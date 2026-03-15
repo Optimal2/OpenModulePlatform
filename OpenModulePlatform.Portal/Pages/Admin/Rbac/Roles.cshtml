@@ -1,17 +1,25 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.Rbac.RolesModel
-
-<h2>Roles</h2>
-
+<section class="page-header"><div><div class="eyebrow">Security and access</div><h2>Roles</h2><p class="lede">Roles bundle permissions and principals. Use roles to keep direct principal management small and predictable.</p></div><div class="toolbar"><a class="action-link" href="~/admin/rbac/role">Create role</a></div></section>
+@if (Model.Rows.Count == 0)
+{
+    <div class="card empty-state">No roles have been created yet.</div>
+}
+else
+{
 <table class="grid">
-    <thead><tr><th>Name</th><th>Description</th></tr></thead>
+    <thead><tr><th>Name</th><th>Description</th><th>Permissions</th><th>Principals</th><th></th></tr></thead>
     <tbody>
     @foreach (var row in Model.Rows)
     {
         <tr>
             <td><a href="~/admin/rbac/role?roleId=@row.RoleId">@row.Name</a></td>
             <td>@(row.Description)</td>
+            <td><span class="pill">@row.PermissionCount</span></td>
+            <td><span class="pill">@row.PrincipalCount</span></td>
+            <td><a class="action-link" href="~/admin/rbac/role?roleId=@row.RoleId">Edit</a></td>
         </tr>
     }
     </tbody>
 </table>
+}

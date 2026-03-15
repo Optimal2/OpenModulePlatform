@@ -401,3 +401,55 @@ code {
     background: #fff0f0;
     color: #8f1f1f;
 }
+
+
+.empty-state {
+    padding: 14px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 14px;
+    background: var(--surface-muted);
+    color: var(--text-muted);
+}
+
+.inline-form {
+    display: inline;
+}
+
+.compact-grid {
+    margin-top: 10px;
+}
+
+.compact-grid th,
+.compact-grid td {
+    padding: 8px 10px;
+}
+
+.btn-danger-subtle {
+    border-color: #f0c2c2;
+    background: #fff7f7;
+    color: #8a1f1f;
+}
+
+.btn-danger-subtle:hover {
+    border-color: #d36f6f;
+    color: #7a1111;
+}
+
+.form-grid-inline {
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) auto;
+    gap: 12px;
+    align-items: end;
+}
+
+.form-grid-inline--triple {
+    grid-template-columns: minmax(180px, 220px) minmax(260px, 1fr) auto;
+}
+
+.form-grid-inline .grow {
+    min-width: 0;
+}
+
+.form-grid-inline .actions {
+    min-width: 0;
+}

@@ -1,42 +1,97 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.Rbac.RoleModel
-
-<h2>Role</h2>
-
-@if (Model.Role is null)
+<section class="page-header"><div><div class="eyebrow">Security and access</div><h2>@(Model.IsCreate ? "Create role" : "Edit role")</h2><p class="lede">Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable.</p></div></section>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
+@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+<form method="post" class="card form-grid bottom-gap">
+    <input type="hidden" asp-for="Input.RoleId" />
+    <div class="field-grid field-grid--2">
+        <div class="form-field"><label asp-for="Input.Name"></label><input asp-for="Input.Name" /><div class="field-help">Use a stable role name, for example <span class="info-badge">PortalAdmins</span> or <span class="info-badge">ExampleServiceAppModule.Operators</span>.</div><span asp-validation-for="Input.Name" class="field-validation-error"></span></div>
+        <div class="form-field"><label asp-for="Input.Description"></label><input asp-for="Input.Description" /><div class="field-help">Short explanation of who should receive this role.</div><span asp-validation-for="Input.Description" class="field-validation-error"></span></div>
+    </div>
+    <div class="toolbar"><button type="submit">Save role</button><a class="action-link" href="~/admin/rbac/roles">Back to roles</a></div>
+</form>
+@if (!Model.IsCreate)
 {
-    <div class="card">Role not found.</div>
-}
-else
-{
-    <div class="card">
-        <div><b>Name</b>: @Model.Role.Name</div>
-        <div><b>Description</b>: @Model.Role.Description</div>
-    </div>
-
-    <div class="card">
-        <h3>Permissions</h3>
-        <table class="grid">
-            <thead><tr><th>Permission</th></tr></thead>
-            <tbody>
-            @foreach (var row in Model.Permissions)
+    <div class="section-grid section-grid--wide bottom-gap">
+        <section class="card section-card">
+            <div class="eyebrow">Role permissions</div>
+            <h3>Assigned permissions</h3>
+            <p class="muted">These permissions are granted whenever the role is resolved for a user or service identity.</p>
+            @if (Model.Permissions.Count == 0)
             {
-                <tr><td>@row.PermissionName</td></tr>
+                <div class="empty-state top-gap">No permissions assigned yet.</div>
             }
-            </tbody>
-        </table>
-    </div>
-
-    <div class="card">
-        <h3>Principals</h3>
-        <table class="grid">
-            <thead><tr><th>Type</th><th>Principal</th></tr></thead>
-            <tbody>
-            @foreach (var row in Model.Principals)
+            else
             {
-                <tr><td>@row.PrincipalType</td><td>@row.Principal</td></tr>
+                <table class="grid compact-grid">
+                    <thead><tr><th>Permission</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var row in Model.Permissions)
+                    {
+                        <tr>
+                            <td>@row.PermissionName</td>
+                            <td>
+                                <form method="post" asp-page-handler="RemovePermission" class="inline-form">
+                                    <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                                    <input type="hidden" name="permissionId" value="@row.PermissionId" />
+                                    <button type="submit" class="btn btn-danger-subtle">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
             }
-            </tbody>
-        </table>
+            <form method="post" asp-page-handler="AddPermission" class="top-gap form-grid-inline">
+                <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                <div class="form-field grow"><label for="permissionId">Add permission</label><select id="permissionId" name="permissionId"><option value="">Select permission</option>@foreach (var option in Model.AvailablePermissionOptions){<option value="@option.Value">@option.Label</option>}</select></div>
+                <div class="form-field actions"><button type="submit">Add permission</button></div>
+            </form>
+        </section>
+        <section class="card section-card">
+            <div class="eyebrow">Role principals</div>
+            <h3>Assigned principals</h3>
+            <p class="muted">Bind users, groups or service identities to the role. Prefer groups where possible.</p>
+            @if (Model.Principals.Count == 0)
+            {
+                <div class="empty-state top-gap">No principals assigned yet.</div>
+            }
+            else
+            {
+                <table class="grid compact-grid">
+                    <thead><tr><th>Type</th><th>Principal</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var row in Model.Principals)
+                    {
+                        <tr>
+                            <td>@row.PrincipalType</td>
+                            <td>@row.Principal</td>
+                            <td>
+                                <form method="post" asp-page-handler="RemovePrincipal" class="inline-form">
+                                    <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                                    <input type="hidden" name="principalType" value="@row.PrincipalType" />
+                                    <input type="hidden" name="principal" value="@row.Principal" />
+                                    <button type="submit" class="btn btn-danger-subtle">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+            <form method="post" asp-page-handler="AddPrincipal" class="top-gap form-grid-inline form-grid-inline--triple">
+                <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                <div class="form-field"><label for="principalType">Principal type</label><select id="principalType" name="principalType">@foreach (var option in Model.PrincipalTypeOptions){<option value="@option.Value">@option.Label</option>}</select></div>
+                <div class="form-field grow"><label for="principal">Principal</label><input id="principal" name="principal" value="@Model.NewPrincipal" /><div class="field-help">Examples: <span class="info-badge">DOMAIN\User</span>, <span class="info-badge">DOMAIN\Group</span>, <span class="info-badge">svc-omp-hostagent</span>.</div></div>
+                <div class="form-field actions"><button type="submit">Add principal</button></div>
+            </form>
+        </section>
     </div>
+    <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this role? Linked role assignments will also be removed.');">
+        <input type="hidden" asp-for="Input.RoleId" />
+        <h3>Danger zone</h3>
+        <p class="muted">Deleting a role removes all principal and permission links for that role.</p>
+        <button type="submit" class="btn btn-danger">Delete role</button>
+    </form>
 }
