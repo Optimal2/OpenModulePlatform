@@ -6,7 +6,7 @@
 <table class="grid">
     <thead>
         <tr>
-            <th>Hostname</th>
+            <th>Host key</th>
             <th>Host template</th>
             <th>Status</th>
             <th>Requested by</th>
@@ -18,7 +18,7 @@
     @foreach (var row in Model.Rows)
     {
         <tr>
-            <td>@(row.Hostname)</td>
+            <td>@(row.HostKey)</td>
             <td>@(row.HostTemplateKey)</td>
             <td>@(row.Status.ToString())</td>
             <td>@(row.RequestedBy)</td>

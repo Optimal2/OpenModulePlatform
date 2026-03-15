@@ -1,0 +1,38 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.AppInstancesModel
+
+<h2>App Instances</h2>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Instance</th>
+            <th>Module instance</th>
+            <th>App</th>
+            <th>App instance key</th>
+            <th>Host</th>
+            <th>Route</th>
+            <th>Installation</th>
+            <th>Artifact</th>
+            <th>Allowed</th>
+            <th>Last seen</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.InstanceKey)</td>
+            <td>@(row.ModuleInstanceKey)</td>
+            <td>@(row.AppKey)</td>
+            <td>@(row.AppInstanceKey)</td>
+            <td>@(row.HostKey)</td>
+            <td>@(row.RoutePath)</td>
+            <td>@(row.InstallationName)</td>
+            <td>@(row.ArtifactVersion)</td>
+            <td>@(row.IsAllowed ? "Yes" : "No")</td>
+            <td>@(row.LastSeenUtc?.ToString("u"))</td>
+        </tr>
+    }
+    </tbody>
+</table>

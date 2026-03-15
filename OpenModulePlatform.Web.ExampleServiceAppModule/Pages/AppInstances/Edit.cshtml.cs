@@ -1,4 +1,4 @@
-// File: OpenModulePlatform.Web.ExampleServiceAppModule/Pages/HostInstallations/Edit.cshtml.cs
+// File: OpenModulePlatform.Web.ExampleServiceAppModule/Pages/AppInstances/Edit.cshtml.cs
 using OpenModulePlatform.Web.ExampleServiceAppModule.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations;
 
-namespace OpenModulePlatform.Web.ExampleServiceAppModule.Pages.HostInstallations;
+namespace OpenModulePlatform.Web.ExampleServiceAppModule.Pages.AppInstances;
 
 public sealed class EditModel : ExampleServiceAppModulePageModel
 {
@@ -23,20 +23,20 @@ public sealed class EditModel : ExampleServiceAppModulePageModel
 
     public string? StatusMessage { get; private set; }
 
-    public async Task<IActionResult> OnGet(Guid hostInstallationId, CancellationToken ct)
+    public async Task<IActionResult> OnGet(Guid appInstanceId, CancellationToken ct)
     {
         var guard = await RequireAdminAsync(ct);
         if (guard is not null)
             return guard;
 
-        SetTitles("Edit host installation");
-        var row = await _repo.GetHostInstallationAsync(hostInstallationId, ct);
+        SetTitles("Edit app instance");
+        var row = await _repo.GetAppInstanceAsync(appInstanceId, ct);
         if (row is null)
             return NotFound();
 
         Input = new EditInput
         {
-            HostInstallationId = row.HostInstallationId,
+            AppInstanceId = row.AppInstanceId,
             IsAllowed = row.IsAllowed,
             DesiredState = row.DesiredState,
             ConfigId = row.ConfigId,
@@ -52,15 +52,15 @@ public sealed class EditModel : ExampleServiceAppModulePageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("Edit host installation");
-        await _repo.UpdateHostInstallationAsync(Input.HostInstallationId, Input.IsAllowed, Input.DesiredState, Input.ConfigId, Input.ArtifactId, User?.Identity?.Name ?? "unknown", ct);
-        StatusMessage = "Host installation updated.";
+        SetTitles("Edit app instance");
+        await _repo.UpdateAppInstanceAsync(Input.AppInstanceId, Input.IsAllowed, Input.DesiredState, Input.ConfigId, Input.ArtifactId, User?.Identity?.Name ?? "unknown", ct);
+        StatusMessage = "App instance updated.";
         return Page();
     }
 
     public sealed class EditInput
     {
-        public Guid HostInstallationId { get; set; }
+        public Guid AppInstanceId { get; set; }
 
         [Display(Name = "Allowed")]
         public bool IsAllowed { get; set; }

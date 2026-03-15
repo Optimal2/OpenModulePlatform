@@ -18,7 +18,7 @@ public sealed class ExampleServiceAppModuleJobProcessor
         _jobs = jobs;
     }
 
-    public async Task ProcessOneAsync(Guid hostInstallationId, ExampleServiceAppModuleOptions config, ExampleServiceAppModuleJobWorkItem job, CancellationToken ct)
+    public async Task ProcessOneAsync(Guid appInstanceId, ExampleServiceAppModuleOptions config, ExampleServiceAppModuleJobWorkItem job, CancellationToken ct)
     {
         var startedUtc = DateTime.UtcNow;
 
@@ -35,28 +35,28 @@ public sealed class ExampleServiceAppModuleJobProcessor
             };
 
             var resultJson = JsonSerializer.Serialize(result);
-            await _jobs.CompleteAsync(job.JobId, hostInstallationId, startedUtc, resultJson, ct);
+            await _jobs.CompleteAsync(job.JobId, appInstanceId, startedUtc, resultJson, ct);
             _log.LogInformation("Completed example job {JobId} of type {RequestType}", job.JobId, job.RequestType);
         }
         catch (JsonException ex)
         {
-            await FailJobAsync(job, hostInstallationId, startedUtc, ex, ct);
+            await FailJobAsync(job, appInstanceId, startedUtc, ex, ct);
         }
         catch (SqlException ex)
         {
-            await FailJobAsync(job, hostInstallationId, startedUtc, ex, ct);
+            await FailJobAsync(job, appInstanceId, startedUtc, ex, ct);
         }
         catch (InvalidOperationException ex)
         {
-            await FailJobAsync(job, hostInstallationId, startedUtc, ex, ct);
+            await FailJobAsync(job, appInstanceId, startedUtc, ex, ct);
         }
     }
 
-    private async Task FailJobAsync(ExampleServiceAppModuleJobWorkItem job, Guid hostInstallationId, DateTime startedUtc, Exception ex, CancellationToken ct)
+    private async Task FailJobAsync(ExampleServiceAppModuleJobWorkItem job, Guid appInstanceId, DateTime startedUtc, Exception ex, CancellationToken ct)
     {
         try
         {
-            await _jobs.FailAsync(job.JobId, hostInstallationId, startedUtc, ex.Message, ct);
+            await _jobs.FailAsync(job.JobId, appInstanceId, startedUtc, ex.Message, ct);
         }
         catch (SqlException failEx)
         {

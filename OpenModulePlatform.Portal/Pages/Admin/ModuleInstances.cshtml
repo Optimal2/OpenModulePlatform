@@ -1,14 +1,15 @@
 @page
-@model OpenModulePlatform.Portal.Pages.Admin.InstancesModel
+@model OpenModulePlatform.Portal.Pages.Admin.ModuleInstancesModel
 
-<h2>Instances</h2>
+<h2>Module Instances</h2>
 
 <table class="grid">
     <thead>
         <tr>
-            <th>Instance key</th>
+            <th>Instance</th>
+            <th>Module</th>
+            <th>Module instance key</th>
             <th>Display name</th>
-            <th>Instance template</th>
             <th>Enabled</th>
         </tr>
     </thead>
@@ -17,8 +18,9 @@
     {
         <tr>
             <td>@(row.InstanceKey)</td>
+            <td>@(row.ModuleKey)</td>
+            <td>@(row.ModuleInstanceKey)</td>
             <td>@(row.DisplayName)</td>
-            <td>@(row.InstanceTemplateKey)</td>
             <td>@(row.IsEnabled ? "Yes" : "No")</td>
         </tr>
     }

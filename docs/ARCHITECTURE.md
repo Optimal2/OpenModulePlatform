@@ -1,74 +1,41 @@
-<!-- File: docs/ARCHITECTURE.md -->
-# OpenModulePlatform architecture
+# Architecture
 
-## Purpose
+OpenModulePlatform is organised around four concerns:
 
-OpenModulePlatform is designed as a modular platform rather than a single-purpose application. The repository focuses on the platform baseline: portal infrastructure, shared services, RBAC, host-management concepts and representative example modules.
+## 1. Instance structure
+- `omp.Instances`
+- `omp.Modules`
+- `omp.ModuleInstances`
+- `omp.Apps`
+- `omp.AppInstances`
+- `omp.Artifacts`
 
-## Structural model
+## 2. Security
+- `omp.Permissions`
+- `omp.Roles`
+- `omp.RolePermissions`
+- `omp.RolePrincipals`
 
-The structural model describes what an OMP instance consists of.
+## 3. Deployment and topology
+- `omp.InstanceTemplates`
+- `omp.HostTemplates`
+- `omp.InstanceTemplateHosts`
+- `omp.InstanceTemplateModuleInstances`
+- `omp.InstanceTemplateAppInstances`
+- `omp.Hosts`
+- `omp.HostDeploymentAssignments`
+- `omp.HostDeployments`
 
-```text
-OMP Instance
-└─ OMP Module
-   └─ OMP App
-      └─ OMP Artifact
-```
+## 4. Module-owned data
+Each module owns its own schema for configuration and workload data.
 
-### Interpretation
+## First-round direction
+This repository revision moves runtime state away from app definitions and into `omp.AppInstances`.
+That change makes it possible to:
 
-- **OMP Instance** - a concrete installation of the platform.
-- **OMP Module** - a functional extension within an instance.
-- **OMP App** - an application that belongs to a module.
-- **OMP Artifact** - a deployable build output for an app.
+- run multiple instances of the same app definition
+- attach different artifacts and configuration to each instance
+- place app instances on different hosts
+- represent both web and service apps using the same runtime concept
 
-## Operational model
-
-The operational model describes how an OMP instance is shaped, deployed and observed.
-
-```text
-OMP Instance
-├─ OMP InstanceTemplate
-└─ OMP Host
-   ├─ OMP HostTemplate
-   ├─ OMP HostDeploymentAssignment
-   ├─ OMP HostDeployment
-   └─ OMP HostInstallation
-```
-
-### Interpretation
-
-- **OMP InstanceTemplate** - describes the intended topology of an instance.
-- **OMP Host** - an execution and deployment environment within an instance.
-- **OMP HostTemplate** - describes the desired state of a host.
-- **OMP HostDeploymentAssignment** - links a host to the template it should follow.
-- **OMP HostDeployment** - a concrete deployment execution on a host.
-- **OMP HostInstallation** - the observed installation state of an app on a host.
-
-## Current implementation in this repository
-
-### Portal and web applications
-
-- ASP.NET Core Razor Pages.
-- Shared hosting conventions in `OpenModulePlatform.Web.Shared`.
-- SQL-backed RBAC via `omp.*` tables.
-- Central portal navigation driven by `omp.Modules`, `omp.Apps` and `omp.AppPermissions`.
-
-### Service applications
-
-- .NET worker-service hosting model.
-- Heartbeat and verification against `omp.HostInstallations`.
-- Module-local configuration stored in the module schema.
-- Queue-based job processing pattern for background execution.
-
-### SQL model
-
-The `sql` folder contains:
-
-- a core install script for the platform schema and portal baseline.
-- an example install script that sets up the sample modules and their data.
-
-## What is intentionally not included
-
-This repository does not include customer-specific modules, domain-specific pipelines or private deployment conventions. The intent is to keep the baseline reusable for open source adoption and downstream extension.
+The template model is present in the schema, but full materialisation and HostAgent orchestration are still future work.

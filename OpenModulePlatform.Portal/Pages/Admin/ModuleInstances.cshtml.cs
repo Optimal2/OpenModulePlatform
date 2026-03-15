@@ -1,4 +1,4 @@
-// File: OpenModulePlatform.Portal/Pages/Admin/HostInstallations.cshtml.cs
+// File: OpenModulePlatform.Portal/Pages/Admin/ModuleInstances.cshtml.cs
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
@@ -8,17 +8,17 @@ using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
-public sealed class HostInstallationsModel : OmpPortalPageModel
+public sealed class ModuleInstancesModel : OmpPortalPageModel
 {
     private readonly OmpAdminRepository _repo;
 
-    public HostInstallationsModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
+    public ModuleInstancesModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
         : base(options, rbac)
     {
         _repo = repo;
     }
 
-    public IReadOnlyList<HostInstallationRow> Rows { get; private set; } = [];
+    public IReadOnlyList<ModuleInstanceRow> Rows { get; private set; } = [];
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -26,8 +26,8 @@ public sealed class HostInstallationsModel : OmpPortalPageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("Host installations");
-        Rows = await _repo.GetHostInstallationsAsync(ct);
+        SetTitles("Module Instances");
+        Rows = await _repo.GetModuleInstancesAsync(ct);
         return Page();
     }
 }

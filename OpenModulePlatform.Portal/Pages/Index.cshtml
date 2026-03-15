@@ -11,10 +11,10 @@
 </div>
 
 <div class="card">
-    <h3>Available OMP web apps</h3>
+    <h3>Available OMP web app instances</h3>
     @if (Model.Apps.Count == 0)
     {
-        <div class="muted">No accessible web apps are currently registered.</div>
+        <div class="muted">No accessible web app instances are currently registered.</div>
     }
     else
     {
@@ -22,6 +22,7 @@
             <thead>
                 <tr>
                     <th>Display name</th>
+                    <th>App instance key</th>
                     <th>App key</th>
                     <th>Route</th>
                     <th>Description</th>
@@ -30,13 +31,17 @@
             <tbody>
             @foreach (var app in Model.Apps)
             {
+                var href = !string.IsNullOrWhiteSpace(app.PublicUrl)
+                    ? app.PublicUrl
+                    : (app.RoutePath is null ? null : Url.Content("~/" + app.RoutePath));
                 <tr>
                     <td>@app.DisplayName</td>
+                    <td><code>@app.AppInstanceKey</code></td>
                     <td><code>@app.AppKey</code></td>
                     <td>
-                        @if (!string.IsNullOrWhiteSpace(app.RouteBasePath))
+                        @if (!string.IsNullOrWhiteSpace(href))
                         {
-                            <a href="~/@app.RouteBasePath">/@app.RouteBasePath</a>
+                            <a href="@href">@href</a>
                         }
                     </td>
                     <td>@app.Description</td>

@@ -8,8 +8,8 @@
         <tr>
             <th>Module</th>
             <th>App key</th>
+            <th>Display name</th>
             <th>Type</th>
-            <th>Route</th>
             <th>Enabled</th>
             <th>Description</th>
         </tr>
@@ -20,8 +20,8 @@
         <tr>
             <td>@(row.ModuleKey)</td>
             <td>@(row.AppKey)</td>
+            <td>@(row.DisplayName)</td>
             <td>@(row.AppType)</td>
-            <td>@(row.RouteBasePath)</td>
             <td>@(row.IsEnabled ? "Yes" : "No")</td>
             <td>@(row.Description)</td>
         </tr>

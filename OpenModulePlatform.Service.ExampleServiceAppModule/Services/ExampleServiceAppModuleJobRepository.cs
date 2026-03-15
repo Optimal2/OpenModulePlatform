@@ -13,7 +13,7 @@ public sealed class ExampleServiceAppModuleJobRepository
         _db = db;
     }
 
-    public async Task<ExampleServiceAppModuleJobWorkItem?> TryClaimNextAsync(Guid hostInstallationId, CancellationToken ct)
+    public async Task<ExampleServiceAppModuleJobWorkItem?> TryClaimNextAsync(Guid appInstanceId, CancellationToken ct)
     {
         const string sql = @"
 ;WITH next_job AS
@@ -26,7 +26,7 @@ public sealed class ExampleServiceAppModuleJobRepository
 UPDATE j
 SET Status = 1,
     Attempts = Attempts + 1,
-    ClaimedByHostInstallationId = @hostInstallationId,
+    ClaimedByAppInstanceId = @appInstanceId,
     ClaimedUtc = SYSUTCDATETIME(),
     UpdatedUtc = SYSUTCDATETIME(),
     LastError = NULL
@@ -41,7 +41,7 @@ INNER JOIN next_job n ON n.JobId = j.JobId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostInstallationId", hostInstallationId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
             return null;
@@ -56,7 +56,7 @@ INNER JOIN next_job n ON n.JobId = j.JobId;";
         };
     }
 
-    public async Task CompleteAsync(long jobId, Guid hostInstallationId, DateTime startedUtc, string resultJson, CancellationToken ct)
+    public async Task CompleteAsync(long jobId, Guid appInstanceId, DateTime startedUtc, string resultJson, CancellationToken ct)
     {
         const string sql = @"
 UPDATE omp_example_serviceapp_module.Jobs
@@ -67,20 +67,20 @@ SET Status = 2,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE JobId = @jobId;
 
-INSERT INTO omp_example_serviceapp_module.JobExecutions(JobId, HostInstallationId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
-VALUES(@jobId, @hostInstallationId, @startedUtc, SYSUTCDATETIME(), N'Completed', @resultJson, NULL);";
+INSERT INTO omp_example_serviceapp_module.JobExecutions(JobId, AppInstanceId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
+VALUES(@jobId, @appInstanceId, @startedUtc, SYSUTCDATETIME(), N'Completed', @resultJson, NULL);";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@jobId", jobId);
-        cmd.Parameters.AddWithValue("@hostInstallationId", hostInstallationId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
         cmd.Parameters.AddWithValue("@startedUtc", startedUtc);
         cmd.Parameters.AddWithValue("@resultJson", resultJson);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task FailAsync(long jobId, Guid hostInstallationId, DateTime startedUtc, string errorMessage, CancellationToken ct)
+    public async Task FailAsync(long jobId, Guid appInstanceId, DateTime startedUtc, string errorMessage, CancellationToken ct)
     {
         const string sql = @"
 UPDATE omp_example_serviceapp_module.Jobs
@@ -90,14 +90,14 @@ SET Status = 3,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE JobId = @jobId;
 
-INSERT INTO omp_example_serviceapp_module.JobExecutions(JobId, HostInstallationId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
-VALUES(@jobId, @hostInstallationId, @startedUtc, SYSUTCDATETIME(), N'Failed', NULL, @errorMessage);";
+INSERT INTO omp_example_serviceapp_module.JobExecutions(JobId, AppInstanceId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
+VALUES(@jobId, @appInstanceId, @startedUtc, SYSUTCDATETIME(), N'Failed', NULL, @errorMessage);";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@jobId", jobId);
-        cmd.Parameters.AddWithValue("@hostInstallationId", hostInstallationId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
         cmd.Parameters.AddWithValue("@startedUtc", startedUtc);
         cmd.Parameters.AddWithValue("@errorMessage", errorMessage);
         await cmd.ExecuteNonQueryAsync(ct);

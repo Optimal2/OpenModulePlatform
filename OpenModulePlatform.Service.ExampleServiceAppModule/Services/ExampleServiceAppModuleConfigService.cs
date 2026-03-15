@@ -6,25 +6,25 @@ namespace OpenModulePlatform.Service.ExampleServiceAppModule.Services;
 
 public sealed class ExampleServiceAppModuleConfigService
 {
-    private readonly HostInstallationRepository _hostInstallations;
+    private readonly AppInstanceRepository _appInstances;
     private readonly ExampleServiceAppModuleConfigurationRepository _configs;
 
     public ExampleServiceAppModuleConfigService(
-        HostInstallationRepository hostInstallations,
+        AppInstanceRepository appInstances,
         ExampleServiceAppModuleConfigurationRepository configs)
     {
-        _hostInstallations = hostInstallations;
+        _appInstances = appInstances;
         _configs = configs;
     }
 
-    public async Task<RefreshResult> RefreshAsync(Guid hostInstallationId, CancellationToken ct)
+    public async Task<RefreshResult> RefreshAsync(Guid appInstanceId, CancellationToken ct)
     {
-        var runtime = await _hostInstallations.GetRuntimeAsync(hostInstallationId, ct);
+        var runtime = await _appInstances.GetRuntimeAsync(appInstanceId, ct);
         if (runtime is null)
-            return new RefreshResult(null, null, "installation_not_found");
+            return new RefreshResult(null, null, "app_instance_not_found");
 
         if (!runtime.IsAllowed)
-            return new RefreshResult(runtime, null, "installation_not_allowed");
+            return new RefreshResult(runtime, null, "app_instance_not_allowed");
 
         if (runtime.DesiredState == 0)
             return new RefreshResult(runtime, null, "desired_state_disabled");
@@ -43,7 +43,7 @@ public sealed class ExampleServiceAppModuleConfigService
     }
 
     public sealed record RefreshResult(
-        HostInstallationRepository.HostInstallationRuntime? Runtime,
+        AppInstanceRepository.AppInstanceRuntime? Runtime,
         ExampleServiceAppModuleOptions? Config,
         string? StateReason);
 }

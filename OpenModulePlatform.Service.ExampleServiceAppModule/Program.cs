@@ -21,7 +21,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.Configure<WorkerSettings>(context.Configuration.GetSection("Worker"));
 
         services.AddSingleton<SqlConnectionFactory>();
-        services.AddSingleton<HostInstallationRepository>();
+        services.AddSingleton<AppInstanceRepository>();
         services.AddSingleton<ExampleServiceAppModuleConfigurationRepository>();
         services.AddSingleton<ExampleServiceAppModuleConfigService>();
         services.AddSingleton<ExampleServiceAppModuleJobRepository>();

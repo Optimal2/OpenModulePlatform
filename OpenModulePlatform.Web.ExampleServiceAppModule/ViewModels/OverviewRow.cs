@@ -6,6 +6,6 @@ public sealed class OverviewRow
     public string ModuleKey { get; set; } = string.Empty;
     public string SchemaName { get; set; } = string.Empty;
     public int ActiveConfigurationCount { get; set; }
-    public int HostInstallationCount { get; set; }
+    public int ServiceAppInstanceCount { get; set; }
     public int OpenJobCount { get; set; }
 }
