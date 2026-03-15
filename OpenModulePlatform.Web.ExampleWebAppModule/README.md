@@ -1,11 +1,12 @@
 # OpenModulePlatform.Web.ExampleWebAppModule
 
-This sample demonstrates a web-only OMP module.
+This project is a reference implementation of a web-only OMP module.
 
-Highlights:
+## What it demonstrates
 
-- module type: `WebAppModule`
-- one OMP web app
-- own module schema: `omp_example_webapp_module`
-- module-local configuration table
-- portal registration script
+- module-local configuration stored in a dedicated schema
+- module registration in `omp.Modules` and `omp.Apps`
+- permission registration through `omp.Permissions` and `omp.AppPermissions`
+- portal integration using the shared web infrastructure
+
+Use this project as a starting point when you need an OMP module that only requires a web application.

@@ -2,6 +2,7 @@
 using OpenModulePlatform.Web.ExampleServiceAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace OpenModulePlatform.Web.ExampleServiceAppModule.Services;
@@ -9,14 +10,16 @@ namespace OpenModulePlatform.Web.ExampleServiceAppModule.Services;
 public sealed class ExampleServiceAppModuleAdminRepository
 {
     private readonly SqlConnectionFactory _db;
+    private readonly ILogger<ExampleServiceAppModuleAdminRepository> _log;
 
     public const string ModuleKey = "example_serviceapp_module";
     public const string ModuleSchema = "omp_example_serviceapp_module";
     public const string ServiceAppKey = "example_serviceapp_module_service";
 
-    public ExampleServiceAppModuleAdminRepository(SqlConnectionFactory db)
+    public ExampleServiceAppModuleAdminRepository(SqlConnectionFactory db, ILogger<ExampleServiceAppModuleAdminRepository> log)
     {
         _db = db;
+        _log = log;
     }
 
     public async Task<OverviewRow> GetOverviewAsync(CancellationToken ct)
@@ -146,12 +149,12 @@ WHERE hi.HostInstallationId = @hostInstallationId
         cmd.Parameters.AddWithValue("@artifactId", (object?)artifactId ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
 
-        try
-        {
-            const string auditSql = @"
+        const string auditSql = @"
 INSERT INTO omp.AuditLog(Actor, Action, TargetType, TargetId, BeforeJson, AfterJson)
 VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
 
+        try
+        {
             await using var audit = new SqlCommand(auditSql, conn);
             audit.Parameters.AddWithValue("@actor", actor);
             audit.Parameters.AddWithValue("@action", ServiceAppKey + ".hostinstallation.update");
@@ -160,8 +163,13 @@ VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
             audit.Parameters.AddWithValue("@afterJson", JsonSerializer.Serialize(new { hostInstallationId, isAllowed, desiredState, configId, artifactId }));
             await audit.ExecuteNonQueryAsync(ct);
         }
-        catch
+        catch (SqlException ex)
         {
+            _log.LogWarning(ex, "Audit logging failed for host installation {HostInstallationId}.", hostInstallationId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogWarning(ex, "Audit logging failed for host installation {HostInstallationId}.", hostInstallationId);
         }
     }
 

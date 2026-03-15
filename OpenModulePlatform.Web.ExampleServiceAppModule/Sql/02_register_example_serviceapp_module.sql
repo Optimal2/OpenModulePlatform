@@ -37,10 +37,10 @@ IF EXISTS (SELECT 1 FROM omp.Modules WHERE InstanceId = @InstanceId AND ModuleKe
 BEGIN
     UPDATE omp.Modules
     SET DisplayName = N'Example ServiceAppModule',
-        ModuleType = N'ServiceAppModule',
+        ModuleType = N'HostAppModule',
         SchemaName = N'omp_example_serviceapp_module',
         BasePath = N'ExampleServiceAppModule',
-        Description = N'Combined web app + service app example module for OMP',
+        Description = N'Combined web app and service app example module for OpenModulePlatform',
         IsEnabled = 1,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE InstanceId = @InstanceId AND ModuleKey = @ModuleKey;
@@ -48,7 +48,7 @@ END
 ELSE
 BEGIN
     INSERT INTO omp.Modules(InstanceId, ModuleKey, DisplayName, ModuleType, SchemaName, BasePath, Description, IsEnabled, SortOrder)
-    VALUES(@InstanceId, @ModuleKey, N'Example ServiceAppModule', N'ServiceAppModule', N'omp_example_serviceapp_module', N'ExampleServiceAppModule', N'Combined web app + service app example module for OMP', 1, 400);
+    VALUES(@InstanceId, @ModuleKey, N'Example ServiceAppModule', N'HostAppModule', N'omp_example_serviceapp_module', N'ExampleServiceAppModule', N'Combined web app and service app example module for OpenModulePlatform', 1, 400);
 END
 
 SELECT @ModuleId = ModuleId FROM omp.Modules WHERE InstanceId = @InstanceId AND ModuleKey = @ModuleKey;

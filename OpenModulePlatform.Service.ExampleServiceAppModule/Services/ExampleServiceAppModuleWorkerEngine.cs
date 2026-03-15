@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Service.ExampleServiceAppModule/Services/ExampleServiceAppModuleWorkerEngine.cs
 using OpenModulePlatform.Service.ExampleServiceAppModule.Models;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Service.ExampleServiceAppModule.Services;
@@ -105,9 +106,19 @@ public sealed class ExampleServiceAppModuleWorkerEngine
             {
                 break;
             }
-            catch (Exception ex)
+            catch (SqlException ex)
             {
-                _log.LogError(ex, "Loop error.");
+                _log.LogError(ex, "Loop error caused by a database operation.");
+                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _log.LogError(ex, "Loop error caused by an invalid worker state.");
+                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            }
+            catch (IOException ex)
+            {
+                _log.LogError(ex, "Loop error caused by an I/O operation.");
                 await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
             }
         }

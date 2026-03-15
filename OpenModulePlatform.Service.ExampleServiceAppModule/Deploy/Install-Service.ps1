@@ -36,8 +36,8 @@ function Wait-ForServiceStatus {
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
-        $service = Get-Service -Name $Name -ErrorAction Stop
-        if ($service.Status -eq $Status) {
+        $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+        if ($null -ne $service -and $service.Status -eq $Status) {
             return
         }
 
@@ -96,7 +96,11 @@ function Resolve-PublishSourcePath {
         try {
             $matches += Get-ChildItem -LiteralPath $root -Filter $ExecutableName -File -Recurse -ErrorAction SilentlyContinue
         }
-        catch {
+        catch [System.UnauthorizedAccessException] {
+            Write-Verbose "Skipped inaccessible search root '$root'."
+        }
+        catch [System.IO.IOException] {
+            Write-Verbose "Skipped search root '$root' because of an I/O error."
         }
     }
 
@@ -153,7 +157,7 @@ if ($null -ne $existingService) {
 }
 
 Write-Host 'Copying published files to Program Files...'
-$robocopyLog = & robocopy $sourcePath $targetPath *.* /MIR /R:2 /W:2 /NFL /NDL /NJH /NJS /NP
+$robocopyLog = & robocopy $sourcePath $targetPath *.* /E /R:2 /W:2 /NFL /NDL /NJH /NJS /NP
 $robocopyExitCode = $LASTEXITCODE
 if ($robocopyExitCode -ge 8) {
     throw "Robocopy failed with exit code $robocopyExitCode.`n$robocopyLog"
@@ -177,14 +181,14 @@ else {
         Disabled  = 'disabled'
     }
 
-    & sc.exe config $ServiceName binPath= $binaryPath start= $startupMap[$StartupType] DisplayName= $DisplayName | Out-Null
+    $configOutput = & sc.exe config $ServiceName binPath= $binaryPath start= $startupMap[$StartupType] DisplayName= $DisplayName 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "sc.exe config failed with exit code $LASTEXITCODE."
+        throw "sc.exe config failed with exit code $LASTEXITCODE.`n$configOutput"
     }
 
-    & sc.exe description $ServiceName $Description | Out-Null
+    $descriptionOutput = & sc.exe description $ServiceName $Description 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "sc.exe description failed with exit code $LASTEXITCODE."
+        throw "sc.exe description failed with exit code $LASTEXITCODE.`n$descriptionOutput"
     }
 }
 
