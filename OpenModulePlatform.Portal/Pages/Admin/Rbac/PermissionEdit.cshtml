@@ -1,0 +1,26 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.Rbac.PermissionEditModel
+<section class="page-header"><div><div class="eyebrow">Security and access</div><h2>@(Model.IsCreate ? "Create permission" : "Edit permission")</h2><p class="lede">Permissions are stable capability names used by roles and apps. Prefer precise names that do not require frequent renaming.</p></div></section>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
+@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+<form method="post" class="card form-grid bottom-gap">
+    <input type="hidden" asp-for="Input.PermissionId" />
+    <div class="field-grid field-grid--2">
+        <div class="form-field"><label asp-for="Input.Name"></label><input asp-for="Input.Name" /><div class="field-help">Examples: <span class="info-badge">OMP.Portal.Admin</span>, <span class="info-badge">ExampleWebAppModule.View</span>.</div><span asp-validation-for="Input.Name" class="field-validation-error"></span></div>
+        <div class="form-field"><label asp-for="Input.Description"></label><input asp-for="Input.Description" /><div class="field-help">Describe the capability in business terms, not implementation details.</div><span asp-validation-for="Input.Description" class="field-validation-error"></span></div>
+    </div>
+    @if (!Model.IsCreate)
+    {
+        <div class="small-text muted">Used by roles: <span class="pill">@Model.RoleCount</span></div>
+    }
+    <div class="toolbar"><button type="submit">Save permission</button><a class="action-link" href="~/admin/rbac/permissions">Back to permissions</a></div>
+</form>
+@if (!Model.IsCreate)
+{
+    <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this permission? Role links will also be removed.');">
+        <input type="hidden" asp-for="Input.PermissionId" />
+        <h3>Danger zone</h3>
+        <p class="muted">Deleting a permission removes it from all roles.</p>
+        <button type="submit" class="btn btn-danger">Delete permission</button>
+    </form>
+}
