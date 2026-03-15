@@ -1,4 +1,4 @@
-/* File: OpenModulePlatform.Portal/wwwroot/css/site.css */
+/* File: wwwroot/css/site.css */
 :root {
     --bg: #f5f7fb;
     --surface: #ffffff;
@@ -17,11 +17,23 @@
     box-sizing: border-box;
 }
 
+html {
+    background: var(--bg);
+}
+
 body {
     font-family: Segoe UI, Arial, sans-serif;
     margin: 0;
     color: var(--text);
     background: var(--bg);
+}
+
+a {
+    color: var(--link);
+}
+
+a:hover {
+    color: var(--link-hover);
 }
 
 .topbar {
@@ -46,6 +58,7 @@ body {
 .brand {
     font-weight: 700;
     font-size: 1rem;
+    color: var(--text);
 }
 
 .brand-subtitle {
@@ -84,6 +97,10 @@ body {
     padding: 24px;
 }
 
+.content {
+    padding: 16px;
+}
+
 .page-header {
     display: flex;
     justify-content: space-between;
@@ -111,10 +128,6 @@ body {
     margin: 0;
     max-width: 900px;
     color: var(--text-muted);
-}
-
-.content {
-    padding: 16px;
 }
 
 .card {
@@ -164,6 +177,10 @@ body {
     margin-top: 12px;
 }
 
+.bottom-gap {
+    margin-bottom: 16px;
+}
+
 .pill {
     display: inline-block;
     padding: 3px 10px;
@@ -181,9 +198,12 @@ body {
     margin-top: 12px;
 }
 
-.action-link {
+.action-link,
+button,
+.btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 10px 12px;
     border: 1px solid var(--border);
@@ -191,9 +211,12 @@ body {
     background: var(--surface-muted);
     color: var(--text);
     text-decoration: none;
+    cursor: pointer;
 }
 
-.action-link:hover {
+.action-link:hover,
+button:hover,
+.btn:hover {
     border-color: var(--link);
     color: var(--link-hover);
 }
@@ -244,6 +267,55 @@ body {
     border-radius: 16px;
     background: var(--surface);
     color: var(--text-muted);
+}
+
+.form-grid {
+    display: grid;
+    gap: 14px;
+}
+
+.form-field {
+    display: grid;
+    gap: 6px;
+}
+
+label {
+    font-weight: 600;
+}
+
+input[type=text],
+input[type=number],
+input[type=url],
+textarea,
+select {
+    width: 100%;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+}
+
+input[type=checkbox] {
+    width: 1rem;
+    height: 1rem;
+}
+
+textarea {
+    min-height: 220px;
+    font-family: ui-monospace, Consolas, monospace;
+    resize: vertical;
+}
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-banner {
+    margin-bottom: 14px;
 }
 
 code {

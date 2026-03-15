@@ -1,32 +1,44 @@
 @page
 @model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.AppInstances.EditModel
 
-<h2>Edit app instance</h2>
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Example module</div>
+        <h1>Edit app instance</h1>
+        <p class="lede">Uppdatera styrande värden för vald appinstans.</p>
+    </div>
+</div>
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
-    <div class="card">@Model.StatusMessage</div>
+    <div class="card status-banner">@Model.StatusMessage</div>
 }
 
-<form method="post" class="card">
+<form method="post" class="card form-grid">
     <input type="hidden" asp-for="Input.AppInstanceId" />
-    <div>
-        <label asp-for="Input.IsAllowed"></label>
+
+    <div class="form-field checkbox-row">
         <input asp-for="Input.IsAllowed" type="checkbox" />
+        <label asp-for="Input.IsAllowed"></label>
     </div>
-    <div>
+
+    <div class="form-field">
         <label asp-for="Input.DesiredState"></label>
         <input asp-for="Input.DesiredState" type="text" />
     </div>
-    <div>
+
+    <div class="form-field">
         <label asp-for="Input.ConfigId"></label>
         <input asp-for="Input.ConfigId" type="text" />
     </div>
-    <div>
+
+    <div class="form-field">
         <label asp-for="Input.ArtifactId"></label>
         <input asp-for="Input.ArtifactId" type="text" />
     </div>
-    <div style="margin-top:12px;">
+
+    <div class="toolbar">
         <button type="submit">Save</button>
+        <a class="action-link" href="~/appinstances">Back to app instances</a>
     </div>
 </form>

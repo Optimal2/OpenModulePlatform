@@ -9,14 +9,17 @@
 </head>
 <body>
     <header class="topbar">
-        <div class="brand">@ViewData["PortalTitle"]</div>
-        <nav class="nav">
+        <div class="brand-wrap">
+            <div class="brand">@ViewData["PortalTitle"]</div>
+            <div class="brand-subtitle">Example Web App Module</div>
+        </div>
+        <nav class="nav nav--primary">
             <a href="~/">Overview</a>
             <a href="~/configurations">Configurations</a>
         </nav>
         <div class="user">@User?.Identity?.Name</div>
     </header>
-    <main class="content">
+    <main class="content-shell">
         @RenderBody()
     </main>
 </body>
