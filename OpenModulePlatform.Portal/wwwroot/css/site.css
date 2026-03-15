@@ -1,0 +1,93 @@
+/* File: OpenModulePlatform.Portal/wwwroot/css/site.css */
+body {
+    font-family: Segoe UI, Arial, sans-serif;
+    margin: 0;
+    color: #111;
+    background: #fff;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #ddd;
+    background: #fafafa;
+}
+
+.brand {
+    font-weight: 600;
+}
+
+.nav a {
+    margin-right: 10px;
+    text-decoration: none;
+    color: #0b57d0;
+}
+
+.nav a:hover {
+    text-decoration: underline;
+}
+
+.user {
+    margin-left: auto;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.content {
+    padding: 16px;
+}
+
+.grid {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+
+.grid th, .grid td {
+    border: 1px solid #ddd;
+    padding: 8px 10px;
+    vertical-align: top;
+}
+
+.grid th {
+    background: #f6f6f6;
+    text-align: left;
+}
+
+.card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 12px;
+    background: #fff;
+    margin-top: 12px;
+}
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.metric {
+    font-size: 1.6rem;
+    font-weight: 600;
+}
+
+.muted {
+    color: #666;
+}
+
+.pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid #ccc;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+code {
+    font-family: ui-monospace, Consolas, monospace;
+}

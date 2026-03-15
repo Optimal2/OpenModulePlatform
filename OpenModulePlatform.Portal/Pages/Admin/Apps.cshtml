@@ -1,0 +1,30 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.AppsModel
+
+<h2>Apps</h2>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Module</th>
+            <th>App key</th>
+            <th>Type</th>
+            <th>Route</th>
+            <th>Enabled</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.ModuleKey)</td>
+            <td>@(row.AppKey)</td>
+            <td>@(row.AppType)</td>
+            <td>@(row.RouteBasePath)</td>
+            <td>@(row.IsEnabled ? "Yes" : "No")</td>
+            <td>@(row.Description)</td>
+        </tr>
+    }
+    </tbody>
+</table>

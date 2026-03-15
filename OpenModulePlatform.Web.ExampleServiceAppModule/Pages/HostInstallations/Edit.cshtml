@@ -1,0 +1,32 @@
+@page
+@model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.HostInstallations.EditModel
+
+<h2>Edit host installation</h2>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card">@Model.StatusMessage</div>
+}
+
+<form method="post" class="card">
+    <input type="hidden" asp-for="Input.HostInstallationId" />
+    <div>
+        <label asp-for="Input.IsAllowed"></label>
+        <input asp-for="Input.IsAllowed" type="checkbox" />
+    </div>
+    <div>
+        <label asp-for="Input.DesiredState"></label>
+        <input asp-for="Input.DesiredState" type="text" />
+    </div>
+    <div>
+        <label asp-for="Input.ConfigId"></label>
+        <input asp-for="Input.ConfigId" type="text" />
+    </div>
+    <div>
+        <label asp-for="Input.ArtifactId"></label>
+        <input asp-for="Input.ArtifactId" type="text" />
+    </div>
+    <div style="margin-top:12px;">
+        <button type="submit">Save</button>
+    </div>
+</form>

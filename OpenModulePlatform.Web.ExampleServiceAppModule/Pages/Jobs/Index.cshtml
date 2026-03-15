@@ -1,0 +1,35 @@
+@page
+@model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.Jobs.IndexModel
+
+<h2>Jobs</h2>
+
+<form method="post" class="card">
+    <div>
+        <label asp-for="Input.RequestType"></label>
+        <input asp-for="Input.RequestType" type="text" />
+    </div>
+    <div>
+        <label asp-for="Input.PayloadJson"></label>
+        <textarea asp-for="Input.PayloadJson"></textarea>
+    </div>
+    <div style="margin-top:12px;">
+        <button type="submit">Queue job</button>
+    </div>
+</form>
+
+<table class="grid">
+    <thead><tr><th>JobId</th><th>Type</th><th>Status</th><th>Attempts</th><th>Requested UTC</th><th>Last error</th></tr></thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.JobId)</td>
+            <td>@(row.RequestType)</td>
+            <td>@(row.Status)</td>
+            <td>@(row.Attempts)</td>
+            <td>@(row.RequestedUtc.ToString("u"))</td>
+            <td>@(row.LastError)</td>
+        </tr>
+    }
+    </tbody>
+</table>

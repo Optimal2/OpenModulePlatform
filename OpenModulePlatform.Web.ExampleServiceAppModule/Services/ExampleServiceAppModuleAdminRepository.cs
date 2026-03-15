@@ -1,0 +1,300 @@
+// File: OpenModulePlatform.Web.ExampleServiceAppModule/Services/ExampleServiceAppModuleAdminRepository.cs
+using OpenModulePlatform.Web.ExampleServiceAppModule.ViewModels;
+using OpenModulePlatform.Web.Shared.Services;
+using Microsoft.Data.SqlClient;
+using System.Text.Json;
+
+namespace OpenModulePlatform.Web.ExampleServiceAppModule.Services;
+
+public sealed class ExampleServiceAppModuleAdminRepository
+{
+    private readonly SqlConnectionFactory _db;
+
+    public const string ModuleKey = "example_serviceapp_module";
+    public const string ModuleSchema = "omp_example_serviceapp_module";
+    public const string ServiceAppKey = "example_serviceapp_module_service";
+
+    public ExampleServiceAppModuleAdminRepository(SqlConnectionFactory db)
+    {
+        _db = db;
+    }
+
+    public async Task<OverviewRow> GetOverviewAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT @moduleKey,
+       @moduleSchema,
+       (SELECT COUNT(1) FROM omp_example_serviceapp_module.Configurations WHERE VersionNo = 0),
+       (SELECT COUNT(1)
+        FROM omp.HostInstallations hi
+        INNER JOIN omp.Apps a ON a.AppId = hi.AppId
+        WHERE a.AppKey = @serviceAppKey),
+       (SELECT COUNT(1) FROM omp_example_serviceapp_module.Jobs WHERE Status IN (0,1));";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@moduleKey", ModuleKey);
+        cmd.Parameters.AddWithValue("@moduleSchema", ModuleSchema);
+        cmd.Parameters.AddWithValue("@serviceAppKey", ServiceAppKey);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        await rdr.ReadAsync(ct);
+
+        return new OverviewRow
+        {
+            ModuleKey = rdr.GetString(0),
+            SchemaName = rdr.GetString(1),
+            ActiveConfigurationCount = rdr.GetInt32(2),
+            HostInstallationCount = rdr.GetInt32(3),
+            OpenJobCount = rdr.GetInt32(4)
+        };
+    }
+
+    public async Task<IReadOnlyList<HostInstallationRow>> GetHostInstallationsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT hi.HostInstallationId,
+       hi.HostId,
+       h.Hostname,
+       hi.InstallationName,
+       hi.LastSeenUtc,
+       hi.LastLogin,
+       hi.LastClientHostName,
+       hi.LastClientIp,
+       h.ExpectedLogin,
+       h.ExpectedHostName,
+       h.ExpectedClientIp,
+       hi.VerificationStatus,
+       hi.LastVerifiedUtc,
+       hi.IsAllowed,
+       hi.DesiredState,
+       hi.ConfigId,
+       hi.ArtifactId,
+       ar.Version,
+       ar.TargetName,
+       hi.UpdatedUtc
+FROM omp.HostInstallations hi
+INNER JOIN omp.Hosts h ON h.HostId = hi.HostId
+INNER JOIN omp.Apps a ON a.AppId = hi.AppId
+LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = hi.ArtifactId
+WHERE a.AppKey = @serviceAppKey
+ORDER BY h.Hostname, hi.InstallationName;";
+
+        var rows = new List<HostInstallationRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@serviceAppKey", ServiceAppKey);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new HostInstallationRow
+            {
+                HostInstallationId = rdr.GetGuid(0),
+                HostId = rdr.GetGuid(1),
+                Hostname = rdr.GetString(2),
+                InstallationName = rdr.GetString(3),
+                LastSeenUtc = rdr.IsDBNull(4) ? null : rdr.GetDateTime(4),
+                LastLogin = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                LastClientHostName = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                LastClientIp = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                ExpectedLogin = rdr.GetString(8),
+                ExpectedHostName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                ExpectedClientIp = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                VerificationStatus = rdr.GetByte(11),
+                LastVerifiedUtc = rdr.IsDBNull(12) ? null : rdr.GetDateTime(12),
+                IsAllowed = rdr.GetBoolean(13),
+                DesiredState = rdr.GetByte(14),
+                ConfigId = rdr.IsDBNull(15) ? null : rdr.GetInt32(15),
+                ArtifactId = rdr.IsDBNull(16) ? null : rdr.GetInt32(16),
+                ArtifactVersion = rdr.IsDBNull(17) ? null : rdr.GetString(17),
+                ArtifactTargetName = rdr.IsDBNull(18) ? null : rdr.GetString(18),
+                UpdatedUtc = rdr.GetDateTime(19)
+            });
+        }
+        return rows;
+    }
+
+    public async Task<HostInstallationRow?> GetHostInstallationAsync(Guid hostInstallationId, CancellationToken ct)
+    {
+        var rows = await GetHostInstallationsAsync(ct);
+        return rows.FirstOrDefault(x => x.HostInstallationId == hostInstallationId);
+    }
+
+    public async Task UpdateHostInstallationAsync(Guid hostInstallationId, bool isAllowed, byte desiredState, int? configId, int? artifactId, string actor, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE hi
+SET IsAllowed = @isAllowed,
+    DesiredState = @desiredState,
+    ConfigId = @configId,
+    ArtifactId = @artifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.HostInstallations hi
+INNER JOIN omp.Apps a ON a.AppId = hi.AppId
+WHERE hi.HostInstallationId = @hostInstallationId
+  AND a.AppKey = @serviceAppKey;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostInstallationId", hostInstallationId);
+        cmd.Parameters.AddWithValue("@serviceAppKey", ServiceAppKey);
+        cmd.Parameters.AddWithValue("@isAllowed", isAllowed);
+        cmd.Parameters.AddWithValue("@desiredState", desiredState);
+        cmd.Parameters.AddWithValue("@configId", (object?)configId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@artifactId", (object?)artifactId ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+
+        try
+        {
+            const string auditSql = @"
+INSERT INTO omp.AuditLog(Actor, Action, TargetType, TargetId, BeforeJson, AfterJson)
+VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
+
+            await using var audit = new SqlCommand(auditSql, conn);
+            audit.Parameters.AddWithValue("@actor", actor);
+            audit.Parameters.AddWithValue("@action", ServiceAppKey + ".hostinstallation.update");
+            audit.Parameters.AddWithValue("@targetType", "HostInstallation");
+            audit.Parameters.AddWithValue("@targetId", hostInstallationId.ToString());
+            audit.Parameters.AddWithValue("@afterJson", JsonSerializer.Serialize(new { hostInstallationId, isAllowed, desiredState, configId, artifactId }));
+            await audit.ExecuteNonQueryAsync(ct);
+        }
+        catch
+        {
+        }
+    }
+
+    public async Task<IReadOnlyList<ConfigurationRow>> GetConfigurationsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT c.ConfigId,
+       c.VersionNo,
+       c.ConfigJson,
+       c.Comment,
+       c.CreatedUtc,
+       c.CreatedBy,
+       CAST(ISNULL(a.AssignedInstallations, 0) AS int)
+FROM omp_example_serviceapp_module.Configurations c
+OUTER APPLY (
+    SELECT COUNT(*) AS AssignedInstallations
+    FROM omp.HostInstallations hi
+    INNER JOIN omp.Apps a ON a.AppId = hi.AppId
+    WHERE a.AppKey = @serviceAppKey AND hi.ConfigId = c.ConfigId
+) a
+WHERE c.VersionNo = 0
+ORDER BY c.ConfigId DESC;";
+
+        var rows = new List<ConfigurationRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@serviceAppKey", ServiceAppKey);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ConfigurationRow
+            {
+                ConfigId = rdr.GetInt32(0),
+                VersionNo = rdr.GetInt32(1),
+                ConfigJson = rdr.GetString(2),
+                Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                CreatedUtc = rdr.GetDateTime(4),
+                CreatedBy = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                AssignedInstallations = rdr.GetInt32(6)
+            });
+        }
+        return rows;
+    }
+
+    public async Task<ConfigurationRow?> GetConfigurationAsync(int configId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ConfigId, VersionNo, ConfigJson, Comment, CreatedUtc, CreatedBy
+FROM omp_example_serviceapp_module.Configurations
+WHERE ConfigId = @configId AND VersionNo = 0;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@configId", configId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+            return null;
+
+        return new ConfigurationRow
+        {
+            ConfigId = rdr.GetInt32(0),
+            VersionNo = rdr.GetInt32(1),
+            ConfigJson = rdr.GetString(2),
+            Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+            CreatedUtc = rdr.GetDateTime(4),
+            CreatedBy = rdr.IsDBNull(5) ? null : rdr.GetString(5)
+        };
+    }
+
+    public async Task UpdateConfigurationAsync(int configId, string configJson, string? comment, string actor, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp_example_serviceapp_module.Configurations
+SET ConfigJson = @configJson,
+    Comment = @comment,
+    CreatedBy = @actor,
+    CreatedUtc = SYSUTCDATETIME()
+WHERE ConfigId = @configId AND VersionNo = 0;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@configId", configId);
+        cmd.Parameters.AddWithValue("@configJson", configJson);
+        cmd.Parameters.AddWithValue("@comment", (object?)comment ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@actor", actor);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<JobRow>> GetJobsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT JobId, RequestType, PayloadJson, Status, Attempts, RequestedUtc, RequestedBy, LastError, ResultJson
+FROM omp_example_serviceapp_module.Jobs
+ORDER BY RequestedUtc DESC, JobId DESC;";
+
+        var rows = new List<JobRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new JobRow
+            {
+                JobId = rdr.GetInt64(0),
+                RequestType = rdr.GetString(1),
+                PayloadJson = rdr.GetString(2),
+                Status = rdr.GetByte(3),
+                Attempts = rdr.GetInt32(4),
+                RequestedUtc = rdr.GetDateTime(5),
+                RequestedBy = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                LastError = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                ResultJson = rdr.IsDBNull(8) ? null : rdr.GetString(8)
+            });
+        }
+        return rows;
+    }
+
+    public async Task EnqueueJobAsync(string requestType, string payloadJson, string actor, CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp_example_serviceapp_module.Jobs(RequestType, PayloadJson, Status, Attempts, RequestedUtc, RequestedBy)
+VALUES(@requestType, @payloadJson, 0, 0, SYSUTCDATETIME(), @actor);";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@requestType", requestType);
+        cmd.Parameters.AddWithValue("@payloadJson", payloadJson);
+        cmd.Parameters.AddWithValue("@actor", actor);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+}

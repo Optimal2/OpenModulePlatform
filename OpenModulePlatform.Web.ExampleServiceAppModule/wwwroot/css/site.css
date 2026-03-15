@@ -1,0 +1,12 @@
+/* File: OpenModulePlatform.Web.ExampleServiceAppModule/wwwroot/css/site.css */
+body { font-family: Segoe UI, Arial, sans-serif; margin: 0; color: #111; }
+.topbar { display: flex; gap: 16px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #ddd; background: #fafafa; }
+.brand { font-weight: 600; }
+.nav a { margin-right: 10px; color: #0b57d0; text-decoration: none; }
+.content { padding: 16px; }
+.grid { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.grid th, .grid td { border: 1px solid #ddd; padding: 8px 10px; vertical-align: top; }
+.grid th { background: #f6f6f6; text-align: left; }
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; background: #fff; margin-top: 12px; }
+input[type=text], textarea { width: 100%; box-sizing: border-box; }
+textarea { min-height: 220px; font-family: ui-monospace, Consolas, monospace; }

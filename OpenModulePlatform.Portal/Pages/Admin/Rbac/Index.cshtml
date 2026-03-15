@@ -1,0 +1,14 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.Rbac.IndexModel
+
+<h2>RBAC</h2>
+
+<div class="card-grid">
+    <div class="card"><div class="metric">@Model.RoleCount</div><div>Roles</div></div>
+    <div class="card"><div class="metric">@Model.PermissionCount</div><div>Permissions</div></div>
+</div>
+
+<div class="card">
+    <a href="~/admin/rbac/roles">Roles</a> |
+    <a href="~/admin/rbac/permissions">Permissions</a>
+</div>

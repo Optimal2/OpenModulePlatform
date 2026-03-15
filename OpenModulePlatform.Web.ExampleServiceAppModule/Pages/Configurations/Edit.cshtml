@@ -1,0 +1,24 @@
+@page
+@model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.Configurations.EditModel
+
+<h2>Edit configuration</h2>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card">@Model.StatusMessage</div>
+}
+
+<form method="post" class="card">
+    <input type="hidden" asp-for="Input.ConfigId" />
+    <div>
+        <label asp-for="Input.Comment"></label>
+        <input asp-for="Input.Comment" type="text" />
+    </div>
+    <div>
+        <label asp-for="Input.ConfigJson"></label>
+        <textarea asp-for="Input.ConfigJson"></textarea>
+    </div>
+    <div style="margin-top:12px;">
+        <button type="submit">Save</button>
+    </div>
+</form>

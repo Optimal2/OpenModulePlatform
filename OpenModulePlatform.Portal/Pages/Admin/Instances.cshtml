@@ -1,0 +1,26 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.InstancesModel
+
+<h2>Instances</h2>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Instance key</th>
+            <th>Display name</th>
+            <th>Enabled</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.InstanceKey)</td>
+            <td>@(row.DisplayName)</td>
+            <td>@(row.IsEnabled ? "Yes" : "No")</td>
+            <td>@(row.Description)</td>
+        </tr>
+    }
+    </tbody>
+</table>

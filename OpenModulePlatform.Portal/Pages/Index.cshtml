@@ -1,0 +1,48 @@
+@page
+@model OpenModulePlatform.Portal.Pages.IndexModel
+
+<h2>OMP Portal</h2>
+
+<p class="muted">This portal is the shared entry point for an OMP instance.</p>
+
+<div class="card">
+    <div><b>Current user</b>: @User?.Identity?.Name</div>
+    <div><b>Portal admin</b>: @(Model.IsPortalAdmin ? "Yes" : "No")</div>
+</div>
+
+<div class="card">
+    <h3>Available OMP web apps</h3>
+    @if (Model.Apps.Count == 0)
+    {
+        <div class="muted">No accessible web apps are currently registered.</div>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>Display name</th>
+                    <th>App key</th>
+                    <th>Route</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var app in Model.Apps)
+            {
+                <tr>
+                    <td>@app.DisplayName</td>
+                    <td><code>@app.AppKey</code></td>
+                    <td>
+                        @if (!string.IsNullOrWhiteSpace(app.RouteBasePath))
+                        {
+                            <a href="~/@app.RouteBasePath">/@app.RouteBasePath</a>
+                        }
+                    </td>
+                    <td>@app.Description</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>

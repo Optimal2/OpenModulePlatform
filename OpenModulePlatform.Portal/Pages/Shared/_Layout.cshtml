@@ -1,0 +1,37 @@
+@* File: OpenModulePlatform.Portal/Pages/Shared/_Layout.cshtml *@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">@ViewData["PortalTitle"]</div>
+        <nav class="nav">
+            <a href="~/">Home</a>
+            @if (ViewData["IsPortalAdmin"] is bool isPortalAdmin && isPortalAdmin)
+            {
+                <a href="~/admin/overview">Overview</a>
+                <a href="~/admin/instances">Instances</a>
+                <a href="~/admin/modules">Modules</a>
+                <a href="~/admin/apps">Apps</a>
+                <a href="~/admin/artifacts">Artifacts</a>
+                <a href="~/admin/hosts">Hosts</a>
+                <a href="~/admin/instancetemplates">Instance Templates</a>
+                <a href="~/admin/hosttemplates">Host Templates</a>
+                <a href="~/admin/hostdeploymentassignments">Assignments</a>
+                <a href="~/admin/hostdeployments">Deployments</a>
+                <a href="~/admin/hostinstallations">Installations</a>
+                <a href="~/admin/rbac">RBAC</a>
+            }
+        </nav>
+        <div class="user">@User?.Identity?.Name</div>
+    </header>
+    <main class="content">
+        @RenderBody()
+    </main>
+</body>
+</html>

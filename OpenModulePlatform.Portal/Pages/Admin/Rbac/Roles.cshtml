@@ -1,0 +1,17 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.Rbac.RolesModel
+
+<h2>Roles</h2>
+
+<table class="grid">
+    <thead><tr><th>Name</th><th>Description</th></tr></thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td><a href="~/admin/rbac/role?roleId=@row.RoleId">@row.Name</a></td>
+            <td>@(row.Description)</td>
+        </tr>
+    }
+    </tbody>
+</table>
