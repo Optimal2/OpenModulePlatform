@@ -1,0 +1,12 @@
+@page
+@model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.IndexModel
+
+<h2>Example ServiceAppModule</h2>
+
+<div class="card">
+    <div><b>Module key</b>: <code>@Model.Overview.ModuleKey</code></div>
+    <div><b>Schema</b>: <code>@Model.Overview.SchemaName</code></div>
+    <div><b>Active configurations</b>: @Model.Overview.ActiveConfigurationCount</div>
+    <div><b>Host installations</b>: @Model.Overview.HostInstallationCount</div>
+    <div><b>Open jobs</b>: @Model.Overview.OpenJobCount</div>
+</div>

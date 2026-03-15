@@ -1,0 +1,19 @@
+@page
+@model OpenModulePlatform.Web.ExampleWebAppModule.Pages.Configurations.IndexModel
+
+<h2>Configurations</h2>
+
+<table class="grid">
+    <thead><tr><th>ConfigId</th><th>Comment</th><th>Created UTC</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.ConfigId)</td>
+            <td>@(row.Comment)</td>
+            <td>@(row.CreatedUtc.ToString("u"))</td>
+            <td><a href="~/configurations/edit?configId=@row.ConfigId">Edit</a></td>
+        </tr>
+    }
+    </tbody>
+</table>

@@ -1,0 +1,30 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ModulesModel
+
+<h2>Modules</h2>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Instance</th>
+            <th>Module key</th>
+            <th>Type</th>
+            <th>Schema</th>
+            <th>Base path</th>
+            <th>Enabled</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.InstanceKey)</td>
+            <td>@(row.ModuleKey)</td>
+            <td>@(row.ModuleType)</td>
+            <td>@(row.SchemaName)</td>
+            <td>@(row.BasePath)</td>
+            <td>@(row.IsEnabled ? "Yes" : "No")</td>
+        </tr>
+    }
+    </tbody>
+</table>

@@ -1,0 +1,34 @@
+@page
+@model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.HostInstallations.IndexModel
+
+<h2>Host installations</h2>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Host</th>
+            <th>Installation</th>
+            <th>Allowed</th>
+            <th>Desired state</th>
+            <th>Artifact</th>
+            <th>Config</th>
+            <th>Last seen</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.Hostname)</td>
+            <td>@(row.InstallationName)</td>
+            <td>@(row.IsAllowed ? "Yes" : "No")</td>
+            <td>@(row.DesiredState)</td>
+            <td>@(row.ArtifactVersion)</td>
+            <td>@(row.ConfigId)</td>
+            <td>@(row.LastSeenUtc?.ToString("u"))</td>
+            <td><a href="~/hostinstallations/edit?hostInstallationId=@row.HostInstallationId">Edit</a></td>
+        </tr>
+    }
+    </tbody>
+</table>

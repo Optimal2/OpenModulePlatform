@@ -1,0 +1,42 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.Rbac.RoleModel
+
+<h2>Role</h2>
+
+@if (Model.Role is null)
+{
+    <div class="card">Role not found.</div>
+}
+else
+{
+    <div class="card">
+        <div><b>Name</b>: @Model.Role.Name</div>
+        <div><b>Description</b>: @Model.Role.Description</div>
+    </div>
+
+    <div class="card">
+        <h3>Permissions</h3>
+        <table class="grid">
+            <thead><tr><th>Permission</th></tr></thead>
+            <tbody>
+            @foreach (var row in Model.Permissions)
+            {
+                <tr><td>@row.PermissionName</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>Principals</h3>
+        <table class="grid">
+            <thead><tr><th>Type</th><th>Principal</th></tr></thead>
+            <tbody>
+            @foreach (var row in Model.Principals)
+            {
+                <tr><td>@row.PrincipalType</td><td>@row.Principal</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

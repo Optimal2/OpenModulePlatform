@@ -1,0 +1,28 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.HostDeploymentAssignmentsModel
+
+<h2>Host deployment Assignments</h2>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Hostname</th>
+            <th>Host template</th>
+            <th>Active</th>
+            <th>Assigned by</th>
+            <th>Assigned UTC</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.Hostname)</td>
+            <td>@(row.HostTemplateKey)</td>
+            <td>@(row.IsActive ? "Yes" : "No")</td>
+            <td>@(row.AssignedBy)</td>
+            <td>@(row.AssignedUtc.ToString("u"))</td>
+        </tr>
+    }
+    </tbody>
+</table>

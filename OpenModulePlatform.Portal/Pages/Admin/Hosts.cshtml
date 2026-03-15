@@ -1,0 +1,30 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.HostsModel
+
+<h2>Hosts</h2>
+
+<table class="grid">
+    <thead>
+        <tr>
+            <th>Instance</th>
+            <th>Hostname</th>
+            <th>Environment</th>
+            <th>OS</th>
+            <th>Architecture</th>
+            <th>Last seen</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var row in Model.Rows)
+    {
+        <tr>
+            <td>@(row.InstanceKey)</td>
+            <td>@(row.Hostname)</td>
+            <td>@(row.Environment)</td>
+            <td>@(row.OsFamily)</td>
+            <td>@(row.Architecture)</td>
+            <td>@(row.LastSeenUtc?.ToString("u"))</td>
+        </tr>
+    }
+    </tbody>
+</table>

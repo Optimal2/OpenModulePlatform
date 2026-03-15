@@ -1,0 +1,13 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.OverviewModel
+
+<h2>OMP overview</h2>
+
+<div class="card-grid">
+    <div class="card"><div class="metric">@Model.Metrics.InstanceCount</div><div>Instances</div></div>
+    <div class="card"><div class="metric">@Model.Metrics.ModuleCount</div><div>Modules</div></div>
+    <div class="card"><div class="metric">@Model.Metrics.AppCount</div><div>Apps</div></div>
+    <div class="card"><div class="metric">@Model.Metrics.ArtifactCount</div><div>Artifacts</div></div>
+    <div class="card"><div class="metric">@Model.Metrics.HostCount</div><div>Hosts</div></div>
+    <div class="card"><div class="metric">@Model.Metrics.HostInstallationCount</div><div>Host installations</div></div>
+</div>
