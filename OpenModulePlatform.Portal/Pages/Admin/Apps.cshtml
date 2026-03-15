@@ -1,30 +1,43 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.AppsModel
 
-<h2>Apps</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Definitions</div>
+        <h2>Apps</h2>
+        <p class="lede">App definitions belong to modules and describe what can be deployed. Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Module</th>
-            <th>App key</th>
-            <th>Display name</th>
-            <th>Type</th>
-            <th>Enabled</th>
-            <th>Description</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.ModuleKey)</td>
-            <td>@(row.AppKey)</td>
-            <td>@(row.DisplayName)</td>
-            <td>@(row.AppType)</td>
-            <td>@(row.IsEnabled ? "Yes" : "No")</td>
-            <td>@(row.Description)</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No app definitions found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Module</th>
+                <th>App key</th>
+                <th>Display name</th>
+                <th>Type</th>
+                <th>Enabled</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.ModuleKey</code></td>
+                <td><code>@row.AppKey</code></td>
+                <td>@row.DisplayName</td>
+                <td>@row.AppType</td>
+                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td>@row.Description</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

@@ -1,32 +1,45 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.HostsModel
 
-<h2>Hosts</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Manual core</div>
+        <h2>Hosts</h2>
+        <p class="lede">Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Instance</th>
-            <th>Host key</th>
-            <th>Display name</th>
-            <th>Environment</th>
-            <th>OS</th>
-            <th>Architecture</th>
-            <th>Last seen</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.InstanceKey)</td>
-            <td>@(row.HostKey)</td>
-            <td>@(row.DisplayName)</td>
-            <td>@(row.Environment)</td>
-            <td>@(row.OsFamily)</td>
-            <td>@(row.Architecture)</td>
-            <td>@(row.LastSeenUtc?.ToString("u"))</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No hosts found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Instance</th>
+                <th>Host key</th>
+                <th>Display name</th>
+                <th>Environment</th>
+                <th>OS</th>
+                <th>Architecture</th>
+                <th>Last seen</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.InstanceKey</code></td>
+                <td><code>@row.HostKey</code></td>
+                <td>@row.DisplayName</td>
+                <td>@row.Environment</td>
+                <td>@row.OsFamily</td>
+                <td>@row.Architecture</td>
+                <td>@row.LastSeenUtc?.ToString("u")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

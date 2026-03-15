@@ -1,30 +1,43 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.HostDeploymentsModel
 
-<h2>Host Deployments</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Automation</div>
+        <h2>Host deployments</h2>
+        <p class="lede">Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Host key</th>
-            <th>Host template</th>
-            <th>Status</th>
-            <th>Requested by</th>
-            <th>Requested UTC</th>
-            <th>Completed UTC</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.HostKey)</td>
-            <td>@(row.HostTemplateKey)</td>
-            <td>@(row.Status.ToString())</td>
-            <td>@(row.RequestedBy)</td>
-            <td>@(row.RequestedUtc.ToString("u"))</td>
-            <td>@(row.CompletedUtc?.ToString("u"))</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No host deployments found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Host key</th>
+                <th>Host template</th>
+                <th>Status</th>
+                <th>Requested by</th>
+                <th>Requested UTC</th>
+                <th>Completed UTC</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.HostKey</code></td>
+                <td><code>@row.HostTemplateKey</code></td>
+                <td><span class="pill">@row.Status.ToString()</span></td>
+                <td>@row.RequestedBy</td>
+                <td>@row.RequestedUtc.ToString("u")</td>
+                <td>@row.CompletedUtc?.ToString("u")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

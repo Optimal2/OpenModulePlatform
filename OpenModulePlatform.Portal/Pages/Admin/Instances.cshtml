@@ -1,26 +1,39 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.InstancesModel
 
-<h2>Instances</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Manual core</div>
+        <h2>Instances</h2>
+        <p class="lede">OMP instances are the top-level environments. Instance templates remain optional and primarily belong to the automation workflow.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Instance key</th>
-            <th>Display name</th>
-            <th>Instance template</th>
-            <th>Enabled</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.InstanceKey)</td>
-            <td>@(row.DisplayName)</td>
-            <td>@(row.InstanceTemplateKey)</td>
-            <td>@(row.IsEnabled ? "Yes" : "No")</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No instances found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Instance key</th>
+                <th>Display name</th>
+                <th>Instance template</th>
+                <th>Enabled</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.InstanceKey</code></td>
+                <td>@row.DisplayName</td>
+                <td>@row.InstanceTemplateKey</td>
+                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
