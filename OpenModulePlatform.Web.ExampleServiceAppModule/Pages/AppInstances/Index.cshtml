@@ -1,36 +1,49 @@
 @page
 @model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.AppInstances.IndexModel
 
-<h2>App Instances</h2>
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Example module</div>
+        <h1>App Instances</h1>
+        <p class="lede">Runtime-instansnivån för serviceappen. Här hanteras tillåtelse, önskat tillstånd, artifact och konfigurationskoppling.</p>
+    </div>
+</div>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Host</th>
-            <th>App instance</th>
-            <th>Installation</th>
-            <th>Allowed</th>
-            <th>Desired state</th>
-            <th>Artifact</th>
-            <th>Config</th>
-            <th>Last seen</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.HostKey)</td>
-            <td>@(row.AppInstanceKey)</td>
-            <td>@(row.InstallationName)</td>
-            <td>@(row.IsAllowed ? "Yes" : "No")</td>
-            <td>@(row.DesiredState)</td>
-            <td>@(row.ArtifactVersion)</td>
-            <td>@(row.ConfigId)</td>
-            <td>@(row.LastSeenUtc?.ToString("u"))</td>
-            <td><a href="~/appinstances/edit?appInstanceId=@row.AppInstanceId">Edit</a></td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">Inga appinstanser hittades.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Host</th>
+                <th>App instance</th>
+                <th>Installation</th>
+                <th>Allowed</th>
+                <th>Desired state</th>
+                <th>Artifact</th>
+                <th>Config</th>
+                <th>Last seen</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><span class="pill">@row.HostKey</span></td>
+                <td>@row.AppInstanceKey</td>
+                <td>@row.InstallationName</td>
+                <td>@(row.IsAllowed ? "Yes" : "No")</td>
+                <td>@row.DesiredState</td>
+                <td>@row.ArtifactVersion</td>
+                <td>@row.ConfigId</td>
+                <td>@row.LastSeenUtc?.ToString("u")</td>
+                <td><a class="action-link" href="~/appinstances/edit?appInstanceId=@row.AppInstanceId">Edit</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

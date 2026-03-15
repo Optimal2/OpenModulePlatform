@@ -1,19 +1,32 @@
 @page
 @model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.Configurations.IndexModel
 
-<h2>Configurations</h2>
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Example module</div>
+        <h1>Configurations</h1>
+        <p class="lede">Konfigurationer som kan kopplas till serviceappens appinstanser.</p>
+    </div>
+</div>
 
-<table class="grid">
-    <thead><tr><th>ConfigId</th><th>Assigned app instances</th><th>Comment</th><th></th></tr></thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.ConfigId)</td>
-            <td>@(row.AssignedInstallations)</td>
-            <td>@(row.Comment)</td>
-            <td><a href="~/configurations/edit?configId=@row.ConfigId">Edit</a></td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">Inga konfigurationer hittades.</div>
+}
+else
+{
+    <table class="grid">
+        <thead><tr><th>ConfigId</th><th>Assigned app instances</th><th>Comment</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><span class="pill">@row.ConfigId</span></td>
+                <td>@row.AssignedInstallations</td>
+                <td>@row.Comment</td>
+                <td><a class="action-link" href="~/configurations/edit?configId=@row.ConfigId">Edit</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

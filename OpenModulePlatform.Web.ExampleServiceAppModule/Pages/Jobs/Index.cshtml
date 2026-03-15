@@ -1,35 +1,50 @@
 @page
 @model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.Jobs.IndexModel
 
-<h2>Jobs</h2>
-
-<form method="post" class="card">
+<div class="page-header">
     <div>
+        <div class="eyebrow">Example module</div>
+        <h1>Jobs</h1>
+        <p class="lede">Köa nya jobb och följ aktuell jobbhistorik för serviceappen.</p>
+    </div>
+</div>
+
+<form method="post" class="card form-grid bottom-gap">
+    <div class="form-field">
         <label asp-for="Input.RequestType"></label>
         <input asp-for="Input.RequestType" type="text" />
     </div>
-    <div>
+
+    <div class="form-field">
         <label asp-for="Input.PayloadJson"></label>
         <textarea asp-for="Input.PayloadJson"></textarea>
     </div>
-    <div style="margin-top:12px;">
+
+    <div class="toolbar">
         <button type="submit">Queue job</button>
     </div>
 </form>
 
-<table class="grid">
-    <thead><tr><th>JobId</th><th>Type</th><th>Status</th><th>Attempts</th><th>Requested UTC</th><th>Last error</th></tr></thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.JobId)</td>
-            <td>@(row.RequestType)</td>
-            <td>@(row.Status)</td>
-            <td>@(row.Attempts)</td>
-            <td>@(row.RequestedUtc.ToString("u"))</td>
-            <td>@(row.LastError)</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">Inga jobb hittades.</div>
+}
+else
+{
+    <table class="grid">
+        <thead><tr><th>JobId</th><th>Type</th><th>Status</th><th>Attempts</th><th>Requested UTC</th><th>Last error</th></tr></thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><span class="pill">@row.JobId</span></td>
+                <td>@row.RequestType</td>
+                <td>@row.Status</td>
+                <td>@row.Attempts</td>
+                <td>@row.RequestedUtc.ToString("u")</td>
+                <td>@row.LastError</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

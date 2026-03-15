@@ -1,10 +1,29 @@
 @page
 @model OpenModulePlatform.Web.ExampleWebAppModule.Pages.IndexModel
 
-<h2>Example WebAppModule</h2>
+<div class="page-header">
+    <div>
+        <div class="eyebrow">Example module</div>
+        <h1>Example Web App Module</h1>
+        <p class="lede">Neutral referensmodul för webbflöden i OMP. Sidan visar modulöversikt och länkar vidare till modulens konfigurationer.</p>
+    </div>
+</div>
 
-<div class="card">
-    <div><b>Module key</b>: <code>@Model.Overview.ModuleKey</code></div>
-    <div><b>Schema</b>: <code>@Model.Overview.SchemaName</code></div>
-    <div><b>Active configurations</b>: @Model.Overview.ActiveConfigurationCount</div>
+<div class="section-grid section-grid--wide">
+    <section class="card section-card">
+        <h3>Overview</h3>
+        <div class="mini-metrics top-gap">
+            <div><span>Module key</span><code>@Model.Overview.ModuleKey</code></div>
+            <div><span>Schema</span><code>@Model.Overview.SchemaName</code></div>
+            <div><span>Active configurations</span><span class="metric-inline">@Model.Overview.ActiveConfigurationCount</span></div>
+        </div>
+    </section>
+
+    <section class="card section-card">
+        <h3>Next step</h3>
+        <p class="muted small-text">Gå vidare till konfigurationsvyn för att granska eller uppdatera modulens aktuella sample-konfigurationer.</p>
+        <div class="toolbar">
+            <a class="action-link" href="~/configurations">Open configurations</a>
+        </div>
+    </section>
 </div>
