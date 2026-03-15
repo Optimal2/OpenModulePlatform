@@ -31,7 +31,7 @@ BEGIN
         ModuleType = N'WebAppModule',
         SchemaName = N'omp_example_webapp_module',
         BasePath = N'ExampleWebAppModule',
-        Description = N'Web-only example module for OMP',
+        Description = N'Web-only example module for OpenModulePlatform',
         IsEnabled = 1,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE InstanceId = @InstanceId AND ModuleKey = @ModuleKey;
@@ -39,7 +39,7 @@ END
 ELSE
 BEGIN
     INSERT INTO omp.Modules(InstanceId, ModuleKey, DisplayName, ModuleType, SchemaName, BasePath, Description, IsEnabled, SortOrder)
-    VALUES(@InstanceId, @ModuleKey, N'Example WebAppModule', N'WebAppModule', N'omp_example_webapp_module', N'ExampleWebAppModule', N'Web-only example module for OMP', 1, 300);
+    VALUES(@InstanceId, @ModuleKey, N'Example WebAppModule', N'WebAppModule', N'omp_example_webapp_module', N'ExampleWebAppModule', N'Web-only example module for OpenModulePlatform', 1, 300);
 END
 
 SELECT @ModuleId = ModuleId FROM omp.Modules WHERE InstanceId = @InstanceId AND ModuleKey = @ModuleKey;

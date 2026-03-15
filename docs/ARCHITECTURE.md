@@ -1,17 +1,13 @@
 <!-- File: docs/ARCHITECTURE.md -->
 # OpenModulePlatform architecture
 
-## Current baseline in this repository
+## Purpose
 
-This repository provides a neutral OMP baseline built around:
+OpenModulePlatform is designed as a modular platform rather than a single-purpose application. The repository focuses on the platform baseline: portal infrastructure, shared services, RBAC, host-management concepts and representative example modules.
 
-- a shared web library
-- the OMP Portal
-- a web-only example module
-- a web + service example module
-- a core SQL schema using the OMP terminology
+## Structural model
 
-## Structural model implemented in SQL
+The structural model describes what an OMP instance consists of.
 
 ```text
 OMP Instance
@@ -20,7 +16,16 @@ OMP Instance
       └─ OMP Artifact
 ```
 
-## Operational model implemented in SQL
+### Interpretation
+
+- **OMP Instance** - a concrete installation of the platform.
+- **OMP Module** - a functional extension within an instance.
+- **OMP App** - an application that belongs to a module.
+- **OMP Artifact** - a deployable build output for an app.
+
+## Operational model
+
+The operational model describes how an OMP instance is shaped, deployed and observed.
 
 ```text
 OMP Instance
@@ -32,25 +37,38 @@ OMP Instance
    └─ OMP HostInstallation
 ```
 
-## Current technical implementation
+### Interpretation
 
-### Portal and web apps
+- **OMP InstanceTemplate** - describes the intended topology of an instance.
+- **OMP Host** - an execution and deployment environment within an instance.
+- **OMP HostTemplate** - describes the desired state of a host.
+- **OMP HostDeploymentAssignment** - links a host to the template it should follow.
+- **OMP HostDeployment** - a concrete deployment execution on a host.
+- **OMP HostInstallation** - the observed installation state of an app on a host.
 
-- ASP.NET Core Razor Pages
-- Windows authentication / Negotiate support
-- SQL-backed RBAC
-- shared page model and hosting conventions in `OpenModulePlatform.Web.Shared`
+## Current implementation in this repository
 
-### Service apps
+### Portal and web applications
 
-- .NET worker service style process
-- SQL heartbeat against `omp.HostInstallations`
-- configuration snapshot loading from module-local schema
-- SQL queue claim pattern for jobs
+- ASP.NET Core Razor Pages.
+- Shared hosting conventions in `OpenModulePlatform.Web.Shared`.
+- SQL-backed RBAC via `omp.*` tables.
+- Central portal navigation driven by `omp.Modules`, `omp.Apps` and `omp.AppPermissions`.
 
-## Intentionally excluded from this repository
+### Service applications
 
-- customer-specific modules
-- archive-specific concepts
-- domain-specific pipelines
-- private environment details
+- .NET worker-service hosting model.
+- Heartbeat and verification against `omp.HostInstallations`.
+- Module-local configuration stored in the module schema.
+- Queue-based job processing pattern for background execution.
+
+### SQL model
+
+The `sql` folder contains:
+
+- a core install script for the platform schema and portal baseline.
+- an example install script that sets up the sample modules and their data.
+
+## What is intentionally not included
+
+This repository does not include customer-specific modules, domain-specific pipelines or private deployment conventions. The intent is to keep the baseline reusable for open source adoption and downstream extension.

@@ -3,7 +3,10 @@
 OpenModulePlatform core install script.
 
 This script creates the neutral OMP core schema and seeds a minimal default instance,
-default templates, default host, and the OMP Portal module/app registration.
+default templates, default host, bootstrap RBAC data and the OMP Portal module/app registration.
+
+After this script has completed, run SQL_Install_OpenModulePlatform_Examples.sql if you want
+to install the example modules included in this repository.
 */
 USE [OpenModulePlatform];
 GO
@@ -314,6 +317,7 @@ DECLARE @PortalViewPermissionId int;
 DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultHostTemplateId int;
+DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = COALESCE(CONVERT(nvarchar(256), ORIGINAL_LOGIN()), SUSER_SNAME());
 
 IF NOT EXISTS (SELECT 1 FROM omp.Instances WHERE InstanceId = @DefaultInstanceId)
 BEGIN
@@ -394,6 +398,20 @@ IF NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRol
 
 IF NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @PortalAdminPermissionId)
     INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @PortalAdminPermissionId);
+
+/*
+Bootstrap portal administrator row:
+- PrincipalType = User
+- Principal     = current SQL login running the install script
+
+Adjust or remove this row after initial setup if your environment uses another
+user or an AD group for portal administration. The purpose is to ensure that the
+first portal administrator can sign in and complete the remaining configuration
+from the OMP Portal UI.
+*/
+IF NOT EXISTS (SELECT 1 FROM omp.RolePrincipals WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User' AND Principal = @BootstrapPortalAdminPrincipal)
+    INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
+    VALUES(@PortalAdminsRoleId, N'User', @BootstrapPortalAdminPrincipal);
 
 IF EXISTS (SELECT 1 FROM omp.Modules WHERE InstanceId = @DefaultInstanceId AND ModuleKey = N'omp_portal')
 BEGIN

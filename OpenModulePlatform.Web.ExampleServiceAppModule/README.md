@@ -1,10 +1,12 @@
 # OpenModulePlatform.Web.ExampleServiceAppModule
 
-This sample demonstrates an OMP module composed of a web app plus a service app.
+This project is a reference implementation of an OMP module that combines a web application with a service application.
 
-Included examples:
+## What it demonstrates
 
 - module-local configuration management
-- service app host installations
-- queue-based job execution sample
-- worker heartbeat against `omp.HostInstallations`
+- host installation administration
+- queue-based job submission from the web application
+- integration with a companion service application
+
+Use this project together with `OpenModulePlatform.Service.ExampleServiceAppModule` when you want to model a module that has both user-facing and background-processing responsibilities.

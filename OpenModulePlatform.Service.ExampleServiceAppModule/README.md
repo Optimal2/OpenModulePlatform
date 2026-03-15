@@ -1,10 +1,14 @@
 # OpenModulePlatform.Service.ExampleServiceAppModule
 
-Example OMP service app / worker.
+This project is a reference implementation of an OMP service application.
 
-Behavior:
+## Runtime responsibilities
 
-- heartbeats against `omp.HostInstallations`
-- loads active configuration from `omp_example_serviceapp_module.Configurations`
-- claims jobs from `omp_example_serviceapp_module.Jobs`
-- writes execution results to `omp_example_serviceapp_module.JobExecutions`
+- heartbeat and verification against `omp.HostInstallations`
+- configuration refresh from `omp_example_serviceapp_module.Configurations`
+- job claim and completion in `omp_example_serviceapp_module.Jobs`
+- execution logging in `omp_example_serviceapp_module.JobExecutions`
+
+## Installation
+
+Publish the project and run `Deploy/Install-Service.ps1` from an elevated PowerShell session. The script can be executed either from the publish folder or directly from the `Deploy` folder in the project tree.

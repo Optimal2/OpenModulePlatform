@@ -29,7 +29,7 @@ public sealed class RbacService
 
         var groupPrincipals = OperatingSystem.IsWindows()
             ? GetGroupPrincipalsFromUser(user)
-            : new List<string>();
+            : [];
 
         try
         {
@@ -54,7 +54,12 @@ public sealed class RbacService
 
             return permissions;
         }
-        catch (Exception ex)
+        catch (SqlException ex)
+        {
+            _log.LogError(ex, "Failed to load permissions from the OMP database.");
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (InvalidOperationException ex)
         {
             _log.LogError(ex, "Failed to load permissions from the OMP database.");
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -81,12 +86,12 @@ WHERE (rp.PrincipalType='User' AND rp.Principal = @user)
     }
 
     [SupportedOSPlatform("windows")]
-    private static List<string> GetGroupPrincipalsFromUser(ClaimsPrincipal user)
+    private List<string> GetGroupPrincipalsFromUser(ClaimsPrincipal user)
     {
         try
         {
             if (user.Identity is not WindowsIdentity windowsIdentity || windowsIdentity.Groups is null)
-                return new List<string>();
+                return [];
 
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var sid in windowsIdentity.Groups)
@@ -102,16 +107,27 @@ WHERE (rp.PrincipalType='User' AND rp.Principal = @user)
                     if (!string.IsNullOrWhiteSpace(ntValue))
                         result.Add(ntValue);
                 }
-                catch
+                catch (IdentityNotMappedException ex)
                 {
+                    _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sidValue);
+                }
+                catch (SystemException ex)
+                {
+                    _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sidValue);
                 }
             }
 
             return result.ToList();
         }
-        catch
+        catch (UnauthorizedAccessException ex)
         {
-            return new List<string>();
+            _log.LogWarning(ex, "Failed to enumerate Windows group memberships for the current user.");
+            return [];
+        }
+        catch (SystemException ex)
+        {
+            _log.LogWarning(ex, "Failed to enumerate Windows group memberships for the current user.");
+            return [];
         }
     }
 }
