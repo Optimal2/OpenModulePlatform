@@ -5,7 +5,7 @@ using Microsoft.Data.SqlClient;
 
 namespace OpenModulePlatform.Portal.Services;
 
-public sealed class OmpAdminRepository
+public sealed partial class OmpAdminRepository
 {
     private readonly SqlConnectionFactory _db;
 

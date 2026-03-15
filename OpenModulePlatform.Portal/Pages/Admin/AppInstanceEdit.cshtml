@@ -1,0 +1,43 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.AppInstanceEditModel
+<section class="page-header"><div><div class="eyebrow">Manual core</div><h2>@(Model.IsCreate ? "Create app instance" : "Edit app instance")</h2><p class="lede">App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance.</p></div></section>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
+@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+<form method="post" class="card form-grid">
+<input type="hidden" asp-for="Input.AppInstanceId" />
+<div class="field-grid field-grid--2">
+<div class="form-field"><label asp-for="Input.ModuleInstanceId"></label><select asp-for="Input.ModuleInstanceId"><option value="">Select module instance</option>@foreach (var option in Model.ModuleInstanceOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">Start by choosing the module instance. Host and app selections are validated against it.</div><span asp-validation-for="Input.ModuleInstanceId" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.AppId"></label><select asp-for="Input.AppId"><option value="">Select app</option>@foreach (var option in Model.AppOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">The chosen app must belong to the same module definition as the selected module instance.</div><span asp-validation-for="Input.AppId" class="field-validation-error"></span></div>
+</div>
+<div class="field-grid field-grid--3">
+<div class="form-field"><label asp-for="Input.AppInstanceKey"></label><input asp-for="Input.AppInstanceKey" /><span asp-validation-for="Input.AppInstanceKey" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.DisplayName"></label><input asp-for="Input.DisplayName" /><span asp-validation-for="Input.DisplayName" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.SortOrder"></label><input asp-for="Input.SortOrder" type="number" /></div>
+</div>
+<div class="form-field"><label asp-for="Input.Description"></label><textarea asp-for="Input.Description"></textarea></div>
+<div class="field-grid field-grid--2">
+<div class="form-field"><label asp-for="Input.HostId"></label><select asp-for="Input.HostId"><option value="">No host / not pinned</option>@foreach (var option in Model.HostOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">If set, the host must belong to the same instance as the selected module instance.</div></div>
+<div class="form-field"><label asp-for="Input.ArtifactId"></label><select asp-for="Input.ArtifactId"><option value="">No artifact selected</option>@foreach (var option in Model.ArtifactOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">If set, the artifact must belong to the selected app definition.</div></div>
+</div>
+<div class="field-grid field-grid--2">
+<div class="form-field"><label asp-for="Input.RoutePath"></label><input asp-for="Input.RoutePath" /><div class="field-help">Use a leading slash for local routes, for example <code>/example-service</code>.</div><span asp-validation-for="Input.RoutePath" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.PublicUrl"></label><input asp-for="Input.PublicUrl" type="url" /><div class="field-help">Optional absolute URL when the app is externally reachable.</div><span asp-validation-for="Input.PublicUrl" class="field-validation-error"></span></div>
+</div>
+<div class="field-grid field-grid--3">
+<div class="form-field"><label asp-for="Input.InstallPath"></label><input asp-for="Input.InstallPath" /><div class="field-help">Physical install location on host, if relevant.</div></div>
+<div class="form-field"><label asp-for="Input.InstallationName"></label><input asp-for="Input.InstallationName" /><div class="field-help">Friendly install slot or service name.</div></div>
+<div class="form-field"><label asp-for="Input.ConfigId"></label><input asp-for="Input.ConfigId" type="number" /><div class="field-help">Module-owned config identifier. Leave empty when not used.</div></div>
+</div>
+<div class="field-grid field-grid--3">
+<div class="form-field"><label asp-for="Input.DesiredState"></label><select asp-for="Input.DesiredState">@foreach (var option in Model.DesiredStateOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">Controls what the platform expects this runtime instance to do.</div></div>
+<div class="form-field checkbox-row checkbox-row--boxed"><input asp-for="Input.IsEnabled" type="checkbox" /><label asp-for="Input.IsEnabled"></label></div>
+<div class="form-field checkbox-row checkbox-row--boxed"><input asp-for="Input.IsAllowed" type="checkbox" /><label asp-for="Input.IsAllowed"></label></div>
+</div>
+<div class="field-grid field-grid--3">
+<div class="form-field"><label asp-for="Input.ExpectedLogin"></label><input asp-for="Input.ExpectedLogin" /><div class="field-help">Optional runtime identity that is expected to report heartbeat.</div></div>
+<div class="form-field"><label asp-for="Input.ExpectedClientHostName"></label><input asp-for="Input.ExpectedClientHostName" /></div>
+<div class="form-field"><label asp-for="Input.ExpectedClientIp"></label><input asp-for="Input.ExpectedClientIp" /></div>
+</div>
+<div class="toolbar"><button type="submit">Save app instance</button><a class="action-link" href="~/admin/appinstances">Back to app instances</a></div>
+</form>
+@if (!Model.IsCreate) { <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this app instance?');"><input type="hidden" asp-for="Input.AppInstanceId" /><h3>Danger zone</h3><p class="muted">Delete removes the runtime row. Make sure no external system still relies on this app instance key.</p><button type="submit" class="btn btn-danger">Delete app instance</button></form> }

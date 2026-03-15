@@ -1,0 +1,21 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ModuleEditModel
+<section class="page-header"><div><div class="eyebrow">Manual core</div><h2>@(Model.IsCreate ? "Create module" : "Edit module")</h2><p class="lede">Modules are definitions. Keep runtime-specific values out of this page and use module instances or app instances for environment-specific configuration.</p></div></section>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
+@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+<form method="post" class="card form-grid">
+<input type="hidden" asp-for="Input.ModuleId" />
+<div class="field-grid field-grid--2">
+<div class="form-field"><label asp-for="Input.ModuleKey"></label><input asp-for="Input.ModuleKey" /><div class="field-help">Stable definition key used by apps and instance templates.</div><span asp-validation-for="Input.ModuleKey" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.DisplayName"></label><input asp-for="Input.DisplayName" /><span asp-validation-for="Input.DisplayName" class="field-validation-error"></span></div>
+</div>
+<div class="field-grid field-grid--3">
+<div class="form-field"><label asp-for="Input.ModuleType"></label><select asp-for="Input.ModuleType">@foreach (var option in Model.ModuleTypeOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">Pick the closest platform role. This is a definition-level classification.</div></div>
+<div class="form-field"><label asp-for="Input.SchemaName"></label><input asp-for="Input.SchemaName" /><div class="field-help">Database schema owned by the module, when applicable.</div><span asp-validation-for="Input.SchemaName" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.SortOrder"></label><input asp-for="Input.SortOrder" type="number" /></div>
+</div>
+<div class="form-field"><label asp-for="Input.Description"></label><textarea asp-for="Input.Description"></textarea></div>
+<div class="form-field checkbox-row checkbox-row--boxed"><input asp-for="Input.IsEnabled" type="checkbox" /><label asp-for="Input.IsEnabled"></label></div>
+<div class="toolbar"><button type="submit">Save module</button><a class="action-link" href="~/admin/modules">Back to modules</a></div>
+</form>
+@if (!Model.IsCreate) { <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this module? Related apps and instances must be removed first.');"><input type="hidden" asp-for="Input.ModuleId" /><h3>Danger zone</h3><p class="muted">Deleting a module is only possible when dependent apps, module instances and template rows are already gone.</p><button type="submit" class="btn btn-danger">Delete module</button></form> }

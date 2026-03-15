@@ -338,3 +338,66 @@ code {
 .mini-metrics > div:last-child {
     border-bottom: none;
 }
+
+
+.field-grid {
+    display: grid;
+    gap: 14px;
+}
+
+.field-grid--2 {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.field-grid--3 {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.field-help {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+}
+
+.info-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    margin-left: 0.15rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-muted);
+    font-size: 0.72rem;
+    cursor: help;
+}
+
+.checkbox-row--boxed {
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-muted);
+}
+
+.validation-summary-errors,
+.field-validation-error {
+    color: #a61b1b;
+}
+
+.validation-summary-errors ul {
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+.danger-zone {
+    margin-top: 16px;
+    border-color: #efcaca;
+    background: #fff8f8;
+}
+
+.btn-danger {
+    border-color: #c54848;
+    background: #fff0f0;
+    color: #8f1f1f;
+}

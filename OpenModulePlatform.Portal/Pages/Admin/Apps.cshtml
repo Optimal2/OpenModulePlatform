@@ -9,6 +9,10 @@
     </div>
 </section>
 
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/appedit">Create app</a>
+</div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">No app definitions found.</div>
@@ -24,6 +28,7 @@ else
                 <th>Type</th>
                 <th>Enabled</th>
                 <th>Description</th>
+                            <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -36,6 +41,7 @@ else
                 <td>@row.AppType</td>
                 <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
                 <td>@row.Description</td>
+                <td><a class="action-link" href="~/admin/appedit?id=@row.AppId">Edit</a></td>
             </tr>
         }
         </tbody>

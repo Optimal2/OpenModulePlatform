@@ -9,6 +9,10 @@
     </div>
 </section>
 
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/hostedit">Create host</a>
+</div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">No hosts found.</div>
@@ -25,6 +29,7 @@ else
                 <th>OS</th>
                 <th>Architecture</th>
                 <th>Last seen</th>
+                            <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -38,6 +43,7 @@ else
                 <td>@row.OsFamily</td>
                 <td>@row.Architecture</td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
+                <td><a class="action-link" href="~/admin/hostedit?id=@row.HostId">Edit</a></td>
             </tr>
         }
         </tbody>

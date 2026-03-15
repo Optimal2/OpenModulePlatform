@@ -9,6 +9,10 @@
     </div>
 </section>
 
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/moduleedit">Create module</a>
+</div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">No modules found.</div>
@@ -23,6 +27,7 @@ else
                 <th>Type</th>
                 <th>Schema</th>
                 <th>Enabled</th>
+                            <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -34,6 +39,7 @@ else
                 <td>@row.ModuleType</td>
                 <td><code>@row.SchemaName</code></td>
                 <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td><a class="action-link" href="~/admin/moduleedit?id=@row.ModuleId">Edit</a></td>
             </tr>
         }
         </tbody>

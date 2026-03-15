@@ -1,0 +1,21 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.AppEditModel
+<section class="page-header"><div><div class="eyebrow">Manual core</div><h2>@(Model.IsCreate ? "Create app definition" : "Edit app definition")</h2><p class="lede">Apps are definition rows. Runtime placement, route and artifact selection should be handled on app instances instead.</p></div></section>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
+@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+<form method="post" class="card form-grid">
+<input type="hidden" asp-for="Input.AppId" />
+<div class="field-grid field-grid--2">
+<div class="form-field"><label asp-for="Input.ModuleId"></label><select asp-for="Input.ModuleId"><option value="">Select module</option>@foreach (var option in Model.ModuleOptions){<option value="@option.Value">@option.Label</option>}</select><span asp-validation-for="Input.ModuleId" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.AppType"></label><select asp-for="Input.AppType">@foreach (var option in Model.AppTypeOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">Choose how the platform should think about this definition.</div></div>
+</div>
+<div class="field-grid field-grid--3">
+<div class="form-field"><label asp-for="Input.AppKey"></label><input asp-for="Input.AppKey" /><span asp-validation-for="Input.AppKey" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.DisplayName"></label><input asp-for="Input.DisplayName" /><span asp-validation-for="Input.DisplayName" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.SortOrder"></label><input asp-for="Input.SortOrder" type="number" /></div>
+</div>
+<div class="form-field"><label asp-for="Input.Description"></label><textarea asp-for="Input.Description"></textarea></div>
+<div class="form-field checkbox-row checkbox-row--boxed"><input asp-for="Input.IsEnabled" type="checkbox" /><label asp-for="Input.IsEnabled"></label></div>
+<div class="toolbar"><button type="submit">Save app</button><a class="action-link" href="~/admin/apps">Back to apps</a></div>
+</form>
+@if (!Model.IsCreate) { <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this app definition? Related artifacts and app instances must be removed first.');"><input type="hidden" asp-for="Input.AppId" /><h3>Danger zone</h3><p class="muted">Delete is blocked while artifacts, app instances or template rows still reference the app.</p><button type="submit" class="btn btn-danger">Delete app</button></form> }
