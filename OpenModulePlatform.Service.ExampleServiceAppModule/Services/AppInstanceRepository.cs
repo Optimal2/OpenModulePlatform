@@ -1,98 +1,103 @@
-// File: OpenModulePlatform.Service.ExampleServiceAppModule/Services/HostInstallationRepository.cs
+// File: OpenModulePlatform.Service.ExampleServiceAppModule/Services/AppInstanceRepository.cs
 using Microsoft.Data.SqlClient;
 
 namespace OpenModulePlatform.Service.ExampleServiceAppModule.Services;
 
-public sealed class HostInstallationRepository
+public sealed class AppInstanceRepository
 {
     private readonly SqlConnectionFactory _db;
 
-    public HostInstallationRepository(SqlConnectionFactory db)
+    public AppInstanceRepository(SqlConnectionFactory db)
     {
         _db = db;
     }
 
-    public sealed record HostInstallationRuntime(
-        Guid HostInstallationId,
-        Guid HostId,
+    public sealed record AppInstanceRuntime(
+        Guid AppInstanceId,
+        Guid? HostId,
         int AppId,
         string AppKey,
         bool IsAllowed,
         byte DesiredState,
         int? ConfigId,
-        string ExpectedLogin,
-        string? ExpectedHostName,
+        string? ExpectedLogin,
+        string? ExpectedClientHostName,
         string? ExpectedClientIp);
 
     public sealed record ObservedIdentity(string Login, string HostName, string? ClientIp);
 
-    public async Task<HostInstallationRuntime?> GetRuntimeAsync(Guid hostInstallationId, CancellationToken ct)
+    public async Task<AppInstanceRuntime?> GetRuntimeAsync(Guid appInstanceId, CancellationToken ct)
     {
         const string sql = @"
-SELECT hi.HostInstallationId,
-       hi.HostId,
-       hi.AppId,
+SELECT ai.AppInstanceId,
+       ai.HostId,
+       ai.AppId,
        a.AppKey,
-       hi.IsAllowed,
-       hi.DesiredState,
-       hi.ConfigId,
-       h.ExpectedLogin,
-       h.ExpectedHostName,
-       h.ExpectedClientIp
-FROM omp.HostInstallations hi
-INNER JOIN omp.Hosts h ON h.HostId = hi.HostId
-INNER JOIN omp.Apps a ON a.AppId = hi.AppId
-WHERE hi.HostInstallationId = @hostInstallationId;";
+       ai.IsAllowed,
+       ai.DesiredState,
+       ai.ConfigId,
+       ai.ExpectedLogin,
+       ai.ExpectedClientHostName,
+       ai.ExpectedClientIp
+FROM omp.AppInstances ai
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+WHERE ai.AppInstanceId = @appInstanceId;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostInstallationId", hostInstallationId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
             return null;
 
-        return new HostInstallationRuntime(
+        return new AppInstanceRuntime(
             rdr.GetGuid(0),
-            rdr.GetGuid(1),
+            rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
             rdr.GetInt32(2),
             rdr.GetString(3),
             rdr.GetBoolean(4),
             rdr.GetByte(5),
             rdr.IsDBNull(6) ? null : rdr.GetInt32(6),
-            rdr.IsDBNull(7) ? string.Empty : rdr.GetString(7),
+            rdr.IsDBNull(7) ? null : rdr.GetString(7),
             rdr.IsDBNull(8) ? null : rdr.GetString(8),
             rdr.IsDBNull(9) ? null : rdr.GetString(9));
     }
 
-    public async Task<ObservedIdentity?> HeartbeatAsync(Guid hostInstallationId, CancellationToken ct)
+    public async Task<ObservedIdentity?> HeartbeatAsync(Guid appInstanceId, CancellationToken ct)
     {
         const string sql = @"
 DECLARE @login nvarchar(256) = ORIGINAL_LOGIN();
 DECLARE @hostName nvarchar(128) = HOST_NAME();
 DECLARE @clientIp nvarchar(64) = CONVERT(nvarchar(64), CONNECTIONPROPERTY('client_net_address'));
+DECLARE @hostId uniqueidentifier;
 
-UPDATE omp.HostInstallations
+SELECT @hostId = HostId
+FROM omp.AppInstances
+WHERE AppInstanceId = @appInstanceId;
+
+UPDATE omp.AppInstances
 SET LastSeenUtc = SYSUTCDATETIME(),
     LastLogin = @login,
     LastClientHostName = @hostName,
     LastClientIp = @clientIp,
     UpdatedUtc = SYSUTCDATETIME()
-WHERE HostInstallationId = @hostInstallationId;
+WHERE AppInstanceId = @appInstanceId;
 
-UPDATE h
-SET LastSeenUtc = SYSUTCDATETIME(),
-    UpdatedUtc = SYSUTCDATETIME()
-FROM omp.Hosts h
-INNER JOIN omp.HostInstallations hi ON hi.HostId = h.HostId
-WHERE hi.HostInstallationId = @hostInstallationId;
+IF @hostId IS NOT NULL
+BEGIN
+    UPDATE omp.Hosts
+    SET LastSeenUtc = SYSUTCDATETIME(),
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE HostId = @hostId;
+END
 
 SELECT @login AS LoginName, @hostName AS ClientHostName, @clientIp AS ClientIp;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostInstallationId", hostInstallationId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
             return null;

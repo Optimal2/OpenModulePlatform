@@ -9,7 +9,7 @@ public sealed class ExampleServiceAppModuleWorkerEngine
 {
     private readonly ILogger<ExampleServiceAppModuleWorkerEngine> _log;
     private readonly IOptionsMonitor<WorkerSettings> _workerSettings;
-    private readonly HostInstallationRepository _hostInstallations;
+    private readonly AppInstanceRepository _appInstances;
     private readonly ExampleServiceAppModuleConfigService _configService;
     private readonly ExampleServiceAppModuleJobRepository _jobs;
     private readonly ExampleServiceAppModuleJobProcessor _processor;
@@ -17,19 +17,19 @@ public sealed class ExampleServiceAppModuleWorkerEngine
     private DateTime _nextHeartbeatUtc = DateTime.MinValue;
     private DateTime _nextConfigRefreshUtc = DateTime.MinValue;
     private ExampleServiceAppModuleOptions? _config;
-    private HostInstallationRepository.HostInstallationRuntime? _runtime;
+    private AppInstanceRepository.AppInstanceRuntime? _runtime;
 
     public ExampleServiceAppModuleWorkerEngine(
         ILogger<ExampleServiceAppModuleWorkerEngine> log,
         IOptionsMonitor<WorkerSettings> workerSettings,
-        HostInstallationRepository hostInstallations,
+        AppInstanceRepository appInstances,
         ExampleServiceAppModuleConfigService configService,
         ExampleServiceAppModuleJobRepository jobs,
         ExampleServiceAppModuleJobProcessor processor)
     {
         _log = log;
         _workerSettings = workerSettings;
-        _hostInstallations = hostInstallations;
+        _appInstances = appInstances;
         _configService = configService;
         _jobs = jobs;
         _processor = processor;
@@ -38,10 +38,10 @@ public sealed class ExampleServiceAppModuleWorkerEngine
     public async Task ExecuteLoopAsync(CancellationToken stoppingToken)
     {
         var settings = _workerSettings.CurrentValue;
-        var hostInstallationId = settings.HostInstallationId;
-        _log.LogInformation("Started. HostInstallationId={HostInstallationId}", hostInstallationId);
+        var appInstanceId = settings.AppInstanceId;
+        _log.LogInformation("Started. AppInstanceId={AppInstanceId}", appInstanceId);
 
-        HostInstallationRepository.ObservedIdentity? observed = null;
+        AppInstanceRepository.ObservedIdentity? observed = null;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -52,13 +52,13 @@ public sealed class ExampleServiceAppModuleWorkerEngine
 
                 if (now >= _nextHeartbeatUtc)
                 {
-                    observed = await _hostInstallations.HeartbeatAsync(hostInstallationId, stoppingToken);
+                    observed = await _appInstances.HeartbeatAsync(appInstanceId, stoppingToken);
                     _nextHeartbeatUtc = now.AddSeconds(Math.Max(1, settings.HeartbeatSeconds));
                 }
 
                 if (now >= _nextConfigRefreshUtc)
                 {
-                    var refresh = await _configService.RefreshAsync(hostInstallationId, stoppingToken);
+                    var refresh = await _configService.RefreshAsync(appInstanceId, stoppingToken);
                     _runtime = refresh.Runtime;
                     _config = refresh.Config;
                     _nextConfigRefreshUtc = now.AddSeconds(Math.Max(1, settings.ConfigRefreshSeconds));
@@ -76,8 +76,8 @@ public sealed class ExampleServiceAppModuleWorkerEngine
                 if (!IsExpectedIdentityMatch(_runtime, observed, out var mismatchReason))
                 {
                     _log.LogError(
-                        "Host installation identity mismatch. HostInstallationId={HostInstallationId} ExpectedLogin={ExpectedLogin} ObservedLogin={ObservedLogin} Reason={Reason}",
-                        hostInstallationId,
+                        "App instance identity mismatch. AppInstanceId={AppInstanceId} ExpectedLogin={ExpectedLogin} ObservedLogin={ObservedLogin} Reason={Reason}",
+                        appInstanceId,
                         _runtime.ExpectedLogin,
                         observed.Login,
                         mismatchReason);
@@ -91,12 +91,12 @@ public sealed class ExampleServiceAppModuleWorkerEngine
 
                 for (var i = 0; i < batchSize && !stoppingToken.IsCancellationRequested; i++)
                 {
-                    var job = await _jobs.TryClaimNextAsync(hostInstallationId, stoppingToken);
+                    var job = await _jobs.TryClaimNextAsync(appInstanceId, stoppingToken);
                     if (job is null)
                         break;
 
                     processedAny = true;
-                    await _processor.ProcessOneAsync(hostInstallationId, _config, job, stoppingToken);
+                    await _processor.ProcessOneAsync(appInstanceId, _config, job, stoppingToken);
                 }
 
                 if (!processedAny)
@@ -124,7 +124,7 @@ public sealed class ExampleServiceAppModuleWorkerEngine
         }
     }
 
-    private static bool IsExpectedIdentityMatch(HostInstallationRepository.HostInstallationRuntime runtime, HostInstallationRepository.ObservedIdentity observed, out string reason)
+    private static bool IsExpectedIdentityMatch(AppInstanceRepository.AppInstanceRuntime runtime, AppInstanceRepository.ObservedIdentity observed, out string reason)
     {
         reason = string.Empty;
 
@@ -135,10 +135,10 @@ public sealed class ExampleServiceAppModuleWorkerEngine
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(runtime.ExpectedHostName)
-            && !string.Equals(runtime.ExpectedHostName, observed.HostName, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(runtime.ExpectedClientHostName)
+            && !string.Equals(runtime.ExpectedClientHostName, observed.HostName, StringComparison.OrdinalIgnoreCase))
         {
-            reason = "host_name";
+            reason = "client_host_name";
             return false;
         }
 

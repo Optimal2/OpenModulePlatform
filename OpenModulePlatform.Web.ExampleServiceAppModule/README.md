@@ -1,12 +1,11 @@
-# OpenModulePlatform.Web.ExampleServiceAppModule
+# Example ServiceAppModule Web App
 
-This project is a reference implementation of an OMP module that combines a web application with a service application.
+This project is the administrative web application for the sample service-backed OMP module.
 
-## What it demonstrates
+It demonstrates:
 
-- module-local configuration management
-- host installation administration
-- queue-based job submission from the web application
-- integration with a companion service application
+- module-specific configuration storage
+- app-instance-centric administration
+- visibility into example jobs and runtime state
 
-Use this project together with `OpenModulePlatform.Service.ExampleServiceAppModule` when you want to model a module that has both user-facing and background-processing responsibilities.
+The module uses `omp.AppInstances` as the runtime anchor for the service app. Each service app instance can carry its own artifact, configuration and verification policy.

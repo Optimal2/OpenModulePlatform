@@ -1,43 +1,34 @@
-<!-- File: docs/TERMINOLOGY.md -->
-# OpenModulePlatform terminology
+# Terminology
 
-## Umbrella term
+## OMP Instance
+A concrete installation of OpenModulePlatform for one environment or organisation.
 
-**OpenModulePlatform (OMP)** is the umbrella name for the platform, its architecture and its codebase.
+## Module
+A reusable module definition.
 
-## Highest concrete level
+## Module Instance
+A concrete module instance inside an OMP instance.
 
-**OMP Instance** is the highest concrete level in both the structural and operational models.
+## App
+A reusable app definition that belongs to a module definition.
 
-## Structural model
+## App Instance
+A concrete runtime or web instance of an app inside a module instance. An app instance may have its own route, artifact, configuration, host placement and verification rules.
 
-- **OMP Instance**
-- **OMP Module**
-- **OMP App**
-- **OMP Artifact**
+## Artifact
+A deployable build output for an app definition.
 
-## Operational model
+## Host
+A runtime target within an OMP instance. Hosts can carry one or more app instances.
 
-- **OMP Instance**
-- **OMP InstanceTemplate**
-- **OMP Host**
-- **OMP HostTemplate**
-- **OMP HostDeploymentAssignment**
-- **OMP HostDeployment**
-- **OMP HostInstallation**
+## Instance Template
+A template for the topology of an OMP instance.
 
-## Special terms
+## Host Template
+A template for the desired shape of a host role within an OMP instance.
 
-- **OMP Portal** - the primary portal concept for the main web user interface.
-- **OMP HostAgent** - an optional tool that can run on an OMP host and automate deployment, installation, update, monitoring and reporting.
+## OMP Portal
+The shared portal web application for navigating and administering an OMP instance.
 
-## Practical interpretation
-
-- An **OMP Instance** is a concrete installation of OMP.
-- An **OMP Module** is a functional extension within an instance.
-- An **OMP App** is an application that belongs to a module.
-- An **OMP Artifact** is a versioned build output for an app.
-- An **OMP Host** is an execution and deployment environment within an instance.
-- An **OMP HostTemplate** describes the desired state of a host.
-- An **OMP HostDeployment** is the application of a desired state on a host.
-- An **OMP HostInstallation** is the actual installation state observed on a host.
+## OMP HostAgent
+A future optional automation component that can reconcile host state against the desired topology and deployment model.

@@ -17,20 +17,24 @@ public sealed class AppCatalogService
     public async Task<IReadOnlyList<PortalAppEntry>> GetEnabledWebAppsAsync(CancellationToken ct)
     {
         const string sql = @"
-SELECT a.AppId,
+SELECT ai.AppInstanceId,
+       ai.AppInstanceKey,
        a.AppKey,
-       a.DisplayName,
-       a.RouteBasePath,
-       a.SortOrder,
-       a.Description,
+       ai.DisplayName,
+       ai.RoutePath,
+       ai.PublicUrl,
+       ai.SortOrder,
+       ai.Description,
        p.Name AS PermissionName,
        ap.RequireAll
-FROM omp.Apps a
+FROM omp.AppInstances ai
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
 LEFT JOIN omp.AppPermissions ap ON ap.AppId = a.AppId
 LEFT JOIN omp.Permissions p ON p.PermissionId = ap.PermissionId
-WHERE a.IsEnabled = 1
+WHERE ai.IsEnabled = 1
+  AND ai.IsAllowed = 1
   AND a.AppType IN (N'Portal', N'WebApp')
-ORDER BY a.SortOrder, a.DisplayName;";
+ORDER BY ai.SortOrder, ai.DisplayName;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -38,31 +42,33 @@ ORDER BY a.SortOrder, a.DisplayName;";
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
-        var map = new Dictionary<int, PortalAppEntry>();
+        var map = new Dictionary<Guid, PortalAppEntry>();
         while (await rdr.ReadAsync(ct))
         {
-            var appId = rdr.GetInt32(0);
-            if (!map.TryGetValue(appId, out var entry))
+            var appInstanceId = rdr.GetGuid(0);
+            if (!map.TryGetValue(appInstanceId, out var entry))
             {
                 entry = new PortalAppEntry
                 {
-                    AppId = appId,
-                    AppKey = rdr.GetString(1),
-                    DisplayName = rdr.GetString(2),
-                    RouteBasePath = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-                    SortOrder = rdr.GetInt32(4),
-                    Description = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                    RequireAll = !rdr.IsDBNull(7) && rdr.GetBoolean(7)
+                    AppInstanceId = appInstanceId,
+                    AppInstanceKey = rdr.GetString(1),
+                    AppKey = rdr.GetString(2),
+                    DisplayName = rdr.GetString(3),
+                    RoutePath = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                    PublicUrl = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                    SortOrder = rdr.GetInt32(6),
+                    Description = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                    RequireAll = !rdr.IsDBNull(9) && rdr.GetBoolean(9)
                 };
-                map[appId] = entry;
+                map[appInstanceId] = entry;
             }
             else
             {
-                entry.RequireAll = entry.RequireAll || (!rdr.IsDBNull(7) && rdr.GetBoolean(7));
+                entry.RequireAll = entry.RequireAll || (!rdr.IsDBNull(9) && rdr.GetBoolean(9));
             }
 
-            if (!rdr.IsDBNull(6))
-                entry.RequiredPermissions.Add(rdr.GetString(6));
+            if (!rdr.IsDBNull(8))
+                entry.RequiredPermissions.Add(rdr.GetString(8));
         }
 
         return map.Values.OrderBy(x => x.SortOrder).ThenBy(x => x.DisplayName).ToList();

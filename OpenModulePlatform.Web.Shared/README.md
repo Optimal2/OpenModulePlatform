@@ -1,15 +1,13 @@
-<!-- File: OpenModulePlatform.Web.Shared/README.md -->
 # OpenModulePlatform.Web.Shared
 
-`OpenModulePlatform.Web.Shared` contains the shared infrastructure used by OMP web applications.
+Shared web infrastructure for OMP portal and module web applications.
 
-## Included building blocks
+The library provides:
 
-- `AddOmpWebDefaults(...)` and `UseOmpWebDefaults(...)`
-- `SqlConnectionFactory`
-- `RbacService`
-- `OmpPageModel`
-- `OmpSecurePageModel`
-- `HttpRequest.GetPublicBaseUrl()`
+- common hosting defaults
+- SQL connection factory support
+- shared RBAC integration
+- common Razor Page base classes
+- lightweight HTTP helpers
 
-The shared project is intended to keep hosting, authorization and common page-model behavior consistent across portal and module web applications.
+Use this project when building an OMP web application that should align with the shared portal conventions.

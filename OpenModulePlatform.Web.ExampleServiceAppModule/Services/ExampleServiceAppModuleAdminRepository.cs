@@ -2,7 +2,6 @@
 using OpenModulePlatform.Web.ExampleServiceAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace OpenModulePlatform.Web.ExampleServiceAppModule.Services;
@@ -12,9 +11,9 @@ public sealed class ExampleServiceAppModuleAdminRepository
     private readonly SqlConnectionFactory _db;
     private readonly ILogger<ExampleServiceAppModuleAdminRepository> _log;
 
-    public const string ModuleKey = "example_serviceapp_module";
-    public const string ModuleSchema = "omp_example_serviceapp_module";
-    public const string ServiceAppKey = "example_serviceapp_module_service";
+    private const string ModuleKey = "example_serviceapp_module";
+    private const string ModuleSchema = "omp_example_serviceapp_module";
+    private const string ServiceAppKey = "example_serviceapp_module_service";
 
     public ExampleServiceAppModuleAdminRepository(SqlConnectionFactory db, ILogger<ExampleServiceAppModuleAdminRepository> log)
     {
@@ -29,8 +28,8 @@ SELECT @moduleKey,
        @moduleSchema,
        (SELECT COUNT(1) FROM omp_example_serviceapp_module.Configurations WHERE VersionNo = 0),
        (SELECT COUNT(1)
-        FROM omp.HostInstallations hi
-        INNER JOIN omp.Apps a ON a.AppId = hi.AppId
+        FROM omp.AppInstances ai
+        INNER JOIN omp.Apps a ON a.AppId = ai.AppId
         WHERE a.AppKey = @serviceAppKey),
        (SELECT COUNT(1) FROM omp_example_serviceapp_module.Jobs WHERE Status IN (0,1));";
 
@@ -48,42 +47,45 @@ SELECT @moduleKey,
             ModuleKey = rdr.GetString(0),
             SchemaName = rdr.GetString(1),
             ActiveConfigurationCount = rdr.GetInt32(2),
-            HostInstallationCount = rdr.GetInt32(3),
+            ServiceAppInstanceCount = rdr.GetInt32(3),
             OpenJobCount = rdr.GetInt32(4)
         };
     }
 
-    public async Task<IReadOnlyList<HostInstallationRow>> GetHostInstallationsAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<AppInstanceRow>> GetAppInstancesAsync(CancellationToken ct)
     {
         const string sql = @"
-SELECT hi.HostInstallationId,
-       hi.HostId,
-       h.Hostname,
-       hi.InstallationName,
-       hi.LastSeenUtc,
-       hi.LastLogin,
-       hi.LastClientHostName,
-       hi.LastClientIp,
-       h.ExpectedLogin,
-       h.ExpectedHostName,
-       h.ExpectedClientIp,
-       hi.VerificationStatus,
-       hi.LastVerifiedUtc,
-       hi.IsAllowed,
-       hi.DesiredState,
-       hi.ConfigId,
-       hi.ArtifactId,
+SELECT ai.AppInstanceId,
+       ai.HostId,
+       h.HostKey,
+       ai.AppInstanceKey,
+       ai.DisplayName,
+       ai.InstallationName,
+       ai.RoutePath,
+       ai.LastSeenUtc,
+       ai.LastLogin,
+       ai.LastClientHostName,
+       ai.LastClientIp,
+       ai.ExpectedLogin,
+       ai.ExpectedClientHostName,
+       ai.ExpectedClientIp,
+       ai.VerificationStatus,
+       ai.LastVerifiedUtc,
+       ai.IsAllowed,
+       ai.DesiredState,
+       ai.ConfigId,
+       ai.ArtifactId,
        ar.Version,
        ar.TargetName,
-       hi.UpdatedUtc
-FROM omp.HostInstallations hi
-INNER JOIN omp.Hosts h ON h.HostId = hi.HostId
-INNER JOIN omp.Apps a ON a.AppId = hi.AppId
-LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = hi.ArtifactId
+       ai.UpdatedUtc
+FROM omp.AppInstances ai
+LEFT JOIN omp.Hosts h ON h.HostId = ai.HostId
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
 WHERE a.AppKey = @serviceAppKey
-ORDER BY h.Hostname, hi.InstallationName;";
+ORDER BY h.HostKey, ai.AppInstanceKey;";
 
-        var rows = new List<HostInstallationRow>();
+        var rows = new List<AppInstanceRow>();
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
@@ -91,57 +93,60 @@ ORDER BY h.Hostname, hi.InstallationName;";
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            rows.Add(new HostInstallationRow
+            rows.Add(new AppInstanceRow
             {
-                HostInstallationId = rdr.GetGuid(0),
-                HostId = rdr.GetGuid(1),
-                Hostname = rdr.GetString(2),
-                InstallationName = rdr.GetString(3),
-                LastSeenUtc = rdr.IsDBNull(4) ? null : rdr.GetDateTime(4),
-                LastLogin = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                LastClientHostName = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                LastClientIp = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                ExpectedLogin = rdr.GetString(8),
-                ExpectedHostName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-                ExpectedClientIp = rdr.IsDBNull(10) ? null : rdr.GetString(10),
-                VerificationStatus = rdr.GetByte(11),
-                LastVerifiedUtc = rdr.IsDBNull(12) ? null : rdr.GetDateTime(12),
-                IsAllowed = rdr.GetBoolean(13),
-                DesiredState = rdr.GetByte(14),
-                ConfigId = rdr.IsDBNull(15) ? null : rdr.GetInt32(15),
-                ArtifactId = rdr.IsDBNull(16) ? null : rdr.GetInt32(16),
-                ArtifactVersion = rdr.IsDBNull(17) ? null : rdr.GetString(17),
-                ArtifactTargetName = rdr.IsDBNull(18) ? null : rdr.GetString(18),
-                UpdatedUtc = rdr.GetDateTime(19)
+                AppInstanceId = rdr.GetGuid(0),
+                HostId = rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
+                HostKey = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                AppInstanceKey = rdr.GetString(3),
+                DisplayName = rdr.GetString(4),
+                InstallationName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                RoutePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                LastSeenUtc = rdr.IsDBNull(7) ? null : rdr.GetDateTime(7),
+                LastLogin = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                LastClientHostName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                LastClientIp = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                ExpectedLogin = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+                ExpectedClientHostName = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                ExpectedClientIp = rdr.IsDBNull(13) ? null : rdr.GetString(13),
+                VerificationStatus = rdr.GetByte(14),
+                LastVerifiedUtc = rdr.IsDBNull(15) ? null : rdr.GetDateTime(15),
+                IsAllowed = rdr.GetBoolean(16),
+                DesiredState = rdr.GetByte(17),
+                ConfigId = rdr.IsDBNull(18) ? null : rdr.GetInt32(18),
+                ArtifactId = rdr.IsDBNull(19) ? null : rdr.GetInt32(19),
+                ArtifactVersion = rdr.IsDBNull(20) ? null : rdr.GetString(20),
+                ArtifactTargetName = rdr.IsDBNull(21) ? null : rdr.GetString(21),
+                UpdatedUtc = rdr.GetDateTime(22)
             });
         }
         return rows;
     }
 
-    public async Task<HostInstallationRow?> GetHostInstallationAsync(Guid hostInstallationId, CancellationToken ct)
+    public async Task<AppInstanceRow?> GetAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
     {
-        var rows = await GetHostInstallationsAsync(ct);
-        return rows.FirstOrDefault(x => x.HostInstallationId == hostInstallationId);
+        var rows = await GetAppInstancesAsync(ct);
+        return rows.FirstOrDefault(x => x.AppInstanceId == appInstanceId);
     }
 
-    public async Task UpdateHostInstallationAsync(Guid hostInstallationId, bool isAllowed, byte desiredState, int? configId, int? artifactId, string actor, CancellationToken ct)
+    public async Task UpdateAppInstanceAsync(Guid appInstanceId, bool isAllowed, byte desiredState, int? configId, int? artifactId, string actor, CancellationToken ct)
     {
         const string sql = @"
-UPDATE hi
+UPDATE ai
 SET IsAllowed = @isAllowed,
     DesiredState = @desiredState,
     ConfigId = @configId,
     ArtifactId = @artifactId,
     UpdatedUtc = SYSUTCDATETIME()
-FROM omp.HostInstallations hi
-INNER JOIN omp.Apps a ON a.AppId = hi.AppId
-WHERE hi.HostInstallationId = @hostInstallationId
+FROM omp.AppInstances ai
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+WHERE ai.AppInstanceId = @appInstanceId
   AND a.AppKey = @serviceAppKey;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostInstallationId", hostInstallationId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
         cmd.Parameters.AddWithValue("@serviceAppKey", ServiceAppKey);
         cmd.Parameters.AddWithValue("@isAllowed", isAllowed);
         cmd.Parameters.AddWithValue("@desiredState", desiredState);
@@ -157,19 +162,19 @@ VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
         {
             await using var audit = new SqlCommand(auditSql, conn);
             audit.Parameters.AddWithValue("@actor", actor);
-            audit.Parameters.AddWithValue("@action", ServiceAppKey + ".hostinstallation.update");
-            audit.Parameters.AddWithValue("@targetType", "HostInstallation");
-            audit.Parameters.AddWithValue("@targetId", hostInstallationId.ToString());
-            audit.Parameters.AddWithValue("@afterJson", JsonSerializer.Serialize(new { hostInstallationId, isAllowed, desiredState, configId, artifactId }));
+            audit.Parameters.AddWithValue("@action", ServiceAppKey + ".appinstance.update");
+            audit.Parameters.AddWithValue("@targetType", "AppInstance");
+            audit.Parameters.AddWithValue("@targetId", appInstanceId.ToString());
+            audit.Parameters.AddWithValue("@afterJson", JsonSerializer.Serialize(new { appInstanceId, isAllowed, desiredState, configId, artifactId }));
             await audit.ExecuteNonQueryAsync(ct);
         }
         catch (SqlException ex)
         {
-            _log.LogWarning(ex, "Audit logging failed for host installation {HostInstallationId}.", hostInstallationId);
+            _log.LogWarning(ex, "Audit logging failed for app instance {AppInstanceId}.", appInstanceId);
         }
         catch (InvalidOperationException ex)
         {
-            _log.LogWarning(ex, "Audit logging failed for host installation {HostInstallationId}.", hostInstallationId);
+            _log.LogWarning(ex, "Audit logging failed for app instance {AppInstanceId}.", appInstanceId);
         }
     }
 
@@ -182,13 +187,13 @@ SELECT c.ConfigId,
        c.Comment,
        c.CreatedUtc,
        c.CreatedBy,
-       CAST(ISNULL(a.AssignedInstallations, 0) AS int)
+       CAST(ISNULL(a.AssignedInstances, 0) AS int)
 FROM omp_example_serviceapp_module.Configurations c
 OUTER APPLY (
-    SELECT COUNT(*) AS AssignedInstallations
-    FROM omp.HostInstallations hi
-    INNER JOIN omp.Apps a ON a.AppId = hi.AppId
-    WHERE a.AppKey = @serviceAppKey AND hi.ConfigId = c.ConfigId
+    SELECT COUNT(*) AS AssignedInstances
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+    WHERE a.AppKey = @serviceAppKey AND ai.ConfigId = c.ConfigId
 ) a
 WHERE c.VersionNo = 0
 ORDER BY c.ConfigId DESC;";
@@ -266,7 +271,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         const string sql = @"
 SELECT JobId, RequestType, PayloadJson, Status, Attempts, RequestedUtc, RequestedBy, LastError, ResultJson
 FROM omp_example_serviceapp_module.Jobs
-ORDER BY RequestedUtc DESC, JobId DESC;";
+ORDER BY JobId DESC;";
 
         var rows = new List<JobRow>();
         await using var conn = _db.Create();
@@ -294,8 +299,8 @@ ORDER BY RequestedUtc DESC, JobId DESC;";
     public async Task EnqueueJobAsync(string requestType, string payloadJson, string actor, CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp_example_serviceapp_module.Jobs(RequestType, PayloadJson, Status, Attempts, RequestedUtc, RequestedBy)
-VALUES(@requestType, @payloadJson, 0, 0, SYSUTCDATETIME(), @actor);";
+INSERT INTO omp_example_serviceapp_module.Jobs(RequestType, PayloadJson, Status, RequestedUtc, RequestedBy, UpdatedUtc)
+VALUES(@requestType, @payloadJson, 0, SYSUTCDATETIME(), @actor, SYSUTCDATETIME());";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);

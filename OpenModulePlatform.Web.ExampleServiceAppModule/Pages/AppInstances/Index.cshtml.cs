@@ -1,4 +1,4 @@
-// File: OpenModulePlatform.Web.ExampleServiceAppModule/Pages/HostInstallations/Index.cshtml.cs
+// File: OpenModulePlatform.Web.ExampleServiceAppModule/Pages/AppInstances/Index.cshtml.cs
 using OpenModulePlatform.Web.ExampleServiceAppModule.Services;
 using OpenModulePlatform.Web.ExampleServiceAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Options;
@@ -6,7 +6,7 @@ using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
-namespace OpenModulePlatform.Web.ExampleServiceAppModule.Pages.HostInstallations;
+namespace OpenModulePlatform.Web.ExampleServiceAppModule.Pages.AppInstances;
 
 public sealed class IndexModel : ExampleServiceAppModulePageModel
 {
@@ -18,7 +18,7 @@ public sealed class IndexModel : ExampleServiceAppModulePageModel
         _repo = repo;
     }
 
-    public IReadOnlyList<HostInstallationRow> Rows { get; private set; } = [];
+    public IReadOnlyList<AppInstanceRow> Rows { get; private set; } = [];
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -26,8 +26,8 @@ public sealed class IndexModel : ExampleServiceAppModulePageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("Host installations");
-        Rows = await _repo.GetHostInstallationsAsync(ct);
+        SetTitles("App Instances");
+        Rows = await _repo.GetAppInstancesAsync(ct);
         return Page();
     }
 }

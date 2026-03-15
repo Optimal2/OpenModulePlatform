@@ -1,12 +1,13 @@
 @page
-@model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.HostInstallations.IndexModel
+@model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.AppInstances.IndexModel
 
-<h2>Host installations</h2>
+<h2>App Instances</h2>
 
 <table class="grid">
     <thead>
         <tr>
             <th>Host</th>
+            <th>App instance</th>
             <th>Installation</th>
             <th>Allowed</th>
             <th>Desired state</th>
@@ -20,14 +21,15 @@
     @foreach (var row in Model.Rows)
     {
         <tr>
-            <td>@(row.Hostname)</td>
+            <td>@(row.HostKey)</td>
+            <td>@(row.AppInstanceKey)</td>
             <td>@(row.InstallationName)</td>
             <td>@(row.IsAllowed ? "Yes" : "No")</td>
             <td>@(row.DesiredState)</td>
             <td>@(row.ArtifactVersion)</td>
             <td>@(row.ConfigId)</td>
             <td>@(row.LastSeenUtc?.ToString("u"))</td>
-            <td><a href="~/hostinstallations/edit?hostInstallationId=@row.HostInstallationId">Edit</a></td>
+            <td><a href="~/appinstances/edit?appInstanceId=@row.AppInstanceId">Edit</a></td>
         </tr>
     }
     </tbody>

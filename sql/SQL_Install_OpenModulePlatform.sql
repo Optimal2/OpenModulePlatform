@@ -3,10 +3,14 @@
 OpenModulePlatform core install script.
 
 This script creates the neutral OMP core schema and seeds a minimal default instance,
-default templates, default host, bootstrap RBAC data and the OMP Portal module/app registration.
+default templates, a sample host, bootstrap RBAC data, and the OMP Portal definitions.
 
-After this script has completed, run SQL_Install_OpenModulePlatform_Examples.sql if you want
-to install the example modules included in this repository.
+Important:
+- This script intentionally inserts placeholder values in security- and runtime-sensitive rows.
+- Review and replace all values marked REPLACE_ME before you try to sign in to OMP Portal
+  or start any sample service app.
+- After this script has completed, run SQL_Install_OpenModulePlatform_Examples.sql if you want
+  to install the example modules included in this repository.
 */
 USE [OpenModulePlatform];
 GO
@@ -87,6 +91,41 @@ END
 GO
 
 -------------------------------------------------------------------------------
+-- Operational template model
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.InstanceTemplates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.InstanceTemplates
+    (
+        InstanceTemplateId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        TemplateKey nvarchar(100) NOT NULL,
+        DisplayName nvarchar(200) NOT NULL,
+        Description nvarchar(500) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplates_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UQ_omp_InstanceTemplates_TemplateKey UNIQUE(TemplateKey)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.HostTemplates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostTemplates
+    (
+        HostTemplateId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        TemplateKey nvarchar(100) NOT NULL,
+        DisplayName nvarchar(200) NOT NULL,
+        Description nvarchar(500) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_HostTemplates_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostTemplates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostTemplates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UQ_omp_HostTemplates_TemplateKey UNIQUE(TemplateKey)
+    );
+END
+GO
+
+-------------------------------------------------------------------------------
 -- Structural model
 -------------------------------------------------------------------------------
 IF OBJECT_ID(N'omp.Instances', N'U') IS NULL
@@ -97,6 +136,7 @@ BEGIN
         InstanceKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
         Description nvarchar(500) NULL,
+        InstanceTemplateId int NULL,
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_Instances_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Instances_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Instances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
@@ -105,24 +145,54 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = N'FK_omp_Instances_InstanceTemplate'
+)
+BEGIN
+    ALTER TABLE omp.Instances
+    ADD CONSTRAINT FK_omp_Instances_InstanceTemplate
+        FOREIGN KEY(InstanceTemplateId) REFERENCES omp.InstanceTemplates(InstanceTemplateId);
+END
+GO
+
 IF OBJECT_ID(N'omp.Modules', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.Modules
     (
         ModuleId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        InstanceId uniqueidentifier NOT NULL,
         ModuleKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
         ModuleType nvarchar(50) NOT NULL,
         SchemaName nvarchar(128) NOT NULL,
-        BasePath nvarchar(128) NULL,
         Description nvarchar(500) NULL,
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_Modules_IsEnabled DEFAULT(1),
         SortOrder int NOT NULL CONSTRAINT DF_omp_Modules_SortOrder DEFAULT(0),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Modules_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Modules_UpdatedUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_omp_Modules_Instance FOREIGN KEY(InstanceId) REFERENCES omp.Instances(InstanceId),
-        CONSTRAINT UQ_omp_Modules_Instance_ModuleKey UNIQUE(InstanceId, ModuleKey)
+        CONSTRAINT UQ_omp_Modules_ModuleKey UNIQUE(ModuleKey)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.ModuleInstances', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ModuleInstances
+    (
+        ModuleInstanceId uniqueidentifier NOT NULL CONSTRAINT PK_omp_ModuleInstances PRIMARY KEY,
+        InstanceId uniqueidentifier NOT NULL,
+        ModuleId int NOT NULL,
+        ModuleInstanceKey nvarchar(100) NOT NULL,
+        DisplayName nvarchar(200) NOT NULL,
+        Description nvarchar(500) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_ModuleInstances_IsEnabled DEFAULT(1),
+        SortOrder int NOT NULL CONSTRAINT DF_omp_ModuleInstances_SortOrder DEFAULT(0),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_ModuleInstances_Instance FOREIGN KEY(InstanceId) REFERENCES omp.Instances(InstanceId),
+        CONSTRAINT FK_omp_ModuleInstances_Module FOREIGN KEY(ModuleId) REFERENCES omp.Modules(ModuleId),
+        CONSTRAINT UQ_omp_ModuleInstances_Instance_ModuleInstanceKey UNIQUE(InstanceId, ModuleInstanceKey)
     );
 END
 GO
@@ -136,7 +206,6 @@ BEGIN
         AppKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
         AppType nvarchar(50) NOT NULL,
-        RouteBasePath nvarchar(128) NULL,
         Description nvarchar(500) NULL,
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_Apps_IsEnabled DEFAULT(1),
         SortOrder int NOT NULL CONSTRAINT DF_omp_Apps_SortOrder DEFAULT(0),
@@ -181,62 +250,144 @@ BEGIN
 END
 GO
 
--------------------------------------------------------------------------------
--- Operational model
--------------------------------------------------------------------------------
-IF OBJECT_ID(N'omp.InstanceTemplates', N'U') IS NULL
-BEGIN
-    CREATE TABLE omp.InstanceTemplates
-    (
-        InstanceTemplateId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        TemplateKey nvarchar(100) NOT NULL,
-        DisplayName nvarchar(200) NOT NULL,
-        Description nvarchar(500) NULL,
-        IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplates_IsEnabled DEFAULT(1),
-        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplates_CreatedUtc DEFAULT SYSUTCDATETIME(),
-        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT UQ_omp_InstanceTemplates_TemplateKey UNIQUE(TemplateKey)
-    );
-END
-GO
-
 IF OBJECT_ID(N'omp.Hosts', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.Hosts
     (
         HostId uniqueidentifier NOT NULL CONSTRAINT PK_omp_Hosts PRIMARY KEY,
         InstanceId uniqueidentifier NOT NULL,
-        Hostname nvarchar(128) NOT NULL,
+        HostKey nvarchar(128) NOT NULL,
         DisplayName nvarchar(200) NULL,
         Environment nvarchar(100) NULL,
         OsFamily nvarchar(50) NULL,
         OsVersion nvarchar(100) NULL,
         Architecture nvarchar(50) NULL,
-        ExpectedLogin nvarchar(256) NOT NULL,
-        ExpectedHostName nvarchar(128) NULL,
-        ExpectedClientIp nvarchar(64) NULL,
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_Hosts_IsEnabled DEFAULT(1),
         LastSeenUtc datetime2(3) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Hosts_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Hosts_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT FK_omp_Hosts_Instance FOREIGN KEY(InstanceId) REFERENCES omp.Instances(InstanceId),
-        CONSTRAINT UQ_omp_Hosts_Instance_Hostname UNIQUE(InstanceId, Hostname)
+        CONSTRAINT UQ_omp_Hosts_Instance_HostKey UNIQUE(InstanceId, HostKey)
     );
 END
 GO
 
-IF OBJECT_ID(N'omp.HostTemplates', N'U') IS NULL
+IF OBJECT_ID(N'omp.AppInstances', N'U') IS NULL
 BEGIN
-    CREATE TABLE omp.HostTemplates
+    CREATE TABLE omp.AppInstances
     (
-        HostTemplateId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        TemplateKey nvarchar(100) NOT NULL,
+        AppInstanceId uniqueidentifier NOT NULL CONSTRAINT PK_omp_AppInstances PRIMARY KEY,
+        ModuleInstanceId uniqueidentifier NOT NULL,
+        HostId uniqueidentifier NULL,
+        AppId int NOT NULL,
+        AppInstanceKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
         Description nvarchar(500) NULL,
-        IsEnabled bit NOT NULL CONSTRAINT DF_omp_HostTemplates_IsEnabled DEFAULT(1),
-        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostTemplates_CreatedUtc DEFAULT SYSUTCDATETIME(),
-        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostTemplates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT UQ_omp_HostTemplates_TemplateKey UNIQUE(TemplateKey)
+        RoutePath nvarchar(256) NULL,
+        PublicUrl nvarchar(500) NULL,
+        InstallPath nvarchar(500) NULL,
+        InstallationName nvarchar(150) NULL,
+        ArtifactId int NULL,
+        ConfigId int NULL,
+        ExpectedLogin nvarchar(256) NULL,
+        ExpectedClientHostName nvarchar(128) NULL,
+        ExpectedClientIp nvarchar(64) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_AppInstances_IsEnabled DEFAULT(1),
+        IsAllowed bit NOT NULL CONSTRAINT DF_omp_AppInstances_IsAllowed DEFAULT(1),
+        DesiredState tinyint NOT NULL CONSTRAINT DF_omp_AppInstances_DesiredState DEFAULT(1),
+        VerificationStatus tinyint NOT NULL CONSTRAINT DF_omp_AppInstances_VerificationStatus DEFAULT(0),
+        LastSeenUtc datetime2(3) NULL,
+        LastLogin nvarchar(256) NULL,
+        LastClientHostName nvarchar(128) NULL,
+        LastClientIp nvarchar(64) NULL,
+        LastVerifiedUtc datetime2(3) NULL,
+        SortOrder int NOT NULL CONSTRAINT DF_omp_AppInstances_SortOrder DEFAULT(0),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_AppInstances_ModuleInstance FOREIGN KEY(ModuleInstanceId) REFERENCES omp.ModuleInstances(ModuleInstanceId),
+        CONSTRAINT FK_omp_AppInstances_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_AppInstances_App FOREIGN KEY(AppId) REFERENCES omp.Apps(AppId),
+        CONSTRAINT FK_omp_AppInstances_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId),
+        CONSTRAINT UQ_omp_AppInstances_ModuleInstance_AppInstanceKey UNIQUE(ModuleInstanceId, AppInstanceKey)
+    );
+END
+GO
+
+-------------------------------------------------------------------------------
+-- Template topology model
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.InstanceTemplateHosts', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.InstanceTemplateHosts
+    (
+        InstanceTemplateHostId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        InstanceTemplateId int NOT NULL,
+        HostTemplateId int NOT NULL,
+        HostKey nvarchar(128) NOT NULL,
+        DisplayName nvarchar(200) NULL,
+        Environment nvarchar(100) NULL,
+        SortOrder int NOT NULL CONSTRAINT DF_omp_InstanceTemplateHosts_SortOrder DEFAULT(0),
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateHosts_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateHosts_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateHosts_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_InstanceTemplateHosts_InstanceTemplate FOREIGN KEY(InstanceTemplateId) REFERENCES omp.InstanceTemplates(InstanceTemplateId),
+        CONSTRAINT FK_omp_InstanceTemplateHosts_HostTemplate FOREIGN KEY(HostTemplateId) REFERENCES omp.HostTemplates(HostTemplateId),
+        CONSTRAINT UQ_omp_InstanceTemplateHosts_Template_HostKey UNIQUE(InstanceTemplateId, HostKey)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.InstanceTemplateModuleInstances', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.InstanceTemplateModuleInstances
+    (
+        InstanceTemplateModuleInstanceId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        InstanceTemplateId int NOT NULL,
+        ModuleId int NOT NULL,
+        ModuleInstanceKey nvarchar(100) NOT NULL,
+        DisplayName nvarchar(200) NOT NULL,
+        Description nvarchar(500) NULL,
+        SortOrder int NOT NULL CONSTRAINT DF_omp_InstanceTemplateModuleInstances_SortOrder DEFAULT(0),
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateModuleInstances_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateModuleInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateModuleInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_InstanceTemplateModuleInstances_InstanceTemplate FOREIGN KEY(InstanceTemplateId) REFERENCES omp.InstanceTemplates(InstanceTemplateId),
+        CONSTRAINT FK_omp_InstanceTemplateModuleInstances_Module FOREIGN KEY(ModuleId) REFERENCES omp.Modules(ModuleId),
+        CONSTRAINT UQ_omp_InstanceTemplateModuleInstances_Template_ModuleInstanceKey UNIQUE(InstanceTemplateId, ModuleInstanceKey)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.InstanceTemplateAppInstances', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.InstanceTemplateAppInstances
+    (
+        InstanceTemplateAppInstanceId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        InstanceTemplateModuleInstanceId int NOT NULL,
+        InstanceTemplateHostId int NULL,
+        AppId int NOT NULL,
+        AppInstanceKey nvarchar(100) NOT NULL,
+        DisplayName nvarchar(200) NOT NULL,
+        Description nvarchar(500) NULL,
+        RoutePath nvarchar(256) NULL,
+        PublicUrl nvarchar(500) NULL,
+        InstallPath nvarchar(500) NULL,
+        InstallationName nvarchar(150) NULL,
+        DesiredArtifactId int NULL,
+        DesiredConfigId int NULL,
+        ExpectedLogin nvarchar(256) NULL,
+        ExpectedClientHostName nvarchar(128) NULL,
+        ExpectedClientIp nvarchar(64) NULL,
+        DesiredState tinyint NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_DesiredState DEFAULT(1),
+        SortOrder int NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_SortOrder DEFAULT(0),
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_ModuleInstance FOREIGN KEY(InstanceTemplateModuleInstanceId) REFERENCES omp.InstanceTemplateModuleInstances(InstanceTemplateModuleInstanceId),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_Host FOREIGN KEY(InstanceTemplateHostId) REFERENCES omp.InstanceTemplateHosts(InstanceTemplateHostId),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_App FOREIGN KEY(AppId) REFERENCES omp.Apps(AppId),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_Artifact FOREIGN KEY(DesiredArtifactId) REFERENCES omp.Artifacts(ArtifactId),
+        CONSTRAINT UQ_omp_InstanceTemplateAppInstances_ModuleInstance_AppInstanceKey UNIQUE(InstanceTemplateModuleInstanceId, AppInstanceKey)
     );
 END
 GO
@@ -278,62 +429,23 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID(N'omp.HostInstallations', N'U') IS NULL
-BEGIN
-    CREATE TABLE omp.HostInstallations
-    (
-        HostInstallationId uniqueidentifier NOT NULL CONSTRAINT PK_omp_HostInstallations PRIMARY KEY,
-        HostId uniqueidentifier NOT NULL,
-        AppId int NOT NULL,
-        InstallationName nvarchar(150) NOT NULL,
-        ArtifactId int NULL,
-        ConfigId int NULL,
-        IsAllowed bit NOT NULL CONSTRAINT DF_omp_HostInstallations_IsAllowed DEFAULT(1),
-        DesiredState tinyint NOT NULL CONSTRAINT DF_omp_HostInstallations_DesiredState DEFAULT(1),
-        VerificationStatus tinyint NOT NULL CONSTRAINT DF_omp_HostInstallations_VerificationStatus DEFAULT(0),
-        LastSeenUtc datetime2(3) NULL,
-        LastLogin nvarchar(256) NULL,
-        LastClientHostName nvarchar(128) NULL,
-        LastClientIp nvarchar(64) NULL,
-        LastVerifiedUtc datetime2(3) NULL,
-        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostInstallations_CreatedUtc DEFAULT SYSUTCDATETIME(),
-        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostInstallations_UpdatedUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_omp_HostInstallations_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
-        CONSTRAINT FK_omp_HostInstallations_App FOREIGN KEY(AppId) REFERENCES omp.Apps(AppId),
-        CONSTRAINT FK_omp_HostInstallations_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId),
-        CONSTRAINT UQ_omp_HostInstallations_Host_App_Installation UNIQUE(HostId, AppId, InstallationName)
-    );
-END
-GO
-
 -------------------------------------------------------------------------------
--- Seed baseline instance and templates
+-- Seed baseline instance, templates, host, portal module and app
 -------------------------------------------------------------------------------
 DECLARE @DefaultInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111111';
+DECLARE @DefaultPortalModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111112';
+DECLARE @DefaultPortalAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111113';
 DECLARE @DefaultHostId uniqueidentifier = '11111111-1111-1111-1111-111111111121';
 DECLARE @PortalModuleId int;
 DECLARE @PortalAppId int;
 DECLARE @PortalViewPermissionId int;
 DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalAdminsRoleId int;
+DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultHostTemplateId int;
-DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = COALESCE(CONVERT(nvarchar(256), ORIGINAL_LOGIN()), SUSER_SNAME());
-
-IF NOT EXISTS (SELECT 1 FROM omp.Instances WHERE InstanceId = @DefaultInstanceId)
-BEGIN
-    INSERT INTO omp.Instances(InstanceId, InstanceKey, DisplayName, Description)
-    VALUES(@DefaultInstanceId, N'default', N'Default Instance', N'Default OMP instance seeded by the install script');
-END
-ELSE
-BEGIN
-    UPDATE omp.Instances
-    SET InstanceKey = N'default',
-        DisplayName = N'Default Instance',
-        Description = N'Default OMP instance seeded by the install script',
-        IsEnabled = 1,
-        UpdatedUtc = SYSUTCDATETIME()
-    WHERE InstanceId = @DefaultInstanceId;
-END
+DECLARE @DefaultTemplateHostId int;
+DECLARE @DefaultTemplatePortalModuleInstanceId int;
+DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\\UserOrGroup';
 
 IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplates WHERE TemplateKey = N'default')
 BEGIN
@@ -347,37 +459,63 @@ BEGIN
     VALUES(N'default-host', N'Default Host Template', N'Minimal baseline host template for development and examples');
 END
 
+SELECT @DefaultInstanceTemplateId = InstanceTemplateId FROM omp.InstanceTemplates WHERE TemplateKey = N'default';
 SELECT @DefaultHostTemplateId = HostTemplateId FROM omp.HostTemplates WHERE TemplateKey = N'default-host';
+
+IF NOT EXISTS (SELECT 1 FROM omp.Instances WHERE InstanceId = @DefaultInstanceId)
+BEGIN
+    INSERT INTO omp.Instances(InstanceId, InstanceKey, DisplayName, Description, InstanceTemplateId)
+    VALUES(@DefaultInstanceId, N'default', N'Default Instance', N'Default OMP instance seeded by the install script', @DefaultInstanceTemplateId);
+END
+ELSE
+BEGIN
+    UPDATE omp.Instances
+    SET InstanceKey = N'default',
+        DisplayName = N'Default Instance',
+        Description = N'Default OMP instance seeded by the install script',
+        InstanceTemplateId = @DefaultInstanceTemplateId,
+        IsEnabled = 1,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE InstanceId = @DefaultInstanceId;
+END
 
 IF NOT EXISTS (SELECT 1 FROM omp.Hosts WHERE HostId = @DefaultHostId)
 BEGIN
-    INSERT INTO omp.Hosts(HostId, InstanceId, Hostname, DisplayName, Environment, OsFamily, Architecture, ExpectedLogin, ExpectedHostName)
-    VALUES(@DefaultHostId, @DefaultInstanceId, N'default-host', N'Default Host', N'Development', N'Windows', N'x64', N'DOMAIN\service-user', N'default-host');
+    INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, Environment, OsFamily, Architecture)
+    VALUES(@DefaultHostId, @DefaultInstanceId, N'sample-host', N'Sample Host', N'Development', N'Windows', N'x64');
 END
 ELSE
 BEGIN
     UPDATE omp.Hosts
     SET InstanceId = @DefaultInstanceId,
-        Hostname = N'default-host',
-        DisplayName = N'Default Host',
+        HostKey = N'sample-host',
+        DisplayName = N'Sample Host',
         Environment = N'Development',
         OsFamily = N'Windows',
         Architecture = N'x64',
-        ExpectedLogin = N'DOMAIN\service-user',
-        ExpectedHostName = N'default-host',
         IsEnabled = 1,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE HostId = @DefaultHostId;
 END
 
+IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateHosts WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = N'sample-host')
+BEGIN
+    INSERT INTO omp.InstanceTemplateHosts(InstanceTemplateId, HostTemplateId, HostKey, DisplayName, Environment, SortOrder)
+    VALUES(@DefaultInstanceTemplateId, @DefaultHostTemplateId, N'sample-host', N'Sample Host', N'Development', 100);
+END
+
+SELECT @DefaultTemplateHostId = InstanceTemplateHostId
+FROM omp.InstanceTemplateHosts
+WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = N'sample-host';
+
 IF NOT EXISTS (SELECT 1 FROM omp.HostDeploymentAssignments WHERE HostId = @DefaultHostId AND HostTemplateId = @DefaultHostTemplateId)
 BEGIN
     INSERT INTO omp.HostDeploymentAssignments(HostId, HostTemplateId, AssignedBy, IsActive)
-    VALUES(@DefaultHostId, @DefaultHostTemplateId, SUSER_SNAME(), 1);
+    VALUES(@DefaultHostId, @DefaultHostTemplateId, N'install-script', 1);
 END
 
 -------------------------------------------------------------------------------
--- Seed OMP Portal module and app
+-- Seed OMP Portal definitions and instance rows
 -------------------------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.View')
     INSERT INTO omp.Permissions(Name, Description) VALUES(N'OMP.Portal.View', N'Read access to the OMP Portal');
@@ -400,46 +538,50 @@ IF NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRol
     INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @PortalAdminPermissionId);
 
 /*
-Bootstrap portal administrator row:
-- PrincipalType = User
-- Principal     = current SQL login running the install script
+Bootstrap portal administrator row.
 
-Adjust or remove this row after initial setup if your environment uses another
-user or an AD group for portal administration. The purpose is to ensure that the
-first portal administrator can sign in and complete the remaining configuration
-from the OMP Portal UI.
+Replace the placeholder principal below before you try to sign in to OMP Portal.
+Examples:
+- DOMAIN\your.user
+- DOMAIN\OMP Portal Admins
 */
-IF NOT EXISTS (SELECT 1 FROM omp.RolePrincipals WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User' AND Principal = @BootstrapPortalAdminPrincipal)
+IF EXISTS (SELECT 1 FROM omp.RolePrincipals WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User')
+BEGIN
+    UPDATE omp.RolePrincipals
+    SET Principal = @BootstrapPortalAdminPrincipal
+    WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User';
+END
+ELSE
+BEGIN
     INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
     VALUES(@PortalAdminsRoleId, N'User', @BootstrapPortalAdminPrincipal);
+END
 
-IF EXISTS (SELECT 1 FROM omp.Modules WHERE InstanceId = @DefaultInstanceId AND ModuleKey = N'omp_portal')
+IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'omp_portal')
 BEGIN
     UPDATE omp.Modules
     SET DisplayName = N'OMP Portal',
         ModuleType = N'PortalModule',
         SchemaName = N'omp',
-        BasePath = N'',
         Description = N'Core portal module for OpenModulePlatform',
         IsEnabled = 1,
         SortOrder = 100,
         UpdatedUtc = SYSUTCDATETIME()
-    WHERE InstanceId = @DefaultInstanceId AND ModuleKey = N'omp_portal';
+    WHERE ModuleKey = N'omp_portal';
 END
 ELSE
 BEGIN
-    INSERT INTO omp.Modules(InstanceId, ModuleKey, DisplayName, ModuleType, SchemaName, BasePath, Description, IsEnabled, SortOrder)
-    VALUES(@DefaultInstanceId, N'omp_portal', N'OMP Portal', N'PortalModule', N'omp', N'', N'Core portal module for OpenModulePlatform', 1, 100);
+    INSERT INTO omp.Modules(ModuleKey, DisplayName, ModuleType, SchemaName, Description, IsEnabled, SortOrder)
+    VALUES(N'omp_portal', N'OMP Portal', N'PortalModule', N'omp', N'Core portal module for OpenModulePlatform', 1, 100);
 END
 
-SELECT @PortalModuleId = ModuleId FROM omp.Modules WHERE InstanceId = @DefaultInstanceId AND ModuleKey = N'omp_portal';
+SELECT @PortalModuleId = ModuleId FROM omp.Modules WHERE ModuleKey = N'omp_portal';
 
 IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @PortalModuleId AND AppKey = N'omp_portal')
 BEGIN
     UPDATE omp.Apps
     SET DisplayName = N'OMP Portal',
         AppType = N'Portal',
-        RouteBasePath = N'',
         Description = N'Primary OMP portal web application',
         IsEnabled = 1,
         SortOrder = 100,
@@ -448,12 +590,79 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT INTO omp.Apps(ModuleId, AppKey, DisplayName, AppType, RouteBasePath, Description, IsEnabled, SortOrder)
-    VALUES(@PortalModuleId, N'omp_portal', N'OMP Portal', N'Portal', N'', N'Primary OMP portal web application', 1, 100);
+    INSERT INTO omp.Apps(ModuleId, AppKey, DisplayName, AppType, Description, IsEnabled, SortOrder)
+    VALUES(@PortalModuleId, N'omp_portal', N'OMP Portal', N'Portal', N'Primary OMP portal web application', 1, 100);
 END
 
 SELECT @PortalAppId = AppId FROM omp.Apps WHERE ModuleId = @PortalModuleId AND AppKey = N'omp_portal';
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @PortalAppId AND PermissionId = @PortalViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@PortalAppId, @PortalViewPermissionId, 0);
+
+IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @DefaultPortalModuleInstanceId)
+BEGIN
+    INSERT INTO omp.ModuleInstances(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
+    VALUES(@DefaultPortalModuleInstanceId, @DefaultInstanceId, @PortalModuleId, N'omp_portal', N'OMP Portal', N'Portal module instance for the default OMP instance', 1, 100);
+END
+ELSE
+BEGIN
+    UPDATE omp.ModuleInstances
+    SET InstanceId = @DefaultInstanceId,
+        ModuleId = @PortalModuleId,
+        ModuleInstanceKey = N'omp_portal',
+        DisplayName = N'OMP Portal',
+        Description = N'Portal module instance for the default OMP instance',
+        IsEnabled = 1,
+        SortOrder = 100,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleInstanceId = @DefaultPortalModuleInstanceId;
+END
+
+IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateModuleInstances WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND ModuleInstanceKey = N'omp_portal')
+BEGIN
+    INSERT INTO omp.InstanceTemplateModuleInstances(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder)
+    VALUES(@DefaultInstanceTemplateId, @PortalModuleId, N'omp_portal', N'OMP Portal', N'Portal module instance for the default template', 100);
+END
+
+SELECT @DefaultTemplatePortalModuleInstanceId = InstanceTemplateModuleInstanceId
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND ModuleInstanceKey = N'omp_portal';
+
+IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @DefaultPortalAppInstanceId)
+BEGIN
+    INSERT INTO omp.AppInstances(
+        AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description,
+        RoutePath, InstallationName, IsEnabled, IsAllowed, DesiredState, SortOrder)
+    VALUES(
+        @DefaultPortalAppInstanceId, @DefaultPortalModuleInstanceId, @DefaultHostId, @PortalAppId, N'omp_portal', N'OMP Portal',
+        N'Primary OMP portal app instance for the default OMP instance', N'', N'portal', 1, 1, 1, 100);
+END
+ELSE
+BEGIN
+    UPDATE omp.AppInstances
+    SET ModuleInstanceId = @DefaultPortalModuleInstanceId,
+        HostId = @DefaultHostId,
+        AppId = @PortalAppId,
+        AppInstanceKey = N'omp_portal',
+        DisplayName = N'OMP Portal',
+        Description = N'Primary OMP portal app instance for the default OMP instance',
+        RoutePath = N'',
+        InstallationName = N'portal',
+        IsEnabled = 1,
+        IsAllowed = 1,
+        DesiredState = 1,
+        SortOrder = 100,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE AppInstanceId = @DefaultPortalAppInstanceId;
+END
+
+IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId AND AppInstanceKey = N'omp_portal')
+BEGIN
+    INSERT INTO omp.InstanceTemplateAppInstances(
+        InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description,
+        RoutePath, InstallationName, DesiredState, SortOrder)
+    VALUES(
+        @DefaultTemplatePortalModuleInstanceId, @DefaultTemplateHostId, @PortalAppId, N'omp_portal', N'OMP Portal',
+        N'Primary OMP portal app instance for the default template', N'', N'portal', 1, 100);
+END
 GO
