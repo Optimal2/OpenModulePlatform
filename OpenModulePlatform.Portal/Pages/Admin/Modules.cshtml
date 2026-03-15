@@ -1,28 +1,41 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ModulesModel
 
-<h2>Modules</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Definitions</div>
+        <h2>Modules</h2>
+        <p class="lede">Module definitions are reusable building blocks. They do not describe placement or runtime state.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Module key</th>
-            <th>Display name</th>
-            <th>Type</th>
-            <th>Schema</th>
-            <th>Enabled</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.ModuleKey)</td>
-            <td>@(row.DisplayName)</td>
-            <td>@(row.ModuleType)</td>
-            <td>@(row.SchemaName)</td>
-            <td>@(row.IsEnabled ? "Yes" : "No")</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No modules found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Module key</th>
+                <th>Display name</th>
+                <th>Type</th>
+                <th>Schema</th>
+                <th>Enabled</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.ModuleKey</code></td>
+                <td>@row.DisplayName</td>
+                <td>@row.ModuleType</td>
+                <td><code>@row.SchemaName</code></td>
+                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

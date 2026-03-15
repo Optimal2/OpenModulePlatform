@@ -9,29 +9,27 @@
 </head>
 <body>
     <header class="topbar">
-        <div class="brand">@ViewData["PortalTitle"]</div>
-        <nav class="nav">
+        <div class="brand-wrap">
+            <div class="brand">@ViewData["PortalTitle"]</div>
+            <div class="brand-subtitle">Portal</div>
+        </div>
+        <nav class="nav nav--primary">
             <a href="~/">Home</a>
             @if (ViewData["IsPortalAdmin"] is bool isPortalAdmin && isPortalAdmin)
             {
-                <a href="~/admin/overview">Overview</a>
+                <a href="~/admin/overview">Admin</a>
                 <a href="~/admin/instances">Instances</a>
-                <a href="~/admin/modules">Modules</a>
-                <a href="~/admin/moduleinstances">Module Instances</a>
-                <a href="~/admin/apps">Apps</a>
-                <a href="~/admin/appinstances">App Instances</a>
-                <a href="~/admin/artifacts">Artifacts</a>
                 <a href="~/admin/hosts">Hosts</a>
-                <a href="~/admin/instancetemplates">Instance Templates</a>
-                <a href="~/admin/hosttemplates">Host Templates</a>
-                <a href="~/admin/hostdeploymentassignments">Assignments</a>
-                <a href="~/admin/hostdeployments">Deployments</a>
+                <a href="~/admin/modules">Modules</a>
+                <a href="~/admin/apps">Apps</a>
+                <a href="~/admin/artifacts">Artifacts</a>
+                <a href="~/admin/automation">Automation</a>
                 <a href="~/admin/rbac">RBAC</a>
             }
         </nav>
         <div class="user">@User?.Identity?.Name</div>
     </header>
-    <main class="content">
+    <main class="content-shell">
         @RenderBody()
     </main>
 </body>

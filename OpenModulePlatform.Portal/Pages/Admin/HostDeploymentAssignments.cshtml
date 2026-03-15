@@ -1,28 +1,41 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.HostDeploymentAssignmentsModel
 
-<h2>Host Deployment Assignments</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Automation</div>
+        <h2>Host deployment assignments</h2>
+        <p class="lede">Assignments connect hosts to deployment planning. This is intentionally separated from the main manual admin workflow.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Host key</th>
-            <th>Host template</th>
-            <th>Active</th>
-            <th>Assigned by</th>
-            <th>Assigned UTC</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.HostKey)</td>
-            <td>@(row.HostTemplateKey)</td>
-            <td>@(row.IsActive ? "Yes" : "No")</td>
-            <td>@(row.AssignedBy)</td>
-            <td>@(row.AssignedUtc.ToString("u"))</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No host deployment assignments found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Host key</th>
+                <th>Host template</th>
+                <th>Active</th>
+                <th>Assigned by</th>
+                <th>Assigned UTC</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.HostKey</code></td>
+                <td><code>@row.HostTemplateKey</code></td>
+                <td><span class="pill">@(row.IsActive ? "Active" : "Inactive")</span></td>
+                <td>@row.AssignedBy</td>
+                <td>@row.AssignedUtc.ToString("u")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

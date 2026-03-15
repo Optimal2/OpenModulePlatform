@@ -1,38 +1,51 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.AppInstancesModel
 
-<h2>App Instances</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Manual core</div>
+        <h2>App instances</h2>
+        <p class="lede">App instances are the runtime-facing layer. They connect app definitions to hosts, artifacts, route or installation data and observed runtime state.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Instance</th>
-            <th>Module instance</th>
-            <th>App</th>
-            <th>App instance key</th>
-            <th>Host</th>
-            <th>Route</th>
-            <th>Installation</th>
-            <th>Artifact</th>
-            <th>Allowed</th>
-            <th>Last seen</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.InstanceKey)</td>
-            <td>@(row.ModuleInstanceKey)</td>
-            <td>@(row.AppKey)</td>
-            <td>@(row.AppInstanceKey)</td>
-            <td>@(row.HostKey)</td>
-            <td>@(row.RoutePath)</td>
-            <td>@(row.InstallationName)</td>
-            <td>@(row.ArtifactVersion)</td>
-            <td>@(row.IsAllowed ? "Yes" : "No")</td>
-            <td>@(row.LastSeenUtc?.ToString("u"))</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No app instances found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Instance</th>
+                <th>Module instance</th>
+                <th>App</th>
+                <th>App instance key</th>
+                <th>Host</th>
+                <th>Route</th>
+                <th>Installation</th>
+                <th>Artifact</th>
+                <th>Allowed</th>
+                <th>Last seen</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.InstanceKey</code></td>
+                <td><code>@row.ModuleInstanceKey</code></td>
+                <td><code>@row.AppKey</code></td>
+                <td><code>@row.AppInstanceKey</code></td>
+                <td><code>@row.HostKey</code></td>
+                <td>@row.RoutePath</td>
+                <td>@row.InstallationName</td>
+                <td>@row.ArtifactVersion</td>
+                <td><span class="pill">@(row.IsAllowed ? "Allowed" : "Blocked")</span></td>
+                <td>@row.LastSeenUtc?.ToString("u")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

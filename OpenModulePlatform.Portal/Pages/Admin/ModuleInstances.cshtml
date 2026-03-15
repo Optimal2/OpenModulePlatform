@@ -1,28 +1,41 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ModuleInstancesModel
 
-<h2>Module Instances</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Manual core</div>
+        <h2>Module instances</h2>
+        <p class="lede">Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Instance</th>
-            <th>Module</th>
-            <th>Module instance key</th>
-            <th>Display name</th>
-            <th>Enabled</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.InstanceKey)</td>
-            <td>@(row.ModuleKey)</td>
-            <td>@(row.ModuleInstanceKey)</td>
-            <td>@(row.DisplayName)</td>
-            <td>@(row.IsEnabled ? "Yes" : "No")</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No module instances found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Instance</th>
+                <th>Module</th>
+                <th>Module instance key</th>
+                <th>Display name</th>
+                <th>Enabled</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.InstanceKey</code></td>
+                <td><code>@row.ModuleKey</code></td>
+                <td><code>@row.ModuleInstanceKey</code></td>
+                <td>@row.DisplayName</td>
+                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

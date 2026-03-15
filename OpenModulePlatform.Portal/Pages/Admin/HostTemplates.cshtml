@@ -1,26 +1,39 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.HostTemplatesModel
 
-<h2>Host templates</h2>
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Automation</div>
+        <h2>Host templates</h2>
+        <p class="lede">Host templates describe reusable host-level desired state for template-driven rollout.</p>
+    </div>
+</section>
 
-<table class="grid">
-    <thead>
-        <tr>
-            <th>Template key</th>
-            <th>Display name</th>
-            <th>Enabled</th>
-            <th>Description</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var row in Model.Rows)
-    {
-        <tr>
-            <td>@(row.TemplateKey)</td>
-            <td>@(row.DisplayName)</td>
-            <td>@(row.IsEnabled ? "Yes" : "No")</td>
-            <td>@(row.Description)</td>
-        </tr>
-    }
-    </tbody>
-</table>
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">No host templates found.</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Template key</th>
+                <th>Display name</th>
+                <th>Enabled</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.TemplateKey</code></td>
+                <td>@row.DisplayName</td>
+                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td>@row.Description</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
