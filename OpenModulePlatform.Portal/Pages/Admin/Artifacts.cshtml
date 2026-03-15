@@ -9,6 +9,10 @@
     </div>
 </section>
 
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/artifactedit">Create artifact</a>
+</div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">No artifacts found.</div>
@@ -24,6 +28,7 @@ else
                 <th>Target</th>
                 <th>Relative path</th>
                 <th>Enabled</th>
+                            <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -36,6 +41,7 @@ else
                 <td>@row.TargetName</td>
                 <td><code>@row.RelativePath</code></td>
                 <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td><a class="action-link" href="~/admin/artifactedit?id=@row.ArtifactId">Edit</a></td>
             </tr>
         }
         </tbody>

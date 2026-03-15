@@ -1,0 +1,21 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ModuleInstanceEditModel
+<section class="page-header"><div><div class="eyebrow">Manual core</div><h2>@(Model.IsCreate ? "Create module instance" : "Edit module instance")</h2><p class="lede">Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational.</p></div></section>
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
+@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+<form method="post" class="card form-grid">
+<input type="hidden" asp-for="Input.ModuleInstanceId" />
+<div class="field-grid field-grid--2">
+<div class="form-field"><label asp-for="Input.InstanceId"></label><select asp-for="Input.InstanceId"><option value="">Select instance</option>@foreach (var option in Model.InstanceOptions){<option value="@option.Value">@option.Label</option>}</select><span asp-validation-for="Input.InstanceId" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.ModuleId"></label><select asp-for="Input.ModuleId"><option value="">Select module</option>@foreach (var option in Model.ModuleOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">Choose the module definition this module instance represents.</div><span asp-validation-for="Input.ModuleId" class="field-validation-error"></span></div>
+</div>
+<div class="field-grid field-grid--3">
+<div class="form-field"><label asp-for="Input.ModuleInstanceKey"></label><input asp-for="Input.ModuleInstanceKey" /><span asp-validation-for="Input.ModuleInstanceKey" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.DisplayName"></label><input asp-for="Input.DisplayName" /><span asp-validation-for="Input.DisplayName" class="field-validation-error"></span></div>
+<div class="form-field"><label asp-for="Input.SortOrder"></label><input asp-for="Input.SortOrder" type="number" /></div>
+</div>
+<div class="form-field"><label asp-for="Input.Description"></label><textarea asp-for="Input.Description"></textarea></div>
+<div class="form-field checkbox-row checkbox-row--boxed"><input asp-for="Input.IsEnabled" type="checkbox" /><label asp-for="Input.IsEnabled"></label></div>
+<div class="toolbar"><button type="submit">Save module instance</button><a class="action-link" href="~/admin/moduleinstances">Back to module instances</a></div>
+</form>
+@if (!Model.IsCreate) { <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this module instance? Related app instances must be removed first.');"><input type="hidden" asp-for="Input.ModuleInstanceId" /><h3>Danger zone</h3><p class="muted">SQL blocks deletion while app instances or template mappings still depend on this row.</p><button type="submit" class="btn btn-danger">Delete module instance</button></form> }

@@ -9,6 +9,10 @@
     </div>
 </section>
 
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/moduleinstanceedit">Create module instance</a>
+</div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">No module instances found.</div>
@@ -23,6 +27,7 @@ else
                 <th>Module instance key</th>
                 <th>Display name</th>
                 <th>Enabled</th>
+                            <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -34,6 +39,7 @@ else
                 <td><code>@row.ModuleInstanceKey</code></td>
                 <td>@row.DisplayName</td>
                 <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td><a class="action-link" href="~/admin/moduleinstanceedit?id=@row.ModuleInstanceId">Edit</a></td>
             </tr>
         }
         </tbody>

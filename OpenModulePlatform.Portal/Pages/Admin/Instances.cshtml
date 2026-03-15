@@ -9,6 +9,10 @@
     </div>
 </section>
 
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/instanceedit">Create instance</a>
+</div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">No instances found.</div>
@@ -22,6 +26,7 @@ else
                 <th>Display name</th>
                 <th>Instance template</th>
                 <th>Enabled</th>
+                            <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -32,6 +37,7 @@ else
                 <td>@row.DisplayName</td>
                 <td>@row.InstanceTemplateKey</td>
                 <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td><a class="action-link" href="~/admin/instanceedit?id=@row.InstanceId">Edit</a></td>
             </tr>
         }
         </tbody>

@@ -9,6 +9,10 @@
     </div>
 </section>
 
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/appinstanceedit">Create app instance</a>
+</div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">No app instances found.</div>
@@ -28,6 +32,7 @@ else
                 <th>Artifact</th>
                 <th>Allowed</th>
                 <th>Last seen</th>
+                            <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -44,6 +49,7 @@ else
                 <td>@row.ArtifactVersion</td>
                 <td><span class="pill">@(row.IsAllowed ? "Allowed" : "Blocked")</span></td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
+                <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">Edit</a></td>
             </tr>
         }
         </tbody>
