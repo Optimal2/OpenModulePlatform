@@ -9,6 +9,9 @@ using SharedRbacService = OpenModulePlatform.Web.Shared.Services.RbacService;
 
 namespace OpenModulePlatform.Portal.Pages;
 
+/// <summary>
+/// Portal start page showing the app catalog available to the current user.
+/// </summary>
 public sealed class IndexModel : OmpPageModel
 {
     private readonly AppCatalogService _catalog;
@@ -25,6 +28,7 @@ public sealed class IndexModel : OmpPageModel
     }
 
     public IReadOnlyList<PortalAppEntry> Apps { get; private set; } = [];
+
     public bool IsPortalAdmin { get; private set; }
 
     public async Task OnGet(CancellationToken ct)
@@ -32,8 +36,8 @@ public sealed class IndexModel : OmpPageModel
         SetTitles();
 
         var permissions = await _rbac.GetUserPermissionsAsync(User, ct);
-        ViewData["IsPortalAdmin"] = permissions.Contains(OmpPortalPermissions.Admin);
         IsPortalAdmin = permissions.Contains(OmpPortalPermissions.Admin);
+        ViewData["IsPortalAdmin"] = IsPortalAdmin;
 
         var allApps = await _catalog.GetEnabledWebAppsAsync(ct);
         Apps = _catalog.FilterByPermissions(allApps, permissions);

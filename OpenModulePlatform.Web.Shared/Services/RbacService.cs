@@ -7,6 +7,19 @@ using System.Security.Principal;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
+/// <summary>
+/// Resolves effective OMP permissions for the current authenticated user.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The service maps the current identity to rows in <c>omp.RolePrincipals</c> and then
+/// projects those links through <c>omp.RolePermissions</c> and <c>omp.Permissions</c>.
+/// </para>
+/// <para>
+/// On Windows hosts the resolver also expands group membership, which allows role links
+/// to be granted either directly to users or indirectly through AD groups / translated SIDs.
+/// </para>
+/// </remarks>
 public sealed class RbacService
 {
     private readonly SqlConnectionFactory _db;
@@ -18,14 +31,20 @@ public sealed class RbacService
         _log = log;
     }
 
-    public async Task<HashSet<string>> GetUserPermissionsAsync(ClaimsPrincipal user, CancellationToken ct)
+    public async Task<HashSet<string>> GetUserPermissionsAsync(
+        ClaimsPrincipal user,
+        CancellationToken ct)
     {
         if (user.Identity?.IsAuthenticated != true)
+        {
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
 
         var userName = user.Identity?.Name ?? string.Empty;
         if (string.IsNullOrWhiteSpace(userName))
+        {
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
 
         var groupPrincipals = OperatingSystem.IsWindows()
             ? GetGroupPrincipalsFromUser(user)
@@ -41,15 +60,20 @@ public sealed class RbacService
             cmd.Parameters.AddWithValue("@user", userName);
 
             for (var i = 0; i < groupPrincipals.Count; i++)
+            {
                 cmd.Parameters.AddWithValue($"@g{i}", groupPrincipals[i]);
+            }
 
             var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
             while (await rdr.ReadAsync(ct))
             {
                 var permission = rdr.GetString(0);
                 if (!string.IsNullOrWhiteSpace(permission))
+                {
                     permissions.Add(permission);
+                }
             }
 
             return permissions;
@@ -85,35 +109,52 @@ WHERE (rp.PrincipalType='User' AND rp.Principal = @user)
 {groupClause};";
     }
 
+    /// <summary>
+    /// Enumerates Windows groups for the current user and stores both SID and translated name.
+    /// </summary>
     [SupportedOSPlatform("windows")]
     private List<string> GetGroupPrincipalsFromUser(ClaimsPrincipal user)
     {
         try
         {
-            if (user.Identity is not WindowsIdentity windowsIdentity || windowsIdentity.Groups is null)
+            if (user.Identity is not WindowsIdentity windowsIdentity ||
+                windowsIdentity.Groups is null)
+            {
                 return [];
+            }
 
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var sid in windowsIdentity.Groups)
             {
                 var sidValue = sid.Value;
                 if (!string.IsNullOrWhiteSpace(sidValue))
+                {
                     result.Add(sidValue);
+                }
 
                 try
                 {
                     var nt = sid.Translate(typeof(NTAccount)) as NTAccount;
                     var ntValue = nt?.Value;
                     if (!string.IsNullOrWhiteSpace(ntValue))
+                    {
                         result.Add(ntValue);
+                    }
                 }
                 catch (IdentityNotMappedException ex)
                 {
-                    _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sidValue);
+                    _log.LogDebug(
+                        ex,
+                        "Skipped SID to NTAccount translation for SID {SidValue}.",
+                        sidValue);
                 }
                 catch (SystemException ex)
                 {
-                    _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sidValue);
+                    _log.LogDebug(
+                        ex,
+                        "Skipped SID to NTAccount translation for SID {SidValue}.",
+                        sidValue);
                 }
             }
 
@@ -121,12 +162,16 @@ WHERE (rp.PrincipalType='User' AND rp.Principal = @user)
         }
         catch (UnauthorizedAccessException ex)
         {
-            _log.LogWarning(ex, "Failed to enumerate Windows group memberships for the current user.");
+            _log.LogWarning(
+                ex,
+                "Failed to enumerate Windows group memberships for the current user.");
             return [];
         }
         catch (SystemException ex)
         {
-            _log.LogWarning(ex, "Failed to enumerate Windows group memberships for the current user.");
+            _log.LogWarning(
+                ex,
+                "Failed to enumerate Windows group memberships for the current user.");
             return [];
         }
     }

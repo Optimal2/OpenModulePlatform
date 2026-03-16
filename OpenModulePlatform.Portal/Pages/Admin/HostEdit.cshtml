@@ -1,24 +1,122 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.HostEditModel
-<section class="page-header"><div><div class="eyebrow">Manual core</div><h2>@(Model.IsCreate ? "Create host" : "Edit host")</h2><p class="lede">Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages.</p></div></section>
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
-@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Manual core</div>
+        <h2>@(Model.IsCreate ? "Create host" : "Edit host")</h2>
+        <p class="lede">
+            Hosts represent real deployment targets inside an OMP instance.
+            For manual setup this is one of the most important core pages.
+        </p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
 <form method="post" class="card form-grid">
-<input type="hidden" asp-for="Input.HostId" />
-<div class="field-grid field-grid--2">
-<div class="form-field"><label asp-for="Input.InstanceId"></label><select asp-for="Input.InstanceId"><option value="">Select instance</option>@foreach (var option in Model.InstanceOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">Every host belongs to exactly one OMP instance.</div><span asp-validation-for="Input.InstanceId" class="field-validation-error"></span></div>
-<div class="form-field"><label asp-for="Input.HostKey"></label><input asp-for="Input.HostKey" /><div class="field-help">Logical host identity used by OMP. Keep it short and stable.</div><span asp-validation-for="Input.HostKey" class="field-validation-error"></span></div>
-</div>
-<div class="field-grid field-grid--2">
-<div class="form-field"><label asp-for="Input.DisplayName"></label><input asp-for="Input.DisplayName" /><div class="field-help">Optional human-friendly label.</div></div>
-<div class="form-field checkbox-row checkbox-row--boxed"><input asp-for="Input.IsEnabled" type="checkbox" /><label asp-for="Input.IsEnabled"></label></div>
-</div>
-<div class="field-grid field-grid--3">
-<div class="form-field"><label asp-for="Input.Environment"></label><select asp-for="Input.Environment"><option value="">Not set</option>@foreach (var option in Model.EnvironmentOptions){<option value="@option.Value">@option.Label</option>}</select></div>
-<div class="form-field"><label asp-for="Input.OsFamily"></label><select asp-for="Input.OsFamily"><option value="">Not set</option>@foreach (var option in Model.OsFamilyOptions){<option value="@option.Value">@option.Label</option>}</select></div>
-<div class="form-field"><label asp-for="Input.Architecture"></label><select asp-for="Input.Architecture"><option value="">Not set</option>@foreach (var option in Model.ArchitectureOptions){<option value="@option.Value">@option.Label</option>}</select></div>
-</div>
-<div class="form-field"><label asp-for="Input.OsVersion"></label><input asp-for="Input.OsVersion" /><div class="field-help">Free text for the observed or intended OS version.</div></div>
-<div class="toolbar"><button type="submit">Save host</button><a class="action-link" href="~/admin/hosts">Back to hosts</a></div>
+    <input type="hidden" asp-for="Input.HostId" />
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.InstanceId"></label>
+            <select asp-for="Input.InstanceId">
+                <option value="">Select instance</option>
+                @foreach (var option in Model.InstanceOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">Every host belongs to exactly one OMP instance.</div>
+            <span asp-validation-for="Input.InstanceId" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.HostKey"></label>
+            <input asp-for="Input.HostKey" />
+            <div class="field-help">Logical host identity used by OMP. Keep it short and stable.</div>
+            <span asp-validation-for="Input.HostKey" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.DisplayName"></label>
+            <input asp-for="Input.DisplayName" />
+            <div class="field-help">Optional human-friendly label.</div>
+        </div>
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.IsEnabled" type="checkbox" />
+            <label asp-for="Input.IsEnabled"></label>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.Environment"></label>
+            <select asp-for="Input.Environment">
+                <option value="">Not set</option>
+                @foreach (var option in Model.EnvironmentOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.OsFamily"></label>
+            <select asp-for="Input.OsFamily">
+                <option value="">Not set</option>
+                @foreach (var option in Model.OsFamilyOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.Architecture"></label>
+            <select asp-for="Input.Architecture">
+                <option value="">Not set</option>
+                @foreach (var option in Model.ArchitectureOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.OsVersion"></label>
+        <input asp-for="Input.OsVersion" />
+        <div class="field-help">Free text for the observed or intended OS version.</div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">Save host</button>
+        <a class="action-link" href="~/admin/hosts">Back to hosts</a>
+    </div>
 </form>
-@if (!Model.IsCreate) { <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this host? App instances using it must be moved or removed first.');"><input type="hidden" asp-for="Input.HostId" /><h3>Danger zone</h3><p class="muted">Host deletion is blocked when app instances or deployments still reference the host.</p><button type="submit" class="btn btn-danger">Delete host</button></form> }
+
+@if (!Model.IsCreate)
+{
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('Delete this host? App instances using it must be moved or removed first.');">
+        <input type="hidden" asp-for="Input.HostId" />
+        <h3>Danger zone</h3>
+        <p class="muted">Host deletion is blocked when app instances or deployments still reference the host.</p>
+        <button type="submit" class="btn btn-danger">Delete host</button>
+    </form>
+}

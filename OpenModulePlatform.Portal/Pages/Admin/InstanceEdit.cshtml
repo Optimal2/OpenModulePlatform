@@ -5,7 +5,10 @@
     <div>
         <div class="eyebrow">Manual core</div>
         <h2>@(Model.IsCreate ? "Create instance" : "Edit instance")</h2>
-        <p class="lede">Instances are the top-level OMP environments. Templates are optional for manual administration and mainly belong to future automation.</p>
+        <p class="lede">
+            Instances are the top-level OMP environments.
+            Templates are optional for manual administration and mainly belong to future automation.
+        </p>
     </div>
 </section>
 
@@ -21,13 +24,18 @@
 
 <form method="post" class="card form-grid">
     <input type="hidden" asp-for="Input.InstanceId" />
+
     <div class="field-grid field-grid--2">
         <div class="form-field">
             <label asp-for="Input.InstanceKey"></label>
             <input asp-for="Input.InstanceKey" />
-            <div class="field-help">Stable technical key used in links, config and references. <span class="info-badge" title="Allowed characters: letters, digits, dot, dash and underscore.">i</span></div>
+            <div class="field-help">
+                Stable technical key used in links, config and references.
+                <span class="info-badge" title="Allowed characters: letters, digits, dot, dash and underscore.">i</span>
+            </div>
             <span asp-validation-for="Input.InstanceKey" class="field-validation-error"></span>
         </div>
+
         <div class="form-field">
             <label asp-for="Input.DisplayName"></label>
             <input asp-for="Input.DisplayName" />
@@ -35,11 +43,13 @@
             <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
         </div>
     </div>
+
     <div class="form-field">
         <label asp-for="Input.Description"></label>
         <textarea asp-for="Input.Description"></textarea>
         <div class="field-help">Optional context for operators and maintainers.</div>
     </div>
+
     <div class="field-grid field-grid--2">
         <div class="form-field">
             <label asp-for="Input.InstanceTemplateId"></label>
@@ -50,13 +60,18 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">Leave empty for a purely manual instance. Template linkage can be added later.</div>
+            <div class="field-help">
+                Leave empty for a purely manual instance.
+                Template linkage can be added later.
+            </div>
         </div>
+
         <div class="form-field checkbox-row checkbox-row--boxed">
             <input asp-for="Input.IsEnabled" type="checkbox" />
             <label asp-for="Input.IsEnabled"></label>
         </div>
     </div>
+
     <div class="toolbar">
         <button type="submit">Save instance</button>
         <a class="action-link" href="~/admin/instances">Back to instances</a>
@@ -65,10 +80,16 @@
 
 @if (!Model.IsCreate)
 {
-    <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this instance? This only works when no dependent rows remain.');">
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('Delete this instance? This only works when no dependent rows remain.');">
         <input type="hidden" asp-for="Input.InstanceId" />
         <h3>Danger zone</h3>
-        <p class="muted">Delete is blocked by SQL if hosts, module instances or other dependent rows still reference this instance.</p>
+        <p class="muted">
+            Delete is blocked by SQL if hosts, module instances or other dependent rows still reference this instance.
+        </p>
         <button type="submit" class="btn btn-danger">Delete instance</button>
     </form>
 }

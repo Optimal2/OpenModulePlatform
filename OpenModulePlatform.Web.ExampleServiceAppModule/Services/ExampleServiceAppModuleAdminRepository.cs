@@ -6,6 +6,9 @@ using System.Text.Json;
 
 namespace OpenModulePlatform.Web.ExampleServiceAppModule.Services;
 
+/// <summary>
+/// Portal-facing repository for the example service-backed module.
+/// </summary>
 public sealed class ExampleServiceAppModuleAdminRepository
 {
     private readonly SqlConnectionFactory _db;
@@ -129,7 +132,14 @@ ORDER BY h.HostKey, ai.AppInstanceKey;";
         return rows.FirstOrDefault(x => x.AppInstanceId == appInstanceId);
     }
 
-    public async Task UpdateAppInstanceAsync(Guid appInstanceId, bool isAllowed, byte desiredState, int? configId, int? artifactId, string actor, CancellationToken ct)
+    public async Task UpdateAppInstanceAsync(
+        Guid appInstanceId,
+        bool isAllowed,
+        byte desiredState,
+        int? configId,
+        int? artifactId,
+        string actor,
+        CancellationToken ct)
     {
         const string sql = @"
 UPDATE ai
@@ -165,7 +175,16 @@ VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
             audit.Parameters.AddWithValue("@action", ServiceAppKey + ".appinstance.update");
             audit.Parameters.AddWithValue("@targetType", "AppInstance");
             audit.Parameters.AddWithValue("@targetId", appInstanceId.ToString());
-            audit.Parameters.AddWithValue("@afterJson", JsonSerializer.Serialize(new { appInstanceId, isAllowed, desiredState, configId, artifactId }));
+            var afterJson = JsonSerializer.Serialize(new
+            {
+                appInstanceId,
+                isAllowed,
+                desiredState,
+                configId,
+                artifactId
+            });
+
+            audit.Parameters.AddWithValue("@afterJson", afterJson);
             await audit.ExecuteNonQueryAsync(ct);
         }
         catch (SqlException ex)

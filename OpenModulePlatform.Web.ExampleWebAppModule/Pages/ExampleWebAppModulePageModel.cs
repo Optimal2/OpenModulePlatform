@@ -8,15 +8,23 @@ using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Web.ExampleWebAppModule.Pages;
 
+/// <summary>
+/// Base page model for the simple web-only example module.
+/// </summary>
 public abstract class ExampleWebAppModulePageModel : OmpSecurePageModel
 {
-    protected ExampleWebAppModulePageModel(IOptions<WebAppOptions> options, RbacService rbac)
+    protected ExampleWebAppModulePageModel(
+        IOptions<WebAppOptions> options,
+        RbacService rbac)
         : base(options, rbac)
     {
     }
 
     protected Task<IActionResult?> RequireViewAsync(CancellationToken ct)
-        => RequireAnyAsync(ct, ExampleWebAppModulePermissions.View, ExampleWebAppModulePermissions.Admin);
+        => RequireAnyAsync(
+            ct,
+            ExampleWebAppModulePermissions.View,
+            ExampleWebAppModulePermissions.Admin);
 
     protected Task<IActionResult?> RequireAdminAsync(CancellationToken ct)
         => RequireAnyAsync(ct, ExampleWebAppModulePermissions.Admin);

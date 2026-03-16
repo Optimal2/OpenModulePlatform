@@ -5,6 +5,14 @@ using Microsoft.Data.SqlClient;
 
 namespace OpenModulePlatform.Portal.Services;
 
+/// <summary>
+/// Builds the Portal start-page catalog from enabled <c>omp.AppInstances</c>.
+/// </summary>
+/// <remarks>
+/// This is an important architectural choice: navigation is derived from app instances,
+/// not app definitions. That keeps the Portal aligned with the instance-centric runtime
+/// model where route, host placement and artifact choice belong to <c>AppInstance</c>.
+/// </remarks>
 public sealed class AppCatalogService
 {
     private readonly SqlConnectionFactory _db;
@@ -14,7 +22,8 @@ public sealed class AppCatalogService
         _db = db;
     }
 
-    public async Task<IReadOnlyList<PortalAppEntry>> GetEnabledWebAppsAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<PortalAppEntry>> GetEnabledWebAppsAsync(
+        CancellationToken ct)
     {
         const string sql = @"
 SELECT ai.AppInstanceId,
@@ -34,7 +43,8 @@ LEFT JOIN omp.Permissions p ON p.PermissionId = ap.PermissionId
 WHERE ai.IsEnabled = 1
   AND ai.IsAllowed = 1
   AND a.AppType IN (N'Portal', N'WebApp')
-ORDER BY ai.SortOrder, ai.DisplayName;";
+ORDER BY ai.SortOrder,
+         ai.DisplayName;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -60,26 +70,40 @@ ORDER BY ai.SortOrder, ai.DisplayName;";
                     Description = rdr.IsDBNull(7) ? null : rdr.GetString(7),
                     RequireAll = !rdr.IsDBNull(9) && rdr.GetBoolean(9)
                 };
+
                 map[appInstanceId] = entry;
             }
             else
             {
-                entry.RequireAll = entry.RequireAll || (!rdr.IsDBNull(9) && rdr.GetBoolean(9));
+                entry.RequireAll = entry.RequireAll ||
+                    (!rdr.IsDBNull(9) && rdr.GetBoolean(9));
             }
 
             if (!rdr.IsDBNull(8))
+            {
                 entry.RequiredPermissions.Add(rdr.GetString(8));
+            }
         }
 
-        return map.Values.OrderBy(x => x.SortOrder).ThenBy(x => x.DisplayName).ToList();
+        return map.Values
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.DisplayName)
+            .ToList();
     }
 
-    public IReadOnlyList<PortalAppEntry> FilterByPermissions(IReadOnlyList<PortalAppEntry> apps, IReadOnlySet<string> permissions)
+    /// <summary>
+    /// Applies RBAC filtering to catalog entries already loaded from the database.
+    /// </summary>
+    public IReadOnlyList<PortalAppEntry> FilterByPermissions(
+        IReadOnlyList<PortalAppEntry> apps,
+        IReadOnlySet<string> permissions)
     {
         return apps.Where(app =>
         {
             if (app.RequiredPermissions.Count == 0)
+            {
                 return true;
+            }
 
             return app.RequireAll
                 ? app.RequiredPermissions.All(permissions.Contains)

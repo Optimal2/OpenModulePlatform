@@ -1,21 +1,50 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.Rbac.IndexModel
-<section class="page-header"><div><div class="eyebrow">Security and access</div><h2>RBAC</h2><p class="lede">Manage roles, permissions and principal assignments from Portal instead of editing the database directly.</p></div></section>
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Security and access</div>
+        <h2>RBAC</h2>
+        <p class="lede">Manage roles, permissions and principal assignments from Portal instead of editing the database directly.</p>
+    </div>
+</section>
+
 <div class="card-grid bottom-gap">
-    <div class="card"><div class="metric">@Model.RoleCount</div><div>Roles</div><div class="muted small-text top-gap">Named access bundles that can carry multiple permissions and principals.</div></div>
-    <div class="card"><div class="metric">@Model.PermissionCount</div><div>Permissions</div><div class="muted small-text top-gap">Low-level capabilities granted to apps and portal areas.</div></div>
+    <div class="card">
+        <div class="metric">@Model.RoleCount</div>
+        <div>Roles</div>
+        <div class="muted small-text top-gap">
+            Named access bundles that can carry multiple permissions and principals.
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="metric">@Model.PermissionCount</div>
+        <div>Permissions</div>
+        <div class="muted small-text top-gap">
+            Low-level capabilities granted to apps and portal areas.
+        </div>
+    </div>
 </div>
+
 <div class="section-grid section-grid--wide">
     <section class="card section-card">
         <div class="eyebrow">Role administration</div>
         <h3>Manage roles</h3>
         <p class="muted">Create roles, update descriptions, assign permissions and attach principals.</p>
-        <div class="toolbar"><a class="action-link" href="~/admin/rbac/roles">Open roles</a><a class="action-link" href="~/admin/rbac/role">Create role</a></div>
+        <div class="toolbar">
+            <a class="action-link" href="~/admin/rbac/roles">Open roles</a>
+            <a class="action-link" href="~/admin/rbac/role">Create role</a>
+        </div>
     </section>
+
     <section class="card section-card">
         <div class="eyebrow">Permission catalog</div>
         <h3>Manage permissions</h3>
         <p class="muted">Create permissions once and reuse them across roles and example modules.</p>
-        <div class="toolbar"><a class="action-link" href="~/admin/rbac/permissions">Open permissions</a><a class="action-link" href="~/admin/rbac/permissionedit">Create permission</a></div>
+        <div class="toolbar">
+            <a class="action-link" href="~/admin/rbac/permissions">Open permissions</a>
+            <a class="action-link" href="~/admin/rbac/permissionedit">Create permission</a>
+        </div>
     </section>
 </div>

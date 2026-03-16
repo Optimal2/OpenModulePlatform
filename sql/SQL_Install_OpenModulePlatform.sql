@@ -330,8 +330,12 @@ BEGIN
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateHosts_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateHosts_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateHosts_UpdatedUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_omp_InstanceTemplateHosts_InstanceTemplate FOREIGN KEY(InstanceTemplateId) REFERENCES omp.InstanceTemplates(InstanceTemplateId),
-        CONSTRAINT FK_omp_InstanceTemplateHosts_HostTemplate FOREIGN KEY(HostTemplateId) REFERENCES omp.HostTemplates(HostTemplateId),
+        CONSTRAINT FK_omp_InstanceTemplateHosts_InstanceTemplate
+            FOREIGN KEY(InstanceTemplateId)
+            REFERENCES omp.InstanceTemplates(InstanceTemplateId),
+        CONSTRAINT FK_omp_InstanceTemplateHosts_HostTemplate
+            FOREIGN KEY(HostTemplateId)
+            REFERENCES omp.HostTemplates(HostTemplateId),
         CONSTRAINT UQ_omp_InstanceTemplateHosts_Template_HostKey UNIQUE(InstanceTemplateId, HostKey)
     );
 END
@@ -351,8 +355,12 @@ BEGIN
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateModuleInstances_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateModuleInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateModuleInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_omp_InstanceTemplateModuleInstances_InstanceTemplate FOREIGN KEY(InstanceTemplateId) REFERENCES omp.InstanceTemplates(InstanceTemplateId),
-        CONSTRAINT FK_omp_InstanceTemplateModuleInstances_Module FOREIGN KEY(ModuleId) REFERENCES omp.Modules(ModuleId),
+        CONSTRAINT FK_omp_InstanceTemplateModuleInstances_InstanceTemplate
+            FOREIGN KEY(InstanceTemplateId)
+            REFERENCES omp.InstanceTemplates(InstanceTemplateId),
+        CONSTRAINT FK_omp_InstanceTemplateModuleInstances_Module
+            FOREIGN KEY(ModuleId)
+            REFERENCES omp.Modules(ModuleId),
         CONSTRAINT UQ_omp_InstanceTemplateModuleInstances_Template_ModuleInstanceKey UNIQUE(InstanceTemplateId, ModuleInstanceKey)
     );
 END
@@ -383,11 +391,20 @@ BEGIN
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_omp_InstanceTemplateAppInstances_ModuleInstance FOREIGN KEY(InstanceTemplateModuleInstanceId) REFERENCES omp.InstanceTemplateModuleInstances(InstanceTemplateModuleInstanceId),
-        CONSTRAINT FK_omp_InstanceTemplateAppInstances_Host FOREIGN KEY(InstanceTemplateHostId) REFERENCES omp.InstanceTemplateHosts(InstanceTemplateHostId),
-        CONSTRAINT FK_omp_InstanceTemplateAppInstances_App FOREIGN KEY(AppId) REFERENCES omp.Apps(AppId),
-        CONSTRAINT FK_omp_InstanceTemplateAppInstances_Artifact FOREIGN KEY(DesiredArtifactId) REFERENCES omp.Artifacts(ArtifactId),
-        CONSTRAINT UQ_omp_InstanceTemplateAppInstances_ModuleInstance_AppInstanceKey UNIQUE(InstanceTemplateModuleInstanceId, AppInstanceKey)
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_ModuleInstance
+            FOREIGN KEY(InstanceTemplateModuleInstanceId)
+            REFERENCES omp.InstanceTemplateModuleInstances(InstanceTemplateModuleInstanceId),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_Host
+            FOREIGN KEY(InstanceTemplateHostId)
+            REFERENCES omp.InstanceTemplateHosts(InstanceTemplateHostId),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_App
+            FOREIGN KEY(AppId)
+            REFERENCES omp.Apps(AppId),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_Artifact
+            FOREIGN KEY(DesiredArtifactId)
+            REFERENCES omp.Artifacts(ArtifactId),
+        CONSTRAINT UQ_omp_InstanceTemplateAppInstances_ModuleInstance_AppInstanceKey
+            UNIQUE(InstanceTemplateModuleInstanceId, AppInstanceKey)
     );
 END
 GO
@@ -464,8 +481,18 @@ SELECT @DefaultHostTemplateId = HostTemplateId FROM omp.HostTemplates WHERE Temp
 
 IF NOT EXISTS (SELECT 1 FROM omp.Instances WHERE InstanceId = @DefaultInstanceId)
 BEGIN
-    INSERT INTO omp.Instances(InstanceId, InstanceKey, DisplayName, Description, InstanceTemplateId)
-    VALUES(@DefaultInstanceId, N'default', N'Default Instance', N'Default OMP instance seeded by the install script', @DefaultInstanceTemplateId);
+    INSERT INTO omp.Instances(
+        InstanceId,
+        InstanceKey,
+        DisplayName,
+        Description,
+        InstanceTemplateId)
+    VALUES(
+        @DefaultInstanceId,
+        N'default',
+        N'Default Instance',
+        N'Default OMP instance seeded by the install script',
+        @DefaultInstanceTemplateId);
 END
 ELSE
 BEGIN
@@ -601,8 +628,24 @@ IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @PortalAppId AND P
 
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @DefaultPortalModuleInstanceId)
 BEGIN
-    INSERT INTO omp.ModuleInstances(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
-    VALUES(@DefaultPortalModuleInstanceId, @DefaultInstanceId, @PortalModuleId, N'omp_portal', N'OMP Portal', N'Portal module instance for the default OMP instance', 1, 100);
+    INSERT INTO omp.ModuleInstances(
+        ModuleInstanceId,
+        InstanceId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @DefaultPortalModuleInstanceId,
+        @DefaultInstanceId,
+        @PortalModuleId,
+        N'omp_portal',
+        N'OMP Portal',
+        N'Portal module instance for the default OMP instance',
+        1,
+        100);
 END
 ELSE
 BEGIN
@@ -618,15 +661,34 @@ BEGIN
     WHERE ModuleInstanceId = @DefaultPortalModuleInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateModuleInstances WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND ModuleInstanceKey = N'omp_portal')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateModuleInstances
+    WHERE InstanceTemplateId = @DefaultInstanceTemplateId
+      AND ModuleInstanceKey = N'omp_portal'
+)
 BEGIN
-    INSERT INTO omp.InstanceTemplateModuleInstances(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder)
-    VALUES(@DefaultInstanceTemplateId, @PortalModuleId, N'omp_portal', N'OMP Portal', N'Portal module instance for the default template', 100);
+    INSERT INTO omp.InstanceTemplateModuleInstances(
+        InstanceTemplateId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        SortOrder)
+    VALUES(
+        @DefaultInstanceTemplateId,
+        @PortalModuleId,
+        N'omp_portal',
+        N'OMP Portal',
+        N'Portal module instance for the default template',
+        100);
 END
 
 SELECT @DefaultTemplatePortalModuleInstanceId = InstanceTemplateModuleInstanceId
 FROM omp.InstanceTemplateModuleInstances
-WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND ModuleInstanceKey = N'omp_portal';
+WHERE InstanceTemplateId = @DefaultInstanceTemplateId
+  AND ModuleInstanceKey = N'omp_portal';
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @DefaultPortalAppInstanceId)
 BEGIN
@@ -656,7 +718,13 @@ BEGIN
     WHERE AppInstanceId = @DefaultPortalAppInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId AND AppInstanceKey = N'omp_portal')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId
+      AND AppInstanceKey = N'omp_portal'
+)
 BEGIN
     INSERT INTO omp.InstanceTemplateAppInstances(
         InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description,

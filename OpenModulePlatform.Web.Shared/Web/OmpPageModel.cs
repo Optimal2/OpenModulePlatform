@@ -5,6 +5,9 @@ using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Web.Shared.Web;
 
+/// <summary>
+/// Base Razor Page model for OMP web applications.
+/// </summary>
 public abstract class OmpPageModel : PageModel
 {
     private readonly IOptions<WebAppOptions> _options;
@@ -20,6 +23,9 @@ public abstract class OmpPageModel : PageModel
         ? "OpenModulePlatform"
         : WebAppOptions.Title;
 
+    /// <summary>
+    /// Sets the common layout titles used by all OMP web applications.
+    /// </summary>
     protected void SetTitles(string? pageTitle = null)
     {
         ViewData["PortalTitle"] = WebAppTitle;

@@ -153,8 +153,14 @@ IF @InstanceId IS NULL
 
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 SELECT @SampleHostId = HostId FROM omp.Hosts WHERE InstanceId = @InstanceId AND HostKey = N'sample-host';
-SELECT @SampleTemplateHostId = InstanceTemplateHostId FROM omp.InstanceTemplateHosts WHERE InstanceTemplateId = @InstanceTemplateId AND HostKey = N'sample-host';
-SELECT TOP (1) @InitialServiceConfigId = ConfigId FROM omp_example_serviceapp_module.Configurations WHERE VersionNo = 0 ORDER BY ConfigId DESC;
+SELECT @SampleTemplateHostId = InstanceTemplateHostId
+FROM omp.InstanceTemplateHosts
+WHERE InstanceTemplateId = @InstanceTemplateId
+  AND HostKey = N'sample-host';
+SELECT TOP (1) @InitialServiceConfigId = ConfigId
+FROM omp_example_serviceapp_module.Configurations
+WHERE VersionNo = 0
+ORDER BY ConfigId DESC;
 
 -------------------------------------------------------------------------------
 -- Example WebAppModule registration
@@ -163,7 +169,10 @@ IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ExampleWebAppModule.
     INSERT INTO omp.Permissions(Name, Description) VALUES(N'ExampleWebAppModule.View', N'Read access to the Example WebAppModule');
 
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ExampleWebAppModule.Admin')
-    INSERT INTO omp.Permissions(Name, Description) VALUES(N'ExampleWebAppModule.Admin', N'Administrative access to the Example WebAppModule');
+    INSERT INTO omp.Permissions(Name, Description)
+    VALUES(
+        N'ExampleWebAppModule.Admin',
+        N'Administrative access to the Example WebAppModule');
 
 SELECT @WebViewPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ExampleWebAppModule.View';
 SELECT @WebAdminPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ExampleWebAppModule.Admin';
@@ -182,8 +191,22 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT INTO omp.Modules(ModuleKey, DisplayName, ModuleType, SchemaName, Description, IsEnabled, SortOrder)
-    VALUES(N'example_webapp_module', N'Example WebAppModule', N'WebAppModule', N'omp_example_webapp_module', N'Web-only example module for OpenModulePlatform', 1, 300);
+    INSERT INTO omp.Modules(
+        ModuleKey,
+        DisplayName,
+        ModuleType,
+        SchemaName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        N'example_webapp_module',
+        N'Example WebAppModule',
+        N'WebAppModule',
+        N'omp_example_webapp_module',
+        N'Web-only example module for OpenModulePlatform',
+        1,
+        300);
 END
 
 SELECT @WebModuleId = ModuleId FROM omp.Modules WHERE ModuleKey = N'example_webapp_module';
@@ -201,8 +224,22 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT INTO omp.Apps(ModuleId, AppKey, DisplayName, AppType, Description, IsEnabled, SortOrder)
-    VALUES(@WebModuleId, N'example_webapp_module_webapp', N'Example WebAppModule', N'WebApp', N'Web app definition for the web-only example module', 1, 300);
+    INSERT INTO omp.Apps(
+        ModuleId,
+        AppKey,
+        DisplayName,
+        AppType,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @WebModuleId,
+        N'example_webapp_module_webapp',
+        N'Example WebAppModule',
+        N'WebApp',
+        N'Web app definition for the web-only example module',
+        1,
+        300);
 END
 
 SELECT @WebAppId = AppId FROM omp.Apps WHERE ModuleId = @WebModuleId AND AppKey = N'example_webapp_module_webapp';
@@ -210,16 +247,48 @@ SELECT @WebAppId = AppId FROM omp.Apps WHERE ModuleId = @WebModuleId AND AppKey 
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @WebAppId AND PermissionId = @WebViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@WebAppId, @WebViewPermissionId, 0);
 
-IF @PortalAdminsRoleId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @WebViewPermissionId)
-    INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @WebViewPermissionId);
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @WebViewPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @WebViewPermissionId);
 
-IF @PortalAdminsRoleId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @WebAdminPermissionId)
-    INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @WebAdminPermissionId);
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @WebAdminPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @WebAdminPermissionId);
 
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @WebModuleInstanceId)
 BEGIN
-    INSERT INTO omp.ModuleInstances(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
-    VALUES(@WebModuleInstanceId, @InstanceId, @WebModuleId, N'example_webapp_module', N'Example WebAppModule', N'Web-only example module instance', 1, 300);
+    INSERT INTO omp.ModuleInstances(
+        ModuleInstanceId,
+        InstanceId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @WebModuleInstanceId,
+        @InstanceId,
+        @WebModuleId,
+        N'example_webapp_module',
+        N'Example WebAppModule',
+        N'Web-only example module instance',
+        1,
+        300);
 END
 ELSE
 BEGIN
@@ -235,20 +304,65 @@ BEGIN
     WHERE ModuleInstanceId = @WebModuleInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateModuleInstances WHERE InstanceTemplateId = @InstanceTemplateId AND ModuleInstanceKey = N'example_webapp_module')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateModuleInstances
+    WHERE InstanceTemplateId = @InstanceTemplateId
+      AND ModuleInstanceKey = N'example_webapp_module'
+)
 BEGIN
-    INSERT INTO omp.InstanceTemplateModuleInstances(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder)
-    VALUES(@InstanceTemplateId, @WebModuleId, N'example_webapp_module', N'Example WebAppModule', N'Web-only example module instance in the default template', 300);
+    INSERT INTO omp.InstanceTemplateModuleInstances(
+        InstanceTemplateId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        SortOrder)
+    VALUES(
+        @InstanceTemplateId,
+        @WebModuleId,
+        N'example_webapp_module',
+        N'Example WebAppModule',
+        N'Web-only example module instance in the default template',
+        300);
 END
 
 SELECT @WebTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
 FROM omp.InstanceTemplateModuleInstances
-WHERE InstanceTemplateId = @InstanceTemplateId AND ModuleInstanceKey = N'example_webapp_module';
+WHERE InstanceTemplateId = @InstanceTemplateId
+  AND ModuleInstanceKey = N'example_webapp_module';
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @WebAppInstanceId)
 BEGIN
-    INSERT INTO omp.AppInstances(AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, InstallationName, IsEnabled, IsAllowed, DesiredState, SortOrder)
-    VALUES(@WebAppInstanceId, @WebModuleInstanceId, @SampleHostId, @WebAppId, N'example_webapp_module_webapp', N'Example WebAppModule', N'Primary web app instance for the example WebAppModule', N'ExampleWebAppModule', N'webapp', 1, 1, 1, 300);
+    INSERT INTO omp.AppInstances(
+        AppInstanceId,
+        ModuleInstanceId,
+        HostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        IsEnabled,
+        IsAllowed,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @WebAppInstanceId,
+        @WebModuleInstanceId,
+        @SampleHostId,
+        @WebAppId,
+        N'example_webapp_module_webapp',
+        N'Example WebAppModule',
+        N'Primary web app instance for the example WebAppModule',
+        N'ExampleWebAppModule',
+        N'webapp',
+        1,
+        1,
+        1,
+        300);
 END
 ELSE
 BEGIN
@@ -269,10 +383,36 @@ BEGIN
     WHERE AppInstanceId = @WebAppInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateModuleInstanceId = @WebTemplateModuleInstanceId AND AppInstanceKey = N'example_webapp_module_webapp')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateModuleInstanceId = @WebTemplateModuleInstanceId
+      AND AppInstanceKey = N'example_webapp_module_webapp'
+)
 BEGIN
-    INSERT INTO omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, InstallationName, DesiredState, SortOrder)
-    VALUES(@WebTemplateModuleInstanceId, @SampleTemplateHostId, @WebAppId, N'example_webapp_module_webapp', N'Example WebAppModule', N'Primary web app instance for the example WebAppModule', N'ExampleWebAppModule', N'webapp', 1, 300);
+    INSERT INTO omp.InstanceTemplateAppInstances(
+        InstanceTemplateModuleInstanceId,
+        InstanceTemplateHostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @WebTemplateModuleInstanceId,
+        @SampleTemplateHostId,
+        @WebAppId,
+        N'example_webapp_module_webapp',
+        N'Example WebAppModule',
+        N'Primary web app instance for the example WebAppModule',
+        N'ExampleWebAppModule',
+        N'webapp',
+        1,
+        300);
 END
 
 -------------------------------------------------------------------------------
@@ -282,7 +422,10 @@ IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ExampleServiceAppMod
     INSERT INTO omp.Permissions(Name, Description) VALUES(N'ExampleServiceAppModule.View', N'Read access to the Example ServiceAppModule');
 
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ExampleServiceAppModule.Admin')
-    INSERT INTO omp.Permissions(Name, Description) VALUES(N'ExampleServiceAppModule.Admin', N'Administrative access to the Example ServiceAppModule');
+    INSERT INTO omp.Permissions(Name, Description)
+    VALUES(
+        N'ExampleServiceAppModule.Admin',
+        N'Administrative access to the Example ServiceAppModule');
 
 SELECT @ServiceViewPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ExampleServiceAppModule.View';
 SELECT @ServiceAdminPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ExampleServiceAppModule.Admin';
@@ -301,8 +444,22 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT INTO omp.Modules(ModuleKey, DisplayName, ModuleType, SchemaName, Description, IsEnabled, SortOrder)
-    VALUES(N'example_serviceapp_module', N'Example ServiceAppModule', N'HostAppModule', N'omp_example_serviceapp_module', N'Combined web app and service app example module for OpenModulePlatform', 1, 400);
+    INSERT INTO omp.Modules(
+        ModuleKey,
+        DisplayName,
+        ModuleType,
+        SchemaName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        N'example_serviceapp_module',
+        N'Example ServiceAppModule',
+        N'HostAppModule',
+        N'omp_example_serviceapp_module',
+        N'Combined web app and service app example module for OpenModulePlatform',
+        1,
+        400);
 END
 
 SELECT @ServiceModuleId = ModuleId FROM omp.Modules WHERE ModuleKey = N'example_serviceapp_module';
@@ -321,7 +478,14 @@ END
 ELSE
 BEGIN
     INSERT INTO omp.Apps(ModuleId, AppKey, DisplayName, AppType, Description, IsEnabled, SortOrder)
-    VALUES(@ServiceModuleId, N'example_serviceapp_module_webapp', N'Example ServiceAppModule', N'WebApp', N'Web app definition for the example HostAppModule', 1, 400);
+    VALUES(
+        @ServiceModuleId,
+        N'example_serviceapp_module_webapp',
+        N'Example ServiceAppModule',
+        N'WebApp',
+        N'Web app definition for the example HostAppModule',
+        1,
+        400);
 END
 
 IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @ServiceModuleId AND AppKey = N'example_serviceapp_module_service')
@@ -338,7 +502,14 @@ END
 ELSE
 BEGIN
     INSERT INTO omp.Apps(ModuleId, AppKey, DisplayName, AppType, Description, IsEnabled, SortOrder)
-    VALUES(@ServiceModuleId, N'example_serviceapp_module_service', N'Example Service Worker', N'ServiceApp', N'Service app definition for the example HostAppModule', 1, 401);
+    VALUES(
+        @ServiceModuleId,
+        N'example_serviceapp_module_service',
+        N'Example Service Worker',
+        N'ServiceApp',
+        N'Service app definition for the example HostAppModule',
+        1,
+        401);
 END
 
 SELECT @ServiceWebAppId = AppId FROM omp.Apps WHERE ModuleId = @ServiceModuleId AND AppKey = N'example_serviceapp_module_webapp';
@@ -347,13 +518,37 @@ SELECT @ServiceAppId = AppId FROM omp.Apps WHERE ModuleId = @ServiceModuleId AND
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @ServiceWebAppId AND PermissionId = @ServiceViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@ServiceWebAppId, @ServiceViewPermissionId, 0);
 
-IF @PortalAdminsRoleId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @ServiceViewPermissionId)
-    INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @ServiceViewPermissionId);
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @ServiceViewPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @ServiceViewPermissionId);
 
-IF @PortalAdminsRoleId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @ServiceAdminPermissionId)
-    INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @ServiceAdminPermissionId);
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @ServiceAdminPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @ServiceAdminPermissionId);
 
-IF NOT EXISTS (SELECT 1 FROM omp.Artifacts WHERE AppId = @ServiceAppId AND Version = N'1.0.0' AND PackageType = N'folder' AND TargetName = N'win-x64')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.Artifacts
+    WHERE AppId = @ServiceAppId
+      AND Version = N'1.0.0'
+      AND PackageType = N'folder'
+      AND TargetName = N'win-x64'
+)
     INSERT INTO omp.Artifacts(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(@ServiceAppId, N'1.0.0', N'folder', N'win-x64', N'publish/ExampleServiceAppModule', 1);
 
@@ -361,8 +556,24 @@ SELECT TOP (1) @ServiceArtifactId = ArtifactId FROM omp.Artifacts WHERE AppId = 
 
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @ServiceModuleInstanceId)
 BEGIN
-    INSERT INTO omp.ModuleInstances(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
-    VALUES(@ServiceModuleInstanceId, @InstanceId, @ServiceModuleId, N'example_serviceapp_module', N'Example ServiceAppModule', N'Example module instance with both web and service apps', 1, 400);
+    INSERT INTO omp.ModuleInstances(
+        ModuleInstanceId,
+        InstanceId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @ServiceModuleInstanceId,
+        @InstanceId,
+        @ServiceModuleId,
+        N'example_serviceapp_module',
+        N'Example ServiceAppModule',
+        N'Example module instance with both web and service apps',
+        1,
+        400);
 END
 ELSE
 BEGIN
@@ -378,20 +589,65 @@ BEGIN
     WHERE ModuleInstanceId = @ServiceModuleInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateModuleInstances WHERE InstanceTemplateId = @InstanceTemplateId AND ModuleInstanceKey = N'example_serviceapp_module')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateModuleInstances
+    WHERE InstanceTemplateId = @InstanceTemplateId
+      AND ModuleInstanceKey = N'example_serviceapp_module'
+)
 BEGIN
-    INSERT INTO omp.InstanceTemplateModuleInstances(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder)
-    VALUES(@InstanceTemplateId, @ServiceModuleId, N'example_serviceapp_module', N'Example ServiceAppModule', N'Example module instance with both web and service apps', 400);
+    INSERT INTO omp.InstanceTemplateModuleInstances(
+        InstanceTemplateId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        SortOrder)
+    VALUES(
+        @InstanceTemplateId,
+        @ServiceModuleId,
+        N'example_serviceapp_module',
+        N'Example ServiceAppModule',
+        N'Example module instance with both web and service apps',
+        400);
 END
 
 SELECT @ServiceTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
 FROM omp.InstanceTemplateModuleInstances
-WHERE InstanceTemplateId = @InstanceTemplateId AND ModuleInstanceKey = N'example_serviceapp_module';
+WHERE InstanceTemplateId = @InstanceTemplateId
+  AND ModuleInstanceKey = N'example_serviceapp_module';
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @ServiceWebAppInstanceId)
 BEGIN
-    INSERT INTO omp.AppInstances(AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, InstallationName, IsEnabled, IsAllowed, DesiredState, SortOrder)
-    VALUES(@ServiceWebAppInstanceId, @ServiceModuleInstanceId, @SampleHostId, @ServiceWebAppId, N'example_serviceapp_module_webapp', N'Example ServiceAppModule', N'Primary web app instance for the example HostAppModule', N'ExampleServiceAppModule', N'webapp', 1, 1, 1, 400);
+    INSERT INTO omp.AppInstances(
+        AppInstanceId,
+        ModuleInstanceId,
+        HostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        IsEnabled,
+        IsAllowed,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @ServiceWebAppInstanceId,
+        @ServiceModuleInstanceId,
+        @SampleHostId,
+        @ServiceWebAppId,
+        N'example_serviceapp_module_webapp',
+        N'Example ServiceAppModule',
+        N'Primary web app instance for the example HostAppModule',
+        N'ExampleServiceAppModule',
+        N'webapp',
+        1,
+        1,
+        1,
+        400);
 END
 ELSE
 BEGIN
@@ -412,23 +668,78 @@ BEGIN
     WHERE AppInstanceId = @ServiceWebAppInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId AND AppInstanceKey = N'example_serviceapp_module_webapp')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
+      AND AppInstanceKey = N'example_serviceapp_module_webapp'
+)
 BEGIN
-    INSERT INTO omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, InstallationName, DesiredState, SortOrder)
-    VALUES(@ServiceTemplateModuleInstanceId, @SampleTemplateHostId, @ServiceWebAppId, N'example_serviceapp_module_webapp', N'Example ServiceAppModule', N'Primary web app instance for the example HostAppModule', N'ExampleServiceAppModule', N'webapp', 1, 400);
+    INSERT INTO omp.InstanceTemplateAppInstances(
+        InstanceTemplateModuleInstanceId,
+        InstanceTemplateHostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @ServiceTemplateModuleInstanceId,
+        @SampleTemplateHostId,
+        @ServiceWebAppId,
+        N'example_serviceapp_module_webapp',
+        N'Example ServiceAppModule',
+        N'Primary web app instance for the example HostAppModule',
+        N'ExampleServiceAppModule',
+        N'webapp',
+        1,
+        400);
 END
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @ServiceAppInstanceId)
 BEGIN
     INSERT INTO omp.AppInstances(
-        AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description,
-        InstallPath, InstallationName, ArtifactId, ConfigId, ExpectedLogin, ExpectedClientHostName, ExpectedClientIp,
-        IsEnabled, IsAllowed, DesiredState, SortOrder)
+        AppInstanceId,
+        ModuleInstanceId,
+        HostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        InstallPath,
+        InstallationName,
+        ArtifactId,
+        ConfigId,
+        ExpectedLogin,
+        ExpectedClientHostName,
+        ExpectedClientIp,
+        IsEnabled,
+        IsAllowed,
+        DesiredState,
+        SortOrder)
     VALUES(
-        @ServiceAppInstanceId, @ServiceModuleInstanceId, @SampleHostId, @ServiceAppId, N'example_serviceapp_module_service', N'Example Service Worker',
-        N'Primary service app instance for the example HostAppModule', N'C:\Program Files\OpenModulePlatform\ServiceApps\ExampleServiceAppModule', N'default', @ServiceArtifactId, @InitialServiceConfigId,
-        N'REPLACE_ME\\service-account', N'REPLACE_ME_HOST', N'REPLACE_ME_IP',
-        1, 1, 1, 401);
+        @ServiceAppInstanceId,
+        @ServiceModuleInstanceId,
+        @SampleHostId,
+        @ServiceAppId,
+        N'example_serviceapp_module_service',
+        N'Example Service Worker',
+        N'Primary service app instance for the example HostAppModule',
+        N'C:\Program Files\OpenModulePlatform\ServiceApps\ExampleServiceAppModule',
+        N'default',
+        @ServiceArtifactId,
+        @InitialServiceConfigId,
+        N'REPLACE_ME\\service-account',
+        N'REPLACE_ME_HOST',
+        N'REPLACE_ME_IP',
+        1,
+        1,
+        1,
+        401);
 END
 ELSE
 BEGIN
@@ -454,16 +765,46 @@ BEGIN
     WHERE AppInstanceId = @ServiceAppInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId AND AppInstanceKey = N'example_serviceapp_module_service')
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
+      AND AppInstanceKey = N'example_serviceapp_module_service'
+)
 BEGIN
     INSERT INTO omp.InstanceTemplateAppInstances(
-        InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description,
-        InstallPath, InstallationName, DesiredArtifactId, DesiredConfigId,
-        ExpectedLogin, ExpectedClientHostName, ExpectedClientIp, DesiredState, SortOrder)
+        InstanceTemplateModuleInstanceId,
+        InstanceTemplateHostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        InstallPath,
+        InstallationName,
+        DesiredArtifactId,
+        DesiredConfigId,
+        ExpectedLogin,
+        ExpectedClientHostName,
+        ExpectedClientIp,
+        DesiredState,
+        SortOrder)
     VALUES(
-        @ServiceTemplateModuleInstanceId, @SampleTemplateHostId, @ServiceAppId, N'example_serviceapp_module_service', N'Example Service Worker',
-        N'Primary service app instance for the example HostAppModule', N'C:\Program Files\OpenModulePlatform\ServiceApps\ExampleServiceAppModule', N'default', @ServiceArtifactId, @InitialServiceConfigId,
-        N'REPLACE_ME\\service-account', N'REPLACE_ME_HOST', N'REPLACE_ME_IP', 1, 401);
+        @ServiceTemplateModuleInstanceId,
+        @SampleTemplateHostId,
+        @ServiceAppId,
+        N'example_serviceapp_module_service',
+        N'Example Service Worker',
+        N'Primary service app instance for the example HostAppModule',
+        N'C:\Program Files\OpenModulePlatform\ServiceApps\ExampleServiceAppModule',
+        N'default',
+        @ServiceArtifactId,
+        @InitialServiceConfigId,
+        N'REPLACE_ME\\service-account',
+        N'REPLACE_ME_HOST',
+        N'REPLACE_ME_IP',
+        1,
+        401);
 END
 
 -------------------------------------------------------------------------------

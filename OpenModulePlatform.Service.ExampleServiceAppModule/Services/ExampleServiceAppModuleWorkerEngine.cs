@@ -5,6 +5,19 @@ using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Service.ExampleServiceAppModule.Services;
 
+/// <summary>
+/// Main orchestration loop for the example service-backed module.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The worker loop demonstrates how a future OMP-hosted service can resolve its desired
+/// state from <c>omp.AppInstances</c>, refresh module-owned configuration, publish heartbeat,
+/// and process jobs only when the current runtime identity matches the configured policy.
+/// </para>
+/// <para>
+/// This is intentionally simple example orchestration rather than a full HostAgent.
+/// </para>
+/// </remarks>
 public sealed class ExampleServiceAppModuleWorkerEngine
 {
     private readonly ILogger<ExampleServiceAppModuleWorkerEngine> _log;
@@ -39,6 +52,7 @@ public sealed class ExampleServiceAppModuleWorkerEngine
     {
         var settings = _workerSettings.CurrentValue;
         var appInstanceId = settings.AppInstanceId;
+
         _log.LogInformation("Started. AppInstanceId={AppInstanceId}", appInstanceId);
 
         AppInstanceRepository.ObservedIdentity? observed = null;
@@ -46,6 +60,7 @@ public sealed class ExampleServiceAppModuleWorkerEngine
         while (!stoppingToken.IsCancellationRequested)
         {
             settings = _workerSettings.CurrentValue;
+
             try
             {
                 var now = DateTime.UtcNow;
@@ -61,28 +76,38 @@ public sealed class ExampleServiceAppModuleWorkerEngine
                     var refresh = await _configService.RefreshAsync(appInstanceId, stoppingToken);
                     _runtime = refresh.Runtime;
                     _config = refresh.Config;
-                    _nextConfigRefreshUtc = now.AddSeconds(Math.Max(1, settings.ConfigRefreshSeconds));
+                    _nextConfigRefreshUtc = now.AddSeconds(
+                        Math.Max(1, settings.ConfigRefreshSeconds));
 
                     if (_runtime is null || _config is null)
-                        _log.LogInformation("Service app inactive for current cycle. Reason={Reason}", refresh.StateReason);
+                    {
+                        _log.LogInformation(
+                            "Service app inactive for current cycle. Reason={Reason}",
+                            refresh.StateReason);
+                    }
                 }
 
                 if (_runtime is null || _config is null || observed is null)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, settings.PollSeconds)), stoppingToken);
+                    await Task.Delay(
+                        TimeSpan.FromSeconds(Math.Max(1, settings.PollSeconds)),
+                        stoppingToken);
                     continue;
                 }
 
                 if (!IsExpectedIdentityMatch(_runtime, observed, out var mismatchReason))
                 {
                     _log.LogError(
-                        "App instance identity mismatch. AppInstanceId={AppInstanceId} ExpectedLogin={ExpectedLogin} ObservedLogin={ObservedLogin} Reason={Reason}",
+                        "App instance identity mismatch. AppInstanceId={AppInstanceId} " +
+                        "ExpectedLogin={ExpectedLogin} ObservedLogin={ObservedLogin} Reason={Reason}",
                         appInstanceId,
                         _runtime.ExpectedLogin,
                         observed.Login,
                         mismatchReason);
 
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, settings.PollSeconds)), stoppingToken);
+                    await Task.Delay(
+                        TimeSpan.FromSeconds(Math.Max(1, settings.PollSeconds)),
+                        stoppingToken);
                     continue;
                 }
 
@@ -93,14 +118,24 @@ public sealed class ExampleServiceAppModuleWorkerEngine
                 {
                     var job = await _jobs.TryClaimNextAsync(appInstanceId, stoppingToken);
                     if (job is null)
+                    {
                         break;
+                    }
 
                     processedAny = true;
-                    await _processor.ProcessOneAsync(appInstanceId, _config, job, stoppingToken);
+                    await _processor.ProcessOneAsync(
+                        appInstanceId,
+                        _config,
+                        job,
+                        stoppingToken);
                 }
 
                 if (!processedAny)
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, settings.PollSeconds)), stoppingToken);
+                {
+                    await Task.Delay(
+                        TimeSpan.FromSeconds(Math.Max(1, settings.PollSeconds)),
+                        stoppingToken);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -124,26 +159,41 @@ public sealed class ExampleServiceAppModuleWorkerEngine
         }
     }
 
-    private static bool IsExpectedIdentityMatch(AppInstanceRepository.AppInstanceRuntime runtime, AppInstanceRepository.ObservedIdentity observed, out string reason)
+    /// <summary>
+    /// Compares the observed runtime identity with the app-instance policy.
+    /// </summary>
+    private static bool IsExpectedIdentityMatch(
+        AppInstanceRepository.AppInstanceRuntime runtime,
+        AppInstanceRepository.ObservedIdentity observed,
+        out string reason)
     {
         reason = string.Empty;
 
-        if (!string.IsNullOrWhiteSpace(runtime.ExpectedLogin)
-            && !string.Equals(runtime.ExpectedLogin, observed.Login, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(runtime.ExpectedLogin) &&
+            !string.Equals(
+                runtime.ExpectedLogin,
+                observed.Login,
+                StringComparison.OrdinalIgnoreCase))
         {
             reason = "login";
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(runtime.ExpectedClientHostName)
-            && !string.Equals(runtime.ExpectedClientHostName, observed.HostName, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(runtime.ExpectedClientHostName) &&
+            !string.Equals(
+                runtime.ExpectedClientHostName,
+                observed.HostName,
+                StringComparison.OrdinalIgnoreCase))
         {
             reason = "client_host_name";
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(runtime.ExpectedClientIp)
-            && !string.Equals(runtime.ExpectedClientIp, observed.ClientIp, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(runtime.ExpectedClientIp) &&
+            !string.Equals(
+                runtime.ExpectedClientIp,
+                observed.ClientIp,
+                StringComparison.OrdinalIgnoreCase))
         {
             reason = "client_ip";
             return false;

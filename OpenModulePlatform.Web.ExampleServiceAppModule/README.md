@@ -8,4 +8,6 @@ It demonstrates:
 - app-instance-centric administration
 - visibility into example jobs and runtime state
 
-The module uses `omp.AppInstances` as the runtime anchor for the service app. Each service app instance can carry its own artifact, configuration and verification policy.
+The module uses `omp.AppInstances` as the runtime anchor for the service app.
+Each service app instance can carry its own artifact, configuration and
+verification policy.
