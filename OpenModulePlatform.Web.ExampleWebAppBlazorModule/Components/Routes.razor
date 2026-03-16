@@ -1,0 +1,23 @@
+@using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Components.Layout
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(Program).Assembly">
+        <Found Context="routeData">
+            <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <PageTitle>Sidan hittades inte</PageTitle>
+                <div class="page-header">
+                    <div>
+                        <div class="eyebrow">Example module</div>
+                        <h1>Sidan hittades inte</h1>
+                        <p class="lede">Kontrollera adressen eller navigera tillbaka via menyn.</p>
+                    </div>
+                </div>
+                <div class="empty-state">Det finns ingen sida på den angivna adressen.</div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

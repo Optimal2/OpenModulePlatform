@@ -5,7 +5,7 @@ OpenModulePlatform example install script.
 Run this script after SQL_Install_OpenModulePlatform.sql.
 
 This script creates the example module schemas and registers:
-- one web-only example module
+- two web-only example modules (Razor Pages and Blazor Server)
 - one service-backed example module
 - module instances and app instances for the default OMP instance
 - template topology rows for the default instance template
@@ -24,6 +24,10 @@ GO
 -------------------------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_example_webapp_module')
     EXEC('CREATE SCHEMA [omp_example_webapp_module]');
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_example_webapp_blazor_module')
+    EXEC('CREATE SCHEMA [omp_example_webapp_blazor_module]');
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_example_serviceapp_module')
@@ -51,6 +55,30 @@ IF NOT EXISTS (SELECT 1 FROM omp_example_webapp_module.Configurations WHERE Vers
 BEGIN
     INSERT INTO omp_example_webapp_module.Configurations(VersionNo, ConfigJson, Comment, CreatedBy)
     VALUES(0, N'{"sampleMode": true}', N'Initial example web configuration', N'install-script');
+END
+GO
+
+-------------------------------------------------------------------------------
+-- Example WebAppBlazorModule tables
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp_example_webapp_blazor_module.Configurations', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_example_webapp_blazor_module.Configurations
+    (
+        ConfigId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        VersionNo int NOT NULL,
+        ConfigJson nvarchar(max) NOT NULL,
+        Comment nvarchar(400) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_ExampleWebBlazor_Config_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        CreatedBy nvarchar(256) NULL
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM omp_example_webapp_blazor_module.Configurations WHERE VersionNo = 0)
+BEGIN
+    INSERT INTO omp_example_webapp_blazor_module.Configurations(VersionNo, ConfigJson, Comment, CreatedBy)
+    VALUES(0, N'{"sampleMode": true, "ui": "blazor"}', N'Initial example blazor web configuration', N'install-script');
 END
 GO
 
@@ -131,6 +159,14 @@ DECLARE @WebAppId int;
 DECLARE @WebAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111202';
 DECLARE @WebViewPermissionId int;
 DECLARE @WebAdminPermissionId int;
+
+DECLARE @WebBlazorModuleId int;
+DECLARE @WebBlazorModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111211';
+DECLARE @WebBlazorTemplateModuleInstanceId int;
+DECLARE @WebBlazorAppId int;
+DECLARE @WebBlazorAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111212';
+DECLARE @WebBlazorViewPermissionId int;
+DECLARE @WebBlazorAdminPermissionId int;
 
 DECLARE @ServiceModuleId int;
 DECLARE @ServiceModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111301';
@@ -413,6 +449,259 @@ BEGIN
         N'webapp',
         1,
         300);
+END
+
+-------------------------------------------------------------------------------
+-- Example WebAppBlazorModule registration
+-------------------------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ExampleWebAppBlazorModule.View')
+    INSERT INTO omp.Permissions(Name, Description) VALUES(N'ExampleWebAppBlazorModule.View', N'Read access to the Example WebApp Blazor Module');
+
+IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ExampleWebAppBlazorModule.Admin')
+    INSERT INTO omp.Permissions(Name, Description)
+    VALUES(
+        N'ExampleWebAppBlazorModule.Admin',
+        N'Administrative access to the Example WebApp Blazor Module');
+
+SELECT @WebBlazorViewPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ExampleWebAppBlazorModule.View';
+SELECT @WebBlazorAdminPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ExampleWebAppBlazorModule.Admin';
+
+IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'example_webapp_blazor_module')
+BEGIN
+    UPDATE omp.Modules
+    SET DisplayName = N'Example WebApp Blazor Module',
+        ModuleType = N'WebAppModule',
+        SchemaName = N'omp_example_webapp_blazor_module',
+        Description = N'Blazor Server web-only example module for OpenModulePlatform',
+        IsEnabled = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleKey = N'example_webapp_blazor_module';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Modules(
+        ModuleKey,
+        DisplayName,
+        ModuleType,
+        SchemaName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        N'example_webapp_blazor_module',
+        N'Example WebApp Blazor Module',
+        N'WebAppModule',
+        N'omp_example_webapp_blazor_module',
+        N'Blazor Server web-only example module for OpenModulePlatform',
+        1,
+        310);
+END
+
+SELECT @WebBlazorModuleId = ModuleId FROM omp.Modules WHERE ModuleKey = N'example_webapp_blazor_module';
+
+IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @WebBlazorModuleId AND AppKey = N'example_webapp_blazor_module_webapp')
+BEGIN
+    UPDATE omp.Apps
+    SET DisplayName = N'Example WebApp Blazor Module',
+        AppType = N'WebApp',
+        Description = N'Web app definition for the Blazor web-only example module',
+        IsEnabled = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleId = @WebBlazorModuleId AND AppKey = N'example_webapp_blazor_module_webapp';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Apps(
+        ModuleId,
+        AppKey,
+        DisplayName,
+        AppType,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @WebBlazorModuleId,
+        N'example_webapp_blazor_module_webapp',
+        N'Example WebApp Blazor Module',
+        N'WebApp',
+        N'Web app definition for the Blazor web-only example module',
+        1,
+        310);
+END
+
+SELECT @WebBlazorAppId = AppId FROM omp.Apps WHERE ModuleId = @WebBlazorModuleId AND AppKey = N'example_webapp_blazor_module_webapp';
+
+IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @WebBlazorAppId AND PermissionId = @WebBlazorViewPermissionId)
+    INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@WebBlazorAppId, @WebBlazorViewPermissionId, 0);
+
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @WebBlazorViewPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @WebBlazorViewPermissionId);
+
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @WebBlazorAdminPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @WebBlazorAdminPermissionId);
+
+IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @WebBlazorModuleInstanceId)
+BEGIN
+    INSERT INTO omp.ModuleInstances(
+        ModuleInstanceId,
+        InstanceId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @WebBlazorModuleInstanceId,
+        @InstanceId,
+        @WebBlazorModuleId,
+        N'example_webapp_blazor_module',
+        N'Example WebApp Blazor Module',
+        N'Blazor Server web-only example module instance',
+        1,
+        310);
+END
+ELSE
+BEGIN
+    UPDATE omp.ModuleInstances
+    SET InstanceId = @InstanceId,
+        ModuleId = @WebBlazorModuleId,
+        ModuleInstanceKey = N'example_webapp_blazor_module',
+        DisplayName = N'Example WebApp Blazor Module',
+        Description = N'Blazor Server web-only example module instance',
+        IsEnabled = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleInstanceId = @WebBlazorModuleInstanceId;
+END
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateModuleInstances
+    WHERE InstanceTemplateId = @InstanceTemplateId
+      AND ModuleInstanceKey = N'example_webapp_blazor_module'
+)
+BEGIN
+    INSERT INTO omp.InstanceTemplateModuleInstances(
+        InstanceTemplateId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        SortOrder)
+    VALUES(
+        @InstanceTemplateId,
+        @WebBlazorModuleId,
+        N'example_webapp_blazor_module',
+        N'Example WebApp Blazor Module',
+        N'Blazor Server web-only example module instance in the default template',
+        310);
+END
+
+SELECT @WebBlazorTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateId = @InstanceTemplateId
+  AND ModuleInstanceKey = N'example_webapp_blazor_module';
+
+IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @WebBlazorAppInstanceId)
+BEGIN
+    INSERT INTO omp.AppInstances(
+        AppInstanceId,
+        ModuleInstanceId,
+        HostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        IsEnabled,
+        IsAllowed,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @WebBlazorAppInstanceId,
+        @WebBlazorModuleInstanceId,
+        @SampleHostId,
+        @WebBlazorAppId,
+        N'example_webapp_blazor_module_webapp',
+        N'Example WebApp Blazor Module',
+        N'Primary web app instance for the Blazor example WebAppModule',
+        N'ExampleWebAppBlazorModule',
+        N'webapp',
+        1,
+        1,
+        1,
+        310);
+END
+ELSE
+BEGIN
+    UPDATE omp.AppInstances
+    SET ModuleInstanceId = @WebBlazorModuleInstanceId,
+        HostId = @SampleHostId,
+        AppId = @WebBlazorAppId,
+        AppInstanceKey = N'example_webapp_blazor_module_webapp',
+        DisplayName = N'Example WebApp Blazor Module',
+        Description = N'Primary web app instance for the Blazor example WebAppModule',
+        RoutePath = N'ExampleWebAppBlazorModule',
+        InstallationName = N'webapp',
+        IsEnabled = 1,
+        IsAllowed = 1,
+        DesiredState = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE AppInstanceId = @WebBlazorAppInstanceId;
+END
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateModuleInstanceId = @WebBlazorTemplateModuleInstanceId
+      AND AppInstanceKey = N'example_webapp_blazor_module_webapp'
+)
+BEGIN
+    INSERT INTO omp.InstanceTemplateAppInstances(
+        InstanceTemplateModuleInstanceId,
+        InstanceTemplateHostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @WebBlazorTemplateModuleInstanceId,
+        @SampleTemplateHostId,
+        @WebBlazorAppId,
+        N'example_webapp_blazor_module_webapp',
+        N'Example WebApp Blazor Module',
+        N'Primary web app instance for the Blazor example WebAppModule',
+        N'ExampleWebAppBlazorModule',
+        N'webapp',
+        1,
+        310);
 END
 
 -------------------------------------------------------------------------------

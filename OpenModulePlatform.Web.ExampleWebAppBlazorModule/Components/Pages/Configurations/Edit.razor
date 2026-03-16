@@ -1,0 +1,132 @@
+@page "/configurations/edit"
+@page "/configurations/edit/{ConfigId:int}"
+@inherits ExampleWebAppBlazorModuleComponentBase
+@inject ExampleWebAppBlazorModuleAdminRepository Repo
+
+<PageTitle>@PageTitle</PageTitle>
+
+@if (!AuthorizationResolved)
+{
+    <div class="empty-state">Laddar konfiguration...</div>
+}
+else if (!IsAuthorized)
+{
+    <div class="empty-state">@AccessDeniedMessage</div>
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <div class="eyebrow">Example module</div>
+            <h1>Edit configuration</h1>
+            <p class="lede">Uppdatera kommentar och JSON-innehåll för vald konfiguration.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(StatusMessage))
+    {
+        <div class="card status-banner">@StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+    {
+        <div class="empty-state">@ErrorMessage</div>
+    }
+    else
+    {
+        <EditForm Model="Input" OnValidSubmit="SaveAsync" class="card form-grid">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-field">
+                <label for="comment">Comment</label>
+                <InputText id="comment" @bind-Value="Input.Comment" />
+            </div>
+
+            <div class="form-field">
+                <label for="configJson">Config JSON</label>
+                <InputTextArea id="configJson" @bind-Value="Input.ConfigJson" />
+                <ValidationMessage For="@(() => Input.ConfigJson)" />
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">Save</button>
+                <NavLink class="action-link" href="/configurations">Back to configurations</NavLink>
+            </div>
+        </EditForm>
+    }
+}
+
+@code {
+    [Parameter]
+    public int? ConfigId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "configId")]
+    public int? QueryConfigId { get; set; }
+
+    private EditInput Input { get; set; } = new();
+    private string? StatusMessage { get; set; }
+    private string? ErrorMessage { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        SetPageTitle("Edit configuration");
+        StatusMessage = null;
+
+        if (!await EnsureAnyPermissionAsync(CancellationToken.None, ExampleWebAppBlazorModulePermissions.Admin))
+        {
+            return;
+        }
+
+        var effectiveConfigId = ConfigId ?? QueryConfigId;
+        if (effectiveConfigId is null || effectiveConfigId.Value <= 0)
+        {
+            ErrorMessage = "Ingen giltig configId angavs.";
+            return;
+        }
+
+        var row = await Repo.GetConfigurationAsync(effectiveConfigId.Value, CancellationToken.None);
+        if (row is null)
+        {
+            ErrorMessage = "Konfigurationen hittades inte.";
+            return;
+        }
+
+        ErrorMessage = null;
+        Input = new EditInput
+        {
+            ConfigId = row.ConfigId,
+            Comment = row.Comment,
+            ConfigJson = row.ConfigJson
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!IsAuthorized)
+        {
+            return;
+        }
+
+        await Repo.UpdateConfigurationAsync(
+            Input.ConfigId,
+            Input.ConfigJson,
+            Input.Comment,
+            CurrentUserName,
+            CancellationToken.None);
+
+        StatusMessage = "Configuration updated.";
+    }
+
+    private sealed class EditInput
+    {
+        public int ConfigId { get; set; }
+
+        [Display(Name = "Comment")]
+        public string? Comment { get; set; }
+
+        [Required]
+        [Display(Name = "Config JSON")]
+        public string ConfigJson { get; set; } = "{}";
+    }
+}

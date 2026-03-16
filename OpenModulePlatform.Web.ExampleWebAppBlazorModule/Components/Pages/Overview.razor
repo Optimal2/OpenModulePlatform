@@ -1,0 +1,66 @@
+@page "/"
+@inherits ExampleWebAppBlazorModuleComponentBase
+@inject ExampleWebAppBlazorModuleAdminRepository Repo
+
+<PageTitle>@PageTitle</PageTitle>
+
+@if (!AuthorizationResolved)
+{
+    <div class="empty-state">Laddar översikt...</div>
+}
+else if (!IsAuthorized)
+{
+    <div class="empty-state">@AccessDeniedMessage</div>
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <div class="eyebrow">Example module</div>
+            <h1>Example Web App Blazor Module</h1>
+            <p class="lede">
+                Neutral referensmodul för webbflöden i OMP. Sidan visar modulöversikt
+                och länkar vidare till modulens konfigurationer.
+            </p>
+        </div>
+    </div>
+
+    <div class="section-grid section-grid--wide">
+        <section class="card section-card">
+            <h3>Overview</h3>
+            <div class="mini-metrics top-gap">
+                <div><span>Module key</span><code>@OverviewData.ModuleKey</code></div>
+                <div><span>Schema</span><code>@OverviewData.SchemaName</code></div>
+                <div><span>Active configurations</span><span class="metric-inline">@OverviewData.ActiveConfigurationCount</span></div>
+            </div>
+        </section>
+
+        <section class="card section-card">
+            <h3>Next step</h3>
+            <p class="muted small-text">
+                Gå vidare till konfigurationsvyn för att granska eller uppdatera
+                modulens aktuella sample-konfigurationer.
+            </p>
+            <div class="toolbar">
+                <NavLink class="action-link" href="/configurations">Open configurations</NavLink>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    private OverviewRow OverviewData { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        SetPageTitle("Overview");
+
+        if (await EnsureAnyPermissionAsync(
+                CancellationToken.None,
+                ExampleWebAppBlazorModulePermissions.View,
+                ExampleWebAppBlazorModulePermissions.Admin))
+        {
+            OverviewData = await Repo.GetOverviewAsync(CancellationToken.None);
+        }
+    }
+}
