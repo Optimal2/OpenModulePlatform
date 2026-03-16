@@ -53,7 +53,14 @@ public sealed class EditModel : ExampleServiceAppModulePageModel
             return guard;
 
         SetTitles("Edit app instance");
-        await _repo.UpdateAppInstanceAsync(Input.AppInstanceId, Input.IsAllowed, Input.DesiredState, Input.ConfigId, Input.ArtifactId, User?.Identity?.Name ?? "unknown", ct);
+        await _repo.UpdateAppInstanceAsync(
+            Input.AppInstanceId,
+            Input.IsAllowed,
+            Input.DesiredState,
+            Input.ConfigId,
+            Input.ArtifactId,
+            User?.Identity?.Name ?? "unknown",
+            ct);
         StatusMessage = "App instance updated.";
         return Page();
     }

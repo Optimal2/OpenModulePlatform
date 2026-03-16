@@ -8,6 +8,10 @@ using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
+/// <summary>
+/// Base class for Portal admin pages.
+/// It centralizes the permission check for OMP.Portal.Admin so page models stay focused on their own data flow.
+/// </summary>
 public abstract class OmpPortalPageModel : OmpSecurePageModel
 {
     protected OmpPortalPageModel(IOptions<WebAppOptions> options, RbacService rbac)
@@ -15,7 +19,7 @@ public abstract class OmpPortalPageModel : OmpSecurePageModel
     {
     }
 
-    public async Task<IActionResult?> RequirePortalAdminAsync(CancellationToken ct)
+    protected async Task<IActionResult?> RequirePortalAdminAsync(CancellationToken ct)
     {
         var result = await RequireAnyAsync(ct, OmpPortalPermissions.Admin);
         ViewData["IsPortalAdmin"] = result is null;

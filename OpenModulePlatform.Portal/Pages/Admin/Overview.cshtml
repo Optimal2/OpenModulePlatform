@@ -5,24 +5,52 @@
     <div>
         <div class="eyebrow">Administration</div>
         <h2>OMP admin overview</h2>
-        <p class="lede">The admin area is split between manual core administration and advanced automation. For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts. Template- and deployment-driven rollout lives under Automation.</p>
+        <p class="lede">
+            The admin area is split between manual core administration and advanced automation.
+            For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts.
+            Template- and deployment-driven rollout lives under Automation.
+        </p>
     </div>
 </section>
 
 <div class="card-grid">
-    <div class="card"><div class="metric">@Model.Metrics.InstanceCount</div><div>Instances</div></div>
-    <div class="card"><div class="metric">@Model.Metrics.HostCount</div><div>Hosts</div></div>
-    <div class="card"><div class="metric">@Model.Metrics.ModuleCount</div><div>Module definitions</div></div>
-    <div class="card"><div class="metric">@Model.Metrics.ModuleInstanceCount</div><div>Module instances</div></div>
-    <div class="card"><div class="metric">@Model.Metrics.AppCount</div><div>App definitions</div></div>
-    <div class="card"><div class="metric">@Model.Metrics.AppInstanceCount</div><div>App instances</div></div>
-    <div class="card"><div class="metric">@Model.Metrics.ArtifactCount</div><div>Artifacts</div></div>
+    <div class="card">
+        <div class="metric">@Model.Metrics.InstanceCount</div>
+        <div>Instances</div>
+    </div>
+    <div class="card">
+        <div class="metric">@Model.Metrics.HostCount</div>
+        <div>Hosts</div>
+    </div>
+    <div class="card">
+        <div class="metric">@Model.Metrics.ModuleCount</div>
+        <div>Module definitions</div>
+    </div>
+    <div class="card">
+        <div class="metric">@Model.Metrics.ModuleInstanceCount</div>
+        <div>Module instances</div>
+    </div>
+    <div class="card">
+        <div class="metric">@Model.Metrics.AppCount</div>
+        <div>App definitions</div>
+    </div>
+    <div class="card">
+        <div class="metric">@Model.Metrics.AppInstanceCount</div>
+        <div>App instances</div>
+    </div>
+    <div class="card">
+        <div class="metric">@Model.Metrics.ArtifactCount</div>
+        <div>Artifacts</div>
+    </div>
 </div>
 
 <div class="section-grid section-grid--wide top-gap">
     <section class="card section-card">
         <h3>Manual core administration</h3>
-        <p class="muted">These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation.</p>
+        <p class="muted">
+            These pages are the main workflow when setting up and maintaining an OMP instance
+            without HostAgent automation.
+        </p>
         <div class="toolbar">
             <a class="action-link" href="~/admin/instances">Instances</a>
             <a class="action-link" href="~/admin/hosts">Hosts</a>
@@ -36,7 +64,10 @@
 
     <section class="card section-card">
         <h3>Advanced automation</h3>
-        <p class="muted">Template topology, deployment assignments and deployment tracking are separated from the main workflow until the HostAgent path is more complete.</p>
+        <p class="muted">
+            Template topology, deployment assignments and deployment tracking are separated from the main workflow
+            until the HostAgent path is more complete.
+        </p>
         <div class="toolbar">
             <a class="action-link" href="~/admin/automation">Open automation area</a>
         </div>

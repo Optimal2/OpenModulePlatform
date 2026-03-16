@@ -3,6 +3,14 @@ using Microsoft.Data.SqlClient;
 
 namespace OpenModulePlatform.Service.ExampleServiceAppModule.Services;
 
+/// <summary>
+/// Reads and updates runtime state for a concrete <c>omp.AppInstance</c>.
+/// </summary>
+/// <remarks>
+/// The example service app uses <c>AppInstance</c> as its runtime anchor rather than a
+/// separate host-installation entity. That is intentional and mirrors the current OMP
+/// direction where desired state, placement and observed state live on the app instance.
+/// </remarks>
 public sealed class AppInstanceRepository
 {
     private readonly SqlConnectionFactory _db;
@@ -12,6 +20,9 @@ public sealed class AppInstanceRepository
         _db = db;
     }
 
+    /// <summary>
+    /// Runtime values consumed by the worker loop.
+    /// </summary>
     public sealed record AppInstanceRuntime(
         Guid AppInstanceId,
         Guid? HostId,
@@ -24,9 +35,14 @@ public sealed class AppInstanceRepository
         string? ExpectedClientHostName,
         string? ExpectedClientIp);
 
+    /// <summary>
+    /// Observed identity values captured during heartbeat.
+    /// </summary>
     public sealed record ObservedIdentity(string Login, string HostName, string? ClientIp);
 
-    public async Task<AppInstanceRuntime?> GetRuntimeAsync(Guid appInstanceId, CancellationToken ct)
+    public async Task<AppInstanceRuntime?> GetRuntimeAsync(
+        Guid appInstanceId,
+        CancellationToken ct)
     {
         const string sql = @"
 SELECT ai.AppInstanceId,
@@ -45,11 +61,15 @@ WHERE ai.AppInstanceId = @appInstanceId;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
+
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
+        {
             return null;
+        }
 
         return new AppInstanceRuntime(
             rdr.GetGuid(0),
@@ -64,7 +84,13 @@ WHERE ai.AppInstanceId = @appInstanceId;";
             rdr.IsDBNull(9) ? null : rdr.GetString(9));
     }
 
-    public async Task<ObservedIdentity?> HeartbeatAsync(Guid appInstanceId, CancellationToken ct)
+    /// <summary>
+    /// Updates observed runtime information for the app instance and, when available,
+    /// touches the containing host heartbeat as well.
+    /// </summary>
+    public async Task<ObservedIdentity?> HeartbeatAsync(
+        Guid appInstanceId,
+        CancellationToken ct)
     {
         const string sql = @"
 DECLARE @login nvarchar(256) = ORIGINAL_LOGIN();
@@ -92,15 +118,21 @@ BEGIN
     WHERE HostId = @hostId;
 END
 
-SELECT @login AS LoginName, @hostName AS ClientHostName, @clientIp AS ClientIp;";
+SELECT @login AS LoginName,
+       @hostName AS ClientHostName,
+       @clientIp AS ClientIp;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
+
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
+        {
             return null;
+        }
 
         return new ObservedIdentity(
             rdr.IsDBNull(0) ? string.Empty : rdr.GetString(0),

@@ -5,6 +5,9 @@ using Microsoft.Data.SqlClient;
 
 namespace OpenModulePlatform.Web.ExampleWebAppModule.Services;
 
+/// <summary>
+/// Portal-facing repository for the simple web-only example module.
+/// </summary>
 public sealed class ExampleWebAppModuleAdminRepository
 {
     private readonly SqlConnectionFactory _db;
@@ -28,6 +31,7 @@ WHERE VersionNo = 0;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@moduleKey", ModuleKey);
         cmd.Parameters.AddWithValue("@moduleSchema", ModuleSchema);
@@ -46,16 +50,24 @@ WHERE VersionNo = 0;";
     public async Task<IReadOnlyList<ConfigurationRow>> GetConfigurationsAsync(CancellationToken ct)
     {
         const string sql = @"
-SELECT ConfigId, VersionNo, ConfigJson, Comment, CreatedUtc, CreatedBy
+SELECT ConfigId,
+       VersionNo,
+       ConfigJson,
+       Comment,
+       CreatedUtc,
+       CreatedBy
 FROM omp_example_webapp_module.Configurations
 WHERE VersionNo = 0
 ORDER BY ConfigId DESC;";
 
         var rows = new List<ConfigurationRow>();
+
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
         while (await rdr.ReadAsync(ct))
         {
             rows.Add(new ConfigurationRow
@@ -68,23 +80,34 @@ ORDER BY ConfigId DESC;";
                 CreatedBy = rdr.IsDBNull(5) ? null : rdr.GetString(5)
             });
         }
+
         return rows;
     }
 
     public async Task<ConfigurationRow?> GetConfigurationAsync(int configId, CancellationToken ct)
     {
         const string sql = @"
-SELECT ConfigId, VersionNo, ConfigJson, Comment, CreatedUtc, CreatedBy
+SELECT ConfigId,
+       VersionNo,
+       ConfigJson,
+       Comment,
+       CreatedUtc,
+       CreatedBy
 FROM omp_example_webapp_module.Configurations
-WHERE ConfigId = @configId AND VersionNo = 0;";
+WHERE ConfigId = @configId
+  AND VersionNo = 0;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@configId", configId);
+
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
+        {
             return null;
+        }
 
         return new ConfigurationRow
         {
@@ -97,7 +120,12 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         };
     }
 
-    public async Task UpdateConfigurationAsync(int configId, string configJson, string? comment, string actor, CancellationToken ct)
+    public async Task UpdateConfigurationAsync(
+        int configId,
+        string configJson,
+        string? comment,
+        string actor,
+        CancellationToken ct)
     {
         const string sql = @"
 UPDATE omp_example_webapp_module.Configurations
@@ -105,10 +133,12 @@ SET ConfigJson = @configJson,
     Comment = @comment,
     CreatedBy = @actor,
     CreatedUtc = SYSUTCDATETIME()
-WHERE ConfigId = @configId AND VersionNo = 0;";
+WHERE ConfigId = @configId
+  AND VersionNo = 0;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@configId", configId);
         cmd.Parameters.AddWithValue("@configJson", configJson);

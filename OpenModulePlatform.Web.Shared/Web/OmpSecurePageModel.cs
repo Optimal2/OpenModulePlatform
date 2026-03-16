@@ -6,6 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Web.Shared.Web;
 
+/// <summary>
+/// Base page model for pages that enforce OMP RBAC permissions.
+/// </summary>
 public abstract class OmpSecurePageModel : OmpPageModel
 {
     private readonly RbacService _rbac;
@@ -19,17 +22,27 @@ public abstract class OmpSecurePageModel : OmpPageModel
     protected Task<HashSet<string>> GetUserPermissionsAsync(CancellationToken ct)
         => _rbac.GetUserPermissionsAsync(User, ct);
 
+    /// <summary>
+    /// Enforces a set of permissions using the configured mode or an explicit override.
+    /// </summary>
     protected async Task<IActionResult?> RequirePermissionsAsync(
         IEnumerable<string> requiredPermissions,
         PermissionMode? modeOverride,
         CancellationToken ct)
     {
         if (WebAppOptions.AllowAnonymous)
+        {
             return null;
+        }
 
-        var required = requiredPermissions?.Where(x => !string.IsNullOrWhiteSpace(x)).ToArray() ?? Array.Empty<string>();
+        var required = requiredPermissions?
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray() ?? Array.Empty<string>();
+
         if (required.Length == 0)
+        {
             return null;
+        }
 
         var mode = modeOverride ?? WebAppOptions.PermissionMode;
         var current = await _rbac.GetUserPermissionsAsync(User, ct);
@@ -43,9 +56,13 @@ public abstract class OmpSecurePageModel : OmpPageModel
         return allowed ? null : Forbid();
     }
 
-    protected Task<IActionResult?> RequireAnyAsync(CancellationToken ct, params string[] requiredPermissions)
+    protected Task<IActionResult?> RequireAnyAsync(
+        CancellationToken ct,
+        params string[] requiredPermissions)
         => RequirePermissionsAsync(requiredPermissions, PermissionMode.Any, ct);
 
-    protected Task<IActionResult?> RequireAllAsync(CancellationToken ct, params string[] requiredPermissions)
+    protected Task<IActionResult?> RequireAllAsync(
+        CancellationToken ct,
+        params string[] requiredPermissions)
         => RequirePermissionsAsync(requiredPermissions, PermissionMode.All, ct);
 }

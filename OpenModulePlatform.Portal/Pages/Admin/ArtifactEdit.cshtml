@@ -1,21 +1,105 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ArtifactEditModel
-<section class="page-header"><div><div class="eyebrow">Manual core</div><h2>@(Model.IsCreate ? "Create artifact" : "Edit artifact")</h2><p class="lede">Artifacts are deployable outputs of an app definition. Keep the artifact metadata precise so app instances can reference the right build.</p></div></section>
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage)) { <div class="card status-banner">@Model.StatusMessage</div> }
-@if (!ViewContext.ModelState.IsValid) { <div class="card validation-summary-errors" asp-validation-summary="All"></div> }
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">Manual core</div>
+        <h2>@(Model.IsCreate ? "Create artifact" : "Edit artifact")</h2>
+        <p class="lede">
+            Artifacts are deployable outputs of an app definition.
+            Keep the artifact metadata precise so app instances can reference the right build.
+        </p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
 <form method="post" class="card form-grid">
-<input type="hidden" asp-for="Input.ArtifactId" />
-<div class="field-grid field-grid--2">
-<div class="form-field"><label asp-for="Input.AppId"></label><select asp-for="Input.AppId"><option value="">Select app</option>@foreach (var option in Model.AppOptions){<option value="@option.Value">@option.Label</option>}</select><span asp-validation-for="Input.AppId" class="field-validation-error"></span></div>
-<div class="form-field"><label asp-for="Input.PackageType"></label><select asp-for="Input.PackageType">@foreach (var option in Model.PackageTypeOptions){<option value="@option.Value">@option.Label</option>}</select><div class="field-help">Use a known package type when possible so later deployment automation can behave predictably.</div></div>
-</div>
-<div class="field-grid field-grid--3">
-<div class="form-field"><label asp-for="Input.Version"></label><input asp-for="Input.Version" /><span asp-validation-for="Input.Version" class="field-validation-error"></span></div>
-<div class="form-field"><label asp-for="Input.TargetName"></label><input asp-for="Input.TargetName" /><div class="field-help">Optional RID/target such as <code>win-x64</code>.</div></div>
-<div class="form-field checkbox-row checkbox-row--boxed"><input asp-for="Input.IsEnabled" type="checkbox" /><label asp-for="Input.IsEnabled"></label></div>
-</div>
-<div class="form-field"><label asp-for="Input.RelativePath"></label><input asp-for="Input.RelativePath" /><div class="field-help">Relative path inside your artifact repository or release output.</div></div>
-<div class="form-field"><label asp-for="Input.Sha256"></label><input asp-for="Input.Sha256" /><div class="field-help">Optional checksum used for later integrity checks.</div><span asp-validation-for="Input.Sha256" class="field-validation-error"></span></div>
-<div class="toolbar"><button type="submit">Save artifact</button><a class="action-link" href="~/admin/artifacts">Back to artifacts</a></div>
+    <input type="hidden" asp-for="Input.ArtifactId" />
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.AppId"></label>
+            <select asp-for="Input.AppId">
+                <option value="">Select app</option>
+                @foreach (var option in Model.AppOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <span asp-validation-for="Input.AppId" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.PackageType"></label>
+            <select asp-for="Input.PackageType">
+                @foreach (var option in Model.PackageTypeOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">
+                Use a known package type when possible so later deployment automation can behave predictably.
+            </div>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.Version"></label>
+            <input asp-for="Input.Version" />
+            <span asp-validation-for="Input.Version" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.TargetName"></label>
+            <input asp-for="Input.TargetName" />
+            <div class="field-help">Optional RID/target such as <code>win-x64</code>.</div>
+        </div>
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.IsEnabled" type="checkbox" />
+            <label asp-for="Input.IsEnabled"></label>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.RelativePath"></label>
+        <input asp-for="Input.RelativePath" />
+        <div class="field-help">Relative path inside your artifact repository or release output.</div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.Sha256"></label>
+        <input asp-for="Input.Sha256" />
+        <div class="field-help">Optional checksum used for later integrity checks.</div>
+        <span asp-validation-for="Input.Sha256" class="field-validation-error"></span>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">Save artifact</button>
+        <a class="action-link" href="~/admin/artifacts">Back to artifacts</a>
+    </div>
 </form>
-@if (!Model.IsCreate) { <form method="post" asp-page-handler="Delete" class="card danger-zone" onsubmit="return confirm('Delete this artifact? App instances depending on it must be updated first.');"><input type="hidden" asp-for="Input.ArtifactId" /><h3>Danger zone</h3><p class="muted">Delete is blocked while app instances still point at this artifact.</p><button type="submit" class="btn btn-danger">Delete artifact</button></form> }
+
+@if (!Model.IsCreate)
+{
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('Delete this artifact? App instances depending on it must be updated first.');">
+        <input type="hidden" asp-for="Input.ArtifactId" />
+        <h3>Danger zone</h3>
+        <p class="muted">Delete is blocked while app instances still point at this artifact.</p>
+        <button type="submit" class="btn btn-danger">Delete artifact</button>
+    </form>
+}

@@ -5,6 +5,9 @@ using System.Text.Json;
 
 namespace OpenModulePlatform.Service.ExampleServiceAppModule.Services;
 
+/// <summary>
+/// Processes one claimed job for the example service-backed module.
+/// </summary>
 public sealed class ExampleServiceAppModuleJobProcessor
 {
     private readonly ILogger<ExampleServiceAppModuleJobProcessor> _log;
@@ -18,7 +21,11 @@ public sealed class ExampleServiceAppModuleJobProcessor
         _jobs = jobs;
     }
 
-    public async Task ProcessOneAsync(Guid appInstanceId, ExampleServiceAppModuleOptions config, ExampleServiceAppModuleJobWorkItem job, CancellationToken ct)
+    public async Task ProcessOneAsync(
+        Guid appInstanceId,
+        ExampleServiceAppModuleOptions config,
+        ExampleServiceAppModuleJobWorkItem job,
+        CancellationToken ct)
     {
         var startedUtc = DateTime.UtcNow;
 
@@ -52,7 +59,12 @@ public sealed class ExampleServiceAppModuleJobProcessor
         }
     }
 
-    private async Task FailJobAsync(ExampleServiceAppModuleJobWorkItem job, Guid appInstanceId, DateTime startedUtc, Exception ex, CancellationToken ct)
+    private async Task FailJobAsync(
+        ExampleServiceAppModuleJobWorkItem job,
+        Guid appInstanceId,
+        DateTime startedUtc,
+        Exception ex,
+        CancellationToken ct)
     {
         try
         {

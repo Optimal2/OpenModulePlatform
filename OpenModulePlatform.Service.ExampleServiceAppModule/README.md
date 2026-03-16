@@ -14,5 +14,7 @@ That app instance row controls the effective artifact, configuration, desired st
 
 ## Installation
 
-Publish the service app, then run `Deploy/Install-Service.ps1` from the published output folder or directly from the project `Deploy` folder.
-The script copies the published files to `Program Files` and registers the Windows service.
+Publish the service app, then run `Deploy/Install-Service.ps1` from the
+published output folder or directly from the project `Deploy` folder.
+The script copies the published files to `Program Files` and registers the
+Windows service.

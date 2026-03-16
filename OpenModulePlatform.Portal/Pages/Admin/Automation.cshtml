@@ -5,7 +5,11 @@
     <div>
         <div class="eyebrow">Advanced admin</div>
         <h2>Automation and templates</h2>
-        <p class="lede">These pages are separated from the main admin workflow because they belong to template-driven rollout, deployment planning and future HostAgent automation. For manual setup, start with instances, hosts, modules, apps and artifacts.</p>
+        <p class="lede">
+            These pages are separated from the main admin workflow because they belong to template-driven rollout,
+            deployment planning and future HostAgent automation.
+            For manual setup, start with instances, hosts, modules, apps and artifacts.
+        </p>
     </div>
 </section>
 
@@ -17,7 +21,11 @@
             <a class="action-link" href="~/admin/instancetemplates">Instance templates</a>
             <a class="action-link" href="~/admin/hosttemplates">Host templates</a>
         </div>
-        <div class="muted small-text top-gap">Topology detail pages for <code>InstanceTemplateHosts</code>, <code>InstanceTemplateModuleInstances</code> and <code>InstanceTemplateAppInstances</code> are not exposed as dedicated admin pages yet in this repo.</div>
+        <div class="muted small-text top-gap">
+            Topology detail pages for <code>InstanceTemplateHosts</code>,
+            <code>InstanceTemplateModuleInstances</code> and <code>InstanceTemplateAppInstances</code>
+            are not exposed as dedicated admin pages yet in this repo.
+        </div>
     </section>
 
     <section class="card section-card">
@@ -32,10 +40,22 @@
     <section class="card section-card">
         <h3>Current counts</h3>
         <div class="mini-metrics">
-            <div><span class="metric-inline">@Model.Metrics.InstanceCount</span><span>Instances</span></div>
-            <div><span class="metric-inline">@Model.Metrics.HostCount</span><span>Hosts</span></div>
-            <div><span class="metric-inline">@Model.Metrics.ModuleInstanceCount</span><span>Module instances</span></div>
-            <div><span class="metric-inline">@Model.Metrics.AppInstanceCount</span><span>App instances</span></div>
+            <div>
+                <span class="metric-inline">@Model.Metrics.InstanceCount</span>
+                <span>Instances</span>
+            </div>
+            <div>
+                <span class="metric-inline">@Model.Metrics.HostCount</span>
+                <span>Hosts</span>
+            </div>
+            <div>
+                <span class="metric-inline">@Model.Metrics.ModuleInstanceCount</span>
+                <span>Module instances</span>
+            </div>
+            <div>
+                <span class="metric-inline">@Model.Metrics.AppInstanceCount</span>
+                <span>App instances</span>
+            </div>
         </div>
     </section>
 </div>

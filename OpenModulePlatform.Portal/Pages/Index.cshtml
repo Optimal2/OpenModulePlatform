@@ -31,9 +31,12 @@
             <tbody>
             @foreach (var app in Model.Apps)
             {
+                var normalizedRoute = app.RoutePath?.TrimStart('/');
                 var href = !string.IsNullOrWhiteSpace(app.PublicUrl)
                     ? app.PublicUrl
-                    : (app.RoutePath is null ? null : Url.Content("~/" + app.RoutePath));
+                    : (string.IsNullOrWhiteSpace(normalizedRoute)
+                        ? null
+                        : Url.Content("~/" + normalizedRoute));
                 <tr>
                     <td>@app.DisplayName</td>
                     <td><code>@app.AppInstanceKey</code></td>

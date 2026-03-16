@@ -8,15 +8,23 @@ using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Web.ExampleServiceAppModule.Pages;
 
+/// <summary>
+/// Base page model for the service-backed example module UI.
+/// </summary>
 public abstract class ExampleServiceAppModulePageModel : OmpSecurePageModel
 {
-    protected ExampleServiceAppModulePageModel(IOptions<WebAppOptions> options, RbacService rbac)
+    protected ExampleServiceAppModulePageModel(
+        IOptions<WebAppOptions> options,
+        RbacService rbac)
         : base(options, rbac)
     {
     }
 
     protected Task<IActionResult?> RequireViewAsync(CancellationToken ct)
-        => RequireAnyAsync(ct, ExampleServiceAppModulePermissions.View, ExampleServiceAppModulePermissions.Admin);
+        => RequireAnyAsync(
+            ct,
+            ExampleServiceAppModulePermissions.View,
+            ExampleServiceAppModulePermissions.Admin);
 
     protected Task<IActionResult?> RequireAdminAsync(CancellationToken ct)
         => RequireAnyAsync(ct, ExampleServiceAppModulePermissions.Admin);
