@@ -1,0 +1,75 @@
+@page "/configurations"
+@inherits ExampleWebAppBlazorModuleComponentBase
+@inject ExampleWebAppBlazorModuleAdminRepository Repo
+
+<PageTitle>@PageTitle</PageTitle>
+
+@if (!AuthorizationResolved)
+{
+    <div class="empty-state">Laddar konfigurationer...</div>
+}
+else if (!IsAuthorized)
+{
+    <div class="empty-state">@AccessDeniedMessage</div>
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <div class="eyebrow">Example module</div>
+            <h1>Configurations</h1>
+            <p class="lede">
+                Konfigurationer för Example Web App Blazor Module. Dessa värden används av
+                exempelmodulen och kan redigeras utan att lämna modulgränssnittet.
+            </p>
+        </div>
+    </div>
+
+    @if (Rows.Count == 0)
+    {
+        <div class="empty-state">Inga konfigurationer hittades.</div>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>ConfigId</th>
+                    <th>Comment</th>
+                    <th>Created UTC</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var row in Rows)
+            {
+                <tr>
+                    <td><span class="pill">@row.ConfigId</span></td>
+                    <td>@row.Comment</td>
+                    <td>@row.CreatedUtc.ToString("u")</td>
+                    <td>
+                        <NavLink class="action-link" href="@($"/configurations/edit/{row.ConfigId}")">Edit</NavLink>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private IReadOnlyList<ConfigurationRow> Rows { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        SetPageTitle("Configurations");
+
+        if (await EnsureAnyPermissionAsync(
+                CancellationToken.None,
+                ExampleWebAppBlazorModulePermissions.View,
+                ExampleWebAppBlazorModulePermissions.Admin))
+        {
+            Rows = await Repo.GetConfigurationsAsync(CancellationToken.None);
+        }
+    }
+}

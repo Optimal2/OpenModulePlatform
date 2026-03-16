@@ -4,4 +4,5 @@
   <Project Path="OpenModulePlatform.Web.ExampleWebAppModule/OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
   <Project Path="OpenModulePlatform.Web.ExampleServiceAppModule/OpenModulePlatform.Web.ExampleServiceAppModule.csproj" />
   <Project Path="OpenModulePlatform.Service.ExampleServiceAppModule/OpenModulePlatform.Service.ExampleServiceAppModule.csproj" />
+  <Project Path="OpenModulePlatform.Web.ExampleWebAppBlazorModule/OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj" />
 </Solution>
