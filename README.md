@@ -1,105 +1,105 @@
 # OpenModulePlatform
 
-OpenModulePlatform (OMP) är en generell modulär plattform för att definiera, köra
-och administrera OMP-instanser, moduler, appdefinitioner, appinstanser, artifacts,
-hosts och topologi.
+OpenModulePlatform (OMP) is a general modular platform for defining, running,
+and administering OMP instances, modules, app definitions, app instances, artifacts,
+hosts, and topology.
 
-Repo:t innehåller bara neutral plattformskod och neutrala exempelmoduler.
-Det innehåller inte domänspecifika verksamhetsdelar från tidigare interna projekt.
+The repository contains only neutral platform code and neutral example modules.
+It does not contain domain-specific business components from previous internal projects.
 
-## Innehåll
+## Contents
 
-- `OpenModulePlatform.Portal` - Portal för navigation och manuell administration
-- `OpenModulePlatform.Web.Shared` - delad webb-infrastruktur för Portal och webbmoduler
-- `OpenModulePlatform.Web.ExampleWebAppModule` - enkel webbmodul som referensexempel
-- `OpenModulePlatform.Web.ExampleServiceAppModule` - webbgränssnitt för service-backed exempelmodul
-- `OpenModulePlatform.Service.ExampleServiceAppModule` - worker/service-exempel
-- `sql/SQL_Install_OpenModulePlatform.sql` - core-schema, RBAC, Portal och bootstrapdata
-- `sql/SQL_Install_OpenModulePlatform_Examples.sql` - exempelmoduler, exempelinstanser, template-topologi och sample jobs
-- `docs/` - arkitektur, terminologi och handfasta guider
+- `OpenModulePlatform.Portal` - Portal for navigation and manual administration
+- `OpenModulePlatform.Web.Shared` - shared web infrastructure for the Portal and web modules
+- `OpenModulePlatform.Web.ExampleWebAppModule` - simple web module used as a reference example
+- `OpenModulePlatform.Web.ExampleServiceAppModule` - web interface for the service-backed example module
+- `OpenModulePlatform.Service.ExampleServiceAppModule` - worker/service example
+- `sql/SQL_Install_OpenModulePlatform.sql` - core schema, RBAC, Portal, and bootstrap data
+- `sql/SQL_Install_OpenModulePlatform_Examples.sql` - example modules, example instances, template topology, and sample jobs
+- `docs/` - architecture, terminology, and practical guides
 
-## Nuvarande modell
+## Current model
 
-Nuvarande modell separerar uttryckligen:
+The current model explicitly separates:
 
-- **definitioner** - `Modules`, `Apps`, `Artifacts`
-- **konkreta instanser** - `ModuleInstances`, `AppInstances`
-- **manuell drift** - `Instances`, `Hosts`, artifacts, appinstanser och RBAC
-- **framtida automation/topologi** - `InstanceTemplates`, `HostTemplates`, template-topologitabeller och deploymenttabeller
+- **definitions** - `Modules`, `Apps`, `Artifacts`
+- **concrete instances** - `ModuleInstances`, `AppInstances`
+- **manual operations** - `Instances`, `Hosts`, artifacts, app instances, and RBAC
+- **future automation/topology** - `InstanceTemplates`, `HostTemplates`, template topology tables, and deployment tables
 
-`omp.AppInstances` är den centrala runtime-tabellen i nuvarande modell. Det är där OMP idag lägger:
+`omp.AppInstances` is the central runtime table in the current model. This is where OMP currently stores:
 
-- hostplacering
-- artifactval
-- configreferens
+- host placement
+- artifact selection
+- config reference
 - route/path/url
 - desired state
-- observed state / heartbeat / verifieringsdata
+- observed state / heartbeat / verification data
 
-## Vad som fungerar idag
+## What works today
 
-- Portal kan användas för manuell administration av kärnmodellen
-- RBAC kan administreras från Portal
-- Portal bygger appkatalogen från `AppInstances`, inte från `Apps`
-- Exempelmodulerna visar både rent webbscenario och service-backed scenario
-- Service-exemplet läser runtime-state från `AppInstances` och uppdaterar heartbeat/observed identity
-- SQL-skripten bootstrappar både core och exempeldata
+- The Portal can be used for manual administration of the core model
+- RBAC can be administered from the Portal
+- The Portal builds the app catalog from `AppInstances`, not from `Apps`
+- The example modules demonstrate both a pure web scenario and a service-backed scenario
+- The service example reads runtime state from `AppInstances` and updates heartbeat/observed identity
+- The SQL scripts bootstrap both core and example data
 
-## Vad som fortfarande är pågående
+## What is still in progress
 
-- template-materialisering är ännu inte fullt genomförd
-- HostAgent finns ännu inte
-- deploymenttabellerna är mer förberedande än fullt operationaliserade
-- configmodellen är fortfarande modulägd och inte fullt formaliserad på core-nivå
+- template materialization is not yet fully implemented
+- HostAgent does not yet exist
+- the deployment tables are more preparatory than fully operationalized
+- the config model is still module-owned and not yet fully formalized at the core level
 
-## Snabbstart
+## Quick start
 
-### 1. Skapa databas
+### 1. Create the database
 
-Skapa databasen `OpenModulePlatform` i SQL Server.
+Create the `OpenModulePlatform` database in SQL Server.
 
-### 2. Installera core
+### 2. Install core
 
-Kör:
+Run:
 
 ```sql
 sql/SQL_Install_OpenModulePlatform.sql
 ```
 
-Efter körning måste alla `REPLACE_ME`-värden granskas och ersättas innan Portal eller serviceappar kan användas på riktigt.
+After running it, all `REPLACE_ME` values must be reviewed and replaced before the Portal or service apps can be used for real.
 
-### 3. Installera exempel
+### 3. Install examples
 
-Kör:
+Run:
 
 ```sql
 sql/SQL_Install_OpenModulePlatform_Examples.sql
 ```
 
-Detta lägger till neutrala exempelmoduler, modulinstanser, appinstanser, template-topologi och sample jobs.
+This adds neutral example modules, module instances, app instances, template topology, and sample jobs.
 
-### 4. Konfigurera Portal
+### 4. Configure the Portal
 
-Sätt `ConnectionStrings:OmpDb` för Portal och starta `OpenModulePlatform.Portal`.
+Set `ConnectionStrings:OmpDb` for the Portal and start `OpenModulePlatform.Portal`.
 
-Portal är den primära vägen för manuell administration. Normal drift ska inte kräva direkt SQL-editing efter initial bootstrap.
+The Portal is the primary path for manual administration. Normal operation should not require direct SQL editing after the initial bootstrap.
 
-## Manuell administration kontra automation
+## Manual administration versus automation
 
-I nuvarande läge är Portal uppdelad i två spår:
+In its current state, the Portal is divided into two tracks:
 
-- **Core/manual administration** - Instances, Hosts, Modules, ModuleInstances, Apps, Artifacts, AppInstances och RBAC
-- **Advanced automation** - templates, deployment assignments och deployments
+- **Core/manual administration** - Instances, Hosts, Modules, ModuleInstances, Apps, Artifacts, AppInstances, and RBAC
+- **Advanced automation** - templates, deployment assignments, and deployments
 
-Tanken är att vanlig manuell installation ska kunna göras utan att användaren behöver arbeta med den framtida HostAgent-/template-modellen.
+The idea is that a normal manual installation should be possible without requiring the user to work with the future HostAgent/template model.
 
-## Dokumentation
+## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Terminology](docs/TERMINOLOGY.md)
 - [Manual admin configuration](docs/ADMIN_CONFIGURATION.md)
 - [Current project status](docs/PROJECT_STATUS.md)
 
-## Licens
+## License
 
-Projektet publiceras under MIT-licens.
+The project is published under the MIT License.
