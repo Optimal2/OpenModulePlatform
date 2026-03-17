@@ -108,7 +108,7 @@ public sealed class InstanceEditModel : OmpPortalPageModel
                 },
                 ct);
 
-            StatusMessage = IsCreate ? "Instance created." : "Instance updated.";
+            StatusMessage = IsCreate ? T("Instance created.") : T("Instance updated.");
             return RedirectToPage("/Admin/InstanceEdit", new { id });
         }
         catch (SqlException ex)
@@ -132,7 +132,7 @@ public sealed class InstanceEditModel : OmpPortalPageModel
         try
         {
             await _repo.DeleteInstanceAsync(Input.InstanceId, ct);
-            StatusMessage = "Instance deleted.";
+            StatusMessage = T("Instance deleted.");
             return RedirectToPage("/Admin/Instances");
         }
         catch (SqlException ex)

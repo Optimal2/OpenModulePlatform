@@ -2,31 +2,31 @@
 @using OpenModulePlatform.Portal.Services
 @model OpenModulePlatform.Portal.Pages.IndexModel
 
-<h2>OMP Portal</h2>
+<h2>@L["OMP Portal"]</h2>
 
-<p class="muted">This portal is the shared entry point for an OMP instance.</p>
+<p class="muted">@L["This portal is the shared entry point for an OMP instance."]</p>
 
 <div class="card">
-    <div><b>Current user</b>: @User?.Identity?.Name</div>
-    <div><b>Portal admin</b>: @(Model.IsPortalAdmin ? "Yes" : "No")</div>
+    <div><b>@L["Current user"]</b>: @User?.Identity?.Name</div>
+    <div><b>@L["Portal admin"]</b>: @(Model.IsPortalAdmin ? L["Yes"] : L["No"])</div>
 </div>
 
 <div class="card">
-    <h3>Available OMP web app instances</h3>
+    <h3>@L["Available OMP web app instances"]</h3>
     @if (Model.Apps.Count == 0)
     {
-        <div class="muted">No accessible web app instances are currently registered.</div>
+        <div class="muted">@L["No accessible web app instances are currently registered."]</div>
     }
     else
     {
         <table class="grid">
             <thead>
                 <tr>
-                    <th>Display name</th>
-                    <th>App instance key</th>
-                    <th>App key</th>
-                    <th>Route</th>
-                    <th>Description</th>
+                    <th>@L["Display name"]</th>
+                    <th>@L["App instance key"]</th>
+                    <th>@L["App key"]</th>
+                    <th>@L["Route"]</th>
+                    <th>@L["Description"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -52,7 +52,7 @@
                         else if (!string.IsNullOrWhiteSpace(configuredAddress))
                         {
                             <code>@configuredAddress</code>
-                            <div class="muted">Set Host base URL to make this route clickable from the Portal.</div>
+                            <div class="muted">@L["Set Host base URL to make this route clickable from the Portal."]</div>
                         }
                     </td>
                     <td>@app.Description</td>

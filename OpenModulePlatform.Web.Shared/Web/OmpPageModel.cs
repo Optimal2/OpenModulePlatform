@@ -1,6 +1,9 @@
 // File: OpenModulePlatform.Web.Shared/Web/OmpPageModel.cs
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Web.Shared.Web;
@@ -19,6 +22,11 @@ public abstract class OmpPageModel : PageModel
 
     protected WebAppOptions WebAppOptions => _options.Value;
 
+    protected IStringLocalizer<SharedResource> Localizer =>
+        HttpContext.RequestServices.GetRequiredService<IStringLocalizer<SharedResource>>();
+
+    protected string T(string key) => Localizer[key];
+
     public string WebAppTitle => string.IsNullOrWhiteSpace(WebAppOptions.Title)
         ? "OpenModulePlatform"
         : WebAppOptions.Title;
@@ -28,9 +36,13 @@ public abstract class OmpPageModel : PageModel
     /// </summary>
     protected void SetTitles(string? pageTitle = null)
     {
+        var localizedPageTitle = string.IsNullOrWhiteSpace(pageTitle)
+            ? null
+            : T(pageTitle);
+
         ViewData["PortalTitle"] = WebAppTitle;
-        ViewData["Title"] = string.IsNullOrWhiteSpace(pageTitle)
+        ViewData["Title"] = string.IsNullOrWhiteSpace(localizedPageTitle)
             ? WebAppTitle
-            : $"{WebAppTitle} - {pageTitle}";
+            : $"{WebAppTitle} - {localizedPageTitle}";
     }
 }

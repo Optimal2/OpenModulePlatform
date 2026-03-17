@@ -116,7 +116,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 },
                 ct);
 
-            StatusMessage = IsCreate ? "Role created." : "Role updated.";
+            StatusMessage = IsCreate ? T("Role created.") : T("Role updated.");
             return RedirectToPage("/Admin/Rbac/Role", new { roleId });
         }
         catch (SqlException ex)
@@ -153,7 +153,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.AddPermissionToRoleAsync(Input.RoleId, permissionId, ct);
-        StatusMessage = "Permission added to role.";
+        StatusMessage = T("Permission added to role.");
         return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
@@ -171,7 +171,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.RemovePermissionFromRoleAsync(Input.RoleId, permissionId, ct);
-        StatusMessage = "Permission removed from role.";
+        StatusMessage = T("Permission removed from role.");
         return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
@@ -212,7 +212,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.AddPrincipalToRoleAsync(Input.RoleId, principalType, principal, ct);
-        StatusMessage = "Principal added to role.";
+        StatusMessage = T("Principal added to role.");
         return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
@@ -230,7 +230,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.RemovePrincipalFromRoleAsync(Input.RoleId, principalType, principal, ct);
-        StatusMessage = "Principal removed from role.";
+        StatusMessage = T("Principal removed from role.");
         return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
@@ -250,7 +250,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         try
         {
             await _repo.DeleteRoleAsync(Input.RoleId, ct);
-            StatusMessage = "Role deleted.";
+            StatusMessage = T("Role deleted.");
             return RedirectToPage("/Admin/Rbac/Roles");
         }
         catch (SqlException ex)

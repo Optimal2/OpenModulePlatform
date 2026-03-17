@@ -3,12 +3,10 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Administration</div>
-        <h2>OMP admin overview</h2>
+        <div class="eyebrow">@L["Administration"]</div>
+        <h2>@L["OMP admin overview"]</h2>
         <p class="lede">
-            The admin area is split between manual core administration and advanced automation.
-            For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts.
-            Template- and deployment-driven rollout lives under Automation.
+            @L["The admin area is split between manual core administration and advanced automation. For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts. Template- and deployment-driven rollout lives under Automation."]
         </p>
     </div>
 </section>
@@ -16,68 +14,66 @@
 <div class="card-grid">
     <div class="card">
         <div class="metric">@Model.Metrics.InstanceCount</div>
-        <div>Instances</div>
+        <div>@L["Instances"]</div>
     </div>
     <div class="card">
         <div class="metric">@Model.Metrics.HostCount</div>
-        <div>Hosts</div>
+        <div>@L["Hosts"]</div>
     </div>
     <div class="card">
         <div class="metric">@Model.Metrics.ModuleCount</div>
-        <div>Module definitions</div>
+        <div>@L["Module definitions"]</div>
     </div>
     <div class="card">
         <div class="metric">@Model.Metrics.ModuleInstanceCount</div>
-        <div>Module instances</div>
+        <div>@L["Module instances"]</div>
     </div>
     <div class="card">
         <div class="metric">@Model.Metrics.AppCount</div>
-        <div>App definitions</div>
+        <div>@L["App definitions"]</div>
     </div>
     <div class="card">
         <div class="metric">@Model.Metrics.AppInstanceCount</div>
-        <div>App instances</div>
+        <div>@L["App instances"]</div>
     </div>
     <div class="card">
         <div class="metric">@Model.Metrics.ArtifactCount</div>
-        <div>Artifacts</div>
+        <div>@L["Artifacts"]</div>
     </div>
 </div>
 
 <div class="section-grid section-grid--wide top-gap">
     <section class="card section-card">
-        <h3>Manual core administration</h3>
+        <h3>@L["Manual core administration"]</h3>
         <p class="muted">
-            These pages are the main workflow when setting up and maintaining an OMP instance
-            without HostAgent automation.
+            @L["These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation."]
         </p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/instances">Instances</a>
-            <a class="action-link" href="~/admin/hosts">Hosts</a>
-            <a class="action-link" href="~/admin/modules">Modules</a>
-            <a class="action-link" href="~/admin/moduleinstances">Module instances</a>
-            <a class="action-link" href="~/admin/apps">Apps</a>
-            <a class="action-link" href="~/admin/appinstances">App instances</a>
-            <a class="action-link" href="~/admin/artifacts">Artifacts</a>
+            <a class="action-link" href="~/admin/instances">@L["Instances"]</a>
+            <a class="action-link" href="~/admin/hosts">@L["Hosts"]</a>
+            <a class="action-link" href="~/admin/modules">@L["Modules"]</a>
+            <a class="action-link" href="~/admin/moduleinstances">@L["Module instances"]</a>
+            <a class="action-link" href="~/admin/apps">@L["Apps"]</a>
+            <a class="action-link" href="~/admin/appinstances">@L["App instances"]</a>
+            <a class="action-link" href="~/admin/artifacts">@L["Artifacts"]</a>
         </div>
     </section>
 
     <section class="card section-card">
-        <h3>Advanced automation</h3>
+        <h3>@L["Advanced automation"]</h3>
         <p class="muted">
-            Template topology, deployment assignments and deployment tracking are separated from the main workflow
-            until the HostAgent path is more complete.
+            @L["Template topology, deployment assignments and deployment tracking are separated from the main workflow until the HostAgent path is more complete."]
         </p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/automation">Open automation area</a>
+            <a class="action-link" href="~/admin/automation">@L["Open automation area"]</a>
         </div>
     </section>
 
     <section class="card section-card">
-        <h3>Security and access</h3>
-        <p class="muted">Manage admin permissions and role assignments separately from topology and runtime data.</p>
+        <h3>@L["Security and access"]</h3>
+        <p class="muted">@L["Manage admin permissions and role assignments separately from topology and runtime data."]</p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/rbac">Open RBAC</a>
+            <a class="action-link" href="~/admin/rbac">@L["Open RBAC"]</a>
         </div>
     </section>
 </div>
