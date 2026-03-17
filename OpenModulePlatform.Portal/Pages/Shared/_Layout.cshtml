@@ -1,6 +1,10 @@
 @* File: OpenModulePlatform.Portal/Pages/Shared/_Layout.cshtml *@
+@{
+    var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
+    var currentCulture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+}
 <!doctype html>
-<html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -11,23 +15,41 @@
     <header class="topbar">
         <div class="brand-wrap">
             <div class="brand">@ViewData["PortalTitle"]</div>
-            <div class="brand-subtitle">Portal</div>
+            <div class="brand-subtitle">@L["Portal"]</div>
         </div>
         <nav class="nav nav--primary">
-            <a href="~/">Home</a>
+            <a href="~/">@L["Home"]</a>
             @if (ViewData["IsPortalAdmin"] is bool isPortalAdmin && isPortalAdmin)
             {
-                <a href="~/admin/overview">Admin</a>
-                <a href="~/admin/instances">Instances</a>
-                <a href="~/admin/hosts">Hosts</a>
-                <a href="~/admin/modules">Modules</a>
-                <a href="~/admin/apps">Apps</a>
-                <a href="~/admin/artifacts">Artifacts</a>
-                <a href="~/admin/automation">Automation</a>
-                <a href="~/admin/rbac">RBAC</a>
+                <a href="~/admin/overview">@L["Admin"]</a>
+                <a href="~/admin/instances">@L["Instances"]</a>
+                <a href="~/admin/hosts">@L["Hosts"]</a>
+                <a href="~/admin/modules">@L["Modules"]</a>
+                <a href="~/admin/apps">@L["Apps"]</a>
+                <a href="~/admin/artifacts">@L["Artifacts"]</a>
+                <a href="~/admin/automation">@L["Automation"]</a>
+                <a href="~/admin/rbac">@L["RBAC"]</a>
             }
         </nav>
-        <div class="user">@User?.Identity?.Name</div>
+        <div class="toolbar toolbar--header">
+            <form method="get" action="~/localization/set-language" class="language-switcher">
+                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                <label class="visually-hidden" for="portal-language-selector">@L["Language"]</label>
+                <select id="portal-language-selector" name="culture" onchange="this.form.submit()">
+                    @if (currentCulture == "sv-SE")
+                    {
+                        <option value="sv-SE" selected>@L["Swedish"]</option>
+                        <option value="en-US">@L["English"]</option>
+                    }
+                    else
+                    {
+                        <option value="sv-SE">@L["Swedish"]</option>
+                        <option value="en-US" selected>@L["English"]</option>
+                    }
+                </select>
+            </form>
+            <div class="user">@User?.Identity?.Name</div>
+        </div>
     </header>
     <main class="content-shell">
         @RenderBody()

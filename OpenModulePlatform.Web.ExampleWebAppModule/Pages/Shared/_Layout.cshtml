@@ -1,6 +1,10 @@
 @* File: OpenModulePlatform.Web.ExampleWebAppModule/Pages/Shared/_Layout.cshtml *@
+@{
+    var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
+    var currentCulture = System.Globalization.CultureInfo.CurrentUICulture.Name;
+}
 <!doctype html>
-<html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -11,13 +15,31 @@
     <header class="topbar">
         <div class="brand-wrap">
             <div class="brand">@ViewData["PortalTitle"]</div>
-            <div class="brand-subtitle">Example Web App Module</div>
+            <div class="brand-subtitle">@L["Example Web App Module"]</div>
         </div>
         <nav class="nav nav--primary">
-            <a href="~/">Overview</a>
-            <a href="~/configurations">Configurations</a>
+            <a href="~/">@L["Overview"]</a>
+            <a href="~/configurations">@L["Configurations"]</a>
         </nav>
-        <div class="user">@User?.Identity?.Name</div>
+        <div class="toolbar toolbar--header">
+            <form method="get" action="~/localization/set-language" class="language-switcher">
+                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                <label class="visually-hidden" for="example-language-selector">@L["Language"]</label>
+                <select id="example-language-selector" name="culture" onchange="this.form.submit()">
+                    @if (currentCulture == "sv-SE")
+                    {
+                        <option value="sv-SE" selected>@L["Swedish"]</option>
+                        <option value="en-US">@L["English"]</option>
+                    }
+                    else
+                    {
+                        <option value="sv-SE">@L["Swedish"]</option>
+                        <option value="en-US" selected>@L["English"]</option>
+                    }
+                </select>
+            </form>
+            <div class="user">@User?.Identity?.Name</div>
+        </div>
     </header>
     <main class="content-shell">
         @RenderBody()

@@ -138,7 +138,7 @@ public sealed class HostEditModel : OmpPortalPageModel
                 },
                 ct);
 
-            StatusMessage = IsCreate ? "Host created." : "Host updated.";
+            StatusMessage = IsCreate ? T("Host created.") : T("Host updated.");
             return RedirectToPage("/Admin/HostEdit", new { id });
         }
         catch (SqlException ex)
@@ -167,7 +167,7 @@ public sealed class HostEditModel : OmpPortalPageModel
         try
         {
             await _repo.DeleteHostAsync(Input.HostId, ct);
-            StatusMessage = "Host deleted.";
+            StatusMessage = T("Host deleted.");
             return RedirectToPage("/Admin/Hosts");
         }
         catch (SqlException ex)

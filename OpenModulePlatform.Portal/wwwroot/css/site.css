@@ -453,3 +453,34 @@ code {
 .form-grid-inline .actions {
     min-width: 0;
 }
+
+
+.toolbar--header {
+    margin-top: 0;
+    margin-left: auto;
+    align-items: center;
+}
+
+.language-switcher {
+    display: inline-flex;
+    align-items: center;
+}
+
+.language-switcher select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-muted);
+    color: var(--text);
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}

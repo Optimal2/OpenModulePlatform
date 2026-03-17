@@ -1,14 +1,19 @@
 // File: OpenModulePlatform.Web.Shared/Extensions/OmpWebHostingExtensions.cs
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.Server.IISIntegration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Net;
 using AspNetIPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
@@ -37,7 +42,17 @@ public static class OmpWebHostingExtensions
         builder.Services.AddOptions<WebAppOptions>()
             .Bind(builder.Configuration.GetSection(optionsSectionName));
 
-        builder.Services.AddRazorPages();
+        builder.Services.AddLocalization(options =>
+        {
+            options.ResourcesPath = "Resources";
+        });
+
+        builder.Services.AddRazorPages()
+            .AddDataAnnotationsLocalization(options =>
+            {
+                options.DataAnnotationLocalizerProvider = static (_, factory) =>
+                    factory.Create(typeof(SharedResource));
+            });
 
         var runningUnderIis = !string.IsNullOrWhiteSpace(
             Environment.GetEnvironmentVariable("ASPNETCORE_IIS_PHYSICAL_PATH"));
@@ -60,6 +75,37 @@ public static class OmpWebHostingExtensions
         var webAppOptions = builder.Configuration
             .GetSection(optionsSectionName)
             .Get<WebAppOptions>() ?? new WebAppOptions();
+
+        builder.Services.Configure<RequestLocalizationOptions>(options =>
+        {
+            var supportedCultureNames = (webAppOptions.SupportedCultures?.Length ?? 0) > 0
+                ? webAppOptions.SupportedCultures
+                : [webAppOptions.DefaultCulture];
+
+            var supportedCultures = supportedCultureNames
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(x => new CultureInfo(x))
+                .ToArray();
+
+            if (supportedCultures.Length == 0)
+            {
+                supportedCultures = [new CultureInfo("sv-SE")];
+            }
+
+            var defaultCultureName = string.IsNullOrWhiteSpace(webAppOptions.DefaultCulture)
+                ? supportedCultures[0].Name
+                : webAppOptions.DefaultCulture;
+
+            options.DefaultRequestCulture = new RequestCulture(defaultCultureName);
+            options.SupportedCultures = supportedCultures;
+            options.SupportedUICultures = supportedCultures;
+            options.RequestCultureProviders =
+            [
+                new CookieRequestCultureProvider(),
+                new AcceptLanguageHeaderRequestCultureProvider()
+            ];
+        });
 
         builder.Services.AddOptions<ForwardedHeadersOptions>()
             .Configure<ILoggerFactory>((options, loggerFactory) =>
@@ -90,7 +136,40 @@ public static class OmpWebHostingExtensions
             app.UseForwardedHeaders();
         }
 
+        var localizationOptions = app.Services
+            .GetRequiredService<IOptions<RequestLocalizationOptions>>()
+            .Value;
+
+        app.UseRequestLocalization(localizationOptions);
         app.UseStaticFiles();
+
+        app.MapGet("/localization/set-language", (HttpContext context, string culture, string? returnUrl) =>
+        {
+            if (string.IsNullOrWhiteSpace(culture))
+            {
+                culture = localizationOptions.DefaultRequestCulture.Culture.Name;
+            }
+
+            var requestCulture = new RequestCulture(culture);
+
+            context.Response.Cookies.Append(
+                CookieRequestCultureProvider.DefaultCookieName,
+                CookieRequestCultureProvider.MakeCookieValue(requestCulture),
+                new CookieOptions
+                {
+                    Expires = DateTimeOffset.UtcNow.AddYears(1),
+                    IsEssential = true,
+                    HttpOnly = false,
+                    SameSite = SameSiteMode.Lax
+                });
+
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+            {
+                return Results.LocalRedirect(returnUrl);
+            }
+
+            return Results.LocalRedirect("/");
+        });
 
         if (!options.AllowAnonymous)
         {
