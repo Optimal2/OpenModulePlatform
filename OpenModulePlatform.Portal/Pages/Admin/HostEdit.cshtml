@@ -60,6 +60,16 @@
         </div>
     </div>
 
+    <div class="form-field">
+        <label asp-for="Input.BaseUrl"></label>
+        <input asp-for="Input.BaseUrl" placeholder="https://earkivmodulportal.vgregion.se:8443" />
+        <div class="field-help">
+            Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath.
+            Enter only protocol, host and optional port.
+        </div>
+        <span asp-validation-for="Input.BaseUrl" class="field-validation-error"></span>
+    </div>
+
     <div class="field-grid field-grid--3">
         <div class="form-field">
             <label asp-for="Input.Environment"></label>

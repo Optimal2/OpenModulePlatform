@@ -20,6 +20,8 @@ public sealed class PortalAppEntry
 
     public string? HostKey { get; set; }
 
+    public string? HostBaseUrl { get; set; }
+
     public string? Description { get; set; }
 
     public int SortOrder { get; set; }
@@ -215,6 +217,8 @@ public sealed class HostRow
     public string HostKey { get; set; } = string.Empty;
 
     public string? DisplayName { get; set; }
+
+    public string? BaseUrl { get; set; }
 
     public string? Environment { get; set; }
 

@@ -33,6 +33,9 @@
             @foreach (var app in Model.Apps)
             {
                 var href = AppLinkBuilder.ResolveHref(Request, app);
+                var configuredAddress = !string.IsNullOrWhiteSpace(app.RoutePath)
+                    ? app.RoutePath
+                    : app.PublicUrl;
                 <tr>
                     <td>@app.DisplayName</td>
                     <td><code>@app.AppInstanceKey</code></td>
@@ -40,7 +43,16 @@
                     <td>
                         @if (!string.IsNullOrWhiteSpace(href))
                         {
-                            <a href="@href">@href</a>
+                            <a href="@href">@(configuredAddress ?? href)</a>
+                            @if (!string.Equals(configuredAddress, href, System.StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="muted"><code>@href</code></div>
+                            }
+                        }
+                        else if (!string.IsNullOrWhiteSpace(configuredAddress))
+                        {
+                            <code>@configuredAddress</code>
+                            <div class="muted">Set Host base URL to make this route clickable from the Portal.</div>
                         }
                     </td>
                     <td>@app.Description</td>

@@ -243,16 +243,22 @@ ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
 
     public async Task<IReadOnlyList<HostRow>> GetHostsAsync(CancellationToken ct)
     {
-        const string sql = @"
-SELECT h.HostId, i.InstanceKey, h.HostKey, h.DisplayName, h.Environment, h.OsFamily, h.OsVersion, h.Architecture,
+        var rows = new List<HostRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var hasHostBaseUrl = await HostBaseUrlColumnExistsAsync(conn, ct);
+        var hostBaseUrlSelect = hasHostBaseUrl
+            ? "h.BaseUrl"
+            : "CAST(NULL AS nvarchar(300)) AS BaseUrl";
+
+        var sql = $@"
+SELECT h.HostId, i.InstanceKey, h.HostKey, h.DisplayName, {hostBaseUrlSelect}, h.Environment, h.OsFamily, h.OsVersion, h.Architecture,
        h.IsEnabled, h.LastSeenUtc
 FROM omp.Hosts h
 INNER JOIN omp.Instances i ON i.InstanceId = h.InstanceId
 ORDER BY i.InstanceKey, h.HostKey;";
 
-        var rows = new List<HostRow>();
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -263,12 +269,13 @@ ORDER BY i.InstanceKey, h.HostKey;";
                 InstanceKey = rdr.GetString(1),
                 HostKey = rdr.GetString(2),
                 DisplayName = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-                Environment = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                OsFamily = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                OsVersion = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                Architecture = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                IsEnabled = rdr.GetBoolean(8),
-                LastSeenUtc = rdr.IsDBNull(9) ? null : rdr.GetDateTime(9)
+                BaseUrl = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                Environment = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                OsFamily = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                OsVersion = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                Architecture = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                IsEnabled = rdr.GetBoolean(9),
+                LastSeenUtc = rdr.IsDBNull(10) ? null : rdr.GetDateTime(10)
             });
         }
         return rows;
@@ -392,5 +399,12 @@ ORDER BY d.RequestedUtc DESC, d.HostDeploymentId DESC;";
         await using var cmd = new SqlCommand(sql, conn);
         var value = await cmd.ExecuteScalarAsync(ct);
         return value is int i ? i : Convert.ToInt32(value ?? 0);
+    }
+
+    private static async Task<bool> HostBaseUrlColumnExistsAsync(SqlConnection conn, CancellationToken ct)
+    {
+        const string sql = "SELECT CAST(CASE WHEN COL_LENGTH('omp.Hosts', 'BaseUrl') IS NULL THEN 0 ELSE 1 END AS bit);";
+        await using var cmd = new SqlCommand(sql, conn);
+        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
     }
 }

@@ -36,6 +36,10 @@ Vid manuell installation är detta en kärndel av modellen.
 Template-relaterade hostobjekt behövs däremot inte för att få systemet
 att fungera manuellt.
 
+Om en webbapp-instans använder relativ `RoutePath` och ligger på en annan host
+än själva Portalen bör du sätta `Hosts.BaseUrl` till en absolut rot-URL som
+innehåller protokoll, host och eventuell port.
+
 ### 4. Verifiera eller skapa Modules och Apps
 
 Detta är definitionsnivån.
