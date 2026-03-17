@@ -237,12 +237,15 @@ WHERE HostId = @HostId;";
             throw new InvalidOperationException("Database schema missing omp.Hosts.BaseUrl. Run SQL_Install_OpenModulePlatform.sql.");
         }
 
-        var hostBaseUrlInsertColumns = hasHostBaseUrl ? ",
-    BaseUrl" : string.Empty;
-        var hostBaseUrlInsertValues = hasHostBaseUrl ? ",
-    @BaseUrl" : string.Empty;
-        var hostBaseUrlUpdate = hasHostBaseUrl ? ",
-    BaseUrl = @BaseUrl" : string.Empty;
+        var hostBaseUrlInsertColumns = hasHostBaseUrl
+            ? ",\n    BaseUrl"
+            : string.Empty;
+        var hostBaseUrlInsertValues = hasHostBaseUrl
+            ? ",\n    @BaseUrl"
+            : string.Empty;
+        var hostBaseUrlUpdate = hasHostBaseUrl
+            ? ",\n    BaseUrl = @BaseUrl"
+            : string.Empty;
 
         if (input.HostId == Guid.Empty)
         {
