@@ -1,5 +1,5 @@
-@using OpenModulePlatform.Portal.Services
 @page
+@using OpenModulePlatform.Portal.Services
 @model OpenModulePlatform.Portal.Pages.IndexModel
 
 <h2>OMP Portal</h2>
@@ -32,7 +32,7 @@
             <tbody>
             @foreach (var app in Model.Apps)
             {
-                var href = AppLinkBuilder.ResolveHref(Context.Request, app);
+                var href = AppLinkBuilder.ResolveHref(Request, app);
                 <tr>
                     <td>@app.DisplayName</td>
                     <td><code>@app.AppInstanceKey</code></td>

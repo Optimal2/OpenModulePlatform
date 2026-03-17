@@ -18,6 +18,8 @@ public sealed class PortalAppEntry
 
     public string? PublicUrl { get; set; }
 
+    public string? HostKey { get; set; }
+
     public string? Description { get; set; }
 
     public int SortOrder { get; set; }
