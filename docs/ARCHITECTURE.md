@@ -87,6 +87,9 @@ samma definition.
 
 ### Runtime
 
+`omp.Hosts` kan bära en valfri `BaseUrl` för Portalens länkgenerering när en
+`AppInstance` använder relativ `RoutePath` på en annan host än Portalen.
+
 `omp.AppInstances` innehåller idag bland annat:
 
 - `HostId`

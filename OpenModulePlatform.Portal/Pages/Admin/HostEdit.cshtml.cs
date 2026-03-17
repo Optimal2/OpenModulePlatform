@@ -92,6 +92,7 @@ public sealed class HostEditModel : OmpPortalPageModel
             InstanceId = row.InstanceId,
             HostKey = row.HostKey,
             DisplayName = row.DisplayName,
+            BaseUrl = row.BaseUrl,
             Environment = row.Environment,
             OsFamily = row.OsFamily,
             OsVersion = row.OsVersion,
@@ -128,6 +129,7 @@ public sealed class HostEditModel : OmpPortalPageModel
                     InstanceId = Input.InstanceId,
                     HostKey = Input.HostKey.Trim(),
                     DisplayName = Clean(Input.DisplayName),
+                    BaseUrl = NormalizeBaseUrl(Input.BaseUrl),
                     Environment = Clean(Input.Environment),
                     OsFamily = Clean(Input.OsFamily),
                     OsVersion = Clean(Input.OsVersion),
@@ -145,6 +147,11 @@ public sealed class HostEditModel : OmpPortalPageModel
                 string.Empty,
                 ToFriendlySqlMessage(ex, "The host could not be saved."));
 
+            return Page();
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
             return Page();
         }
     }
@@ -193,6 +200,24 @@ public sealed class HostEditModel : OmpPortalPageModel
                 nameof(Input.HostKey),
                 "Use a stable host key with letters, digits, dash, underscore or dot.");
         }
+
+        if (!string.IsNullOrWhiteSpace(Input.BaseUrl))
+        {
+            var trimmed = Input.BaseUrl.Trim();
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                ModelState.AddModelError(nameof(Input.BaseUrl), "Base URL must be an absolute http or https URL.");
+            }
+            else if (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+            {
+                ModelState.AddModelError(nameof(Input.BaseUrl), "Base URL must not contain query string or fragment.");
+            }
+            else if (uri.AbsolutePath is not "/" and not "")
+            {
+                ModelState.AddModelError(nameof(Input.BaseUrl), "Base URL should only contain protocol, host and optional port.");
+            }
+        }
     }
 
     private static OptionItem Opt(string value, string label)
@@ -200,6 +225,19 @@ public sealed class HostEditModel : OmpPortalPageModel
 
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeBaseUrl(string? value)
+    {
+        var cleaned = Clean(value);
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(cleaned, UriKind.Absolute, out var uri)
+            ? uri.GetLeftPart(UriPartial.Authority)
+            : cleaned;
+    }
 
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
         => ex.Number switch
@@ -225,6 +263,10 @@ public sealed class HostEditModel : OmpPortalPageModel
         [StringLength(200)]
         [Display(Name = "Display name")]
         public string? DisplayName { get; set; }
+
+        [StringLength(300)]
+        [Display(Name = "Base URL")]
+        public string? BaseUrl { get; set; }
 
         [StringLength(100)]
         public string? Environment { get; set; }

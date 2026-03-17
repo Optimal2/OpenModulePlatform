@@ -180,11 +180,20 @@ WHERE InstanceId = @InstanceId;";
 
     public async Task<HostEditData?> GetHostAsync(Guid hostId, CancellationToken ct)
     {
-        const string sql = @"
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var hasHostBaseUrl = await HostBaseUrlColumnExistsAsync(conn, ct);
+        var hostBaseUrlSelect = hasHostBaseUrl
+            ? "BaseUrl"
+            : "CAST(NULL AS nvarchar(300)) AS BaseUrl";
+
+        var sql = $@"
 SELECT HostId,
        InstanceId,
        HostKey,
        DisplayName,
+       {hostBaseUrlSelect},
        Environment,
        OsFamily,
        OsVersion,
@@ -193,8 +202,6 @@ SELECT HostId,
 FROM omp.Hosts
 WHERE HostId = @HostId;";
 
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@HostId", hostId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
@@ -210,11 +217,12 @@ WHERE HostId = @HostId;";
             InstanceId = rdr.GetGuid(1),
             HostKey = rdr.GetString(2),
             DisplayName = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-            Environment = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-            OsFamily = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-            OsVersion = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-            Architecture = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-            IsEnabled = rdr.GetBoolean(8)
+            BaseUrl = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            Environment = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            OsFamily = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            OsVersion = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+            Architecture = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+            IsEnabled = rdr.GetBoolean(9)
         };
     }
 
@@ -223,17 +231,30 @@ WHERE HostId = @HostId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
+        var hasHostBaseUrl = await HostBaseUrlColumnExistsAsync(conn, ct);
+        if (!hasHostBaseUrl && !string.IsNullOrWhiteSpace(input.BaseUrl))
+        {
+            throw new InvalidOperationException("Database schema missing omp.Hosts.BaseUrl. Run SQL_Install_OpenModulePlatform.sql.");
+        }
+
+        var hostBaseUrlInsertColumns = hasHostBaseUrl ? ",
+    BaseUrl" : string.Empty;
+        var hostBaseUrlInsertValues = hasHostBaseUrl ? ",
+    @BaseUrl" : string.Empty;
+        var hostBaseUrlUpdate = hasHostBaseUrl ? ",
+    BaseUrl = @BaseUrl" : string.Empty;
+
         if (input.HostId == Guid.Empty)
         {
             input.HostId = Guid.NewGuid();
 
-            const string insertSql = @"
+            var insertSql = $@"
 INSERT INTO omp.Hosts
 (
     HostId,
     InstanceId,
     HostKey,
-    DisplayName,
+    DisplayName{hostBaseUrlInsertColumns},
     Environment,
     OsFamily,
     OsVersion,
@@ -245,7 +266,7 @@ VALUES
     @HostId,
     @InstanceId,
     @HostKey,
-    @DisplayName,
+    @DisplayName{hostBaseUrlInsertValues},
     @Environment,
     @OsFamily,
     @OsVersion,
@@ -254,16 +275,16 @@ VALUES
 );";
 
             await using var insert = new SqlCommand(insertSql, conn);
-            BindHost(insert, input);
+            BindHost(insert, input, hasHostBaseUrl);
             await insert.ExecuteNonQueryAsync(ct);
             return input.HostId;
         }
 
-        const string updateSql = @"
+        var updateSql = $@"
 UPDATE omp.Hosts
 SET InstanceId = @InstanceId,
     HostKey = @HostKey,
-    DisplayName = @DisplayName,
+    DisplayName = @DisplayName{hostBaseUrlUpdate},
     Environment = @Environment,
     OsFamily = @OsFamily,
     OsVersion = @OsVersion,
@@ -273,7 +294,7 @@ SET InstanceId = @InstanceId,
 WHERE HostId = @HostId;";
 
         await using var update = new SqlCommand(updateSql, conn);
-        BindHost(update, input);
+        BindHost(update, input, hasHostBaseUrl);
         await update.ExecuteNonQueryAsync(ct);
         return input.HostId;
     }
@@ -974,12 +995,16 @@ WHERE ArtifactId = @ArtifactId
         Add(cmd, "@IsEnabled", input.IsEnabled);
     }
 
-    private static void BindHost(SqlCommand cmd, HostEditData input)
+    private static void BindHost(SqlCommand cmd, HostEditData input, bool includeBaseUrl)
     {
         Add(cmd, "@HostId", input.HostId);
         Add(cmd, "@InstanceId", input.InstanceId);
         Add(cmd, "@HostKey", input.HostKey);
         Add(cmd, "@DisplayName", input.DisplayName);
+        if (includeBaseUrl)
+        {
+            Add(cmd, "@BaseUrl", input.BaseUrl);
+        }
         Add(cmd, "@Environment", input.Environment);
         Add(cmd, "@OsFamily", input.OsFamily);
         Add(cmd, "@OsVersion", input.OsVersion);

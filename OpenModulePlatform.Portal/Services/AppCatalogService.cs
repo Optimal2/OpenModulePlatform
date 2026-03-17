@@ -25,7 +25,15 @@ public sealed class AppCatalogService
     public async Task<IReadOnlyList<PortalAppEntry>> GetEnabledWebAppsAsync(
         CancellationToken ct)
     {
-        const string sql = @"
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var hasHostBaseUrl = await HostBaseUrlColumnExistsAsync(conn, ct);
+        var hostBaseUrlSelect = hasHostBaseUrl
+            ? "h.BaseUrl"
+            : "CAST(NULL AS nvarchar(300)) AS BaseUrl";
+
+        var sql = $@"
 SELECT ai.AppInstanceId,
        ai.AppInstanceKey,
        a.AppKey,
@@ -33,6 +41,7 @@ SELECT ai.AppInstanceId,
        ai.RoutePath,
        ai.PublicUrl,
        h.HostKey,
+       {hostBaseUrlSelect},
        ai.SortOrder,
        ai.Description,
        p.Name AS PermissionName,
@@ -47,9 +56,6 @@ WHERE ai.IsEnabled = 1
   AND a.AppType IN (N'Portal', N'WebApp')
 ORDER BY ai.SortOrder,
          ai.DisplayName;";
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
@@ -69,9 +75,10 @@ ORDER BY ai.SortOrder,
                     RoutePath = rdr.IsDBNull(4) ? null : rdr.GetString(4),
                     PublicUrl = rdr.IsDBNull(5) ? null : rdr.GetString(5),
                     HostKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                    SortOrder = rdr.GetInt32(7),
-                    Description = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-                    RequireAll = !rdr.IsDBNull(10) && rdr.GetBoolean(10)
+                    HostBaseUrl = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                    SortOrder = rdr.GetInt32(8),
+                    Description = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                    RequireAll = !rdr.IsDBNull(11) && rdr.GetBoolean(11)
                 };
 
                 map[appInstanceId] = entry;
@@ -79,12 +86,12 @@ ORDER BY ai.SortOrder,
             else
             {
                 entry.RequireAll = entry.RequireAll ||
-                    (!rdr.IsDBNull(10) && rdr.GetBoolean(10));
+                    (!rdr.IsDBNull(11) && rdr.GetBoolean(11));
             }
 
-            if (!rdr.IsDBNull(9))
+            if (!rdr.IsDBNull(10))
             {
-                entry.RequiredPermissions.Add(rdr.GetString(9));
+                entry.RequiredPermissions.Add(rdr.GetString(10));
             }
         }
 
@@ -92,6 +99,13 @@ ORDER BY ai.SortOrder,
             .OrderBy(x => x.SortOrder)
             .ThenBy(x => x.DisplayName)
             .ToList();
+    }
+
+    private static async Task<bool> HostBaseUrlColumnExistsAsync(SqlConnection conn, CancellationToken ct)
+    {
+        const string sql = "SELECT CAST(CASE WHEN COL_LENGTH('omp.Hosts', 'BaseUrl') IS NULL THEN 0 ELSE 1 END AS bit);";
+        await using var cmd = new SqlCommand(sql, conn);
+        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
     }
 
     /// <summary>

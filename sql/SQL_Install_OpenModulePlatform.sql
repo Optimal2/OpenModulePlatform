@@ -258,6 +258,7 @@ BEGIN
         InstanceId uniqueidentifier NOT NULL,
         HostKey nvarchar(128) NOT NULL,
         DisplayName nvarchar(200) NULL,
+        BaseUrl nvarchar(300) NULL,
         Environment nvarchar(100) NULL,
         OsFamily nvarchar(50) NULL,
         OsVersion nvarchar(100) NULL,
@@ -269,6 +270,12 @@ BEGIN
         CONSTRAINT FK_omp_Hosts_Instance FOREIGN KEY(InstanceId) REFERENCES omp.Instances(InstanceId),
         CONSTRAINT UQ_omp_Hosts_Instance_HostKey UNIQUE(InstanceId, HostKey)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.Hosts', N'BaseUrl') IS NULL
+BEGIN
+    ALTER TABLE omp.Hosts ADD BaseUrl nvarchar(300) NULL;
 END
 GO
 
@@ -508,8 +515,8 @@ END
 
 IF NOT EXISTS (SELECT 1 FROM omp.Hosts WHERE HostId = @DefaultHostId)
 BEGIN
-    INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, Environment, OsFamily, Architecture)
-    VALUES(@DefaultHostId, @DefaultInstanceId, N'sample-host', N'Sample Host', N'Development', N'Windows', N'x64');
+    INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture)
+    VALUES(@DefaultHostId, @DefaultInstanceId, N'sample-host', N'Sample Host', NULL, N'Development', N'Windows', N'x64');
 END
 ELSE
 BEGIN
@@ -517,6 +524,7 @@ BEGIN
     SET InstanceId = @DefaultInstanceId,
         HostKey = N'sample-host',
         DisplayName = N'Sample Host',
+        BaseUrl = NULL,
         Environment = N'Development',
         OsFamily = N'Windows',
         Architecture = N'x64',

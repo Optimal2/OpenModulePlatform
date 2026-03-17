@@ -42,6 +42,8 @@ public sealed class HostEditData
 
     public string? DisplayName { get; set; }
 
+    public string? BaseUrl { get; set; }
+
     public string? Environment { get; set; }
 
     public string? OsFamily { get; set; }
