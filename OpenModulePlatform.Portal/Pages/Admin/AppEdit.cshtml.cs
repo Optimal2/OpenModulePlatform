@@ -122,7 +122,7 @@ public sealed class AppEditModel : OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? "App created." : "App updated.";
-            return RedirectToPage("~/admin/appedit", new { id });
+            return RedirectToPage("/Admin/AppEdit", new { id });
         }
         catch (SqlException ex)
         {
@@ -146,7 +146,7 @@ public sealed class AppEditModel : OmpPortalPageModel
         {
             await _repo.DeleteAppAsync(Input.AppId, ct);
             StatusMessage = "App deleted.";
-            return RedirectToPage("~/admin/apps");
+            return RedirectToPage("/Admin/Apps");
         }
         catch (SqlException ex)
         {

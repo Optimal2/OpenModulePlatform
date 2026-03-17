@@ -122,7 +122,7 @@ public sealed class ModuleEditModel : OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? "Module created." : "Module updated.";
-            return RedirectToPage("~/admin/moduleedit", new { id });
+            return RedirectToPage("/Admin/ModuleEdit", new { id });
         }
         catch (SqlException ex)
         {
@@ -146,7 +146,7 @@ public sealed class ModuleEditModel : OmpPortalPageModel
         {
             await _repo.DeleteModuleAsync(Input.ModuleId, ct);
             StatusMessage = "Module deleted.";
-            return RedirectToPage("~/admin/modules");
+            return RedirectToPage("/Admin/Modules");
         }
         catch (SqlException ex)
         {

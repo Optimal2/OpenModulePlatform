@@ -109,7 +109,7 @@ public sealed class InstanceEditModel : OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? "Instance created." : "Instance updated.";
-            return RedirectToPage("~/admin/instanceedit", new { id });
+            return RedirectToPage("/Admin/InstanceEdit", new { id });
         }
         catch (SqlException ex)
         {
@@ -133,7 +133,7 @@ public sealed class InstanceEditModel : OmpPortalPageModel
         {
             await _repo.DeleteInstanceAsync(Input.InstanceId, ct);
             StatusMessage = "Instance deleted.";
-            return RedirectToPage("~/admin/instances");
+            return RedirectToPage("/Admin/Instances");
         }
         catch (SqlException ex)
         {

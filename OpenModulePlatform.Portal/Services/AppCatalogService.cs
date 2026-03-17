@@ -32,12 +32,14 @@ SELECT ai.AppInstanceId,
        ai.DisplayName,
        ai.RoutePath,
        ai.PublicUrl,
+       h.HostKey,
        ai.SortOrder,
        ai.Description,
        p.Name AS PermissionName,
        ap.RequireAll
 FROM omp.AppInstances ai
 INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+LEFT JOIN omp.Hosts h ON h.HostId = ai.HostId
 LEFT JOIN omp.AppPermissions ap ON ap.AppId = a.AppId
 LEFT JOIN omp.Permissions p ON p.PermissionId = ap.PermissionId
 WHERE ai.IsEnabled = 1
@@ -66,9 +68,10 @@ ORDER BY ai.SortOrder,
                     DisplayName = rdr.GetString(3),
                     RoutePath = rdr.IsDBNull(4) ? null : rdr.GetString(4),
                     PublicUrl = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                    SortOrder = rdr.GetInt32(6),
-                    Description = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                    RequireAll = !rdr.IsDBNull(9) && rdr.GetBoolean(9)
+                    HostKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                    SortOrder = rdr.GetInt32(7),
+                    Description = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                    RequireAll = !rdr.IsDBNull(10) && rdr.GetBoolean(10)
                 };
 
                 map[appInstanceId] = entry;
@@ -76,12 +79,12 @@ ORDER BY ai.SortOrder,
             else
             {
                 entry.RequireAll = entry.RequireAll ||
-                    (!rdr.IsDBNull(9) && rdr.GetBoolean(9));
+                    (!rdr.IsDBNull(10) && rdr.GetBoolean(10));
             }
 
-            if (!rdr.IsDBNull(8))
+            if (!rdr.IsDBNull(9))
             {
-                entry.RequiredPermissions.Add(rdr.GetString(8));
+                entry.RequiredPermissions.Add(rdr.GetString(9));
             }
         }
 
