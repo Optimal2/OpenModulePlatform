@@ -114,8 +114,9 @@
             <label asp-for="Input.RoutePath"></label>
             <input asp-for="Input.RoutePath" />
             <div class="field-help">
-                Use a local relative path segment, for example
-                <code>ExampleServiceAppModule</code>. Leading slashes are normalized away.
+                Use either an absolute URL such as <code>https://www.google.com/</code> or a host-root-relative path such as
+                <code>app01</code>, <code>/app01</code>, <code>app01/</code> or <code>/app01/</code>. Relative values are resolved directly
+                from the selected host root without any extra portal prefix.
             </div>
             <span asp-validation-for="Input.RoutePath" class="field-validation-error"></span>
         </div>

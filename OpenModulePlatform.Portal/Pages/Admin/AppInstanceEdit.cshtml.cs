@@ -153,7 +153,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? "App instance created." : "App instance updated.";
-            return RedirectToPage("~/admin/appinstanceedit", new { id });
+            return RedirectToPage("/Admin/AppInstanceEdit", new { id });
         }
         catch (SqlException ex)
         {
@@ -177,7 +177,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         {
             await _repo.DeleteAppInstanceAsync(Input.AppInstanceId, ct);
             StatusMessage = "App instance deleted.";
-            return RedirectToPage("~/admin/appinstances");
+            return RedirectToPage("/Admin/AppInstances");
         }
         catch (SqlException ex)
         {
@@ -228,14 +228,6 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
             ModelState.AddModelError(
                 nameof(Input.AppInstanceKey),
                 "Use a stable key with letters, digits, dash, underscore or dot.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(Input.RoutePath) &&
-            Uri.TryCreate(Input.RoutePath, UriKind.Absolute, out _))
-        {
-            ModelState.AddModelError(
-                nameof(Input.RoutePath),
-                "Route path should be a local relative path segment, not an absolute URL.");
         }
 
         if (!string.IsNullOrWhiteSpace(Input.PublicUrl)
@@ -323,8 +315,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
 
     private static string? CleanRoutePath(string? value)
     {
-        var cleaned = Clean(value);
-        return cleaned?.TrimStart('/');
+        return Clean(value);
     }
 
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)

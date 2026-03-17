@@ -122,7 +122,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? "Artifact created." : "Artifact updated.";
-            return RedirectToPage("~/admin/artifactedit", new { id });
+            return RedirectToPage("/Admin/ArtifactEdit", new { id });
         }
         catch (SqlException ex)
         {
@@ -146,7 +146,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         {
             await _repo.DeleteArtifactAsync(Input.ArtifactId, ct);
             StatusMessage = "Artifact deleted.";
-            return RedirectToPage("~/admin/artifacts");
+            return RedirectToPage("/Admin/Artifacts");
         }
         catch (SqlException ex)
         {

@@ -101,7 +101,7 @@ public sealed class PermissionEditModel : Pages.Admin.OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? "Permission created." : "Permission updated.";
-            return RedirectToPage("~/admin/rbac/permissionedit", new { id });
+            return RedirectToPage("/Admin/Rbac/PermissionEdit", new { id });
         }
         catch (SqlException ex)
         {
@@ -125,14 +125,14 @@ public sealed class PermissionEditModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.PermissionId <= 0)
         {
-            return RedirectToPage("~/admin/rbac/permissions");
+            return RedirectToPage("/Admin/Rbac/Permissions");
         }
 
         try
         {
             await _repo.DeletePermissionAsync(Input.PermissionId, ct);
             StatusMessage = "Permission deleted.";
-            return RedirectToPage("~/admin/rbac/permissions");
+            return RedirectToPage("/Admin/Rbac/Permissions");
         }
         catch (SqlException ex)
         {

@@ -1,3 +1,4 @@
+@using OpenModulePlatform.Portal.Services
 @page
 @model OpenModulePlatform.Portal.Pages.IndexModel
 
@@ -31,12 +32,7 @@
             <tbody>
             @foreach (var app in Model.Apps)
             {
-                var normalizedRoute = app.RoutePath?.TrimStart('/');
-                var href = !string.IsNullOrWhiteSpace(app.PublicUrl)
-                    ? app.PublicUrl
-                    : (string.IsNullOrWhiteSpace(normalizedRoute)
-                        ? null
-                        : Url.Content("~/" + normalizedRoute));
+                var href = AppLinkBuilder.ResolveHref(Context.Request, app);
                 <tr>
                     <td>@app.DisplayName</td>
                     <td><code>@app.AppInstanceKey</code></td>

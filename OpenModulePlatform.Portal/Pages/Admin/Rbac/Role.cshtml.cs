@@ -117,7 +117,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? "Role created." : "Role updated.";
-            return RedirectToPage("~/admin/rbac/role", new { roleId });
+            return RedirectToPage("/Admin/Rbac/Role", new { roleId });
         }
         catch (SqlException ex)
         {
@@ -141,7 +141,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("~/admin/rbac/roles");
+            return RedirectToPage("/Admin/Rbac/Roles");
         }
 
         if (permissionId <= 0)
@@ -154,7 +154,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         await _repo.AddPermissionToRoleAsync(Input.RoleId, permissionId, ct);
         StatusMessage = "Permission added to role.";
-        return RedirectToPage("~/admin/rbac/role", new { roleId = Input.RoleId });
+        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
     public async Task<IActionResult> OnPostRemovePermission(int permissionId, CancellationToken ct)
@@ -167,12 +167,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("~/admin/rbac/roles");
+            return RedirectToPage("/Admin/Rbac/Roles");
         }
 
         await _repo.RemovePermissionFromRoleAsync(Input.RoleId, permissionId, ct);
         StatusMessage = "Permission removed from role.";
-        return RedirectToPage("~/admin/rbac/role", new { roleId = Input.RoleId });
+        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
     public async Task<IActionResult> OnPostAddPrincipal(string principalType, string principal, CancellationToken ct)
@@ -185,7 +185,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("~/admin/rbac/roles");
+            return RedirectToPage("/Admin/Rbac/Roles");
         }
 
         principalType = Clean(principalType) ?? string.Empty;
@@ -213,7 +213,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         await _repo.AddPrincipalToRoleAsync(Input.RoleId, principalType, principal, ct);
         StatusMessage = "Principal added to role.";
-        return RedirectToPage("~/admin/rbac/role", new { roleId = Input.RoleId });
+        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
     public async Task<IActionResult> OnPostRemovePrincipal(string principalType, string principal, CancellationToken ct)
@@ -226,12 +226,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("~/admin/rbac/roles");
+            return RedirectToPage("/Admin/Rbac/Roles");
         }
 
         await _repo.RemovePrincipalFromRoleAsync(Input.RoleId, principalType, principal, ct);
         StatusMessage = "Principal removed from role.";
-        return RedirectToPage("~/admin/rbac/role", new { roleId = Input.RoleId });
+        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
     public async Task<IActionResult> OnPostDelete(CancellationToken ct)
@@ -244,14 +244,14 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("~/admin/rbac/roles");
+            return RedirectToPage("/Admin/Rbac/Roles");
         }
 
         try
         {
             await _repo.DeleteRoleAsync(Input.RoleId, ct);
             StatusMessage = "Role deleted.";
-            return RedirectToPage("~/admin/rbac/roles");
+            return RedirectToPage("/Admin/Rbac/Roles");
         }
         catch (SqlException ex)
         {
