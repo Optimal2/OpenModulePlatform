@@ -7,7 +7,7 @@
 
 @if (!AuthorizationResolved)
 {
-    <div class="empty-state">Laddar konfiguration...</div>
+    <div class="empty-state">@T("Loading configuration...")</div>
 }
 else if (!IsAuthorized)
 {
@@ -17,9 +17,9 @@ else
 {
     <div class="page-header">
         <div>
-            <div class="eyebrow">Example module</div>
-            <h1>Edit configuration</h1>
-            <p class="lede">Uppdatera kommentar och JSON-innehåll för vald konfiguration.</p>
+            <div class="eyebrow">@T("Example module")</div>
+            <h1>@T("Edit configuration")</h1>
+            <p class="lede">@T("Update comment and JSON content for the selected configuration.")</p>
         </div>
     </div>
 
@@ -39,19 +39,19 @@ else
             <ValidationSummary />
 
             <div class="form-field">
-                <label for="comment">Comment</label>
+                <label for="comment">@T("Comment")</label>
                 <InputText id="comment" @bind-Value="Input.Comment" />
             </div>
 
             <div class="form-field">
-                <label for="configJson">Config JSON</label>
+                <label for="configJson">@T("Config JSON")</label>
                 <InputTextArea id="configJson" @bind-Value="Input.ConfigJson" />
                 <ValidationMessage For="@(() => Input.ConfigJson)" />
             </div>
 
             <div class="toolbar">
-                <button type="submit">Save</button>
-                <NavLink class="action-link" href="/configurations">Back to configurations</NavLink>
+                <button type="submit">@T("Save")</button>
+                <NavLink class="action-link" href="/configurations">@T("Back to configurations")</NavLink>
             </div>
         </EditForm>
     }
@@ -81,14 +81,14 @@ else
         var effectiveConfigId = ConfigId ?? QueryConfigId;
         if (effectiveConfigId is null || effectiveConfigId.Value <= 0)
         {
-            ErrorMessage = "Ingen giltig configId angavs.";
+            ErrorMessage = T("A valid configId was not provided.");
             return;
         }
 
         var row = await Repo.GetConfigurationAsync(effectiveConfigId.Value, CancellationToken.None);
         if (row is null)
         {
-            ErrorMessage = "Konfigurationen hittades inte.";
+            ErrorMessage = T("The configuration could not be found.");
             return;
         }
 
@@ -115,7 +115,7 @@ else
             CurrentUserName,
             CancellationToken.None);
 
-        StatusMessage = "Configuration updated.";
+        StatusMessage = T("Configuration updated.");
     }
 
     private sealed class EditInput

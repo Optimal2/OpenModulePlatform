@@ -1,7 +1,9 @@
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
@@ -21,6 +23,9 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
     [Inject]
     protected RbacService Rbac { get; set; } = default!;
 
+    [Inject]
+    protected IStringLocalizer<SharedResource> Localizer { get; set; } = default!;
+
     protected ClaimsPrincipal CurrentUser { get; private set; } = new(new ClaimsIdentity());
     protected HashSet<string> CurrentPermissions { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     protected bool AuthorizationResolved { get; private set; }
@@ -34,11 +39,17 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
 
     protected string CurrentUserName => CurrentUser.Identity?.Name ?? "unknown";
 
+    protected string T(string key) => Localizer[key];
+
     protected void SetPageTitle(string? pageTitle = null)
     {
-        PageTitle = string.IsNullOrWhiteSpace(pageTitle)
+        var localizedPageTitle = string.IsNullOrWhiteSpace(pageTitle)
+            ? null
+            : T(pageTitle);
+
+        PageTitle = string.IsNullOrWhiteSpace(localizedPageTitle)
             ? WebAppTitle
-            : $"{WebAppTitle} - {pageTitle}";
+            : $"{WebAppTitle} - {localizedPageTitle}";
     }
 
     protected async Task<bool> EnsureAnyPermissionAsync(
@@ -65,7 +76,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             CurrentPermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             IsAuthorized = false;
             AuthorizationResolved = true;
-            AccessDeniedMessage = "Du saknar åtkomst till sidan.";
+            AccessDeniedMessage = T("You do not have access to this page.");
             return false;
         }
 
@@ -79,7 +90,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
         AuthorizationResolved = true;
         AccessDeniedMessage = IsAuthorized
             ? null
-            : "Du saknar behörighet för den här sidan.";
+            : T("You do not have permission to view this page.");
 
         return IsAuthorized;
     }

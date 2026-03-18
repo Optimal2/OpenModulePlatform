@@ -52,7 +52,7 @@ public sealed class EditModel : ExampleServiceAppModulePageModel
 
         SetTitles("Edit configuration");
         await _repo.UpdateConfigurationAsync(Input.ConfigId, Input.ConfigJson, Input.Comment, User?.Identity?.Name ?? "unknown", ct);
-        StatusMessage = "Configuration updated.";
+        StatusMessage = T("Configuration updated.");
         return Page();
     }
 
