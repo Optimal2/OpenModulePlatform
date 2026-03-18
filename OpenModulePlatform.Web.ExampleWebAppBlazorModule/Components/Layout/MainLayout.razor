@@ -1,25 +1,37 @@
 @inherits LayoutComponentBase
 @inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> Options
+@inject Microsoft.AspNetCore.Components.NavigationManager NavigationManager
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@inject Microsoft.Extensions.Localization.IStringLocalizer<OpenModulePlatform.Web.Shared.Localization.SharedResource> L
 
 <div class="page-shell">
     <header class="topbar">
         <div class="brand-wrap">
             <div class="brand">@PortalTitle</div>
-            <div class="brand-subtitle">Example Web App Blazor Module</div>
+            <div class="brand-subtitle">@L["Example Web App Blazor Module"]</div>
         </div>
         <nav class="nav nav--primary">
-            <NavLink href="/" Match="NavLinkMatch.All">Overview</NavLink>
-            <NavLink href="/configurations">Configurations</NavLink>
+            <NavLink href="/" Match="NavLinkMatch.All">@L["Overview"]</NavLink>
+            <NavLink href="/configurations">@L["Configurations"]</NavLink>
         </nav>
-        <div class="user">
-            <AuthorizeView>
-                <Authorized Context="authState">
-                    @authState.User.Identity?.Name
-                </Authorized>
-                <NotAuthorized>
-                    anonymous
-                </NotAuthorized>
-            </AuthorizeView>
+        <div class="toolbar toolbar--header">
+            <div class="language-switcher">
+                <label class="visually-hidden" for="blazor-language-selector">@L["Language"]</label>
+                <select id="blazor-language-selector" value="@CurrentCulture" @onchange="OnLanguageChanged">
+                    <option value="sv-SE">@L["Swedish"]</option>
+                    <option value="en-US">@L["English"]</option>
+                </select>
+            </div>
+            <div class="user">
+                <AuthorizeView>
+                    <Authorized Context="authState">
+                        @authState.User.Identity?.Name
+                    </Authorized>
+                    <NotAuthorized>
+                        @L["anonymous"]
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
         </div>
     </header>
 
@@ -32,4 +44,53 @@
     private string PortalTitle => string.IsNullOrWhiteSpace(Options.Value.Title)
         ? "OpenModulePlatform"
         : Options.Value.Title;
+
+    private string CurrentCulture => System.Globalization.CultureInfo.CurrentUICulture.Name;
+
+    private string ReturnUrl
+    {
+        get
+        {
+            var request = HttpContextAccessor.HttpContext?.Request;
+            if (request is not null)
+            {
+                return $"{request.PathBase}{request.Path}{request.QueryString}";
+            }
+
+            return new Uri(NavigationManager.Uri).PathAndQuery;
+        }
+    }
+
+    private string SetLanguageUrl
+    {
+        get
+        {
+            var pathBase = HttpContextAccessor.HttpContext?.Request.PathBase.Value;
+            if (!string.IsNullOrWhiteSpace(pathBase))
+            {
+                return $"{pathBase}/localization/set-language";
+            }
+
+            return "/localization/set-language";
+        }
+    }
+
+    private void OnLanguageChanged(Microsoft.AspNetCore.Components.ChangeEventArgs args)
+    {
+        var culture = args.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(culture))
+        {
+            return;
+        }
+
+        var targetUrl = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
+            SetLanguageUrl,
+            new Dictionary<string, string?>
+            {
+                ["culture"] = culture,
+                ["returnUrl"] = ReturnUrl
+            });
+
+        NavigationManager.NavigateTo(targetUrl, forceLoad: true);
+    }
 }

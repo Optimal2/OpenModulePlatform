@@ -61,7 +61,7 @@ public sealed class EditModel : ExampleServiceAppModulePageModel
             Input.ArtifactId,
             User?.Identity?.Name ?? "unknown",
             ct);
-        StatusMessage = "App instance updated.";
+        StatusMessage = T("App instance updated.");
         return Page();
     }
 
