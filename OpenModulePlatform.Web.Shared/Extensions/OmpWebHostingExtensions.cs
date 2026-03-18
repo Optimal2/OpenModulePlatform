@@ -39,6 +39,8 @@ public static class OmpWebHostingExtensions
         this WebApplicationBuilder builder,
         string optionsSectionName = WebAppOptions.DefaultSectionName)
     {
+        builder.AddOmpWebLogging();
+
         builder.Services.AddOptions<WebAppOptions>()
             .Bind(builder.Configuration.GetSection(optionsSectionName));
 
@@ -78,9 +80,12 @@ public static class OmpWebHostingExtensions
 
         builder.Services.Configure<RequestLocalizationOptions>(options =>
         {
-            var supportedCultureNames = (webAppOptions.SupportedCultures?.Length ?? 0) > 0
-                ? webAppOptions.SupportedCultures
-                : [webAppOptions.DefaultCulture];
+            var supportedCultureNames = webAppOptions.SupportedCultures;
+
+            if (supportedCultureNames is null || supportedCultureNames.Length == 0)
+            {
+                supportedCultureNames = [webAppOptions.DefaultCulture];
+            }
 
             var supportedCultures = supportedCultureNames
                 .Where(x => !string.IsNullOrWhiteSpace(x))

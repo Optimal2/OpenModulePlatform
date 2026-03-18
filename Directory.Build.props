@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <NLogPackageVersion>6.1.2</NLogPackageVersion>
+  </PropertyGroup>
+</Project>
