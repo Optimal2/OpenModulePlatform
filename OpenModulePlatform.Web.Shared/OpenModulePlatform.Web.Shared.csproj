@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="8.0.24" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+    <PackageReference Include="NLog.Web.AspNetCore" Version="$(NLogPackageVersion)" />
   </ItemGroup>
 
   <ItemGroup>

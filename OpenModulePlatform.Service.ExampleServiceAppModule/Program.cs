@@ -1,10 +1,10 @@
+using Microsoft.Extensions.Logging;
 // File: OpenModulePlatform.Service.ExampleServiceAppModule/Program.cs
 using OpenModulePlatform.Service.ExampleServiceAppModule.Models;
 using OpenModulePlatform.Service.ExampleServiceAppModule.Services;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.EventLog;
+using NLog.Extensions.Hosting;
 
 var builder = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
@@ -13,9 +13,9 @@ var builder = Host.CreateDefaultBuilder(args)
     })
     .ConfigureLogging(logging =>
     {
-        if (OperatingSystem.IsWindows())
-            logging.AddFilter<EventLogLoggerProvider>(null, LogLevel.Error);
+        logging.ClearProviders();
     })
+    .UseNLog()
     .ConfigureServices((context, services) =>
     {
         services.Configure<WorkerSettings>(context.Configuration.GetSection("Worker"));
