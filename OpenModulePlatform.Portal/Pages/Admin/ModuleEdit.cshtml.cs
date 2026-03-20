@@ -39,11 +39,11 @@ public sealed class ModuleEditModel : OmpPortalPageModel
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
-    public IReadOnlyList<OptionItem> ModuleTypeOptions { get; } =
+    public IReadOnlyList<OptionItem> ModuleTypeOptions =>
     [
-        Opt("PortalModule", "Portal module"),
-        Opt("WebAppModule", "Web app module"),
-        Opt("HostAppModule", "Host app module")
+        Opt("PortalModule", T("Portal module")),
+        Opt("WebAppModule", T("Web app module")),
+        Opt("HostAppModule", T("Host app module"))
     ];
 
     [TempData]
@@ -128,7 +128,7 @@ public sealed class ModuleEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The module could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The module could not be saved.")));
 
             return Page();
         }
@@ -152,7 +152,7 @@ public sealed class ModuleEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The module could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The module could not be deleted.")));
 
             return Page();
         }
@@ -163,20 +163,18 @@ public sealed class ModuleEditModel : OmpPortalPageModel
         if (!KeyPattern.IsMatch(Input.ModuleKey ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.ModuleKey),
-                "Use a stable key with letters, digits, dash, underscore or dot.");
+                nameof(Input.ModuleKey), T("Use a stable key with letters, digits, dash, underscore or dot."));
         }
 
         if (!SchemaPattern.IsMatch(Input.SchemaName ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.SchemaName),
-                "Schema names must start with a letter and then use letters, digits or underscore.");
+                nameof(Input.SchemaName), T("Schema names must start with a letter and then use letters, digits or underscore."));
         }
 
         if (string.IsNullOrWhiteSpace(Input.ModuleType))
         {
-            ModelState.AddModelError(nameof(Input.ModuleType), "Select a module type.");
+            ModelState.AddModelError(nameof(Input.ModuleType), T("Select a module type."));
         }
     }
 

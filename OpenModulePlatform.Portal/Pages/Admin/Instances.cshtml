@@ -3,33 +3,30 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>Instances</h2>
-        <p class="lede">
-            OMP instances are the top-level environments. Instance templates remain
-            optional and primarily belong to the automation workflow.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@L["Instances"]</h2>
+        <p class="lede">@L["OMP instances are the top-level environments. Instance templates remain optional and primarily belong to the automation workflow."]</p>
     </div>
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/instanceedit">Create instance</a>
+    <a class="action-link" href="~/admin/instanceedit">@L["Create instance"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No instances found.</div>
+    <div class="empty-state">@L["No instances found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Instance key</th>
-                <th>Display name</th>
-                <th>Instance template</th>
-                <th>Enabled</th>
-                            <th>Actions</th>
+                <th>@L["Instance key"]</th>
+                <th>@L["Display name"]</th>
+                <th>@L["Instance template"]</th>
+                <th>@L["Enabled"]</th>
+                            <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -39,8 +36,8 @@ else
                 <td><code>@row.InstanceKey</code></td>
                 <td>@row.DisplayName</td>
                 <td>@row.InstanceTemplateKey</td>
-                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                <td><a class="action-link" href="~/admin/instanceedit?id=@row.InstanceId">Edit</a></td>
+                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td><a class="action-link" href="~/admin/instanceedit?id=@row.InstanceId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>

@@ -3,48 +3,48 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Security and access</div>
-        <h2>RBAC</h2>
-        <p class="lede">Manage roles, permissions and principal assignments from Portal instead of editing the database directly.</p>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@L["RBAC"]</h2>
+        <p class="lede">@L["Manage roles, permissions and principal assignments from Portal instead of editing the database directly."]</p>
     </div>
 </section>
 
 <div class="card-grid bottom-gap">
     <div class="card">
         <div class="metric">@Model.RoleCount</div>
-        <div>Roles</div>
+        <div>@L["Roles"]</div>
         <div class="muted small-text top-gap">
-            Named access bundles that can carry multiple permissions and principals.
+            @L["Named access bundles that can carry multiple permissions and principals."]
         </div>
     </div>
 
     <div class="card">
         <div class="metric">@Model.PermissionCount</div>
-        <div>Permissions</div>
+        <div>@L["Permissions"]</div>
         <div class="muted small-text top-gap">
-            Low-level capabilities granted to apps and portal areas.
+            @L["Low-level capabilities granted to apps and portal areas."]
         </div>
     </div>
 </div>
 
 <div class="section-grid section-grid--wide">
     <section class="card section-card">
-        <div class="eyebrow">Role administration</div>
-        <h3>Manage roles</h3>
-        <p class="muted">Create roles, update descriptions, assign permissions and attach principals.</p>
+        <div class="eyebrow">@L["Role administration"]</div>
+        <h3>@L["Manage roles"]</h3>
+        <p class="muted">@L["Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable."]</p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/rbac/roles">Open roles</a>
-            <a class="action-link" href="~/admin/rbac/role">Create role</a>
+            <a class="action-link" href="~/admin/rbac/roles">@L["Open roles"]</a>
+            <a class="action-link" href="~/admin/rbac/role">@L["Create role"]</a>
         </div>
     </section>
 
     <section class="card section-card">
-        <div class="eyebrow">Permission catalog</div>
-        <h3>Manage permissions</h3>
-        <p class="muted">Create permissions once and reuse them across roles and example modules.</p>
+        <div class="eyebrow">@L["Permission catalog"]</div>
+        <h3>@L["Manage permissions"]</h3>
+        <p class="muted">@L["Permissions are stable capability names used by roles and apps. Prefer precise names that do not require frequent renaming."]</p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/rbac/permissions">Open permissions</a>
-            <a class="action-link" href="~/admin/rbac/permissionedit">Create permission</a>
+            <a class="action-link" href="~/admin/rbac/permissions">@L["Open permissions"]</a>
+            <a class="action-link" href="~/admin/rbac/permissionedit">@L["Create permission"]</a>
         </div>
     </section>
 </div>

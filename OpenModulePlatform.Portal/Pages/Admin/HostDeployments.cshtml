@@ -3,30 +3,27 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Automation</div>
-        <h2>Host deployments</h2>
-        <p class="lede">
-            Deployment records track rollout requests and execution status. They are
-            kept outside the main manual topology workflow.
-        </p>
+        <div class="eyebrow">@L["Automation"]</div>
+        <h2>@L["HostDeployments.Title"]</h2>
+        <p class="lede">@L["HostDeployments.Lede"]</p>
     </div>
 </section>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No host deployments found.</div>
+    <div class="empty-state">@L["No host deployments found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Host key</th>
-                <th>Host template</th>
-                <th>Status</th>
-                <th>Requested by</th>
-                <th>Requested UTC</th>
-                <th>Completed UTC</th>
+                <th>@L["Host key"]</th>
+                <th>@L["Host template"]</th>
+                <th>@L["Status"]</th>
+                <th>@L["Requested by"]</th>
+                <th>@L["Requested UTC"]</th>
+                <th>@L["Completed UTC"]</th>
             </tr>
         </thead>
         <tbody>

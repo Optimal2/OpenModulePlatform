@@ -121,7 +121,7 @@ public sealed class ModuleInstanceEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The module instance could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The module instance could not be saved.")));
 
             return Page();
         }
@@ -147,7 +147,7 @@ public sealed class ModuleInstanceEditModel : OmpPortalPageModel
             SetTitles("Edit module instance");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The module instance could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The module instance could not be deleted.")));
 
             return Page();
         }
@@ -163,19 +163,18 @@ public sealed class ModuleInstanceEditModel : OmpPortalPageModel
     {
         if (Input.InstanceId == Guid.Empty)
         {
-            ModelState.AddModelError(nameof(Input.InstanceId), "Select an instance.");
+            ModelState.AddModelError(nameof(Input.InstanceId), T("Select an instance."));
         }
 
         if (Input.ModuleId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.ModuleId), "Select a module.");
+            ModelState.AddModelError(nameof(Input.ModuleId), T("Select a module."));
         }
 
         if (!KeyPattern.IsMatch(Input.ModuleInstanceKey ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.ModuleInstanceKey),
-                "Use a stable key with letters, digits, dash, underscore or dot.");
+                nameof(Input.ModuleInstanceKey), T("Use a stable key with letters, digits, dash, underscore or dot."));
         }
     }
 

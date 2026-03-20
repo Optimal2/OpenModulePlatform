@@ -3,29 +3,26 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Automation</div>
-        <h2>Host deployment assignments</h2>
-        <p class="lede">
-            Assignments connect hosts to deployment planning. This is intentionally
-            separated from the main manual admin workflow.
-        </p>
+        <div class="eyebrow">@L["Automation"]</div>
+        <h2>@L["HostDeploymentAssignments.Title"]</h2>
+        <p class="lede">@L["HostDeploymentAssignments.Lede"]</p>
     </div>
 </section>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No host deployment assignments found.</div>
+    <div class="empty-state">@L["No host deployment assignments found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Host key</th>
-                <th>Host template</th>
-                <th>Active</th>
-                <th>Assigned by</th>
-                <th>Assigned UTC</th>
+                <th>@L["Host key"]</th>
+                <th>@L["Host template"]</th>
+                <th>@L["Active"]</th>
+                <th>@L["Assigned by"]</th>
+                <th>@L["Assigned UTC"]</th>
             </tr>
         </thead>
         <tbody>
@@ -34,7 +31,7 @@ else
             <tr>
                 <td><code>@row.HostKey</code></td>
                 <td><code>@row.HostTemplateKey</code></td>
-                <td><span class="pill">@(row.IsActive ? "Active" : "Inactive")</span></td>
+                <td><span class="pill">@(row.IsActive ? L["Active"] : L["Inactive"])</span></td>
                 <td>@row.AssignedBy</td>
                 <td>@row.AssignedUtc.ToString("u")</td>
             </tr>

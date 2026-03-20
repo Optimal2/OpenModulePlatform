@@ -37,11 +37,11 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AppOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> PackageTypeOptions { get; } =
+    public IReadOnlyList<OptionItem> PackageTypeOptions =>
     [
-        Opt("folder", "Folder"),
-        Opt("zip", "Zip"),
-        Opt("nupkg", "NuGet package")
+        Opt("folder", T("Folder")),
+        Opt("zip", T("Zip")),
+        Opt("nupkg", T("NuGet package"))
     ];
 
     [TempData]
@@ -128,7 +128,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The artifact could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The artifact could not be saved.")));
 
             return Page();
         }
@@ -154,7 +154,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
             SetTitles("Edit artifact");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The artifact could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The artifact could not be deleted.")));
 
             return Page();
         }
@@ -169,19 +169,18 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
     {
         if (Input.AppId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.AppId), "Select an app.");
+            ModelState.AddModelError(nameof(Input.AppId), T("Select an app."));
         }
 
         if (string.IsNullOrWhiteSpace(Input.Version))
         {
-            ModelState.AddModelError(nameof(Input.Version), "Version is required.");
+            ModelState.AddModelError(nameof(Input.Version), T("Version is required."));
         }
 
         if (!string.IsNullOrWhiteSpace(Input.Sha256) && !ShaPattern.IsMatch(Input.Sha256))
         {
             ModelState.AddModelError(
-                nameof(Input.Sha256),
-                "SHA-256 must be 64 hexadecimal characters.");
+                nameof(Input.Sha256), T("SHA-256 must be 64 hexadecimal characters."));
         }
     }
 

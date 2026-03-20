@@ -3,8 +3,8 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>App instances</h2>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@L["App instances"]</h2>
         <p class="lede">
             App instances are the runtime-facing layer. They connect app definitions
             to hosts, artifacts, route or installation data and observed runtime state.
@@ -13,29 +13,29 @@
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/appinstanceedit">Create app instance</a>
+    <a class="action-link" href="~/admin/appinstanceedit">@L["Create app instance"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No app instances found.</div>
+    <div class="empty-state">@L["No app instances found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Instance</th>
-                <th>Module instance</th>
-                <th>App</th>
-                <th>App instance key</th>
-                <th>Host</th>
-                <th>Route</th>
-                <th>Installation</th>
-                <th>Artifact</th>
-                <th>Allowed</th>
-                <th>Last seen</th>
-                            <th>Actions</th>
+                <th>@L["Instance"]</th>
+                <th>@L["Module instance"]</th>
+                <th>@L["App"]</th>
+                <th>@L["App instance key"]</th>
+                <th>@L["Host"]</th>
+                <th>@L["Route"]</th>
+                <th>@L["Installation"]</th>
+                <th>@L["Artifact"]</th>
+                <th>@L["Allowed"]</th>
+                <th>@L["Last seen"]</th>
+                            <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -50,9 +50,9 @@ else
                 <td>@row.RoutePath</td>
                 <td>@row.InstallationName</td>
                 <td>@row.ArtifactVersion</td>
-                <td><span class="pill">@(row.IsAllowed ? "Allowed" : "Blocked")</span></td>
+                <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
-                <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">Edit</a></td>
+                <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>

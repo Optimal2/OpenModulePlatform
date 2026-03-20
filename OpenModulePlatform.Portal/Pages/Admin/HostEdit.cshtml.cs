@@ -37,26 +37,26 @@ public sealed class HostEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> InstanceOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> EnvironmentOptions { get; } =
+    public IReadOnlyList<OptionItem> EnvironmentOptions =>
     [
-        Opt("dev", "Development"),
-        Opt("test", "Test"),
-        Opt("stage", "Stage"),
-        Opt("prod", "Production")
+        Opt("dev", T("Development")),
+        Opt("test", T("Test")),
+        Opt("stage", T("Stage")),
+        Opt("prod", T("Production"))
     ];
 
-    public IReadOnlyList<OptionItem> OsFamilyOptions { get; } =
+    public IReadOnlyList<OptionItem> OsFamilyOptions =>
     [
-        Opt("Windows", "Windows"),
-        Opt("Linux", "Linux"),
-        Opt("macOS", "macOS")
+        Opt("Windows", T("Windows")),
+        Opt("Linux", T("Linux")),
+        Opt("macOS", T("macOS"))
     ];
 
-    public IReadOnlyList<OptionItem> ArchitectureOptions { get; } =
+    public IReadOnlyList<OptionItem> ArchitectureOptions =>
     [
-        Opt("x64", "x64"),
-        Opt("arm64", "arm64"),
-        Opt("x86", "x86")
+        Opt("x64", T("x64")),
+        Opt("arm64", T("arm64")),
+        Opt("x86", T("x86"))
     ];
 
     [TempData]
@@ -145,13 +145,13 @@ public sealed class HostEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The host could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The host could not be saved.")));
 
             return Page();
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            ModelState.AddModelError(string.Empty, T(ex.Message));
             return Page();
         }
     }
@@ -176,7 +176,7 @@ public sealed class HostEditModel : OmpPortalPageModel
             SetTitles("Edit host");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The host could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The host could not be deleted.")));
 
             return Page();
         }
@@ -191,14 +191,13 @@ public sealed class HostEditModel : OmpPortalPageModel
     {
         if (Input.InstanceId == Guid.Empty)
         {
-            ModelState.AddModelError(nameof(Input.InstanceId), "Select an instance.");
+            ModelState.AddModelError(nameof(Input.InstanceId), T("Select an instance."));
         }
 
         if (!KeyPattern.IsMatch(Input.HostKey ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.HostKey),
-                "Use a stable host key with letters, digits, dash, underscore or dot.");
+                nameof(Input.HostKey), T("Use a stable host key with letters, digits, dash, underscore or dot."));
         }
 
         if (!string.IsNullOrWhiteSpace(Input.BaseUrl))
@@ -207,15 +206,15 @@ public sealed class HostEditModel : OmpPortalPageModel
             if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
                 || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
-                ModelState.AddModelError(nameof(Input.BaseUrl), "Base URL must be an absolute http or https URL.");
+                ModelState.AddModelError(nameof(Input.BaseUrl), T("Base URL must be an absolute http or https URL."));
             }
             else if (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
             {
-                ModelState.AddModelError(nameof(Input.BaseUrl), "Base URL must not contain query string or fragment.");
+                ModelState.AddModelError(nameof(Input.BaseUrl), T("Base URL must not contain query string or fragment."));
             }
             else if (uri.AbsolutePath is not "/" and not "")
             {
-                ModelState.AddModelError(nameof(Input.BaseUrl), "Base URL should only contain protocol, host and optional port.");
+                ModelState.AddModelError(nameof(Input.BaseUrl), T("Base URL should only contain protocol, host and optional port."));
             }
         }
     }

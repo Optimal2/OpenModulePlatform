@@ -109,7 +109,7 @@ public sealed class PermissionEditModel : Pages.Admin.OmpPortalPageModel
             SetTitles(IsCreate ? "Create permission" : "Edit permission");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The permission could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The permission could not be saved.")));
 
             return Page();
         }
@@ -140,7 +140,7 @@ public sealed class PermissionEditModel : Pages.Admin.OmpPortalPageModel
             SetTitles("Edit permission");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The permission could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The permission could not be deleted.")));
 
             return Page();
         }
@@ -163,8 +163,7 @@ public sealed class PermissionEditModel : Pages.Admin.OmpPortalPageModel
         if (!NamePattern.IsMatch(Input.Name ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.Name),
-                "Use letters, digits, dash, underscore or dot. Keep permission names stable.");
+                nameof(Input.Name), T("Use letters, digits, dash, underscore or dot. Keep permission names stable."));
         }
     }
 

@@ -3,12 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>@(Model.IsCreate ? "Create artifact" : "Edit artifact")</h2>
-        <p class="lede">
-            Artifacts are deployable outputs of an app definition.
-            Keep the artifact metadata precise so app instances can reference the right build.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@(Model.IsCreate ? L["Create artifact"] : L["Edit artifact"])</h2>
+        <p class="lede">@L["Artifacts are deployable outputs of an app definition. Keep the artifact metadata precise so app instances can reference the right build."]</p>
     </div>
 </section>
 
@@ -29,7 +26,7 @@
         <div class="form-field">
             <label asp-for="Input.AppId"></label>
             <select asp-for="Input.AppId">
-                <option value="">Select app</option>
+                <option value="">@L["Select app"]</option>
                 @foreach (var option in Model.AppOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -47,7 +44,7 @@
                 }
             </select>
             <div class="field-help">
-                Use a known package type when possible so later deployment automation can behave predictably.
+                @L["Use a known package type when possible so later deployment automation can behave predictably."]
             </div>
         </div>
     </div>
@@ -62,7 +59,7 @@
         <div class="form-field">
             <label asp-for="Input.TargetName"></label>
             <input asp-for="Input.TargetName" />
-            <div class="field-help">Optional RID/target such as <code>win-x64</code>.</div>
+            <div class="field-help">@L["Optional RID/target such as win-x64."]</div>
         </div>
 
         <div class="form-field checkbox-row checkbox-row--boxed">
@@ -74,19 +71,19 @@
     <div class="form-field">
         <label asp-for="Input.RelativePath"></label>
         <input asp-for="Input.RelativePath" />
-        <div class="field-help">Relative path inside your artifact repository or release output.</div>
+        <div class="field-help">@L["Relative path inside your artifact repository or release output."]</div>
     </div>
 
     <div class="form-field">
         <label asp-for="Input.Sha256"></label>
         <input asp-for="Input.Sha256" />
-        <div class="field-help">Optional checksum used for later integrity checks.</div>
+        <div class="field-help">@L["Optional checksum used for later integrity checks."]</div>
         <span asp-validation-for="Input.Sha256" class="field-validation-error"></span>
     </div>
 
     <div class="toolbar">
-        <button type="submit">Save artifact</button>
-        <a class="action-link" href="~/admin/artifacts">Back to artifacts</a>
+        <button type="submit">@L["Save artifact"]</button>
+        <a class="action-link" href="~/admin/artifacts">@L["Back to artifacts"]</a>
     </div>
 </form>
 
@@ -96,10 +93,10 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('Delete this artifact? App instances depending on it must be updated first.');">
+        onsubmit="return confirm('@L["Delete this artifact? App instances depending on it must be updated first."]');">
         <input type="hidden" asp-for="Input.ArtifactId" />
-        <h3>Danger zone</h3>
-        <p class="muted">Delete is blocked while app instances still point at this artifact.</p>
-        <button type="submit" class="btn btn-danger">Delete artifact</button>
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Delete is blocked while app instances still point at this artifact."]</p>
+        <button type="submit" class="btn btn-danger">@L["Delete artifact"]</button>
     </form>
 }

@@ -3,58 +3,53 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Advanced admin</div>
-        <h2>Automation and templates</h2>
-        <p class="lede">
-            These pages are separated from the main admin workflow because they belong to template-driven rollout,
-            deployment planning and future HostAgent automation.
-            For manual setup, start with instances, hosts, modules, apps and artifacts.
-        </p>
+        <div class="eyebrow">@L["Advanced admin"]</div>
+        <h2>@L["Automation and templates"]</h2>
+        <p class="lede">@L["These pages are separated from the main admin workflow because they belong to template-driven rollout, deployment planning and future HostAgent automation. For manual setup, start with instances, hosts, modules, apps and artifacts."]</p>
     </div>
 </section>
 
 <div class="section-grid section-grid--wide">
     <section class="card section-card">
-        <h3>Template model</h3>
-        <p class="muted">Use these pages when defining desired topology for automated rollout.</p>
+        <h3>@L["Template model"]</h3>
+        <p class="muted">@L["Use these pages when defining desired topology for automated rollout."]</p>
         <div class="link-list">
-            <a class="action-link" href="~/admin/instancetemplates">Instance templates</a>
-            <a class="action-link" href="~/admin/hosttemplates">Host templates</a>
+            <a class="action-link" href="~/admin/instancetemplates">@L["Instance templates"]</a>
+            <a class="action-link" href="~/admin/hosttemplates">@L["Host templates"]</a>
         </div>
         <div class="muted small-text top-gap">
-            Topology detail pages for <code>InstanceTemplateHosts</code>,
-            <code>InstanceTemplateModuleInstances</code> and <code>InstanceTemplateAppInstances</code>
+            @L["Topology detail pages for InstanceTemplateHosts, InstanceTemplateModuleInstances and InstanceTemplateAppInstances."]
             are not exposed as dedicated admin pages yet in this repo.
         </div>
     </section>
 
     <section class="card section-card">
-        <h3>Deployment planning</h3>
-        <p class="muted">These pages are related to deployment orchestration and future HostAgent-driven execution.</p>
+        <h3>@L["Deployment planning"]</h3>
+        <p class="muted">@L["These pages are related to deployment orchestration and future HostAgent-driven execution."]</p>
         <div class="link-list">
-            <a class="action-link" href="~/admin/hostdeploymentassignments">Host deployment assignments</a>
-            <a class="action-link" href="~/admin/hostdeployments">Host deployments</a>
+            <a class="action-link" href="~/admin/hostdeploymentassignments">@L["Host deployment assignments"]</a>
+            <a class="action-link" href="~/admin/hostdeployments">@L["Host deployments"]</a>
         </div>
     </section>
 
     <section class="card section-card">
-        <h3>Current counts</h3>
+        <h3>@L["Current counts"]</h3>
         <div class="mini-metrics">
             <div>
                 <span class="metric-inline">@Model.Metrics.InstanceCount</span>
-                <span>Instances</span>
+                <span>@L["Instances"]</span>
             </div>
             <div>
                 <span class="metric-inline">@Model.Metrics.HostCount</span>
-                <span>Hosts</span>
+                <span>@L["Hosts"]</span>
             </div>
             <div>
                 <span class="metric-inline">@Model.Metrics.ModuleInstanceCount</span>
-                <span>Module instances</span>
+                <span>@L["Module instances"]</span>
             </div>
             <div>
                 <span class="metric-inline">@Model.Metrics.AppInstanceCount</span>
-                <span>App instances</span>
+                <span>@L["App instances"]</span>
             </div>
         </div>
     </section>

@@ -3,12 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Security and access</div>
-        <h2>@(Model.IsCreate ? "Create role" : "Edit role")</h2>
-        <p class="lede">
-            Roles are the main RBAC editing surface.
-            Add permissions and principals here so access remains grouped and auditable.
-        </p>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@(Model.IsCreate ? L["Create role"] : L["Edit role"])</h2>
+        <p class="lede">@L["Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable."]</p>
     </div>
 </section>
 
@@ -30,9 +27,9 @@
             <label asp-for="Input.Name"></label>
             <input asp-for="Input.Name" />
             <div class="field-help">
-                Use a stable role name, for example
+                @L["Use a stable role name, for example"]
                 <span class="info-badge">PortalAdmins</span>
-                or <span class="info-badge">ExampleServiceAppModule.Operators</span>.
+                <span class="muted">/</span> <span class="info-badge">ExampleServiceAppModule.Operators</span>.
             </div>
             <span asp-validation-for="Input.Name" class="field-validation-error"></span>
         </div>
@@ -40,14 +37,14 @@
         <div class="form-field">
             <label asp-for="Input.Description"></label>
             <input asp-for="Input.Description" />
-            <div class="field-help">Short explanation of who should receive this role.</div>
+            <div class="field-help">@L["Short explanation of who should receive this role."]</div>
             <span asp-validation-for="Input.Description" class="field-validation-error"></span>
         </div>
     </div>
 
     <div class="toolbar">
-        <button type="submit">Save role</button>
-        <a class="action-link" href="~/admin/rbac/roles">Back to roles</a>
+        <button type="submit">@L["Save role"]</button>
+        <a class="action-link" href="~/admin/rbac/roles">@L["Back to roles"]</a>
     </div>
 </form>
 
@@ -55,22 +52,22 @@
 {
     <div class="section-grid section-grid--wide bottom-gap">
         <section class="card section-card">
-            <div class="eyebrow">Role permissions</div>
-            <h3>Assigned permissions</h3>
+            <div class="eyebrow">@L["Role administration"]</div>
+            <h3>@L["Assigned permissions"]</h3>
             <p class="muted">
-                These permissions are granted whenever the role is resolved for a user or service identity.
+                @L["These permissions are granted whenever the role is resolved for a user or service identity."]
             </p>
 
             @if (Model.Permissions.Count == 0)
             {
-                <div class="empty-state top-gap">No permissions assigned yet.</div>
+                <div class="empty-state top-gap">@L["No permissions assigned yet."]</div>
             }
             else
             {
                 <table class="grid compact-grid">
                     <thead>
                         <tr>
-                            <th>Permission</th>
+                            <th>@L["Permission"]</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -83,7 +80,7 @@
                                     <form method="post" asp-page-handler="RemovePermission" class="inline-form">
                                         <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
                                         <input type="hidden" name="permissionId" value="@row.PermissionId" />
-                                        <button type="submit" class="btn btn-danger-subtle">Remove</button>
+                                        <button type="submit" class="btn btn-danger-subtle">@L["Remove"]</button>
                                     </form>
                                 </td>
                             </tr>
@@ -95,9 +92,9 @@
             <form method="post" asp-page-handler="AddPermission" class="top-gap form-grid-inline">
                 <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
                 <div class="form-field grow">
-                    <label for="permissionId">Add permission</label>
+                    <label for="permissionId">@L["Add permission"]</label>
                     <select id="permissionId" name="permissionId">
-                        <option value="">Select permission</option>
+                        <option value="">@L["Select permission"]</option>
                         @foreach (var option in Model.AvailablePermissionOptions)
                         {
                             <option value="@option.Value">@option.Label</option>
@@ -105,27 +102,27 @@
                     </select>
                 </div>
                 <div class="form-field actions">
-                    <button type="submit">Add permission</button>
+                    <button type="submit">@L["Add permission"]</button>
                 </div>
             </form>
         </section>
 
         <section class="card section-card">
-            <div class="eyebrow">Role principals</div>
-            <h3>Assigned principals</h3>
-            <p class="muted">Bind users, groups or service identities to the role. Prefer groups where possible.</p>
+            <div class="eyebrow">@L["Principals"]</div>
+            <h3>@L["Assigned principals"]</h3>
+            <p class="muted">@L["Bind users, groups or service identities to the role. Prefer groups where possible."]</p>
 
             @if (Model.Principals.Count == 0)
             {
-                <div class="empty-state top-gap">No principals assigned yet.</div>
+                <div class="empty-state top-gap">@L["No principals assigned yet."]</div>
             }
             else
             {
                 <table class="grid compact-grid">
                     <thead>
                         <tr>
-                            <th>Type</th>
-                            <th>Principal</th>
+                            <th>@L["Type"]</th>
+                            <th>@L["Principal"]</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -133,14 +130,14 @@
                         @foreach (var row in Model.Principals)
                         {
                             <tr>
-                                <td>@row.PrincipalType</td>
+                                <td>@L[row.PrincipalType]</td>
                                 <td>@row.Principal</td>
                                 <td>
                                     <form method="post" asp-page-handler="RemovePrincipal" class="inline-form">
                                         <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
                                         <input type="hidden" name="principalType" value="@row.PrincipalType" />
                                         <input type="hidden" name="principal" value="@row.Principal" />
-                                        <button type="submit" class="btn btn-danger-subtle">Remove</button>
+                                        <button type="submit" class="btn btn-danger-subtle">@L["Remove"]</button>
                                     </form>
                                 </td>
                             </tr>
@@ -153,7 +150,7 @@
                 <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
 
                 <div class="form-field">
-                    <label for="principalType">Principal type</label>
+                    <label for="principalType">@L["Principal type"]</label>
                     <select id="principalType" name="principalType">
                         @foreach (var option in Model.PrincipalTypeOptions)
                         {
@@ -163,10 +160,10 @@
                 </div>
 
                 <div class="form-field grow">
-                    <label for="principal">Principal</label>
+                    <label for="principal">@L["Principal"]</label>
                     <input id="principal" name="principal" value="@Model.NewPrincipal" />
                     <div class="field-help">
-                        Examples:
+                        @L["Examples:"]
                         <span class="info-badge">DOMAIN\User</span>,
                         <span class="info-badge">DOMAIN\Group</span>,
                         <span class="info-badge">svc-omp-hostagent</span>.
@@ -174,7 +171,7 @@
                 </div>
 
                 <div class="form-field actions">
-                    <button type="submit">Add principal</button>
+                    <button type="submit">@L["Add principal"]</button>
                 </div>
             </form>
         </section>
@@ -184,10 +181,10 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('Delete this role? Linked role assignments will also be removed.');">
+        onsubmit="return confirm('@L["Delete this role? Linked role assignments will also be removed."]');">
         <input type="hidden" asp-for="Input.RoleId" />
-        <h3>Danger zone</h3>
-        <p class="muted">Deleting a role removes all principal and permission links for that role.</p>
-        <button type="submit" class="btn btn-danger">Delete role</button>
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Deleting a role removes all principal and permission links for that role."]</p>
+        <button type="submit" class="btn btn-danger">@L["Delete role"]</button>
     </form>
 }

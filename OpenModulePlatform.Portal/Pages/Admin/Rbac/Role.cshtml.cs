@@ -49,12 +49,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AvailablePermissionOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> PrincipalTypeOptions { get; } =
+    public IReadOnlyList<OptionItem> PrincipalTypeOptions =>
     [
-        new() { Value = "User", Label = "User" },
-        new() { Value = "Group", Label = "Group" },
-        new() { Value = "ServiceAccount", Label = "ServiceAccount" },
-        new() { Value = "Host", Label = "Host" }
+        new() { Value = "User", Label = T("User") },
+        new() { Value = "Group", Label = T("Group") },
+        new() { Value = "ServiceAccount", Label = T("ServiceAccount") },
+        new() { Value = "Host", Label = T("Host") }
     ];
 
     public async Task<IActionResult> OnGet(int? roleId, CancellationToken ct)
@@ -125,7 +125,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             SetTitles(IsCreate ? "Create role" : "Edit role");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The role could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The role could not be saved.")));
 
             return Page();
         }
@@ -148,7 +148,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         {
             await LoadDetailsAsync(ct);
             SetTitles("Edit role");
-            ModelState.AddModelError(string.Empty, "Select a permission to add.");
+            ModelState.AddModelError(string.Empty, T("Select a permission to add."));
             return Page();
         }
 
@@ -196,8 +196,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             await LoadDetailsAsync(ct);
             SetTitles("Edit role");
             ModelState.AddModelError(
-                string.Empty,
-                "Select a principal type and enter a principal value.");
+                string.Empty, T("Select a principal type and enter a principal value."));
             NewPrincipal = principal;
             return Page();
         }
@@ -206,7 +205,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         {
             await LoadDetailsAsync(ct);
             SetTitles("Edit role");
-            ModelState.AddModelError(string.Empty, "Principal is too long.");
+            ModelState.AddModelError(string.Empty, T("Principal is too long."));
             NewPrincipal = principal;
             return Page();
         }
@@ -259,7 +258,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             SetTitles("Edit role");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The role could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The role could not be deleted.")));
 
             return Page();
         }
@@ -295,8 +294,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         if (!NamePattern.IsMatch(Input.Name ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.Name),
-                "Use letters, digits, dash, underscore or dot. Keep the role name stable.");
+                nameof(Input.Name), T("Use letters, digits, dash, underscore or dot. Keep the role name stable."));
         }
     }
 
