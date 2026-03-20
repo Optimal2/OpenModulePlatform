@@ -3,28 +3,25 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Automation</div>
-        <h2>Instance templates</h2>
-        <p class="lede">
-            Instance templates belong to the future automation path. They describe
-            desired topology rather than the manually managed live runtime.
-        </p>
+        <div class="eyebrow">@L["Automation"]</div>
+        <h2>@L["Instance templates"]</h2>
+        <p class="lede">@L["Instance templates belong to the future automation path. They describe desired topology rather than the manually managed live runtime."]</p>
     </div>
 </section>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No instance templates found.</div>
+    <div class="empty-state">@L["No instance templates found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Template key</th>
-                <th>Display name</th>
-                <th>Enabled</th>
-                <th>Description</th>
+                <th>@L["Template key"]</th>
+                <th>@L["Display name"]</th>
+                <th>@L["Enabled"]</th>
+                <th>@L["Description"]</th>
             </tr>
         </thead>
         <tbody>
@@ -33,7 +30,7 @@ else
             <tr>
                 <td><code>@row.TemplateKey</code></td>
                 <td>@row.DisplayName</td>
-                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
                 <td>@row.Description</td>
             </tr>
         }

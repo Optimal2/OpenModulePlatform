@@ -3,30 +3,27 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Security and access</div>
-        <h2>Permissions</h2>
-        <p class="lede">
-            Permissions are low-level capability names.
-            Keep them stable and descriptive so roles remain understandable.
-        </p>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@L["Permissions"]</h2>
+        <p class="lede">@L["Permissions are low-level capability names. Keep them stable and descriptive so roles remain understandable."]</p>
     </div>
     <div class="toolbar">
-        <a class="action-link" href="~/admin/rbac/permissionedit">Create permission</a>
+        <a class="action-link" href="~/admin/rbac/permissionedit">@L["Create permission"]</a>
     </div>
 </section>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="card empty-state">No permissions have been created yet.</div>
+    <div class="card empty-state">@L["No permissions have been created yet."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Used by roles</th>
+                <th>@L["Name"]</th>
+                <th>@L["Description"]</th>
+                <th>@L["Used by roles"]</th>
                 <th></th>
             </tr>
         </thead>
@@ -38,7 +35,7 @@ else
                     <td>@row.Description</td>
                     <td><span class="pill">@row.RoleCount</span></td>
                     <td>
-                        <a class="action-link" href="~/admin/rbac/permissionedit?id=@row.PermissionId">Edit</a>
+                        <a class="action-link" href="~/admin/rbac/permissionedit?id=@row.PermissionId">@L["Edit"]</a>
                     </td>
                 </tr>
             }

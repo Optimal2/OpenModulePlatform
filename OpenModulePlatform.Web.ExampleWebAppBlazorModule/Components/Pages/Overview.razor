@@ -6,7 +6,7 @@
 
 @if (!AuthorizationResolved)
 {
-    <div class="empty-state">@T("Loading overview...")</div>
+    <div class="empty-state">Laddar översikt...</div>
 }
 else if (!IsAuthorized)
 {
@@ -16,31 +16,33 @@ else
 {
     <div class="page-header">
         <div>
-            <div class="eyebrow">@T("Example module")</div>
-            <h1>@T("Example Web App Blazor Module")</h1>
+            <div class="eyebrow">Example module</div>
+            <h1>Example Web App Blazor Module</h1>
             <p class="lede">
-                @T("Neutral reference module for web flows in OMP. The page shows a module overview and links onward to the module's configurations.")
+                Neutral referensmodul för webbflöden i OMP. Sidan visar modulöversikt
+                och länkar vidare till modulens konfigurationer.
             </p>
         </div>
     </div>
 
     <div class="section-grid section-grid--wide">
         <section class="card section-card">
-            <h3>@T("Overview")</h3>
+            <h3>Overview</h3>
             <div class="mini-metrics top-gap">
-                <div><span>@T("Module key")</span><code>@OverviewData.ModuleKey</code></div>
-                <div><span>@T("Schema")</span><code>@OverviewData.SchemaName</code></div>
-                <div><span>@T("Active configurations")</span><span class="metric-inline">@OverviewData.ActiveConfigurationCount</span></div>
+                <div><span>Module key</span><code>@OverviewData.ModuleKey</code></div>
+                <div><span>Schema</span><code>@OverviewData.SchemaName</code></div>
+                <div><span>Active configurations</span><span class="metric-inline">@OverviewData.ActiveConfigurationCount</span></div>
             </div>
         </section>
 
         <section class="card section-card">
-            <h3>@T("Next step")</h3>
+            <h3>Next step</h3>
             <p class="muted small-text">
-                @T("Continue to the configuration view to review or update the module's current sample configurations.")
+                Gå vidare till konfigurationsvyn för att granska eller uppdatera
+                modulens aktuella sample-konfigurationer.
             </p>
             <div class="toolbar">
-                <NavLink class="action-link" href="configurations">@T("Open configurations")</NavLink>
+                <NavLink class="action-link" href="/configurations">Open configurations</NavLink>
             </div>
         </section>
     </div>

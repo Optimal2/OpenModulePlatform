@@ -3,35 +3,32 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Definitions</div>
-        <h2>Apps</h2>
-        <p class="lede">
-            App definitions belong to modules and describe what can be deployed.
-            Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions.
-        </p>
+        <div class="eyebrow">@L["Definitions"]</div>
+        <h2>@L["Apps"]</h2>
+        <p class="lede">@L["App definitions belong to modules and describe what can be deployed. Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions."]</p>
     </div>
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/appedit">Create app</a>
+    <a class="action-link" href="~/admin/appedit">@L["Create app"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No app definitions found.</div>
+    <div class="empty-state">@L["No app definitions found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Module</th>
-                <th>App key</th>
-                <th>Display name</th>
-                <th>Type</th>
-                <th>Enabled</th>
-                <th>Description</th>
-                <th>Actions</th>
+                <th>@L["Module"]</th>
+                <th>@L["App key"]</th>
+                <th>@L["Display name"]</th>
+                <th>@L["Type"]</th>
+                <th>@L["Enabled"]</th>
+                <th>@L["Description"]</th>
+                <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -41,13 +38,13 @@ else
                     <td><code>@row.ModuleKey</code></td>
                     <td><code>@row.AppKey</code></td>
                     <td>@row.DisplayName</td>
-                    <td>@row.AppType</td>
+                    <td>@L[row.AppType]</td>
                     <td>
-                        <span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span>
+                        <span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span>
                     </td>
                     <td>@row.Description</td>
                     <td>
-                        <a class="action-link" href="~/admin/appedit?id=@row.AppId">Edit</a>
+                        <a class="action-link" href="~/admin/appedit?id=@row.AppId">@L["Edit"]</a>
                     </td>
                 </tr>
             }

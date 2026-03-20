@@ -37,11 +37,11 @@ public sealed class AppEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> ModuleOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> AppTypeOptions { get; } =
+    public IReadOnlyList<OptionItem> AppTypeOptions =>
     [
-        Opt("Portal", "Portal"),
-        Opt("WebApp", "Web app"),
-        Opt("ServiceApp", "Service app")
+        Opt("Portal", T("Portal")),
+        Opt("WebApp", T("Web app")),
+        Opt("ServiceApp", T("Service app"))
     ];
 
     [TempData]
@@ -128,7 +128,7 @@ public sealed class AppEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The app could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The app could not be saved.")));
 
             return Page();
         }
@@ -154,7 +154,7 @@ public sealed class AppEditModel : OmpPortalPageModel
             SetTitles("Edit app");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The app could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The app could not be deleted.")));
 
             return Page();
         }
@@ -169,19 +169,18 @@ public sealed class AppEditModel : OmpPortalPageModel
     {
         if (Input.ModuleId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.ModuleId), "Select a module.");
+            ModelState.AddModelError(nameof(Input.ModuleId), T("Select a module."));
         }
 
         if (!KeyPattern.IsMatch(Input.AppKey ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.AppKey),
-                "Use a stable key with letters, digits, dash, underscore or dot.");
+                nameof(Input.AppKey), T("Use a stable key with letters, digits, dash, underscore or dot."));
         }
 
         if (string.IsNullOrWhiteSpace(Input.AppType))
         {
-            ModelState.AddModelError(nameof(Input.AppType), "Select an app type.");
+            ModelState.AddModelError(nameof(Input.AppType), T("Select an app type."));
         }
     }
 

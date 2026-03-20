@@ -32,10 +32,20 @@
             <tbody>
             @foreach (var app in Model.Apps)
             {
-                var href = AppLinkBuilder.ResolveHref(Request, app);
-                var configuredAddress = !string.IsNullOrWhiteSpace(app.RoutePath)
+                string? href = null;
+                string? configuredAddress = null;
+                string? displayAddress = null;
+                var showResolvedHref = false;
+
+                href = AppLinkBuilder.ResolveHref(Request, app);
+                configuredAddress = !string.IsNullOrWhiteSpace(app.RoutePath)
                     ? app.RoutePath
                     : app.PublicUrl;
+                displayAddress = configuredAddress ?? href;
+                showResolvedHref = !string.IsNullOrWhiteSpace(href)
+                    && !string.IsNullOrWhiteSpace(configuredAddress)
+                    && !string.Equals(configuredAddress, href, System.StringComparison.OrdinalIgnoreCase);
+
                 <tr>
                     <td>@app.DisplayName</td>
                     <td><code>@app.AppInstanceKey</code></td>
@@ -43,8 +53,9 @@
                     <td>
                         @if (!string.IsNullOrWhiteSpace(href))
                         {
-                            <a href="@href">@(configuredAddress ?? href)</a>
-                            @if (!string.Equals(configuredAddress, href, System.StringComparison.OrdinalIgnoreCase))
+                            <a href="@href">@displayAddress</a>
+
+                            @if (showResolvedHref)
                             {
                                 <div class="muted"><code>@href</code></div>
                             }

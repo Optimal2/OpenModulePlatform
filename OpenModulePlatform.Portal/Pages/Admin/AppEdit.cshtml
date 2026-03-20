@@ -3,12 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>@(Model.IsCreate ? "Create app definition" : "Edit app definition")</h2>
-        <p class="lede">
-            Apps are definition rows. Runtime placement, route and artifact selection should be handled
-            on app instances instead.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@(Model.IsCreate ? L["Create app definition"] : L["Edit app definition"])</h2>
+        <p class="lede">@L["App definitions belong to modules and describe what can be deployed. Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions."]</p>
     </div>
 </section>
 
@@ -29,7 +26,7 @@
         <div class="form-field">
             <label asp-for="Input.ModuleId"></label>
             <select asp-for="Input.ModuleId">
-                <option value="">Select module</option>
+                <option value="">@L["Select module"]</option>
                 @foreach (var option in Model.ModuleOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -46,7 +43,7 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">Choose how the platform should think about this definition.</div>
+            <div class="field-help">@L["Choose how the platform should think about this definition."]</div>
         </div>
     </div>
 
@@ -80,8 +77,8 @@
     </div>
 
     <div class="toolbar">
-        <button type="submit">Save app</button>
-        <a class="action-link" href="~/admin/apps">Back to apps</a>
+        <button type="submit">@L["Save app"]</button>
+        <a class="action-link" href="~/admin/apps">@L["Back to apps"]</a>
     </div>
 </form>
 
@@ -91,10 +88,10 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('Delete this app definition? Related artifacts and app instances must be removed first.');">
+        onsubmit="return confirm('@L["Delete this app definition? Related artifacts and app instances must be removed first."]');">
         <input type="hidden" asp-for="Input.AppId" />
-        <h3>Danger zone</h3>
-        <p class="muted">Delete is blocked while artifacts, app instances or template rows still reference the app.</p>
-        <button type="submit" class="btn btn-danger">Delete app</button>
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Delete is blocked while artifacts, app instances or template rows still reference the app."]</p>
+        <button type="submit" class="btn btn-danger">@L["Delete app"]</button>
     </form>
 }

@@ -3,12 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>@(Model.IsCreate ? "Create host" : "Edit host")</h2>
-        <p class="lede">
-            Hosts represent real deployment targets inside an OMP instance.
-            For manual setup this is one of the most important core pages.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@(Model.IsCreate ? L["Create host"] : L["Edit host"])</h2>
+        <p class="lede">@L["Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages."]</p>
     </div>
 </section>
 
@@ -29,20 +26,20 @@
         <div class="form-field">
             <label asp-for="Input.InstanceId"></label>
             <select asp-for="Input.InstanceId">
-                <option value="">Select instance</option>
+                <option value="">@L["Select instance"]</option>
                 @foreach (var option in Model.InstanceOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">Every host belongs to exactly one OMP instance.</div>
+            <div class="field-help">@L["Every host belongs to exactly one OMP instance."]</div>
             <span asp-validation-for="Input.InstanceId" class="field-validation-error"></span>
         </div>
 
         <div class="form-field">
             <label asp-for="Input.HostKey"></label>
             <input asp-for="Input.HostKey" />
-            <div class="field-help">Logical host identity used by OMP. Keep it short and stable.</div>
+            <div class="field-help">@L["Logical host identity used by OMP. Keep it short and stable."]</div>
             <span asp-validation-for="Input.HostKey" class="field-validation-error"></span>
         </div>
     </div>
@@ -51,7 +48,7 @@
         <div class="form-field">
             <label asp-for="Input.DisplayName"></label>
             <input asp-for="Input.DisplayName" />
-            <div class="field-help">Optional human-friendly label.</div>
+            <div class="field-help">@L["Optional human-friendly label."]</div>
         </div>
 
         <div class="form-field checkbox-row checkbox-row--boxed">
@@ -62,10 +59,9 @@
 
     <div class="form-field">
         <label asp-for="Input.BaseUrl"></label>
-        <input asp-for="Input.BaseUrl" placeholder="http://localhost />
+        <input asp-for="Input.BaseUrl" placeholder="http://localhost" />
         <div class="field-help">
-            Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath.
-            Enter only protocol, host and optional port.
+            @L["Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath. Enter only protocol, host and optional port."]
         </div>
         <span asp-validation-for="Input.BaseUrl" class="field-validation-error"></span>
     </div>
@@ -74,7 +70,7 @@
         <div class="form-field">
             <label asp-for="Input.Environment"></label>
             <select asp-for="Input.Environment">
-                <option value="">Not set</option>
+                <option value="">@L["Not set"]</option>
                 @foreach (var option in Model.EnvironmentOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -85,7 +81,7 @@
         <div class="form-field">
             <label asp-for="Input.OsFamily"></label>
             <select asp-for="Input.OsFamily">
-                <option value="">Not set</option>
+                <option value="">@L["Not set"]</option>
                 @foreach (var option in Model.OsFamilyOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -96,7 +92,7 @@
         <div class="form-field">
             <label asp-for="Input.Architecture"></label>
             <select asp-for="Input.Architecture">
-                <option value="">Not set</option>
+                <option value="">@L["Not set"]</option>
                 @foreach (var option in Model.ArchitectureOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -108,12 +104,12 @@
     <div class="form-field">
         <label asp-for="Input.OsVersion"></label>
         <input asp-for="Input.OsVersion" />
-        <div class="field-help">Free text for the observed or intended OS version.</div>
+        <div class="field-help">@L["Free text for the observed or intended OS version."]</div>
     </div>
 
     <div class="toolbar">
-        <button type="submit">Save host</button>
-        <a class="action-link" href="~/admin/hosts">Back to hosts</a>
+        <button type="submit">@L["Save host"]</button>
+        <a class="action-link" href="~/admin/hosts">@L["Back to hosts"]</a>
     </div>
 </form>
 
@@ -123,10 +119,10 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('Delete this host? App instances using it must be moved or removed first.');">
+        onsubmit="return confirm('@L["Delete this host? App instances using it must be moved or removed first."]');">
         <input type="hidden" asp-for="Input.HostId" />
-        <h3>Danger zone</h3>
-        <p class="muted">Host deletion is blocked when app instances or deployments still reference the host.</p>
-        <button type="submit" class="btn btn-danger">Delete host</button>
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Host deletion is blocked when app instances or deployments still reference the host."]</p>
+        <button type="submit" class="btn btn-danger">@L["Delete host"]</button>
     </form>
 }

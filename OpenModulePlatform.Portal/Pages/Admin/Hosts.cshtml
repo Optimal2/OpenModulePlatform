@@ -3,37 +3,34 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>Hosts</h2>
-        <p class="lede">
-            Hosts represent concrete runtime targets within an OMP instance.
-            App instances attach to hosts for actual placement and observation.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@L["Hosts"]</h2>
+        <p class="lede">@L["Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation."]</p>
     </div>
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/hostedit">Create host</a>
+    <a class="action-link" href="~/admin/hostedit">@L["Create host"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No hosts found.</div>
+    <div class="empty-state">@L["No hosts found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Instance</th>
-                <th>Host key</th>
-                <th>Display name</th>
-                <th>Base URL</th>
-                <th>Environment</th>
-                <th>OS</th>
-                <th>Architecture</th>
-                <th>Last seen</th>
-                            <th>Actions</th>
+                <th>@L["Instance"]</th>
+                <th>@L["Host key"]</th>
+                <th>@L["Display name"]</th>
+                <th>@L["Base URL"]</th>
+                <th>@L["Environment"]</th>
+                <th>@L["OS"]</th>
+                <th>@L["Architecture"]</th>
+                <th>@L["Last seen"]</th>
+                            <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -44,11 +41,11 @@ else
                 <td><code>@row.HostKey</code></td>
                 <td>@row.DisplayName</td>
                 <td><code>@row.BaseUrl</code></td>
-                <td>@row.Environment</td>
-                <td>@row.OsFamily</td>
-                <td>@row.Architecture</td>
+                <td>@(string.IsNullOrWhiteSpace(row.Environment) ? null : L[row.Environment])</td>
+                <td>@(string.IsNullOrWhiteSpace(row.OsFamily) ? null : L[row.OsFamily])</td>
+                <td>@(string.IsNullOrWhiteSpace(row.Architecture) ? null : L[row.Architecture])</td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
-                <td><a class="action-link" href="~/admin/hostedit?id=@row.HostId">Edit</a></td>
+                <td><a class="action-link" href="~/admin/hostedit?id=@row.HostId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>

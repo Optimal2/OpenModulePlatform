@@ -3,20 +3,20 @@
 
 <div class="page-header">
     <div>
-        <div class="eyebrow">@L["Example module"]</div>
-        <h1>@L["Configurations"]</h1>
-        <p class="lede">@L["Configurations that can be assigned to the service app's app instances."]</p>
+        <div class="eyebrow">Example module</div>
+        <h1>Configurations</h1>
+        <p class="lede">Konfigurationer som kan kopplas till serviceappens appinstanser.</p>
     </div>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">@L["No configurations were found."]</div>
+    <div class="empty-state">Inga konfigurationer hittades.</div>
 }
 else
 {
     <table class="grid">
-        <thead><tr><th>@L["ConfigId"]</th><th>@L["Assigned app instances"]</th><th>@L["Comment"]</th><th></th></tr></thead>
+        <thead><tr><th>ConfigId</th><th>Assigned app instances</th><th>Comment</th><th></th></tr></thead>
         <tbody>
         @foreach (var row in Model.Rows)
         {
@@ -24,7 +24,7 @@ else
                 <td><span class="pill">@row.ConfigId</span></td>
                 <td>@row.AssignedInstallations</td>
                 <td>@row.Comment</td>
-                <td><a class="action-link" href="~/configurations/edit?configId=@row.ConfigId">@L["Edit"]</a></td>
+                <td><a class="action-link" href="~/configurations/edit?configId=@row.ConfigId">Edit</a></td>
             </tr>
         }
         </tbody>

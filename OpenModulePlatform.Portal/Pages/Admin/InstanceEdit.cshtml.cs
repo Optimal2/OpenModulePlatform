@@ -115,7 +115,7 @@ public sealed class InstanceEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The instance could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The instance could not be saved.")));
 
             return Page();
         }
@@ -141,7 +141,7 @@ public sealed class InstanceEditModel : OmpPortalPageModel
             SetTitles("Edit instance");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The instance could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The instance could not be deleted.")));
 
             return Page();
         }
@@ -157,13 +157,12 @@ public sealed class InstanceEditModel : OmpPortalPageModel
         if (!KeyPattern.IsMatch(Input.InstanceKey ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.InstanceKey),
-                "Use a stable key with letters, digits, dash, underscore or dot.");
+                nameof(Input.InstanceKey), T("Use a stable key with letters, digits, dash, underscore or dot."));
         }
 
         if (string.IsNullOrWhiteSpace(Input.DisplayName))
         {
-            ModelState.AddModelError(nameof(Input.DisplayName), "Display name is required.");
+            ModelState.AddModelError(nameof(Input.DisplayName), T("Display name is required."));
         }
     }
 

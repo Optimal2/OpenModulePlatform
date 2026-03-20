@@ -3,34 +3,31 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>Module instances</h2>
-        <p class="lede">
-            Module instances bind module definitions into a specific OMP instance.
-            This is the operational layer above definitions and below app instances.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@L["Module instances"]</h2>
+        <p class="lede">@L["Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances."]</p>
     </div>
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/moduleinstanceedit">Create module instance</a>
+    <a class="action-link" href="~/admin/moduleinstanceedit">@L["Create module instance"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No module instances found.</div>
+    <div class="empty-state">@L["No module instances found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Instance</th>
-                <th>Module</th>
-                <th>Module instance key</th>
-                <th>Display name</th>
-                <th>Enabled</th>
-                            <th>Actions</th>
+                <th>@L["Instance"]</th>
+                <th>@L["Module"]</th>
+                <th>@L["Module instance key"]</th>
+                <th>@L["Display name"]</th>
+                <th>@L["Enabled"]</th>
+                            <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -41,8 +38,8 @@ else
                 <td><code>@row.ModuleKey</code></td>
                 <td><code>@row.ModuleInstanceKey</code></td>
                 <td>@row.DisplayName</td>
-                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                <td><a class="action-link" href="~/admin/moduleinstanceedit?id=@row.ModuleInstanceId">Edit</a></td>
+                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td><a class="action-link" href="~/admin/moduleinstanceedit?id=@row.ModuleInstanceId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>

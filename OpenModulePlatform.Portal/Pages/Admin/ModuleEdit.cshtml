@@ -3,12 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>@(Model.IsCreate ? "Create module" : "Edit module")</h2>
-        <p class="lede">
-            Modules are definitions. Keep runtime-specific values out of this page and use module instances
-            or app instances for environment-specific configuration.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@(Model.IsCreate ? L["Create module"] : L["Edit module"])</h2>
+        <p class="lede">@L["Modules are definitions. Keep runtime-specific values out of this page and use module instances or app instances for environment-specific configuration."]</p>
     </div>
 </section>
 
@@ -29,7 +26,7 @@
         <div class="form-field">
             <label asp-for="Input.ModuleKey"></label>
             <input asp-for="Input.ModuleKey" />
-            <div class="field-help">Stable definition key used by apps and instance templates.</div>
+            <div class="field-help">@L["Stable definition key used by apps and instance templates."]</div>
             <span asp-validation-for="Input.ModuleKey" class="field-validation-error"></span>
         </div>
 
@@ -49,13 +46,13 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">Pick the closest platform role. This is a definition-level classification.</div>
+            <div class="field-help">@L["Pick the closest platform role. This is a definition-level classification."]</div>
         </div>
 
         <div class="form-field">
             <label asp-for="Input.SchemaName"></label>
             <input asp-for="Input.SchemaName" />
-            <div class="field-help">Database schema owned by the module, when applicable.</div>
+            <div class="field-help">@L["Database schema owned by the module, when applicable."]</div>
             <span asp-validation-for="Input.SchemaName" class="field-validation-error"></span>
         </div>
 
@@ -76,8 +73,8 @@
     </div>
 
     <div class="toolbar">
-        <button type="submit">Save module</button>
-        <a class="action-link" href="~/admin/modules">Back to modules</a>
+        <button type="submit">@L["Save module"]</button>
+        <a class="action-link" href="~/admin/modules">@L["Back to modules"]</a>
     </div>
 </form>
 
@@ -87,13 +84,12 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('Delete this module? Related apps and instances must be removed first.');">
+        onsubmit="return confirm('@L["Delete this module? Related apps and instances must be removed first."]');">
         <input type="hidden" asp-for="Input.ModuleId" />
-        <h3>Danger zone</h3>
+        <h3>@L["Danger zone"]</h3>
         <p class="muted">
-            Deleting a module is only possible when dependent apps, module instances and template rows
-            are already gone.
+            @L["Deleting a module is only possible when dependent apps, module instances and template rows are already gone."]
         </p>
-        <button type="submit" class="btn btn-danger">Delete module</button>
+        <button type="submit" class="btn btn-danger">@L["Delete module"]</button>
     </form>
 }

@@ -3,8 +3,8 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Definitions</div>
-        <h2>Artifacts</h2>
+        <div class="eyebrow">@L["Definitions"]</div>
+        <h2>@L["Artifacts"]</h2>
         <p class="lede">
             Artifacts are deployable builds for app definitions. App instances select
             which artifact version to use at runtime.
@@ -13,25 +13,25 @@
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/artifactedit">Create artifact</a>
+    <a class="action-link" href="~/admin/artifactedit">@L["Create artifact"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No artifacts found.</div>
+    <div class="empty-state">@L["No artifacts found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>App key</th>
-                <th>Version</th>
-                <th>Package type</th>
-                <th>Target</th>
-                <th>Relative path</th>
-                <th>Enabled</th>
-                            <th>Actions</th>
+                <th>@L["App key"]</th>
+                <th>@L["Version"]</th>
+                <th>@L["Package type"]</th>
+                <th>@L["Target"]</th>
+                <th>@L["Relative path"]</th>
+                <th>@L["Enabled"]</th>
+                            <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -43,8 +43,8 @@ else
                 <td>@row.PackageType</td>
                 <td>@row.TargetName</td>
                 <td><code>@row.RelativePath</code></td>
-                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                <td><a class="action-link" href="~/admin/artifactedit?id=@row.ArtifactId">Edit</a></td>
+                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td><a class="action-link" href="~/admin/artifactedit?id=@row.ArtifactId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>

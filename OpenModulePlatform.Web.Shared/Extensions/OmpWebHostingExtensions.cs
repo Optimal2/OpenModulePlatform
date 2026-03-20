@@ -74,8 +74,6 @@ public static class OmpWebHostingExtensions
             options.FallbackPolicy = options.DefaultPolicy;
         });
 
-        builder.Services.AddHttpContextAccessor();
-
         var webAppOptions = builder.Configuration
             .GetSection(optionsSectionName)
             .Get<WebAppOptions>() ?? new WebAppOptions();
@@ -157,16 +155,6 @@ public static class OmpWebHostingExtensions
                 culture = localizationOptions.DefaultRequestCulture.Culture.Name;
             }
 
-            var supportedCultures = localizationOptions.SupportedCultures
-                ?.Select(x => x.Name)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            if (supportedCultures.Count > 0 && !supportedCultures.Contains(culture))
-            {
-                culture = localizationOptions.DefaultRequestCulture.Culture.Name;
-            }
-
             var requestCulture = new RequestCulture(culture);
 
             context.Response.Cookies.Append(
@@ -177,8 +165,7 @@ public static class OmpWebHostingExtensions
                     Expires = DateTimeOffset.UtcNow.AddYears(1),
                     IsEssential = true,
                     HttpOnly = false,
-                    SameSite = SameSiteMode.Lax,
-                    Path = "/"
+                    SameSite = SameSiteMode.Lax
                 });
 
             if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))

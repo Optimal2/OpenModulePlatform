@@ -43,11 +43,11 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> ArtifactOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> DesiredStateOptions { get; } =
+    public IReadOnlyList<OptionItem> DesiredStateOptions =>
     [
-        Opt("0", "Unknown / unmanaged"),
-        Opt("1", "Enabled / should run"),
-        Opt("2", "Stopped / should not run")
+        Opt("0", T("Unknown / unmanaged")),
+        Opt("1", T("Enabled / should run")),
+        Opt("2", T("Stopped / should not run"))
     ];
 
     [TempData]
@@ -159,7 +159,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The app instance could not be saved."));
+                T(ToFriendlySqlMessage(ex, "The app instance could not be saved.")));
 
             return Page();
         }
@@ -185,7 +185,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
             SetTitles("Edit app instance");
             ModelState.AddModelError(
                 string.Empty,
-                ToFriendlySqlMessage(ex, "The app instance could not be deleted."));
+                T(ToFriendlySqlMessage(ex, "The app instance could not be deleted.")));
 
             return Page();
         }
@@ -215,27 +215,25 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
     {
         if (Input.ModuleInstanceId == Guid.Empty)
         {
-            ModelState.AddModelError(nameof(Input.ModuleInstanceId), "Select a module instance.");
+            ModelState.AddModelError(nameof(Input.ModuleInstanceId), T("Select a module instance."));
         }
 
         if (Input.AppId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.AppId), "Select an app definition.");
+            ModelState.AddModelError(nameof(Input.AppId), T("Select an app definition."));
         }
 
         if (!KeyPattern.IsMatch(Input.AppInstanceKey ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.AppInstanceKey),
-                "Use a stable key with letters, digits, dash, underscore or dot.");
+                nameof(Input.AppInstanceKey), T("Use a stable key with letters, digits, dash, underscore or dot."));
         }
 
         if (!string.IsNullOrWhiteSpace(Input.PublicUrl)
             && !Uri.TryCreate(Input.PublicUrl, UriKind.Absolute, out _))
         {
             ModelState.AddModelError(
-                nameof(Input.PublicUrl),
-                "Public URL must be an absolute URL.");
+                nameof(Input.PublicUrl), T("Public URL must be an absolute URL."));
         }
     }
 
@@ -245,8 +243,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         if (moduleInstance is null)
         {
             ModelState.AddModelError(
-                nameof(Input.ModuleInstanceId),
-                "Selected module instance was not found.");
+                nameof(Input.ModuleInstanceId), T("Selected module instance was not found."));
 
             return;
         }
@@ -254,15 +251,14 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         var app = await _repo.GetAppContextAsync(Input.AppId, ct);
         if (app is null)
         {
-            ModelState.AddModelError(nameof(Input.AppId), "Selected app was not found.");
+            ModelState.AddModelError(nameof(Input.AppId), T("Selected app was not found."));
             return;
         }
 
         if (app.ModuleId != moduleInstance.ModuleId)
         {
             ModelState.AddModelError(
-                nameof(Input.AppId),
-                "The selected app does not belong to the selected module instance's module.");
+                nameof(Input.AppId), T("The selected app does not belong to the selected module instance's module."));
         }
 
         if (Input.HostId.HasValue)
@@ -284,15 +280,14 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         var host = await _repo.GetHostContextAsync(hostId, ct);
         if (host is null)
         {
-            ModelState.AddModelError(nameof(Input.HostId), "Selected host was not found.");
+            ModelState.AddModelError(nameof(Input.HostId), T("Selected host was not found."));
             return;
         }
 
         if (host.InstanceId != moduleInstance.InstanceId)
         {
             ModelState.AddModelError(
-                nameof(Input.HostId),
-                "The selected host belongs to a different instance than the selected module instance.");
+                nameof(Input.HostId), T("The selected host belongs to a different instance than the selected module instance."));
         }
     }
 
@@ -302,8 +297,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         if (!belongsToApp)
         {
             ModelState.AddModelError(
-                nameof(Input.ArtifactId),
-                "The selected artifact does not belong to the selected app.");
+                nameof(Input.ArtifactId), T("The selected artifact does not belong to the selected app."));
         }
     }
 

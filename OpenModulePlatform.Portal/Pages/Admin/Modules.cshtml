@@ -3,31 +3,31 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Definitions</div>
-        <h2>Modules</h2>
-        <p class="lede">Module definitions are reusable building blocks. They do not describe placement or runtime state.</p>
+        <div class="eyebrow">@L["Definitions"]</div>
+        <h2>@L["Modules"]</h2>
+        <p class="lede">@L["Module definitions are reusable building blocks. They do not describe placement or runtime state."]</p>
     </div>
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/moduleedit">Create module</a>
+    <a class="action-link" href="~/admin/moduleedit">@L["Create module"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">No modules found.</div>
+    <div class="empty-state">@L["No modules found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Module key</th>
-                <th>Display name</th>
-                <th>Type</th>
-                <th>Schema</th>
-                <th>Enabled</th>
-                            <th>Actions</th>
+                <th>@L["Module key"]</th>
+                <th>@L["Display name"]</th>
+                <th>@L["Type"]</th>
+                <th>@L["Schema"]</th>
+                <th>@L["Enabled"]</th>
+                            <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -36,10 +36,10 @@ else
             <tr>
                 <td><code>@row.ModuleKey</code></td>
                 <td>@row.DisplayName</td>
-                <td>@row.ModuleType</td>
+                <td>@L[row.ModuleType]</td>
                 <td><code>@row.SchemaName</code></td>
-                <td><span class="pill">@(row.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                <td><a class="action-link" href="~/admin/moduleedit?id=@row.ModuleId">Edit</a></td>
+                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td><a class="action-link" href="~/admin/moduleedit?id=@row.ModuleId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>

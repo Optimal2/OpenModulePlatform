@@ -3,31 +3,28 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Security and access</div>
-        <h2>Roles</h2>
-        <p class="lede">
-            Roles bundle permissions and principals.
-            Use roles to keep direct principal management small and predictable.
-        </p>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@L["Roles"]</h2>
+        <p class="lede">@L["Roles bundle permissions and principals. Use roles to keep direct principal management small and predictable."]</p>
     </div>
     <div class="toolbar">
-        <a class="action-link" href="~/admin/rbac/role">Create role</a>
+        <a class="action-link" href="~/admin/rbac/role">@L["Create role"]</a>
     </div>
 </section>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="card empty-state">No roles have been created yet.</div>
+    <div class="card empty-state">@L["No roles have been created yet."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Permissions</th>
-                <th>Principals</th>
+                <th>@L["Name"]</th>
+                <th>@L["Description"]</th>
+                <th>@L["Permissions"]</th>
+                <th>@L["Principals"]</th>
                 <th></th>
             </tr>
         </thead>
@@ -42,7 +39,7 @@ else
                     <td><span class="pill">@row.PermissionCount</span></td>
                     <td><span class="pill">@row.PrincipalCount</span></td>
                     <td>
-                        <a class="action-link" href="~/admin/rbac/role?roleId=@row.RoleId">Edit</a>
+                        <a class="action-link" href="~/admin/rbac/role?roleId=@row.RoleId">@L["Edit"]</a>
                     </td>
                 </tr>
             }

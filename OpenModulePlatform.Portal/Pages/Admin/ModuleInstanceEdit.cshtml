@@ -3,12 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">Manual core</div>
-        <h2>@(Model.IsCreate ? "Create module instance" : "Edit module instance")</h2>
-        <p class="lede">
-            Module instances bind a module definition to a concrete OMP instance.
-            This is where definitions start becoming operational.
-        </p>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@(Model.IsCreate ? L["Create module instance"] : L["Edit module instance"])</h2>
+        <p class="lede">@L["Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational."]</p>
     </div>
 </section>
 
@@ -29,7 +26,7 @@
         <div class="form-field">
             <label asp-for="Input.InstanceId"></label>
             <select asp-for="Input.InstanceId">
-                <option value="">Select instance</option>
+                <option value="">@L["Select instance"]</option>
                 @foreach (var option in Model.InstanceOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -41,13 +38,13 @@
         <div class="form-field">
             <label asp-for="Input.ModuleId"></label>
             <select asp-for="Input.ModuleId">
-                <option value="">Select module</option>
+                <option value="">@L["Select module"]</option>
                 @foreach (var option in Model.ModuleOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">Choose the module definition this module instance represents.</div>
+            <div class="field-help">@L["Choose the module definition this module instance represents."]</div>
             <span asp-validation-for="Input.ModuleId" class="field-validation-error"></span>
         </div>
     </div>
@@ -82,8 +79,8 @@
     </div>
 
     <div class="toolbar">
-        <button type="submit">Save module instance</button>
-        <a class="action-link" href="~/admin/moduleinstances">Back to module instances</a>
+        <button type="submit">@L["Save module instance"]</button>
+        <a class="action-link" href="~/admin/moduleinstances">@L["Back to module instances"]</a>
     </div>
 </form>
 
@@ -93,10 +90,10 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('Delete this module instance? Related app instances must be removed first.');">
+        onsubmit="return confirm('@L["Delete this module instance? Related app instances must be removed first."]');">
         <input type="hidden" asp-for="Input.ModuleInstanceId" />
-        <h3>Danger zone</h3>
-        <p class="muted">SQL blocks deletion while app instances or template mappings still depend on this row.</p>
-        <button type="submit" class="btn btn-danger">Delete module instance</button>
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["SQL blocks deletion while app instances or template mappings still depend on this row."]</p>
+        <button type="submit" class="btn btn-danger">@L["Delete module instance"]</button>
     </form>
 }
