@@ -1311,4 +1311,4 @@
   <data name="HostDeployments.Lede" xml:space="preserve">
     <value>Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</value>
   </data>
-</root>
+<data name="More" xml:space="preserve"><value>More</value><comment>Compact portal top-bar overflow toggle.</comment></data></root>
