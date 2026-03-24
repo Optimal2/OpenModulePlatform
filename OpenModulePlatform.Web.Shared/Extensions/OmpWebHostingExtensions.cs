@@ -123,6 +123,7 @@ public static class OmpWebHostingExtensions
 
         builder.Services.AddSingleton<SqlConnectionFactory>();
         builder.Services.AddScoped<RbacService>();
+        builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
 
         return builder;
     }

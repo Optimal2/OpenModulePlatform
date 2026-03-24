@@ -58,53 +58,61 @@ a:hover {
 .portal-topbar__nav {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
     min-width: 0;
     flex-wrap: nowrap;
     overflow: visible;
-}
-
-.portal-topbar__links {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-wrap: nowrap;
-    overflow: hidden;
     white-space: nowrap;
 }
 
-.portal-topbar__link,
+.portal-topbar__portal-link,
+.portal-topbar__module-link,
 .portal-topbar__overflow summary {
     display: inline-flex;
     align-items: center;
     flex: 0 0 auto;
     min-height: 28px;
-    padding: 4px 10px;
-    border-radius: 999px;
     text-decoration: none;
     font-size: 0.84rem;
     color: var(--text-muted);
-    border: 1px solid transparent;
     cursor: pointer;
     list-style: none;
     white-space: nowrap;
 }
 
-.portal-topbar__link:hover,
-.portal-topbar__overflow summary:hover {
-    color: var(--text);
-    background: var(--surface);
-    border-color: var(--border);
+.portal-topbar__portal-link {
+    font-weight: 600;
 }
 
-.portal-topbar__link--root {
-    padding-right: 14px;
-    margin-right: 2px;
-    border-right: 1px solid var(--border-strong);
-    border-radius: 0;
+.portal-topbar__module-link {
+    position: relative;
+}
+
+.portal-topbar__module-link + .portal-topbar__module-link::before {
+    content: "-";
+    margin: 0 8px 0 2px;
+    color: var(--border-strong);
+}
+
+.portal-topbar__portal-link:hover,
+.portal-topbar__module-link:hover,
+.portal-topbar__overflow summary:hover {
+    color: var(--text);
+}
+
+.portal-topbar__pipe {
+    flex: 0 0 auto;
+    color: var(--border-strong);
+}
+
+.portal-topbar__modules {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 .portal-topbar__overflow {
@@ -127,8 +135,6 @@ a:hover {
 
 .portal-topbar__overflow[open] summary {
     color: var(--text);
-    background: var(--surface);
-    border-color: var(--border);
 }
 
 .portal-topbar__menu {
@@ -136,7 +142,7 @@ a:hover {
     top: calc(100% + 6px);
     right: 0;
     z-index: 1000;
-    min-width: 180px;
+    min-width: 220px;
     padding: 8px;
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -144,15 +150,18 @@ a:hover {
     box-shadow: var(--shadow);
 }
 
-.portal-topbar__menu a {
+.portal-topbar__menu .portal-topbar__module-link {
     display: block;
     padding: 8px 10px;
     border-radius: 10px;
-    text-decoration: none;
     color: var(--text);
 }
 
-.portal-topbar__menu a:hover {
+.portal-topbar__menu .portal-topbar__module-link::before {
+    content: none;
+}
+
+.portal-topbar__menu .portal-topbar__module-link:hover {
     background: var(--surface-muted);
 }
 

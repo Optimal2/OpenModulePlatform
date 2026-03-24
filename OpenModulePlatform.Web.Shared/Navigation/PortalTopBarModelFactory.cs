@@ -3,23 +3,15 @@ using OpenModulePlatform.Web.Shared.Options;
 namespace OpenModulePlatform.Web.Shared.Navigation;
 
 /// <summary>
-/// Builds the shared portal shortcut model used by module layouts.
+/// Builds a basic shared portal shortcut model from configuration.
 /// </summary>
+/// <remarks>
+/// The runtime top bar shown in modules is normally created by <see cref="PortalTopBarService"/>
+/// so it can populate module links using the same access logic as the Portal start page.
+/// This factory remains as a lightweight configuration-only fallback.
+/// </remarks>
 public static class PortalTopBarModelFactory
 {
-    private static readonly PortalTopBarLinkOptions[] DefaultLinks =
-    [
-        new() { TextKey = "Portal", Href = "/" },
-        new() { TextKey = "Admin", Href = "/admin/overview" },
-        new() { TextKey = "Instances", Href = "/admin/instances" },
-        new() { TextKey = "Hosts", Href = "/admin/hosts" },
-        new() { TextKey = "Modules", Href = "/admin/modules" },
-        new() { TextKey = "Apps", Href = "/admin/apps" },
-        new() { TextKey = "Artifacts", Href = "/admin/artifacts" },
-        new() { TextKey = "Automation", Href = "/admin/automation" },
-        new() { TextKey = "RBAC", Href = "/admin/rbac" }
-    ];
-
     public static PortalTopBarModel Create(WebAppOptions options)
     {
         var topBarOptions = options.PortalTopBar ?? new PortalTopBarOptions();
@@ -29,33 +21,19 @@ public static class PortalTopBarModelFactory
             return PortalTopBarModel.Hidden;
         }
 
-        var linkOptions = topBarOptions.Links.Length > 0
-            ? topBarOptions.Links
-            : DefaultLinks;
-
-        var links = linkOptions
-            .Where(static x =>
-                !string.IsNullOrWhiteSpace(x.TextKey) &&
-                !string.IsNullOrWhiteSpace(x.Href))
-            .Select(x => new PortalTopBarLink(
-                x.TextKey.Trim(),
-                CombinePortalHref(topBarOptions.PortalBaseUrl, x.Href)))
-            .ToArray();
-
-        if (links.Length == 0)
-        {
-            return PortalTopBarModel.Hidden;
-        }
+        var portalLink = new PortalTopBarLink("Portal", CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         return new PortalTopBarModel
         {
             IsVisible = true,
-            Links = links,
+            Links = [portalLink],
+            PortalLink = portalLink,
+            ModuleLinks = Array.Empty<PortalTopBarLink>(),
             OverflowToggleTextKey = "More"
         };
     }
 
-    private static string CombinePortalHref(string portalBaseUrl, string href)
+    internal static string CombinePortalHref(string portalBaseUrl, string href)
     {
         if (Uri.IsWellFormedUriString(href, UriKind.Absolute))
         {
