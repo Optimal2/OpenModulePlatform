@@ -9,12 +9,20 @@ public sealed class PortalTopBarModel
     {
         IsVisible = false,
         Links = Array.Empty<PortalTopBarLink>(),
+        ModuleLinks = Array.Empty<PortalTopBarLink>(),
         OverflowToggleTextKey = "More"
     };
 
     public bool IsVisible { get; init; }
 
+    /// <summary>
+    /// Combined link collection kept for backwards compatibility.
+    /// </summary>
     public IReadOnlyList<PortalTopBarLink> Links { get; init; } = Array.Empty<PortalTopBarLink>();
+
+    public PortalTopBarLink? PortalLink { get; init; }
+
+    public IReadOnlyList<PortalTopBarLink> ModuleLinks { get; init; } = Array.Empty<PortalTopBarLink>();
 
     public string OverflowToggleTextKey { get; init; } = "More";
 }

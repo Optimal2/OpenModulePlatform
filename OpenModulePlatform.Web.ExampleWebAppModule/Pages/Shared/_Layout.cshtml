@@ -1,8 +1,13 @@
 @* File: OpenModulePlatform.Web.ExampleWebAppModule/Pages/Shared/_Layout.cshtml *@
 @using OpenModulePlatform.Web.Shared.Navigation
 @inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> WebAppOptionsAccessor
+@inject PortalTopBarService PortalTopBarService
 @{
-    var portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
+    var portalTopBar = await PortalTopBarService.CreateAsync(
+        WebAppOptionsAccessor.Value,
+        Context.Request,
+        User,
+        Context.RequestAborted);
     var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
     var currentCulture = System.Globalization.CultureInfo.CurrentUICulture.Name;
 }
@@ -16,23 +21,29 @@
 </head>
 <body>
     <header class="app-header">
-        @if (portalTopBar.IsVisible)
+        @if (portalTopBar.IsVisible && portalTopBar.PortalLink is not null)
         {
             <div class="portal-topbar">
                 <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
-                    <div class="portal-topbar__links" data-portal-topbar-links>
-                        @for (var i = 0; i < portalTopBar.Links.Count; i++)
-                        {
-                            var link = portalTopBar.Links[i];
-                            var cssClass = i == 0 ? "portal-topbar__link portal-topbar__link--root" : "portal-topbar__link";
-                            <a class="@cssClass" href="@link.Href" data-portal-topbar-item data-index="@i">@L[link.TextKey]</a>
-                        }
-                    </div>
+                    <a class="portal-topbar__portal-link" href="@portalTopBar.PortalLink.Href">@L[portalTopBar.PortalLink.TextKey]</a>
 
-                    <details class="portal-topbar__overflow" data-portal-topbar-overflow hidden>
-                        <summary>@L[portalTopBar.OverflowToggleTextKey]</summary>
-                        <div class="portal-topbar__menu" data-portal-topbar-menu></div>
-                    </details>
+                    @if (portalTopBar.ModuleLinks.Count > 0)
+                    {
+                        <span class="portal-topbar__pipe" aria-hidden="true">|</span>
+
+                        <div class="portal-topbar__modules" data-portal-topbar-modules>
+                            @for (var i = 0; i < portalTopBar.ModuleLinks.Count; i++)
+                            {
+                                var link = portalTopBar.ModuleLinks[i];
+                                <a class="portal-topbar__module-link" href="@link.Href" data-portal-topbar-item data-index="@i">@link.TextKey</a>
+                            }
+                        </div>
+
+                        <details class="portal-topbar__overflow" data-portal-topbar-overflow hidden>
+                            <summary>@L[portalTopBar.OverflowToggleTextKey]</summary>
+                            <div class="portal-topbar__menu" data-portal-topbar-menu></div>
+                        </details>
+                    }
                 </nav>
             </div>
         }
@@ -78,22 +89,22 @@
             }
 
             function rebalance(topbar) {
-                const linksHost = topbar.querySelector('[data-portal-topbar-links]');
+                const modulesHost = topbar.querySelector('[data-portal-topbar-modules]');
                 const overflow = topbar.querySelector('[data-portal-topbar-overflow]');
                 const menu = topbar.querySelector('[data-portal-topbar-menu]');
                 const summary = overflow?.querySelector('summary');
 
-                if (!linksHost || !overflow || !menu || !summary) {
+                if (!modulesHost || !overflow || !menu || !summary) {
                     return;
                 }
 
                 const allLinks = sortByIndex([
-                    ...linksHost.querySelectorAll('[data-portal-topbar-item]'),
+                    ...modulesHost.querySelectorAll('[data-portal-topbar-item]'),
                     ...menu.querySelectorAll('[data-portal-topbar-item]')
                 ]);
 
                 for (const link of allLinks) {
-                    linksHost.appendChild(link);
+                    modulesHost.appendChild(link);
                 }
 
                 overflow.open = false;
@@ -101,15 +112,15 @@
                 overflow.classList.remove('portal-topbar__overflow--measuring');
                 menu.replaceChildren();
 
-                if (linksHost.scrollWidth <= linksHost.clientWidth) {
+                if (topbar.scrollWidth <= topbar.clientWidth) {
                     return;
                 }
 
                 overflow.hidden = false;
                 overflow.classList.add('portal-topbar__overflow--measuring');
 
-                while (linksHost.children.length > 1 && linksHost.scrollWidth > linksHost.clientWidth) {
-                    const linkToMove = linksHost.lastElementChild;
+                while (modulesHost.children.length > 0 && topbar.scrollWidth > topbar.clientWidth) {
+                    const linkToMove = modulesHost.lastElementChild;
                     if (!linkToMove) {
                         break;
                     }
