@@ -13,6 +13,8 @@ namespace OpenModulePlatform.Web.Shared.Navigation;
 /// </summary>
 public sealed class PortalTopBarService
 {
+    private const string PortalAdminPermission = "OMP.Portal.Admin";
+
     private readonly SqlConnectionFactory _db;
     private readonly RbacService _rbac;
     private readonly ILogger<PortalTopBarService> _log;
@@ -47,6 +49,7 @@ public sealed class PortalTopBarService
         {
             var permissions = await _rbac.GetUserPermissionsAsync(user, ct);
             var apps = await GetEnabledWebAppsAsync(ct);
+            var isPortalAdmin = permissions.Contains(PortalAdminPermission);
 
             var moduleLinks = apps
                 .Where(app => HasAccess(app, permissions))
@@ -60,7 +63,12 @@ public sealed class PortalTopBarService
                 PortalLink = portalLink,
                 ModuleLinks = moduleLinks,
                 Links = [portalLink, .. moduleLinks],
-                OverflowToggleTextKey = "More"
+                IsPortalAdmin = isPortalAdmin,
+                PortalAdminLinks = isPortalAdmin
+                    ? CreatePortalAdminLinks(topBarOptions.PortalBaseUrl)
+                    : Array.Empty<PortalTopBarLink>(),
+                OverflowToggleTextKey = "More",
+                PortalAdminToggleTextKey = "Admin"
             };
         }
         catch (Exception ex)
@@ -73,9 +81,27 @@ public sealed class PortalTopBarService
                 PortalLink = portalLink,
                 ModuleLinks = Array.Empty<PortalTopBarLink>(),
                 Links = [portalLink],
-                OverflowToggleTextKey = "More"
+                IsPortalAdmin = false,
+                PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
+                OverflowToggleTextKey = "More",
+                PortalAdminToggleTextKey = "Admin"
             };
         }
+    }
+
+    private static PortalTopBarLink[] CreatePortalAdminLinks(string portalBaseUrl)
+    {
+        return
+        [
+            new PortalTopBarLink("Admin", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/overview")),
+            new PortalTopBarLink("Instances", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/instances")),
+            new PortalTopBarLink("Hosts", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/hosts")),
+            new PortalTopBarLink("Modules", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/modules")),
+            new PortalTopBarLink("Apps", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/apps")),
+            new PortalTopBarLink("Artifacts", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/artifacts")),
+            new PortalTopBarLink("Automation", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/automation")),
+            new PortalTopBarLink("RBAC", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/rbac"))
+        ];
     }
 
     private async Task<IReadOnlyList<PortalTopBarAppEntry>> GetEnabledWebAppsAsync(CancellationToken ct)
