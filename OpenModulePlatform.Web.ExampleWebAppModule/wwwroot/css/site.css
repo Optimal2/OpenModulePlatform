@@ -48,6 +48,8 @@ a:hover {
 .portal-topbar {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     min-height: 34px;
     padding: 6px 20px;
     border-bottom: 1px solid var(--border);
@@ -59,7 +61,7 @@ a:hover {
     display: flex;
     align-items: center;
     gap: 10px;
-    width: 100%;
+    flex: 1 1 auto;
     min-width: 0;
     flex-wrap: nowrap;
     overflow: visible;
@@ -91,7 +93,11 @@ a:hover {
 
 .portal-topbar__module-link + .portal-topbar__module-link::before {
     content: "-";
-    margin: 0 8px 0 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    margin: 0 8px 0 4px;
     color: var(--border-strong);
 }
 
@@ -102,7 +108,11 @@ a:hover {
 }
 
 .portal-topbar__pipe {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
+    width: 12px;
     color: var(--border-strong);
 }
 
@@ -113,6 +123,65 @@ a:hover {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
+}
+
+.portal-topbar__tools {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.portal-topbar__admin {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.portal-topbar__admin summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-height: 28px;
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.portal-topbar__admin summary::-webkit-details-marker {
+    display: none;
+}
+
+.portal-topbar__admin summary:hover,
+.portal-topbar__admin[open] summary {
+    color: var(--text);
+    background: var(--surface-muted);
+}
+
+.portal-topbar__admin-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1100;
+    min-width: 220px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.portal-topbar__admin-link {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 10px;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.portal-topbar__admin-link:hover {
+    background: var(--surface-muted);
 }
 
 .portal-topbar__overflow {

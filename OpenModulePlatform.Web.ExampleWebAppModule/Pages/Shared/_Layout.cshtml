@@ -23,7 +23,7 @@
     <header class="app-header">
         @if (portalTopBar.IsVisible && portalTopBar.PortalLink is not null)
         {
-            <div class="portal-topbar">
+            <div class="portal-topbar" data-portal-topbar-root>
                 <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
                     <a class="portal-topbar__portal-link" href="@portalTopBar.PortalLink.Href">@L[portalTopBar.PortalLink.TextKey]</a>
 
@@ -39,12 +39,30 @@
                             }
                         </div>
 
-                        <details class="portal-topbar__overflow" data-portal-topbar-overflow hidden>
+                        <details class="portal-topbar__overflow" data-portal-topbar-overflow data-portal-topbar-overlay hidden>
                             <summary>@L[portalTopBar.OverflowToggleTextKey]</summary>
                             <div class="portal-topbar__menu" data-portal-topbar-menu></div>
                         </details>
                     }
                 </nav>
+
+                @if (portalTopBar.IsPortalAdmin && portalTopBar.PortalAdminLinks.Count > 0)
+                {
+                    <div class="portal-topbar__tools">
+                        <details class="portal-topbar__admin" data-portal-topbar-overlay>
+                            <summary title="@L[portalTopBar.PortalAdminToggleTextKey]" aria-label="@L[portalTopBar.PortalAdminToggleTextKey]">
+                                <span aria-hidden="true">&#9881;</span>
+                                <span class="visually-hidden">@L[portalTopBar.PortalAdminToggleTextKey]</span>
+                            </summary>
+                            <div class="portal-topbar__admin-menu">
+                                @foreach (var link in portalTopBar.PortalAdminLinks)
+                                {
+                                    <a class="portal-topbar__admin-link" href="@link.Href">@L[link.TextKey]</a>
+                                }
+                            </div>
+                        </details>
+                    </div>
+                }
             </div>
         }
         <div class="topbar">
@@ -135,19 +153,21 @@
                 }
             }
 
-            function registerOutsideClose(topbar) {
-                const overflow = topbar.querySelector('[data-portal-topbar-overflow]');
-                if (!overflow) {
+            function registerOutsideClose(root) {
+                const overlays = root.querySelectorAll('[data-portal-topbar-overlay]');
+                if (!overlays.length) {
                     return;
                 }
 
                 document.addEventListener('click', event => {
-                    if (!overflow.open) {
-                        return;
-                    }
+                    for (const overlay of overlays) {
+                        if (!overlay.open) {
+                            continue;
+                        }
 
-                    if (!overflow.contains(event.target)) {
-                        overflow.open = false;
+                        if (!overlay.contains(event.target)) {
+                            overlay.open = false;
+                        }
                     }
                 });
             }
@@ -155,7 +175,7 @@
             for (const topbar of topbars) {
                 const rebalanceTopbar = () => rebalance(topbar);
                 rebalanceTopbar();
-                registerOutsideClose(topbar);
+                registerOutsideClose(topbar.closest('[data-portal-topbar-root]') ?? topbar);
 
                 if (typeof ResizeObserver !== 'undefined') {
                     const resizeObserver = new ResizeObserver(rebalanceTopbar);

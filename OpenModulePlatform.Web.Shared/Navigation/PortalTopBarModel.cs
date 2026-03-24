@@ -10,7 +10,9 @@ public sealed class PortalTopBarModel
         IsVisible = false,
         Links = Array.Empty<PortalTopBarLink>(),
         ModuleLinks = Array.Empty<PortalTopBarLink>(),
-        OverflowToggleTextKey = "More"
+        PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
+        OverflowToggleTextKey = "More",
+        PortalAdminToggleTextKey = "Admin"
     };
 
     public bool IsVisible { get; init; }
@@ -24,5 +26,11 @@ public sealed class PortalTopBarModel
 
     public IReadOnlyList<PortalTopBarLink> ModuleLinks { get; init; } = Array.Empty<PortalTopBarLink>();
 
+    public bool IsPortalAdmin { get; init; }
+
+    public IReadOnlyList<PortalTopBarLink> PortalAdminLinks { get; init; } = Array.Empty<PortalTopBarLink>();
+
     public string OverflowToggleTextKey { get; init; } = "More";
+
+    public string PortalAdminToggleTextKey { get; init; } = "Admin";
 }
