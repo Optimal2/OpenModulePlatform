@@ -39,6 +39,19 @@
                             }
                         </div>
 
+                        <details class="portal-topbar__collapsed" data-portal-topbar-overlay>
+                            <summary title="@L[portalTopBar.OverflowToggleTextKey]" aria-label="@L[portalTopBar.OverflowToggleTextKey]">
+                                <span aria-hidden="true">&#128279;</span>
+                                <span class="visually-hidden">@L[portalTopBar.OverflowToggleTextKey]</span>
+                            </summary>
+                            <div class="portal-topbar__collapsed-menu">
+                                @foreach (var link in portalTopBar.ModuleLinks)
+                                {
+                                    <a class="portal-topbar__collapsed-link" href="@link.Href">@link.TextKey</a>
+                                }
+                            </div>
+                        </details>
+
                         <details class="portal-topbar__overflow" data-portal-topbar-overflow data-portal-topbar-overlay hidden>
                             <summary>@L[portalTopBar.OverflowToggleTextKey]</summary>
                             <div class="portal-topbar__menu" data-portal-topbar-menu></div>
