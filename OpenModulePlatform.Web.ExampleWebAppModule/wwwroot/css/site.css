@@ -581,3 +581,35 @@ code {
         margin-left: 0;
     }
 }
+
+@media (max-width: 710px) {
+    .portal-topbar {
+        padding: 6px 16px;
+        justify-content: space-between;
+    }
+
+    .portal-topbar__nav {
+        flex: 1 1 auto;
+        justify-content: flex-start;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .portal-topbar__pipe,
+    .portal-topbar__modules,
+    .portal-topbar__overflow {
+        display: none !important;
+    }
+
+    .portal-topbar__tools {
+        flex: 0 0 auto;
+        margin-left: 12px;
+        justify-content: flex-end;
+    }
+
+    .portal-topbar__admin,
+    .portal-topbar__admin summary {
+        display: inline-flex;
+    }
+}
+
