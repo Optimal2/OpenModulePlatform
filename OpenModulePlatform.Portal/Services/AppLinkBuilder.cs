@@ -21,6 +21,19 @@ namespace OpenModulePlatform.Portal.Services;
 /// </remarks>
 public static class AppLinkBuilder
 {
+    public static string? ResolveDisplayAddress(HttpRequest request, PortalAppEntry app)
+    {
+        var configuredAddress = Clean(app.RoutePath) ?? Clean(app.PublicUrl);
+        if (!string.IsNullOrWhiteSpace(configuredAddress))
+        {
+            return configuredAddress;
+        }
+
+        return IsPortalApp(app)
+            ? (request.PathBase.HasValue ? request.PathBase.Value.ToString() : "/")
+            : null;
+    }
+
     public static string? ResolveHref(HttpRequest request, PortalAppEntry app)
     {
         var routePath = Clean(app.RoutePath);
@@ -38,7 +51,24 @@ public static class AppLinkBuilder
         }
 
         var publicUrl = Clean(app.PublicUrl);
-        return string.IsNullOrWhiteSpace(publicUrl) ? null : publicUrl;
+        if (!string.IsNullOrWhiteSpace(publicUrl))
+        {
+            return publicUrl;
+        }
+
+        if (IsPortalApp(app))
+        {
+            var portalPath = request.PathBase.HasValue ? request.PathBase.Value.ToString() : string.Empty;
+            return $"{request.GetPublicBaseUrl().TrimEnd('/')}{portalPath}";
+        }
+
+        return null;
+    }
+
+    private static bool IsPortalApp(PortalAppEntry app)
+    {
+        return string.Equals(app.AppKey, "omp_portal", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(app.AppInstanceKey, "omp_portal", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ResolveHostRoot(HttpRequest request, PortalAppEntry app)
