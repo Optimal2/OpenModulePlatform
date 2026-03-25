@@ -38,9 +38,7 @@
                 var showResolvedHref = false;
 
                 href = AppLinkBuilder.ResolveHref(Request, app);
-                configuredAddress = !string.IsNullOrWhiteSpace(app.RoutePath)
-                    ? app.RoutePath
-                    : app.PublicUrl;
+                configuredAddress = AppLinkBuilder.ResolveDisplayAddress(Request, app);
                 displayAddress = configuredAddress ?? href;
                 showResolvedHref = !string.IsNullOrWhiteSpace(href)
                     && !string.IsNullOrWhiteSpace(configuredAddress)

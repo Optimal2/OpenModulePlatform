@@ -29,7 +29,8 @@ public static class PortalTopBarModelFactory
             Links = [portalLink],
             PortalLink = portalLink,
             ModuleLinks = Array.Empty<PortalTopBarLink>(),
-            OverflowToggleTextKey = "More"
+            OverflowToggleTextKey = "More",
+            CollapsedToggleTextKey = "Modules"
         };
     }
 

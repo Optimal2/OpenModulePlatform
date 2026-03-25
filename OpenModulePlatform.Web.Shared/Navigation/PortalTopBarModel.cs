@@ -12,6 +12,7 @@ public sealed class PortalTopBarModel
         ModuleLinks = Array.Empty<PortalTopBarLink>(),
         PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
         OverflowToggleTextKey = "More",
+        CollapsedToggleTextKey = "Modules",
         PortalAdminToggleTextKey = "Admin"
     };
 
@@ -31,6 +32,8 @@ public sealed class PortalTopBarModel
     public IReadOnlyList<PortalTopBarLink> PortalAdminLinks { get; init; } = Array.Empty<PortalTopBarLink>();
 
     public string OverflowToggleTextKey { get; init; } = "More";
+
+    public string CollapsedToggleTextKey { get; init; } = "Modules";
 
     public string PortalAdminToggleTextKey { get; init; } = "Admin";
 }

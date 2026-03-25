@@ -194,13 +194,14 @@ a:hover {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
     min-height: 28px;
+    padding: 0 8px;
     border-radius: 8px;
     color: var(--text-muted);
     cursor: pointer;
     list-style: none;
     user-select: none;
+    white-space: nowrap;
 }
 
 .portal-topbar__collapsed summary::-webkit-details-marker {
