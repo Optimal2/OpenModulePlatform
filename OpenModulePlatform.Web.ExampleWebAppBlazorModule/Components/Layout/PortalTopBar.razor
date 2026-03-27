@@ -17,6 +17,22 @@
         <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
             <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@L[_portalTopBar.PortalLink.TextKey]</a>
 
+            @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminLinks.Count > 0)
+            {
+                <details class="portal-topbar__admin" data-portal-topbar-overlay>
+                    <summary title="@L[_portalTopBar.PortalAdminToggleTextKey]" aria-label="@L[_portalTopBar.PortalAdminToggleTextKey]">
+                        <span aria-hidden="true">&#9881;</span>
+                        <span class="visually-hidden">@L[_portalTopBar.PortalAdminToggleTextKey]</span>
+                    </summary>
+                    <div class="portal-topbar__admin-menu">
+                        @foreach (var link in _portalTopBar.PortalAdminLinks)
+                        {
+                            <a class="portal-topbar__admin-link" href="@link.Href">@L[link.TextKey]</a>
+                        }
+                    </div>
+                </details>
+            }
+
             @if (_portalTopBar.ModuleLinks.Count > 0)
             {
                 <span class="portal-topbar__pipe" aria-hidden="true">|</span>
@@ -47,24 +63,6 @@
                 </details>
             }
         </nav>
-
-        @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminLinks.Count > 0)
-        {
-            <div class="portal-topbar__tools">
-                <details class="portal-topbar__admin" data-portal-topbar-overlay>
-                    <summary title="@L[_portalTopBar.PortalAdminToggleTextKey]" aria-label="@L[_portalTopBar.PortalAdminToggleTextKey]">
-                        <span aria-hidden="true">&#9881;</span>
-                        <span class="visually-hidden">@L[_portalTopBar.PortalAdminToggleTextKey]</span>
-                    </summary>
-                    <div class="portal-topbar__admin-menu">
-                        @foreach (var link in _portalTopBar.PortalAdminLinks)
-                        {
-                            <a class="portal-topbar__admin-link" href="@link.Href">@L[link.TextKey]</a>
-                        }
-                    </div>
-                </details>
-            </div>
-        }
     </div>
 }
 

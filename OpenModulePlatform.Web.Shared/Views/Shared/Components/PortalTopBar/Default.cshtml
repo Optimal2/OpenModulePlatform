@@ -1,0 +1,57 @@
+@model OpenModulePlatform.Web.Shared.Navigation.PortalTopBarModel
+@inject Microsoft.Extensions.Localization.IStringLocalizer<OpenModulePlatform.Web.Shared.Localization.SharedResource> L
+
+@if (Model.IsVisible && Model.PortalLink is not null)
+{
+    <div class="portal-topbar" data-portal-topbar-root>
+        <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
+            <a class="portal-topbar__portal-link" href="@Model.PortalLink.Href">@L[Model.PortalLink.TextKey]</a>
+
+            @if (Model.IsPortalAdmin && Model.PortalAdminLinks.Count > 0)
+            {
+                <details class="portal-topbar__admin" data-portal-topbar-overlay>
+                    <summary title="@L[Model.PortalAdminToggleTextKey]" aria-label="@L[Model.PortalAdminToggleTextKey]">
+                        <span aria-hidden="true">&#9881;</span>
+                        <span class="visually-hidden">@L[Model.PortalAdminToggleTextKey]</span>
+                    </summary>
+                    <div class="portal-topbar__admin-menu">
+                        @foreach (var link in Model.PortalAdminLinks)
+                        {
+                            <a class="portal-topbar__admin-link" href="@link.Href">@L[link.TextKey]</a>
+                        }
+                    </div>
+                </details>
+            }
+
+            @if (Model.ModuleLinks.Count > 0)
+            {
+                <span class="portal-topbar__pipe" aria-hidden="true">|</span>
+
+                <div class="portal-topbar__modules" data-portal-topbar-modules>
+                    @for (var i = 0; i < Model.ModuleLinks.Count; i++)
+                    {
+                        var link = Model.ModuleLinks[i];
+                        <a class="portal-topbar__module-link" href="@link.Href" data-portal-topbar-item data-index="@i">@link.TextKey</a>
+                    }
+                </div>
+
+                <details class="portal-topbar__collapsed" data-portal-topbar-overlay>
+                    <summary title="@L[Model.CollapsedToggleTextKey]" aria-label="@L[Model.CollapsedToggleTextKey]">
+                        @L[Model.CollapsedToggleTextKey]
+                    </summary>
+                    <div class="portal-topbar__collapsed-menu">
+                        @foreach (var link in Model.ModuleLinks)
+                        {
+                            <a class="portal-topbar__collapsed-link" href="@link.Href">@link.TextKey</a>
+                        }
+                    </div>
+                </details>
+
+                <details class="portal-topbar__overflow" data-portal-topbar-overflow data-portal-topbar-overlay hidden>
+                    <summary>@L[Model.OverflowToggleTextKey]</summary>
+                    <div class="portal-topbar__menu" data-portal-topbar-menu></div>
+                </details>
+            }
+        </nav>
+    </div>
+}

@@ -1,7 +1,7 @@
 .portal-topbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 12px;
     min-height: 34px;
     padding: 6px 20px;
@@ -13,6 +13,7 @@
 .portal-topbar__nav {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 10px;
     flex: 1 1 auto;
     min-width: 0;
@@ -37,7 +38,9 @@
 }
 
 .portal-topbar__portal-link {
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 0.94rem;
+    color: var(--text);
 }
 
 .portal-topbar__module-link {
@@ -78,15 +81,10 @@
     white-space: nowrap;
 }
 
-.portal-topbar__tools {
-    display: flex;
-    align-items: center;
-    flex: 0 0 auto;
-}
-
 .portal-topbar__admin {
     position: relative;
     flex: 0 0 auto;
+    margin-left: 2px;
 }
 
 .portal-topbar__admin summary {
@@ -115,7 +113,7 @@
 .portal-topbar__admin-menu {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    left: 0;
     z-index: 1100;
     min-width: 220px;
     padding: 8px;
@@ -245,7 +243,7 @@
 @media (max-width: 710px) {
     .portal-topbar {
         padding: 6px 16px;
-        justify-content: space-between;
+        justify-content: flex-start;
     }
 
     .portal-topbar__nav {
@@ -266,19 +264,20 @@
     }
 
     .portal-topbar__collapsed,
-    .portal-topbar__collapsed summary {
-        display: inline-flex;
-    }
-
-    .portal-topbar__tools {
-        flex: 0 0 auto;
-        margin-left: 12px;
-        justify-content: flex-end;
-    }
-
+    .portal-topbar__collapsed summary,
     .portal-topbar__admin,
     .portal-topbar__admin summary {
         display: inline-flex;
     }
 }
 
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}

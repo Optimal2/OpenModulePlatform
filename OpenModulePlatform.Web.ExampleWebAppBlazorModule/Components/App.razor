@@ -1,24 +1,18 @@
-@using Microsoft.AspNetCore.Http
-@inject IHttpContextAccessor HttpContextAccessor
-@{
-    var pathBase = HttpContextAccessor.HttpContext?.Request.PathBase.Value?.TrimEnd('/') ?? string.Empty;
-    var baseHref = string.IsNullOrEmpty(pathBase) ? "/" : $"{pathBase}/";
-    var assetPrefix = string.IsNullOrEmpty(pathBase) ? string.Empty : pathBase;
-    var htmlLang = System.Globalization.CultureInfo.CurrentUICulture.Name;
-}
+@inject NavigationManager NavigationManager
+
 <!DOCTYPE html>
-<html lang="@htmlLang">
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="@baseHref" />
-    <link rel="stylesheet" href="@($"{assetPrefix}/css/site.css")" />
-    <link rel="stylesheet" href="@($"{assetPrefix}/css/portal-topbar.css")" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <base href="@NavigationManager.BaseUri" />
+    <link rel="stylesheet" href="css/site.css" />
+    <link rel="stylesheet" href="_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
+    <HeadOutlet />
 </head>
 <body>
     <Routes @rendermode="InteractiveServer" />
-    <script src="@($"{assetPrefix}/js/portal-topbar.js")"></script>
-    <script src="@($"{assetPrefix}/_framework/blazor.web.js")"></script>
+    <script src="_content/OpenModulePlatform.Web.Shared/js/portal-topbar.js"></script>
+    <script src="_framework/blazor.web.js"></script>
 </body>
 </html>

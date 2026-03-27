@@ -74,8 +74,6 @@ public static class OmpWebHostingExtensions
             options.FallbackPolicy = options.DefaultPolicy;
         });
 
-        builder.Services.AddHttpContextAccessor();
-
         var webAppOptions = builder.Configuration
             .GetSection(optionsSectionName)
             .Get<WebAppOptions>() ?? new WebAppOptions();
@@ -123,6 +121,7 @@ public static class OmpWebHostingExtensions
                 ConfigureForwardedHeaders(options, webAppOptions, logger);
             });
 
+        builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<SqlConnectionFactory>();
         builder.Services.AddScoped<RbacService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
