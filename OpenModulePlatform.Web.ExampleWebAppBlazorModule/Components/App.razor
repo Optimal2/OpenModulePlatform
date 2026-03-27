@@ -1,16 +1,24 @@
+@using Microsoft.AspNetCore.Http
+@inject IHttpContextAccessor HttpContextAccessor
+@{
+    var pathBase = HttpContextAccessor.HttpContext?.Request.PathBase.Value?.TrimEnd('/') ?? string.Empty;
+    var baseHref = string.IsNullOrEmpty(pathBase) ? "/" : $"{pathBase}/";
+    var assetPrefix = string.IsNullOrEmpty(pathBase) ? string.Empty : pathBase;
+    var htmlLang = System.Globalization.CultureInfo.CurrentUICulture.Name;
+}
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="@htmlLang">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/" />
-    <link rel="stylesheet" href="css/site.css" />
-    <link rel="stylesheet" href="css/portal-topbar.css" />
+    <base href="@baseHref" />
+    <link rel="stylesheet" href="@($"{assetPrefix}/css/site.css")" />
+    <link rel="stylesheet" href="@($"{assetPrefix}/css/portal-topbar.css")" />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 <body>
     <Routes @rendermode="InteractiveServer" />
-    <script src="js/portal-topbar.js"></script>
-    <script src="_framework/blazor.web.js"></script>
+    <script src="@($"{assetPrefix}/js/portal-topbar.js")"></script>
+    <script src="@($"{assetPrefix}/_framework/blazor.web.js")"></script>
 </body>
 </html>

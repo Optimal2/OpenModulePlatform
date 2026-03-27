@@ -29,10 +29,30 @@ public sealed class PortalTopBarService
         _log = log;
     }
 
-    public async Task<PortalTopBarModel> CreateAsync(
+    public Task<PortalTopBarModel> CreateAsync(
         WebAppOptions options,
         HttpRequest request,
         ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        var currentUri = BuildCurrentUri(request);
+        return CreateInternalAsync(options, user, currentUri, request.Host.Host, ct);
+    }
+
+    public Task<PortalTopBarModel> CreateAsync(
+        WebAppOptions options,
+        Uri currentUri,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        return CreateInternalAsync(options, user, currentUri, currentUri.Host, ct);
+    }
+
+    private async Task<PortalTopBarModel> CreateInternalAsync(
+        WebAppOptions options,
+        ClaimsPrincipal user,
+        Uri currentUri,
+        string currentHost,
         CancellationToken ct)
     {
         var topBarOptions = options.PortalTopBar ?? new PortalTopBarOptions();
@@ -53,7 +73,7 @@ public sealed class PortalTopBarService
 
             var moduleLinks = apps
                 .Where(app => HasAccess(app, permissions))
-                .Select(app => new PortalTopBarLink(app.DisplayName, ResolveHref(request, app)!))
+                .Select(app => new PortalTopBarLink(app.DisplayName, ResolveHref(currentUri, currentHost, app)!))
                 .Where(link => !string.IsNullOrWhiteSpace(link.Href))
                 .ToArray();
 
@@ -68,7 +88,8 @@ public sealed class PortalTopBarService
                     ? CreatePortalAdminLinks(topBarOptions.PortalBaseUrl)
                     : Array.Empty<PortalTopBarLink>(),
                 OverflowToggleTextKey = "More",
-                PortalAdminToggleTextKey = "Admin"
+                PortalAdminToggleTextKey = "Admin",
+                CollapsedToggleTextKey = "Modules"
             };
         }
         catch (Exception ex)
@@ -84,9 +105,19 @@ public sealed class PortalTopBarService
                 IsPortalAdmin = false,
                 PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
                 OverflowToggleTextKey = "More",
-                PortalAdminToggleTextKey = "Admin"
+                PortalAdminToggleTextKey = "Admin",
+                CollapsedToggleTextKey = "Modules"
             };
         }
+    }
+
+    private static Uri BuildCurrentUri(HttpRequest request)
+    {
+        var baseUrl = request.GetPublicBaseUrl();
+        var pathBase = request.PathBase.HasValue ? request.PathBase.Value : string.Empty;
+        var path = request.Path.HasValue ? request.Path.Value : string.Empty;
+        var query = request.QueryString.HasValue ? request.QueryString.Value : string.Empty;
+        return new Uri($"{baseUrl}{pathBase}{path}{query}", UriKind.Absolute);
     }
 
     private static PortalTopBarLink[] CreatePortalAdminLinks(string portalBaseUrl)
@@ -136,46 +167,38 @@ ORDER BY ai.SortOrder,
          ai.DisplayName;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
 
-        var map = new Dictionary<Guid, PortalTopBarAppEntry>();
-        while (await rdr.ReadAsync(ct))
+        var apps = new Dictionary<Guid, PortalTopBarAppEntry>();
+        while (await reader.ReadAsync(ct))
         {
-            var appInstanceId = rdr.GetGuid(0);
-            if (!map.TryGetValue(appInstanceId, out var entry))
+            var appInstanceId = reader.GetGuid(0);
+            if (!apps.TryGetValue(appInstanceId, out var entry))
             {
                 entry = new PortalTopBarAppEntry
                 {
                     AppInstanceId = appInstanceId,
-                    DisplayName = rdr.GetString(1),
-                    RoutePath = rdr.IsDBNull(2) ? null : rdr.GetString(2),
-                    PublicUrl = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-                    HostKey = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                    HostBaseUrl = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                    SortOrder = rdr.GetInt32(6),
-                    RequireAll = !rdr.IsDBNull(8) && rdr.GetBoolean(8)
+                    DisplayName = reader.GetString(1),
+                    RoutePath = reader.IsDBNull(2) ? null : reader.GetString(2),
+                    PublicUrl = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    HostKey = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    HostBaseUrl = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    SortOrder = reader.IsDBNull(6) ? 0 : reader.GetInt32(6),
+                    RequireAll = !reader.IsDBNull(8) && reader.GetBoolean(8)
                 };
-
-                map[appInstanceId] = entry;
-            }
-            else
-            {
-                entry.RequireAll = entry.RequireAll || (!rdr.IsDBNull(8) && rdr.GetBoolean(8));
+                apps.Add(appInstanceId, entry);
             }
 
-            if (!rdr.IsDBNull(7))
+            if (!reader.IsDBNull(7))
             {
-                entry.RequiredPermissions.Add(rdr.GetString(7));
+                entry.RequiredPermissions.Add(reader.GetString(7));
             }
         }
 
-        return map.Values
-            .OrderBy(x => x.SortOrder)
-            .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return apps.Values.ToArray();
     }
 
-    private static bool HasAccess(PortalTopBarAppEntry app, IReadOnlySet<string> permissions)
+    private static bool HasAccess(PortalTopBarAppEntry app, HashSet<string> permissions)
     {
         if (app.RequiredPermissions.Count == 0)
         {
@@ -194,7 +217,7 @@ ORDER BY ai.SortOrder,
         return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
     }
 
-    private static string? ResolveHref(HttpRequest request, PortalTopBarAppEntry app)
+    private static string? ResolveHref(Uri currentUri, string currentHost, PortalTopBarAppEntry app)
     {
         var routePath = Clean(app.RoutePath);
         if (!string.IsNullOrWhiteSpace(routePath))
@@ -204,7 +227,7 @@ ORDER BY ai.SortOrder,
                 return absoluteRoute.ToString();
             }
 
-            var hostRoot = ResolveHostRoot(request, app);
+            var hostRoot = ResolveHostRoot(currentUri, currentHost, app);
             return string.IsNullOrWhiteSpace(hostRoot)
                 ? null
                 : CombineHostRootAndRoute(hostRoot, routePath);
@@ -214,7 +237,7 @@ ORDER BY ai.SortOrder,
         return string.IsNullOrWhiteSpace(publicUrl) ? null : publicUrl;
     }
 
-    private static string? ResolveHostRoot(HttpRequest request, PortalTopBarAppEntry app)
+    private static string? ResolveHostRoot(Uri currentUri, string currentHost, PortalTopBarAppEntry app)
     {
         var hostBaseUrl = Clean(app.HostBaseUrl);
         if (!string.IsNullOrWhiteSpace(hostBaseUrl)
@@ -224,9 +247,9 @@ ORDER BY ai.SortOrder,
         }
 
         var hostKey = Clean(app.HostKey);
-        if (string.IsNullOrWhiteSpace(hostKey) || HostMatchesCurrentRequest(request, hostKey))
+        if (string.IsNullOrWhiteSpace(hostKey) || HostMatchesCurrentRequest(currentHost, hostKey))
         {
-            return request.GetPublicBaseUrl();
+            return currentUri.GetLeftPart(UriPartial.Authority);
         }
 
         if (Uri.TryCreate(hostKey, UriKind.Absolute, out var absoluteHostKey))
@@ -237,10 +260,9 @@ ORDER BY ai.SortOrder,
         return null;
     }
 
-    private static bool HostMatchesCurrentRequest(HttpRequest request, string hostKey)
+    private static bool HostMatchesCurrentRequest(string currentHost, string hostKey)
     {
-        return string.Equals(hostKey, request.Host.Host, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(hostKey, request.Host.Value, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(hostKey, currentHost, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CombineHostRootAndRoute(string hostRoot, string routePath)

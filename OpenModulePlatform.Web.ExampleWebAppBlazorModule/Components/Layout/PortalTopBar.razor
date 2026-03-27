@@ -2,11 +2,14 @@
 @using OpenModulePlatform.Web.Shared.Localization
 @using Microsoft.Extensions.Localization
 @using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Authorization
 @inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> WebAppOptionsAccessor
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @inject PortalTopBarService PortalTopBarService
 @inject IStringLocalizer<SharedResource> L
 @inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 @if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
 {
@@ -71,17 +74,30 @@
     protected override async Task OnInitializedAsync()
     {
         var httpContext = HttpContextAccessor.HttpContext;
-        if (httpContext is null)
+        if (httpContext is not null)
         {
-            _portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
+            _portalTopBar = await PortalTopBarService.CreateAsync(
+                WebAppOptionsAccessor.Value,
+                httpContext.Request,
+                httpContext.User,
+                httpContext.RequestAborted);
             return;
         }
 
-        _portalTopBar = await PortalTopBarService.CreateAsync(
-            WebAppOptionsAccessor.Value,
-            httpContext.Request,
-            httpContext.User,
-            httpContext.RequestAborted);
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authenticationState.User;
+
+        if (Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
+        {
+            _portalTopBar = await PortalTopBarService.CreateAsync(
+                WebAppOptionsAccessor.Value,
+                currentUri,
+                user,
+                CancellationToken.None);
+            return;
+        }
+
+        _portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
