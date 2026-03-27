@@ -40,6 +40,9 @@ a:hover {
     position: sticky;
     top: 0;
     z-index: 10;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
 }
 
 .topbar {
@@ -197,6 +200,26 @@ a:hover {
     gap: 10px;
     margin-top: 12px;
 }
+.toolbar--header {
+    margin-top: 0;
+    margin-left: auto;
+    align-items: center;
+}
+
+.language-switcher {
+    display: inline-flex;
+    align-items: center;
+}
+
+.language-switcher select {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 10px;
+    font: inherit;
+}
+
 
 .action-link,
 button,
