@@ -10,3 +10,4 @@
 TestResults/
 artifacts/
 **/logs/
+**/.DS_Store

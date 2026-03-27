@@ -9,4 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\OpenModulePlatform.Web.Shared\wwwroot\css\portal-topbar.css" Link="wwwroot\css\portal-topbar.css" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
