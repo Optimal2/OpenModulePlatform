@@ -13,4 +13,8 @@
   <ItemGroup>
     <Content Include="..\OpenModulePlatform.Web.Shared\wwwroot\css\portal-topbar.css" Link="wwwroot\css\portal-topbar.css" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\OpenModulePlatform.Web.Shared\wwwroot\js\portal-topbar.js" Link="wwwroot\js\portal-topbar.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
