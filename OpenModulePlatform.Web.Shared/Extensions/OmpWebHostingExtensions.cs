@@ -74,6 +74,8 @@ public static class OmpWebHostingExtensions
             options.FallbackPolicy = options.DefaultPolicy;
         });
 
+        builder.Services.AddHttpContextAccessor();
+
         var webAppOptions = builder.Configuration
             .GetSection(optionsSectionName)
             .Get<WebAppOptions>() ?? new WebAppOptions();

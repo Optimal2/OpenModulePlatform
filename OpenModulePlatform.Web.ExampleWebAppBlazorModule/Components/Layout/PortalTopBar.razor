@@ -1,0 +1,94 @@
+@using OpenModulePlatform.Web.Shared.Navigation
+@using OpenModulePlatform.Web.Shared.Localization
+@using Microsoft.Extensions.Localization
+@using Microsoft.JSInterop
+@inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> WebAppOptionsAccessor
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@inject PortalTopBarService PortalTopBarService
+@inject IStringLocalizer<SharedResource> L
+@inject IJSRuntime JS
+
+@if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
+{
+    <div class="portal-topbar" data-portal-topbar-root>
+        <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
+            <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@L[_portalTopBar.PortalLink.TextKey]</a>
+
+            @if (_portalTopBar.ModuleLinks.Count > 0)
+            {
+                <span class="portal-topbar__pipe" aria-hidden="true">|</span>
+
+                <div class="portal-topbar__modules" data-portal-topbar-modules>
+                    @for (var i = 0; i < _portalTopBar.ModuleLinks.Count; i++)
+                    {
+                        var link = _portalTopBar.ModuleLinks[i];
+                        <a class="portal-topbar__module-link" href="@link.Href" data-portal-topbar-item data-index="@i">@link.TextKey</a>
+                    }
+                </div>
+
+                <details class="portal-topbar__collapsed" data-portal-topbar-overlay>
+                    <summary title="@L[_portalTopBar.CollapsedToggleTextKey]" aria-label="@L[_portalTopBar.CollapsedToggleTextKey]">
+                        @L[_portalTopBar.CollapsedToggleTextKey]
+                    </summary>
+                    <div class="portal-topbar__collapsed-menu">
+                        @foreach (var link in _portalTopBar.ModuleLinks)
+                        {
+                            <a class="portal-topbar__collapsed-link" href="@link.Href">@link.TextKey</a>
+                        }
+                    </div>
+                </details>
+
+                <details class="portal-topbar__overflow" data-portal-topbar-overflow data-portal-topbar-overlay hidden>
+                    <summary>@L[_portalTopBar.OverflowToggleTextKey]</summary>
+                    <div class="portal-topbar__menu" data-portal-topbar-menu></div>
+                </details>
+            }
+        </nav>
+
+        @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminLinks.Count > 0)
+        {
+            <div class="portal-topbar__tools">
+                <details class="portal-topbar__admin" data-portal-topbar-overlay>
+                    <summary title="@L[_portalTopBar.PortalAdminToggleTextKey]" aria-label="@L[_portalTopBar.PortalAdminToggleTextKey]">
+                        <span aria-hidden="true">&#9881;</span>
+                        <span class="visually-hidden">@L[_portalTopBar.PortalAdminToggleTextKey]</span>
+                    </summary>
+                    <div class="portal-topbar__admin-menu">
+                        @foreach (var link in _portalTopBar.PortalAdminLinks)
+                        {
+                            <a class="portal-topbar__admin-link" href="@link.Href">@L[link.TextKey]</a>
+                        }
+                    </div>
+                </details>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private PortalTopBarModel _portalTopBar = PortalTopBarModel.Hidden;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext is null)
+        {
+            _portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
+            return;
+        }
+
+        _portalTopBar = await PortalTopBarService.CreateAsync(
+            WebAppOptionsAccessor.Value,
+            httpContext.Request,
+            httpContext.User,
+            httpContext.RequestAborted);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_portalTopBar.IsVisible)
+        {
+            await JS.InvokeVoidAsync("ompPortalTopBar.initAll");
+        }
+    }
+}

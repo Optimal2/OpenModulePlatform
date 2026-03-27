@@ -2,24 +2,27 @@
 @inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> Options
 
 <div class="page-shell">
-    <header class="topbar">
-        <div class="brand-wrap">
-            <div class="brand">@PortalTitle</div>
-            <div class="brand-subtitle">Example Web App Blazor Module</div>
-        </div>
-        <nav class="nav nav--primary">
-            <NavLink href="/" Match="NavLinkMatch.All">Overview</NavLink>
-            <NavLink href="/configurations">Configurations</NavLink>
-        </nav>
-        <div class="user">
-            <AuthorizeView>
-                <Authorized Context="authState">
-                    @authState.User.Identity?.Name
-                </Authorized>
-                <NotAuthorized>
-                    anonymous
-                </NotAuthorized>
-            </AuthorizeView>
+    <header class="app-header">
+        <PortalTopBar />
+        <div class="topbar">
+            <div class="brand-wrap">
+                <div class="brand">@PortalTitle</div>
+                <div class="brand-subtitle">Example Web App Blazor Module</div>
+            </div>
+            <nav class="nav nav--primary">
+                <NavLink href="/" Match="NavLinkMatch.All">Overview</NavLink>
+                <NavLink href="/configurations">Configurations</NavLink>
+            </nav>
+            <div class="user">
+                <AuthorizeView>
+                    <Authorized Context="authState">
+                        @authState.User.Identity?.Name
+                    </Authorized>
+                    <NotAuthorized>
+                        anonymous
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
         </div>
     </header>
 
