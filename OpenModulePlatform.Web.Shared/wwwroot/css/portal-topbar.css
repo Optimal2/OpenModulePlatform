@@ -35,7 +35,7 @@
 .portal-topbar__module-link,
 .portal-topbar__overflow summary,
 .portal-topbar__language summary,
-.portal-topbar__user {
+.portal-topbar__profile summary {
     display: inline-flex;
     align-items: center;
     flex: 0 0 auto;
@@ -72,7 +72,7 @@
 .portal-topbar__module-link:hover,
 .portal-topbar__overflow summary:hover,
 .portal-topbar__language summary:hover,
-.portal-topbar__user:hover {
+.portal-topbar__profile summary:hover {
     color: var(--text);
 }
 
@@ -96,6 +96,7 @@
 
 .portal-topbar__admin,
 .portal-topbar__language,
+.portal-topbar__profile,
 .portal-topbar__overflow,
 .portal-topbar__collapsed {
     position: relative;
@@ -104,6 +105,7 @@
 
 .portal-topbar__admin summary,
 .portal-topbar__language summary,
+.portal-topbar__profile summary,
 .portal-topbar__collapsed summary {
     display: inline-flex;
     align-items: center;
@@ -123,7 +125,8 @@
     padding: 0;
 }
 
-.portal-topbar__language summary {
+.portal-topbar__language summary,
+.portal-topbar__profile summary {
     width: 28px;
     padding: 0;
 }
@@ -135,6 +138,7 @@
 
 .portal-topbar__admin summary::-webkit-details-marker,
 .portal-topbar__language summary::-webkit-details-marker,
+.portal-topbar__profile summary::-webkit-details-marker,
 .portal-topbar__collapsed summary::-webkit-details-marker,
 .portal-topbar__overflow summary::-webkit-details-marker {
     display: none;
@@ -144,22 +148,16 @@
 .portal-topbar__admin[open] summary,
 .portal-topbar__language summary:hover,
 .portal-topbar__language[open] summary,
+.portal-topbar__profile summary:hover,
+.portal-topbar__profile[open] summary,
 .portal-topbar__collapsed summary:hover,
 .portal-topbar__collapsed[open] summary,
 .portal-topbar__overflow summary:hover,
-.portal-topbar__overflow[open] summary,
-.portal-topbar__user {
+.portal-topbar__overflow[open] summary {
     color: var(--text);
     background: var(--surface-muted);
 }
 
-.portal-topbar__user {
-    padding: 0 10px;
-    border-radius: 999px;
-    max-width: min(28vw, 220px);
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
 
 .portal-topbar__icon {
     display: inline-flex;
@@ -182,7 +180,8 @@
 .portal-topbar__admin-menu,
 .portal-topbar__collapsed-menu,
 .portal-topbar__menu,
-.portal-topbar__language-menu {
+.portal-topbar__language-menu,
+.portal-topbar__profile-menu {
     position: absolute;
     top: calc(100% + 6px);
     z-index: 1100;
@@ -200,6 +199,12 @@
     left: 0;
 }
 
+.portal-topbar__profile-menu {
+    right: 0;
+    min-width: 200px;
+    max-width: min(80vw, 320px);
+}
+
 .portal-topbar__menu {
     right: 0;
     z-index: 1000;
@@ -208,7 +213,8 @@
 .portal-topbar__admin-link,
 .portal-topbar__collapsed-link,
 .portal-topbar__language-link,
-.portal-topbar__menu .portal-topbar__module-link {
+.portal-topbar__menu .portal-topbar__module-link,
+.portal-topbar__profile-name {
     display: block;
     padding: 8px 10px;
     border-radius: 10px;
@@ -226,6 +232,14 @@
 .portal-topbar__language-link.is-current {
     font-weight: 700;
 }
+
+.portal-topbar__profile-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
 
 .portal-topbar__collapsed {
     display: none;
@@ -274,10 +288,6 @@
         padding: 0 8px;
     }
 
-    .portal-topbar__user {
-        max-width: 120px;
-        padding: 0 8px;
-    }
 }
 
 .visually-hidden {
