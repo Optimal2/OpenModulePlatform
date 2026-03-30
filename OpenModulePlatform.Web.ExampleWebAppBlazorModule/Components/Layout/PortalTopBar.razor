@@ -90,7 +90,20 @@
 
             @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
             {
-                <span class="portal-topbar__user" title="@L["User"]">@_portalTopBar.CurrentUserName</span>
+                <details class="portal-topbar__profile" data-portal-topbar-overlay>
+                    <summary title="@L["User"]" aria-label="@L["User"]">
+                        <span class="portal-topbar__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                <path d="M18 20a6 6 0 0 0-12 0"></path>
+                                <circle cx="12" cy="8" r="4"></circle>
+                            </svg>
+                        </span>
+                        <span class="visually-hidden">@L["User"]</span>
+                    </summary>
+                    <div class="portal-topbar__profile-menu">
+                        <span class="portal-topbar__profile-name" title="@_portalTopBar.CurrentUserName">@_portalTopBar.CurrentUserName</span>
+                    </div>
+                </details>
             }
         </div>
     </div>
