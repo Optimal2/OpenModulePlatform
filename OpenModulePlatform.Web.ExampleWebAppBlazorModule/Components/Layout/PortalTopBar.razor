@@ -1,15 +1,15 @@
 @using OpenModulePlatform.Web.Shared.Navigation
+@using OpenModulePlatform.Web.Shared.Options
 @using OpenModulePlatform.Web.Shared.Localization
-@using Microsoft.Extensions.Localization
-@using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Authorization
-@inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> WebAppOptionsAccessor
-@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@using Microsoft.AspNetCore.Http
+@inject Microsoft.Extensions.Options.IOptions<WebAppOptions> WebAppOptionsAccessor
 @inject PortalTopBarService PortalTopBarService
-@inject IStringLocalizer<SharedResource> L
-@inject IJSRuntime JS
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> L
+@inject IHttpContextAccessor HttpContextAccessor
 
 @if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
 {
@@ -63,6 +63,36 @@
                 </details>
             }
         </nav>
+
+        <div class="portal-topbar__actions">
+            @if (_portalTopBar.LanguageOptions.Count > 1)
+            {
+                <details class="portal-topbar__language" data-portal-topbar-overlay>
+                    <summary title="@L[_portalTopBar.LanguageToggleTextKey]" aria-label="@L[_portalTopBar.LanguageToggleTextKey]">
+                        <span class="portal-topbar__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9"></circle>
+                                <path d="M3 12h18"></path>
+                                <path d="M12 3a14 14 0 0 1 0 18"></path>
+                                <path d="M12 3a14 14 0 0 0 0 18"></path>
+                            </svg>
+                        </span>
+                        <span class="visually-hidden">@L[_portalTopBar.LanguageToggleTextKey]</span>
+                    </summary>
+                    <div class="portal-topbar__language-menu">
+                        @foreach (var language in _portalTopBar.LanguageOptions)
+                        {
+                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)">@L[language.TextKey]</a>
+                        }
+                    </div>
+                </details>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
+            {
+                <span class="portal-topbar__user" title="@L["User"]">@_portalTopBar.CurrentUserName</span>
+            }
+        </div>
     </div>
 }
 
@@ -102,7 +132,21 @@
     {
         if (_portalTopBar.IsVisible)
         {
-            await JS.InvokeVoidAsync("ompPortalTopBar.initAll");
+            await JS.InvokeAsync<object>("ompPortalTopBar.initAll", Array.Empty<object>());
         }
+    }
+
+    private string BuildLanguageHref(string culture)
+    {
+        if (!Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
+        {
+            return $"localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl=%2F";
+        }
+
+        var returnUrl = string.IsNullOrWhiteSpace(currentUri.PathAndQuery)
+            ? "/"
+            : currentUri.PathAndQuery;
+
+        return $"localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     }
 }

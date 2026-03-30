@@ -1,5 +1,9 @@
 @model OpenModulePlatform.Web.Shared.Navigation.PortalTopBarModel
 @inject Microsoft.Extensions.Localization.IStringLocalizer<OpenModulePlatform.Web.Shared.Localization.SharedResource> L
+@{
+    var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
+    string BuildLanguageHref(string culture) => $"{Context.Request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+}
 
 @if (Model.IsVisible && Model.PortalLink is not null)
 {
@@ -53,5 +57,35 @@
                 </details>
             }
         </nav>
+
+        <div class="portal-topbar__actions">
+            @if (Model.LanguageOptions.Count > 1)
+            {
+                <details class="portal-topbar__language" data-portal-topbar-overlay>
+                    <summary title="@L[Model.LanguageToggleTextKey]" aria-label="@L[Model.LanguageToggleTextKey]">
+                        <span class="portal-topbar__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9"></circle>
+                                <path d="M3 12h18"></path>
+                                <path d="M12 3a14 14 0 0 1 0 18"></path>
+                                <path d="M12 3a14 14 0 0 0 0 18"></path>
+                            </svg>
+                        </span>
+                        <span class="visually-hidden">@L[Model.LanguageToggleTextKey]</span>
+                    </summary>
+                    <div class="portal-topbar__language-menu">
+                        @foreach (var language in Model.LanguageOptions)
+                        {
+                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)">@L[language.TextKey]</a>
+                        }
+                    </div>
+                </details>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.CurrentUserName))
+            {
+                <span class="portal-topbar__user" title="@L["User"]">@Model.CurrentUserName</span>
+            }
+        </div>
     </div>
 }

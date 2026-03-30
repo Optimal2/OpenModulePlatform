@@ -1,6 +1,6 @@
 @* File: OpenModulePlatform.Web.ExampleServiceAppModule/Pages/Shared/_Layout.cshtml *@
 <!doctype html>
-<html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -14,15 +14,14 @@
         <div class="topbar">
             <div class="brand-wrap">
                 <div class="brand">@ViewData["PortalTitle"]</div>
-                <div class="brand-subtitle">Example Service App Module</div>
+                <div class="brand-subtitle">@L["Example Service App Module"]</div>
             </div>
             <nav class="nav nav--primary">
-                <a href="~/">Overview</a>
-                <a href="~/appinstances">App Instances</a>
-                <a href="~/configurations">Configurations</a>
-                <a href="~/jobs">Jobs</a>
+                <a href="~/">@L["Overview"]</a>
+                <a href="~/appinstances">@L["App Instances"]</a>
+                <a href="~/configurations">@L["Configurations"]</a>
+                <a href="~/jobs">@L["Jobs"]</a>
             </nav>
-            <div class="user">@User?.Identity?.Name</div>
         </div>
     </header>
     <main class="content-shell">
