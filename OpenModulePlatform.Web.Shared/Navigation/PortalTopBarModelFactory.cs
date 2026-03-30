@@ -1,3 +1,4 @@
+using System.Globalization;
 using OpenModulePlatform.Web.Shared.Options;
 
 namespace OpenModulePlatform.Web.Shared.Navigation;
@@ -29,8 +30,17 @@ public static class PortalTopBarModelFactory
             Links = [portalLink],
             PortalLink = portalLink,
             ModuleLinks = Array.Empty<PortalTopBarLink>(),
+            LanguageOptions = options.SupportedCultures
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(c => new PortalTopBarCultureOption(
+                    c,
+                    c.StartsWith("sv", StringComparison.OrdinalIgnoreCase) ? "Swedish" : c.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? "English" : c,
+                    string.Equals(c, CultureInfo.CurrentUICulture.Name, StringComparison.OrdinalIgnoreCase)))
+                .ToArray(),
             OverflowToggleTextKey = "More",
-            CollapsedToggleTextKey = "Modules"
+            CollapsedToggleTextKey = "Modules",
+            LanguageToggleTextKey = "Language"
         };
     }
 
