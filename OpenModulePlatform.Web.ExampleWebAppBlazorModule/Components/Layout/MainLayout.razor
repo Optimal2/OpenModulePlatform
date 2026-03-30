@@ -13,16 +13,6 @@
                 <NavLink href="/" Match="NavLinkMatch.All">Overview</NavLink>
                 <NavLink href="/configurations">Configurations</NavLink>
             </nav>
-            <div class="user">
-                <AuthorizeView>
-                    <Authorized Context="authState">
-                        @authState.User.Identity?.Name
-                    </Authorized>
-                    <NotAuthorized>
-                        anonymous
-                    </NotAuthorized>
-                </AuthorizeView>
-            </div>
         </div>
     </header>
 
