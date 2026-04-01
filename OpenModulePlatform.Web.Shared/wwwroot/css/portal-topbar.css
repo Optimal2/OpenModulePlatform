@@ -300,3 +300,49 @@
     clip: rect(0, 0, 0, 0);
     border: 0;
 }
+
+
+.portal-topbar__summary-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.portal-topbar__fallback-indicator {
+    position: absolute;
+    right: -5px;
+    bottom: -4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.55rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.portal-topbar__language-note {
+    margin-bottom: 6px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--surface-muted);
+    color: var(--text-muted);
+}
+
+.portal-topbar__language-note-title {
+    margin-bottom: 2px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.portal-topbar__language-note-body {
+    font-size: 0.78rem;
+    line-height: 1.35;
+}

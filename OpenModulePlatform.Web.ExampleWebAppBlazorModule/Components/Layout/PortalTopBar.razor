@@ -69,20 +69,37 @@
             {
                 <details class="portal-topbar__language" data-portal-topbar-overlay>
                     <summary title="@L[_portalTopBar.LanguageToggleTextKey]" aria-label="@L[_portalTopBar.LanguageToggleTextKey]">
-                        <span class="portal-topbar__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                <circle cx="12" cy="12" r="9"></circle>
-                                <path d="M3 12h18"></path>
-                                <path d="M12 3a14 14 0 0 1 0 18"></path>
-                                <path d="M12 3a14 14 0 0 0 0 18"></path>
-                            </svg>
+                        <span class="portal-topbar__summary-icon">
+                            <span class="portal-topbar__icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9"></circle>
+                                    <path d="M3 12h18"></path>
+                                    <path d="M12 3a14 14 0 0 1 0 18"></path>
+                                    <path d="M12 3a14 14 0 0 0 0 18"></path>
+                                </svg>
+                            </span>
+                            @if (_portalTopBar.IsCultureFallback)
+                            {
+                                <span class="portal-topbar__fallback-indicator" title="@FallbackNotice" aria-hidden="true">i</span>
+                            }
                         </span>
                         <span class="visually-hidden">@L[_portalTopBar.LanguageToggleTextKey]</span>
+                        @if (_portalTopBar.IsCultureFallback)
+                        {
+                            <span class="visually-hidden">@FallbackNotice</span>
+                        }
                     </summary>
                     <div class="portal-topbar__language-menu">
+                        @if (_portalTopBar.IsCultureFallback)
+                        {
+                            <div class="portal-topbar__language-note">
+                                <div class="portal-topbar__language-note-title">@L["LanguageFallback"]</div>
+                                <div class="portal-topbar__language-note-body">@FallbackNotice</div>
+                            </div>
+                        }
                         @foreach (var language in _portalTopBar.LanguageOptions)
                         {
-                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)">@L[language.TextKey]</a>
+                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)" data-enhance-nav="false">@CultureText(language.DisplayText)</a>
                         }
                     </div>
                 </details>
@@ -111,6 +128,11 @@
 
 @code {
     private PortalTopBarModel _portalTopBar = PortalTopBarModel.Hidden;
+
+    private string FallbackNotice => string.Format(
+        L["LanguageFallbackNotice"],
+        CultureText(_portalTopBar.PreferredCultureDisplayText),
+        CultureText(_portalTopBar.EffectiveCultureDisplayText));
 
     protected override async Task OnInitializedAsync()
     {
@@ -151,15 +173,24 @@
 
     private string BuildLanguageHref(string culture)
     {
+        var baseUri = new Uri(NavigationManager.BaseUri, UriKind.Absolute);
+        var endpointPath = baseUri.AbsolutePath.TrimEnd('/');
+        endpointPath = string.IsNullOrWhiteSpace(endpointPath)
+            ? "/localization/set-language"
+            : $"{endpointPath}/localization/set-language";
+
         if (!Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
         {
-            return $"localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl=%2F";
+            return $"{endpointPath}?culture={Uri.EscapeDataString(culture)}&returnUrl=%2F";
         }
 
         var returnUrl = string.IsNullOrWhiteSpace(currentUri.PathAndQuery)
-            ? "/"
+            ? baseUri.AbsolutePath
             : currentUri.PathAndQuery;
 
-        return $"localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        return $"{endpointPath}?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     }
+
+    private string CultureText(string? text)
+        => string.IsNullOrWhiteSpace(text) ? string.Empty : L[text];
 }

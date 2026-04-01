@@ -3,32 +3,31 @@
 
 <div class="page-header">
     <div>
-        <div class="eyebrow">Example module</div>
-        <h1>App Instances</h1>
+        <div class="eyebrow">@L["Example module"]</div>
+        <h1>@L["App Instances"]</h1>
         <p class="lede">
-            Runtime-instansnivån för serviceappen. Här hanteras tillåtelse,
-            önskat tillstånd, artifact och konfigurationskoppling.
+            @L["Runtime instance level for the service app. Manage allowance, desired state, artifact, and configuration link."]
         </p>
     </div>
 </div>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">Inga appinstanser hittades.</div>
+    <div class="empty-state">@L["No app instances were found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>Host</th>
-                <th>App instance</th>
-                <th>Installation</th>
-                <th>Allowed</th>
-                <th>Desired state</th>
-                <th>Artifact</th>
-                <th>Config</th>
-                <th>Last seen</th>
+                <th>@L["Host"]</th>
+                <th>@L["App instance"]</th>
+                <th>@L["Installation"]</th>
+                <th>@L["Allowed"]</th>
+                <th>@L["Desired state"]</th>
+                <th>@L["Artifact"]</th>
+                <th>@L["Config"]</th>
+                <th>@L["Last seen"]</th>
                 <th></th>
             </tr>
         </thead>
@@ -39,12 +38,12 @@ else
                 <td><span class="pill">@row.HostKey</span></td>
                 <td>@row.AppInstanceKey</td>
                 <td>@row.InstallationName</td>
-                <td>@(row.IsAllowed ? "Yes" : "No")</td>
+                <td>@(row.IsAllowed ? L["Yes"] : L["No"])</td>
                 <td>@row.DesiredState</td>
                 <td>@row.ArtifactVersion</td>
                 <td>@row.ConfigId</td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
-                <td><a class="action-link" href="~/appinstances/edit?appInstanceId=@row.AppInstanceId">Edit</a></td>
+                <td><a class="action-link" href="~/appinstances/edit?appInstanceId=@row.AppInstanceId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>
