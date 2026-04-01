@@ -194,15 +194,20 @@
 }
 
 .portal-topbar__admin-menu,
-.portal-topbar__collapsed-menu,
-.portal-topbar__language-menu {
+.portal-topbar__collapsed-menu {
     left: 0;
+}
+
+.portal-topbar__language-menu {
+    right: 0;
+    left: auto;
+    max-width: min(calc(100vw - 16px), 320px);
 }
 
 .portal-topbar__profile-menu {
     right: 0;
     min-width: 200px;
-    max-width: min(80vw, 320px);
+    max-width: min(calc(100vw - 16px), 320px);
 }
 
 .portal-topbar__menu {
