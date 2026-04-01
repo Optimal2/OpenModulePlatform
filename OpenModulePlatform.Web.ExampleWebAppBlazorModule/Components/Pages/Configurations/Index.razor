@@ -6,7 +6,7 @@
 
 @if (!AuthorizationResolved)
 {
-    <div class="empty-state">Laddar konfigurationer...</div>
+    <div class="empty-state">@L["Loading configurations..."]</div>
 }
 else if (!IsAuthorized)
 {
@@ -16,27 +16,26 @@ else
 {
     <div class="page-header">
         <div>
-            <div class="eyebrow">Example module</div>
-            <h1>Configurations</h1>
+            <div class="eyebrow">@L["Example module"]</div>
+            <h1>@L["Configurations"]</h1>
             <p class="lede">
-                Konfigurationer för Example Web App Blazor Module. Dessa värden används av
-                exempelmodulen och kan redigeras utan att lämna modulgränssnittet.
+                @L["Configurations for Example Web App Blazor Module. These values are used by the example module and can be edited without leaving the module interface."]
             </p>
         </div>
     </div>
 
     @if (Rows.Count == 0)
     {
-        <div class="empty-state">Inga konfigurationer hittades.</div>
+        <div class="empty-state">@L["No configurations were found."]</div>
     }
     else
     {
         <table class="grid">
             <thead>
                 <tr>
-                    <th>ConfigId</th>
-                    <th>Comment</th>
-                    <th>Created UTC</th>
+                    <th>@L["ConfigId"]</th>
+                    <th>@L["Comment"]</th>
+                    <th>@L["Created UTC"]</th>
                     <th></th>
                 </tr>
             </thead>
@@ -48,7 +47,7 @@ else
                     <td>@row.Comment</td>
                     <td>@row.CreatedUtc.ToString("u")</td>
                     <td>
-                        <NavLink class="action-link" href="@($"/configurations/edit/{row.ConfigId}")">Edit</NavLink>
+                        <NavLink class="action-link" href='@($"configurations/edit/{row.ConfigId}")'>@L["Edit"]</NavLink>
                     </td>
                 </tr>
             }
@@ -62,7 +61,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        SetPageTitle("Configurations");
+        SetPageTitle(L["Configurations"]);
 
         if (await EnsureAnyPermissionAsync(
                 CancellationToken.None,

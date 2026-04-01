@@ -15,7 +15,11 @@ public sealed class PortalTopBarModel
         OverflowToggleTextKey = "More",
         CollapsedToggleTextKey = "Modules",
         PortalAdminToggleTextKey = "Admin",
-        LanguageToggleTextKey = "Language"
+        LanguageToggleTextKey = "Language",
+        PreferredCulture = "en-US",
+        EffectiveCulture = "en-US",
+        PreferredCultureDisplayText = "English",
+        EffectiveCultureDisplayText = "English"
     };
 
     public bool IsVisible { get; init; }
@@ -34,6 +38,16 @@ public sealed class PortalTopBarModel
     public IReadOnlyList<PortalTopBarLink> PortalAdminLinks { get; init; } = Array.Empty<PortalTopBarLink>();
 
     public IReadOnlyList<PortalTopBarCultureOption> LanguageOptions { get; init; } = Array.Empty<PortalTopBarCultureOption>();
+
+    public string PreferredCulture { get; init; } = "en-US";
+
+    public string EffectiveCulture { get; init; } = "en-US";
+
+    public string PreferredCultureDisplayText { get; init; } = "English";
+
+    public string EffectiveCultureDisplayText { get; init; } = "English";
+
+    public bool IsCultureFallback { get; init; }
 
     public string? CurrentUserName { get; init; }
 

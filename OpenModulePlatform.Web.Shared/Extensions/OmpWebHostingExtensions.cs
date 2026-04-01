@@ -35,9 +35,10 @@ namespace OpenModulePlatform.Web.Shared.Extensions;
 /// </remarks>
 public static class OmpWebHostingExtensions
 {
-    public static WebApplicationBuilder AddOmpWebDefaults(
+    public static WebApplicationBuilder AddOmpWebDefaults<TAppResource>(
         this WebApplicationBuilder builder,
         string optionsSectionName = WebAppOptions.DefaultSectionName)
+        where TAppResource : class
     {
         builder.AddOmpWebLogging();
 
@@ -53,7 +54,7 @@ public static class OmpWebHostingExtensions
             .AddDataAnnotationsLocalization(options =>
             {
                 options.DataAnnotationLocalizerProvider = static (_, factory) =>
-                    factory.Create(typeof(SharedResource));
+                    factory.Create(typeof(TAppResource));
             });
 
         var runningUnderIis = !string.IsNullOrWhiteSpace(
@@ -107,6 +108,7 @@ public static class OmpWebHostingExtensions
             options.SupportedUICultures = supportedCultures;
             options.RequestCultureProviders =
             [
+                new PreferredCultureRequestCultureProvider(webAppOptions, new CultureSelectionService()),
                 new CookieRequestCultureProvider(),
                 new AcceptLanguageHeaderRequestCultureProvider()
             ];
@@ -122,6 +124,7 @@ public static class OmpWebHostingExtensions
             });
 
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton<CultureSelectionService>();
         builder.Services.AddSingleton<SqlConnectionFactory>();
         builder.Services.AddScoped<RbacService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
@@ -150,25 +153,15 @@ public static class OmpWebHostingExtensions
         app.UseRequestLocalization(localizationOptions);
         app.UseStaticFiles();
 
-        app.MapGet("/localization/set-language", (HttpContext context, string culture, string? returnUrl) =>
+        app.MapGet("/localization/set-language", (
+            HttpContext context,
+            string culture,
+            string? returnUrl,
+            CultureSelectionService cultureSelectionService) =>
         {
-            if (string.IsNullOrWhiteSpace(culture))
-            {
-                culture = localizationOptions.DefaultRequestCulture.Culture.Name;
-            }
-
-            var requestCulture = new RequestCulture(culture);
-
-            context.Response.Cookies.Append(
-                CookieRequestCultureProvider.DefaultCookieName,
-                CookieRequestCultureProvider.MakeCookieValue(requestCulture),
-                new CookieOptions
-                {
-                    Expires = DateTimeOffset.UtcNow.AddYears(1),
-                    IsEssential = true,
-                    HttpOnly = false,
-                    SameSite = SameSiteMode.Lax
-                });
+            var preferredCulture = cultureSelectionService.NormalizePreferredCulture(culture, options);
+            var effectiveCulture = cultureSelectionService.ResolveEffectiveCulture(preferredCulture, options);
+            cultureSelectionService.ApplyCookies(context.Response, preferredCulture, effectiveCulture);
 
             if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
             {

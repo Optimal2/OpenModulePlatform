@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Web.ExampleServiceAppModule/Pages/ExampleServiceAppModulePageModel.cs
+using OpenModulePlatform.Web.ExampleServiceAppModule.Localization;
 using OpenModulePlatform.Web.ExampleServiceAppModule.Security;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
@@ -11,7 +12,7 @@ namespace OpenModulePlatform.Web.ExampleServiceAppModule.Pages;
 /// <summary>
 /// Base page model for the service-backed example module UI.
 /// </summary>
-public abstract class ExampleServiceAppModulePageModel : OmpSecurePageModel
+public abstract class ExampleServiceAppModulePageModel : OmpSecurePageModel<ExampleServiceAppModuleResource>
 {
     protected ExampleServiceAppModulePageModel(
         IOptions<WebAppOptions> options,

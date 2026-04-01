@@ -1,4 +1,6 @@
 @using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Components.Layout
+@using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization
+@inject Microsoft.Extensions.Localization.IStringLocalizer<ExampleWebAppBlazorModuleResource> L
 
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(Program).Assembly">
@@ -8,15 +10,15 @@
         </Found>
         <NotFound>
             <LayoutView Layout="@typeof(MainLayout)">
-                <PageTitle>Sidan hittades inte</PageTitle>
+                <PageTitle>@L["Page not found"]</PageTitle>
                 <div class="page-header">
                     <div>
-                        <div class="eyebrow">Example module</div>
-                        <h1>Sidan hittades inte</h1>
-                        <p class="lede">Kontrollera adressen eller navigera tillbaka via menyn.</p>
+                        <div class="eyebrow">@L["Example module"]</div>
+                        <h1>@L["Page not found"]</h1>
+                        <p class="lede">@L["Check the address or navigate back using the menu."]</p>
                     </div>
                 </div>
-                <div class="empty-state">Det finns ingen sida på den angivna adressen.</div>
+                <div class="empty-state">@L["There is no page at the specified address."]</div>
             </LayoutView>
         </NotFound>
     </Router>

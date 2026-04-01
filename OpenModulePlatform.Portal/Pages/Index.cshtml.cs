@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Pages/Index.cshtml.cs
+using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Security;
 using OpenModulePlatform.Portal.Services;
@@ -12,7 +13,7 @@ namespace OpenModulePlatform.Portal.Pages;
 /// <summary>
 /// Portal start page showing the app catalog available to the current user.
 /// </summary>
-public sealed class IndexModel : OmpPageModel
+public sealed class IndexModel : OmpPageModel<PortalResource>
 {
     private readonly AppCatalogService _catalog;
     private readonly SharedRbacService _rbac;

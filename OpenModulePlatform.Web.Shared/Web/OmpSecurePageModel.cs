@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Web.Shared/Web/OmpSecurePageModel.cs
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +10,7 @@ namespace OpenModulePlatform.Web.Shared.Web;
 /// <summary>
 /// Base page model for pages that enforce OMP RBAC permissions.
 /// </summary>
-public abstract class OmpSecurePageModel : OmpPageModel
+public abstract class OmpSecurePageModel<TResource> : OmpPageModel<TResource> where TResource : class
 {
     private readonly RbacService _rbac;
 
@@ -65,4 +66,12 @@ public abstract class OmpSecurePageModel : OmpPageModel
         CancellationToken ct,
         params string[] requiredPermissions)
         => RequirePermissionsAsync(requiredPermissions, PermissionMode.All, ct);
+}
+
+public abstract class OmpSecurePageModel : OmpSecurePageModel<SharedResource>
+{
+    protected OmpSecurePageModel(IOptions<WebAppOptions> options, RbacService rbac)
+        : base(options, rbac)
+    {
+    }
 }

@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="HostDeploymentAssignments.Title" xml:space="preserve"><value>Host deployment assignments</value></data>
+  <data name="HostDeploymentAssignments.Lede" xml:space="preserve"><value>Assignments connect hosts to deployment planning. This is intentionally separated from the main manual admin workflow.</value></data>
+  <data name="HostDeployments.Title" xml:space="preserve"><value>Host Deployments</value></data>
+  <data name="HostDeployments.Lede" xml:space="preserve"><value>Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</value></data>
+<data name="More" xml:space="preserve"><value>More</value><comment>Compact portal top-bar overflow toggle.</comment></data><data name="Modules" xml:space="preserve"><value>Modules</value></data></root>

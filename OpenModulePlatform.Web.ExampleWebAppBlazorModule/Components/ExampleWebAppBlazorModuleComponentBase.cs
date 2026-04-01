@@ -1,7 +1,9 @@
+using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
@@ -21,6 +23,12 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
     [Inject]
     protected RbacService Rbac { get; set; } = default!;
 
+    [Inject]
+    protected NavigationManager NavigationManager { get; set; } = default!;
+
+    [Inject]
+    protected IStringLocalizer<ExampleWebAppBlazorModuleResource> L { get; set; } = default!;
+
     protected ClaimsPrincipal CurrentUser { get; private set; } = new(new ClaimsIdentity());
     protected HashSet<string> CurrentPermissions { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     protected bool AuthorizationResolved { get; private set; }
@@ -32,7 +40,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
         ? "OpenModulePlatform"
         : Options.Value.Title;
 
-    protected string CurrentUserName => CurrentUser.Identity?.Name ?? "unknown";
+    protected string CurrentUserName => CurrentUser.Identity?.Name ?? L["Unknown user"];
 
     protected void SetPageTitle(string? pageTitle = null)
     {
@@ -40,6 +48,11 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             ? WebAppTitle
             : $"{WebAppTitle} - {pageTitle}";
     }
+
+    protected string AppHref(string relativePath = "")
+        => string.IsNullOrWhiteSpace(relativePath)
+            ? string.Empty
+            : relativePath.TrimStart('/');
 
     protected async Task<bool> EnsureAnyPermissionAsync(
         CancellationToken ct,
@@ -65,7 +78,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             CurrentPermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             IsAuthorized = false;
             AuthorizationResolved = true;
-            AccessDeniedMessage = "Du saknar åtkomst till sidan.";
+            AccessDeniedMessage = L["You do not have access to the page."];
             return false;
         }
 
@@ -79,7 +92,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
         AuthorizationResolved = true;
         AccessDeniedMessage = IsAuthorized
             ? null
-            : "Du saknar behörighet för den här sidan.";
+            : L["You do not have permission for this page."];
 
         return IsAuthorized;
     }

@@ -1,5 +1,6 @@
 @page "/configurations/edit"
 @page "/configurations/edit/{ConfigId:int}"
+@using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization
 @inherits ExampleWebAppBlazorModuleComponentBase
 @inject ExampleWebAppBlazorModuleAdminRepository Repo
 
@@ -7,7 +8,7 @@
 
 @if (!AuthorizationResolved)
 {
-    <div class="empty-state">Laddar konfiguration...</div>
+    <div class="empty-state">@L["Loading configuration..."]</div>
 }
 else if (!IsAuthorized)
 {
@@ -17,9 +18,9 @@ else
 {
     <div class="page-header">
         <div>
-            <div class="eyebrow">Example module</div>
-            <h1>Edit configuration</h1>
-            <p class="lede">Uppdatera kommentar och JSON-innehåll för vald konfiguration.</p>
+            <div class="eyebrow">@L["Example module"]</div>
+            <h1>@L["Edit configuration"]</h1>
+            <p class="lede">@L["Update comment and JSON content for the selected configuration."]</p>
         </div>
     </div>
 
@@ -39,19 +40,19 @@ else
             <ValidationSummary />
 
             <div class="form-field">
-                <label for="comment">Comment</label>
+                <label for="comment">@L["Comment"]</label>
                 <InputText id="comment" @bind-Value="Input.Comment" />
             </div>
 
             <div class="form-field">
-                <label for="configJson">Config JSON</label>
+                <label for="configJson">@L["Config JSON"]</label>
                 <InputTextArea id="configJson" @bind-Value="Input.ConfigJson" />
                 <ValidationMessage For="@(() => Input.ConfigJson)" />
             </div>
 
             <div class="toolbar">
-                <button type="submit">Save</button>
-                <NavLink class="action-link" href="/configurations">Back to configurations</NavLink>
+                <button type="submit">@L["Save"]</button>
+                <NavLink class="action-link" href="configurations">@L["Back to configurations"]</NavLink>
             </div>
         </EditForm>
     }
@@ -70,7 +71,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        SetPageTitle("Edit configuration");
+        SetPageTitle(L["Edit configuration"]);
         StatusMessage = null;
 
         if (!await EnsureAnyPermissionAsync(CancellationToken.None, ExampleWebAppBlazorModulePermissions.Admin))
@@ -81,14 +82,14 @@ else
         var effectiveConfigId = ConfigId ?? QueryConfigId;
         if (effectiveConfigId is null || effectiveConfigId.Value <= 0)
         {
-            ErrorMessage = "Ingen giltig configId angavs.";
+            ErrorMessage = L["No valid configId was provided."];
             return;
         }
 
         var row = await Repo.GetConfigurationAsync(effectiveConfigId.Value, CancellationToken.None);
         if (row is null)
         {
-            ErrorMessage = "Konfigurationen hittades inte.";
+            ErrorMessage = L["The configuration was not found."];
             return;
         }
 
@@ -115,7 +116,7 @@ else
             CurrentUserName,
             CancellationToken.None);
 
-        StatusMessage = "Configuration updated.";
+        StatusMessage = L["Configuration updated."];
     }
 
     private sealed class EditInput

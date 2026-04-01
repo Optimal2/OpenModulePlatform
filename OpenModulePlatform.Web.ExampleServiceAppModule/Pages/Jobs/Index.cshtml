@@ -3,9 +3,9 @@
 
 <div class="page-header">
     <div>
-        <div class="eyebrow">Example module</div>
-        <h1>Jobs</h1>
-        <p class="lede">Köa nya jobb och följ aktuell jobbhistorik för serviceappen.</p>
+        <div class="eyebrow">@L["Example module"]</div>
+        <h1>@L["Jobs"]</h1>
+        <p class="lede">@L["Queue new jobs and follow the current job history for the service app."]</p>
     </div>
 </div>
 
@@ -21,18 +21,18 @@
     </div>
 
     <div class="toolbar">
-        <button type="submit">Queue job</button>
+        <button type="submit">@L["Queue job"]</button>
     </div>
 </form>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">Inga jobb hittades.</div>
+    <div class="empty-state">@L["No jobs were found."]</div>
 }
 else
 {
     <table class="grid">
-        <thead><tr><th>JobId</th><th>Type</th><th>Status</th><th>Attempts</th><th>Requested UTC</th><th>Last error</th></tr></thead>
+        <thead><tr><th>@L["JobId"]</th><th>@L["Type"]</th><th>@L["Status"]</th><th>@L["Attempts"]</th><th>@L["Requested UTC"]</th><th>@L["Last error"]</th></tr></thead>
         <tbody>
         @foreach (var row in Model.Rows)
         {

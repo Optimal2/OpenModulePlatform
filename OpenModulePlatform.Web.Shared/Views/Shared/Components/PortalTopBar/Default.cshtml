@@ -3,6 +3,8 @@
 @{
     var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
     string BuildLanguageHref(string culture) => $"{Context.Request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    string CultureText(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : L[value];
+    var fallbackNotice = string.Format(L["LanguageFallbackNotice"], CultureText(Model.PreferredCultureDisplayText), CultureText(Model.EffectiveCultureDisplayText));
 }
 
 @if (Model.IsVisible && Model.PortalLink is not null)
@@ -63,20 +65,37 @@
             {
                 <details class="portal-topbar__language" data-portal-topbar-overlay>
                     <summary title="@L[Model.LanguageToggleTextKey]" aria-label="@L[Model.LanguageToggleTextKey]">
-                        <span class="portal-topbar__icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                <circle cx="12" cy="12" r="9"></circle>
-                                <path d="M3 12h18"></path>
-                                <path d="M12 3a14 14 0 0 1 0 18"></path>
-                                <path d="M12 3a14 14 0 0 0 0 18"></path>
-                            </svg>
+                        <span class="portal-topbar__summary-icon">
+                            <span class="portal-topbar__icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9"></circle>
+                                    <path d="M3 12h18"></path>
+                                    <path d="M12 3a14 14 0 0 1 0 18"></path>
+                                    <path d="M12 3a14 14 0 0 0 0 18"></path>
+                                </svg>
+                            </span>
+                            @if (Model.IsCultureFallback)
+                            {
+                                <span class="portal-topbar__fallback-indicator" title="@fallbackNotice" aria-hidden="true">i</span>
+                            }
                         </span>
                         <span class="visually-hidden">@L[Model.LanguageToggleTextKey]</span>
+                        @if (Model.IsCultureFallback)
+                        {
+                            <span class="visually-hidden">@fallbackNotice</span>
+                        }
                     </summary>
                     <div class="portal-topbar__language-menu">
+                        @if (Model.IsCultureFallback)
+                        {
+                            <div class="portal-topbar__language-note">
+                                <div class="portal-topbar__language-note-title">@L["LanguageFallback"]</div>
+                                <div class="portal-topbar__language-note-body">@fallbackNotice</div>
+                            </div>
+                        }
                         @foreach (var language in Model.LanguageOptions)
                         {
-                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)">@L[language.TextKey]</a>
+                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)">@CultureText(language.DisplayText)</a>
                         }
                     </div>
                 </details>

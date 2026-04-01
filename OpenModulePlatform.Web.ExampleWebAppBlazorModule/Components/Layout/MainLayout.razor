@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
+@using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization
 @inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> Options
+@inject Microsoft.Extensions.Localization.IStringLocalizer<ExampleWebAppBlazorModuleResource> L
 
 <div class="page-shell">
     <header class="app-header">
@@ -7,11 +9,11 @@
         <div class="topbar">
             <div class="brand-wrap">
                 <div class="brand">@PortalTitle</div>
-                <div class="brand-subtitle">Example Web App Blazor Module</div>
+                <div class="brand-subtitle">@L["Example Web App Blazor Module"]</div>
             </div>
             <nav class="nav nav--primary">
-                <NavLink href="/" Match="NavLinkMatch.All">Overview</NavLink>
-                <NavLink href="/configurations">Configurations</NavLink>
+                <NavLink href="" Match="NavLinkMatch.All">@L["Overview"]</NavLink>
+                <NavLink href="configurations">@L["Configurations"]</NavLink>
             </nav>
         </div>
     </header>

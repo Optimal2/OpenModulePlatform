@@ -11,7 +11,7 @@ namespace OpenModulePlatform.Web.Shared.Web;
 /// <summary>
 /// Base Razor Page model for OMP web applications.
 /// </summary>
-public abstract class OmpPageModel : PageModel
+public abstract class OmpPageModel<TResource> : PageModel where TResource : class
 {
     private readonly IOptions<WebAppOptions> _options;
 
@@ -22,8 +22,8 @@ public abstract class OmpPageModel : PageModel
 
     protected WebAppOptions WebAppOptions => _options.Value;
 
-    protected IStringLocalizer<SharedResource> Localizer =>
-        HttpContext.RequestServices.GetRequiredService<IStringLocalizer<SharedResource>>();
+    protected IStringLocalizer<TResource> Localizer =>
+        HttpContext.RequestServices.GetRequiredService<IStringLocalizer<TResource>>();
 
     protected string T(string key) => Localizer[key];
 
@@ -44,5 +44,13 @@ public abstract class OmpPageModel : PageModel
         ViewData["Title"] = string.IsNullOrWhiteSpace(localizedPageTitle)
             ? WebAppTitle
             : $"{WebAppTitle} - {localizedPageTitle}";
+    }
+}
+
+public abstract class OmpPageModel : OmpPageModel<SharedResource>
+{
+    protected OmpPageModel(IOptions<WebAppOptions> options)
+        : base(options)
+    {
     }
 }

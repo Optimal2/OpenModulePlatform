@@ -1,10 +1,11 @@
 using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Components;
+using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization;
 using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Services;
 using OpenModulePlatform.Web.Shared.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddOmpWebDefaults(optionsSectionName: "Portal");
+builder.AddOmpWebDefaults<ExampleWebAppBlazorModuleResource>(optionsSectionName: "Portal");
 builder.Services
     .AddRazorComponents()
     .AddInteractiveServerComponents();
