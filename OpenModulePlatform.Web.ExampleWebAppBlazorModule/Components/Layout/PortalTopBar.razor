@@ -10,6 +10,7 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> L
 @inject IHttpContextAccessor HttpContextAccessor
+@implements IDisposable
 
 @if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
 {
@@ -136,6 +137,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        NavigationManager.LocationChanged += HandleLocationChanged;
+
         var httpContext = HttpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
@@ -174,22 +177,24 @@
     private string BuildLanguageHref(string culture)
     {
         var baseUri = new Uri(NavigationManager.BaseUri, UriKind.Absolute);
-        var endpointPath = baseUri.AbsolutePath.TrimEnd('/');
-        endpointPath = string.IsNullOrWhiteSpace(endpointPath)
+        var basePath = baseUri.AbsolutePath.TrimEnd('/');
+        var endpointPath = string.IsNullOrWhiteSpace(basePath)
             ? "/localization/set-language"
-            : $"{endpointPath}/localization/set-language";
+            : $"{basePath}/localization/set-language";
 
-        if (!Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
-        {
-            return $"{endpointPath}?culture={Uri.EscapeDataString(culture)}&returnUrl=%2F";
-        }
-
-        var returnUrl = string.IsNullOrWhiteSpace(currentUri.PathAndQuery)
-            ? baseUri.AbsolutePath
-            : currentUri.PathAndQuery;
+        var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        var returnUrl = string.IsNullOrWhiteSpace(relativePath)
+            ? (string.IsNullOrWhiteSpace(basePath) ? "/" : $"{basePath}/")
+            : $"{(string.IsNullOrWhiteSpace(basePath) ? string.Empty : basePath)}/{relativePath.TrimStart('/')}";
 
         return $"{endpointPath}?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+        => NavigationManager.LocationChanged -= HandleLocationChanged;
 
     private string CultureText(string? text)
         => string.IsNullOrWhiteSpace(text) ? string.Empty : L[text];
