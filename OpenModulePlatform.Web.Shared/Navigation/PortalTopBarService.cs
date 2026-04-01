@@ -1,3 +1,4 @@
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
@@ -18,15 +19,18 @@ public sealed class PortalTopBarService
 
     private readonly SqlConnectionFactory _db;
     private readonly RbacService _rbac;
+    private readonly CultureSelectionService _cultureSelectionService;
     private readonly ILogger<PortalTopBarService> _log;
 
     public PortalTopBarService(
         SqlConnectionFactory db,
         RbacService rbac,
+        CultureSelectionService cultureSelectionService,
         ILogger<PortalTopBarService> log)
     {
         _db = db;
         _rbac = rbac;
+        _cultureSelectionService = cultureSelectionService;
         _log = log;
     }
 
@@ -46,12 +50,13 @@ public sealed class PortalTopBarService
             "Portal",
             PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
+        var cultureSelection = _cultureSelectionService.Resolve(options, request);
+
         try
         {
             var permissions = await _rbac.GetUserPermissionsAsync(user, ct);
             var apps = await GetEnabledWebAppsAsync(ct);
             var isPortalAdmin = permissions.Contains(PortalAdminPermission);
-            var currentCulture = CultureInfo.CurrentUICulture.Name;
             var currentUserName = user.Identity?.IsAuthenticated == true
                 ? user.Identity?.Name
                 : null;
@@ -62,44 +67,15 @@ public sealed class PortalTopBarService
                 .Where(link => !string.IsNullOrWhiteSpace(link.Href))
                 .ToArray();
 
-            return new PortalTopBarModel
-            {
-                IsVisible = true,
-                PortalLink = portalLink,
-                ModuleLinks = moduleLinks,
-                Links = [portalLink, .. moduleLinks],
-                IsPortalAdmin = isPortalAdmin,
-                PortalAdminLinks = isPortalAdmin
-                    ? CreatePortalAdminLinks(topBarOptions.PortalBaseUrl)
-                    : Array.Empty<PortalTopBarLink>(),
-                LanguageOptions = CreateLanguageOptions(options.SupportedCultures, currentCulture),
-                CurrentUserName = currentUserName,
-                OverflowToggleTextKey = "More",
-                PortalAdminToggleTextKey = "Admin",
-                LanguageToggleTextKey = "Language"
-            };
+            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, isPortalAdmin, moduleLinks, options);
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically. Falling back to a portal-only top bar.");
 
-            return new PortalTopBarModel
-            {
-                IsVisible = true,
-                PortalLink = portalLink,
-                ModuleLinks = Array.Empty<PortalTopBarLink>(),
-                Links = [portalLink],
-                IsPortalAdmin = false,
-                PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
-                LanguageOptions = CreateLanguageOptions(options.SupportedCultures, CultureInfo.CurrentUICulture.Name),
-                CurrentUserName = user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null,
-                OverflowToggleTextKey = "More",
-                PortalAdminToggleTextKey = "Admin",
-                LanguageToggleTextKey = "Language"
-            };
+            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, false, Array.Empty<PortalTopBarLink>(), options);
         }
     }
-
 
     public async Task<PortalTopBarModel> CreateAsync(
         WebAppOptions options,
@@ -117,12 +93,13 @@ public sealed class PortalTopBarService
             "Portal",
             PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
+        var cultureSelection = _cultureSelectionService.ResolveFromCurrentCulture(options);
+
         try
         {
             var permissions = await _rbac.GetUserPermissionsAsync(user, ct);
             var apps = await GetEnabledWebAppsAsync(ct);
             var isPortalAdmin = permissions.Contains(PortalAdminPermission);
-            var currentCulture = CultureInfo.CurrentUICulture.Name;
             var currentUserName = user.Identity?.IsAuthenticated == true
                 ? user.Identity?.Name
                 : null;
@@ -133,49 +110,51 @@ public sealed class PortalTopBarService
                 .Where(link => !string.IsNullOrWhiteSpace(link.Href))
                 .ToArray();
 
-            return new PortalTopBarModel
-            {
-                IsVisible = true,
-                PortalLink = portalLink,
-                ModuleLinks = moduleLinks,
-                Links = [portalLink, .. moduleLinks],
-                IsPortalAdmin = isPortalAdmin,
-                PortalAdminLinks = isPortalAdmin
-                    ? CreatePortalAdminLinks(topBarOptions.PortalBaseUrl)
-                    : Array.Empty<PortalTopBarLink>(),
-                LanguageOptions = CreateLanguageOptions(options.SupportedCultures, currentCulture),
-                CurrentUserName = currentUserName,
-                OverflowToggleTextKey = "More",
-                PortalAdminToggleTextKey = "Admin",
-                LanguageToggleTextKey = "Language"
-            };
+            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, isPortalAdmin, moduleLinks, options);
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically. Falling back to a portal-only top bar.");
 
-            return new PortalTopBarModel
-            {
-                IsVisible = true,
-                PortalLink = portalLink,
-                ModuleLinks = Array.Empty<PortalTopBarLink>(),
-                Links = [portalLink],
-                IsPortalAdmin = false,
-                PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
-                LanguageOptions = CreateLanguageOptions(options.SupportedCultures, CultureInfo.CurrentUICulture.Name),
-                CurrentUserName = user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null,
-                OverflowToggleTextKey = "More",
-                PortalAdminToggleTextKey = "Admin",
-                LanguageToggleTextKey = "Language"
-            };
+            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, false, Array.Empty<PortalTopBarLink>(), options);
         }
     }
 
+    private static PortalTopBarModel CreateModel(
+        PortalTopBarOptions topBarOptions,
+        PortalTopBarLink portalLink,
+        CultureSelectionResult cultureSelection,
+        string? currentUserName,
+        bool isPortalAdmin,
+        IReadOnlyList<PortalTopBarLink> moduleLinks,
+        WebAppOptions options)
+        => new()
+        {
+            IsVisible = true,
+            PortalLink = portalLink,
+            ModuleLinks = moduleLinks,
+            Links = [portalLink, .. moduleLinks],
+            IsPortalAdmin = isPortalAdmin,
+            PortalAdminLinks = isPortalAdmin
+                ? CreatePortalAdminLinks(topBarOptions.PortalBaseUrl)
+                : Array.Empty<PortalTopBarLink>(),
+            LanguageOptions = CreateLanguageOptions(options, cultureSelection),
+            PreferredCulture = cultureSelection.PreferredCulture,
+            EffectiveCulture = cultureSelection.EffectiveCulture,
+            PreferredCultureDisplayText = cultureSelection.PreferredCultureDisplayText,
+            EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
+            IsCultureFallback = cultureSelection.IsFallback,
+            CurrentUserName = currentUserName,
+            OverflowToggleTextKey = "More",
+            PortalAdminToggleTextKey = "Admin",
+            LanguageToggleTextKey = "Language"
+        };
+
     private static IReadOnlyList<PortalTopBarCultureOption> CreateLanguageOptions(
-        IEnumerable<string>? supportedCultures,
-        string currentCulture)
+        WebAppOptions options,
+        CultureSelectionResult cultureSelection)
     {
-        var cultures = (supportedCultures ?? Array.Empty<string>())
+        var cultures = (options.SupportedCultures ?? Array.Empty<string>())
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(c => c.Trim())
@@ -183,27 +162,12 @@ public sealed class PortalTopBarService
 
         if (cultures.Length == 0)
         {
-            cultures = [currentCulture];
+            cultures = [cultureSelection.EffectiveCulture];
         }
 
         return cultures
-            .Select(c => new PortalTopBarCultureOption(c, ToCultureTextKey(c), string.Equals(c, currentCulture, StringComparison.OrdinalIgnoreCase)))
+            .Select(c => new PortalTopBarCultureOption(c, ToCultureDisplayText(c), string.Equals(c, cultureSelection.EffectiveCulture, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
-    }
-
-    private static string ToCultureTextKey(string culture)
-    {
-        if (culture.StartsWith("sv", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Swedish";
-        }
-
-        if (culture.StartsWith("en", StringComparison.OrdinalIgnoreCase))
-        {
-            return "English";
-        }
-
-        return culture;
     }
 
     private static IReadOnlyList<PortalTopBarLink> CreatePortalAdminLinks(string portalBaseUrl) =>
@@ -228,6 +192,28 @@ public sealed class PortalTopBarService
         return app.RequireAll
             ? app.RequiredPermissions.All(permissions.Contains)
             : app.RequiredPermissions.Any(permissions.Contains);
+    }
+
+    private static string ToCultureDisplayText(string culture)
+    {
+        if (culture.StartsWith("sv", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Swedish";
+        }
+
+        if (culture.StartsWith("en", StringComparison.OrdinalIgnoreCase))
+        {
+            return "English";
+        }
+
+        try
+        {
+            return CultureInfo.GetCultureInfo(culture).NativeName;
+        }
+        catch (CultureNotFoundException)
+        {
+            return culture;
+        }
     }
 
     private static async Task<bool> HostBaseUrlColumnExistsAsync(SqlConnection conn, CancellationToken ct)

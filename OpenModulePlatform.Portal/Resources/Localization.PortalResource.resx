@@ -1,0 +1,1314 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Portal" xml:space="preserve">
+    <value>Portal</value>
+  </data>
+  <data name="Home" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="Admin" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="Instances" xml:space="preserve">
+    <value>Instances</value>
+  </data>
+  <data name="Hosts" xml:space="preserve">
+    <value>Hosts</value>
+  </data>
+  <data name="Modules" xml:space="preserve">
+    <value>Modules</value>
+  </data>
+  <data name="Apps" xml:space="preserve">
+    <value>Apps</value>
+  </data>
+  <data name="Artifacts" xml:space="preserve">
+    <value>Artifacts</value>
+  </data>
+  <data name="Automation" xml:space="preserve">
+    <value>Automation</value>
+  </data>
+  <data name="RBAC" xml:space="preserve">
+    <value>RBAC</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Swedish" xml:space="preserve">
+    <value>Swedish</value>
+  </data>
+  <data name="English" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Overview" xml:space="preserve">
+    <value>Overview</value>
+  </data>
+  <data name="Configurations" xml:space="preserve">
+    <value>Configurations</value>
+  </data>
+  <data name="Example Web App Module" xml:space="preserve">
+    <value>Example Web App Module</value>
+  </data>
+  <data name="Example module" xml:space="preserve">
+    <value>Example module</value>
+  </data>
+  <data name="OMP Portal" xml:space="preserve">
+    <value>OMP Portal</value>
+  </data>
+  <data name="This portal is the shared entry point for an OMP instance." xml:space="preserve">
+    <value>This portal is the shared entry point for an OMP instance.</value>
+  </data>
+  <data name="Current user" xml:space="preserve">
+    <value>Current user</value>
+  </data>
+  <data name="Portal admin" xml:space="preserve">
+    <value>Portal admin</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="Available OMP web app instances" xml:space="preserve">
+    <value>Available OMP web app instances</value>
+  </data>
+  <data name="No accessible web app instances are currently registered." xml:space="preserve">
+    <value>No accessible web app instances are currently registered.</value>
+  </data>
+  <data name="Display name" xml:space="preserve">
+    <value>Display name</value>
+  </data>
+  <data name="App instance key" xml:space="preserve">
+    <value>App instance key</value>
+  </data>
+  <data name="App key" xml:space="preserve">
+    <value>App key</value>
+  </data>
+  <data name="Route" xml:space="preserve">
+    <value>Route</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>Description</value>
+  </data>
+  <data name="Administration" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="OMP admin overview" xml:space="preserve">
+    <value>OMP admin overview</value>
+  </data>
+  <data name="The admin area is split between manual core administration and advanced automation. For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts. Template- and deployment-driven rollout lives under Automation." xml:space="preserve">
+    <value>The admin area is split between manual core administration and advanced automation. For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts. Template- and deployment-driven rollout lives under Automation.</value>
+  </data>
+  <data name="Module definitions" xml:space="preserve">
+    <value>Module definitions</value>
+  </data>
+  <data name="Module instances" xml:space="preserve">
+    <value>Module instances</value>
+  </data>
+  <data name="App definitions" xml:space="preserve">
+    <value>App definitions</value>
+  </data>
+  <data name="App instances" xml:space="preserve">
+    <value>App instances</value>
+  </data>
+  <data name="Manual core administration" xml:space="preserve">
+    <value>Manual core administration</value>
+  </data>
+  <data name="These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation." xml:space="preserve">
+    <value>These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation.</value>
+  </data>
+  <data name="Advanced automation" xml:space="preserve">
+    <value>Advanced automation</value>
+  </data>
+  <data name="Template topology, deployment assignments and deployment tracking are separated from the main workflow until the HostAgent path is more complete." xml:space="preserve">
+    <value>Template topology, deployment assignments and deployment tracking are separated from the main workflow until the HostAgent path is more complete.</value>
+  </data>
+  <data name="Open automation area" xml:space="preserve">
+    <value>Open automation area</value>
+  </data>
+  <data name="Security and access" xml:space="preserve">
+    <value>Security and access</value>
+  </data>
+  <data name="Manage admin permissions and role assignments separately from topology and runtime data." xml:space="preserve">
+    <value>Manage admin permissions and role assignments separately from topology and runtime data.</value>
+  </data>
+  <data name="Open RBAC" xml:space="preserve">
+    <value>Open RBAC</value>
+  </data>
+  <data name="Neutral reference module for web flows in OMP. The page shows a module overview and links onward to the module's configurations." xml:space="preserve">
+    <value>Neutral reference module for web flows in OMP. The page shows a module overview and links onward to the module's configurations.</value>
+  </data>
+  <data name="Module key" xml:space="preserve">
+    <value>Module key</value>
+  </data>
+  <data name="Schema" xml:space="preserve">
+    <value>Schema</value>
+  </data>
+  <data name="Active configurations" xml:space="preserve">
+    <value>Active configurations</value>
+  </data>
+  <data name="Next step" xml:space="preserve">
+    <value>Next step</value>
+  </data>
+  <data name="Continue to the configuration view to review or update the module's current sample configurations." xml:space="preserve">
+    <value>Continue to the configuration view to review or update the module's current sample configurations.</value>
+  </data>
+  <data name="Open configurations" xml:space="preserve">
+    <value>Open configurations</value>
+  </data>
+  <data name="Configurations for Example Web App Module. These values are used by the example module and can be edited without leaving the module interface." xml:space="preserve">
+    <value>Configurations for Example Web App Module. These values are used by the example module and can be edited without leaving the module interface.</value>
+  </data>
+  <data name="No configurations were found." xml:space="preserve">
+    <value>No configurations were found.</value>
+  </data>
+  <data name="Created UTC" xml:space="preserve">
+    <value>Created UTC</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Edit configuration" xml:space="preserve">
+    <value>Edit configuration</value>
+  </data>
+  <data name="Update comment and JSON content for the selected configuration." xml:space="preserve">
+    <value>Update comment and JSON content for the selected configuration.</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Back to configurations" xml:space="preserve">
+    <value>Back to configurations</value>
+  </data>
+  <data name="Edit host" xml:space="preserve">
+    <value>Edit host</value>
+  </data>
+  <data name="Create host" xml:space="preserve">
+    <value>Create host</value>
+  </data>
+  <data name="Host created." xml:space="preserve">
+    <value>Host created.</value>
+  </data>
+  <data name="Host updated." xml:space="preserve">
+    <value>Host updated.</value>
+  </data>
+  <data name="Host deleted." xml:space="preserve">
+    <value>Host deleted.</value>
+  </data>
+  <data name="Roles" xml:space="preserve">
+    <value>Roles</value>
+  </data>
+  <data name="Create role" xml:space="preserve">
+    <value>Create role</value>
+  </data>
+  <data name="Edit role" xml:space="preserve">
+    <value>Edit role</value>
+  </data>
+  <data name="Role created." xml:space="preserve">
+    <value>Role created.</value>
+  </data>
+  <data name="Role updated." xml:space="preserve">
+    <value>Role updated.</value>
+  </data>
+  <data name="Permission added to role." xml:space="preserve">
+    <value>Permission added to role.</value>
+  </data>
+  <data name="Permission removed from role." xml:space="preserve">
+    <value>Permission removed from role.</value>
+  </data>
+  <data name="Principal added to role." xml:space="preserve">
+    <value>Principal added to role.</value>
+  </data>
+  <data name="Principal removed from role." xml:space="preserve">
+    <value>Principal removed from role.</value>
+  </data>
+  <data name="Role deleted." xml:space="preserve">
+    <value>Role deleted.</value>
+  </data>
+  <data name="Create permission" xml:space="preserve">
+    <value>Create permission</value>
+  </data>
+  <data name="Edit permission" xml:space="preserve">
+    <value>Edit permission</value>
+  </data>
+  <data name="Permission created." xml:space="preserve">
+    <value>Permission created.</value>
+  </data>
+  <data name="Permission updated." xml:space="preserve">
+    <value>Permission updated.</value>
+  </data>
+  <data name="Permission deleted." xml:space="preserve">
+    <value>Permission deleted.</value>
+  </data>
+  <data name="Permissions" xml:space="preserve">
+    <value>Permissions</value>
+  </data>
+  <data name="Create app" xml:space="preserve">
+    <value>Create app</value>
+  </data>
+  <data name="Edit app" xml:space="preserve">
+    <value>Edit app</value>
+  </data>
+  <data name="App created." xml:space="preserve">
+    <value>App created.</value>
+  </data>
+  <data name="App updated." xml:space="preserve">
+    <value>App updated.</value>
+  </data>
+  <data name="App deleted." xml:space="preserve">
+    <value>App deleted.</value>
+  </data>
+  <data name="Host templates" xml:space="preserve">
+    <value>Host templates</value>
+  </data>
+  <data name="Host Deployments" xml:space="preserve">
+    <value>Host Deployments</value>
+  </data>
+  <data name="Create module instance" xml:space="preserve">
+    <value>Create module instance</value>
+  </data>
+  <data name="Edit module instance" xml:space="preserve">
+    <value>Edit module instance</value>
+  </data>
+  <data name="Module instance created." xml:space="preserve">
+    <value>Module instance created.</value>
+  </data>
+  <data name="Module instance updated." xml:space="preserve">
+    <value>Module instance updated.</value>
+  </data>
+  <data name="Module instance deleted." xml:space="preserve">
+    <value>Module instance deleted.</value>
+  </data>
+  <data name="Edit instance" xml:space="preserve">
+    <value>Edit instance</value>
+  </data>
+  <data name="Create instance" xml:space="preserve">
+    <value>Create instance</value>
+  </data>
+  <data name="Instance created." xml:space="preserve">
+    <value>Instance created.</value>
+  </data>
+  <data name="Instance updated." xml:space="preserve">
+    <value>Instance updated.</value>
+  </data>
+  <data name="Instance deleted." xml:space="preserve">
+    <value>Instance deleted.</value>
+  </data>
+  <data name="Create module" xml:space="preserve">
+    <value>Create module</value>
+  </data>
+  <data name="Edit module" xml:space="preserve">
+    <value>Edit module</value>
+  </data>
+  <data name="Module created." xml:space="preserve">
+    <value>Module created.</value>
+  </data>
+  <data name="Module updated." xml:space="preserve">
+    <value>Module updated.</value>
+  </data>
+  <data name="Module deleted." xml:space="preserve">
+    <value>Module deleted.</value>
+  </data>
+  <data name="Instance templates" xml:space="preserve">
+    <value>Instance templates</value>
+  </data>
+  <data name="Create app instance" xml:space="preserve">
+    <value>Create app instance</value>
+  </data>
+  <data name="Edit app instance" xml:space="preserve">
+    <value>Edit app instance</value>
+  </data>
+  <data name="App instance created." xml:space="preserve">
+    <value>App instance created.</value>
+  </data>
+  <data name="App instance updated." xml:space="preserve">
+    <value>App instance updated.</value>
+  </data>
+  <data name="App instance deleted." xml:space="preserve">
+    <value>App instance deleted.</value>
+  </data>
+  <data name="Create artifact" xml:space="preserve">
+    <value>Create artifact</value>
+  </data>
+  <data name="Edit artifact" xml:space="preserve">
+    <value>Edit artifact</value>
+  </data>
+  <data name="Artifact created." xml:space="preserve">
+    <value>Artifact created.</value>
+  </data>
+  <data name="Artifact updated." xml:space="preserve">
+    <value>Artifact updated.</value>
+  </data>
+  <data name="Artifact deleted." xml:space="preserve">
+    <value>Artifact deleted.</value>
+  </data>
+  <data name="Host Deployment Assignments" xml:space="preserve">
+    <value>Host Deployment Assignments</value>
+  </data>
+  <data name="Configuration updated." xml:space="preserve">
+    <value>Configuration updated.</value>
+  </data>
+  <data name="Allowed" xml:space="preserve">
+    <value>Allowed</value>
+  </data>
+  <data name="App" xml:space="preserve">
+    <value>App</value>
+  </data>
+  <data name="App definition" xml:space="preserve">
+    <value>App definition</value>
+  </data>
+  <data name="Artifact" xml:space="preserve">
+    <value>Artifact</value>
+  </data>
+  <data name="Comment" xml:space="preserve">
+    <value>Comment</value>
+  </data>
+  <data name="Config JSON" xml:space="preserve">
+    <value>Config JSON</value>
+  </data>
+  <data name="ConfigId" xml:space="preserve">
+    <value>ConfigId</value>
+  </data>
+  <data name="Desired state" xml:space="preserve">
+    <value>Desired state</value>
+  </data>
+  <data name="Enabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="Expected client IP" xml:space="preserve">
+    <value>Expected client IP</value>
+  </data>
+  <data name="Expected client host" xml:space="preserve">
+    <value>Expected client host</value>
+  </data>
+  <data name="Expected login" xml:space="preserve">
+    <value>Expected login</value>
+  </data>
+  <data name="Host" xml:space="preserve">
+    <value>Host</value>
+  </data>
+  <data name="Host key" xml:space="preserve">
+    <value>Host key</value>
+  </data>
+  <data name="Install path" xml:space="preserve">
+    <value>Install path</value>
+  </data>
+  <data name="Installation name" xml:space="preserve">
+    <value>Installation name</value>
+  </data>
+  <data name="Instance" xml:space="preserve">
+    <value>Instance</value>
+  </data>
+  <data name="Instance key" xml:space="preserve">
+    <value>Instance key</value>
+  </data>
+  <data name="Instance template" xml:space="preserve">
+    <value>Instance template</value>
+  </data>
+  <data name="Module" xml:space="preserve">
+    <value>Module</value>
+  </data>
+  <data name="Module instance" xml:space="preserve">
+    <value>Module instance</value>
+  </data>
+  <data name="Module instance key" xml:space="preserve">
+    <value>Module instance key</value>
+  </data>
+  <data name="Module type" xml:space="preserve">
+    <value>Module type</value>
+  </data>
+  <data name="OS family" xml:space="preserve">
+    <value>OS family</value>
+  </data>
+  <data name="OS version" xml:space="preserve">
+    <value>OS version</value>
+  </data>
+  <data name="Package type" xml:space="preserve">
+    <value>Package type</value>
+  </data>
+  <data name="Permission name" xml:space="preserve">
+    <value>Permission name</value>
+  </data>
+  <data name="Public URL" xml:space="preserve">
+    <value>Public URL</value>
+  </data>
+  <data name="Relative path" xml:space="preserve">
+    <value>Relative path</value>
+  </data>
+  <data name="Role name" xml:space="preserve">
+    <value>Role name</value>
+  </data>
+  <data name="Route path" xml:space="preserve">
+    <value>Route path</value>
+  </data>
+  <data name="SHA-256" xml:space="preserve">
+    <value>SHA-256</value>
+  </data>
+  <data name="Schema name" xml:space="preserve">
+    <value>Schema name</value>
+  </data>
+  <data name="Sort order" xml:space="preserve">
+    <value>Sort order</value>
+  </data>
+  <data name="Target name" xml:space="preserve">
+    <value>Target name</value>
+  </data>
+  <data name="App Instances" xml:space="preserve">
+    <value>App Instances</value>
+  </data>
+  <data name="App type" xml:space="preserve">
+    <value>App type</value>
+  </data>
+  <data name="Module Instances" xml:space="preserve">
+    <value>Module Instances</value>
+  </data>
+  <data name="Set Host base URL to make this route clickable from the Portal." xml:space="preserve">
+    <value>Set Host base URL to make this route clickable from the Portal.</value>
+  </data>
+  <data name="Base URL" xml:space="preserve">
+    <value>Base URL</value>
+  </data>
+  <data name="Payload JSON" xml:space="preserve">
+    <value>Payload JSON</value>
+  </data>
+  <data name="Request type" xml:space="preserve">
+    <value>Request type</value>
+  </data>
+  <data name="ArtifactId" xml:space="preserve">
+    <value>ArtifactId</value>
+  </data>
+  <data name="Manual core" xml:space="preserve">
+    <value>Manual core</value>
+  </data>
+  <data name="Definitions" xml:space="preserve">
+    <value>Definitions</value>
+  </data>
+  <data name="Advanced admin" xml:space="preserve">
+    <value>Advanced admin</value>
+  </data>
+  <data name="Automation and templates" xml:space="preserve">
+    <value>Automation and templates</value>
+  </data>
+  <data name="Template model" xml:space="preserve">
+    <value>Template model</value>
+  </data>
+  <data name="Use these pages when defining desired topology for automated rollout." xml:space="preserve">
+    <value>Use these pages when defining desired topology for automated rollout.</value>
+  </data>
+  <data name="Deployment planning" xml:space="preserve">
+    <value>Deployment planning</value>
+  </data>
+  <data name="These pages are related to deployment orchestration and future HostAgent-driven execution." xml:space="preserve">
+    <value>These pages are related to deployment orchestration and future HostAgent-driven execution.</value>
+  </data>
+  <data name="Current counts" xml:space="preserve">
+    <value>Current counts</value>
+  </data>
+  <data name="No host deployment assignments found." xml:space="preserve">
+    <value>No host deployment assignments found.</value>
+  </data>
+  <data name="Assigned by" xml:space="preserve">
+    <value>Assigned by</value>
+  </data>
+  <data name="Assigned UTC" xml:space="preserve">
+    <value>Assigned UTC</value>
+  </data>
+  <data name="Active" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="Inactive" xml:space="preserve">
+    <value>Inactive</value>
+  </data>
+  <data name="No host deployments found." xml:space="preserve">
+    <value>No host deployments found.</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Requested by" xml:space="preserve">
+    <value>Requested by</value>
+  </data>
+  <data name="Requested UTC" xml:space="preserve">
+    <value>Requested UTC</value>
+  </data>
+  <data name="Completed UTC" xml:space="preserve">
+    <value>Completed UTC</value>
+  </data>
+  <data name="Disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="Blocked" xml:space="preserve">
+    <value>Blocked</value>
+  </data>
+  <data name="Actions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="Type" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="Version" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="Target" xml:space="preserve">
+    <value>Target</value>
+  </data>
+  <data name="Last seen" xml:space="preserve">
+    <value>Last seen</value>
+  </data>
+  <data name="OS" xml:space="preserve">
+    <value>OS</value>
+  </data>
+  <data name="Not set" xml:space="preserve">
+    <value>Not set</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Permission" xml:space="preserve">
+    <value>Permission</value>
+  </data>
+  <data name="Principal" xml:space="preserve">
+    <value>Principal</value>
+  </data>
+  <data name="Principals" xml:space="preserve">
+    <value>Principals</value>
+  </data>
+  <data name="Remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="App definitions belong to modules and describe what can be deployed. Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions." xml:space="preserve">
+    <value>App definitions belong to modules and describe what can be deployed. Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions.</value>
+  </data>
+  <data name="Create app definition" xml:space="preserve">
+    <value>Create app definition</value>
+  </data>
+  <data name="Edit app definition" xml:space="preserve">
+    <value>Edit app definition</value>
+  </data>
+  <data name="Select module" xml:space="preserve">
+    <value>Select module</value>
+  </data>
+  <data name="Choose how the platform should think about this definition." xml:space="preserve">
+    <value>Choose how the platform should think about this definition.</value>
+  </data>
+  <data name="Save app" xml:space="preserve">
+    <value>Save app</value>
+  </data>
+  <data name="Back to apps" xml:space="preserve">
+    <value>Back to apps</value>
+  </data>
+  <data name="Delete this app definition? Related artifacts and app instances must be removed first." xml:space="preserve">
+    <value>Delete this app definition? Related artifacts and app instances must be removed first.</value>
+  </data>
+  <data name="Delete is blocked while artifacts, app instances or template rows still reference the app." xml:space="preserve">
+    <value>Delete is blocked while artifacts, app instances or template rows still reference the app.</value>
+  </data>
+  <data name="Delete app" xml:space="preserve">
+    <value>Delete app</value>
+  </data>
+  <data name="No app definitions found." xml:space="preserve">
+    <value>No app definitions found.</value>
+  </data>
+  <data name="App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance." xml:space="preserve">
+    <value>App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance.</value>
+  </data>
+  <data name="Select module instance" xml:space="preserve">
+    <value>Select module instance</value>
+  </data>
+  <data name="Start by choosing the module instance. Host and app selections are validated against it." xml:space="preserve">
+    <value>Start by choosing the module instance. Host and app selections are validated against it.</value>
+  </data>
+  <data name="Select app" xml:space="preserve">
+    <value>Select app</value>
+  </data>
+  <data name="The chosen app must belong to the same module definition as the selected module instance." xml:space="preserve">
+    <value>The chosen app must belong to the same module definition as the selected module instance.</value>
+  </data>
+  <data name="No host / not pinned" xml:space="preserve">
+    <value>No host / not pinned</value>
+  </data>
+  <data name="If set, the host must belong to the same instance as the selected module instance." xml:space="preserve">
+    <value>If set, the host must belong to the same instance as the selected module instance.</value>
+  </data>
+  <data name="No artifact selected" xml:space="preserve">
+    <value>No artifact selected</value>
+  </data>
+  <data name="If set, the artifact must belong to the selected app definition." xml:space="preserve">
+    <value>If set, the artifact must belong to the selected app definition.</value>
+  </data>
+  <data name="Use either an absolute URL such as https://www.google.com/ or a host-root-relative path such as app01, /app01, app01/ or /app01/. Relative values are resolved directly from the selected host root without any extra portal prefix." xml:space="preserve">
+    <value>Use either an absolute URL such as https://www.google.com/ or a host-root-relative path such as app01, /app01, app01/ or /app01/. Relative values are resolved directly from the selected host root without any extra portal prefix.</value>
+  </data>
+  <data name="Optional absolute URL when the app is externally reachable." xml:space="preserve">
+    <value>Optional absolute URL when the app is externally reachable.</value>
+  </data>
+  <data name="Physical install location on host, if relevant." xml:space="preserve">
+    <value>Physical install location on host, if relevant.</value>
+  </data>
+  <data name="Friendly install slot or service name." xml:space="preserve">
+    <value>Friendly install slot or service name.</value>
+  </data>
+  <data name="Module-owned config identifier. Leave empty when not used." xml:space="preserve">
+    <value>Module-owned config identifier. Leave empty when not used.</value>
+  </data>
+  <data name="Controls what the platform expects this runtime instance to do." xml:space="preserve">
+    <value>Controls what the platform expects this runtime instance to do.</value>
+  </data>
+  <data name="Optional runtime identity that is expected to report heartbeat." xml:space="preserve">
+    <value>Optional runtime identity that is expected to report heartbeat.</value>
+  </data>
+  <data name="Save app instance" xml:space="preserve">
+    <value>Save app instance</value>
+  </data>
+  <data name="Back to app instances" xml:space="preserve">
+    <value>Back to app instances</value>
+  </data>
+  <data name="Delete this app instance?" xml:space="preserve">
+    <value>Delete this app instance?</value>
+  </data>
+  <data name="Delete removes the runtime row. Make sure no external system still relies on this app instance key." xml:space="preserve">
+    <value>Delete removes the runtime row. Make sure no external system still relies on this app instance key.</value>
+  </data>
+  <data name="Delete app instance" xml:space="preserve">
+    <value>Delete app instance</value>
+  </data>
+  <data name="No app instances found." xml:space="preserve">
+    <value>No app instances found.</value>
+  </data>
+  <data name="Installation" xml:space="preserve">
+    <value>Installation</value>
+  </data>
+  <data name="Optional RID/target such as win-x64." xml:space="preserve">
+    <value>Optional RID/target such as win-x64.</value>
+  </data>
+  <data name="Relative path inside your artifact repository or release output." xml:space="preserve">
+    <value>Relative path inside your artifact repository or release output.</value>
+  </data>
+  <data name="Optional checksum used for later integrity checks." xml:space="preserve">
+    <value>Optional checksum used for later integrity checks.</value>
+  </data>
+  <data name="Save artifact" xml:space="preserve">
+    <value>Save artifact</value>
+  </data>
+  <data name="Back to artifacts" xml:space="preserve">
+    <value>Back to artifacts</value>
+  </data>
+  <data name="Delete this artifact? App instances depending on it must be updated first." xml:space="preserve">
+    <value>Delete this artifact? App instances depending on it must be updated first.</value>
+  </data>
+  <data name="Delete is blocked while app instances still point at this artifact." xml:space="preserve">
+    <value>Delete is blocked while app instances still point at this artifact.</value>
+  </data>
+  <data name="Delete artifact" xml:space="preserve">
+    <value>Delete artifact</value>
+  </data>
+  <data name="No artifacts found." xml:space="preserve">
+    <value>No artifacts found.</value>
+  </data>
+  <data name="Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages." xml:space="preserve">
+    <value>Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages.</value>
+  </data>
+  <data name="Select instance" xml:space="preserve">
+    <value>Select instance</value>
+  </data>
+  <data name="Every host belongs to exactly one OMP instance." xml:space="preserve">
+    <value>Every host belongs to exactly one OMP instance.</value>
+  </data>
+  <data name="Logical host identity used by OMP. Keep it short and stable." xml:space="preserve">
+    <value>Logical host identity used by OMP. Keep it short and stable.</value>
+  </data>
+  <data name="Optional human-friendly label." xml:space="preserve">
+    <value>Optional human-friendly label.</value>
+  </data>
+  <data name="Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath. Enter only protocol, host and optional port." xml:space="preserve">
+    <value>Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath. Enter only protocol, host and optional port.</value>
+  </data>
+  <data name="Free text for the observed or intended OS version." xml:space="preserve">
+    <value>Free text for the observed or intended OS version.</value>
+  </data>
+  <data name="Save host" xml:space="preserve">
+    <value>Save host</value>
+  </data>
+  <data name="Back to hosts" xml:space="preserve">
+    <value>Back to hosts</value>
+  </data>
+  <data name="Delete this host? App instances using it must be moved or removed first." xml:space="preserve">
+    <value>Delete this host? App instances using it must be moved or removed first.</value>
+  </data>
+  <data name="Host deletion is blocked when app instances or deployments still reference the host." xml:space="preserve">
+    <value>Host deletion is blocked when app instances or deployments still reference the host.</value>
+  </data>
+  <data name="Delete host" xml:space="preserve">
+    <value>Delete host</value>
+  </data>
+  <data name="No hosts found." xml:space="preserve">
+    <value>No hosts found.</value>
+  </data>
+  <data name="Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation." xml:space="preserve">
+    <value>Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation.</value>
+  </data>
+  <data name="Instances are the top-level OMP environments. Templates are optional for manual administration and mainly belong to future automation." xml:space="preserve">
+    <value>Instances are the top-level OMP environments. Templates are optional for manual administration and mainly belong to future automation.</value>
+  </data>
+  <data name="Stable technical key used in links, config and references." xml:space="preserve">
+    <value>Stable technical key used in links, config and references.</value>
+  </data>
+  <data name="Human-readable name shown in Portal." xml:space="preserve">
+    <value>Human-readable name shown in Portal.</value>
+  </data>
+  <data name="Optional context for operators and maintainers." xml:space="preserve">
+    <value>Optional context for operators and maintainers.</value>
+  </data>
+  <data name="None / manual setup" xml:space="preserve">
+    <value>None / manual setup</value>
+  </data>
+  <data name="Leave empty for a purely manual instance. Template linkage can be added later." xml:space="preserve">
+    <value>Leave empty for a purely manual instance. Template linkage can be added later.</value>
+  </data>
+  <data name="Save instance" xml:space="preserve">
+    <value>Save instance</value>
+  </data>
+  <data name="Back to instances" xml:space="preserve">
+    <value>Back to instances</value>
+  </data>
+  <data name="Delete this instance? This only works when no dependent rows remain." xml:space="preserve">
+    <value>Delete this instance? This only works when no dependent rows remain.</value>
+  </data>
+  <data name="Delete is blocked by SQL if hosts, module instances or other dependent rows still reference this instance." xml:space="preserve">
+    <value>Delete is blocked by SQL if hosts, module instances or other dependent rows still reference this instance.</value>
+  </data>
+  <data name="Delete instance" xml:space="preserve">
+    <value>Delete instance</value>
+  </data>
+  <data name="No instances found." xml:space="preserve">
+    <value>No instances found.</value>
+  </data>
+  <data name="OMP instances are the top-level environments. Instance templates remain optional and primarily belong to the automation workflow." xml:space="preserve">
+    <value>OMP instances are the top-level environments. Instance templates remain optional and primarily belong to the automation workflow.</value>
+  </data>
+  <data name="Modules are definitions. Keep runtime-specific values out of this page and use module instances or app instances for environment-specific configuration." xml:space="preserve">
+    <value>Modules are definitions. Keep runtime-specific values out of this page and use module instances or app instances for environment-specific configuration.</value>
+  </data>
+  <data name="Stable definition key used by apps and instance templates." xml:space="preserve">
+    <value>Stable definition key used by apps and instance templates.</value>
+  </data>
+  <data name="Pick the closest platform role. This is a definition-level classification." xml:space="preserve">
+    <value>Pick the closest platform role. This is a definition-level classification.</value>
+  </data>
+  <data name="Database schema owned by the module, when applicable." xml:space="preserve">
+    <value>Database schema owned by the module, when applicable.</value>
+  </data>
+  <data name="Save module" xml:space="preserve">
+    <value>Save module</value>
+  </data>
+  <data name="Back to modules" xml:space="preserve">
+    <value>Back to modules</value>
+  </data>
+  <data name="Delete this module? Related apps and instances must be removed first." xml:space="preserve">
+    <value>Delete this module? Related apps and instances must be removed first.</value>
+  </data>
+  <data name="Deleting a module is only possible when dependent apps, module instances and template rows are already gone." xml:space="preserve">
+    <value>Deleting a module is only possible when dependent apps, module instances and template rows are already gone.</value>
+  </data>
+  <data name="Delete module" xml:space="preserve">
+    <value>Delete module</value>
+  </data>
+  <data name="No modules found." xml:space="preserve">
+    <value>No modules found.</value>
+  </data>
+  <data name="Module definitions are reusable building blocks. They do not describe placement or runtime state." xml:space="preserve">
+    <value>Module definitions are reusable building blocks. They do not describe placement or runtime state.</value>
+  </data>
+  <data name="Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational." xml:space="preserve">
+    <value>Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational.</value>
+  </data>
+  <data name="Choose the module definition this module instance represents." xml:space="preserve">
+    <value>Choose the module definition this module instance represents.</value>
+  </data>
+  <data name="Save module instance" xml:space="preserve">
+    <value>Save module instance</value>
+  </data>
+  <data name="Back to module instances" xml:space="preserve">
+    <value>Back to module instances</value>
+  </data>
+  <data name="Delete this module instance? Related app instances must be removed first." xml:space="preserve">
+    <value>Delete this module instance? Related app instances must be removed first.</value>
+  </data>
+  <data name="SQL blocks deletion while app instances or template mappings still depend on this row." xml:space="preserve">
+    <value>SQL blocks deletion while app instances or template mappings still depend on this row.</value>
+  </data>
+  <data name="Delete module instance" xml:space="preserve">
+    <value>Delete module instance</value>
+  </data>
+  <data name="No module instances found." xml:space="preserve">
+    <value>No module instances found.</value>
+  </data>
+  <data name="Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances." xml:space="preserve">
+    <value>Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances.</value>
+  </data>
+  <data name="Host templates describe reusable host-level desired state for template-driven rollout." xml:space="preserve">
+    <value>Host templates describe reusable host-level desired state for template-driven rollout.</value>
+  </data>
+  <data name="No host templates found." xml:space="preserve">
+    <value>No host templates found.</value>
+  </data>
+  <data name="Template key" xml:space="preserve">
+    <value>Template key</value>
+  </data>
+  <data name="Instance templates belong to the future automation path. They describe desired topology rather than the manually managed live runtime." xml:space="preserve">
+    <value>Instance templates belong to the future automation path. They describe desired topology rather than the manually managed live runtime.</value>
+  </data>
+  <data name="No instance templates found." xml:space="preserve">
+    <value>No instance templates found.</value>
+  </data>
+  <data name="Manage roles, permissions and principal assignments from Portal instead of editing the database directly." xml:space="preserve">
+    <value>Manage roles, permissions and principal assignments from Portal instead of editing the database directly.</value>
+  </data>
+  <data name="Named access bundles that can carry multiple permissions and principals." xml:space="preserve">
+    <value>Named access bundles that can carry multiple permissions and principals.</value>
+  </data>
+  <data name="Low-level capabilities granted to apps and portal areas." xml:space="preserve">
+    <value>Low-level capabilities granted to apps and portal areas.</value>
+  </data>
+  <data name="Role administration" xml:space="preserve">
+    <value>Role administration</value>
+  </data>
+  <data name="Manage roles" xml:space="preserve">
+    <value>Manage roles</value>
+  </data>
+  <data name="Create roles, update descriptions, assign permissions and attach principals." xml:space="preserve">
+    <value>Create roles, update descriptions, assign permissions and attach principals.</value>
+  </data>
+  <data name="Open roles" xml:space="preserve">
+    <value>Open roles</value>
+  </data>
+  <data name="Permission catalog" xml:space="preserve">
+    <value>Permission catalog</value>
+  </data>
+  <data name="Manage permissions" xml:space="preserve">
+    <value>Manage permissions</value>
+  </data>
+  <data name="Create permissions once and reuse them across roles and example modules." xml:space="preserve">
+    <value>Create permissions once and reuse them across roles and example modules.</value>
+  </data>
+  <data name="Open permissions" xml:space="preserve">
+    <value>Open permissions</value>
+  </data>
+  <data name="Permissions are low-level capability names. Keep them stable and descriptive so roles remain understandable." xml:space="preserve">
+    <value>Permissions are low-level capability names. Keep them stable and descriptive so roles remain understandable.</value>
+  </data>
+  <data name="No permissions have been created yet." xml:space="preserve">
+    <value>No permissions have been created yet.</value>
+  </data>
+  <data name="Used by roles" xml:space="preserve">
+    <value>Used by roles</value>
+  </data>
+  <data name="Short explanation of who should receive this role." xml:space="preserve">
+    <value>Short explanation of who should receive this role.</value>
+  </data>
+  <data name="Save role" xml:space="preserve">
+    <value>Save role</value>
+  </data>
+  <data name="Back to roles" xml:space="preserve">
+    <value>Back to roles</value>
+  </data>
+  <data name="Assigned permissions" xml:space="preserve">
+    <value>Assigned permissions</value>
+  </data>
+  <data name="No permissions assigned yet." xml:space="preserve">
+    <value>No permissions assigned yet.</value>
+  </data>
+  <data name="Add permission" xml:space="preserve">
+    <value>Add permission</value>
+  </data>
+  <data name="Select permission" xml:space="preserve">
+    <value>Select permission</value>
+  </data>
+  <data name="Assigned principals" xml:space="preserve">
+    <value>Assigned principals</value>
+  </data>
+  <data name="Bind users, groups or service identities to the role. Prefer groups where possible." xml:space="preserve">
+    <value>Bind users, groups or service identities to the role. Prefer groups where possible.</value>
+  </data>
+  <data name="No principals assigned yet." xml:space="preserve">
+    <value>No principals assigned yet.</value>
+  </data>
+  <data name="Principal type" xml:space="preserve">
+    <value>Principal type</value>
+  </data>
+  <data name="Add principal" xml:space="preserve">
+    <value>Add principal</value>
+  </data>
+  <data name="Delete this role? Linked role assignments will also be removed." xml:space="preserve">
+    <value>Delete this role? Linked role assignments will also be removed.</value>
+  </data>
+  <data name="Deleting a role removes all principal and permission links for that role." xml:space="preserve">
+    <value>Deleting a role removes all principal and permission links for that role.</value>
+  </data>
+  <data name="Delete role" xml:space="preserve">
+    <value>Delete role</value>
+  </data>
+  <data name="Roles bundle permissions and principals. Use roles to keep direct principal management small and predictable." xml:space="preserve">
+    <value>Roles bundle permissions and principals. Use roles to keep direct principal management small and predictable.</value>
+  </data>
+  <data name="No roles have been created yet." xml:space="preserve">
+    <value>No roles have been created yet.</value>
+  </data>
+  <data name="Describe the capability in business terms, not implementation details." xml:space="preserve">
+    <value>Describe the capability in business terms, not implementation details.</value>
+  </data>
+  <data name="Used by roles:" xml:space="preserve">
+    <value>Used by roles:</value>
+  </data>
+  <data name="Save permission" xml:space="preserve">
+    <value>Save permission</value>
+  </data>
+  <data name="Back to permissions" xml:space="preserve">
+    <value>Back to permissions</value>
+  </data>
+  <data name="Delete this permission? Role links will also be removed." xml:space="preserve">
+    <value>Delete this permission? Role links will also be removed.</value>
+  </data>
+  <data name="Deleting a permission removes it from all roles." xml:space="preserve">
+    <value>Deleting a permission removes it from all roles.</value>
+  </data>
+  <data name="Delete permission" xml:space="preserve">
+    <value>Delete permission</value>
+  </data>
+  <data name="Danger zone" xml:space="preserve">
+    <value>Danger zone</value>
+  </data>
+  <data name="Web app" xml:space="preserve">
+    <value>Web app</value>
+  </data>
+  <data name="Service app" xml:space="preserve">
+    <value>Service app</value>
+  </data>
+  <data name="Folder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="Zip" xml:space="preserve">
+    <value>Zip</value>
+  </data>
+  <data name="NuGet package" xml:space="preserve">
+    <value>NuGet package</value>
+  </data>
+  <data name="Unknown / unmanaged" xml:space="preserve">
+    <value>Unknown / unmanaged</value>
+  </data>
+  <data name="Enabled / should run" xml:space="preserve">
+    <value>Enabled / should run</value>
+  </data>
+  <data name="Stopped / should not run" xml:space="preserve">
+    <value>Stopped / should not run</value>
+  </data>
+  <data name="Development" xml:space="preserve">
+    <value>Development</value>
+  </data>
+  <data name="Test" xml:space="preserve">
+    <value>Test</value>
+  </data>
+  <data name="Stage" xml:space="preserve">
+    <value>Stage</value>
+  </data>
+  <data name="Production" xml:space="preserve">
+    <value>Production</value>
+  </data>
+  <data name="Portal module" xml:space="preserve">
+    <value>Portal module</value>
+  </data>
+  <data name="Web app module" xml:space="preserve">
+    <value>Web app module</value>
+  </data>
+  <data name="Host app module" xml:space="preserve">
+    <value>Host app module</value>
+  </data>
+  <data name="User" xml:space="preserve">
+    <value>User</value>
+  </data>
+  <data name="Group" xml:space="preserve">
+    <value>Group</value>
+  </data>
+  <data name="ServiceAccount" xml:space="preserve">
+    <value>ServiceAccount</value>
+  </data>
+  <data name="Select a module." xml:space="preserve">
+    <value>Select a module.</value>
+  </data>
+  <data name="Use a stable key with letters, digits, dash, underscore or dot." xml:space="preserve">
+    <value>Use a stable key with letters, digits, dash, underscore or dot.</value>
+  </data>
+  <data name="Select an app type." xml:space="preserve">
+    <value>Select an app type.</value>
+  </data>
+  <data name="The app could not be saved." xml:space="preserve">
+    <value>The app could not be saved.</value>
+  </data>
+  <data name="The app could not be deleted." xml:space="preserve">
+    <value>The app could not be deleted.</value>
+  </data>
+  <data name="An app with the same key already exists in the selected module." xml:space="preserve">
+    <value>An app with the same key already exists in the selected module.</value>
+  </data>
+  <data name="Delete or update dependent rows first." xml:space="preserve">
+    <value>Delete or update dependent rows first.</value>
+  </data>
+  <data name="Select a module instance." xml:space="preserve">
+    <value>Select a module instance.</value>
+  </data>
+  <data name="Select an app definition." xml:space="preserve">
+    <value>Select an app definition.</value>
+  </data>
+  <data name="Public URL must be an absolute URL." xml:space="preserve">
+    <value>Public URL must be an absolute URL.</value>
+  </data>
+  <data name="Selected module instance was not found." xml:space="preserve">
+    <value>Selected module instance was not found.</value>
+  </data>
+  <data name="Selected app was not found." xml:space="preserve">
+    <value>Selected app was not found.</value>
+  </data>
+  <data name="The selected app does not belong to the selected module instance's module." xml:space="preserve">
+    <value>The selected app does not belong to the selected module instance's module.</value>
+  </data>
+  <data name="Selected host was not found." xml:space="preserve">
+    <value>Selected host was not found.</value>
+  </data>
+  <data name="The selected host belongs to a different instance than the selected module instance." xml:space="preserve">
+    <value>The selected host belongs to a different instance than the selected module instance.</value>
+  </data>
+  <data name="The selected artifact does not belong to the selected app." xml:space="preserve">
+    <value>The selected artifact does not belong to the selected app.</value>
+  </data>
+  <data name="The app instance could not be saved." xml:space="preserve">
+    <value>The app instance could not be saved.</value>
+  </data>
+  <data name="The app instance could not be deleted." xml:space="preserve">
+    <value>The app instance could not be deleted.</value>
+  </data>
+  <data name="An app instance with the same key already exists in the selected module instance." xml:space="preserve">
+    <value>An app instance with the same key already exists in the selected module instance.</value>
+  </data>
+  <data name="Select an app." xml:space="preserve">
+    <value>Select an app.</value>
+  </data>
+  <data name="Version is required." xml:space="preserve">
+    <value>Version is required.</value>
+  </data>
+  <data name="SHA-256 must be 64 hexadecimal characters." xml:space="preserve">
+    <value>SHA-256 must be 64 hexadecimal characters.</value>
+  </data>
+  <data name="The artifact could not be saved." xml:space="preserve">
+    <value>The artifact could not be saved.</value>
+  </data>
+  <data name="The artifact could not be deleted." xml:space="preserve">
+    <value>The artifact could not be deleted.</value>
+  </data>
+  <data name="Select an instance." xml:space="preserve">
+    <value>Select an instance.</value>
+  </data>
+  <data name="Use a stable host key with letters, digits, dash, underscore or dot." xml:space="preserve">
+    <value>Use a stable host key with letters, digits, dash, underscore or dot.</value>
+  </data>
+  <data name="Base URL must be an absolute http or https URL." xml:space="preserve">
+    <value>Base URL must be an absolute http or https URL.</value>
+  </data>
+  <data name="Base URL must not contain query string or fragment." xml:space="preserve">
+    <value>Base URL must not contain query string or fragment.</value>
+  </data>
+  <data name="Base URL should only contain protocol, host and optional port." xml:space="preserve">
+    <value>Base URL should only contain protocol, host and optional port.</value>
+  </data>
+  <data name="A host with the same key already exists in the selected instance." xml:space="preserve">
+    <value>A host with the same key already exists in the selected instance.</value>
+  </data>
+  <data name="The host could not be saved." xml:space="preserve">
+    <value>The host could not be saved.</value>
+  </data>
+  <data name="The host could not be deleted." xml:space="preserve">
+    <value>The host could not be deleted.</value>
+  </data>
+  <data name="Display name is required." xml:space="preserve">
+    <value>Display name is required.</value>
+  </data>
+  <data name="A row with the same key already exists." xml:space="preserve">
+    <value>A row with the same key already exists.</value>
+  </data>
+  <data name="The instance could not be saved." xml:space="preserve">
+    <value>The instance could not be saved.</value>
+  </data>
+  <data name="The instance could not be deleted." xml:space="preserve">
+    <value>The instance could not be deleted.</value>
+  </data>
+  <data name="Schema names must start with a letter and then use letters, digits or underscore." xml:space="preserve">
+    <value>Schema names must start with a letter and then use letters, digits or underscore.</value>
+  </data>
+  <data name="Select a module type." xml:space="preserve">
+    <value>Select a module type.</value>
+  </data>
+  <data name="A module with the same key already exists." xml:space="preserve">
+    <value>A module with the same key already exists.</value>
+  </data>
+  <data name="The module could not be saved." xml:space="preserve">
+    <value>The module could not be saved.</value>
+  </data>
+  <data name="The module could not be deleted." xml:space="preserve">
+    <value>The module could not be deleted.</value>
+  </data>
+  <data name="A module instance with the same key already exists in the selected instance." xml:space="preserve">
+    <value>A module instance with the same key already exists in the selected instance.</value>
+  </data>
+  <data name="The module instance could not be saved." xml:space="preserve">
+    <value>The module instance could not be saved.</value>
+  </data>
+  <data name="The module instance could not be deleted." xml:space="preserve">
+    <value>The module instance could not be deleted.</value>
+  </data>
+  <data name="Use letters, digits, dash, underscore or dot. Keep permission names stable." xml:space="preserve">
+    <value>Use letters, digits, dash, underscore or dot. Keep permission names stable.</value>
+  </data>
+  <data name="A permission with the same name already exists." xml:space="preserve">
+    <value>A permission with the same name already exists.</value>
+  </data>
+  <data name="The permission could not be saved." xml:space="preserve">
+    <value>The permission could not be saved.</value>
+  </data>
+  <data name="The permission could not be deleted." xml:space="preserve">
+    <value>The permission could not be deleted.</value>
+  </data>
+  <data name="Use letters, digits, dash, underscore or dot. Keep the role name stable." xml:space="preserve">
+    <value>Use letters, digits, dash, underscore or dot. Keep the role name stable.</value>
+  </data>
+  <data name="A role with the same name already exists." xml:space="preserve">
+    <value>A role with the same name already exists.</value>
+  </data>
+  <data name="The role could not be saved." xml:space="preserve">
+    <value>The role could not be saved.</value>
+  </data>
+  <data name="Select a permission to add." xml:space="preserve">
+    <value>Select a permission to add.</value>
+  </data>
+  <data name="Select a principal type and enter a principal value." xml:space="preserve">
+    <value>Select a principal type and enter a principal value.</value>
+  </data>
+  <data name="Principal is too long." xml:space="preserve">
+    <value>Principal is too long.</value>
+  </data>
+  <data name="The role could not be deleted." xml:space="preserve">
+    <value>The role could not be deleted.</value>
+  </data>
+  <data name="ExampleServiceAppModule.Operators" xml:space="preserve">
+    <value>ExampleServiceAppModule.Operators</value>
+  </data>
+  <data name="DOMAIN\User" xml:space="preserve">
+    <value>DOMAIN\User</value>
+  </data>
+  <data name="DOMAIN\Group" xml:space="preserve">
+    <value>DOMAIN\Group</value>
+  </data>
+  <data name="svc-omp-hostagent" xml:space="preserve">
+    <value>svc-omp-hostagent</value>
+  </data>
+  <data name="Examples:" xml:space="preserve">
+    <value>Examples:</value>
+  </data>
+  <data name="Select permission to add." xml:space="preserve">
+    <value>Select permission to add.</value>
+  </data>
+  <data name="Update dependent references first." xml:space="preserve">
+    <value>Update dependent references first.</value>
+  </data>
+  <data name="Architecture" xml:space="preserve">
+    <value>Architecture</value>
+  </data>
+  <data name="Host template" xml:space="preserve">
+    <value>Host template</value>
+  </data>
+  <data name="Allowed characters: letters, digits, dot, dash and underscore." xml:space="preserve">
+    <value>Allowed characters: letters, digits, dot, dash and underscore.</value>
+  </data>
+  <data name="Topology detail pages for InstanceTemplateHosts, InstanceTemplateModuleInstances and InstanceTemplateAppInstances." xml:space="preserve">
+    <value>Topology detail pages for InstanceTemplateHosts, InstanceTemplateModuleInstances and InstanceTemplateAppInstances.</value>
+  </data>
+  <data name="Use a stable role name, for example" xml:space="preserve">
+    <value>Use a stable role name, for example</value>
+  </data>
+  <data name="Environment" xml:space="preserve">
+    <value>Environment</value>
+  </data>
+  <data name="Host deployment assignments" xml:space="preserve">
+    <value>Host deployment assignments</value>
+  </data>
+  <data name="Host deployments" xml:space="preserve">
+    <value>Host deployments</value>
+  </data>
+  <data name="Linux" xml:space="preserve">
+    <value>Linux</value>
+  </data>
+  <data name="Windows" xml:space="preserve">
+    <value>Windows</value>
+  </data>
+  <data name="macOS" xml:space="preserve">
+    <value>macOS</value>
+  </data>
+  <data name="arm64" xml:space="preserve">
+    <value>arm64</value>
+  </data>
+  <data name="x64" xml:space="preserve">
+    <value>x64</value>
+  </data>
+  <data name="x86" xml:space="preserve">
+    <value>x86</value>
+  </data>
+  <data name="Artifacts are deployable outputs of an app definition. Keep the artifact metadata precise so app instances can reference the right build." xml:space="preserve">
+    <value>Artifacts are deployable outputs of an app definition. Keep the artifact metadata precise so app instances can reference the right build.</value>
+  </data>
+  <data name="Use a known package type when possible so later deployment automation can behave predictably." xml:space="preserve">
+    <value>Use a known package type when possible so later deployment automation can behave predictably.</value>
+  </data>
+  <data name="Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow." xml:space="preserve">
+    <value>Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</value>
+  </data>
+  <data name="Permissions are stable capability names used by roles and apps. Prefer precise names that do not require frequent renaming." xml:space="preserve">
+    <value>Permissions are stable capability names used by roles and apps. Prefer precise names that do not require frequent renaming.</value>
+  </data>
+  <data name="Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable." xml:space="preserve">
+    <value>Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable.</value>
+  </data>
+  <data name="These permissions are granted whenever the role is resolved for a user or service identity." xml:space="preserve">
+    <value>These permissions are granted whenever the role is resolved for a user or service identity.</value>
+  </data>
+  <data name="These pages are separated from the main admin workflow because they belong to template-driven rollout, deployment planning and future HostAgent automation. For manual setup, start with instances, hosts, modules, apps and artifacts." xml:space="preserve">
+    <value>These pages are separated from the main admin workflow because they belong to template-driven rollout, deployment planning and future HostAgent automation. For manual setup, start with instances, hosts, modules, apps and artifacts.</value>
+  </data>
+  <data name="Assignments connect hosts to deployment planning. This is intentionally separated from the main manual admin workflow." xml:space="preserve">
+    <value>Assignments connect hosts to deployment planning. This is intentionally separated from the main manual admin workflow.</value>
+  </data>
+  <data name="HostDeploymentAssignments.Title" xml:space="preserve">
+    <value>Host deployment assignments</value>
+  </data>
+  <data name="HostDeploymentAssignments.Lede" xml:space="preserve">
+    <value>Assignments connect hosts to deployment planning. This is intentionally separated from the main manual admin workflow.</value>
+  </data>
+  <data name="HostDeployments.Title" xml:space="preserve">
+    <value>Host Deployments</value>
+  </data>
+  <data name="HostDeployments.Lede" xml:space="preserve">
+    <value>Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</value>
+  </data>
+<data name="More" xml:space="preserve"><value>More</value><comment>Compact portal top-bar overflow toggle.</comment></data></root>

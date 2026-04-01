@@ -1,5 +1,6 @@
-using System.Globalization;
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
+using System.Globalization;
 
 namespace OpenModulePlatform.Web.Shared.Navigation;
 
@@ -22,6 +23,7 @@ public static class PortalTopBarModelFactory
             return PortalTopBarModel.Hidden;
         }
 
+        var cultureSelection = new CultureSelectionService().ResolveFromCurrentCulture(options);
         var portalLink = new PortalTopBarLink("Portal", CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         return new PortalTopBarModel
@@ -30,14 +32,20 @@ public static class PortalTopBarModelFactory
             Links = [portalLink],
             PortalLink = portalLink,
             ModuleLinks = Array.Empty<PortalTopBarLink>(),
-            LanguageOptions = options.SupportedCultures
+            LanguageOptions = (options.SupportedCultures ?? Array.Empty<string>())
                 .Where(c => !string.IsNullOrWhiteSpace(c))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(c => c.Trim())
                 .Select(c => new PortalTopBarCultureOption(
                     c,
                     c.StartsWith("sv", StringComparison.OrdinalIgnoreCase) ? "Swedish" : c.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? "English" : c,
-                    string.Equals(c, CultureInfo.CurrentUICulture.Name, StringComparison.OrdinalIgnoreCase)))
+                    string.Equals(c, cultureSelection.EffectiveCulture, StringComparison.OrdinalIgnoreCase)))
                 .ToArray(),
+            PreferredCulture = cultureSelection.PreferredCulture,
+            EffectiveCulture = cultureSelection.EffectiveCulture,
+            PreferredCultureDisplayText = cultureSelection.PreferredCultureDisplayText,
+            EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
+            IsCultureFallback = cultureSelection.IsFallback,
             OverflowToggleTextKey = "More",
             CollapsedToggleTextKey = "Modules",
             LanguageToggleTextKey = "Language"
