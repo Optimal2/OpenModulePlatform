@@ -19,55 +19,57 @@
     }
     else
     {
-        <table class="grid">
-            <thead>
-                <tr>
-                    <th>@L["Display name"]</th>
-                    <th>@L["App instance key"]</th>
-                    <th>@L["App key"]</th>
-                    <th>@L["Route"]</th>
-                    <th>@L["Description"]</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var app in Model.Apps)
-            {
-                string? href = null;
-                string? configuredAddress = null;
-                string? displayAddress = null;
-                var showResolvedHref = false;
+        <div class="table-scroll">
+            <table class="grid portal-apps-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Display name"]</th>
+                        <th>@L["App instance key"]</th>
+                        <th>@L["App key"]</th>
+                        <th>@L["Route"]</th>
+                        <th>@L["Description"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var app in Model.Apps)
+                {
+                    string? href = null;
+                    string? configuredAddress = null;
+                    string? displayAddress = null;
+                    var showResolvedHref = false;
 
-                href = AppLinkBuilder.ResolveHref(Request, app);
-                configuredAddress = AppLinkBuilder.ResolveDisplayAddress(Request, app);
-                displayAddress = configuredAddress ?? href;
-                showResolvedHref = !string.IsNullOrWhiteSpace(href)
-                    && !string.IsNullOrWhiteSpace(configuredAddress)
-                    && !string.Equals(configuredAddress, href, System.StringComparison.OrdinalIgnoreCase);
+                    href = AppLinkBuilder.ResolveHref(Request, app);
+                    configuredAddress = AppLinkBuilder.ResolveDisplayAddress(Request, app);
+                    displayAddress = configuredAddress ?? href;
+                    showResolvedHref = !string.IsNullOrWhiteSpace(href)
+                        && !string.IsNullOrWhiteSpace(configuredAddress)
+                        && !string.Equals(configuredAddress, href, System.StringComparison.OrdinalIgnoreCase);
 
-                <tr>
-                    <td>@app.DisplayName</td>
-                    <td><code>@app.AppInstanceKey</code></td>
-                    <td><code>@app.AppKey</code></td>
-                    <td>
-                        @if (!string.IsNullOrWhiteSpace(href))
-                        {
-                            <a href="@href">@displayAddress</a>
-
-                            @if (showResolvedHref)
+                    <tr>
+                        <td>@app.DisplayName</td>
+                        <td><code>@app.AppInstanceKey</code></td>
+                        <td><code>@app.AppKey</code></td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(href))
                             {
-                                <div class="muted"><code>@href</code></div>
+                                <a href="@href">@displayAddress</a>
+
+                                @if (showResolvedHref)
+                                {
+                                    <div class="muted"><code>@href</code></div>
+                                }
                             }
-                        }
-                        else if (!string.IsNullOrWhiteSpace(configuredAddress))
-                        {
-                            <code>@configuredAddress</code>
-                            <div class="muted">@L["Set Host base URL to make this route clickable from the Portal."]</div>
-                        }
-                    </td>
-                    <td>@app.Description</td>
-                </tr>
-            }
-            </tbody>
-        </table>
+                            else if (!string.IsNullOrWhiteSpace(configuredAddress))
+                            {
+                                <code>@configuredAddress</code>
+                                <div class="muted">@L["Set Host base URL to make this route clickable from the Portal."]</div>
+                            }
+                        </td>
+                        <td>@app.Description</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
     }
 </div>

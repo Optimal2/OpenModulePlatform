@@ -264,6 +264,28 @@ button:hover,
     border-bottom: none;
 }
 
+.table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.portal-apps-grid {
+    max-width: 100%;
+}
+
+.portal-apps-grid th,
+.portal-apps-grid td,
+.portal-apps-grid a,
+.portal-apps-grid code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.portal-apps-grid code {
+    white-space: normal;
+}
+
 .empty-state {
     padding: 18px;
     border: 1px dashed var(--border-strong);
@@ -373,6 +395,23 @@ code {
     background: var(--surface-muted);
     font-size: 0.72rem;
     cursor: help;
+}
+
+.example-token {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.18rem 0.55rem;
+    margin: 0 0.15rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-muted);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, \"Liberation Mono\", Menlo, monospace;
+    font-size: 0.8rem;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    vertical-align: baseline;
 }
 
 .checkbox-row--boxed {
