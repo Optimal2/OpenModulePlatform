@@ -60,7 +60,8 @@ public sealed class CultureSelectionService
             Expires = DateTimeOffset.UtcNow.AddYears(1),
             IsEssential = true,
             HttpOnly = false,
-            SameSite = SameSiteMode.Lax
+            SameSite = SameSiteMode.Lax,
+            Path = "/"
         };
 
         response.Cookies.Append(PreferredCultureCookieName, preferredCulture, cookieOptions);

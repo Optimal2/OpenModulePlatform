@@ -28,8 +28,8 @@
             <input asp-for="Input.Name" />
             <div class="field-help">
                 @L["Use a stable role name, for example"]
-                <span class="example-token">PortalAdmins</span>
-                <span class="muted">/</span> <span class="example-token">ExampleServiceAppModule.Operators</span>.
+                <span class="info-badge">PortalAdmins</span>
+                <span class="muted">/</span> <span class="info-badge">ExampleServiceAppModule.Operators</span>.
             </div>
             <span asp-validation-for="Input.Name" class="field-validation-error"></span>
         </div>
@@ -164,9 +164,9 @@
                     <input id="principal" name="principal" value="@Model.NewPrincipal" />
                     <div class="field-help">
                         @L["Examples:"]
-                        <span class="example-token">DOMAIN\User</span>,
-                        <span class="example-token">DOMAIN\Group</span>,
-                        <span class="example-token">svc-omp-hostagent</span>.
+                        <span class="info-badge">DOMAIN\User</span>,
+                        <span class="info-badge">DOMAIN\Group</span>,
+                        <span class="info-badge">svc-omp-hostagent</span>.
                     </div>
                 </div>
 

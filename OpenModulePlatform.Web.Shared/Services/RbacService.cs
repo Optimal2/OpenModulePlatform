@@ -1,4 +1,4 @@
-// File: OpenModulePlatform.Web.Shared/Services/RbacService.cs
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using System.Runtime.Versioning;
@@ -8,26 +8,32 @@ using System.Security.Principal;
 namespace OpenModulePlatform.Web.Shared.Services;
 
 /// <summary>
-/// Resolves effective OMP permissions for the current authenticated user.
+/// Resolves the current user's OMP roles and effective permissions.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The service maps the current identity to rows in <c>omp.RolePrincipals</c> and then
-/// projects those links through <c>omp.RolePermissions</c> and <c>omp.Permissions</c>.
+/// resolves a single active role for the current request. Effective permissions are taken
+/// only from that active role rather than the union of all assigned roles.
 /// </para>
 /// <para>
-/// On Windows hosts the resolver also expands group membership, which allows role links
-/// to be granted either directly to users or indirectly through AD groups / translated SIDs.
+/// The active role is stored in a shared cookie so the selected role follows the user
+/// between the Portal and individual module web applications when they share a host.
 /// </para>
 /// </remarks>
 public sealed class RbacService
 {
     private readonly SqlConnectionFactory _db;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<RbacService> _log;
 
-    public RbacService(SqlConnectionFactory db, ILogger<RbacService> log)
+    public RbacService(
+        SqlConnectionFactory db,
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<RbacService> log)
     {
         _db = db;
+        _httpContextAccessor = httpContextAccessor;
         _log = log;
     }
 
@@ -35,15 +41,23 @@ public sealed class RbacService
         ClaimsPrincipal user,
         CancellationToken ct)
     {
+        var roleContext = await GetUserRoleContextAsync(user, ct);
+        return roleContext.EffectivePermissions;
+    }
+
+    public async Task<UserRoleContext> GetUserRoleContextAsync(
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
         if (user.Identity?.IsAuthenticated != true)
         {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return UserRoleContext.Empty;
         }
 
         var userName = user.Identity?.Name ?? string.Empty;
         if (string.IsNullOrWhiteSpace(userName))
         {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return UserRoleContext.Empty;
         }
 
         var groupPrincipals = OperatingSystem.IsWindows()
@@ -55,42 +69,108 @@ public sealed class RbacService
             await using var conn = _db.Create();
             await conn.OpenAsync(ct);
 
-            var sql = BuildPermissionQuery(groupPrincipals.Count);
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@user", userName);
-
-            for (var i = 0; i < groupPrincipals.Count; i++)
+            var roles = await GetAssignableRolesAsync(conn, userName, groupPrincipals, ct);
+            if (roles.Count == 0)
             {
-                cmd.Parameters.AddWithValue($"@g{i}", groupPrincipals[i]);
+                return UserRoleContext.Empty;
             }
 
-            var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            var activeRoleId = ResolveActiveRoleIdFromCookie(roles)
+                ?? roles[0].RoleId;
 
-            while (await rdr.ReadAsync(ct))
+            var activeRole = roles.FirstOrDefault(x => x.RoleId == activeRoleId) ?? roles[0];
+            var permissions = await GetRolePermissionsAsync(conn, activeRole.RoleId, ct);
+
+            return new UserRoleContext
             {
-                var permission = rdr.GetString(0);
-                if (!string.IsNullOrWhiteSpace(permission))
-                {
-                    permissions.Add(permission);
-                }
-            }
-
-            return permissions;
+                AvailableRoles = roles,
+                ActiveRoleId = activeRole.RoleId,
+                ActiveRoleName = activeRole.Name,
+                EffectivePermissions = permissions
+            };
         }
         catch (SqlException ex)
         {
-            _log.LogError(ex, "Failed to load permissions from the OMP database.");
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _log.LogError(ex, "Failed to load RBAC role context from the OMP database.");
+            return UserRoleContext.Empty;
         }
         catch (InvalidOperationException ex)
         {
-            _log.LogError(ex, "Failed to load permissions from the OMP database.");
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _log.LogError(ex, "Failed to load RBAC role context from the OMP database.");
+            return UserRoleContext.Empty;
         }
     }
 
-    private static string BuildPermissionQuery(int groupCount)
+    private int? ResolveActiveRoleIdFromCookie(IReadOnlyList<UserRoleOption> roles)
+    {
+        var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
+        if (!int.TryParse(cookieValue, out var roleId))
+        {
+            return null;
+        }
+
+        return roles.Any(x => x.RoleId == roleId)
+            ? roleId
+            : null;
+    }
+
+    private static async Task<List<UserRoleOption>> GetAssignableRolesAsync(
+        SqlConnection conn,
+        string userName,
+        IReadOnlyList<string> groupPrincipals,
+        CancellationToken ct)
+    {
+        var sql = BuildAssignableRolesQuery(groupPrincipals.Count);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@user", userName);
+
+        for (var i = 0; i < groupPrincipals.Count; i++)
+        {
+            cmd.Parameters.AddWithValue($"@g{i}", groupPrincipals[i]);
+        }
+
+        var roles = new List<UserRoleOption>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            roles.Add(new UserRoleOption(
+                rdr.GetInt32(0),
+                rdr.GetString(1),
+                rdr.IsDBNull(2) ? null : rdr.GetString(2)));
+        }
+
+        return roles;
+    }
+
+    private static async Task<HashSet<string>> GetRolePermissionsAsync(
+        SqlConnection conn,
+        int roleId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT p.Name
+FROM omp.RolePermissions rp
+INNER JOIN omp.Permissions p ON p.PermissionId = rp.PermissionId
+WHERE rp.RoleId = @roleId;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@roleId", roleId);
+
+        var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var permission = rdr.GetString(0);
+            if (!string.IsNullOrWhiteSpace(permission))
+            {
+                permissions.Add(permission);
+            }
+        }
+
+        return permissions;
+    }
+
+    private static string BuildAssignableRolesQuery(int groupCount)
     {
         var inList = groupCount > 0
             ? string.Join(",", Enumerable.Range(0, groupCount).Select(i => $"@g{i}"))
@@ -101,12 +181,14 @@ public sealed class RbacService
             : string.Empty;
 
         return $@"
-SELECT DISTINCT p.Name
+SELECT DISTINCT r.RoleId,
+       r.Name,
+       r.Description
 FROM omp.RolePrincipals rp
-INNER JOIN omp.RolePermissions rperm ON rperm.RoleId = rp.RoleId
-INNER JOIN omp.Permissions p ON p.PermissionId = rperm.PermissionId
+INNER JOIN omp.Roles r ON r.RoleId = rp.RoleId
 WHERE (rp.PrincipalType='User' AND rp.Principal = @user)
-{groupClause};";
+{groupClause}
+ORDER BY r.Name, r.RoleId;";
     }
 
     /// <summary>

@@ -171,6 +171,38 @@ public static class OmpWebHostingExtensions
             return Results.LocalRedirect("/");
         });
 
+        app.MapGet("/rbac/set-active-role", async (HttpContext context, int? roleId, string? returnUrl, RbacService rbac, CancellationToken ct) =>
+        {
+            var roleContext = await rbac.GetUserRoleContextAsync(context.User, ct);
+            var validRoleIds = roleContext.AvailableRoles.Select(x => x.RoleId).ToHashSet();
+
+            if (roleId is int selectedRoleId && validRoleIds.Contains(selectedRoleId))
+            {
+                context.Response.Cookies.Append(
+                    ActiveRoleCookie.CookieName,
+                    selectedRoleId.ToString(CultureInfo.InvariantCulture),
+                    new CookieOptions
+                    {
+                        Expires = DateTimeOffset.UtcNow.AddYears(1),
+                        IsEssential = true,
+                        HttpOnly = false,
+                        SameSite = SameSiteMode.Lax,
+                        Path = "/"
+                    });
+            }
+            else
+            {
+                context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+            {
+                return Results.LocalRedirect(returnUrl);
+            }
+
+            return Results.LocalRedirect("/");
+        });
+
         if (!options.AllowAnonymous)
         {
             app.UseAuthentication();

@@ -10,6 +10,7 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> L
 @inject IHttpContextAccessor HttpContextAccessor
+@inject OpenModulePlatform.Web.Shared.Services.RbacService RbacService
 @implements IDisposable
 
 @if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
@@ -120,6 +121,26 @@
                     </summary>
                     <div class="portal-topbar__profile-menu">
                         <span class="portal-topbar__profile-name" title="@_portalTopBar.CurrentUserName">@_portalTopBar.CurrentUserName</span>
+                        <div class="portal-topbar__profile-section">
+                            <div class="portal-topbar__profile-label">@L["Active role"]</div>
+                            <div class="portal-topbar__profile-value">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</div>
+                        </div>
+                        <div class="portal-topbar__profile-section">
+                            <div class="portal-topbar__profile-label">@L["Roles"]</div>
+                            @if (_roleContext.AvailableRoles.Count > 0)
+                            {
+                                <select class="portal-topbar__role-select" value="@(_roleContext.ActiveRoleId?.ToString() ?? string.Empty)" @onchange="OnRoleChanged">
+                                    @foreach (var role in _roleContext.AvailableRoles)
+                                    {
+                                        <option value="@role.RoleId">@role.Name</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <div class="portal-topbar__profile-muted">@L["No roles assigned."]</div>
+                            }
+                        </div>
                     </div>
                 </details>
             }
@@ -129,6 +150,7 @@
 
 @code {
     private PortalTopBarModel _portalTopBar = PortalTopBarModel.Hidden;
+    private OpenModulePlatform.Web.Shared.Services.UserRoleContext _roleContext = OpenModulePlatform.Web.Shared.Services.UserRoleContext.Empty;
 
     private string FallbackNotice => string.Format(
         L["LanguageFallbackNotice"],
@@ -147,11 +169,13 @@
                 httpContext.Request,
                 httpContext.User,
                 httpContext.RequestAborted);
+            _roleContext = await RbacService.GetUserRoleContextAsync(httpContext.User, httpContext.RequestAborted);
             return;
         }
 
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authenticationState.User;
+        _roleContext = await RbacService.GetUserRoleContextAsync(user, CancellationToken.None);
 
         if (Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
         {
@@ -188,6 +212,26 @@
             : $"{(string.IsNullOrWhiteSpace(basePath) ? string.Empty : basePath)}/{relativePath.TrimStart('/')}";
 
         return $"{endpointPath}?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+
+
+    private void OnRoleChanged(ChangeEventArgs args)
+    {
+        var selectedValue = args.Value?.ToString();
+        var currentUri = new Uri(NavigationManager.Uri, UriKind.Absolute);
+        var returnUrl = $"{currentUri.AbsolutePath}{currentUri.Query}";
+
+        var target = $"{BuildAppBaseRelativePath("rbac/set-active-role")}?roleId={Uri.EscapeDataString(selectedValue ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        NavigationManager.NavigateTo(target, forceLoad: true);
+    }
+
+    private string BuildAppBaseRelativePath(string relativePath)
+    {
+        var baseUri = new Uri(NavigationManager.BaseUri, UriKind.Absolute);
+        var basePath = baseUri.AbsolutePath.TrimEnd('/');
+        return string.IsNullOrWhiteSpace(basePath)
+            ? $"/{relativePath.TrimStart('/')}"
+            : $"{basePath}/{relativePath.TrimStart('/')}";
     }
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)

@@ -46,6 +46,7 @@ public static class PortalTopBarModelFactory
             PreferredCultureDisplayText = cultureSelection.PreferredCultureDisplayText,
             EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
             IsCultureFallback = cultureSelection.IsFallback,
+            AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>(),
             OverflowToggleTextKey = "More",
             CollapsedToggleTextKey = "Modules",
             LanguageToggleTextKey = "Language"
