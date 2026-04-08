@@ -19,7 +19,8 @@ public sealed class PortalTopBarModel
         PreferredCulture = "en-US",
         EffectiveCulture = "en-US",
         PreferredCultureDisplayText = "English",
-        EffectiveCultureDisplayText = "English"
+        EffectiveCultureDisplayText = "English",
+        AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>()
     };
 
     public bool IsVisible { get; init; }
@@ -50,6 +51,12 @@ public sealed class PortalTopBarModel
     public bool IsCultureFallback { get; init; }
 
     public string? CurrentUserName { get; init; }
+
+    public IReadOnlyList<OpenModulePlatform.Web.Shared.Services.UserRoleOption> AvailableRoles { get; init; } = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>();
+
+    public int? ActiveRoleId { get; init; }
+
+    public string? ActiveRoleName { get; init; }
 
     public string OverflowToggleTextKey { get; init; } = "More";
 

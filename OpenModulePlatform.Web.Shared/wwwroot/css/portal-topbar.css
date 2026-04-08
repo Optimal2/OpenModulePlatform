@@ -351,3 +351,43 @@
     font-size: 0.78rem;
     line-height: 1.35;
 }
+
+
+.portal-topbar__profile-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+}
+
+.portal-topbar__profile-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted, #5f6b7a);
+}
+
+.portal-topbar__profile-value,
+.portal-topbar__profile-muted {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 10px;
+    color: var(--text);
+}
+
+.portal-topbar__profile-muted {
+    color: var(--text-muted, #5f6b7a);
+}
+
+.portal-topbar__role-form {
+    margin: 0;
+}
+
+.portal-topbar__role-select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+}

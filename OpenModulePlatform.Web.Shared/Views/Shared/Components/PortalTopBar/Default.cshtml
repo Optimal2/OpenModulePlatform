@@ -3,6 +3,7 @@
 @{
     var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
     string BuildLanguageHref(string culture) => $"{Context.Request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    string BuildRoleHref(int? roleId) => $"{Context.Request.PathBase}/rbac/set-active-role?roleId={(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     string CultureText(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : L[value];
     var fallbackNotice = string.Format(L["LanguageFallbackNotice"], CultureText(Model.PreferredCultureDisplayText), CultureText(Model.EffectiveCultureDisplayText));
 }
@@ -115,6 +116,29 @@
                     </summary>
                     <div class="portal-topbar__profile-menu">
                         <span class="portal-topbar__profile-name" title="@Model.CurrentUserName">@Model.CurrentUserName</span>
+                        <div class="portal-topbar__profile-section">
+                            <div class="portal-topbar__profile-label">@L["Active role"]</div>
+                            <div class="portal-topbar__profile-value">@(Model.ActiveRoleName ?? L["No roles assigned."])</div>
+                        </div>
+                        <div class="portal-topbar__profile-section">
+                            <div class="portal-topbar__profile-label">@L["Roles"]</div>
+                            @if (Model.AvailableRoles.Count > 0)
+                            {
+                                <form method="get" action="@($"{Context.Request.PathBase}/rbac/set-active-role")" class="portal-topbar__role-form">
+                                    <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                    <select name="roleId" class="portal-topbar__role-select" onchange="this.form.submit()">
+                                        @foreach (var role in Model.AvailableRoles)
+                                        {
+                                            <option value="@role.RoleId" selected="@(role.RoleId == Model.ActiveRoleId ? "selected" : null)">@role.Name</option>
+                                        }
+                                    </select>
+                                </form>
+                            }
+                            else
+                            {
+                                <div class="portal-topbar__profile-muted">@L["No roles assigned."]</div>
+                            }
+                        </div>
                     </div>
                 </details>
             }

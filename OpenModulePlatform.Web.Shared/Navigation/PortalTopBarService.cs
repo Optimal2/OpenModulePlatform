@@ -54,7 +54,8 @@ public sealed class PortalTopBarService
 
         try
         {
-            var permissions = await _rbac.GetUserPermissionsAsync(user, ct);
+            var roleContext = await _rbac.GetUserRoleContextAsync(user, ct);
+            var permissions = roleContext.EffectivePermissions;
             var apps = await GetEnabledWebAppsAsync(ct);
             var isPortalAdmin = permissions.Contains(PortalAdminPermission);
             var currentUserName = user.Identity?.IsAuthenticated == true
@@ -67,13 +68,13 @@ public sealed class PortalTopBarService
                 .Where(link => !string.IsNullOrWhiteSpace(link.Href))
                 .ToArray();
 
-            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, isPortalAdmin, moduleLinks, options);
+            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options);
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically. Falling back to a portal-only top bar.");
 
-            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, false, Array.Empty<PortalTopBarLink>(), options);
+            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, UserRoleContext.Empty, false, Array.Empty<PortalTopBarLink>(), options);
         }
     }
 
@@ -97,7 +98,8 @@ public sealed class PortalTopBarService
 
         try
         {
-            var permissions = await _rbac.GetUserPermissionsAsync(user, ct);
+            var roleContext = await _rbac.GetUserRoleContextAsync(user, ct);
+            var permissions = roleContext.EffectivePermissions;
             var apps = await GetEnabledWebAppsAsync(ct);
             var isPortalAdmin = permissions.Contains(PortalAdminPermission);
             var currentUserName = user.Identity?.IsAuthenticated == true
@@ -110,13 +112,13 @@ public sealed class PortalTopBarService
                 .Where(link => !string.IsNullOrWhiteSpace(link.Href))
                 .ToArray();
 
-            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, isPortalAdmin, moduleLinks, options);
+            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options);
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically. Falling back to a portal-only top bar.");
 
-            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, false, Array.Empty<PortalTopBarLink>(), options);
+            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, UserRoleContext.Empty, false, Array.Empty<PortalTopBarLink>(), options);
         }
     }
 
@@ -125,6 +127,7 @@ public sealed class PortalTopBarService
         PortalTopBarLink portalLink,
         CultureSelectionResult cultureSelection,
         string? currentUserName,
+        UserRoleContext roleContext,
         bool isPortalAdmin,
         IReadOnlyList<PortalTopBarLink> moduleLinks,
         WebAppOptions options)
@@ -145,6 +148,9 @@ public sealed class PortalTopBarService
             EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
             IsCultureFallback = cultureSelection.IsFallback,
             CurrentUserName = currentUserName,
+            AvailableRoles = roleContext.AvailableRoles,
+            ActiveRoleId = roleContext.ActiveRoleId,
+            ActiveRoleName = roleContext.ActiveRoleName,
             OverflowToggleTextKey = "More",
             PortalAdminToggleTextKey = "Admin",
             LanguageToggleTextKey = "Language"
