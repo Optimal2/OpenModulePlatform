@@ -115,29 +115,35 @@
                         <span class="visually-hidden">@L["User"]</span>
                     </summary>
                     <div class="portal-topbar__profile-menu">
-                        <span class="portal-topbar__profile-name" title="@Model.CurrentUserName">@Model.CurrentUserName</span>
-                        <div class="portal-topbar__profile-section">
-                            <div class="portal-topbar__profile-label">@L["Active role"]</div>
-                            <div class="portal-topbar__profile-value">@(Model.ActiveRoleName ?? L["No roles assigned."])</div>
+                        <div class="portal-topbar__profile-identity">
+                            <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
+                            <div class="portal-topbar__profile-current-user" title="@Model.CurrentUserName">@Model.CurrentUserName</div>
                         </div>
                         <div class="portal-topbar__profile-section">
-                            <div class="portal-topbar__profile-label">@L["Roles"]</div>
-                            @if (Model.AvailableRoles.Count > 0)
-                            {
-                                <form method="get" action="@($"{Context.Request.PathBase}/rbac/set-active-role")" class="portal-topbar__role-form">
-                                    <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                    <select name="roleId" class="portal-topbar__role-select" onchange="this.form.submit()">
+                            <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>
+                            <details class="portal-topbar__profile-roles">
+                                <summary class="portal-topbar__profile-roles-summary">
+                                    <span class="portal-topbar__profile-roles-current">@(Model.ActiveRoleName ?? L["No roles assigned."])</span>
+                                    <span class="portal-topbar__profile-roles-chevron" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                            <path d="M9 6l6 6-6 6"></path>
+                                        </svg>
+                                    </span>
+                                </summary>
+                                <div class="portal-topbar__profile-roles-list">
+                                    @if (Model.AvailableRoles.Count > 0)
+                                    {
                                         @foreach (var role in Model.AvailableRoles)
                                         {
-                                            <option value="@role.RoleId" selected="@(role.RoleId == Model.ActiveRoleId ? "selected" : null)">@role.Name</option>
+                                            <a class="portal-topbar__profile-role-link@(role.RoleId == Model.ActiveRoleId ? " is-current" : string.Empty)" href="@BuildRoleHref(role.RoleId)">@role.Name</a>
                                         }
-                                    </select>
-                                </form>
-                            }
-                            else
-                            {
-                                <div class="portal-topbar__profile-muted">@L["No roles assigned."]</div>
-                            }
+                                    }
+                                    else
+                                    {
+                                        <div class="portal-topbar__profile-muted">@L["No roles assigned."]</div>
+                                    }
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </details>

@@ -120,26 +120,35 @@
                         <span class="visually-hidden">@L["User"]</span>
                     </summary>
                     <div class="portal-topbar__profile-menu">
-                        <span class="portal-topbar__profile-name" title="@_portalTopBar.CurrentUserName">@_portalTopBar.CurrentUserName</span>
-                        <div class="portal-topbar__profile-section">
-                            <div class="portal-topbar__profile-label">@L["Active role"]</div>
-                            <div class="portal-topbar__profile-value">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</div>
+                        <div class="portal-topbar__profile-identity">
+                            <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
+                            <div class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@_portalTopBar.CurrentUserName</div>
                         </div>
                         <div class="portal-topbar__profile-section">
-                            <div class="portal-topbar__profile-label">@L["Roles"]</div>
-                            @if (_roleContext.AvailableRoles.Count > 0)
-                            {
-                                <select class="portal-topbar__role-select" value="@(_roleContext.ActiveRoleId?.ToString() ?? string.Empty)" @onchange="OnRoleChanged">
-                                    @foreach (var role in _roleContext.AvailableRoles)
+                            <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>
+                            <details class="portal-topbar__profile-roles">
+                                <summary class="portal-topbar__profile-roles-summary">
+                                    <span class="portal-topbar__profile-roles-current">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</span>
+                                    <span class="portal-topbar__profile-roles-chevron" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                            <path d="M9 6l6 6-6 6"></path>
+                                        </svg>
+                                    </span>
+                                </summary>
+                                <div class="portal-topbar__profile-roles-list">
+                                    @if (_roleContext.AvailableRoles.Count > 0)
                                     {
-                                        <option value="@role.RoleId">@role.Name</option>
+                                        @foreach (var role in _roleContext.AvailableRoles)
+                                        {
+                                            <a class="portal-topbar__profile-role-link@(role.RoleId == _roleContext.ActiveRoleId ? " is-current" : string.Empty)" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
+                                        }
                                     }
-                                </select>
-                            }
-                            else
-                            {
-                                <div class="portal-topbar__profile-muted">@L["No roles assigned."]</div>
-                            }
+                                    else
+                                    {
+                                        <div class="portal-topbar__profile-muted">@L["No roles assigned."]</div>
+                                    }
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </details>
@@ -160,7 +169,19 @@
     protected override async Task OnInitializedAsync()
     {
         NavigationManager.LocationChanged += HandleLocationChanged;
+        await ReloadAsync();
+    }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_portalTopBar.IsVisible)
+        {
+            await JS.InvokeAsync<object>("ompPortalTopBar.initAll", Array.Empty<object>());
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
         var httpContext = HttpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
@@ -190,14 +211,6 @@
         _portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_portalTopBar.IsVisible)
-        {
-            await JS.InvokeAsync<object>("ompPortalTopBar.initAll", Array.Empty<object>());
-        }
-    }
-
     private string BuildLanguageHref(string culture)
     {
         var baseUri = new Uri(NavigationManager.BaseUri, UriKind.Absolute);
@@ -215,16 +228,6 @@
     }
 
 
-    private void OnRoleChanged(ChangeEventArgs args)
-    {
-        var selectedValue = args.Value?.ToString();
-        var currentUri = new Uri(NavigationManager.Uri, UriKind.Absolute);
-        var returnUrl = $"{currentUri.AbsolutePath}{currentUri.Query}";
-
-        var target = $"{BuildAppBaseRelativePath("rbac/set-active-role")}?roleId={Uri.EscapeDataString(selectedValue ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
-        NavigationManager.NavigateTo(target, forceLoad: true);
-    }
-
     private string BuildAppBaseRelativePath(string relativePath)
     {
         var baseUri = new Uri(NavigationManager.BaseUri, UriKind.Absolute);
@@ -234,8 +237,19 @@
             : $"{basePath}/{relativePath.TrimStart('/')}";
     }
 
+    private string BuildRoleHref(int? roleId)
+    {
+        var currentUri = new Uri(NavigationManager.Uri, UriKind.Absolute);
+        var returnUrl = $"{currentUri.AbsolutePath}{currentUri.Query}";
+        return $"{BuildAppBaseRelativePath("rbac/set-active-role")}?roleId={Uri.EscapeDataString(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-        => _ = InvokeAsync(StateHasChanged);
+        => _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
 
     public void Dispose()
         => NavigationManager.LocationChanged -= HandleLocationChanged;
