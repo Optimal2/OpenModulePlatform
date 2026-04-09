@@ -5,6 +5,7 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Server.IISIntegration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -125,6 +127,7 @@ public static class OmpWebHostingExtensions
             });
 
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<ActiveRoleState>();
         builder.Services.AddSingleton<CultureSelectionService>();
         builder.Services.AddSingleton<SqlConnectionFactory>();
         builder.Services.AddScoped<RbacService>();
@@ -153,6 +156,24 @@ public static class OmpWebHostingExtensions
 
         app.UseRequestLocalization(localizationOptions);
         app.UseStaticFiles();
+        app.UseStatusCodePagesWithReExecute("/status/{0}");
+
+        app.MapGet("/status/{statusCode:int}", (
+            HttpContext context,
+            int statusCode,
+            IStringLocalizer<SharedResource> localizer) =>
+        {
+            var feature = context.Features.Get<IStatusCodeReExecuteFeature>();
+            var originalPath = BuildOriginalPath(feature);
+            var portalHref = PortalTopBarModelFactory.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
+            var html = BuildStatusPageHtml(statusCode, originalPath, portalHref, localizer);
+
+            return Results.Content(
+                html,
+                contentType: "text/html; charset=utf-8",
+                contentEncoding: System.Text.Encoding.UTF8,
+                statusCode: statusCode);
+        }).AllowAnonymous();
 
         app.MapGet("/localization/set-language", (
             HttpContext context,
@@ -303,6 +324,107 @@ public static class OmpWebHostingExtensions
                 }
             }
         }
+    }
+
+    private static string BuildOriginalPath(IStatusCodeReExecuteFeature? feature)
+    {
+        if (feature is null)
+        {
+            return string.Empty;
+        }
+
+        return string.Concat(
+            feature.OriginalPathBase,
+            feature.OriginalPath,
+            feature.OriginalQueryString);
+    }
+
+    private static string BuildStatusPageHtml(
+        int statusCode,
+        string originalPath,
+        string portalHref,
+        IStringLocalizer<SharedResource> localizer)
+    {
+        var title = statusCode switch
+        {
+            StatusCodes.Status403Forbidden => localizer["StatusPageTitle403"],
+            StatusCodes.Status404NotFound => localizer["StatusPageTitle404"],
+            _ => localizer["StatusPageTitleDefault"]
+        };
+
+        var heading = statusCode switch
+        {
+            StatusCodes.Status403Forbidden => localizer["StatusPageHeading403"],
+            StatusCodes.Status404NotFound => localizer["StatusPageHeading404"],
+            _ => localizer["StatusPageHeadingDefault"]
+        };
+
+        var message = statusCode switch
+        {
+            StatusCodes.Status403Forbidden => localizer["StatusPageMessage403"],
+            StatusCodes.Status404NotFound => localizer["StatusPageMessage404"],
+            _ => localizer["StatusPageMessageDefault"]
+        };
+
+        var safeTitle = WebUtility.HtmlEncode(title.Value);
+        var safeHeading = WebUtility.HtmlEncode(heading.Value);
+        var safeMessage = WebUtility.HtmlEncode(message.Value);
+        var safePortalHref = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(portalHref) ? "/" : portalHref);
+        var safeBackText = WebUtility.HtmlEncode(localizer["StatusPageBackToPortal"].Value);
+        var safePathLabel = WebUtility.HtmlEncode(localizer["StatusPageOriginalPath"].Value);
+        var safeOriginalPath = WebUtility.HtmlEncode(originalPath);
+        var safeCulture = WebUtility.HtmlEncode(CultureInfo.CurrentUICulture.Name);
+
+        var originalPathMarkup = string.IsNullOrWhiteSpace(originalPath)
+            ? string.Empty
+            : $"<p class='omp-status-detail'><strong>{safePathLabel}:</strong> <code>{safeOriginalPath}</code></p>";
+
+        return $$"""
+<!doctype html>
+<html lang="{{safeCulture}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{safeTitle}} - OMP</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f5f7fa; color: #16202a; }
+    .omp-status-shell { min-height: 100vh; display: grid; place-items: center; padding: 2rem; }
+    .omp-status-card { width: min(42rem, 100%); background: #fff; border: 1px solid #d7dde5; border-radius: 16px; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08); padding: 2rem; }
+    .omp-status-code { display: inline-block; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3559e0; margin-bottom: 1rem; }
+    h1 { margin: 0 0 0.75rem; font-size: 1.75rem; line-height: 1.2; }
+    p { margin: 0 0 1rem; line-height: 1.6; }
+    .omp-status-detail { color: #4b5563; word-break: break-word; }
+    code { display: inline-block; padding: 0.125rem 0.375rem; border-radius: 6px; background: #eef2ff; color: #1f2937; }
+    .omp-status-actions { margin-top: 1.5rem; }
+    .omp-status-button { display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1rem; border-radius: 999px; background: #3559e0; color: #fff; text-decoration: none; font-weight: 600; }
+    .omp-status-button:hover { background: #2948bc; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f172a; color: #e5e7eb; }
+      .omp-status-card { background: #111827; border-color: #374151; box-shadow: none; }
+      .omp-status-code { color: #93c5fd; }
+      .omp-status-detail { color: #cbd5e1; }
+      code { background: #1f2937; color: #e5e7eb; }
+      .omp-status-button { background: #60a5fa; color: #0f172a; }
+      .omp-status-button:hover { background: #93c5fd; }
+    }
+  </style>
+</head>
+<body>
+  <main class="omp-status-shell">
+    <section class="omp-status-card">
+      <div class="omp-status-code">{{statusCode}}</div>
+      <h1>{{safeHeading}}</h1>
+      <p>{{safeMessage}}</p>
+      {{originalPathMarkup}}
+      <div class="omp-status-actions">
+        <a class="omp-status-button" href="{{safePortalHref}}">{{safeBackText}}</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+""";
     }
 
     private static bool TryParseCidrNetwork(
