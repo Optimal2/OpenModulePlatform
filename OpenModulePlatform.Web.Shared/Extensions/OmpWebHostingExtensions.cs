@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.Shared/Extensions/OmpWebHostingExtensions.cs
 using OpenModulePlatform.Web.Shared.Localization;
+using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Authentication.Negotiate;
@@ -175,6 +176,7 @@ public static class OmpWebHostingExtensions
         {
             var roleContext = await rbac.GetUserRoleContextAsync(context.User, ct);
             var validRoleIds = roleContext.AvailableRoles.Select(x => x.RoleId).ToHashSet();
+            var roleChanged = roleId is int requestedRoleId && requestedRoleId != roleContext.ActiveRoleId;
 
             if (roleId is int selectedRoleId && validRoleIds.Contains(selectedRoleId))
             {
@@ -195,12 +197,29 @@ public static class OmpWebHostingExtensions
                 context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/" });
             }
 
+            var safePortalHref = PortalTopBarModelFactory.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
+
+            if (roleChanged)
+            {
+                if (Uri.IsWellFormedUriString(safePortalHref, UriKind.Absolute))
+                {
+                    return Results.Redirect(safePortalHref);
+                }
+
+                return Results.LocalRedirect(safePortalHref);
+            }
+
             if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
             {
                 return Results.LocalRedirect(returnUrl);
             }
 
-            return Results.LocalRedirect("/");
+            if (Uri.IsWellFormedUriString(safePortalHref, UriKind.Absolute))
+            {
+                return Results.Redirect(safePortalHref);
+            }
+
+            return Results.LocalRedirect(safePortalHref);
         });
 
         if (!options.AllowAnonymous)
