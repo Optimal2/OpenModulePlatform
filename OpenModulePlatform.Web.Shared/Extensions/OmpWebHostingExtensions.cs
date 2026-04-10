@@ -3,6 +3,7 @@ using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
@@ -127,7 +128,7 @@ public static class OmpWebHostingExtensions
             });
 
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddScoped<ActiveRoleState>();
+        builder.Services.AddTransient<IClaimsTransformation, ActiveRoleClaimsTransformation>();
         builder.Services.AddSingleton<CultureSelectionService>();
         builder.Services.AddSingleton<SqlConnectionFactory>();
         builder.Services.AddScoped<RbacService>();

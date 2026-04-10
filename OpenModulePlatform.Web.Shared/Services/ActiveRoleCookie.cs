@@ -6,4 +6,5 @@ namespace OpenModulePlatform.Web.Shared.Services;
 public static class ActiveRoleCookie
 {
     public const string CookieName = "omp_active_role";
+    public const string ClaimType = "omp_active_role";
 }
