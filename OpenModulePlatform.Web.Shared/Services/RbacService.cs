@@ -25,18 +25,15 @@ public sealed class RbacService
 {
     private readonly SqlConnectionFactory _db;
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ActiveRoleState _activeRoleState;
     private readonly ILogger<RbacService> _log;
 
     public RbacService(
         SqlConnectionFactory db,
         IHttpContextAccessor httpContextAccessor,
-        ActiveRoleState activeRoleState,
         ILogger<RbacService> log)
     {
         _db = db;
         _httpContextAccessor = httpContextAccessor;
-        _activeRoleState = activeRoleState;
         _log = log;
     }
 
@@ -78,7 +75,7 @@ public sealed class RbacService
                 return UserRoleContext.Empty;
             }
 
-            var activeRoleId = ResolveActiveRoleIdFromCookie(roles)
+            var activeRoleId = ResolveActiveRoleId(user, roles)
                 ?? roles[0].RoleId;
 
             var activeRole = roles.FirstOrDefault(x => x.RoleId == activeRoleId) ?? roles[0];
@@ -104,18 +101,22 @@ public sealed class RbacService
         }
     }
 
-    private int? ResolveActiveRoleIdFromCookie(IReadOnlyList<UserRoleOption> roles)
+    private int? ResolveActiveRoleId(ClaimsPrincipal user, IReadOnlyList<UserRoleOption> roles)
     {
-        var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
-        if (int.TryParse(cookieValue, out var cookieRoleId) && roles.Any(x => x.RoleId == cookieRoleId))
+        var claimValue = user.FindFirstValue(ActiveRoleCookie.ClaimType);
+        if (int.TryParse(claimValue, out var claimRoleId) && roles.Any(x => x.RoleId == claimRoleId))
         {
-            _activeRoleState.ActiveRoleId = cookieRoleId;
-            return cookieRoleId;
+            return claimRoleId;
         }
 
-        var cachedRoleId = _activeRoleState.ActiveRoleId;
-        return cachedRoleId is int roleId && roles.Any(x => x.RoleId == roleId)
-            ? roleId
+        var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
+        if (!int.TryParse(cookieValue, out var cookieRoleId))
+        {
+            return null;
+        }
+
+        return roles.Any(x => x.RoleId == cookieRoleId)
+            ? cookieRoleId
             : null;
     }
 
