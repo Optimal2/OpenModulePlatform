@@ -169,19 +169,7 @@
     protected override async Task OnInitializedAsync()
     {
         NavigationManager.LocationChanged += HandleLocationChanged;
-        await ReloadAsync();
-    }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_portalTopBar.IsVisible)
-        {
-            await JS.InvokeAsync<object>("ompPortalTopBar.initAll", Array.Empty<object>());
-        }
-    }
-
-    private async Task ReloadAsync()
-    {
         var httpContext = HttpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
@@ -209,6 +197,14 @@
         }
 
         _portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_portalTopBar.IsVisible)
+        {
+            await JS.InvokeAsync<object>("ompPortalTopBar.initAll", Array.Empty<object>());
+        }
     }
 
     private string BuildLanguageHref(string culture)
@@ -245,11 +241,7 @@
     }
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-        => _ = InvokeAsync(async () =>
-        {
-            await ReloadAsync();
-            StateHasChanged();
-        });
+        => _ = InvokeAsync(StateHasChanged);
 
     public void Dispose()
         => NavigationManager.LocationChanged -= HandleLocationChanged;
