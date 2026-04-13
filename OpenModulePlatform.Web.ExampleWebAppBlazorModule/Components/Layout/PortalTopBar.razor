@@ -122,33 +122,33 @@
                     <div class="portal-topbar__profile-menu">
                         <div class="portal-topbar__profile-identity">
                             <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
-                            <div class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@_portalTopBar.CurrentUserName</div>
+                            <div class="portal-topbar__profile-user-row">
+                                <div class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@_portalTopBar.CurrentUserName</div>
+                            </div>
                         </div>
                         <div class="portal-topbar__profile-section">
                             <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>
-                            <details class="portal-topbar__profile-roles">
-                                <summary class="portal-topbar__profile-roles-summary">
-                                    <span class="portal-topbar__profile-roles-current">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</span>
-                                    <span class="portal-topbar__profile-roles-chevron" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                            <path d="M9 6l6 6-6 6"></path>
-                                        </svg>
-                                    </span>
-                                </summary>
-                                <div class="portal-topbar__profile-roles-list">
-                                    @if (_roleContext.AvailableRoles.Count > 0)
-                                    {
-                                        @foreach (var role in _roleContext.AvailableRoles)
-                                        {
-                                            <a class="portal-topbar__profile-role-link@(role.RoleId == _roleContext.ActiveRoleId ? " is-current" : string.Empty)" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <div class="portal-topbar__profile-muted">@L["No roles assigned."]</div>
-                                    }
-                                </div>
-                            </details>
+                            <div class="portal-topbar__profile-role-row">
+                                <div class="portal-topbar__profile-current-role" title="@(_roleContext.ActiveRoleName ?? L["No roles assigned."])">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</div>
+                                @if (_roleContext.AvailableRoles.Count > 1)
+                                {
+                                    <details class="portal-topbar__profile-switch" data-portal-topbar-overlay>
+                                        <summary class="portal-topbar__profile-switch-button" title="@L["SwitchRole"]" aria-label="@L["SwitchRole"]">
+                                            <span aria-hidden="true">⇄</span>
+                                            <span class="visually-hidden">@L["SwitchRole"]</span>
+                                        </summary>
+                                        <div class="portal-topbar__profile-switch-menu">
+                                            @foreach (var role in _roleContext.AvailableRoles)
+                                            {
+                                                if (role.RoleId != _roleContext.ActiveRoleId)
+                                                {
+                                                    <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
+                                                }
+                                            }
+                                        </div>
+                                    </details>
+                                }
+                            </div>
                         </div>
                     </div>
                 </details>
