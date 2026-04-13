@@ -11,3 +11,6 @@ TestResults/
 artifacts/
 **/logs/
 **/.DS_Store
+**/.idea/
+.idea/
+*.DS_Store
