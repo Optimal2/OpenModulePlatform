@@ -41,9 +41,9 @@ else
                 <td><code>@row.HostKey</code></td>
                 <td>@row.DisplayName</td>
                 <td><code>@row.BaseUrl</code></td>
-                <td>@(string.IsNullOrWhiteSpace(row.Environment) ? null : L[row.Environment])</td>
-                <td>@(string.IsNullOrWhiteSpace(row.OsFamily) ? null : L[row.OsFamily])</td>
-                <td>@(string.IsNullOrWhiteSpace(row.Architecture) ? null : L[row.Architecture])</td>
+                <td>@(string.IsNullOrWhiteSpace(row.Environment) ? string.Empty : L[row.Environment].Value)</td>
+                <td>@(string.IsNullOrWhiteSpace(row.OsFamily) ? string.Empty : L[row.OsFamily].Value)</td>
+                <td>@(string.IsNullOrWhiteSpace(row.Architecture) ? string.Empty : L[row.Architecture].Value)</td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
                 <td><a class="action-link" href="~/admin/hostedit?id=@row.HostId">@L["Edit"]</a></td>
             </tr>
