@@ -1,4 +1,6 @@
 .portal-topbar {
+    /* Keep the JS breakpoint reader in sync with this component-level value. */
+    --portal-topbar-compact-breakpoint: 710px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -257,6 +259,8 @@
 
 @media (max-width: 710px) {
     .portal-topbar {
+    /* Keep the JS breakpoint reader in sync with this component-level value. */
+    --portal-topbar-compact-breakpoint: 710px;
         padding: 6px 16px;
         gap: 8px;
     }
@@ -287,6 +291,7 @@
 
 }
 
+/* Shared accessibility utility used by the top bar in both Razor Pages and Blazor hosts. */
 .visually-hidden {
     position: absolute;
     width: 1px;

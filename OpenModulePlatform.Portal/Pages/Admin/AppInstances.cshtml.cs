@@ -26,7 +26,7 @@ public sealed class AppInstancesModel : OmpPortalPageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("App Instances");
+        SetTitles("App instances");
         Rows = await _repo.GetAppInstancesAsync(ct);
         return Page();
     }

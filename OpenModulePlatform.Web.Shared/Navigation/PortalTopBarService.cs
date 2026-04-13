@@ -70,11 +70,15 @@ public sealed class PortalTopBarService
 
             return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options);
         }
-        catch (Exception ex)
+        catch (SqlException ex)
         {
-            _log.LogWarning(ex, "Failed to build portal top bar dynamically. Falling back to a portal-only top bar.");
-
-            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, UserRoleContext.Empty, false, Array.Empty<PortalTopBarLink>(), options);
+            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
         }
     }
 
@@ -114,13 +118,41 @@ public sealed class PortalTopBarService
 
             return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options);
         }
-        catch (Exception ex)
+        catch (SqlException ex)
         {
-            _log.LogWarning(ex, "Failed to build portal top bar dynamically. Falling back to a portal-only top bar.");
-
-            return CreateModel(topBarOptions, portalLink, cultureSelection, user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null, UserRoleContext.Empty, false, Array.Empty<PortalTopBarLink>(), options);
+            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
         }
     }
+
+    /// <summary>
+    /// Builds the fail-safe portal-only model used when dynamic app discovery cannot be completed.
+    /// </summary>
+    /// <remarks>
+    /// The top bar should stay usable even when the OMP database is temporarily unavailable.
+    /// In that case the shared UI deliberately hides dynamic module links and role data instead of
+    /// surfacing an error to every page that renders the component.
+    /// </remarks>
+    private static PortalTopBarModel CreateFallbackModel(
+        PortalTopBarOptions topBarOptions,
+        PortalTopBarLink portalLink,
+        CultureSelectionResult cultureSelection,
+        ClaimsPrincipal user,
+        WebAppOptions options)
+        => CreateModel(
+            topBarOptions,
+            portalLink,
+            cultureSelection,
+            user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null,
+            UserRoleContext.Empty,
+            isPortalAdmin: false,
+            moduleLinks: Array.Empty<PortalTopBarLink>(),
+            options);
 
     private static PortalTopBarModel CreateModel(
         PortalTopBarOptions topBarOptions,
