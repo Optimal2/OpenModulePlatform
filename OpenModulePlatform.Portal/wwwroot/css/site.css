@@ -381,6 +381,7 @@ code {
 .field-help {
     font-size: 0.88rem;
     color: var(--text-muted);
+    line-height: 1.45;
 }
 
 .info-badge {
@@ -395,6 +396,22 @@ code {
     background: var(--surface-muted);
     font-size: 0.72rem;
     cursor: help;
+}
+
+.example-token {
+    display: inline-block;
+    margin: 0.1rem 0.2rem 0.1rem 0;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-muted);
+    color: var(--text-strong);
+    font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    vertical-align: middle;
 }
 
 .checkbox-row--boxed {

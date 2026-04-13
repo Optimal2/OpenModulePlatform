@@ -1,8 +1,0 @@
-Fixed the nested role picker row in the topbar user menu so the active role text can render at full width.
-
-Changed file:
-- OpenModulePlatform.Web.Shared/wwwroot/css/portal-topbar.css
-
-What changed:
-- narrowed the topbar summary selectors to direct children only (`> summary`) so the nested summary used by the role picker no longer inherits the 28px icon-button width from the top-level profile button
-- kept the current role row wide and readable inside the dropdown
