@@ -155,6 +155,13 @@ DECLARE @SampleHostId uniqueidentifier;
 DECLARE @SampleTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
 
+/*
+Deterministic example GUID strategy:
+- These GUID values are intentionally hard-coded so the example dataset is idempotent across repeated installs.
+- The reserved 11111111-1111-1111-1111-1111111112xx/3xx ranges make the example rows easy to recognise in docs, support, and local debugging.
+- Do not re-use this reserved range for additional custom example data. If you add more examples, allocate a new documented range or use NEWID() for non-idempotent test data.
+- The example install script is designed to seed one canonical sample dataset, not to merge multiple independently-authored example datasets into the same instance.
+*/
 DECLARE @WebModuleId int;
 DECLARE @WebModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111201';
 DECLARE @WebTemplateModuleInstanceId int;
@@ -844,7 +851,16 @@ IF NOT EXISTS
     INSERT INTO omp.Artifacts(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(@ServiceAppId, N'1.0.0', N'folder', N'win-x64', N'publish/ExampleServiceAppModule', 1);
 
-SELECT TOP (1) @ServiceArtifactId = ArtifactId FROM omp.Artifacts WHERE AppId = @ServiceAppId ORDER BY ArtifactId DESC;
+/*
+Resolve the artifact explicitly instead of assuming that the highest ArtifactId is the correct sample artifact.
+The example install script seeds a canonical win-x64 folder artifact for version 1.0.0 and should keep resolving that exact row on repeated installs.
+*/
+SELECT @ServiceArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @ServiceAppId
+  AND Version = N'1.0.0'
+  AND PackageType = N'folder'
+  AND TargetName = N'win-x64';
 
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @ServiceModuleInstanceId)
 BEGIN
