@@ -78,7 +78,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             CurrentPermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             IsAuthorized = false;
             AuthorizationResolved = true;
-            AccessDeniedMessage = L["You do not have access to the page."];
+            AccessDeniedMessage = L["You do not have access to the page."].Value;
             return false;
         }
 
@@ -92,7 +92,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
         AuthorizationResolved = true;
         AccessDeniedMessage = IsAuthorized
             ? null
-            : L["You do not have permission for this page."];
+            : L["You do not have permission for this page."].Value;
 
         return IsAuthorized;
     }

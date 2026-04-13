@@ -104,6 +104,7 @@ public sealed class CultureSelectionService
         var cultures = configured
             .Where(static x => !string.IsNullOrWhiteSpace(x))
             .Select(static x => NormalizeCultureName(x))
+            .OfType<string>()
             .Where(static x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
