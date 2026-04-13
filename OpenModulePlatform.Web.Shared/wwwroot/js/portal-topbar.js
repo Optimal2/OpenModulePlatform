@@ -1,7 +1,52 @@
 (function () {
+    // Keep a single set of global listeners for all shared top bars on the page.
+    var COMPACT_BREAKPOINT_VARIABLE = '--portal-topbar-compact-breakpoint';
+    var FALLBACK_COMPACT_BREAKPOINT = '710px';
+    var initializedTopbars = new Set();
+    var globalHandlersRegistered = false;
+    // One observer instance is enough because each top bar is tracked separately in initializedTopbars.
+    var resizeObserver = typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(function (entries) {
+            entries.forEach(function (entry) {
+                rebalance(entry.target);
+            });
+        })
+        : null;
+
     function sortByIndex(nodes) {
         return Array.from(nodes).sort(function (left, right) {
             return Number(left.dataset.index) - Number(right.dataset.index);
+        });
+    }
+
+    function getCompactBreakpoint(topbar) {
+        if (!topbar || typeof window.getComputedStyle !== 'function') {
+            return FALLBACK_COMPACT_BREAKPOINT;
+        }
+
+        var configuredBreakpoint = window
+            .getComputedStyle(topbar)
+            .getPropertyValue(COMPACT_BREAKPOINT_VARIABLE)
+            .trim();
+
+        return configuredBreakpoint || FALLBACK_COMPACT_BREAKPOINT;
+    }
+
+    function isCompactViewport(topbar) {
+        return window.matchMedia('(max-width: ' + getCompactBreakpoint(topbar) + ')').matches;
+    }
+
+    function cleanupDisconnectedTopbars() {
+        initializedTopbars.forEach(function (topbar) {
+            if (topbar && topbar.isConnected) {
+                return;
+            }
+
+            initializedTopbars.delete(topbar);
+
+            if (resizeObserver && topbar) {
+                resizeObserver.unobserve(topbar);
+            }
         });
     }
 
@@ -32,7 +77,7 @@
         overflow.classList.remove('portal-topbar__overflow--measuring');
         menu.replaceChildren();
 
-        if (window.matchMedia('(max-width: 710px)').matches) {
+        if (isCompactViewport(topbar)) {
             return;
         }
 
@@ -59,41 +104,50 @@
         }
     }
 
-    function registerOutsideClose(root) {
-        if (!root || root.dataset.portalTopbarOutsideCloseRegistered === 'true') {
-            return;
-        }
+    function rebalanceAll() {
+        cleanupDisconnectedTopbars();
+        initializedTopbars.forEach(rebalance);
+    }
 
-        root.dataset.portalTopbarOutsideCloseRegistered = 'true';
-        document.addEventListener('click', function (event) {
-            root.querySelectorAll('[data-portal-topbar-overlay]').forEach(function (overlay) {
-                if (overlay.open && !overlay.contains(event.target)) {
-                    overlay.open = false;
-                }
-            });
+    function closeOverlaysOnOutsideClick(event) {
+        document.querySelectorAll('[data-portal-topbar-overlay][open]').forEach(function (overlay) {
+            if (!overlay.contains(event.target)) {
+                overlay.open = false;
+            }
         });
     }
 
+    function registerGlobalHandlers() {
+        if (globalHandlersRegistered) {
+            return;
+        }
+
+        globalHandlersRegistered = true;
+        document.addEventListener('click', closeOverlaysOnOutsideClick);
+        window.addEventListener('resize', rebalanceAll);
+        window.addEventListener('load', rebalanceAll);
+    }
+
     function initTopbar(topbar) {
-        if (!topbar || topbar.dataset.portalTopbarInitialized === 'true') {
+        if (!topbar) {
+            return;
+        }
+
+        registerGlobalHandlers();
+
+        if (topbar.dataset.portalTopbarInitialized === 'true') {
+            initializedTopbars.add(topbar);
             rebalance(topbar);
             return;
         }
 
         topbar.dataset.portalTopbarInitialized = 'true';
-        var root = topbar.closest('[data-portal-topbar-root]') || topbar;
-        var rebalanceTopbar = function () { rebalance(topbar); };
+        initializedTopbars.add(topbar);
+        rebalance(topbar);
 
-        rebalanceTopbar();
-        registerOutsideClose(root);
-
-        if (typeof ResizeObserver !== 'undefined') {
-            var resizeObserver = new ResizeObserver(rebalanceTopbar);
+        if (resizeObserver) {
             resizeObserver.observe(topbar);
         }
-
-        window.addEventListener('resize', rebalanceTopbar);
-        window.addEventListener('load', rebalanceTopbar);
     }
 
     function initAll() {
@@ -104,7 +158,7 @@
     window.ompPortalTopBar.initAll = initAll;
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initAll);
+        document.addEventListener('DOMContentLoaded', initAll, { once: true });
     } else {
         initAll();
     }

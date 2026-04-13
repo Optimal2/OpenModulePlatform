@@ -273,9 +273,6 @@
   <data name="Host templates" xml:space="preserve">
     <value>Host templates</value>
   </data>
-  <data name="Host Deployments" xml:space="preserve">
-    <value>Host Deployments</value>
-  </data>
   <data name="Create module instance" xml:space="preserve">
     <value>Create module instance</value>
   </data>
@@ -353,9 +350,6 @@
   </data>
   <data name="Artifact deleted." xml:space="preserve">
     <value>Artifact deleted.</value>
-  </data>
-  <data name="Host Deployment Assignments" xml:space="preserve">
-    <value>Host Deployment Assignments</value>
   </data>
   <data name="Configuration updated." xml:space="preserve">
     <value>Configuration updated.</value>
@@ -465,14 +459,8 @@
   <data name="Target name" xml:space="preserve">
     <value>Target name</value>
   </data>
-  <data name="App Instances" xml:space="preserve">
-    <value>App Instances</value>
-  </data>
   <data name="App type" xml:space="preserve">
     <value>App type</value>
-  </data>
-  <data name="Module Instances" xml:space="preserve">
-    <value>Module Instances</value>
   </data>
   <data name="Set Host base URL to make this route clickable from the Portal." xml:space="preserve">
     <value>Set Host base URL to make this route clickable from the Portal.</value>
@@ -1311,4 +1299,8 @@
   <data name="HostDeployments.Lede" xml:space="preserve">
     <value>Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</value>
   </data>
-<data name="More" xml:space="preserve"><value>More</value><comment>Compact portal top-bar overflow toggle.</comment></data></root>
+  <data name="More" xml:space="preserve">
+    <value>More</value>
+    <comment>Compact portal top-bar overflow toggle.</comment>
+  </data>
+</root>

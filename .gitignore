@@ -14,3 +14,15 @@ artifacts/
 **/.idea/
 .idea/
 *.DS_Store
+
+# Local editor and machine-specific files
+**/.vscode/
+.vscode/
+*.rsuser
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+Thumbs.db
+*.coverage
+*.coveragexml
+coverage/

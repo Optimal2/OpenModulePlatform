@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
+using System.Globalization;
 using System.Runtime.Versioning;
 using System.Security.Claims;
 using System.Security.Principal;
@@ -104,13 +105,13 @@ public sealed class RbacService
     private int? ResolveActiveRoleId(ClaimsPrincipal user, IReadOnlyList<UserRoleOption> roles)
     {
         var claimValue = user.FindFirstValue(ActiveRoleCookie.ClaimType);
-        if (int.TryParse(claimValue, out var claimRoleId) && roles.Any(x => x.RoleId == claimRoleId))
+        if (int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var claimRoleId) && roles.Any(x => x.RoleId == claimRoleId))
         {
             return claimRoleId;
         }
 
         var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
-        if (!int.TryParse(cookieValue, out var cookieRoleId))
+        if (!int.TryParse(cookieValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cookieRoleId))
         {
             return null;
         }

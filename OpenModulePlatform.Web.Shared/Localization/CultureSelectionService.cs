@@ -61,6 +61,7 @@ public sealed class CultureSelectionService
             IsEssential = true,
             HttpOnly = false,
             SameSite = SameSiteMode.Lax,
+            Secure = true,
             Path = "/"
         };
 

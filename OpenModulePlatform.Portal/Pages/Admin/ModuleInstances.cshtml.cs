@@ -26,7 +26,7 @@ public sealed class ModuleInstancesModel : OmpPortalPageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("Module Instances");
+        SetTitles("Module instances");
         Rows = await _repo.GetModuleInstancesAsync(ct);
         return Page();
     }
