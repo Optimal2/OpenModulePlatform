@@ -138,12 +138,9 @@
                                             <span class="visually-hidden">@L["SwitchRole"]</span>
                                         </summary>
                                         <div class="portal-topbar__profile-switch-menu">
-                                            @foreach (var role in _roleContext.AvailableRoles)
+                                            @foreach (var role in _roleContext.AvailableRoles.Where(role => role.RoleId != _roleContext.ActiveRoleId))
                                             {
-                                                if (role.RoleId != _roleContext.ActiveRoleId)
-                                                {
-                                                    <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
-                                                }
+                                                <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
                                             }
                                         </div>
                                     </details>

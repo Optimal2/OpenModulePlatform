@@ -1,161 +1,1306 @@
 <?xml version='1.0' encoding='utf-8'?>
 <root>
-  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
-  <resheader name="version"><value>2.0</value></resheader>
-  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <data name="Portal" xml:space="preserve"><value>Portal</value></data>
-  <data name="Home" xml:space="preserve"><value>Hem</value></data>
-  <data name="Admin" xml:space="preserve"><value>Admin</value></data>
-  <data name="Instances" xml:space="preserve"><value>Instanser</value></data>
-  <data name="Hosts" xml:space="preserve"><value>Värdar</value></data>
-  <data name="Modules" xml:space="preserve"><value>Moduler</value></data>
-  <data name="Apps" xml:space="preserve"><value>Appar</value></data>
-  <data name="Artifacts" xml:space="preserve"><value>Artefakter</value></data>
-  <data name="Automation" xml:space="preserve"><value>Automatisering</value></data>
-  <data name="RBAC" xml:space="preserve"><value>RBAC</value></data>
-  <data name="Language" xml:space="preserve"><value>Språk</value></data>
-  <data name="Swedish" xml:space="preserve"><value>Svenska</value></data>
-  <data name="English" xml:space="preserve"><value>Engelska</value></data>
-  <data name="Overview" xml:space="preserve"><value>Översikt</value></data>
-  <data name="Configurations" xml:space="preserve"><value>Konfigurationer</value></data>
-  <data name="Example Web App Module" xml:space="preserve"><value>Exempelmodul för webbapp</value></data>
-  <data name="Example module" xml:space="preserve"><value>Exempelmodul</value></data>
-  <data name="OMP Portal" xml:space="preserve"><value>OMP-portalen</value></data>
-  <data name="This portal is the shared entry point for an OMP instance." xml:space="preserve"><value>Den här portalen är den gemensamma ingången för en OMP-instans.</value></data>
-  <data name="Current user" xml:space="preserve"><value>Aktuell användare</value></data>
-  <data name="Portal admin" xml:space="preserve"><value>Portaladministratör</value></data>
-  <data name="Yes" xml:space="preserve"><value>Ja</value></data>
-  <data name="No" xml:space="preserve"><value>Nej</value></data>
-  <data name="Available OMP web app instances" xml:space="preserve"><value>Tillgängliga OMP-webbappsinstanser</value></data>
-  <data name="No accessible web app instances are currently registered." xml:space="preserve"><value>Det finns för närvarande inga åtkomliga webbappsinstanser registrerade.</value></data>
-  <data name="Display name" xml:space="preserve"><value>Visningsnamn</value></data>
-  <data name="App instance key" xml:space="preserve"><value>Appinstansnyckel</value></data>
-  <data name="App key" xml:space="preserve"><value>Appnyckel</value></data>
-  <data name="Route" xml:space="preserve"><value>Route</value></data>
-  <data name="Description" xml:space="preserve"><value>Beskrivning</value></data>
-  <data name="Administration" xml:space="preserve"><value>Administration</value></data>
-  <data name="OMP admin overview" xml:space="preserve"><value>Översikt för OMP-admin</value></data>
-  <data name="The admin area is split between manual core administration and advanced automation. For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts. Template- and deployment-driven rollout lives under Automation." xml:space="preserve"><value>Adminområdet är uppdelat mellan manuell kärnadministration och avancerad automatisering. För manuell uppsättning bör fokus ligga på instanser, värdar, moduler, appar, appinstanser och artefakter. Mall- och distributionsdriven utrullning finns under Automatisering.</value></data>
-  <data name="Module definitions" xml:space="preserve"><value>Moduldefinitioner</value></data>
-  <data name="Module instances" xml:space="preserve"><value>Modulinstanser</value></data>
-  <data name="App definitions" xml:space="preserve"><value>Appdefinitioner</value></data>
-  <data name="App instances" xml:space="preserve"><value>Appinstanser</value></data>
-  <data name="Manual core administration" xml:space="preserve"><value>Manuell kärnadministration</value></data>
-  <data name="These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation." xml:space="preserve"><value>Dessa sidor är huvudflödet när en OMP-instans sätts upp och underhålls utan HostAgent-automatisering.</value></data>
-  <data name="Advanced automation" xml:space="preserve"><value>Avancerad automatisering</value></data>
-  <data name="Template topology, deployment assignments and deployment tracking are separated from the main workflow until the HostAgent path is more complete." xml:space="preserve"><value>Malltopologi, tilldelningar av distributioner och distributionsspårning är separerade från huvudflödet tills HostAgent-spåret är mer komplett.</value></data>
-  <data name="Open automation area" xml:space="preserve"><value>Öppna automatiseringsområdet</value></data>
-  <data name="Security and access" xml:space="preserve"><value>Säkerhet och åtkomst</value></data>
-  <data name="Manage admin permissions and role assignments separately from topology and runtime data." xml:space="preserve"><value>Hantera administratörsbehörigheter och rolltilldelningar separat från topologi- och körtidsdata.</value></data>
-  <data name="Open RBAC" xml:space="preserve"><value>Öppna RBAC</value></data>
-  <data name="Neutral reference module for web flows in OMP. The page shows a module overview and links onward to the module's configurations." xml:space="preserve"><value>Neutral referensmodul för webbflöden i OMP. Sidan visar en modulöversikt och länkar vidare till modulens konfigurationer.</value></data>
-  <data name="Module key" xml:space="preserve"><value>Modulnyckel</value></data>
-  <data name="Schema" xml:space="preserve"><value>Schema</value></data>
-  <data name="Active configurations" xml:space="preserve"><value>Aktiva konfigurationer</value></data>
-  <data name="Next step" xml:space="preserve"><value>Nästa steg</value></data>
-  <data name="Continue to the configuration view to review or update the module's current sample configurations." xml:space="preserve"><value>Gå vidare till konfigurationsvyn för att granska eller uppdatera modulens aktuella exempelkonfigurationer.</value></data>
-  <data name="Open configurations" xml:space="preserve"><value>Öppna konfigurationer</value></data>
-  <data name="Configurations for Example Web App Module. These values are used by the example module and can be edited without leaving the module interface." xml:space="preserve"><value>Konfigurationer för Example Web App Module. Dessa värden används av exempelmodulen och kan redigeras utan att lämna modulgränssnittet.</value></data>
-  <data name="No configurations were found." xml:space="preserve"><value>Inga konfigurationer hittades.</value></data>
-  <data name="Created UTC" xml:space="preserve"><value>Skapad UTC</value></data>
-  <data name="Edit" xml:space="preserve"><value>Redigera</value></data>
-  <data name="Edit configuration" xml:space="preserve"><value>Redigera konfiguration</value></data>
-  <data name="Update comment and JSON content for the selected configuration." xml:space="preserve"><value>Uppdatera kommentar och JSON-innehåll för den valda konfigurationen.</value></data>
-  <data name="Save" xml:space="preserve"><value>Spara</value></data>
-  <data name="Back to configurations" xml:space="preserve"><value>Tillbaka till konfigurationer</value></data>
-  <data name="Edit host" xml:space="preserve"><value>Redigera värd</value></data>
-  <data name="Create host" xml:space="preserve"><value>Skapa värd</value></data>
-  <data name="Host created." xml:space="preserve"><value>Värden skapades.</value></data>
-  <data name="Host updated." xml:space="preserve"><value>Värden uppdaterades.</value></data>
-  <data name="Host deleted." xml:space="preserve"><value>Värden togs bort.</value></data>
-  <data name="Roles" xml:space="preserve"><value>Roller</value></data>
-  <data name="Create role" xml:space="preserve"><value>Skapa roll</value></data>
-  <data name="Edit role" xml:space="preserve"><value>Redigera roll</value></data>
-  <data name="Role created." xml:space="preserve"><value>Rollen skapades.</value></data>
-  <data name="Role updated." xml:space="preserve"><value>Rollen uppdaterades.</value></data>
-  <data name="Permission added to role." xml:space="preserve"><value>Behörigheten lades till i rollen.</value></data>
-  <data name="Permission removed from role." xml:space="preserve"><value>Behörigheten togs bort från rollen.</value></data>
-  <data name="Principal added to role." xml:space="preserve"><value>Principalen lades till i rollen.</value></data>
-  <data name="Principal removed from role." xml:space="preserve"><value>Principalen togs bort från rollen.</value></data>
-  <data name="Role deleted." xml:space="preserve"><value>Rollen togs bort.</value></data>
-  <data name="Create permission" xml:space="preserve"><value>Skapa behörighet</value></data>
-  <data name="Edit permission" xml:space="preserve"><value>Redigera behörighet</value></data>
-  <data name="Permission created." xml:space="preserve"><value>Behörigheten skapades.</value></data>
-  <data name="Permission updated." xml:space="preserve"><value>Behörigheten uppdaterades.</value></data>
-  <data name="Permission deleted." xml:space="preserve"><value>Behörigheten togs bort.</value></data>
-  <data name="Permissions" xml:space="preserve"><value>Behörigheter</value></data>
-  <data name="Create app" xml:space="preserve"><value>Skapa app</value></data>
-  <data name="Edit app" xml:space="preserve"><value>Redigera app</value></data>
-  <data name="App created." xml:space="preserve"><value>Appen skapades.</value></data>
-  <data name="App updated." xml:space="preserve"><value>Appen uppdaterades.</value></data>
-  <data name="App deleted." xml:space="preserve"><value>Appen togs bort.</value></data>
-  <data name="Host templates" xml:space="preserve"><value>Värdmallar</value></data>
-  <data name="Host Deployments" xml:space="preserve"><value>Värddistributioner</value></data>
-  <data name="Create module instance" xml:space="preserve"><value>Skapa modulinstans</value></data>
-  <data name="Edit module instance" xml:space="preserve"><value>Redigera modulinstans</value></data>
-  <data name="Module instance created." xml:space="preserve"><value>Modulinstansen skapades.</value></data>
-  <data name="Module instance updated." xml:space="preserve"><value>Modulinstansen uppdaterades.</value></data>
-  <data name="Module instance deleted." xml:space="preserve"><value>Modulinstansen togs bort.</value></data>
-  <data name="Edit instance" xml:space="preserve"><value>Redigera instans</value></data>
-  <data name="Create instance" xml:space="preserve"><value>Skapa instans</value></data>
-  <data name="Instance created." xml:space="preserve"><value>Instansen skapades.</value></data>
-  <data name="Instance updated." xml:space="preserve"><value>Instansen uppdaterades.</value></data>
-  <data name="Instance deleted." xml:space="preserve"><value>Instansen togs bort.</value></data>
-  <data name="Create module" xml:space="preserve"><value>Skapa modul</value></data>
-  <data name="Edit module" xml:space="preserve"><value>Redigera modul</value></data>
-  <data name="Module created." xml:space="preserve"><value>Modulen skapades.</value></data>
-  <data name="Module updated." xml:space="preserve"><value>Modulen uppdaterades.</value></data>
-  <data name="Module deleted." xml:space="preserve"><value>Modulen togs bort.</value></data>
-  <data name="Instance templates" xml:space="preserve"><value>Instansmallar</value></data>
-  <data name="Create app instance" xml:space="preserve"><value>Skapa appinstans</value></data>
-  <data name="Edit app instance" xml:space="preserve"><value>Redigera appinstans</value></data>
-  <data name="App instance created." xml:space="preserve"><value>Appinstansen skapades.</value></data>
-  <data name="App instance updated." xml:space="preserve"><value>Appinstansen uppdaterades.</value></data>
-  <data name="App instance deleted." xml:space="preserve"><value>Appinstansen togs bort.</value></data>
-  <data name="Create artifact" xml:space="preserve"><value>Skapa artefakt</value></data>
-  <data name="Edit artifact" xml:space="preserve"><value>Redigera artefakt</value></data>
-  <data name="Artifact created." xml:space="preserve"><value>Artefakten skapades.</value></data>
-  <data name="Artifact updated." xml:space="preserve"><value>Artefakten uppdaterades.</value></data>
-  <data name="Artifact deleted." xml:space="preserve"><value>Artefakten togs bort.</value></data>
-  <data name="Host Deployment Assignments" xml:space="preserve"><value>Tilldelningar för värddistribution</value></data>
-  <data name="Configuration updated." xml:space="preserve"><value>Konfigurationen uppdaterades.</value></data>
-  <data name="Allowed" xml:space="preserve"><value>Tillåten</value></data>
-  <data name="App" xml:space="preserve"><value>App</value></data>
-  <data name="App definition" xml:space="preserve"><value>Appdefinition</value></data>
-  <data name="Artifact" xml:space="preserve"><value>Artefakt</value></data>
-  <data name="Comment" xml:space="preserve"><value>Kommentar</value></data>
-  <data name="Config JSON" xml:space="preserve"><value>Konfig JSON</value></data>
-  <data name="ConfigId" xml:space="preserve"><value>ConfigId</value></data>
-  <data name="Desired state" xml:space="preserve"><value>Önskat läge</value></data>
-  <data name="Enabled" xml:space="preserve"><value>Aktiverad</value></data>
-  <data name="Expected client IP" xml:space="preserve"><value>Förväntad klient-IP</value></data>
-  <data name="Expected client host" xml:space="preserve"><value>Förväntad klientvärd</value></data>
-  <data name="Expected login" xml:space="preserve"><value>Förväntad inloggning</value></data>
-  <data name="Host" xml:space="preserve"><value>Värd</value></data>
-  <data name="Host key" xml:space="preserve"><value>Värdnyckel</value></data>
-  <data name="Install path" xml:space="preserve"><value>Installationssökväg</value></data>
-  <data name="Installation name" xml:space="preserve"><value>Installationsnamn</value></data>
-  <data name="Instance" xml:space="preserve"><value>Instans</value></data>
-  <data name="Instance key" xml:space="preserve"><value>Instansnyckel</value></data>
-  <data name="Instance template" xml:space="preserve"><value>Instansmall</value></data>
-  <data name="Module" xml:space="preserve"><value>Modul</value></data>
-  <data name="Module instance" xml:space="preserve"><value>Modulinstans</value></data>
-  <data name="Module instance key" xml:space="preserve"><value>Modulinstansnyckel</value></data>
-  <data name="Module type" xml:space="preserve"><value>Modultyp</value></data>
-  <data name="OS family" xml:space="preserve"><value>OS-familj</value></data>
-  <data name="OS version" xml:space="preserve"><value>OS-version</value></data>
-  <data name="Package type" xml:space="preserve"><value>Paketeringstyp</value></data>
-  <data name="Permission name" xml:space="preserve"><value>Behörighetsnamn</value></data>
-  <data name="Public URL" xml:space="preserve"><value>Publik URL</value></data>
-  <data name="Relative path" xml:space="preserve"><value>Relativ sökväg</value></data>
-  <data name="Role name" xml:space="preserve"><value>Rollnamn</value></data>
-  <data name="Route path" xml:space="preserve"><value>Route-sökväg</value></data>
-  <data name="SHA-256" xml:space="preserve"><value>SHA-256</value></data>
-  <data name="Schema name" xml:space="preserve"><value>Schemanamn</value></data>
-  <data name="Sort order" xml:space="preserve"><value>Sorteringsordning</value></data>
-  <data name="Target name" xml:space="preserve"><value>Målnamn</value></data>
-  <data name="App Instances" xml:space="preserve"><value>Appinstanser</value></data>
-  <data name="App type" xml:space="preserve"><value>Apptyp</value></data>
-  <data name="Module Instances" xml:space="preserve"><value>Modulinstanser</value></data>
-<data name="Set Host base URL to make this route clickable from the Portal." xml:space="preserve"><value>Ange värdens bas-URL för att göra den här routen klickbar från portalen.</value></data><data name="Base URL" xml:space="preserve"><value>Bas-URL</value></data><data name="Payload JSON" xml:space="preserve"><value>Payload-JSON</value></data><data name="Request type" xml:space="preserve"><value>Begärandetyp</value></data><data name="ArtifactId" xml:space="preserve"><value>ArtifactId</value></data><data name="Manual core" xml:space="preserve"><value>Manuell kärna</value></data><data name="Definitions" xml:space="preserve"><value>Definitioner</value></data><data name="Advanced admin" xml:space="preserve"><value>Avancerad admin</value></data><data name="Automation and templates" xml:space="preserve"><value>Automatisering och mallar</value></data><data name="Template model" xml:space="preserve"><value>Mallmodell</value></data><data name="Use these pages when defining desired topology for automated rollout." xml:space="preserve"><value>Använd dessa sidor när du definierar önskad topologi för automatiserad utrullning.</value></data><data name="Deployment planning" xml:space="preserve"><value>Distributionsplanering</value></data><data name="These pages are related to deployment orchestration and future HostAgent-driven execution." xml:space="preserve"><value>Dessa sidor hör ihop med distributionsorkestrering och framtida HostAgent-driven körning.</value></data><data name="Current counts" xml:space="preserve"><value>Aktuella antal</value></data><data name="No host deployment assignments found." xml:space="preserve"><value>Inga tilldelningar för värddistribution hittades.</value></data><data name="Assigned by" xml:space="preserve"><value>Tilldelad av</value></data><data name="Assigned UTC" xml:space="preserve"><value>Tilldelad UTC</value></data><data name="Active" xml:space="preserve"><value>Aktiv</value></data><data name="Inactive" xml:space="preserve"><value>Inaktiv</value></data><data name="No host deployments found." xml:space="preserve"><value>Inga värddistributioner hittades.</value></data><data name="Status" xml:space="preserve"><value>Status</value></data><data name="Requested by" xml:space="preserve"><value>Begärd av</value></data><data name="Requested UTC" xml:space="preserve"><value>Begärd UTC</value></data><data name="Completed UTC" xml:space="preserve"><value>Slutförd UTC</value></data><data name="Disabled" xml:space="preserve"><value>Inaktiverad</value></data><data name="Blocked" xml:space="preserve"><value>Blockerad</value></data><data name="Actions" xml:space="preserve"><value>Åtgärder</value></data><data name="Type" xml:space="preserve"><value>Typ</value></data><data name="Version" xml:space="preserve"><value>Version</value></data><data name="Target" xml:space="preserve"><value>Mål</value></data><data name="Last seen" xml:space="preserve"><value>Senast sedd</value></data><data name="OS" xml:space="preserve"><value>OS</value></data><data name="Not set" xml:space="preserve"><value>Ej satt</value></data><data name="Name" xml:space="preserve"><value>Namn</value></data><data name="Permission" xml:space="preserve"><value>Behörighet</value></data><data name="Principal" xml:space="preserve"><value>Principal</value></data><data name="Principals" xml:space="preserve"><value>Principaler</value></data><data name="Remove" xml:space="preserve"><value>Ta bort</value></data><data name="Delete" xml:space="preserve"><value>Ta bort</value></data><data name="App definitions belong to modules and describe what can be deployed. Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions." xml:space="preserve"><value>Appdefinitioner hör till moduler och beskriver vad som kan distribueras. Routes, artefakter, installationssökvägar och körningspolicy hör i stället till appinstanser.</value></data><data name="Create app definition" xml:space="preserve"><value>Skapa appdefinition</value></data><data name="Edit app definition" xml:space="preserve"><value>Redigera appdefinition</value></data><data name="Select module" xml:space="preserve"><value>Välj modul</value></data><data name="Choose how the platform should think about this definition." xml:space="preserve"><value>Välj hur plattformen ska betrakta den här definitionen.</value></data><data name="Save app" xml:space="preserve"><value>Spara app</value></data><data name="Back to apps" xml:space="preserve"><value>Tillbaka till appar</value></data><data name="Delete this app definition? Related artifacts and app instances must be removed first." xml:space="preserve"><value>Ta bort den här appdefinitionen? Relaterade artefakter och appinstanser måste tas bort först.</value></data><data name="Delete is blocked while artifacts, app instances or template rows still reference the app." xml:space="preserve"><value>Borttagning blockeras så länge artefakter, appinstanser eller mallrader fortfarande refererar till appen.</value></data><data name="Delete app" xml:space="preserve"><value>Ta bort app</value></data><data name="No app definitions found." xml:space="preserve"><value>Inga appdefinitioner hittades.</value></data><data name="App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance." xml:space="preserve"><value>Appinstanser är OMP:s centrum för körning. Den här sidan hanterar värdplacering, artefaktval, routing och verifieringspolicy för en konkret app i en OMP-instans.</value></data><data name="Select module instance" xml:space="preserve"><value>Välj modulinstans</value></data><data name="Start by choosing the module instance. Host and app selections are validated against it." xml:space="preserve"><value>Börja med att välja modulinstansen. Val av värd och app valideras mot den.</value></data><data name="Select app" xml:space="preserve"><value>Välj app</value></data><data name="The chosen app must belong to the same module definition as the selected module instance." xml:space="preserve"><value>Den valda appen måste tillhöra samma moduldefinition som den valda modulinstansen.</value></data><data name="No host / not pinned" xml:space="preserve"><value>Ingen värd / inte låst</value></data><data name="If set, the host must belong to the same instance as the selected module instance." xml:space="preserve"><value>Om satt måste värden tillhöra samma instans som den valda modulinstansen.</value></data><data name="No artifact selected" xml:space="preserve"><value>Ingen artefakt vald</value></data><data name="If set, the artifact must belong to the selected app definition." xml:space="preserve"><value>Om satt måste artefakten tillhöra den valda appdefinitionen.</value></data><data name="Use either an absolute URL such as https://www.google.com/ or a host-root-relative path such as app01, /app01, app01/ or /app01/. Relative values are resolved directly from the selected host root without any extra portal prefix." xml:space="preserve"><value>Använd antingen en absolut URL som https://www.google.com/ eller en värdrot-relativ sökväg som app01, /app01, app01/ eller /app01/. Relativa värden löses direkt från den valda värdrotens bas utan extra portalprefix.</value></data><data name="Optional absolute URL when the app is externally reachable." xml:space="preserve"><value>Valfri absolut URL när appen är åtkomlig externt.</value></data><data name="Physical install location on host, if relevant." xml:space="preserve"><value>Fysisk installationsplats på värden, om relevant.</value></data><data name="Friendly install slot or service name." xml:space="preserve"><value>Vänligt installationsslot- eller tjänstnamn.</value></data><data name="Module-owned config identifier. Leave empty when not used." xml:space="preserve"><value>Modulägd konfigurationsidentifierare. Lämna tom när den inte används.</value></data><data name="Controls what the platform expects this runtime instance to do." xml:space="preserve"><value>Styr vad plattformen förväntar sig att denna körinstans ska göra.</value></data><data name="Optional runtime identity that is expected to report heartbeat." xml:space="preserve"><value>Valfri köridentitet som förväntas rapportera heartbeat.</value></data><data name="Save app instance" xml:space="preserve"><value>Spara appinstans</value></data><data name="Back to app instances" xml:space="preserve"><value>Tillbaka till appinstanser</value></data><data name="Delete this app instance?" xml:space="preserve"><value>Ta bort den här appinstansen?</value></data><data name="Delete removes the runtime row. Make sure no external system still relies on this app instance key." xml:space="preserve"><value>Borttagning tar bort körningsraden. Säkerställ att inget externt system fortfarande är beroende av den här appinstansnyckeln.</value></data><data name="Delete app instance" xml:space="preserve"><value>Ta bort appinstans</value></data><data name="No app instances found." xml:space="preserve"><value>Inga appinstanser hittades.</value></data><data name="Installation" xml:space="preserve"><value>Installation</value></data><data name="Optional RID/target such as win-x64." xml:space="preserve"><value>Valfri RID/målplattform som win-x64.</value></data><data name="Relative path inside your artifact repository or release output." xml:space="preserve"><value>Relativ sökväg i ditt artefaktlager eller release-output.</value></data><data name="Optional checksum used for later integrity checks." xml:space="preserve"><value>Valfri checksumma för senare integritetskontroller.</value></data><data name="Save artifact" xml:space="preserve"><value>Spara artefakt</value></data><data name="Back to artifacts" xml:space="preserve"><value>Tillbaka till artefakter</value></data><data name="Delete this artifact? App instances depending on it must be updated first." xml:space="preserve"><value>Ta bort den här artefakten? Appinstanser som beror på den måste uppdateras först.</value></data><data name="Delete is blocked while app instances still point at this artifact." xml:space="preserve"><value>Borttagning blockeras så länge appinstanser fortfarande pekar på denna artefakt.</value></data><data name="Delete artifact" xml:space="preserve"><value>Ta bort artefakt</value></data><data name="No artifacts found." xml:space="preserve"><value>Inga artefakter hittades.</value></data><data name="Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages." xml:space="preserve"><value>Värdar representerar verkliga distributionsmål i en OMP-instans. För manuell uppsättning är detta en av de viktigaste kärnsidorna.</value></data><data name="Select instance" xml:space="preserve"><value>Välj instans</value></data><data name="Every host belongs to exactly one OMP instance." xml:space="preserve"><value>Varje värd tillhör exakt en OMP-instans.</value></data><data name="Logical host identity used by OMP. Keep it short and stable." xml:space="preserve"><value>Logisk värdidentitet som används av OMP. Håll den kort och stabil.</value></data><data name="Optional human-friendly label." xml:space="preserve"><value>Valfri användarvänlig etikett.</value></data><data name="Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath. Enter only protocol, host and optional port." xml:space="preserve"><value>Valfri absolut bas-URL för denna värd. Portalen använder den när en appinstans har en relativ RoutePath. Ange endast protokoll, värd och valfri port.</value></data><data name="Free text for the observed or intended OS version." xml:space="preserve"><value>Fri text för observerad eller avsedd OS-version.</value></data><data name="Save host" xml:space="preserve"><value>Spara värd</value></data><data name="Back to hosts" xml:space="preserve"><value>Tillbaka till värdar</value></data><data name="Delete this host? App instances using it must be moved or removed first." xml:space="preserve"><value>Ta bort den här värden? Appinstanser som använder den måste flyttas eller tas bort först.</value></data><data name="Host deletion is blocked when app instances or deployments still reference the host." xml:space="preserve"><value>Borttagning av värd blockeras när appinstanser eller distributioner fortfarande refererar till värden.</value></data><data name="Delete host" xml:space="preserve"><value>Ta bort värd</value></data><data name="No hosts found." xml:space="preserve"><value>Inga värdar hittades.</value></data><data name="Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation." xml:space="preserve"><value>Värdar representerar konkreta körningsmål inom en OMP-instans. Appinstanser kopplas till värdar för faktisk placering och observation.</value></data><data name="Instances are the top-level OMP environments. Templates are optional for manual administration and mainly belong to future automation." xml:space="preserve"><value>Instanser är OMP:s miljöer på högsta nivå. Mallar är valfria för manuell administration och hör främst till framtida automatisering.</value></data><data name="Stable technical key used in links, config and references." xml:space="preserve"><value>Stabil teknisk nyckel som används i länkar, konfiguration och referenser.</value></data><data name="Human-readable name shown in Portal." xml:space="preserve"><value>Människoläsbart namn som visas i portalen.</value></data><data name="Optional context for operators and maintainers." xml:space="preserve"><value>Valfri kontext för operatörer och förvaltare.</value></data><data name="None / manual setup" xml:space="preserve"><value>Ingen / manuell uppsättning</value></data><data name="Leave empty for a purely manual instance. Template linkage can be added later." xml:space="preserve"><value>Lämna tomt för en helt manuell instans. Mallkoppling kan läggas till senare.</value></data><data name="Save instance" xml:space="preserve"><value>Spara instans</value></data><data name="Back to instances" xml:space="preserve"><value>Tillbaka till instanser</value></data><data name="Delete this instance? This only works when no dependent rows remain." xml:space="preserve"><value>Ta bort den här instansen? Detta fungerar bara när inga beroende rader återstår.</value></data><data name="Delete is blocked by SQL if hosts, module instances or other dependent rows still reference this instance." xml:space="preserve"><value>Borttagning blockeras av SQL om värdar, modulinstanser eller andra beroende rader fortfarande refererar till den här instansen.</value></data><data name="Delete instance" xml:space="preserve"><value>Ta bort instans</value></data><data name="No instances found." xml:space="preserve"><value>Inga instanser hittades.</value></data><data name="OMP instances are the top-level environments. Instance templates remain optional and primarily belong to the automation workflow." xml:space="preserve"><value>OMP-instansser är miljöerna på högsta nivå. Instansmallar är fortfarande valfria och hör främst till automatiseringsflödet.</value></data><data name="Modules are definitions. Keep runtime-specific values out of this page and use module instances or app instances for environment-specific configuration." xml:space="preserve"><value>Moduler är definitioner. Håll körningsspecifika värden borta från denna sida och använd modulinstanser eller appinstanser för miljöspecifik konfiguration.</value></data><data name="Stable definition key used by apps and instance templates." xml:space="preserve"><value>Stabil definitionsnyckel som används av appar och instansmallar.</value></data><data name="Pick the closest platform role. This is a definition-level classification." xml:space="preserve"><value>Välj den plattformsroll som ligger närmast. Detta är en klassificering på definitionsnivå.</value></data><data name="Database schema owned by the module, when applicable." xml:space="preserve"><value>Databasschema som ägs av modulen, när det är tillämpligt.</value></data><data name="Save module" xml:space="preserve"><value>Spara modul</value></data><data name="Back to modules" xml:space="preserve"><value>Tillbaka till moduler</value></data><data name="Delete this module? Related apps and instances must be removed first." xml:space="preserve"><value>Ta bort den här modulen? Relaterade appar och instanser måste tas bort först.</value></data><data name="Deleting a module is only possible when dependent apps, module instances and template rows are already gone." xml:space="preserve"><value>Det går bara att ta bort en modul när beroende appar, modulinstanser och mallrader redan är borta.</value></data><data name="Delete module" xml:space="preserve"><value>Ta bort modul</value></data><data name="No modules found." xml:space="preserve"><value>Inga moduler hittades.</value></data><data name="Module definitions are reusable building blocks. They do not describe placement or runtime state." xml:space="preserve"><value>Moduldefinitioner är återanvändbara byggblock. De beskriver inte placering eller körningstillstånd.</value></data><data name="Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational." xml:space="preserve"><value>Modulinstanser knyter en moduldefinition till en konkret OMP-instans. Det är här definitioner börjar bli operativa.</value></data><data name="Choose the module definition this module instance represents." xml:space="preserve"><value>Välj den moduldefinition som denna modulinstans representerar.</value></data><data name="Save module instance" xml:space="preserve"><value>Spara modulinstans</value></data><data name="Back to module instances" xml:space="preserve"><value>Tillbaka till modulinstanser</value></data><data name="Delete this module instance? Related app instances must be removed first." xml:space="preserve"><value>Ta bort den här modulinstansen? Relaterade appinstanser måste tas bort först.</value></data><data name="SQL blocks deletion while app instances or template mappings still depend on this row." xml:space="preserve"><value>SQL blockerar borttagning så länge appinstanser eller mallkopplingar fortfarande beror på denna rad.</value></data><data name="Delete module instance" xml:space="preserve"><value>Ta bort modulinstans</value></data><data name="No module instances found." xml:space="preserve"><value>Inga modulinstanser hittades.</value></data><data name="Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances." xml:space="preserve"><value>Modulinstanser binder moduldefinitioner till en specifik OMP-instans. Detta är det operativa lagret ovanför definitioner och under appinstanser.</value></data><data name="Host templates describe reusable host-level desired state for template-driven rollout." xml:space="preserve"><value>Värdmallar beskriver återanvändbart önskat tillstånd på värdnivå för mallstyrd utrullning.</value></data><data name="No host templates found." xml:space="preserve"><value>Inga värdmallar hittades.</value></data><data name="Template key" xml:space="preserve"><value>Mallnyckel</value></data><data name="Instance templates belong to the future automation path. They describe desired topology rather than the manually managed live runtime." xml:space="preserve"><value>Instansmallar hör till den framtida automatiseringsvägen. De beskriver önskad topologi snarare än den manuellt hanterade livekörningen.</value></data><data name="No instance templates found." xml:space="preserve"><value>Inga instansmallar hittades.</value></data><data name="Manage roles, permissions and principal assignments from Portal instead of editing the database directly." xml:space="preserve"><value>Hantera roller, behörigheter och principaltilldelningar från portalen i stället för att redigera databasen direkt.</value></data><data name="Named access bundles that can carry multiple permissions and principals." xml:space="preserve"><value>Namngivna åtkomstpaket som kan bära flera behörigheter och principaler.</value></data><data name="Low-level capabilities granted to apps and portal areas." xml:space="preserve"><value>Lågnivåförmågor som ges till appar och portalytor.</value></data><data name="Role administration" xml:space="preserve"><value>Rolladministration</value></data><data name="Manage roles" xml:space="preserve"><value>Hantera roller</value></data><data name="Create roles, update descriptions, assign permissions and attach principals." xml:space="preserve"><value>Skapa roller, uppdatera beskrivningar, tilldela behörigheter och koppla principaler.</value></data><data name="Open roles" xml:space="preserve"><value>Öppna roller</value></data><data name="Permission catalog" xml:space="preserve"><value>Behörighetskatalog</value></data><data name="Manage permissions" xml:space="preserve"><value>Hantera behörigheter</value></data><data name="Create permissions once and reuse them across roles and example modules." xml:space="preserve"><value>Skapa behörigheter en gång och återanvänd dem mellan roller och exempelmoduler.</value></data><data name="Open permissions" xml:space="preserve"><value>Öppna behörigheter</value></data><data name="Permissions are low-level capability names. Keep them stable and descriptive so roles remain understandable." xml:space="preserve"><value>Behörigheter är namn på lågnivåförmågor. Håll dem stabila och beskrivande så att roller förblir begripliga.</value></data><data name="No permissions have been created yet." xml:space="preserve"><value>Inga behörigheter har skapats ännu.</value></data><data name="Used by roles" xml:space="preserve"><value>Används av roller</value></data><data name="Short explanation of who should receive this role." xml:space="preserve"><value>Kort förklaring av vem som bör få den här rollen.</value></data><data name="Save role" xml:space="preserve"><value>Spara roll</value></data><data name="Back to roles" xml:space="preserve"><value>Tillbaka till roller</value></data><data name="Assigned permissions" xml:space="preserve"><value>Tilldelade behörigheter</value></data><data name="No permissions assigned yet." xml:space="preserve"><value>Inga behörigheter tilldelade ännu.</value></data><data name="Add permission" xml:space="preserve"><value>Lägg till behörighet</value></data><data name="Select permission" xml:space="preserve"><value>Välj behörighet</value></data><data name="Assigned principals" xml:space="preserve"><value>Tilldelade principaler</value></data><data name="Bind users, groups or service identities to the role. Prefer groups where possible." xml:space="preserve"><value>Knyt användare, grupper eller tjänsteidentiteter till rollen. Föredra grupper där det är möjligt.</value></data><data name="No principals assigned yet." xml:space="preserve"><value>Inga principaler tilldelade ännu.</value></data><data name="Principal type" xml:space="preserve"><value>Principaltyp</value></data><data name="Add principal" xml:space="preserve"><value>Lägg till principal</value></data><data name="Delete this role? Linked role assignments will also be removed." xml:space="preserve"><value>Ta bort den här rollen? Länkade rolltilldelningar tas också bort.</value></data><data name="Deleting a role removes all principal and permission links for that role." xml:space="preserve"><value>Om en roll tas bort försvinner alla principal- och behörighetslänkar för den rollen.</value></data><data name="Delete role" xml:space="preserve"><value>Ta bort roll</value></data><data name="Roles bundle permissions and principals. Use roles to keep direct principal management small and predictable." xml:space="preserve"><value>Roller samlar behörigheter och principaler. Använd roller för att hålla direkt principalhantering liten och förutsägbar.</value></data><data name="No roles have been created yet." xml:space="preserve"><value>Inga roller har skapats ännu.</value></data><data name="Describe the capability in business terms, not implementation details." xml:space="preserve"><value>Beskriv förmågan i verksamhetstermer, inte implementeringsdetaljer.</value></data><data name="Used by roles:" xml:space="preserve"><value>Används av roller:</value></data><data name="Save permission" xml:space="preserve"><value>Spara behörighet</value></data><data name="Back to permissions" xml:space="preserve"><value>Tillbaka till behörigheter</value></data><data name="Delete this permission? Role links will also be removed." xml:space="preserve"><value>Ta bort den här behörigheten? Rolllänkar tas också bort.</value></data><data name="Deleting a permission removes it from all roles." xml:space="preserve"><value>Om en behörighet tas bort försvinner den från alla roller.</value></data><data name="Delete permission" xml:space="preserve"><value>Ta bort behörighet</value></data><data name="Danger zone" xml:space="preserve"><value>Riskzon</value></data><data name="Web app" xml:space="preserve"><value>Webbapp</value></data><data name="Service app" xml:space="preserve"><value>Tjänsteapp</value></data><data name="Folder" xml:space="preserve"><value>Mapp</value></data><data name="Zip" xml:space="preserve"><value>Zip</value></data><data name="NuGet package" xml:space="preserve"><value>NuGet-paket</value></data><data name="Unknown / unmanaged" xml:space="preserve"><value>Okänd / ohanterad</value></data><data name="Enabled / should run" xml:space="preserve"><value>Aktiverad / ska köras</value></data><data name="Stopped / should not run" xml:space="preserve"><value>Stoppad / ska inte köras</value></data><data name="Development" xml:space="preserve"><value>Utveckling</value></data><data name="Test" xml:space="preserve"><value>Test</value></data><data name="Stage" xml:space="preserve"><value>Steg</value></data><data name="Production" xml:space="preserve"><value>Produktion</value></data><data name="Portal module" xml:space="preserve"><value>Portalmodul</value></data><data name="Web app module" xml:space="preserve"><value>Webbappmodul</value></data><data name="Host app module" xml:space="preserve"><value>Värdappmodul</value></data><data name="User" xml:space="preserve"><value>Användare</value></data><data name="Group" xml:space="preserve"><value>Grupp</value></data><data name="ServiceAccount" xml:space="preserve"><value>Tjänstkonto</value></data><data name="Select a module." xml:space="preserve"><value>Välj en modul.</value></data><data name="Use a stable key with letters, digits, dash, underscore or dot." xml:space="preserve"><value>Använd en stabil nyckel med bokstäver, siffror, bindestreck, understreck eller punkt.</value></data><data name="Select an app type." xml:space="preserve"><value>Välj en apptyp.</value></data><data name="The app could not be saved." xml:space="preserve"><value>Appen kunde inte sparas.</value></data><data name="The app could not be deleted." xml:space="preserve"><value>Appen kunde inte tas bort.</value></data><data name="An app with the same key already exists in the selected module." xml:space="preserve"><value>En app med samma nyckel finns redan i den valda modulen.</value></data><data name="Delete or update dependent rows first." xml:space="preserve"><value>Ta först bort eller uppdatera beroende rader.</value></data><data name="Select a module instance." xml:space="preserve"><value>Välj en modulinstans.</value></data><data name="Select an app definition." xml:space="preserve"><value>Välj en appdefinition.</value></data><data name="Public URL must be an absolute URL." xml:space="preserve"><value>Publik URL måste vara en absolut URL.</value></data><data name="Selected module instance was not found." xml:space="preserve"><value>Den valda modulinstansen hittades inte.</value></data><data name="Selected app was not found." xml:space="preserve"><value>Den valda appen hittades inte.</value></data><data name="The selected app does not belong to the selected module instance's module." xml:space="preserve"><value>Den valda appen tillhör inte den valda modulinstansens modul.</value></data><data name="Selected host was not found." xml:space="preserve"><value>Den valda värden hittades inte.</value></data><data name="The selected host belongs to a different instance than the selected module instance." xml:space="preserve"><value>Den valda värden tillhör en annan instans än den valda modulinstansen.</value></data><data name="The selected artifact does not belong to the selected app." xml:space="preserve"><value>Den valda artefakten tillhör inte den valda appen.</value></data><data name="The app instance could not be saved." xml:space="preserve"><value>Appinstansen kunde inte sparas.</value></data><data name="The app instance could not be deleted." xml:space="preserve"><value>Appinstansen kunde inte tas bort.</value></data><data name="An app instance with the same key already exists in the selected module instance." xml:space="preserve"><value>En appinstans med samma nyckel finns redan i den valda modulinstansen.</value></data><data name="Select an app." xml:space="preserve"><value>Välj en app.</value></data><data name="Version is required." xml:space="preserve"><value>Version krävs.</value></data><data name="SHA-256 must be 64 hexadecimal characters." xml:space="preserve"><value>SHA-256 måste bestå av 64 hexadecimala tecken.</value></data><data name="The artifact could not be saved." xml:space="preserve"><value>Artefakten kunde inte sparas.</value></data><data name="The artifact could not be deleted." xml:space="preserve"><value>Artefakten kunde inte tas bort.</value></data><data name="Select an instance." xml:space="preserve"><value>Välj en instans.</value></data><data name="Use a stable host key with letters, digits, dash, underscore or dot." xml:space="preserve"><value>Använd en stabil värdnyckel med bokstäver, siffror, bindestreck, understreck eller punkt.</value></data><data name="Base URL must be an absolute http or https URL." xml:space="preserve"><value>Bas-URL måste vara en absolut http- eller https-URL.</value></data><data name="Base URL must not contain query string or fragment." xml:space="preserve"><value>Bas-URL får inte innehålla query-sträng eller fragment.</value></data><data name="Base URL should only contain protocol, host and optional port." xml:space="preserve"><value>Bas-URL bör endast innehålla protokoll, värd och valfri port.</value></data><data name="A host with the same key already exists in the selected instance." xml:space="preserve"><value>En värd med samma nyckel finns redan i den valda instansen.</value></data><data name="The host could not be saved." xml:space="preserve"><value>Värden kunde inte sparas.</value></data><data name="The host could not be deleted." xml:space="preserve"><value>Värden kunde inte tas bort.</value></data><data name="Display name is required." xml:space="preserve"><value>Visningsnamn krävs.</value></data><data name="A row with the same key already exists." xml:space="preserve"><value>En rad med samma nyckel finns redan.</value></data><data name="The instance could not be saved." xml:space="preserve"><value>Instansen kunde inte sparas.</value></data><data name="The instance could not be deleted." xml:space="preserve"><value>Instansen kunde inte tas bort.</value></data><data name="Schema names must start with a letter and then use letters, digits or underscore." xml:space="preserve"><value>Schemanamn måste börja med en bokstav och sedan använda bokstäver, siffror eller understreck.</value></data><data name="Select a module type." xml:space="preserve"><value>Välj en modultyp.</value></data><data name="A module with the same key already exists." xml:space="preserve"><value>En modul med samma nyckel finns redan.</value></data><data name="The module could not be saved." xml:space="preserve"><value>Modulen kunde inte sparas.</value></data><data name="The module could not be deleted." xml:space="preserve"><value>Modulen kunde inte tas bort.</value></data><data name="A module instance with the same key already exists in the selected instance." xml:space="preserve"><value>En modulinstans med samma nyckel finns redan i den valda instansen.</value></data><data name="The module instance could not be saved." xml:space="preserve"><value>Modulinstansen kunde inte sparas.</value></data><data name="The module instance could not be deleted." xml:space="preserve"><value>Modulinstansen kunde inte tas bort.</value></data><data name="Use letters, digits, dash, underscore or dot. Keep permission names stable." xml:space="preserve"><value>Använd bokstäver, siffror, bindestreck, understreck eller punkt. Håll behörighetsnamn stabila.</value></data><data name="A permission with the same name already exists." xml:space="preserve"><value>En behörighet med samma namn finns redan.</value></data><data name="The permission could not be saved." xml:space="preserve"><value>Behörigheten kunde inte sparas.</value></data><data name="The permission could not be deleted." xml:space="preserve"><value>Behörigheten kunde inte tas bort.</value></data><data name="Use letters, digits, dash, underscore or dot. Keep the role name stable." xml:space="preserve"><value>Använd bokstäver, siffror, bindestreck, understreck eller punkt. Håll rollnamnet stabilt.</value></data><data name="A role with the same name already exists." xml:space="preserve"><value>En roll med samma namn finns redan.</value></data><data name="The role could not be saved." xml:space="preserve"><value>Rollen kunde inte sparas.</value></data><data name="Select a permission to add." xml:space="preserve"><value>Välj en behörighet att lägga till.</value></data><data name="Select a principal type and enter a principal value." xml:space="preserve"><value>Välj en principaltyp och ange ett principalvärde.</value></data><data name="Principal is too long." xml:space="preserve"><value>Principalen är för lång.</value></data><data name="The role could not be deleted." xml:space="preserve"><value>Rollen kunde inte tas bort.</value></data><data name="ExampleServiceAppModule.Operators" xml:space="preserve"><value>ExampleServiceAppModule.Operators</value></data><data name="DOMAIN\User" xml:space="preserve"><value>DOMAIN\User</value></data><data name="DOMAIN\Group" xml:space="preserve"><value>DOMAIN\Group</value></data><data name="svc-omp-hostagent" xml:space="preserve"><value>svc-omp-hostagent</value></data><data name="Examples:" xml:space="preserve"><value>Exempel:</value></data><data name="Select permission to add." xml:space="preserve"><value>Välj en behörighet att lägga till.</value></data><data name="Update dependent references first." xml:space="preserve"><value>Uppdatera beroende referenser först.</value></data><data name="Architecture" xml:space="preserve"><value>Arkitektur</value></data><data name="Host template" xml:space="preserve"><value>Värdmall</value></data><data name="Allowed characters: letters, digits, dot, dash and underscore." xml:space="preserve"><value>Tillåtna tecken: bokstäver, siffror, punkt, bindestreck och understreck.</value></data><data name="Topology detail pages for InstanceTemplateHosts, InstanceTemplateModuleInstances and InstanceTemplateAppInstances." xml:space="preserve"><value>Detaljsidor för topologi för InstanceTemplateHosts, InstanceTemplateModuleInstances och InstanceTemplateAppInstances.</value></data><data name="Use a stable role name, for example" xml:space="preserve"><value>Använd ett stabilt rollnamn, till exempel</value></data><data name="Environment" xml:space="preserve"><value>Miljö</value></data><data name="Host deployment assignments" xml:space="preserve"><value>Tilldelningar för värddistribution</value></data><data name="Host deployments" xml:space="preserve"><value>Värddistributioner</value></data><data name="Linux" xml:space="preserve"><value>Linux</value></data><data name="Windows" xml:space="preserve"><value>Windows</value></data><data name="macOS" xml:space="preserve"><value>macOS</value></data><data name="arm64" xml:space="preserve"><value>arm64</value></data><data name="x64" xml:space="preserve"><value>x64</value></data><data name="x86" xml:space="preserve"><value>x86</value></data><data name="Artifacts are deployable outputs of an app definition. Keep the artifact metadata precise so app instances can reference the right build." xml:space="preserve"><value>Artefakter är distribuerbara utdata från en appdefinition. Håll artefaktmetadata precisa så att appinstanser kan referera till rätt bygge.</value></data><data name="Use a known package type when possible so later deployment automation can behave predictably." xml:space="preserve"><value>Använd en känd paketeringstyp när det är möjligt så att senare distributionsautomatisering kan bete sig förutsägbart.</value></data><data name="Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow." xml:space="preserve"><value>Distributionsposter spårar utrullningsbegäranden och körningsstatus. De hålls utanför det huvudsakliga manuella topologiflödet.</value></data><data name="Permissions are stable capability names used by roles and apps. Prefer precise names that do not require frequent renaming." xml:space="preserve"><value>Behörigheter är stabila förmågenamn som används av roller och appar. Föredra precisa namn som inte kräver täta namnbyten.</value></data><data name="Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable." xml:space="preserve"><value>Roller är den huvudsakliga redigeringsytan för RBAC. Lägg till behörigheter och principaler här så att åtkomsten förblir grupperad och spårbar.</value></data><data name="These permissions are granted whenever the role is resolved for a user or service identity." xml:space="preserve"><value>Dessa behörigheter beviljas när rollen löses för en användare eller tjänsteidentitet.</value></data><data name="These pages are separated from the main admin workflow because they belong to template-driven rollout, deployment planning and future HostAgent automation. For manual setup, start with instances, hosts, modules, apps and artifacts." xml:space="preserve"><value>Dessa sidor är separerade från det huvudsakliga administrationsflödet eftersom de hör till mallstyrd utrullning, distributionsplanering och framtida HostAgent-automatisering. För manuell uppsättning börjar du med instanser, värdar, moduler, appar och artefakter.</value></data><data name="Assignments connect hosts to deployment planning. This is intentionally separated from the main manual admin workflow." xml:space="preserve"><value>Tilldelningar kopplar värdar till distributionsplanering. Detta är avsiktligt separerat från det huvudsakliga manuella administrationsflödet.</value></data><data name="HostDeploymentAssignments.Title" xml:space="preserve"><value>Tilldelningar för värddistribution</value></data><data name="HostDeploymentAssignments.Lede" xml:space="preserve"><value>Tilldelningar kopplar värdar till distributionsplanering. Detta är avsiktligt separerat från det huvudsakliga manuella administrationsflödet.</value></data><data name="HostDeployments.Title" xml:space="preserve"><value>Värddistributioner</value></data><data name="HostDeployments.Lede" xml:space="preserve"><value>Distributionsposter spårar utrullningsbegäranden och körningsstatus. De hålls utanför det huvudsakliga manuella topologiflödet.</value></data><data name="More" xml:space="preserve"><value>Mer</value><comment>Compact portal top-bar overflow toggle.</comment></data></root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Portal" xml:space="preserve">
+    <value>Portal</value>
+  </data>
+  <data name="Home" xml:space="preserve">
+    <value>Hem</value>
+  </data>
+  <data name="Admin" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="Instances" xml:space="preserve">
+    <value>Instanser</value>
+  </data>
+  <data name="Hosts" xml:space="preserve">
+    <value>Värdar</value>
+  </data>
+  <data name="Modules" xml:space="preserve">
+    <value>Moduler</value>
+  </data>
+  <data name="Apps" xml:space="preserve">
+    <value>Appar</value>
+  </data>
+  <data name="Artifacts" xml:space="preserve">
+    <value>Artefakter</value>
+  </data>
+  <data name="Automation" xml:space="preserve">
+    <value>Automatisering</value>
+  </data>
+  <data name="RBAC" xml:space="preserve">
+    <value>RBAC</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Språk</value>
+  </data>
+  <data name="Swedish" xml:space="preserve">
+    <value>Svenska</value>
+  </data>
+  <data name="English" xml:space="preserve">
+    <value>Engelska</value>
+  </data>
+  <data name="Overview" xml:space="preserve">
+    <value>Översikt</value>
+  </data>
+  <data name="Configurations" xml:space="preserve">
+    <value>Konfigurationer</value>
+  </data>
+  <data name="Example Web App Module" xml:space="preserve">
+    <value>Exempelmodul för webbapp</value>
+  </data>
+  <data name="Example module" xml:space="preserve">
+    <value>Exempelmodul</value>
+  </data>
+  <data name="OMP Portal" xml:space="preserve">
+    <value>OMP-portalen</value>
+  </data>
+  <data name="This portal is the shared entry point for an OMP instance." xml:space="preserve">
+    <value>Den här portalen är den gemensamma ingången för en OMP-instans.</value>
+  </data>
+  <data name="Current user" xml:space="preserve">
+    <value>Aktuell användare</value>
+  </data>
+  <data name="Portal admin" xml:space="preserve">
+    <value>Portaladministratör</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Ja</value>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>Nej</value>
+  </data>
+  <data name="Available OMP web app instances" xml:space="preserve">
+    <value>Tillgängliga OMP-webbappsinstanser</value>
+  </data>
+  <data name="No accessible web app instances are currently registered." xml:space="preserve">
+    <value>Det finns för närvarande inga åtkomliga webbappsinstanser registrerade.</value>
+  </data>
+  <data name="Display name" xml:space="preserve">
+    <value>Visningsnamn</value>
+  </data>
+  <data name="App instance key" xml:space="preserve">
+    <value>Appinstansnyckel</value>
+  </data>
+  <data name="App key" xml:space="preserve">
+    <value>Appnyckel</value>
+  </data>
+  <data name="Route" xml:space="preserve">
+    <value>Route</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>Beskrivning</value>
+  </data>
+  <data name="Administration" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="OMP admin overview" xml:space="preserve">
+    <value>Översikt för OMP-admin</value>
+  </data>
+  <data name="The admin area is split between manual core administration and advanced automation. For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts. Template- and deployment-driven rollout lives under Automation." xml:space="preserve">
+    <value>Adminområdet är uppdelat mellan manuell kärnadministration och avancerad automatisering. För manuell uppsättning bör fokus ligga på instanser, värdar, moduler, appar, appinstanser och artefakter. Mall- och distributionsdriven utrullning finns under Automatisering.</value>
+  </data>
+  <data name="Module definitions" xml:space="preserve">
+    <value>Moduldefinitioner</value>
+  </data>
+  <data name="Module instances" xml:space="preserve">
+    <value>Modulinstanser</value>
+  </data>
+  <data name="App definitions" xml:space="preserve">
+    <value>Appdefinitioner</value>
+  </data>
+  <data name="App instances" xml:space="preserve">
+    <value>Appinstanser</value>
+  </data>
+  <data name="Manual core administration" xml:space="preserve">
+    <value>Manuell kärnadministration</value>
+  </data>
+  <data name="These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation." xml:space="preserve">
+    <value>Dessa sidor är huvudflödet när en OMP-instans sätts upp och underhålls utan HostAgent-automatisering.</value>
+  </data>
+  <data name="Advanced automation" xml:space="preserve">
+    <value>Avancerad automatisering</value>
+  </data>
+  <data name="Template topology, deployment assignments and deployment tracking are separated from the main workflow until the HostAgent path is more complete." xml:space="preserve">
+    <value>Malltopologi, tilldelningar av distributioner och distributionsspårning är separerade från huvudflödet tills HostAgent-spåret är mer komplett.</value>
+  </data>
+  <data name="Open automation area" xml:space="preserve">
+    <value>Öppna automatiseringsområdet</value>
+  </data>
+  <data name="Security and access" xml:space="preserve">
+    <value>Säkerhet och åtkomst</value>
+  </data>
+  <data name="Manage admin permissions and role assignments separately from topology and runtime data." xml:space="preserve">
+    <value>Hantera administratörsbehörigheter och rolltilldelningar separat från topologi- och körtidsdata.</value>
+  </data>
+  <data name="Open RBAC" xml:space="preserve">
+    <value>Öppna RBAC</value>
+  </data>
+  <data name="Neutral reference module for web flows in OMP. The page shows a module overview and links onward to the module's configurations." xml:space="preserve">
+    <value>Neutral referensmodul för webbflöden i OMP. Sidan visar en modulöversikt och länkar vidare till modulens konfigurationer.</value>
+  </data>
+  <data name="Module key" xml:space="preserve">
+    <value>Modulnyckel</value>
+  </data>
+  <data name="Schema" xml:space="preserve">
+    <value>Schema</value>
+  </data>
+  <data name="Active configurations" xml:space="preserve">
+    <value>Aktiva konfigurationer</value>
+  </data>
+  <data name="Next step" xml:space="preserve">
+    <value>Nästa steg</value>
+  </data>
+  <data name="Continue to the configuration view to review or update the module's current sample configurations." xml:space="preserve">
+    <value>Gå vidare till konfigurationsvyn för att granska eller uppdatera modulens aktuella exempelkonfigurationer.</value>
+  </data>
+  <data name="Open configurations" xml:space="preserve">
+    <value>Öppna konfigurationer</value>
+  </data>
+  <data name="Configurations for Example Web App Module. These values are used by the example module and can be edited without leaving the module interface." xml:space="preserve">
+    <value>Konfigurationer för Example Web App Module. Dessa värden används av exempelmodulen och kan redigeras utan att lämna modulgränssnittet.</value>
+  </data>
+  <data name="No configurations were found." xml:space="preserve">
+    <value>Inga konfigurationer hittades.</value>
+  </data>
+  <data name="Created UTC" xml:space="preserve">
+    <value>Skapad UTC</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Redigera</value>
+  </data>
+  <data name="Edit configuration" xml:space="preserve">
+    <value>Redigera konfiguration</value>
+  </data>
+  <data name="Update comment and JSON content for the selected configuration." xml:space="preserve">
+    <value>Uppdatera kommentar och JSON-innehåll för den valda konfigurationen.</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Spara</value>
+  </data>
+  <data name="Back to configurations" xml:space="preserve">
+    <value>Tillbaka till konfigurationer</value>
+  </data>
+  <data name="Edit host" xml:space="preserve">
+    <value>Redigera värd</value>
+  </data>
+  <data name="Create host" xml:space="preserve">
+    <value>Skapa värd</value>
+  </data>
+  <data name="Host created." xml:space="preserve">
+    <value>Värden skapades.</value>
+  </data>
+  <data name="Host updated." xml:space="preserve">
+    <value>Värden uppdaterades.</value>
+  </data>
+  <data name="Host deleted." xml:space="preserve">
+    <value>Värden togs bort.</value>
+  </data>
+  <data name="Roles" xml:space="preserve">
+    <value>Roller</value>
+  </data>
+  <data name="Create role" xml:space="preserve">
+    <value>Skapa roll</value>
+  </data>
+  <data name="Edit role" xml:space="preserve">
+    <value>Redigera roll</value>
+  </data>
+  <data name="Role created." xml:space="preserve">
+    <value>Rollen skapades.</value>
+  </data>
+  <data name="Role updated." xml:space="preserve">
+    <value>Rollen uppdaterades.</value>
+  </data>
+  <data name="Permission added to role." xml:space="preserve">
+    <value>Behörigheten lades till i rollen.</value>
+  </data>
+  <data name="Permission removed from role." xml:space="preserve">
+    <value>Behörigheten togs bort från rollen.</value>
+  </data>
+  <data name="Principal added to role." xml:space="preserve">
+    <value>Principalen lades till i rollen.</value>
+  </data>
+  <data name="Principal removed from role." xml:space="preserve">
+    <value>Principalen togs bort från rollen.</value>
+  </data>
+  <data name="Role deleted." xml:space="preserve">
+    <value>Rollen togs bort.</value>
+  </data>
+  <data name="Create permission" xml:space="preserve">
+    <value>Skapa behörighet</value>
+  </data>
+  <data name="Edit permission" xml:space="preserve">
+    <value>Redigera behörighet</value>
+  </data>
+  <data name="Permission created." xml:space="preserve">
+    <value>Behörigheten skapades.</value>
+  </data>
+  <data name="Permission updated." xml:space="preserve">
+    <value>Behörigheten uppdaterades.</value>
+  </data>
+  <data name="Permission deleted." xml:space="preserve">
+    <value>Behörigheten togs bort.</value>
+  </data>
+  <data name="Permissions" xml:space="preserve">
+    <value>Behörigheter</value>
+  </data>
+  <data name="Create app" xml:space="preserve">
+    <value>Skapa app</value>
+  </data>
+  <data name="Edit app" xml:space="preserve">
+    <value>Redigera app</value>
+  </data>
+  <data name="App created." xml:space="preserve">
+    <value>Appen skapades.</value>
+  </data>
+  <data name="App updated." xml:space="preserve">
+    <value>Appen uppdaterades.</value>
+  </data>
+  <data name="App deleted." xml:space="preserve">
+    <value>Appen togs bort.</value>
+  </data>
+  <data name="Host templates" xml:space="preserve">
+    <value>Värdmallar</value>
+  </data>
+  <data name="Create module instance" xml:space="preserve">
+    <value>Skapa modulinstans</value>
+  </data>
+  <data name="Edit module instance" xml:space="preserve">
+    <value>Redigera modulinstans</value>
+  </data>
+  <data name="Module instance created." xml:space="preserve">
+    <value>Modulinstansen skapades.</value>
+  </data>
+  <data name="Module instance updated." xml:space="preserve">
+    <value>Modulinstansen uppdaterades.</value>
+  </data>
+  <data name="Module instance deleted." xml:space="preserve">
+    <value>Modulinstansen togs bort.</value>
+  </data>
+  <data name="Edit instance" xml:space="preserve">
+    <value>Redigera instans</value>
+  </data>
+  <data name="Create instance" xml:space="preserve">
+    <value>Skapa instans</value>
+  </data>
+  <data name="Instance created." xml:space="preserve">
+    <value>Instansen skapades.</value>
+  </data>
+  <data name="Instance updated." xml:space="preserve">
+    <value>Instansen uppdaterades.</value>
+  </data>
+  <data name="Instance deleted." xml:space="preserve">
+    <value>Instansen togs bort.</value>
+  </data>
+  <data name="Create module" xml:space="preserve">
+    <value>Skapa modul</value>
+  </data>
+  <data name="Edit module" xml:space="preserve">
+    <value>Redigera modul</value>
+  </data>
+  <data name="Module created." xml:space="preserve">
+    <value>Modulen skapades.</value>
+  </data>
+  <data name="Module updated." xml:space="preserve">
+    <value>Modulen uppdaterades.</value>
+  </data>
+  <data name="Module deleted." xml:space="preserve">
+    <value>Modulen togs bort.</value>
+  </data>
+  <data name="Instance templates" xml:space="preserve">
+    <value>Instansmallar</value>
+  </data>
+  <data name="Create app instance" xml:space="preserve">
+    <value>Skapa appinstans</value>
+  </data>
+  <data name="Edit app instance" xml:space="preserve">
+    <value>Redigera appinstans</value>
+  </data>
+  <data name="App instance created." xml:space="preserve">
+    <value>Appinstansen skapades.</value>
+  </data>
+  <data name="App instance updated." xml:space="preserve">
+    <value>Appinstansen uppdaterades.</value>
+  </data>
+  <data name="App instance deleted." xml:space="preserve">
+    <value>Appinstansen togs bort.</value>
+  </data>
+  <data name="Create artifact" xml:space="preserve">
+    <value>Skapa artefakt</value>
+  </data>
+  <data name="Edit artifact" xml:space="preserve">
+    <value>Redigera artefakt</value>
+  </data>
+  <data name="Artifact created." xml:space="preserve">
+    <value>Artefakten skapades.</value>
+  </data>
+  <data name="Artifact updated." xml:space="preserve">
+    <value>Artefakten uppdaterades.</value>
+  </data>
+  <data name="Artifact deleted." xml:space="preserve">
+    <value>Artefakten togs bort.</value>
+  </data>
+  <data name="Configuration updated." xml:space="preserve">
+    <value>Konfigurationen uppdaterades.</value>
+  </data>
+  <data name="Allowed" xml:space="preserve">
+    <value>Tillåten</value>
+  </data>
+  <data name="App" xml:space="preserve">
+    <value>App</value>
+  </data>
+  <data name="App definition" xml:space="preserve">
+    <value>Appdefinition</value>
+  </data>
+  <data name="Artifact" xml:space="preserve">
+    <value>Artefakt</value>
+  </data>
+  <data name="Comment" xml:space="preserve">
+    <value>Kommentar</value>
+  </data>
+  <data name="Config JSON" xml:space="preserve">
+    <value>Konfig JSON</value>
+  </data>
+  <data name="ConfigId" xml:space="preserve">
+    <value>ConfigId</value>
+  </data>
+  <data name="Desired state" xml:space="preserve">
+    <value>Önskat läge</value>
+  </data>
+  <data name="Enabled" xml:space="preserve">
+    <value>Aktiverad</value>
+  </data>
+  <data name="Expected client IP" xml:space="preserve">
+    <value>Förväntad klient-IP</value>
+  </data>
+  <data name="Expected client host" xml:space="preserve">
+    <value>Förväntad klientvärd</value>
+  </data>
+  <data name="Expected login" xml:space="preserve">
+    <value>Förväntad inloggning</value>
+  </data>
+  <data name="Host" xml:space="preserve">
+    <value>Värd</value>
+  </data>
+  <data name="Host key" xml:space="preserve">
+    <value>Värdnyckel</value>
+  </data>
+  <data name="Install path" xml:space="preserve">
+    <value>Installationssökväg</value>
+  </data>
+  <data name="Installation name" xml:space="preserve">
+    <value>Installationsnamn</value>
+  </data>
+  <data name="Instance" xml:space="preserve">
+    <value>Instans</value>
+  </data>
+  <data name="Instance key" xml:space="preserve">
+    <value>Instansnyckel</value>
+  </data>
+  <data name="Instance template" xml:space="preserve">
+    <value>Instansmall</value>
+  </data>
+  <data name="Module" xml:space="preserve">
+    <value>Modul</value>
+  </data>
+  <data name="Module instance" xml:space="preserve">
+    <value>Modulinstans</value>
+  </data>
+  <data name="Module instance key" xml:space="preserve">
+    <value>Modulinstansnyckel</value>
+  </data>
+  <data name="Module type" xml:space="preserve">
+    <value>Modultyp</value>
+  </data>
+  <data name="OS family" xml:space="preserve">
+    <value>OS-familj</value>
+  </data>
+  <data name="OS version" xml:space="preserve">
+    <value>OS-version</value>
+  </data>
+  <data name="Package type" xml:space="preserve">
+    <value>Paketeringstyp</value>
+  </data>
+  <data name="Permission name" xml:space="preserve">
+    <value>Behörighetsnamn</value>
+  </data>
+  <data name="Public URL" xml:space="preserve">
+    <value>Publik URL</value>
+  </data>
+  <data name="Relative path" xml:space="preserve">
+    <value>Relativ sökväg</value>
+  </data>
+  <data name="Role name" xml:space="preserve">
+    <value>Rollnamn</value>
+  </data>
+  <data name="Route path" xml:space="preserve">
+    <value>Route-sökväg</value>
+  </data>
+  <data name="SHA-256" xml:space="preserve">
+    <value>SHA-256</value>
+  </data>
+  <data name="Schema name" xml:space="preserve">
+    <value>Schemanamn</value>
+  </data>
+  <data name="Sort order" xml:space="preserve">
+    <value>Sorteringsordning</value>
+  </data>
+  <data name="Target name" xml:space="preserve">
+    <value>Målnamn</value>
+  </data>
+  <data name="App type" xml:space="preserve">
+    <value>Apptyp</value>
+  </data>
+  <data name="Set Host base URL to make this route clickable from the Portal." xml:space="preserve">
+    <value>Ange värdens bas-URL för att göra den här routen klickbar från portalen.</value>
+  </data>
+  <data name="Base URL" xml:space="preserve">
+    <value>Bas-URL</value>
+  </data>
+  <data name="Payload JSON" xml:space="preserve">
+    <value>Payload-JSON</value>
+  </data>
+  <data name="Request type" xml:space="preserve">
+    <value>Begärandetyp</value>
+  </data>
+  <data name="ArtifactId" xml:space="preserve">
+    <value>ArtifactId</value>
+  </data>
+  <data name="Manual core" xml:space="preserve">
+    <value>Manuell kärna</value>
+  </data>
+  <data name="Definitions" xml:space="preserve">
+    <value>Definitioner</value>
+  </data>
+  <data name="Advanced admin" xml:space="preserve">
+    <value>Avancerad admin</value>
+  </data>
+  <data name="Automation and templates" xml:space="preserve">
+    <value>Automatisering och mallar</value>
+  </data>
+  <data name="Template model" xml:space="preserve">
+    <value>Mallmodell</value>
+  </data>
+  <data name="Use these pages when defining desired topology for automated rollout." xml:space="preserve">
+    <value>Använd dessa sidor när du definierar önskad topologi för automatiserad utrullning.</value>
+  </data>
+  <data name="Deployment planning" xml:space="preserve">
+    <value>Distributionsplanering</value>
+  </data>
+  <data name="These pages are related to deployment orchestration and future HostAgent-driven execution." xml:space="preserve">
+    <value>Dessa sidor hör ihop med distributionsorkestrering och framtida HostAgent-driven körning.</value>
+  </data>
+  <data name="Current counts" xml:space="preserve">
+    <value>Aktuella antal</value>
+  </data>
+  <data name="No host deployment assignments found." xml:space="preserve">
+    <value>Inga tilldelningar för värddistribution hittades.</value>
+  </data>
+  <data name="Assigned by" xml:space="preserve">
+    <value>Tilldelad av</value>
+  </data>
+  <data name="Assigned UTC" xml:space="preserve">
+    <value>Tilldelad UTC</value>
+  </data>
+  <data name="Active" xml:space="preserve">
+    <value>Aktiv</value>
+  </data>
+  <data name="Inactive" xml:space="preserve">
+    <value>Inaktiv</value>
+  </data>
+  <data name="No host deployments found." xml:space="preserve">
+    <value>Inga värddistributioner hittades.</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Requested by" xml:space="preserve">
+    <value>Begärd av</value>
+  </data>
+  <data name="Requested UTC" xml:space="preserve">
+    <value>Begärd UTC</value>
+  </data>
+  <data name="Completed UTC" xml:space="preserve">
+    <value>Slutförd UTC</value>
+  </data>
+  <data name="Disabled" xml:space="preserve">
+    <value>Inaktiverad</value>
+  </data>
+  <data name="Blocked" xml:space="preserve">
+    <value>Blockerad</value>
+  </data>
+  <data name="Actions" xml:space="preserve">
+    <value>Åtgärder</value>
+  </data>
+  <data name="Type" xml:space="preserve">
+    <value>Typ</value>
+  </data>
+  <data name="Version" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="Target" xml:space="preserve">
+    <value>Mål</value>
+  </data>
+  <data name="Last seen" xml:space="preserve">
+    <value>Senast sedd</value>
+  </data>
+  <data name="OS" xml:space="preserve">
+    <value>OS</value>
+  </data>
+  <data name="Not set" xml:space="preserve">
+    <value>Ej satt</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Namn</value>
+  </data>
+  <data name="Permission" xml:space="preserve">
+    <value>Behörighet</value>
+  </data>
+  <data name="Principal" xml:space="preserve">
+    <value>Principal</value>
+  </data>
+  <data name="Principals" xml:space="preserve">
+    <value>Principaler</value>
+  </data>
+  <data name="Remove" xml:space="preserve">
+    <value>Ta bort</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Ta bort</value>
+  </data>
+  <data name="App definitions belong to modules and describe what can be deployed. Routes, artifacts, installation paths and runtime policy belong to app instances instead of app definitions." xml:space="preserve">
+    <value>Appdefinitioner hör till moduler och beskriver vad som kan distribueras. Routes, artefakter, installationssökvägar och körningspolicy hör i stället till appinstanser.</value>
+  </data>
+  <data name="Create app definition" xml:space="preserve">
+    <value>Skapa appdefinition</value>
+  </data>
+  <data name="Edit app definition" xml:space="preserve">
+    <value>Redigera appdefinition</value>
+  </data>
+  <data name="Select module" xml:space="preserve">
+    <value>Välj modul</value>
+  </data>
+  <data name="Choose how the platform should think about this definition." xml:space="preserve">
+    <value>Välj hur plattformen ska betrakta den här definitionen.</value>
+  </data>
+  <data name="Save app" xml:space="preserve">
+    <value>Spara app</value>
+  </data>
+  <data name="Back to apps" xml:space="preserve">
+    <value>Tillbaka till appar</value>
+  </data>
+  <data name="Delete this app definition? Related artifacts and app instances must be removed first." xml:space="preserve">
+    <value>Ta bort den här appdefinitionen? Relaterade artefakter och appinstanser måste tas bort först.</value>
+  </data>
+  <data name="Delete is blocked while artifacts, app instances or template rows still reference the app." xml:space="preserve">
+    <value>Borttagning blockeras så länge artefakter, appinstanser eller mallrader fortfarande refererar till appen.</value>
+  </data>
+  <data name="Delete app" xml:space="preserve">
+    <value>Ta bort app</value>
+  </data>
+  <data name="No app definitions found." xml:space="preserve">
+    <value>Inga appdefinitioner hittades.</value>
+  </data>
+  <data name="App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance." xml:space="preserve">
+    <value>Appinstanser är OMP:s centrum för körning. Den här sidan hanterar värdplacering, artefaktval, routing och verifieringspolicy för en konkret app i en OMP-instans.</value>
+  </data>
+  <data name="Select module instance" xml:space="preserve">
+    <value>Välj modulinstans</value>
+  </data>
+  <data name="Start by choosing the module instance. Host and app selections are validated against it." xml:space="preserve">
+    <value>Börja med att välja modulinstansen. Val av värd och app valideras mot den.</value>
+  </data>
+  <data name="Select app" xml:space="preserve">
+    <value>Välj app</value>
+  </data>
+  <data name="The chosen app must belong to the same module definition as the selected module instance." xml:space="preserve">
+    <value>Den valda appen måste tillhöra samma moduldefinition som den valda modulinstansen.</value>
+  </data>
+  <data name="No host / not pinned" xml:space="preserve">
+    <value>Ingen värd / inte låst</value>
+  </data>
+  <data name="If set, the host must belong to the same instance as the selected module instance." xml:space="preserve">
+    <value>Om satt måste värden tillhöra samma instans som den valda modulinstansen.</value>
+  </data>
+  <data name="No artifact selected" xml:space="preserve">
+    <value>Ingen artefakt vald</value>
+  </data>
+  <data name="If set, the artifact must belong to the selected app definition." xml:space="preserve">
+    <value>Om satt måste artefakten tillhöra den valda appdefinitionen.</value>
+  </data>
+  <data name="Use either an absolute URL such as https://www.google.com/ or a host-root-relative path such as app01, /app01, app01/ or /app01/. Relative values are resolved directly from the selected host root without any extra portal prefix." xml:space="preserve">
+    <value>Använd antingen en absolut URL som https://www.google.com/ eller en värdrot-relativ sökväg som app01, /app01, app01/ eller /app01/. Relativa värden löses direkt från den valda värdrotens bas utan extra portalprefix.</value>
+  </data>
+  <data name="Optional absolute URL when the app is externally reachable." xml:space="preserve">
+    <value>Valfri absolut URL när appen är åtkomlig externt.</value>
+  </data>
+  <data name="Physical install location on host, if relevant." xml:space="preserve">
+    <value>Fysisk installationsplats på värden, om relevant.</value>
+  </data>
+  <data name="Friendly install slot or service name." xml:space="preserve">
+    <value>Vänligt installationsslot- eller tjänstnamn.</value>
+  </data>
+  <data name="Module-owned config identifier. Leave empty when not used." xml:space="preserve">
+    <value>Modulägd konfigurationsidentifierare. Lämna tom när den inte används.</value>
+  </data>
+  <data name="Controls what the platform expects this runtime instance to do." xml:space="preserve">
+    <value>Styr vad plattformen förväntar sig att denna körinstans ska göra.</value>
+  </data>
+  <data name="Optional runtime identity that is expected to report heartbeat." xml:space="preserve">
+    <value>Valfri köridentitet som förväntas rapportera heartbeat.</value>
+  </data>
+  <data name="Save app instance" xml:space="preserve">
+    <value>Spara appinstans</value>
+  </data>
+  <data name="Back to app instances" xml:space="preserve">
+    <value>Tillbaka till appinstanser</value>
+  </data>
+  <data name="Delete this app instance?" xml:space="preserve">
+    <value>Ta bort den här appinstansen?</value>
+  </data>
+  <data name="Delete removes the runtime row. Make sure no external system still relies on this app instance key." xml:space="preserve">
+    <value>Borttagning tar bort körningsraden. Säkerställ att inget externt system fortfarande är beroende av den här appinstansnyckeln.</value>
+  </data>
+  <data name="Delete app instance" xml:space="preserve">
+    <value>Ta bort appinstans</value>
+  </data>
+  <data name="No app instances found." xml:space="preserve">
+    <value>Inga appinstanser hittades.</value>
+  </data>
+  <data name="Installation" xml:space="preserve">
+    <value>Installation</value>
+  </data>
+  <data name="Optional RID/target such as win-x64." xml:space="preserve">
+    <value>Valfri RID/målplattform som win-x64.</value>
+  </data>
+  <data name="Relative path inside your artifact repository or release output." xml:space="preserve">
+    <value>Relativ sökväg i ditt artefaktlager eller release-output.</value>
+  </data>
+  <data name="Optional checksum used for later integrity checks." xml:space="preserve">
+    <value>Valfri checksumma för senare integritetskontroller.</value>
+  </data>
+  <data name="Save artifact" xml:space="preserve">
+    <value>Spara artefakt</value>
+  </data>
+  <data name="Back to artifacts" xml:space="preserve">
+    <value>Tillbaka till artefakter</value>
+  </data>
+  <data name="Delete this artifact? App instances depending on it must be updated first." xml:space="preserve">
+    <value>Ta bort den här artefakten? Appinstanser som beror på den måste uppdateras först.</value>
+  </data>
+  <data name="Delete is blocked while app instances still point at this artifact." xml:space="preserve">
+    <value>Borttagning blockeras så länge appinstanser fortfarande pekar på denna artefakt.</value>
+  </data>
+  <data name="Delete artifact" xml:space="preserve">
+    <value>Ta bort artefakt</value>
+  </data>
+  <data name="No artifacts found." xml:space="preserve">
+    <value>Inga artefakter hittades.</value>
+  </data>
+  <data name="Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages." xml:space="preserve">
+    <value>Värdar representerar verkliga distributionsmål i en OMP-instans. För manuell uppsättning är detta en av de viktigaste kärnsidorna.</value>
+  </data>
+  <data name="Select instance" xml:space="preserve">
+    <value>Välj instans</value>
+  </data>
+  <data name="Every host belongs to exactly one OMP instance." xml:space="preserve">
+    <value>Varje värd tillhör exakt en OMP-instans.</value>
+  </data>
+  <data name="Logical host identity used by OMP. Keep it short and stable." xml:space="preserve">
+    <value>Logisk värdidentitet som används av OMP. Håll den kort och stabil.</value>
+  </data>
+  <data name="Optional human-friendly label." xml:space="preserve">
+    <value>Valfri användarvänlig etikett.</value>
+  </data>
+  <data name="Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath. Enter only protocol, host and optional port." xml:space="preserve">
+    <value>Valfri absolut bas-URL för denna värd. Portalen använder den när en appinstans har en relativ RoutePath. Ange endast protokoll, värd och valfri port.</value>
+  </data>
+  <data name="Free text for the observed or intended OS version." xml:space="preserve">
+    <value>Fri text för observerad eller avsedd OS-version.</value>
+  </data>
+  <data name="Save host" xml:space="preserve">
+    <value>Spara värd</value>
+  </data>
+  <data name="Back to hosts" xml:space="preserve">
+    <value>Tillbaka till värdar</value>
+  </data>
+  <data name="Delete this host? App instances using it must be moved or removed first." xml:space="preserve">
+    <value>Ta bort den här värden? Appinstanser som använder den måste flyttas eller tas bort först.</value>
+  </data>
+  <data name="Host deletion is blocked when app instances or deployments still reference the host." xml:space="preserve">
+    <value>Borttagning av värd blockeras när appinstanser eller distributioner fortfarande refererar till värden.</value>
+  </data>
+  <data name="Delete host" xml:space="preserve">
+    <value>Ta bort värd</value>
+  </data>
+  <data name="No hosts found." xml:space="preserve">
+    <value>Inga värdar hittades.</value>
+  </data>
+  <data name="Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation." xml:space="preserve">
+    <value>Värdar representerar konkreta körningsmål inom en OMP-instans. Appinstanser kopplas till värdar för faktisk placering och observation.</value>
+  </data>
+  <data name="Instances are the top-level OMP environments. Templates are optional for manual administration and mainly belong to future automation." xml:space="preserve">
+    <value>Instanser är OMP:s miljöer på högsta nivå. Mallar är valfria för manuell administration och hör främst till framtida automatisering.</value>
+  </data>
+  <data name="Stable technical key used in links, config and references." xml:space="preserve">
+    <value>Stabil teknisk nyckel som används i länkar, konfiguration och referenser.</value>
+  </data>
+  <data name="Human-readable name shown in Portal." xml:space="preserve">
+    <value>Människoläsbart namn som visas i portalen.</value>
+  </data>
+  <data name="Optional context for operators and maintainers." xml:space="preserve">
+    <value>Valfri kontext för operatörer och förvaltare.</value>
+  </data>
+  <data name="None / manual setup" xml:space="preserve">
+    <value>Ingen / manuell uppsättning</value>
+  </data>
+  <data name="Leave empty for a purely manual instance. Template linkage can be added later." xml:space="preserve">
+    <value>Lämna tomt för en helt manuell instans. Mallkoppling kan läggas till senare.</value>
+  </data>
+  <data name="Save instance" xml:space="preserve">
+    <value>Spara instans</value>
+  </data>
+  <data name="Back to instances" xml:space="preserve">
+    <value>Tillbaka till instanser</value>
+  </data>
+  <data name="Delete this instance? This only works when no dependent rows remain." xml:space="preserve">
+    <value>Ta bort den här instansen? Detta fungerar bara när inga beroende rader återstår.</value>
+  </data>
+  <data name="Delete is blocked by SQL if hosts, module instances or other dependent rows still reference this instance." xml:space="preserve">
+    <value>Borttagning blockeras av SQL om värdar, modulinstanser eller andra beroende rader fortfarande refererar till den här instansen.</value>
+  </data>
+  <data name="Delete instance" xml:space="preserve">
+    <value>Ta bort instans</value>
+  </data>
+  <data name="No instances found." xml:space="preserve">
+    <value>Inga instanser hittades.</value>
+  </data>
+  <data name="OMP instances are the top-level environments. Instance templates remain optional and primarily belong to the automation workflow." xml:space="preserve">
+    <value>OMP-instansser är miljöerna på högsta nivå. Instansmallar är fortfarande valfria och hör främst till automatiseringsflödet.</value>
+  </data>
+  <data name="Modules are definitions. Keep runtime-specific values out of this page and use module instances or app instances for environment-specific configuration." xml:space="preserve">
+    <value>Moduler är definitioner. Håll körningsspecifika värden borta från denna sida och använd modulinstanser eller appinstanser för miljöspecifik konfiguration.</value>
+  </data>
+  <data name="Stable definition key used by apps and instance templates." xml:space="preserve">
+    <value>Stabil definitionsnyckel som används av appar och instansmallar.</value>
+  </data>
+  <data name="Pick the closest platform role. This is a definition-level classification." xml:space="preserve">
+    <value>Välj den plattformsroll som ligger närmast. Detta är en klassificering på definitionsnivå.</value>
+  </data>
+  <data name="Database schema owned by the module, when applicable." xml:space="preserve">
+    <value>Databasschema som ägs av modulen, när det är tillämpligt.</value>
+  </data>
+  <data name="Save module" xml:space="preserve">
+    <value>Spara modul</value>
+  </data>
+  <data name="Back to modules" xml:space="preserve">
+    <value>Tillbaka till moduler</value>
+  </data>
+  <data name="Delete this module? Related apps and instances must be removed first." xml:space="preserve">
+    <value>Ta bort den här modulen? Relaterade appar och instanser måste tas bort först.</value>
+  </data>
+  <data name="Deleting a module is only possible when dependent apps, module instances and template rows are already gone." xml:space="preserve">
+    <value>Det går bara att ta bort en modul när beroende appar, modulinstanser och mallrader redan är borta.</value>
+  </data>
+  <data name="Delete module" xml:space="preserve">
+    <value>Ta bort modul</value>
+  </data>
+  <data name="No modules found." xml:space="preserve">
+    <value>Inga moduler hittades.</value>
+  </data>
+  <data name="Module definitions are reusable building blocks. They do not describe placement or runtime state." xml:space="preserve">
+    <value>Moduldefinitioner är återanvändbara byggblock. De beskriver inte placering eller körningstillstånd.</value>
+  </data>
+  <data name="Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational." xml:space="preserve">
+    <value>Modulinstanser knyter en moduldefinition till en konkret OMP-instans. Det är här definitioner börjar bli operativa.</value>
+  </data>
+  <data name="Choose the module definition this module instance represents." xml:space="preserve">
+    <value>Välj den moduldefinition som denna modulinstans representerar.</value>
+  </data>
+  <data name="Save module instance" xml:space="preserve">
+    <value>Spara modulinstans</value>
+  </data>
+  <data name="Back to module instances" xml:space="preserve">
+    <value>Tillbaka till modulinstanser</value>
+  </data>
+  <data name="Delete this module instance? Related app instances must be removed first." xml:space="preserve">
+    <value>Ta bort den här modulinstansen? Relaterade appinstanser måste tas bort först.</value>
+  </data>
+  <data name="SQL blocks deletion while app instances or template mappings still depend on this row." xml:space="preserve">
+    <value>SQL blockerar borttagning så länge appinstanser eller mallkopplingar fortfarande beror på denna rad.</value>
+  </data>
+  <data name="Delete module instance" xml:space="preserve">
+    <value>Ta bort modulinstans</value>
+  </data>
+  <data name="No module instances found." xml:space="preserve">
+    <value>Inga modulinstanser hittades.</value>
+  </data>
+  <data name="Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances." xml:space="preserve">
+    <value>Modulinstanser binder moduldefinitioner till en specifik OMP-instans. Detta är det operativa lagret ovanför definitioner och under appinstanser.</value>
+  </data>
+  <data name="Host templates describe reusable host-level desired state for template-driven rollout." xml:space="preserve">
+    <value>Värdmallar beskriver återanvändbart önskat tillstånd på värdnivå för mallstyrd utrullning.</value>
+  </data>
+  <data name="No host templates found." xml:space="preserve">
+    <value>Inga värdmallar hittades.</value>
+  </data>
+  <data name="Template key" xml:space="preserve">
+    <value>Mallnyckel</value>
+  </data>
+  <data name="Instance templates belong to the future automation path. They describe desired topology rather than the manually managed live runtime." xml:space="preserve">
+    <value>Instansmallar hör till den framtida automatiseringsvägen. De beskriver önskad topologi snarare än den manuellt hanterade livekörningen.</value>
+  </data>
+  <data name="No instance templates found." xml:space="preserve">
+    <value>Inga instansmallar hittades.</value>
+  </data>
+  <data name="Manage roles, permissions and principal assignments from Portal instead of editing the database directly." xml:space="preserve">
+    <value>Hantera roller, behörigheter och principaltilldelningar från portalen i stället för att redigera databasen direkt.</value>
+  </data>
+  <data name="Named access bundles that can carry multiple permissions and principals." xml:space="preserve">
+    <value>Namngivna åtkomstpaket som kan bära flera behörigheter och principaler.</value>
+  </data>
+  <data name="Low-level capabilities granted to apps and portal areas." xml:space="preserve">
+    <value>Lågnivåförmågor som ges till appar och portalytor.</value>
+  </data>
+  <data name="Role administration" xml:space="preserve">
+    <value>Rolladministration</value>
+  </data>
+  <data name="Manage roles" xml:space="preserve">
+    <value>Hantera roller</value>
+  </data>
+  <data name="Create roles, update descriptions, assign permissions and attach principals." xml:space="preserve">
+    <value>Skapa roller, uppdatera beskrivningar, tilldela behörigheter och koppla principaler.</value>
+  </data>
+  <data name="Open roles" xml:space="preserve">
+    <value>Öppna roller</value>
+  </data>
+  <data name="Permission catalog" xml:space="preserve">
+    <value>Behörighetskatalog</value>
+  </data>
+  <data name="Manage permissions" xml:space="preserve">
+    <value>Hantera behörigheter</value>
+  </data>
+  <data name="Create permissions once and reuse them across roles and example modules." xml:space="preserve">
+    <value>Skapa behörigheter en gång och återanvänd dem mellan roller och exempelmoduler.</value>
+  </data>
+  <data name="Open permissions" xml:space="preserve">
+    <value>Öppna behörigheter</value>
+  </data>
+  <data name="Permissions are low-level capability names. Keep them stable and descriptive so roles remain understandable." xml:space="preserve">
+    <value>Behörigheter är namn på lågnivåförmågor. Håll dem stabila och beskrivande så att roller förblir begripliga.</value>
+  </data>
+  <data name="No permissions have been created yet." xml:space="preserve">
+    <value>Inga behörigheter har skapats ännu.</value>
+  </data>
+  <data name="Used by roles" xml:space="preserve">
+    <value>Används av roller</value>
+  </data>
+  <data name="Short explanation of who should receive this role." xml:space="preserve">
+    <value>Kort förklaring av vem som bör få den här rollen.</value>
+  </data>
+  <data name="Save role" xml:space="preserve">
+    <value>Spara roll</value>
+  </data>
+  <data name="Back to roles" xml:space="preserve">
+    <value>Tillbaka till roller</value>
+  </data>
+  <data name="Assigned permissions" xml:space="preserve">
+    <value>Tilldelade behörigheter</value>
+  </data>
+  <data name="No permissions assigned yet." xml:space="preserve">
+    <value>Inga behörigheter tilldelade ännu.</value>
+  </data>
+  <data name="Add permission" xml:space="preserve">
+    <value>Lägg till behörighet</value>
+  </data>
+  <data name="Select permission" xml:space="preserve">
+    <value>Välj behörighet</value>
+  </data>
+  <data name="Assigned principals" xml:space="preserve">
+    <value>Tilldelade principaler</value>
+  </data>
+  <data name="Bind users, groups or service identities to the role. Prefer groups where possible." xml:space="preserve">
+    <value>Knyt användare, grupper eller tjänsteidentiteter till rollen. Föredra grupper där det är möjligt.</value>
+  </data>
+  <data name="No principals assigned yet." xml:space="preserve">
+    <value>Inga principaler tilldelade ännu.</value>
+  </data>
+  <data name="Principal type" xml:space="preserve">
+    <value>Principaltyp</value>
+  </data>
+  <data name="Add principal" xml:space="preserve">
+    <value>Lägg till principal</value>
+  </data>
+  <data name="Delete this role? Linked role assignments will also be removed." xml:space="preserve">
+    <value>Ta bort den här rollen? Länkade rolltilldelningar tas också bort.</value>
+  </data>
+  <data name="Deleting a role removes all principal and permission links for that role." xml:space="preserve">
+    <value>Om en roll tas bort försvinner alla principal- och behörighetslänkar för den rollen.</value>
+  </data>
+  <data name="Delete role" xml:space="preserve">
+    <value>Ta bort roll</value>
+  </data>
+  <data name="Roles bundle permissions and principals. Use roles to keep direct principal management small and predictable." xml:space="preserve">
+    <value>Roller samlar behörigheter och principaler. Använd roller för att hålla direkt principalhantering liten och förutsägbar.</value>
+  </data>
+  <data name="No roles have been created yet." xml:space="preserve">
+    <value>Inga roller har skapats ännu.</value>
+  </data>
+  <data name="Describe the capability in business terms, not implementation details." xml:space="preserve">
+    <value>Beskriv förmågan i verksamhetstermer, inte implementeringsdetaljer.</value>
+  </data>
+  <data name="Used by roles:" xml:space="preserve">
+    <value>Används av roller:</value>
+  </data>
+  <data name="Save permission" xml:space="preserve">
+    <value>Spara behörighet</value>
+  </data>
+  <data name="Back to permissions" xml:space="preserve">
+    <value>Tillbaka till behörigheter</value>
+  </data>
+  <data name="Delete this permission? Role links will also be removed." xml:space="preserve">
+    <value>Ta bort den här behörigheten? Rolllänkar tas också bort.</value>
+  </data>
+  <data name="Deleting a permission removes it from all roles." xml:space="preserve">
+    <value>Om en behörighet tas bort försvinner den från alla roller.</value>
+  </data>
+  <data name="Delete permission" xml:space="preserve">
+    <value>Ta bort behörighet</value>
+  </data>
+  <data name="Danger zone" xml:space="preserve">
+    <value>Riskzon</value>
+  </data>
+  <data name="Web app" xml:space="preserve">
+    <value>Webbapp</value>
+  </data>
+  <data name="Service app" xml:space="preserve">
+    <value>Tjänsteapp</value>
+  </data>
+  <data name="Folder" xml:space="preserve">
+    <value>Mapp</value>
+  </data>
+  <data name="Zip" xml:space="preserve">
+    <value>Zip</value>
+  </data>
+  <data name="NuGet package" xml:space="preserve">
+    <value>NuGet-paket</value>
+  </data>
+  <data name="Unknown / unmanaged" xml:space="preserve">
+    <value>Okänd / ohanterad</value>
+  </data>
+  <data name="Enabled / should run" xml:space="preserve">
+    <value>Aktiverad / ska köras</value>
+  </data>
+  <data name="Stopped / should not run" xml:space="preserve">
+    <value>Stoppad / ska inte köras</value>
+  </data>
+  <data name="Development" xml:space="preserve">
+    <value>Utveckling</value>
+  </data>
+  <data name="Test" xml:space="preserve">
+    <value>Test</value>
+  </data>
+  <data name="Stage" xml:space="preserve">
+    <value>Steg</value>
+  </data>
+  <data name="Production" xml:space="preserve">
+    <value>Produktion</value>
+  </data>
+  <data name="Portal module" xml:space="preserve">
+    <value>Portalmodul</value>
+  </data>
+  <data name="Web app module" xml:space="preserve">
+    <value>Webbappmodul</value>
+  </data>
+  <data name="Host app module" xml:space="preserve">
+    <value>Värdappmodul</value>
+  </data>
+  <data name="User" xml:space="preserve">
+    <value>Användare</value>
+  </data>
+  <data name="Group" xml:space="preserve">
+    <value>Grupp</value>
+  </data>
+  <data name="ServiceAccount" xml:space="preserve">
+    <value>Tjänstkonto</value>
+  </data>
+  <data name="Select a module." xml:space="preserve">
+    <value>Välj en modul.</value>
+  </data>
+  <data name="Use a stable key with letters, digits, dash, underscore or dot." xml:space="preserve">
+    <value>Använd en stabil nyckel med bokstäver, siffror, bindestreck, understreck eller punkt.</value>
+  </data>
+  <data name="Select an app type." xml:space="preserve">
+    <value>Välj en apptyp.</value>
+  </data>
+  <data name="The app could not be saved." xml:space="preserve">
+    <value>Appen kunde inte sparas.</value>
+  </data>
+  <data name="The app could not be deleted." xml:space="preserve">
+    <value>Appen kunde inte tas bort.</value>
+  </data>
+  <data name="An app with the same key already exists in the selected module." xml:space="preserve">
+    <value>En app med samma nyckel finns redan i den valda modulen.</value>
+  </data>
+  <data name="Delete or update dependent rows first." xml:space="preserve">
+    <value>Ta först bort eller uppdatera beroende rader.</value>
+  </data>
+  <data name="Select a module instance." xml:space="preserve">
+    <value>Välj en modulinstans.</value>
+  </data>
+  <data name="Select an app definition." xml:space="preserve">
+    <value>Välj en appdefinition.</value>
+  </data>
+  <data name="Public URL must be an absolute URL." xml:space="preserve">
+    <value>Publik URL måste vara en absolut URL.</value>
+  </data>
+  <data name="Selected module instance was not found." xml:space="preserve">
+    <value>Den valda modulinstansen hittades inte.</value>
+  </data>
+  <data name="Selected app was not found." xml:space="preserve">
+    <value>Den valda appen hittades inte.</value>
+  </data>
+  <data name="The selected app does not belong to the selected module instance's module." xml:space="preserve">
+    <value>Den valda appen tillhör inte den valda modulinstansens modul.</value>
+  </data>
+  <data name="Selected host was not found." xml:space="preserve">
+    <value>Den valda värden hittades inte.</value>
+  </data>
+  <data name="The selected host belongs to a different instance than the selected module instance." xml:space="preserve">
+    <value>Den valda värden tillhör en annan instans än den valda modulinstansen.</value>
+  </data>
+  <data name="The selected artifact does not belong to the selected app." xml:space="preserve">
+    <value>Den valda artefakten tillhör inte den valda appen.</value>
+  </data>
+  <data name="The app instance could not be saved." xml:space="preserve">
+    <value>Appinstansen kunde inte sparas.</value>
+  </data>
+  <data name="The app instance could not be deleted." xml:space="preserve">
+    <value>Appinstansen kunde inte tas bort.</value>
+  </data>
+  <data name="An app instance with the same key already exists in the selected module instance." xml:space="preserve">
+    <value>En appinstans med samma nyckel finns redan i den valda modulinstansen.</value>
+  </data>
+  <data name="Select an app." xml:space="preserve">
+    <value>Välj en app.</value>
+  </data>
+  <data name="Version is required." xml:space="preserve">
+    <value>Version krävs.</value>
+  </data>
+  <data name="SHA-256 must be 64 hexadecimal characters." xml:space="preserve">
+    <value>SHA-256 måste bestå av 64 hexadecimala tecken.</value>
+  </data>
+  <data name="The artifact could not be saved." xml:space="preserve">
+    <value>Artefakten kunde inte sparas.</value>
+  </data>
+  <data name="The artifact could not be deleted." xml:space="preserve">
+    <value>Artefakten kunde inte tas bort.</value>
+  </data>
+  <data name="Select an instance." xml:space="preserve">
+    <value>Välj en instans.</value>
+  </data>
+  <data name="Use a stable host key with letters, digits, dash, underscore or dot." xml:space="preserve">
+    <value>Använd en stabil värdnyckel med bokstäver, siffror, bindestreck, understreck eller punkt.</value>
+  </data>
+  <data name="Base URL must be an absolute http or https URL." xml:space="preserve">
+    <value>Bas-URL måste vara en absolut http- eller https-URL.</value>
+  </data>
+  <data name="Base URL must not contain query string or fragment." xml:space="preserve">
+    <value>Bas-URL får inte innehålla query-sträng eller fragment.</value>
+  </data>
+  <data name="Base URL should only contain protocol, host and optional port." xml:space="preserve">
+    <value>Bas-URL bör endast innehålla protokoll, värd och valfri port.</value>
+  </data>
+  <data name="A host with the same key already exists in the selected instance." xml:space="preserve">
+    <value>En värd med samma nyckel finns redan i den valda instansen.</value>
+  </data>
+  <data name="The host could not be saved." xml:space="preserve">
+    <value>Värden kunde inte sparas.</value>
+  </data>
+  <data name="The host could not be deleted." xml:space="preserve">
+    <value>Värden kunde inte tas bort.</value>
+  </data>
+  <data name="Display name is required." xml:space="preserve">
+    <value>Visningsnamn krävs.</value>
+  </data>
+  <data name="A row with the same key already exists." xml:space="preserve">
+    <value>En rad med samma nyckel finns redan.</value>
+  </data>
+  <data name="The instance could not be saved." xml:space="preserve">
+    <value>Instansen kunde inte sparas.</value>
+  </data>
+  <data name="The instance could not be deleted." xml:space="preserve">
+    <value>Instansen kunde inte tas bort.</value>
+  </data>
+  <data name="Schema names must start with a letter and then use letters, digits or underscore." xml:space="preserve">
+    <value>Schemanamn måste börja med en bokstav och sedan använda bokstäver, siffror eller understreck.</value>
+  </data>
+  <data name="Select a module type." xml:space="preserve">
+    <value>Välj en modultyp.</value>
+  </data>
+  <data name="A module with the same key already exists." xml:space="preserve">
+    <value>En modul med samma nyckel finns redan.</value>
+  </data>
+  <data name="The module could not be saved." xml:space="preserve">
+    <value>Modulen kunde inte sparas.</value>
+  </data>
+  <data name="The module could not be deleted." xml:space="preserve">
+    <value>Modulen kunde inte tas bort.</value>
+  </data>
+  <data name="A module instance with the same key already exists in the selected instance." xml:space="preserve">
+    <value>En modulinstans med samma nyckel finns redan i den valda instansen.</value>
+  </data>
+  <data name="The module instance could not be saved." xml:space="preserve">
+    <value>Modulinstansen kunde inte sparas.</value>
+  </data>
+  <data name="The module instance could not be deleted." xml:space="preserve">
+    <value>Modulinstansen kunde inte tas bort.</value>
+  </data>
+  <data name="Use letters, digits, dash, underscore or dot. Keep permission names stable." xml:space="preserve">
+    <value>Använd bokstäver, siffror, bindestreck, understreck eller punkt. Håll behörighetsnamn stabila.</value>
+  </data>
+  <data name="A permission with the same name already exists." xml:space="preserve">
+    <value>En behörighet med samma namn finns redan.</value>
+  </data>
+  <data name="The permission could not be saved." xml:space="preserve">
+    <value>Behörigheten kunde inte sparas.</value>
+  </data>
+  <data name="The permission could not be deleted." xml:space="preserve">
+    <value>Behörigheten kunde inte tas bort.</value>
+  </data>
+  <data name="Use letters, digits, dash, underscore or dot. Keep the role name stable." xml:space="preserve">
+    <value>Använd bokstäver, siffror, bindestreck, understreck eller punkt. Håll rollnamnet stabilt.</value>
+  </data>
+  <data name="A role with the same name already exists." xml:space="preserve">
+    <value>En roll med samma namn finns redan.</value>
+  </data>
+  <data name="The role could not be saved." xml:space="preserve">
+    <value>Rollen kunde inte sparas.</value>
+  </data>
+  <data name="Select a permission to add." xml:space="preserve">
+    <value>Välj en behörighet att lägga till.</value>
+  </data>
+  <data name="Select a principal type and enter a principal value." xml:space="preserve">
+    <value>Välj en principaltyp och ange ett principalvärde.</value>
+  </data>
+  <data name="Principal is too long." xml:space="preserve">
+    <value>Principalen är för lång.</value>
+  </data>
+  <data name="The role could not be deleted." xml:space="preserve">
+    <value>Rollen kunde inte tas bort.</value>
+  </data>
+  <data name="ExampleServiceAppModule.Operators" xml:space="preserve">
+    <value>ExampleServiceAppModule.Operators</value>
+  </data>
+  <data name="DOMAIN\User" xml:space="preserve">
+    <value>DOMAIN\User</value>
+  </data>
+  <data name="DOMAIN\Group" xml:space="preserve">
+    <value>DOMAIN\Group</value>
+  </data>
+  <data name="svc-omp-hostagent" xml:space="preserve">
+    <value>svc-omp-hostagent</value>
+  </data>
+  <data name="Examples:" xml:space="preserve">
+    <value>Exempel:</value>
+  </data>
+  <data name="Select permission to add." xml:space="preserve">
+    <value>Välj en behörighet att lägga till.</value>
+  </data>
+  <data name="Update dependent references first." xml:space="preserve">
+    <value>Uppdatera beroende referenser först.</value>
+  </data>
+  <data name="Architecture" xml:space="preserve">
+    <value>Arkitektur</value>
+  </data>
+  <data name="Host template" xml:space="preserve">
+    <value>Värdmall</value>
+  </data>
+  <data name="Allowed characters: letters, digits, dot, dash and underscore." xml:space="preserve">
+    <value>Tillåtna tecken: bokstäver, siffror, punkt, bindestreck och understreck.</value>
+  </data>
+  <data name="Topology detail pages for InstanceTemplateHosts, InstanceTemplateModuleInstances and InstanceTemplateAppInstances." xml:space="preserve">
+    <value>Detaljsidor för topologi för InstanceTemplateHosts, InstanceTemplateModuleInstances och InstanceTemplateAppInstances.</value>
+  </data>
+  <data name="Use a stable role name, for example" xml:space="preserve">
+    <value>Använd ett stabilt rollnamn, till exempel</value>
+  </data>
+  <data name="Environment" xml:space="preserve">
+    <value>Miljö</value>
+  </data>
+  <data name="Host deployment assignments" xml:space="preserve">
+    <value>Tilldelningar för värddistribution</value>
+  </data>
+  <data name="Host deployments" xml:space="preserve">
+    <value>Värddistributioner</value>
+  </data>
+  <data name="Linux" xml:space="preserve">
+    <value>Linux</value>
+  </data>
+  <data name="Windows" xml:space="preserve">
+    <value>Windows</value>
+  </data>
+  <data name="macOS" xml:space="preserve">
+    <value>macOS</value>
+  </data>
+  <data name="arm64" xml:space="preserve">
+    <value>arm64</value>
+  </data>
+  <data name="x64" xml:space="preserve">
+    <value>x64</value>
+  </data>
+  <data name="x86" xml:space="preserve">
+    <value>x86</value>
+  </data>
+  <data name="Artifacts are deployable outputs of an app definition. Keep the artifact metadata precise so app instances can reference the right build." xml:space="preserve">
+    <value>Artefakter är distribuerbara utdata från en appdefinition. Håll artefaktmetadata precisa så att appinstanser kan referera till rätt bygge.</value>
+  </data>
+  <data name="Use a known package type when possible so later deployment automation can behave predictably." xml:space="preserve">
+    <value>Använd en känd paketeringstyp när det är möjligt så att senare distributionsautomatisering kan bete sig förutsägbart.</value>
+  </data>
+  <data name="Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow." xml:space="preserve">
+    <value>Distributionsposter spårar utrullningsbegäranden och körningsstatus. De hålls utanför det huvudsakliga manuella topologiflödet.</value>
+  </data>
+  <data name="Permissions are stable capability names used by roles and apps. Prefer precise names that do not require frequent renaming." xml:space="preserve">
+    <value>Behörigheter är stabila förmågenamn som används av roller och appar. Föredra precisa namn som inte kräver täta namnbyten.</value>
+  </data>
+  <data name="Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable." xml:space="preserve">
+    <value>Roller är den huvudsakliga redigeringsytan för RBAC. Lägg till behörigheter och principaler här så att åtkomsten förblir grupperad och spårbar.</value>
+  </data>
+  <data name="These permissions are granted whenever the role is resolved for a user or service identity." xml:space="preserve">
+    <value>Dessa behörigheter beviljas när rollen löses för en användare eller tjänsteidentitet.</value>
+  </data>
+  <data name="These pages are separated from the main admin workflow because they belong to template-driven rollout, deployment planning and future HostAgent automation. For manual setup, start with instances, hosts, modules, apps and artifacts." xml:space="preserve">
+    <value>Dessa sidor är separerade från det huvudsakliga administrationsflödet eftersom de hör till mallstyrd utrullning, distributionsplanering och framtida HostAgent-automatisering. För manuell uppsättning börjar du med instanser, värdar, moduler, appar och artefakter.</value>
+  </data>
+  <data name="Assignments connect hosts to deployment planning. This is intentionally separated from the main manual admin workflow." xml:space="preserve">
+    <value>Tilldelningar kopplar värdar till distributionsplanering. Detta är avsiktligt separerat från det huvudsakliga manuella administrationsflödet.</value>
+  </data>
+  <data name="HostDeploymentAssignments.Title" xml:space="preserve">
+    <value>Tilldelningar för värddistribution</value>
+  </data>
+  <data name="HostDeploymentAssignments.Lede" xml:space="preserve">
+    <value>Tilldelningar kopplar värdar till distributionsplanering. Detta är avsiktligt separerat från det huvudsakliga manuella administrationsflödet.</value>
+  </data>
+  <data name="HostDeployments.Title" xml:space="preserve">
+    <value>Värddistributioner</value>
+  </data>
+  <data name="HostDeployments.Lede" xml:space="preserve">
+    <value>Distributionsposter spårar utrullningsbegäranden och körningsstatus. De hålls utanför det huvudsakliga manuella topologiflödet.</value>
+  </data>
+  <data name="More" xml:space="preserve">
+    <value>Mer</value>
+    <comment>Compact portal top-bar overflow toggle.</comment>
+  </data>
+</root>

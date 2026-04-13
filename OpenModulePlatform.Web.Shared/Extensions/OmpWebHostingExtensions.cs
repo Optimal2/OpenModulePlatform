@@ -46,8 +46,11 @@ public static class OmpWebHostingExtensions
     {
         builder.AddOmpWebLogging();
 
+        builder.Services.AddSingleton<IValidateOptions<WebAppOptions>, WebAppOptionsValidator>();
+
         builder.Services.AddOptions<WebAppOptions>()
-            .Bind(builder.Configuration.GetSection(optionsSectionName));
+            .Bind(builder.Configuration.GetSection(optionsSectionName))
+            .ValidateOnStart();
 
         builder.Services.AddLocalization(options =>
         {
@@ -211,12 +214,13 @@ public static class OmpWebHostingExtensions
                         IsEssential = true,
                         HttpOnly = false,
                         SameSite = SameSiteMode.Lax,
+                        Secure = true,
                         Path = "/"
                     });
             }
             else
             {
-                context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/" });
+                context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/", Secure = true });
             }
 
             var safePortalHref = PortalTopBarModelFactory.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");

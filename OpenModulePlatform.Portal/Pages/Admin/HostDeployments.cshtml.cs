@@ -26,7 +26,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("Host Deployments");
+        SetTitles("Host deployments");
         Rows = await _repo.GetHostDeploymentsAsync(ct);
         return Page();
     }
