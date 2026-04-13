@@ -1,14 +1,17 @@
 (function () {
     // Keep a single set of global listeners for all shared top bars on the page.
+    // Rebalance work is coalesced per animation frame so that multiple resize notifications
+    // do not trigger repeated layout thrashing for the same visual update.
     var COMPACT_BREAKPOINT_VARIABLE = '--portal-topbar-compact-breakpoint';
     var FALLBACK_COMPACT_BREAKPOINT = '710px';
     var initializedTopbars = new Set();
+    var scheduledTopbars = new Set();
     var globalHandlersRegistered = false;
-    // One observer instance is enough because each top bar is tracked separately in initializedTopbars.
+    var rebalanceFrameRequested = false;
     var resizeObserver = typeof ResizeObserver !== 'undefined'
         ? new ResizeObserver(function (entries) {
             entries.forEach(function (entry) {
-                rebalance(entry.target);
+                scheduleRebalance(entry.target);
             });
         })
         : null;
@@ -43,6 +46,7 @@
             }
 
             initializedTopbars.delete(topbar);
+            scheduledTopbars.delete(topbar);
 
             if (resizeObserver && topbar) {
                 resizeObserver.unobserve(topbar);
@@ -104,9 +108,42 @@
         }
     }
 
+    function flushScheduledRebalances() {
+        rebalanceFrameRequested = false;
+        cleanupDisconnectedTopbars();
+
+        var topbars = Array.from(scheduledTopbars);
+        scheduledTopbars.clear();
+        topbars.forEach(rebalance);
+    }
+
+    function requestRebalanceFrame() {
+        if (rebalanceFrameRequested) {
+            return;
+        }
+
+        rebalanceFrameRequested = true;
+
+        if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(flushScheduledRebalances);
+            return;
+        }
+
+        window.setTimeout(flushScheduledRebalances, 0);
+    }
+
+    function scheduleRebalance(topbar) {
+        if (!topbar) {
+            return;
+        }
+
+        scheduledTopbars.add(topbar);
+        requestRebalanceFrame();
+    }
+
     function rebalanceAll() {
         cleanupDisconnectedTopbars();
-        initializedTopbars.forEach(rebalance);
+        initializedTopbars.forEach(scheduleRebalance);
     }
 
     function closeOverlaysOnOutsideClick(event) {
@@ -137,13 +174,13 @@
 
         if (topbar.dataset.portalTopbarInitialized === 'true') {
             initializedTopbars.add(topbar);
-            rebalance(topbar);
+            scheduleRebalance(topbar);
             return;
         }
 
         topbar.dataset.portalTopbarInitialized = 'true';
         initializedTopbars.add(topbar);
-        rebalance(topbar);
+        scheduleRebalance(topbar);
 
         if (resizeObserver) {
             resizeObserver.observe(topbar);

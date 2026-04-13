@@ -2,6 +2,8 @@
 /*
 OpenModulePlatform core install script.
 
+Repository release line: 0.1.0
+
 This script creates the neutral OMP core schema and seeds a minimal default instance,
 default templates, a sample host, bootstrap RBAC data, and the OMP Portal definitions.
 

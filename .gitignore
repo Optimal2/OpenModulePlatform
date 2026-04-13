@@ -23,6 +23,16 @@ artifacts/
 *.sln.docstates
 *.DotSettings.user
 Thumbs.db
+Desktop.ini
 *.coverage
 *.coveragexml
 coverage/
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo

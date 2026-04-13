@@ -1,86 +1,82 @@
-# Manual admin configuration
+# Manual administration configuration
 
-## Syfte
+## Purpose
 
-Portal ska vara den normala vägen för manuell konfiguration av OMP.
-Efter bootstrap i SQL ska en administratör normalt inte behöva redigera
-kärnobjekt direkt i databasen.
+The Portal is intended to be the normal path for manual OMP configuration.
+After the SQL bootstrap has completed, an administrator should not normally need to edit core objects directly in the database.
 
-## Rekommenderad arbetsordning
+## Recommended order of work
 
-### 1. Verifiera RBAC
+### 1. Verify RBAC
 
-Börja med att kontrollera att rätt principal har Portal-adminrättigheter.
+Start by confirming that the correct principal has Portal administrator access.
 
-Viktigt:
+Important:
 
-- byt ut alla `REPLACE_ME`-värden från SQL-bootstrapen
-- verifiera att rätt användare eller grupp finns i `RolePrincipals`
-- logga in i Portal och kontrollera att adminytorna är tillgängliga
+- replace all `REPLACE_ME` values from the SQL bootstrap scripts
+- verify that the correct user or group exists in `RolePrincipals`
+- sign in to the Portal and confirm that the administration pages are available
 
-### 2. Skapa eller justera Instance
+### 2. Create or adjust the instance
 
-En `Instance` är högsta manuella nivån.
+An `Instance` is the highest manual scope in OMP.
 
-Den bör normalt finnas innan du lägger till:
+It should normally exist before you add:
 
 - hosts
 - module instances
 - app instances
 
-### 3. Lägg till Hosts
+### 3. Add hosts
 
-Hosts hör till en viss `Instance`.
+Hosts belong to a specific `Instance`.
 
-Vid manuell installation är detta en kärndel av modellen.
-Template-relaterade hostobjekt behövs däremot inte för att få systemet
-att fungera manuellt.
+For a manual installation, this is part of the core runtime model.
+Template-related host rows are not required to make the system function manually.
 
-Om en webbapp-instans använder relativ `RoutePath` och ligger på en annan host
-än själva Portalen bör du sätta `Hosts.BaseUrl` till en absolut rot-URL som
-innehåller protokoll, host och eventuell port.
+If a web app instance uses a relative `RoutePath` and runs on a different host than the Portal, set `Hosts.BaseUrl` to an absolute root URL that includes the scheme, host, and optional port.
 
-### 4. Verifiera eller skapa Modules och Apps
+### 4. Verify or create modules and apps
 
-Detta är definitionsnivån.
+This is the definition level of the model.
 
-- `Modules` beskriver moduldefinitioner
-- `Apps` beskriver appdefinitioner
-- `Artifacts` beskriver deploybara byggprodukter
+- `Modules` describe module definitions
+- `Apps` describe app definitions
+- `Artifacts` describe deployable build outputs
 
-### 5. Skapa ModuleInstances
+### 5. Create module instances
 
-Här placeras en moduldefinition in i en konkret OMP-instans.
+This is where a module definition is placed into a concrete OMP instance.
 
-### 6. Skapa AppInstances
+### 6. Create app instances
 
-Detta är den viktigaste runtime-nivån vid manuell drift.
+This is the most important runtime level for manual operation.
 
-På `AppInstance` anger du bland annat:
+At the `AppInstance` level you specify, among other things:
 
-- vilken module instance den tillhör
-- vilken host den kör på
-- vilken appdefinition den representerar
-- vilket artifact den använder
-- vilken route/path/url som gäller
-- vilken config som gäller
-- vilken desired state och verifieringspolicy som gäller
+- which module instance it belongs to
+- which host it runs on
+- which app definition it represents
+- which artifact it uses
+- which route, path, or public URL applies
+- which configuration applies
+- which desired state and verification policy apply
 
-## När template- och deploymentytorna behövs
+## When the template and deployment pages matter
 
-Dessa delar hör främst till automation och framtida HostAgent-flöde:
+These areas mainly belong to automation and the future HostAgent flow:
 
 - instance templates
 - host templates
-- template-topologi
+- template topology
 - host deployment assignments
 - host deployments
 
-Vid ren manuell installation kan dessa oftast lämnas orörda.
+For a purely manual installation, those areas can usually be left alone.
 
-## Praktiska råd
+## Practical guidance
 
-- använd Portal för löpande administration där det går
-- använd SQL främst för initial installation och kontrollerad bootstrap
-- behandla `AppInstance` som central runtime-enhet
-- undvik att lägga runtime-data på `Modules` eller `Apps`
+- use the Portal for ongoing administration whenever possible
+- use SQL mainly for the initial installation and controlled bootstrap work
+- treat `AppInstance` as the central runtime unit
+- avoid storing runtime data on `Modules` or `Apps`

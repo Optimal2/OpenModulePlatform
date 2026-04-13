@@ -2,6 +2,8 @@
 /*
 OpenModulePlatform example install script.
 
+Repository release line: 0.1.0
+
 Run this script after SQL_Install_OpenModulePlatform.sql.
 
 This script creates the example module schemas and registers:
@@ -13,6 +15,7 @@ This script creates the example module schemas and registers:
 - sample jobs for the service-backed example
 
 Important:
+- These example rows are intended for the first public beta release and local evaluation scenarios.
 - The sample service app instance is seeded with deliberate placeholder values.
 - Replace all REPLACE_ME values in omp.AppInstances before starting the sample service app.
 */

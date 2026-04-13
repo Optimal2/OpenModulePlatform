@@ -233,6 +233,31 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 
+    /// <summary>
+    /// Returns lightweight autocomplete suggestions for known user principals.
+    /// Suggestions are intentionally limited to user principals because group, host and service-account
+    /// identifiers are usually environment-specific and can be misleading when suggested broadly.
+    /// </summary>
+    public async Task<IActionResult> OnGetPrincipalSuggestions(string principalType, string? term, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        principalType = Clean(principalType) ?? string.Empty;
+        term = Clean(term) ?? string.Empty;
+
+        if (!string.Equals(principalType, "User", StringComparison.OrdinalIgnoreCase))
+        {
+            return new JsonResult(Array.Empty<string>());
+        }
+
+        var suggestions = await _repo.SearchKnownPrincipalsAsync("User", term, 12, ct);
+        return new JsonResult(suggestions);
+    }
+
     public async Task<IActionResult> OnPostDelete(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);

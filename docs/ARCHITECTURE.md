@@ -1,96 +1,89 @@
 # Architecture
 
-## Översikt
+## Overview
 
-OpenModulePlatform är uppbyggt kring en enkel men tydlig kärna:
+OpenModulePlatform is built around a small but explicit core model:
 
-1. **Definitioner** beskriver vad som kan finnas.
-2. **Instanser** beskriver vad som faktiskt finns i en OMP-instans.
-3. **Runtime** beskriver vad som körs, var det körs och hur det observeras.
-4. **Automation/topologi** beskriver framtida desired state och hur en HostAgent senare kan materialisera den.
+1. **Definitions** describe what can exist.
+2. **Instances** describe what actually exists in an OMP installation.
+3. **Runtime** describes what is running, where it is running, and how it is observed.
+4. **Automation and topology** describe future desired state and how a HostAgent could later materialize it.
 
-Det viktigaste arkitekturvalet i nuvarande kodbas är att `AppInstance`
-används som runtimecentrum i stället för att låta `App` eller `Module`
-bära instansansvar.
+The most important architectural choice in the current codebase is that `AppInstance` is treated as the runtime center instead of pushing runtime responsibility onto `App` or `Module` definitions.
 
-## Lösningens delar
+## Solution components
 
 ### OpenModulePlatform.Portal
 
-Portal är både startyta och administrativt gränssnitt.
+The Portal is both the landing surface and the administrative UI.
 
-Den gör tre huvudjobb:
+It performs three primary jobs:
 
-- visar tillgängliga webbappar via en instansbaserad appkatalog
-- tillhandahåller manuell administration av kärnmodellen
-- tillhandahåller RBAC-administration
+- displays available web applications through an instance-based app catalog
+- provides manual administration for the core data model
+- provides RBAC administration
 
-Portalens katalog byggs från `omp.AppInstances`, inte från `omp.Apps`.
-Det är viktigt eftersom route, hostkoppling och artifactval hör hemma
-på instansnivå.
+The Portal catalog is built from `omp.AppInstances`, not from `omp.Apps`. That matters because route, host placement, and artifact choice are instance-level concerns.
 
 ### OpenModulePlatform.Web.Shared
 
-Det delade webbprojektet samlar:
+The shared web project contains:
 
-- hosting-defaults
-- auth / forwarded headers
-- RBAC-upplösning
-- gemensamma bas-klasser för Razor Pages
-- SQL-anslutningsfabrik för webbappar
+- hosting defaults
+- authentication and forwarded-header defaults
+- RBAC resolution
+- shared base classes for Razor Pages
+- SQL connection plumbing for web applications
 
-Det gör att Portal och modulernas webbgränssnitt följer samma grundmönster.
+This keeps the Portal and the module web front ends aligned around the same baseline behaviour.
 
 ### ExampleWebAppModule
 
-Detta är det enklaste referensexemplet:
+This is the simplest reference example:
 
-- en moduldefinition
-- en webbappdefinition
-- modulägd konfiguration
-- webb-UI för att visa och ändra moduldatan
+- one module definition
+- one web app definition
+- module-owned configuration
+- a web UI that displays and edits module data
 
-Det visar hur en modul kan använda OMP utan någon service/processdel.
+It shows how a module can use OMP without any worker or service component.
 
 ### ExampleServiceAppModule
 
-Detta är ett mer komplett referensexempel:
+This is the more complete reference example:
 
-- en webbapp för administration och insyn
-- en service/worker-del
-- modulägd konfiguration
-- jobs-tabell och job processing
-- runtimekoppling till `omp.AppInstances`
+- a web app for administration and observability
+- a service or worker component
+- module-owned configuration
+- job tables and job processing
+- runtime coupling to `omp.AppInstances`
 
-Det visar hur en modul kan bestå av både webbgränssnitt och service/processdel men ändå använda samma övergripande plattformsmodell.
+It shows how a module can contain both a web surface and a service process while still using the same platform model.
 
-## Datamodellen idag
+## Data model today
 
-### Definitioner
+### Definitions
 
 - `omp.Modules`
 - `omp.Apps`
 - `omp.Artifacts`
 
-Definitioner ska inte bära runtime-specifika värden som route, install path eller hostplacering.
+Definitions should not hold runtime-specific values such as route, install path, or host placement.
 
-### Instanser
+### Instances
 
 - `omp.Instances`
 - `omp.ModuleInstances`
 - `omp.AppInstances`
 - `omp.Hosts`
 
-Här finns den konkreta miljön. `ModuleInstances` och `AppInstances` är
-särskilt viktiga eftersom de gör det möjligt att köra flera instanser av
-samma definition.
+These tables represent the concrete environment. `ModuleInstances` and `AppInstances` are especially important because they make it possible to run multiple instances of the same definition.
 
 ### Runtime
 
-`omp.Hosts` kan bära en valfri `BaseUrl` för Portalens länkgenerering när en
-`AppInstance` använder relativ `RoutePath` på en annan host än Portalen.
+`omp.Hosts` can hold an optional `BaseUrl` used by the Portal when it needs to generate a link for an `AppInstance` that uses a relative `RoutePath` on a different host than the Portal.
 
-`omp.AppInstances` innehåller idag bland annat:
+`omp.AppInstances` currently contains, among other things:
 
 - `HostId`
 - `ArtifactId`
@@ -100,25 +93,25 @@ samma definition.
 - `InstallPath`
 - `InstallationName`
 - `DesiredState`
-- verifieringspolicy (`ExpectedLogin`, `ExpectedClientHostName`, `ExpectedClientIp`)
+- verification policy (`ExpectedLogin`, `ExpectedClientHostName`, `ExpectedClientIp`)
 - observed state (`LastSeenUtc`, `LastLogin`, `LastClientHostName`, `LastClientIp`, `VerificationStatus`)
 
-Detta gör `AppInstance` till den naturliga runtime-enheten för både webbappar och serviceappar.
+This makes `AppInstance` the natural runtime unit for both web apps and service apps.
 
 ### Security
 
-RBAC bygger på fyra core-tabeller:
+RBAC is built on four core tables:
 
 - `omp.Permissions`
 - `omp.Roles`
 - `omp.RolePermissions`
 - `omp.RolePrincipals`
 
-Portal och modul-UI läser effektiva rättigheter via `RbacService`, som mappar användare och Windows-grupper till rättigheter i databasen.
+The Portal and module UIs read effective permissions through `RbacService`, which maps users and Windows groups to permissions stored in the database.
 
-### Template och deployment
+### Templates and deployment
 
-Följande tabeller finns redan:
+The following tables already exist:
 
 - `omp.InstanceTemplates`
 - `omp.HostTemplates`
@@ -128,45 +121,45 @@ Följande tabeller finns redan:
 - `omp.HostDeploymentAssignments`
 - `omp.HostDeployments`
 
-Detta visar den tänkta riktningen, men den fulla materialiseringsmodellen är ännu inte färdig.
+These show the intended direction, but the full materialization model is not yet complete.
 
-## Request-flöde i webbapparna
+## Request flow in web applications
 
-1. Applikationen startar med gemensamma hosting-defaults från `OpenModulePlatform.Web.Shared`.
-2. Windows-integrerad auth används om anonym access inte är tillåten.
-3. `RbacService` läser användarens effektiva permissions från databasen.
-4. Razor Pages bygger vyerna utifrån rättigheter och repository-data.
-5. Portalens startsida filtrerar appkatalogen baserat på rättigheter.
+1. The application starts with shared hosting defaults from `OpenModulePlatform.Web.Shared`.
+2. Windows-integrated authentication is used when anonymous access is not allowed.
+3. `RbacService` reads the user's effective permissions from the database.
+4. Razor Pages build views from permissions and repository data.
+5. The Portal home page filters the app catalog based on permissions.
 
-## Request-flöde i serviceexemplet
+## Request flow in the service example
 
-1. Worker startar med ett konfigurerat `AppInstanceId`.
-2. `AppInstanceRepository` läser runtime-state från `omp.AppInstances`.
-3. Heartbeat uppdaterar observerad state på både `AppInstance` och, när möjligt, `Host`.
-4. Config laddas från modulägd tabell med `ConfigId` som brygga.
-5. Job processor arbetar endast när appinstansen är aktiv, tillåten och verifierad mot förväntad runtimeidentitet.
+1. The worker starts with a configured `AppInstanceId`.
+2. `AppInstanceRepository` reads runtime state from `omp.AppInstances`.
+3. Heartbeat updates observed state on both `AppInstance` and, when possible, `Host`.
+4. Configuration is loaded from a module-owned table using `ConfigId` as the bridge.
+5. The job processor works only when the app instance is active, allowed, and verified against the expected runtime identity.
 
-## Styrkor i nuvarande arkitektur
+## Strengths of the current architecture
 
-- tydlig rörelse bort från sammanblandning av definition och instans
-- `AppInstance` fungerar redan som gemensam runtime-modell för både webb och service
-- Portal använder instansnivån på riktigt i sin appkatalog
-- RBAC är enkel och begriplig
-- SQL-skripten är pedagogiska och använder avsiktliga placeholders i stället för att gissa miljöspecifika värden
-- exempelprojekten visar både ett enkelt och ett mer avancerat integrationsmönster
+- explicit separation between definitions and instances
+- `AppInstance` already works as a shared runtime model for both web and service scenarios
+- the Portal genuinely uses the instance level in its app catalog
+- RBAC is compact and understandable
+- the SQL scripts are explicit and use deliberate placeholders instead of guessing environment-specific values
+- the example projects demonstrate both a simple pattern and a more complete pattern
 
-## Kända svagheter och begränsningar
+## Known limitations
 
-- template-modellen finns i schema men är ännu inte fullt operationaliserad
-- det saknas ännu tydlig origin-spårning mellan template-rader och materialiserade runtime-rader
-- `ConfigId` är funktionell men semantiskt tunn på core-nivå
-- Portalens administrativa arbetsflöden är bättre än tidigare men fortfarande tabellcentrerade
-- det finns ännu ingen riktig reconcile-/materialiseringsmotor mellan desired topology och faktisk verklighet
+- the template model exists in the schema but is not yet fully operationalized
+- origin tracking between template rows and materialized runtime rows is not yet explicit
+- `ConfigId` is functional but still semantically thin at the core-model level
+- the Portal administrative workflows are better than before but still table-centric
+- there is not yet a real reconcile or materialization engine between desired topology and actual runtime state
 
-## Rekommenderad arkitekturriktning framåt
+## Recommended direction
 
-1. Behåll `AppInstance` som central runtime-enhet.
-2. Fullfölj materialiseringsmodellen från template till verkliga `Hosts`, `ModuleInstances` och `AppInstances`.
-3. Gör origin/spårbarhet explicit i databasen.
-4. Definiera desired state kontra observed state ännu tydligare.
-5. Bygg HostAgent först när dessa delar är stabila.
+1. Keep `AppInstance` as the central runtime unit.
+2. Complete the materialization model from templates to real `Hosts`, `ModuleInstances`, and `AppInstances`.
+3. Make origin tracking explicit in the database.
+4. Clarify desired state versus observed state further.
+5. Build HostAgent only after those pieces are stable.

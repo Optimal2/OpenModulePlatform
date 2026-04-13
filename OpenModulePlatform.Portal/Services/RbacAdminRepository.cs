@@ -249,6 +249,48 @@ ORDER BY PrincipalType,
     }
 
     /// <summary>
+    /// Returns distinct previously used principals for lightweight autocomplete suggestions.
+    /// The query intentionally reuses existing assignments instead of reaching into an external
+    /// identity provider so that the portal stays self-contained and predictable in beta deployments.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> SearchKnownPrincipalsAsync(
+        string principalType,
+        string? term,
+        int maxResults,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT DISTINCT TOP (@maxResults)
+       Principal
+FROM omp.RolePrincipals
+WHERE PrincipalType = @principalType
+  AND Principal IS NOT NULL
+  AND LTRIM(RTRIM(Principal)) <> ''
+  AND (@term = '' OR Principal LIKE @termPattern)
+ORDER BY Principal;";
+
+        var rows = new List<string>();
+        term ??= string.Empty;
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@maxResults", maxResults);
+        cmd.Parameters.AddWithValue("@principalType", principalType);
+        cmd.Parameters.AddWithValue("@term", term);
+        cmd.Parameters.AddWithValue("@termPattern", $"%{term}%");
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(rdr.GetString(0));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
     /// Returns permissions that are not yet linked to the specified role.
     /// </summary>
     public async Task<IReadOnlyList<PermissionRow>> GetAvailablePermissionsForRoleAsync(int roleId, CancellationToken ct)

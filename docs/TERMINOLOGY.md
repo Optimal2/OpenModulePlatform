@@ -2,68 +2,66 @@
 
 ## OpenModulePlatform (OMP)
 
-Paraplybegreppet för hela plattformen.
+The umbrella term for the entire platform.
 
-## OMP Instance
+## OMP instance
 
-En konkret installation av OMP för en viss miljö, organisation eller deployment-yta.
+A concrete installation of OMP for a specific environment, organization, or deployment surface.
 
 ## Module
 
-En moduldefinition. Beskriver en återanvändbar modul som kan installeras flera gånger.
+A module definition. It describes a reusable module that can be installed multiple times.
 
-## Module Instance
+## Module instance
 
-En konkret modulinstans i en viss OMP-instans.
+A concrete module instance inside a specific OMP instance.
 
 ## App
 
-En appdefinition som tillhör en moduldefinition. En appdefinition kan representera en webbapp, portalapp eller serviceapp.
+An app definition that belongs to a module definition. An app definition can represent a web app, Portal app, worker app, or service app.
 
-## App Instance
+## App instance
 
-Den konkreta runtime-instansen av en app i en viss modulinstans.
-En appinstans kan ha eget artifact, egen config, egen hostplacering,
-eget route/path/url-värde och egen runtimepolicy.
+The concrete runtime instance of an app inside a specific module instance.
+An app instance can have its own artifact, configuration, host placement, route, path, public URL, and runtime policy.
 
 ## Artifact
 
-En deploybar byggprodukt för en appdefinition, till exempel publicerad mapp, zip eller annan paketerad output.
+A deployable build product for an app definition, such as a published folder, zip archive, or other packaged output.
 
 ## Host
 
-Ett konkret runtime-target inom en OMP-instans. En host kan bära noll eller flera appinstanser.
+A concrete runtime target inside an OMP instance. A host can carry zero or more app instances.
 
-## Instance Template
+## Instance template
 
-Mall för hur en OMP-instans är tänkt att se ut strukturellt.
+A template that describes how an OMP instance is expected to look structurally.
 
-## Host Template
+## Host template
 
-Mall för en hostroll inom en instance template.
+A template for a host role within an instance template.
 
 ## Template topology
 
-Samlingsnamn för de tabeller som beskriver önskad struktur i en template:
+A collective term for the tables that describe desired structure in a template:
 
 - `InstanceTemplateHosts`
 - `InstanceTemplateModuleInstances`
 - `InstanceTemplateAppInstances`
 
-## HostDeploymentAssignment
+## Host deployment assignment
 
-Koppling mellan en konkret host och en host template.
-Detta är en automationsrelaterad del av modellen, inte en nödvändig del
-av manuell installation.
+A link between a concrete host and a host template.
+This is an automation-related part of the model, not a required part of manual installation.
 
-## HostDeployment
+## Host deployment
 
-Representation av ett deploymentförsök eller deployment-tillstånd för en host.
+A representation of a deployment attempt or deployment state for a host.
 
 ## OMP Portal
 
-Det delade webbgränssnittet för navigation och administration i OMP.
+The shared web UI for navigation and administration in OMP.
 
 ## OMP HostAgent
 
-Framtida valfri automationskomponent som ska kunna läsa desired topology / deployment state och utföra eller verifiera åtgärder på hostar.
+A future optional automation component that can read desired topology and deployment state and execute or verify actions on hosts.
