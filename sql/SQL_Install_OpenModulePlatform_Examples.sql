@@ -17,7 +17,10 @@ This script creates the example module schemas and registers:
 Important:
 - These example rows are intended for the first public beta release and local evaluation scenarios.
 - The sample service app instance is seeded with deliberate placeholder values.
-- Replace all REPLACE_ME values in omp.AppInstances before starting the sample service app.
+- Replace the example identity values in omp.AppInstances before starting the sample service app.
+  ExpectedLogin: DOMAIN\ServiceAccountName
+  ExpectedClientHostName: hostname.example.com
+  ExpectedClientIp: 192.168.1.100
 */
 USE [OpenModulePlatform];
 GO
@@ -141,6 +144,12 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM omp_example_serviceapp_module.Configurations WHERE VersionNo = 0)
 BEGIN
+    /*
+    scanBatchSize is intentionally seeded as 1 for the canonical example dataset.
+    This keeps the sample worker behavior deterministic and easy to observe during local evaluation,
+    screenshots, demos and troubleshooting. It is not a production recommendation.
+    Increase this value in the service configuration for real environments after validation.
+    */
     INSERT INTO omp_example_serviceapp_module.Configurations(VersionNo, ConfigJson, Comment, CreatedBy)
     VALUES(0, N'{"scanBatchSize": 1, "sampleMode": true}', N'Initial example service configuration', N'install-script');
 END
@@ -1041,9 +1050,13 @@ BEGIN
         N'default',
         @ServiceArtifactId,
         @InitialServiceConfigId,
-        N'REPLACE_ME\\service-account',
-        N'REPLACE_ME_HOST',
-        N'REPLACE_ME_IP',
+        /*
+        Example identity placeholders below are descriptive on purpose so the expected format is obvious.
+        Replace them with the real service account, host name and client IP before starting the worker.
+        */
+        N'DOMAIN\\ServiceAccountName',
+        N'hostname.example.com',
+        N'192.168.1.100',
         1,
         1,
         1,
@@ -1062,9 +1075,9 @@ BEGIN
         InstallationName = N'default',
         ArtifactId = @ServiceArtifactId,
         ConfigId = @InitialServiceConfigId,
-        ExpectedLogin = N'REPLACE_ME\\service-account',
-        ExpectedClientHostName = N'REPLACE_ME_HOST',
-        ExpectedClientIp = N'REPLACE_ME_IP',
+        ExpectedLogin = N'DOMAIN\\ServiceAccountName',
+        ExpectedClientHostName = N'hostname.example.com',
+        ExpectedClientIp = N'192.168.1.100',
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -1108,9 +1121,9 @@ BEGIN
         N'default',
         @ServiceArtifactId,
         @InitialServiceConfigId,
-        N'REPLACE_ME\\service-account',
-        N'REPLACE_ME_HOST',
-        N'REPLACE_ME_IP',
+        N'DOMAIN\\ServiceAccountName',
+        N'hostname.example.com',
+        N'192.168.1.100',
         1,
         401);
 END
