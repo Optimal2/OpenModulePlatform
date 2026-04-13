@@ -1,20 +1,49 @@
 <!-- File: SECURITY.md -->
 # Security Policy
 
-Security issues should be reported privately to the maintainers before public disclosure.
+OpenModulePlatform aims to provide a safe public baseline for modular platform work.
+Security issues should be reported privately before public disclosure.
 
-This repository is the open source baseline of OMP and intentionally contains no
-customer-specific integrations, credentials or environment-specific deployment secrets.
+## Supported versions
 
-## Scope
+| Version | Supported |
+| --- | --- |
+| 0.1.x | Yes |
+| < 0.1.0 | No |
 
-The repository still includes placeholder values such as `REPLACE_ME` in SQL bootstrap
-scripts. Those placeholders are deliberate and must be replaced by the operator during
-installation. They are not working credentials.
+## Reporting a vulnerability
 
-## Operational notes
+Use GitHub private vulnerability reporting for the repository if that feature is enabled.
+If private vulnerability reporting is not enabled, contact the project maintainers through a private channel before disclosing details publicly.
 
-- protect the `OmpDb` connection string with normal secret-management practices
+Please include, when possible:
+
+- a clear description of the issue
+- affected components and versions
+- reproduction steps or a proof of concept
+- impact assessment
+- any suggested remediation
+
+## What to expect
+
+Maintainers should aim to:
+
+- acknowledge receipt within a reasonable timeframe
+- assess whether the report is valid and in scope
+- coordinate a fix and release plan before public disclosure when practical
+
+No specific response-time SLA is guaranteed for the public beta release line.
+
+## Scope and assumptions
+
+This repository intentionally contains no customer-specific integrations, credentials, or environment-specific deployment secrets.
+
+The SQL bootstrap scripts include placeholder values such as `REPLACE_ME`. Those placeholders are deliberate and must be replaced by the operator during installation. They are not working credentials.
+
+## Operational guidance
+
+- protect the `OmpDb` connection string with standard secret-management practices
 - avoid `ForwardedHeadersTrustAllProxies` outside tightly controlled environments
-- review bootstrap RBAC principals before exposing Portal to real users
+- review bootstrap RBAC principals before exposing the Portal to real users
 - do not treat the example service app as production-hardened automation
+- review authentication, proxy, and cookie settings before exposing any OMP web application to the internet

@@ -161,7 +161,8 @@
 
                 <div class="form-field grow">
                     <label for="principal">@L["Principal"]</label>
-                    <input id="principal" name="principal" value="@Model.NewPrincipal" />
+                    <input id="principal" name="principal" value="@Model.NewPrincipal" list="principal-suggestions" autocomplete="off" />
+                    <datalist id="principal-suggestions"></datalist>
                     <div class="field-help">
                         @L["Examples:"]
                         <span class="example-token">DOMAIN\User</span>,
@@ -187,4 +188,69 @@
         <p class="muted">@L["Deleting a role removes all principal and permission links for that role."]</p>
         <button type="submit" class="btn btn-danger">@L["Delete role"]</button>
     </form>
+    <script>
+        (() => {
+            const principalType = document.getElementById('principalType');
+            const principalInput = document.getElementById('principal');
+            const dataList = document.getElementById('principal-suggestions');
+
+            if (!principalType || !principalInput || !dataList) {
+                return;
+            }
+
+            let controller = null;
+
+            async function refreshSuggestions() {
+                dataList.replaceChildren();
+
+                // Only user principals are suggested. Other principal types are environment-specific
+                // enough that broad autocomplete tends to create noise instead of saving time.
+                if (principalType.value !== 'User') {
+                    return;
+                }
+
+                const term = principalInput.value.trim();
+                const url = new URL(window.location.href);
+                url.search = '';
+                url.searchParams.set('handler', 'PrincipalSuggestions');
+                url.searchParams.set('principalType', principalType.value);
+                url.searchParams.set('term', term);
+
+                if (controller) {
+                    controller.abort();
+                }
+
+                controller = new AbortController();
+
+                try {
+                    const response = await fetch(url.toString(), {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        signal: controller.signal
+                    });
+
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    const suggestions = await response.json();
+                    dataList.replaceChildren();
+
+                    for (const value of suggestions) {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        dataList.appendChild(option);
+                    }
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('Failed to load principal suggestions.', error);
+                    }
+                }
+            }
+
+            principalType.addEventListener('change', refreshSuggestions);
+            principalInput.addEventListener('input', refreshSuggestions);
+            principalInput.addEventListener('focus', refreshSuggestions);
+        })();
+    </script>
+
 }

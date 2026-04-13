@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate repository hygiene
+        shell: pwsh
+        run: |
+          $forbidden = @(
+            '.idea/',
+            '.vs/',
+            '.vscode/',
+            '.DS_Store',
+            'Thumbs.db',
+            '.coverage',
+            '.coveragexml'
+          )
+
+          $files = git ls-files
+          $matches = foreach ($file in $files) {
+            foreach ($pattern in $forbidden) {
+              if ($file -like "*$pattern*") {
+                $file
+                break
+              }
+            }
+          }
+
+          if ($matches) {
+            Write-Host 'Forbidden files were found in the repository:'
+            $matches | Sort-Object -Unique | ForEach-Object { Write-Host " - $_" }
+            exit 1
+          }
+
+      - name: Show .NET SDK info
+        run: dotnet --info
+
+      - name: Restore solution
+        run: dotnet restore OpenModulePlatform.slnx
+
+      - name: Build solution
+        run: dotnet build OpenModulePlatform.slnx --configuration Release --no-restore
