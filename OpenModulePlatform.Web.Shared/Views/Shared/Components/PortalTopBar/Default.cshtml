@@ -5,7 +5,20 @@
     string BuildLanguageHref(string culture) => $"{Context.Request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     string BuildRoleHref(int? roleId) => $"{Context.Request.PathBase}/rbac/set-active-role?roleId={(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     string CultureText(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : L[value];
+    string DisplayUserName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var separatorIndex = value.LastIndexOf('\\');
+        return separatorIndex >= 0 && separatorIndex < value.Length - 1
+            ? value[(separatorIndex + 1)..]
+            : value;
+    }
     var fallbackNotice = string.Format(L["LanguageFallbackNotice"], CultureText(Model.PreferredCultureDisplayText), CultureText(Model.EffectiveCultureDisplayText));
+    var currentUserDisplayName = DisplayUserName(Model.CurrentUserName);
 }
 
 @if (Model.IsVisible && Model.PortalLink is not null)
@@ -118,7 +131,7 @@
                         <div class="portal-topbar__profile-identity">
                             <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
                             <div class="portal-topbar__profile-user-row">
-                                <div class="portal-topbar__profile-current-user" title="@Model.CurrentUserName">@Model.CurrentUserName</div>
+                                <div class="portal-topbar__profile-current-user" title="@Model.CurrentUserName">@currentUserDisplayName</div>
                             </div>
                         </div>
                         <div class="portal-topbar__profile-section">
