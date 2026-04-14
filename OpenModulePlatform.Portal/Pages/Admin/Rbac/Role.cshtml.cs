@@ -210,8 +210,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return Page();
         }
 
-        await _repo.AddPrincipalToRoleAsync(Input.RoleId, principalType, principal, ct);
-        StatusMessage = T("Principal added to role.");
+        var added = await _repo.AddPrincipalToRoleAsync(Input.RoleId, principalType, principal, ct);
+        StatusMessage = added
+            ? T("Principal added to role.")
+            : T("Principal is already assigned to role.");
         return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
     }
 

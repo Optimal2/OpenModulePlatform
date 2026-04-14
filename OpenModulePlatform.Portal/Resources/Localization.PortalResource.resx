@@ -231,6 +231,9 @@
   <data name="Principal added to role." xml:space="preserve">
     <value>Principal added to role.</value>
   </data>
+  <data name="Principal is already assigned to role." xml:space="preserve">
+    <value>Principal is already assigned to role.</value>
+  </data>
   <data name="Principal removed from role." xml:space="preserve">
     <value>Principal removed from role.</value>
   </data>

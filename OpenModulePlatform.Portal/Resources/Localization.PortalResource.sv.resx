@@ -1303,4 +1303,6 @@
     <value>Mer</value>
     <comment>Compact portal top-bar overflow toggle.</comment>
   </data>
+
+  <data name="Principal is already assigned to role." xml:space="preserve"><value>Principalen är redan tilldelad rollen.</value></data>
 </root>
