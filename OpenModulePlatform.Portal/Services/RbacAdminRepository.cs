@@ -522,7 +522,7 @@ WHERE RoleId = @RoleId
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task AddPrincipalToRoleAsync(
+    public async Task<bool> AddPrincipalToRoleAsync(
         int roleId,
         string principalType,
         string principal,
@@ -540,6 +540,12 @@ IF NOT EXISTS
 BEGIN
     INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
     VALUES (@RoleId, @PrincipalType, @Principal);
+
+    SELECT CAST(1 AS bit);
+END
+ELSE
+BEGIN
+    SELECT CAST(0 AS bit);
 END";
 
         await using var conn = _db.Create();
@@ -549,7 +555,9 @@ END";
         Add(cmd, "@RoleId", roleId);
         Add(cmd, "@PrincipalType", principalType);
         Add(cmd, "@Principal", principal);
-        await cmd.ExecuteNonQueryAsync(ct);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is bool added && added;
     }
 
     public async Task RemovePrincipalFromRoleAsync(
@@ -571,6 +579,7 @@ WHERE RoleId = @RoleId
         Add(cmd, "@RoleId", roleId);
         Add(cmd, "@PrincipalType", principalType);
         Add(cmd, "@Principal", principal);
+
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
