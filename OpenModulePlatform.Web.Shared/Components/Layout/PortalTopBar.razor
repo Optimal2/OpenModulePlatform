@@ -1,0 +1,261 @@
+@using OpenModulePlatform.Web.Shared.Navigation
+@using OpenModulePlatform.Web.Shared.Options
+@using OpenModulePlatform.Web.Shared.Localization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Http
+@inject Microsoft.Extensions.Options.IOptions<WebAppOptions> WebAppOptionsAccessor
+@inject PortalTopBarService PortalTopBarService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> L
+@inject IHttpContextAccessor HttpContextAccessor
+@inject OpenModulePlatform.Web.Shared.Services.RbacService RbacService
+@implements IDisposable
+
+@if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
+{
+    <div class="portal-topbar" data-portal-topbar-root>
+        <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
+            <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@L[_portalTopBar.PortalLink.TextKey]</a>
+
+            @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminLinks.Count > 0)
+            {
+                <details class="portal-topbar__admin" data-portal-topbar-overlay>
+                    <summary title="@L[_portalTopBar.PortalAdminToggleTextKey]" aria-label="@L[_portalTopBar.PortalAdminToggleTextKey]">
+                        <span aria-hidden="true">&#9881;</span>
+                        <span class="visually-hidden">@L[_portalTopBar.PortalAdminToggleTextKey]</span>
+                    </summary>
+                    <div class="portal-topbar__admin-menu">
+                        @foreach (var link in _portalTopBar.PortalAdminLinks)
+                        {
+                            <a class="portal-topbar__admin-link" href="@link.Href">@L[link.TextKey]</a>
+                        }
+                    </div>
+                </details>
+            }
+
+            @if (_portalTopBar.ModuleLinks.Count > 0)
+            {
+                <span class="portal-topbar__pipe" aria-hidden="true">|</span>
+
+                <div class="portal-topbar__modules" data-portal-topbar-modules>
+                    @for (var i = 0; i < _portalTopBar.ModuleLinks.Count; i++)
+                    {
+                        var link = _portalTopBar.ModuleLinks[i];
+                        <a class="portal-topbar__module-link" href="@link.Href" data-portal-topbar-item data-index="@i">@link.TextKey</a>
+                    }
+                </div>
+
+                <details class="portal-topbar__collapsed" data-portal-topbar-overlay>
+                    <summary title="@L[_portalTopBar.CollapsedToggleTextKey]" aria-label="@L[_portalTopBar.CollapsedToggleTextKey]">
+                        @L[_portalTopBar.CollapsedToggleTextKey]
+                    </summary>
+                    <div class="portal-topbar__collapsed-menu">
+                        @foreach (var link in _portalTopBar.ModuleLinks)
+                        {
+                            <a class="portal-topbar__collapsed-link" href="@link.Href">@link.TextKey</a>
+                        }
+                    </div>
+                </details>
+
+                <details class="portal-topbar__overflow" data-portal-topbar-overflow data-portal-topbar-overlay hidden>
+                    <summary>@L[_portalTopBar.OverflowToggleTextKey]</summary>
+                    <div class="portal-topbar__menu" data-portal-topbar-menu></div>
+                </details>
+            }
+        </nav>
+
+        <div class="portal-topbar__actions">
+            @if (_portalTopBar.LanguageOptions.Count > 1)
+            {
+                <details class="portal-topbar__language" data-portal-topbar-overlay>
+                    <summary title="@L[_portalTopBar.LanguageToggleTextKey]" aria-label="@L[_portalTopBar.LanguageToggleTextKey]">
+                        <span class="portal-topbar__summary-icon">
+                            <span class="portal-topbar__icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9"></circle>
+                                    <path d="M3 12h18"></path>
+                                    <path d="M12 3a14 14 0 0 1 0 18"></path>
+                                    <path d="M12 3a14 14 0 0 0 0 18"></path>
+                                </svg>
+                            </span>
+                            @if (_portalTopBar.IsCultureFallback)
+                            {
+                                <span class="portal-topbar__fallback-indicator" title="@FallbackNotice" aria-hidden="true">i</span>
+                            }
+                        </span>
+                        <span class="visually-hidden">@L[_portalTopBar.LanguageToggleTextKey]</span>
+                        @if (_portalTopBar.IsCultureFallback)
+                        {
+                            <span class="visually-hidden">@FallbackNotice</span>
+                        }
+                    </summary>
+                    <div class="portal-topbar__language-menu">
+                        @if (_portalTopBar.IsCultureFallback)
+                        {
+                            <div class="portal-topbar__language-note">
+                                <div class="portal-topbar__language-note-title">@L["LanguageFallback"]</div>
+                                <div class="portal-topbar__language-note-body">@FallbackNotice</div>
+                            </div>
+                        }
+                        @foreach (var language in _portalTopBar.LanguageOptions)
+                        {
+                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)" data-enhance-nav="false">@CultureText(language.DisplayText)</a>
+                        }
+                    </div>
+                </details>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
+            {
+                <details class="portal-topbar__profile" data-portal-topbar-overlay>
+                    <summary title="@L["User"]" aria-label="@L["User"]">
+                        <span class="portal-topbar__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                <path d="M18 20a6 6 0 0 0-12 0"></path>
+                                <circle cx="12" cy="8" r="4"></circle>
+                            </svg>
+                        </span>
+                        <span class="visually-hidden">@L["User"]</span>
+                    </summary>
+                    <div class="portal-topbar__profile-menu">
+                        <div class="portal-topbar__profile-identity">
+                            <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
+                            <div class="portal-topbar__profile-user-row">
+                                <div class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@DisplayUserName(_portalTopBar.CurrentUserName)</div>
+                            </div>
+                        </div>
+                        <div class="portal-topbar__profile-section">
+                            <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>
+                            <div class="portal-topbar__profile-role-row">
+                                <div class="portal-topbar__profile-current-role" title="@(_roleContext.ActiveRoleName ?? L["No roles assigned."])">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</div>
+                                @if (_roleContext.AvailableRoles.Count > 1)
+                                {
+                                    <details class="portal-topbar__profile-switch" data-portal-topbar-overlay>
+                                        <summary class="portal-topbar__profile-switch-button" title="@L["SwitchRole"]" aria-label="@L["SwitchRole"]">
+                                            <span aria-hidden="true">⇄</span>
+                                            <span class="visually-hidden">@L["SwitchRole"]</span>
+                                        </summary>
+                                        <div class="portal-topbar__profile-switch-menu">
+                                            @foreach (var role in _roleContext.AvailableRoles.Where(role => role.RoleId != _roleContext.ActiveRoleId))
+                                            {
+                                                <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
+                                            }
+                                        </div>
+                                    </details>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private PortalTopBarModel _portalTopBar = PortalTopBarModel.Hidden;
+    private OpenModulePlatform.Web.Shared.Services.UserRoleContext _roleContext = OpenModulePlatform.Web.Shared.Services.UserRoleContext.Empty;
+
+    private string FallbackNotice => string.Format(
+        L["LanguageFallbackNotice"],
+        CultureText(_portalTopBar.PreferredCultureDisplayText),
+        CultureText(_portalTopBar.EffectiveCultureDisplayText));
+
+    protected override async Task OnInitializedAsync()
+    {
+        NavigationManager.LocationChanged += HandleLocationChanged;
+
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext is not null)
+        {
+            _portalTopBar = await PortalTopBarService.CreateAsync(
+                WebAppOptionsAccessor.Value,
+                httpContext.Request,
+                httpContext.User,
+                httpContext.RequestAborted);
+            _roleContext = await RbacService.GetUserRoleContextAsync(httpContext.User, httpContext.RequestAborted);
+            return;
+        }
+
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authenticationState.User;
+        _roleContext = await RbacService.GetUserRoleContextAsync(user, CancellationToken.None);
+
+        if (Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
+        {
+            _portalTopBar = await PortalTopBarService.CreateAsync(
+                WebAppOptionsAccessor.Value,
+                currentUri,
+                user,
+                CancellationToken.None);
+            return;
+        }
+
+        _portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_portalTopBar.IsVisible)
+        {
+            await JS.InvokeAsync<object>("ompPortalTopBar.initAll", Array.Empty<object>());
+        }
+    }
+
+    private string BuildLanguageHref(string culture)
+    {
+        var baseUri = new Uri(NavigationManager.BaseUri, UriKind.Absolute);
+        var basePath = baseUri.AbsolutePath.TrimEnd('/');
+        var endpointPath = string.IsNullOrWhiteSpace(basePath)
+            ? "/localization/set-language"
+            : $"{basePath}/localization/set-language";
+
+        var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        var returnUrl = string.IsNullOrWhiteSpace(relativePath)
+            ? (string.IsNullOrWhiteSpace(basePath) ? "/" : $"{basePath}/")
+            : $"{(string.IsNullOrWhiteSpace(basePath) ? string.Empty : basePath)}/{relativePath.TrimStart('/')}";
+
+        return $"{endpointPath}?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+
+
+    private string BuildAppBaseRelativePath(string relativePath)
+    {
+        var baseUri = new Uri(NavigationManager.BaseUri, UriKind.Absolute);
+        var basePath = baseUri.AbsolutePath.TrimEnd('/');
+        return string.IsNullOrWhiteSpace(basePath)
+            ? $"/{relativePath.TrimStart('/')}"
+            : $"{basePath}/{relativePath.TrimStart('/')}";
+    }
+
+    private string BuildRoleHref(int? roleId)
+    {
+        var currentUri = new Uri(NavigationManager.Uri, UriKind.Absolute);
+        var returnUrl = $"{currentUri.AbsolutePath}{currentUri.Query}";
+        return $"{BuildAppBaseRelativePath("rbac/set-active-role")}?roleId={Uri.EscapeDataString(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+        => NavigationManager.LocationChanged -= HandleLocationChanged;
+
+    private string CultureText(string? text)
+        => string.IsNullOrWhiteSpace(text) ? string.Empty : L[text];
+
+    private static string DisplayUserName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var separatorIndex = value.LastIndexOf('\\');
+        return separatorIndex >= 0 && separatorIndex < value.Length - 1
+            ? value[(separatorIndex + 1)..]
+            : value;
+    }
+}
