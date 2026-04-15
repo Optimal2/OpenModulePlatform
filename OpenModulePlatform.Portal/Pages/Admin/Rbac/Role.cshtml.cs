@@ -38,8 +38,15 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     [BindProperty]
     public string? NewPrincipal { get; set; }
 
+    [BindProperty]
+    public string? ReturnUrl { get; set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
+
+    public string OriginalName { get; private set; } = string.Empty;
+
+    public string OriginalDescription { get; private set; } = string.Empty;
 
     public bool IsCreate => Input.RoleId == 0;
 
@@ -67,6 +74,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (!roleId.HasValue)
         {
+            SetOriginalValues(null, null);
             SetTitles("Create role");
             return Page();
         }
@@ -84,6 +92,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             Description = role.Description
         };
 
+        SetOriginalValues(role.Name, role.Description);
         await LoadDetailsAsync(ct);
         SetTitles("Edit role");
         return Page();
@@ -117,7 +126,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 ct);
 
             StatusMessage = IsCreate ? T("Role created.") : T("Role updated.");
-            return RedirectToPage("/Admin/Rbac/Role", new { roleId });
+            return RedirectAfterSave(roleId);
         }
         catch (SqlException ex)
         {
@@ -295,9 +304,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     {
         if (IsCreate)
         {
+            SetOriginalValues(null, null);
             return;
         }
 
+        await LoadOriginalValuesAsync(ct);
         await LoadDetailsAsync(ct);
     }
 
@@ -335,6 +346,34 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             547 => "Delete or update dependent rows first.",
             _ => fallback
         };
+
+    private async Task LoadOriginalValuesAsync(CancellationToken ct)
+    {
+        if (Input.RoleId <= 0)
+        {
+            SetOriginalValues(null, null);
+            return;
+        }
+
+        var role = await _repo.GetRoleAsync(Input.RoleId, ct);
+        SetOriginalValues(role?.Name, role?.Description);
+    }
+
+    private void SetOriginalValues(string? name, string? description)
+    {
+        OriginalName = name ?? string.Empty;
+        OriginalDescription = description ?? string.Empty;
+    }
+
+    private IActionResult RedirectAfterSave(int roleId)
+    {
+        if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
+        {
+            return LocalRedirect(ReturnUrl);
+        }
+
+        return RedirectToPage("/Admin/Rbac/Role", new { roleId });
+    }
 
     public sealed class InputModel
     {

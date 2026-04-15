@@ -224,6 +224,36 @@ button:hover,
     color: var(--link-hover);
 }
 
+.btn-primary {
+    border-color: var(--link);
+    background: var(--link);
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    border-color: var(--link-hover);
+    background: var(--link-hover);
+    color: #ffffff;
+}
+
+button:disabled,
+.btn:disabled,
+button[aria-disabled=true],
+.btn[aria-disabled=true] {
+    cursor: not-allowed;
+    border-color: var(--border);
+    background: var(--surface-muted);
+    color: var(--text-muted);
+}
+
+button:disabled:hover,
+.btn:disabled:hover,
+button[aria-disabled=true]:hover,
+.btn[aria-disabled=true]:hover {
+    border-color: var(--border);
+    color: var(--text-muted);
+}
+
 .link-list {
     display: flex;
     flex-direction: column;
@@ -516,3 +546,25 @@ code {
     color: var(--text);
 }
 
+
+
+.unsaved-dialog {
+    width: min(30rem, calc(100vw - 2rem));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 0;
+    box-shadow: 0 24px 64px rgba(17, 24, 39, 0.18);
+}
+
+.unsaved-dialog::backdrop {
+    background: rgba(23, 32, 51, 0.35);
+}
+
+.unsaved-dialog__body {
+    margin: 0;
+    padding: 18px;
+}
+
+.unsaved-dialog__body .toolbar {
+    margin-top: 16px;
+}

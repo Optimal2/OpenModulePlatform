@@ -1305,4 +1305,4 @@
   </data>
 
   <data name="Principal is already assigned to role." xml:space="preserve"><value>Principalen är redan tilldelad rollen.</value></data>
-</root>
+<data name="Unsaved changes" xml:space="preserve"><value>Osparade ändringar</value></data><data name="You have unsaved changes to the role name or description." xml:space="preserve"><value>Du har osparade ändringar i rollnamn eller beskrivning.</value></data><data name="Save changes" xml:space="preserve"><value>Spara ändringar</value></data><data name="Discard changes" xml:space="preserve"><value>Makulera ändringar</value></data><data name="Stay on page" xml:space="preserve"><value>Stanna på sidan</value></data><data name="You have unsaved role changes. Press OK to discard them and leave this page, or Cancel to stay." xml:space="preserve"><value>Du har osparade rolländringar. Tryck på OK för att makulera dem och lämna sidan, eller Avbryt för att stanna kvar.</value></data></root>
