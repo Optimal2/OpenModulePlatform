@@ -1,0 +1,38 @@
+@* File: OpenModulePlatform.Web.ExampleWorkerAppModule/Pages/Shared/_Layout.cshtml *@
+<!doctype html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
+    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
+    @if (ViewData["OmpPreventBackCache"] is true)
+    {
+        <meta name="omp-prevent-back-cache" content="true" />
+    }
+</head>
+<body>
+    <header class="app-header">
+        @await Component.InvokeAsync("PortalTopBar")
+        <div class="topbar">
+            <div class="brand-wrap">
+                <div class="brand">@ViewData["PortalTitle"]</div>
+                <div class="brand-subtitle">@L["Example Worker App Module"]</div>
+            </div>
+            <nav class="nav nav--primary">
+                <a href="~/">@L["Overview"]</a>
+                <a href="~/appinstances">@L["App Instances"]</a>
+                <a href="~/configurations">@L["Configurations"]</a>
+                <a href="~/jobs">@L["Jobs"]</a>
+            </nav>
+        </div>
+    </header>
+    <main class="content-shell">
+        @RenderBody()
+    </main>
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/portal-topbar.js"></script>
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-secure-page-navigation.js"></script>
+</body>
+</html>

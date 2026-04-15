@@ -50,15 +50,27 @@ It shows how a module can use OMP without any worker or service component.
 
 ### ExampleServiceAppModule
 
-This is the more complete reference example:
+This is the classic service-backed reference example:
 
 - a web app for administration and observability
-- a service or worker component
+- a dedicated service executable
 - module-owned configuration
 - job tables and job processing
 - runtime coupling to `omp.AppInstances`
 
-It shows how a module can contain both a web surface and a service process while still using the same platform model.
+It shows how a module can contain both a web surface and a classic service process while still using the same platform model.
+
+### ExampleWorkerAppModule
+
+This is the manager-driven worker reference example:
+
+- a web app for administration and observability
+- a worker plugin loaded by `OpenModulePlatform.WorkerProcessHost`
+- module-owned configuration
+- job tables and job processing
+- runtime coupling to `omp.AppInstances`, `omp.AppWorkerDefinitions`, and `omp.AppInstanceRuntimeStates`
+
+It shows how a module can use the same platform model while moving background processing into the additive worker manager runtime.
 
 ## Data model today
 
@@ -131,13 +143,21 @@ These show the intended direction, but the full materialization model is not yet
 4. Razor Pages build views from permissions and repository data.
 5. The Portal home page filters the app catalog based on permissions.
 
-## Request flow in the service example
+## Request flow in the classic service example
 
 1. The worker starts with a configured `AppInstanceId`.
 2. `AppInstanceRepository` reads runtime state from `omp.AppInstances`.
 3. Heartbeat updates observed state on both `AppInstance` and, when possible, `Host`.
 4. Configuration is loaded from a module-owned table using `ConfigId` as the bridge.
 5. The job processor works only when the app instance is active, allowed, and verified against the expected runtime identity.
+
+## Request flow in the manager-driven worker example
+
+1. `OpenModulePlatform.WorkerManager.WindowsService` discovers eligible app instances for the current host.
+2. The manager starts one `OpenModulePlatform.WorkerProcessHost` child process per eligible `AppInstanceId`.
+3. The child host loads `OpenModulePlatform.Worker.ExampleWorkerAppModule.dll` and resolves `ExampleWorkerAppModuleFactory` through `IWorkerModuleFactory`.
+4. The plugin reads runtime state from `omp.AppInstances` and module configuration from its own schema.
+5. The manager publishes observed runtime state back to OMP while the worker plugin processes jobs.
 
 ## Strengths of the current architecture
 
@@ -146,7 +166,7 @@ These show the intended direction, but the full materialization model is not yet
 - the Portal genuinely uses the instance level in its app catalog
 - RBAC is compact and understandable
 - the SQL scripts are explicit and use deliberate placeholders instead of guessing environment-specific values
-- the example projects demonstrate both a simple pattern and a more complete pattern
+- the example projects demonstrate web-only, classic service-backed, and manager-driven worker patterns
 
 ## Known limitations
 

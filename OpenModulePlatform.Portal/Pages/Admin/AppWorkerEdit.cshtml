@@ -1,0 +1,101 @@
+@* File: OpenModulePlatform.Portal/Pages/Admin/AppWorkerEdit.cshtml *@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.AppWorkerEditModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Worker runtime"]</div>
+        <h2>@(Model.IsCreate ? L["Create app worker definition"] : L["Edit app worker definition"])</h2>
+        <p class="lede">
+            @L["This page maps an app definition to the manager-driven worker runtime. The mapping stays generic and only describes runtime kind, worker type key and plugin assembly path relative to the deployed install root."]
+        </p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="HasExistingDefinition" />
+    @if (!Model.IsCreate)
+    {
+        <input type="hidden" asp-for="Input.AppId" />
+    }
+
+    @if (Model.IsCreate)
+    {
+        <div class="form-field">
+            <label asp-for="Input.AppId"></label>
+            <select asp-for="Input.AppId">
+                <option value="">@L["Select app"]</option>
+                @foreach (var option in Model.AppOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["Only apps that should be hosted through the worker manager need a row here."]</div>
+            <span asp-validation-for="Input.AppId" class="field-validation-error"></span>
+        </div>
+    }
+    else
+    {
+        <div class="form-field">
+            <label>@L["App"]</label>
+            <div class="card"><code>@Model.SelectedAppLabel</code></div>
+        </div>
+    }
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.RuntimeKind"></label>
+            <input asp-for="Input.RuntimeKind" />
+            <div class="field-help">@L["Use a stable runtime identifier such as windows-worker-plugin."]</div>
+            <span asp-validation-for="Input.RuntimeKind" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.WorkerTypeKey"></label>
+            <input asp-for="Input.WorkerTypeKey" />
+            <div class="field-help">@L["This must match the worker factory key exposed by the plugin assembly."]</div>
+            <span asp-validation-for="Input.WorkerTypeKey" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.PluginRelativePath"></label>
+            <input asp-for="Input.PluginRelativePath" />
+            <div class="field-help">@L["Relative path under the deployed app-instance install root, for example plugins/MyWorker/MyWorker.dll."]</div>
+            <span asp-validation-for="Input.PluginRelativePath" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.IsEnabled" type="checkbox" />
+        <label asp-for="Input.IsEnabled"></label>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save worker definition"]</button>
+        <a class="action-link" href="~/admin/appworkers">@L["Back to app workers"]</a>
+    </div>
+</form>
+
+@if (!Model.IsCreate)
+{
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('@L["Delete this app worker definition?"]');">
+        <input type="hidden" asp-for="Input.AppId" />
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Deleting the row stops the manager-driven plugin runtime from selecting this app definition. Existing app instances remain intact."]</p>
+        <button type="submit" class="btn btn-danger">@L["Delete worker definition"]</button>
+    </form>
+}

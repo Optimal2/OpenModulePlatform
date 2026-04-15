@@ -1,6 +1,6 @@
 # Logging with NLog
 
-This solution uses NLog as the shared logging provider for the web hosts and the example worker service.
+This solution uses NLog as the shared logging provider for the web hosts, the classic example worker service, and the Windows worker runtime executables.
 The guidance in this document applies to the `0.1.x` release line.
 
 ## Web applications
@@ -11,6 +11,12 @@ This keeps the logging provider and package version centralized while allowing e
 ## Worker service
 
 `OpenModulePlatform.Service.ExampleServiceAppModule` registers NLog directly on its generic host because it runs as its own process and does not consume the shared web project.
+
+## Worker manager and child host
+
+`OpenModulePlatform.WorkerManager.WindowsService` and `OpenModulePlatform.WorkerProcessHost` both register NLog on their generic hosts.
+
+Manager-driven worker plugins, such as `OpenModulePlatform.Worker.ExampleWorkerAppModule`, do not bootstrap logging on their own. They receive `ILogger` dependencies from the child host service provider.
 
 ## Configuration
 

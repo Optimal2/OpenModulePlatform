@@ -103,6 +103,14 @@ public sealed class WorkerProcessHostedService : BackgroundService
             return;
         }
 
+        if (!OperatingSystem.IsWindows())
+        {
+            _logger.LogDebug(
+                "External shutdown events are only supported on Windows. ShutdownEventName={ShutdownEventName}",
+                _settings.ShutdownEventName);
+            return;
+        }
+
         try
         {
             _shutdownEvent = EventWaitHandle.OpenExisting(_settings.ShutdownEventName);

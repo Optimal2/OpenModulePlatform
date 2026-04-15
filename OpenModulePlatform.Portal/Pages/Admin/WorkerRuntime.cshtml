@@ -1,0 +1,84 @@
+@* File: OpenModulePlatform.Portal/Pages/Admin/WorkerRuntime.cshtml *@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.WorkerRuntimeModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Worker runtime"]</div>
+        <h2>@L["Worker runtime"]</h2>
+        <p class="lede">
+            @L["This view shows app instances whose app definition is mapped to the manager-driven worker runtime, together with the latest observed runtime status published by the worker manager."]
+        </p>
+    </div>
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/appworkers">@L["Open app workers"]</a>
+    <a class="action-link" href="~/admin/appinstances">@L["Open app instances"]</a>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">@L["No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated."]</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>@L["Instance"]</th>
+                <th>@L["Module instance"]</th>
+                <th>@L["App"]</th>
+                <th>@L["App instance key"]</th>
+                <th>@L["Host"]</th>
+                <th>@L["Desired"]</th>
+                <th>@L["Observed"]</th>
+                <th>@L["PID"]</th>
+                <th>@L["Last seen"]</th>
+                <th>@L["Last exit"]</th>
+                <th>@L["Message"]</th>
+                <th>@L["Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.InstanceKey</code></td>
+                <td><code>@row.ModuleInstanceKey</code></td>
+                <td>
+                    <div><code>@row.AppKey</code></div>
+                    <div class="muted small-text">@row.DisplayName</div>
+                </td>
+                <td><code>@row.AppInstanceKey</code></td>
+                <td><code>@row.HostKey</code></td>
+                <td><span class="pill">@Model.GetDesiredStateLabel(row.DesiredState, row.IsAllowed)</span></td>
+                <td>
+                    <div><span class="pill">@Model.GetObservedStateLabel(row.ObservedState)</span></div>
+                    <div class="muted small-text"><code>@row.RuntimeKind</code> / <code>@row.WorkerTypeKey</code></div>
+                </td>
+                <td>@row.ProcessId</td>
+                <td>
+                    <div>@row.LastSeenUtc?.ToString("u")</div>
+                    @if (row.StartedUtc.HasValue)
+                    {
+                        <div class="muted small-text">@L["Started"]: @row.StartedUtc.Value.ToString("u")</div>
+                    }
+                </td>
+                <td>
+                    <div>@row.LastExitUtc?.ToString("u")</div>
+                    @if (row.LastExitCode.HasValue)
+                    {
+                        <div class="muted small-text">@L["Exit code"]: @row.LastExitCode.Value</div>
+                    }
+                </td>
+                <td>
+                    <div class="small-text">@row.StatusMessage</div>
+                    <div class="muted small-text"><code>@row.PluginRelativePath</code></div>
+                </td>
+                <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit app instance"]</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
