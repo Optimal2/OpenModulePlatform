@@ -2,6 +2,7 @@
 using OpenModulePlatform.Worker.ExampleWorkerAppModule.Models;
 using Microsoft.Data.SqlClient;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace OpenModulePlatform.Worker.ExampleWorkerAppModule.Services;
 
