@@ -338,6 +338,27 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.AppInstanceRuntimeStates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.AppInstanceRuntimeStates
+    (
+        AppInstanceId uniqueidentifier NOT NULL CONSTRAINT PK_omp_AppInstanceRuntimeStates PRIMARY KEY,
+        RuntimeKind nvarchar(100) NOT NULL,
+        WorkerTypeKey nvarchar(200) NOT NULL,
+        ObservedState tinyint NOT NULL CONSTRAINT DF_omp_AppInstanceRuntimeStates_ObservedState DEFAULT(0),
+        ProcessId int NULL,
+        StartedUtc datetime2(3) NULL,
+        LastSeenUtc datetime2(3) NULL,
+        LastExitUtc datetime2(3) NULL,
+        LastExitCode int NULL,
+        StatusMessage nvarchar(500) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppInstanceRuntimeStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppInstanceRuntimeStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_AppInstanceRuntimeStates_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId)
+    );
+END
+GO
+
 -------------------------------------------------------------------------------
 -- Template topology model
 -------------------------------------------------------------------------------

@@ -1,0 +1,50 @@
+@page
+@model OpenModulePlatform.Web.ExampleWorkerAppModule.Pages.Jobs.IndexModel
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Example module"]</div>
+        <h1>@L["Jobs"]</h1>
+        <p class="lede">@L["Queue new jobs and follow the current job history for the worker app."]</p>
+    </div>
+</div>
+
+<form method="post" class="card form-grid bottom-gap">
+    <div class="form-field">
+        <label asp-for="Input.RequestType"></label>
+        <input asp-for="Input.RequestType" type="text" />
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.PayloadJson"></label>
+        <textarea asp-for="Input.PayloadJson"></textarea>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Queue job"]</button>
+    </div>
+</form>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">@L["No jobs were found."]</div>
+}
+else
+{
+    <table class="grid">
+        <thead><tr><th>@L["JobId"]</th><th>@L["Type"]</th><th>@L["Status"]</th><th>@L["Attempts"]</th><th>@L["Requested UTC"]</th><th>@L["Last error"]</th></tr></thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><span class="pill">@row.JobId</span></td>
+                <td>@row.RequestType</td>
+                <td>@row.Status</td>
+                <td>@row.Attempts</td>
+                <td>@row.RequestedUtc.ToString("u")</td>
+                <td>@row.LastError</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

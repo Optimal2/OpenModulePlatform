@@ -1,0 +1,57 @@
+@* File: OpenModulePlatform.Portal/Pages/Admin/AppWorkers.cshtml *@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.AppWorkersModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Worker runtime"]</div>
+        <h2>@L["App workers"]</h2>
+        <p class="lede">
+            @L["App worker definitions opt an app into the manager-driven plugin runtime. They stay app-level so classic service apps can continue to exist beside the new worker track."]
+        </p>
+    </div>
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/appworkeredit">@L["Create app worker definition"]</a>
+    <a class="action-link" href="~/admin/workerruntime">@L["Open worker runtime"]</a>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">@L["No app worker definitions found. This can mean that no apps use the worker runtime yet or that the database schema has not been updated."]</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>@L["Module"]</th>
+                <th>@L["App key"]</th>
+                <th>@L["Display name"]</th>
+                <th>@L["Type"]</th>
+                <th>@L["Runtime kind"]</th>
+                <th>@L["Worker type"]</th>
+                <th>@L["Plugin path"]</th>
+                <th>@L["Enabled"]</th>
+                <th>@L["Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.ModuleKey</code></td>
+                <td><code>@row.AppKey</code></td>
+                <td>@row.DisplayName</td>
+                <td>@L[row.AppType]</td>
+                <td><code>@row.RuntimeKind</code></td>
+                <td><code>@row.WorkerTypeKey</code></td>
+                <td><code>@row.PluginRelativePath</code></td>
+                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td><a class="action-link" href="~/admin/appworkeredit?id=@row.AppId">@L["Edit"]</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

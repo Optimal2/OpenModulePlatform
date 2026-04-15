@@ -22,6 +22,7 @@ var builder = Host.CreateDefaultBuilder(args)
     {
         services.Configure<WorkerManagerSettings>(context.Configuration.GetSection("WorkerManager"));
         services.AddSingleton<SqlConnectionFactory>();
+        services.AddSingleton<OmpWorkerRuntimeRepository>();
         services.AddSingleton<ConfiguredWorkerInstanceCatalog>();
         services.AddSingleton<OmpDatabaseWorkerInstanceCatalog>();
         services.AddSingleton<IWorkerInstanceCatalog, WorkerInstanceCatalog>();

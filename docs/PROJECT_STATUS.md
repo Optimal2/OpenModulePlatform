@@ -13,10 +13,11 @@ For release planning purposes, `0.1.0` is the first public beta baseline.
 - consistent separation between definitions and instances across the core model
 - a Portal for manual administration
 - RBAC administration in the Portal
-- neutral reference modules for both web-only and service-backed patterns
+- neutral reference modules for web-only, classic service-backed, and manager-driven worker patterns
 - a service example that uses `AppInstance` as the runtime center
+- a manager-driven worker example built on the same `AppInstance` model
 - SQL scripts for both core and example setup
-- an initial worker runtime scaffold for future process supervision work
+- an implemented Windows worker runtime track with manager, child host, plugin contracts, and runtime observation
 
 ## Areas that are still incomplete
 
@@ -25,7 +26,7 @@ For release planning purposes, `0.1.0` is the first public beta baseline.
 - explicit origin linkage between template objects and materialized objects
 - more complete operational use of the deployment tables
 - a stronger core-level model for configuration concepts
-- the future HostAgent and worker runtime implementation
+- the future HostAgent implementation
 
 ## Model maturity
 
@@ -43,7 +44,7 @@ For release planning purposes, `0.1.0` is the first public beta baseline.
 - the template chain from `InstanceTemplate` to real rows
 - deployment and assignment flows
 - the HostAgent contract
-- the generic worker runtime beyond the current scaffold
+- richer lifecycle and health semantics for the generic worker runtime
 
 ## Recommended priorities
 

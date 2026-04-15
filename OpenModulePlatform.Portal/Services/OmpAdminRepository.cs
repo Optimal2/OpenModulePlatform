@@ -26,6 +26,8 @@ public sealed partial class OmpAdminRepository
             ModuleInstanceCount = await ScalarIntAsync(conn, "SELECT COUNT(1) FROM omp.ModuleInstances;", ct),
             AppCount = await ScalarIntAsync(conn, "SELECT COUNT(1) FROM omp.Apps;", ct),
             AppInstanceCount = await ScalarIntAsync(conn, "SELECT COUNT(1) FROM omp.AppInstances;", ct),
+            AppWorkerDefinitionCount = await ConditionalScalarIntAsync(conn, "omp.AppWorkerDefinitions", "SELECT COUNT(1) FROM omp.AppWorkerDefinitions;", ct),
+            AppInstanceRuntimeStateCount = await ConditionalScalarIntAsync(conn, "omp.AppInstanceRuntimeStates", "SELECT COUNT(1) FROM omp.AppInstanceRuntimeStates;", ct),
             ArtifactCount = await ScalarIntAsync(conn, "SELECT COUNT(1) FROM omp.Artifacts;", ct),
             HostCount = await ScalarIntAsync(conn, "SELECT COUNT(1) FROM omp.Hosts;", ct),
             InstanceTemplateCount = await ScalarIntAsync(conn, "SELECT COUNT(1) FROM omp.InstanceTemplates;", ct),
@@ -151,6 +153,138 @@ ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;";
                 SortOrder = rdr.GetInt32(7)
             });
         }
+        return rows;
+    }
+
+
+    public async Task<IReadOnlyList<AppWorkerDefinitionRow>> GetAppWorkerDefinitionsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT awd.AppId,
+       m.ModuleKey,
+       a.AppKey,
+       a.DisplayName,
+       a.AppType,
+       awd.RuntimeKind,
+       awd.WorkerTypeKey,
+       awd.PluginRelativePath,
+       awd.IsEnabled
+FROM omp.AppWorkerDefinitions awd
+INNER JOIN omp.Apps a ON a.AppId = awd.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;";
+
+        var rows = new List<AppWorkerDefinitionRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await TableExistsAsync(conn, "omp.AppWorkerDefinitions", ct))
+        {
+            return rows;
+        }
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new AppWorkerDefinitionRow
+            {
+                AppId = rdr.GetInt32(0),
+                ModuleKey = rdr.GetString(1),
+                AppKey = rdr.GetString(2),
+                DisplayName = rdr.GetString(3),
+                AppType = rdr.GetString(4),
+                RuntimeKind = rdr.GetString(5),
+                WorkerTypeKey = rdr.GetString(6),
+                PluginRelativePath = rdr.GetString(7),
+                IsEnabled = rdr.GetBoolean(8)
+            });
+        }
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<AppWorkerRuntimeRow>> GetAppWorkerRuntimeAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ai.AppInstanceId,
+       i.InstanceKey,
+       mi.ModuleInstanceKey,
+       a.AppKey,
+       ai.AppInstanceKey,
+       ai.DisplayName,
+       h.HostKey,
+       ai.IsAllowed,
+       ai.DesiredState,
+       awd.RuntimeKind,
+       awd.WorkerTypeKey,
+       awd.PluginRelativePath,
+       COALESCE(rs.ObservedState, 0),
+       rs.ProcessId,
+       rs.StartedUtc,
+       rs.LastSeenUtc,
+       rs.LastExitUtc,
+       rs.LastExitCode,
+       rs.StatusMessage
+FROM omp.AppInstances ai
+INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
+INNER JOIN omp.Instances i ON i.InstanceId = mi.InstanceId
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
+LEFT JOIN omp.Hosts h ON h.HostId = ai.HostId
+LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId
+ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
+
+        var rows = new List<AppWorkerRuntimeRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await TableExistsAsync(conn, "omp.AppWorkerDefinitions", ct))
+        {
+            return rows;
+        }
+
+        var hasRuntimeTable = await TableExistsAsync(conn, "omp.AppInstanceRuntimeStates", ct);
+        var effectiveSql = hasRuntimeTable
+            ? sql
+            : sql
+                .Replace("LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId", string.Empty)
+                .Replace("COALESCE(rs.ObservedState, 0)", "CAST(0 AS tinyint)")
+                .Replace("rs.ProcessId", "CAST(NULL AS int)")
+                .Replace("rs.StartedUtc", "CAST(NULL AS datetime2(3))")
+                .Replace("rs.LastSeenUtc", "CAST(NULL AS datetime2(3))")
+                .Replace("rs.LastExitUtc", "CAST(NULL AS datetime2(3))")
+                .Replace("rs.LastExitCode", "CAST(NULL AS int)")
+                .Replace("rs.StatusMessage", "CAST(NULL AS nvarchar(500))");
+
+        await using var cmd = new SqlCommand(effectiveSql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new AppWorkerRuntimeRow
+            {
+                AppInstanceId = rdr.GetGuid(0),
+                InstanceKey = rdr.GetString(1),
+                ModuleInstanceKey = rdr.GetString(2),
+                AppKey = rdr.GetString(3),
+                AppInstanceKey = rdr.GetString(4),
+                DisplayName = rdr.GetString(5),
+                HostKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                IsAllowed = rdr.GetBoolean(7),
+                DesiredState = rdr.GetByte(8),
+                RuntimeKind = rdr.GetString(9),
+                WorkerTypeKey = rdr.GetString(10),
+                PluginRelativePath = rdr.GetString(11),
+                ObservedState = rdr.GetByte(12),
+                ProcessId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
+                StartedUtc = rdr.IsDBNull(14) ? null : rdr.GetDateTime(14),
+                LastSeenUtc = rdr.IsDBNull(15) ? null : rdr.GetDateTime(15),
+                LastExitUtc = rdr.IsDBNull(16) ? null : rdr.GetDateTime(16),
+                LastExitCode = rdr.IsDBNull(17) ? null : rdr.GetInt32(17),
+                StatusMessage = rdr.IsDBNull(18) ? null : rdr.GetString(18)
+            });
+        }
+
         return rows;
     }
 
@@ -399,6 +533,24 @@ ORDER BY d.RequestedUtc DESC, d.HostDeploymentId DESC;";
         await using var cmd = new SqlCommand(sql, conn);
         var value = await cmd.ExecuteScalarAsync(ct);
         return value is int i ? i : Convert.ToInt32(value ?? 0);
+    }
+
+    private static async Task<int> ConditionalScalarIntAsync(SqlConnection conn, string tableName, string sql, CancellationToken ct)
+    {
+        if (!await TableExistsAsync(conn, tableName, ct))
+        {
+            return 0;
+        }
+
+        return await ScalarIntAsync(conn, sql, ct);
+    }
+
+    private static async Task<bool> TableExistsAsync(SqlConnection conn, string tableName, CancellationToken ct)
+    {
+        const string sql = "SELECT CAST(CASE WHEN OBJECT_ID(@TableName, 'U') IS NULL THEN 0 ELSE 1 END AS bit);";
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@TableName", tableName);
+        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
     }
 
     private static async Task<bool> HostBaseUrlColumnExistsAsync(SqlConnection conn, CancellationToken ct)

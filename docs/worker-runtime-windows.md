@@ -57,3 +57,56 @@ The current manager resolves the plugin assembly path as:
 `Path.Combine(AppInstances.InstallPath, AppWorkerDefinitions.PluginRelativePath)`
 
 This keeps runtime selection app-level while still allowing the host to use the app instance's deployed install root.
+
+## Observed runtime state
+
+The manager-driven runtime now publishes observations to `omp.AppInstanceRuntimeStates`.
+
+This table is manager-owned runtime telemetry, not desired state. It is updated additively beside `omp.AppInstances` and can evolve without changing the meaning of the core app-instance row.
+
+Current columns capture:
+
+- `ObservedState`
+- `ProcessId`
+- `StartedUtc`
+- `LastSeenUtc`
+- `LastExitUtc`
+- `LastExitCode`
+- `StatusMessage`
+
+Current observed state values are:
+
+- `0`: unknown
+- `1`: starting
+- `2`: running
+- `3`: stopping
+- `4`: stopped
+- `5`: failed
+
+## Heartbeat model
+
+When the manager runs in `OmpDatabase` mode it also publishes:
+
+- host heartbeat to `omp.Hosts.LastSeenUtc`
+- worker heartbeat to `omp.AppInstances.LastSeenUtc` while a managed worker is observed as starting or running
+
+This keeps compatibility with existing OMP views that already rely on `omp.AppInstances.LastSeenUtc`, while still adding a separate surface for manager-specific runtime details.
+
+
+## Public example module
+
+The public repository now includes a neutral reference module for this runtime track:
+
+- `OpenModulePlatform.Web.ExampleWorkerAppModule`
+- `OpenModulePlatform.Worker.ExampleWorkerAppModule`
+
+The example keeps the familiar module pattern of a web administration surface plus background processing, but the background processing runs as a worker plugin loaded by `OpenModulePlatform.WorkerProcessHost` instead of as its own service executable.
+
+## Portal administration
+
+The Portal admin area now includes two worker-runtime pages:
+
+- `App workers`: manage `omp.AppWorkerDefinitions` rows per app definition
+- `Worker runtime`: view app instances selected into the worker-runtime track together with the latest observed runtime state
+
+These pages are additive and do not change the classic service-app path.
