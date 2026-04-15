@@ -1,4 +1,6 @@
 using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization;
+using OpenModulePlatform.Web.Shared.Localization;
+using OpenModulePlatform.Web.Shared.Models;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Components;
@@ -29,11 +31,15 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
     [Inject]
     protected IStringLocalizer<ExampleWebAppBlazorModuleResource> L { get; set; } = default!;
 
+    [Inject]
+    protected IStringLocalizer<SharedResource> SharedL { get; set; } = default!;
+
     protected ClaimsPrincipal CurrentUser { get; private set; } = new(new ClaimsIdentity());
     protected HashSet<string> CurrentPermissions { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     protected bool AuthorizationResolved { get; private set; }
     protected bool IsAuthorized { get; private set; }
     protected string? AccessDeniedMessage { get; private set; }
+    protected OmpErrorDisplayModel? PageError { get; private set; }
     protected string PageTitle { get; private set; } = "OpenModulePlatform";
 
     protected string WebAppTitle => string.IsNullOrWhiteSpace(Options.Value.Title)
@@ -54,6 +60,41 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             ? string.Empty
             : relativePath.TrimStart('/');
 
+    protected void ClearPageError()
+        => PageError = null;
+
+    protected void ShowForbiddenError(string? messageOverride = null)
+    {
+        PageError = OmpErrorDisplayModelFactory.CreateForbidden(
+            GetCurrentPathAndQuery(),
+            OmpUrlPathHelper.CombinePortalHref(Options.Value.PortalTopBar.PortalBaseUrl, "/"),
+            NavigationManager.BaseUri,
+            SharedL,
+            messageOverride);
+        SetPageTitle(SharedL["StatusPageTitle403"]);
+    }
+
+    protected void ShowNotFoundError(string? messageOverride = null)
+    {
+        PageError = OmpErrorDisplayModelFactory.CreateNotFound(
+            GetCurrentPathAndQuery(),
+            OmpUrlPathHelper.CombinePortalHref(Options.Value.PortalTopBar.PortalBaseUrl, "/"),
+            NavigationManager.BaseUri,
+            SharedL,
+            messageOverride);
+        SetPageTitle(SharedL["StatusPageTitle404"]);
+    }
+
+    private string GetCurrentPathAndQuery()
+    {
+        if (!Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
+        {
+            return NavigationManager.Uri;
+        }
+
+        return $"{currentUri.AbsolutePath}{currentUri.Query}";
+    }
+
     protected async Task<bool> EnsureAnyPermissionAsync(
         CancellationToken ct,
         params string[] requiredPermissions)
@@ -70,6 +111,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             IsAuthorized = true;
             AuthorizationResolved = true;
             AccessDeniedMessage = null;
+            ClearPageError();
             return true;
         }
 
@@ -79,6 +121,7 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             IsAuthorized = false;
             AuthorizationResolved = true;
             AccessDeniedMessage = L["You do not have access to the page."].Value;
+            ShowForbiddenError(AccessDeniedMessage);
             return false;
         }
 
@@ -93,6 +136,15 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
         AccessDeniedMessage = IsAuthorized
             ? null
             : L["You do not have permission for this page."].Value;
+
+        if (IsAuthorized)
+        {
+            ClearPageError();
+        }
+        else
+        {
+            ShowForbiddenError(AccessDeniedMessage);
+        }
 
         return IsAuthorized;
     }

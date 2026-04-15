@@ -1,0 +1,88 @@
+.omp-error-view {
+    width: min(46rem, 100%);
+    margin: 0 auto;
+    padding: 2rem;
+    border: 1px solid #d7dde5;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+}
+
+.omp-error-view__code {
+    display: inline-block;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #3559e0;
+}
+
+.omp-error-view__title {
+    margin: 0 0 0.75rem;
+    font-size: 1.9rem;
+    line-height: 1.2;
+}
+
+.omp-error-view__message {
+    margin: 0 0 1rem;
+    line-height: 1.6;
+    color: #223044;
+}
+
+.omp-error-view__detail {
+    margin: 0;
+    color: #4b5563;
+    word-break: break-word;
+}
+
+.omp-error-view__detail code {
+    display: inline-block;
+    margin-top: 0.35rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    background: #eef2ff;
+    color: #1f2937;
+}
+
+.omp-error-view__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.omp-error-view__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.omp-error-view__button--primary {
+    background: #3559e0;
+    border-color: #3559e0;
+    color: #fff;
+}
+
+.omp-error-view__button--primary:hover {
+    background: #2948bc;
+    border-color: #2948bc;
+}
+
+.omp-error-view__button--secondary {
+    background: #fff;
+    border-color: #c8d1dc;
+    color: #223044;
+}
+
+.omp-error-view__button--secondary:hover {
+    background: #f5f7fa;
+}

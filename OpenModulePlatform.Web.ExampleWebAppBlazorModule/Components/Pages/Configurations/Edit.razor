@@ -10,9 +10,9 @@
 {
     <div class="empty-state">@L["Loading configuration..."]</div>
 }
-else if (!IsAuthorized)
+else if (PageError is not null)
 {
-    <div class="empty-state">@AccessDeniedMessage</div>
+    <OmpErrorView Model="@PageError" />
 }
 else
 {
@@ -29,13 +29,7 @@ else
         <div class="card status-banner">@StatusMessage</div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(ErrorMessage))
-    {
-        <div class="empty-state">@ErrorMessage</div>
-    }
-    else
-    {
-        <EditForm Model="Input" OnValidSubmit="SaveAsync" class="card form-grid">
+    <EditForm Model="Input" OnValidSubmit="SaveAsync" class="card form-grid">
             <DataAnnotationsValidator />
             <ValidationSummary />
 
@@ -55,7 +49,6 @@ else
                 <NavLink class="action-link" href="configurations">@L["Back to configurations"]</NavLink>
             </div>
         </EditForm>
-    }
 }
 
 @code {
@@ -67,7 +60,6 @@ else
 
     private EditInput Input { get; set; } = new();
     private string? StatusMessage { get; set; }
-    private string? ErrorMessage { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -82,18 +74,18 @@ else
         var effectiveConfigId = ConfigId ?? QueryConfigId;
         if (effectiveConfigId is null || effectiveConfigId.Value <= 0)
         {
-            ErrorMessage = L["No valid configId was provided."];
+            ShowNotFoundError(L["No valid configId was provided."].Value);
             return;
         }
 
         var row = await Repo.GetConfigurationAsync(effectiveConfigId.Value, CancellationToken.None);
         if (row is null)
         {
-            ErrorMessage = L["The configuration was not found."];
+            ShowNotFoundError(L["The configuration was not found."].Value);
             return;
         }
 
-        ErrorMessage = null;
+        ClearPageError();
         Input = new EditInput
         {
             ConfigId = row.ConfigId,
