@@ -197,11 +197,14 @@ public static class OmpWebHostingExtensions
             return Results.LocalRedirect("/");
         });
 
-        app.MapGet("/rbac/set-active-role", async (HttpContext context, int? roleId, string? returnUrl, RbacService rbac, CancellationToken ct) =>
+        app.MapGet("/rbac/set-active-role", async (HttpContext context, int? roleId, string? returnUrl, RbacService rbac, PortalTopBarService portalTopBarService, CancellationToken ct) =>
         {
             var roleContext = await rbac.GetUserRoleContextAsync(context.User, ct);
             var validRoleIds = roleContext.AvailableRoles.Select(x => x.RoleId).ToHashSet();
             var roleChanged = roleId is int requestedRoleId && requestedRoleId != roleContext.ActiveRoleId;
+            var targetPermissions = roleChanged
+                ? await rbac.GetPermissionsForRoleAsync(context.User, roleId, ct)
+                : roleContext.EffectivePermissions;
 
             if (roleId is int selectedRoleId && validRoleIds.Contains(selectedRoleId))
             {
@@ -224,20 +227,13 @@ public static class OmpWebHostingExtensions
             }
 
             var safePortalHref = PortalTopBarModelFactory.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
+            var canReturnToRequestedUrl = !string.IsNullOrWhiteSpace(returnUrl)
+                && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
+                && await portalTopBarService.CanAccessReturnUrlAsync(options, returnUrl, targetPermissions, ct);
 
-            if (roleChanged)
+            if (canReturnToRequestedUrl)
             {
-                if (Uri.IsWellFormedUriString(safePortalHref, UriKind.Absolute))
-                {
-                    return Results.Redirect(safePortalHref);
-                }
-
-                return Results.LocalRedirect(safePortalHref);
-            }
-
-            if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
-            {
-                return Results.LocalRedirect(returnUrl);
+                return Results.LocalRedirect(returnUrl!);
             }
 
             if (Uri.IsWellFormedUriString(safePortalHref, UriKind.Absolute))
