@@ -1,6 +1,4 @@
-@using Microsoft.JSInterop
 @using OpenModulePlatform.Web.Shared.Models
-@inject Microsoft.JSInterop.IJSRuntime JS
 
 @if (Model is not null)
 {
@@ -18,16 +16,6 @@
         }
 
         <div class="omp-error-view__actions">
-            @if (Model.ShowBackButton && !string.IsNullOrWhiteSpace(Model.BackText))
-            {
-                <button type="button" class="omp-error-view__button omp-error-view__button--secondary" @onclick="GoBackAsync">@Model.BackText</button>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(Model.AppHomeHref) && !string.IsNullOrWhiteSpace(Model.AppHomeText))
-            {
-                <a class="omp-error-view__button omp-error-view__button--secondary" href="@Model.AppHomeHref">@Model.AppHomeText</a>
-            }
-
             @if (!string.IsNullOrWhiteSpace(Model.PortalHref) && !string.IsNullOrWhiteSpace(Model.PortalText))
             {
                 <a class="omp-error-view__button omp-error-view__button--primary" href="@Model.PortalHref">@Model.PortalText</a>
@@ -39,7 +27,4 @@
 @code {
     [Parameter, EditorRequired]
     public OmpErrorDisplayModel Model { get; set; } = new();
-
-    private ValueTask GoBackAsync()
-        => JS.InvokeVoidAsync("history.back");
 }

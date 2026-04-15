@@ -913,7 +913,7 @@
     <value>Short explanation of who should receive this role.</value>
   </data>
   <data name="Save role" xml:space="preserve">
-    <value>Save role</value>
+    <value>Save name/description</value>
   </data>
   <data name="Back to roles" xml:space="preserve">
     <value>Back to roles</value>
