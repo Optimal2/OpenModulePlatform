@@ -5,7 +5,7 @@ internal static class PathResolutionUtility
 {
     public static string ResolvePath(string path)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path, nameof(path));
 
         if (Path.IsPathRooted(path))
         {
@@ -19,8 +19,13 @@ internal static class PathResolutionUtility
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar);
 
-        return string.IsNullOrWhiteSpace(relativePath)
-            ? Path.GetFullPath(baseDirectory)
-            : Path.GetFullPath($"{baseDirectory}{Path.DirectorySeparatorChar}{relativePath}");
+        if (relativePath.Length == 0)
+        {
+            throw new ArgumentException(
+                "Path cannot consist only of directory separator characters.",
+                nameof(path));
+        }
+
+        return Path.GetFullPath($"{baseDirectory}{Path.DirectorySeparatorChar}{relativePath}");
     }
 }
