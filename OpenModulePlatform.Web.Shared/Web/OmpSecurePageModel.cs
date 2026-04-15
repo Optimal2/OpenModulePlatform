@@ -3,6 +3,7 @@ using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Web.Shared.Web;
@@ -22,6 +23,21 @@ public abstract class OmpSecurePageModel<TResource> : OmpPageModel<TResource> wh
 
     protected Task<HashSet<string>> GetUserPermissionsAsync(CancellationToken ct)
         => _rbac.GetUserPermissionsAsync(User, ct);
+
+    public override void OnPageHandlerExecuting(PageHandlerExecutingContext context)
+    {
+        base.OnPageHandlerExecuting(context);
+        ApplySecurePageCachingHeaders();
+        ViewData["OmpPreventBackCache"] = true;
+    }
+
+    private void ApplySecurePageCachingHeaders()
+    {
+        var headers = HttpContext.Response.Headers;
+        headers["Cache-Control"] = "no-store, no-cache, max-age=0, must-revalidate";
+        headers["Pragma"] = "no-cache";
+        headers["Expires"] = "0";
+    }
 
     /// <summary>
     /// Enforces a set of permissions using the configured mode or an explicit override.
