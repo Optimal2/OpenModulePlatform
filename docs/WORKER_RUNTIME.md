@@ -2,6 +2,8 @@
 
 This document summarizes the current state of the additive worker runtime track in the public repository.
 
+The worker-runtime projects are now aligned on `.NET 10` together with the rest of the repository.
+
 ## Implemented projects
 
 ### OpenModulePlatform.WorkerManager.WindowsService

@@ -2,6 +2,8 @@
 
 This document describes the additive Windows worker runtime track in OpenModulePlatform.
 
+The current repository baseline for this track is `.NET 10`.
+
 ## Goals
 
 The Windows worker runtime introduces a general manager-driven model where:

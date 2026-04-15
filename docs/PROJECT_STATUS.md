@@ -7,6 +7,10 @@ The current repository is best described as a public platform skeleton with work
 
 For release planning purposes, `0.1.0` is the first public beta baseline.
 
+## Runtime and tooling baseline
+
+The repository is now aligned on `.NET 10`, a pinned .NET 10 SDK line in `global.json`, and centralized NuGet package versioning through `Directory.Packages.props`.
+
 ## Strong areas today
 
 - neutral open-source direction without customer-specific content
