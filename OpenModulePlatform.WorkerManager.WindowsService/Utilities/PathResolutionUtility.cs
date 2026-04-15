@@ -22,10 +22,14 @@ internal static class PathResolutionUtility
         if (relativePath.Length == 0)
         {
             throw new ArgumentException(
-                "Path cannot consist only of directory separator characters.",
+                "Path must contain more than just directory separator characters.",
                 nameof(path));
         }
 
-        return Path.GetFullPath(Path.Combine(baseDirectory, relativePath));
+        // Do not use Path.Combine here. The analyzer cannot prove that relativePath is non-rooted,
+        // even though rooted inputs are handled above and leading directory separators are trimmed.
+        // Building the path explicitly keeps the intent clear and avoids a false positive about
+        // silently dropping the base directory.
+        return Path.GetFullPath($"{baseDirectory}{Path.DirectorySeparatorChar}{relativePath}");
     }
 }
