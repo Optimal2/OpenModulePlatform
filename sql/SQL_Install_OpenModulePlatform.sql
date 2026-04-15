@@ -322,6 +322,22 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.AppWorkerDefinitions', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.AppWorkerDefinitions
+    (
+        AppId int NOT NULL CONSTRAINT PK_omp_AppWorkerDefinitions PRIMARY KEY,
+        RuntimeKind nvarchar(100) NOT NULL,
+        WorkerTypeKey nvarchar(200) NOT NULL,
+        PluginRelativePath nvarchar(400) NOT NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_AppWorkerDefinitions_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppWorkerDefinitions_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppWorkerDefinitions_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_AppWorkerDefinitions_App FOREIGN KEY(AppId) REFERENCES omp.Apps(AppId)
+    );
+END
+GO
+
 -------------------------------------------------------------------------------
 -- Template topology model
 -------------------------------------------------------------------------------
