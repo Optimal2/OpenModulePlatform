@@ -7,7 +7,22 @@ namespace OpenModulePlatform.Worker.Abstractions.Models;
 public sealed class WorkerExecutionContext
 {
     /// <summary>
-    /// Gets or sets the app instance being executed.
+    /// Gets the app instance being executed.
     /// </summary>
     public Guid AppInstanceId { get; init; }
+
+    /// <summary>
+    /// Gets the stable worker type key resolved by the child host.
+    /// </summary>
+    public string WorkerTypeKey { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the fully qualified plugin assembly path used by the child host.
+    /// </summary>
+    public string PluginAssemblyPath { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the UTC timestamp when the child host created the runtime context.
+    /// </summary>
+    public DateTimeOffset StartedUtc { get; init; }
 }
