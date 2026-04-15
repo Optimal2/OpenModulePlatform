@@ -79,9 +79,14 @@ public sealed class ManagedWorkerProcess
         return _restartAttempts.Peek().Add(restartWindow);
     }
 
+    public bool NeedsExitObservation()
+    {
+        return Process is { HasExited: true } && !ExitObserved;
+    }
+
     public bool ObserveExitIfNeeded()
     {
-        if (Process is null || !Process.HasExited || ExitObserved)
+        if (!NeedsExitObservation())
         {
             return false;
         }

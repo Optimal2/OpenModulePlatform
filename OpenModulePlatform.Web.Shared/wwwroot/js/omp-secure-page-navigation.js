@@ -30,11 +30,26 @@
         return entries[0].type === 'back_forward';
     }
 
-    window.addEventListener('pageshow', function (event) {
+    function clearSensitivePageData() {
+        var sensitiveFields = document.querySelectorAll(
+            'input[type="password"], input[autocomplete="new-password"], ' +
+            'input[autocomplete="current-password"], input[autocomplete="one-time-code"], ' +
+            'input[autocomplete="off"], textarea[autocomplete="off"]'
+        );
+
+        for (var i = 0; i < sensitiveFields.length; i++) {
+            sensitiveFields[i].value = '';
+        }
+    }
+
+    function handlePageShow(event) {
         if (!shouldReloadForHistoryNavigation(event)) {
             return;
         }
 
+        clearSensitivePageData();
         window.location.reload();
-    });
+    }
+
+    window.addEventListener('pageshow', handlePageShow);
 })();

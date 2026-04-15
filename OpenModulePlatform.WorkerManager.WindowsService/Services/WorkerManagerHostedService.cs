@@ -67,17 +67,17 @@ public sealed class WorkerManagerHostedService : BackgroundService
         var desiredById = desiredWorkers.ToDictionary(worker => worker.AppInstanceId);
         var runtimeKind = GetRuntimeKindOrNull();
 
-        var exitedWorkers = new List<ManagedWorkerProcess>();
-        foreach (var managed in _managedWorkers.Values)
-        {
-            if (managed.ObserveExitIfNeeded())
-            {
-                exitedWorkers.Add(managed);
-            }
-        }
+        var exitedWorkers = _managedWorkers.Values
+            .Where(managed => managed.NeedsExitObservation())
+            .ToList();
 
         foreach (var managed in exitedWorkers)
         {
+            if (!managed.ObserveExitIfNeeded())
+            {
+                continue;
+            }
+
             _logger.LogWarning(
                 "Worker process exited. AppInstanceId={AppInstanceId}, ExitCode={ExitCode}, StopRequested={StopRequested}",
                 managed.Definition.AppInstanceId,
@@ -443,8 +443,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
             return Path.GetFullPath(path);
         }
 
+        var baseDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var relativePath = path.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
+
+        return string.IsNullOrWhiteSpace(relativePath)
+            ? Path.GetFullPath(baseDirectory)
+            : Path.GetFullPath($"{baseDirectory}{Path.DirectorySeparatorChar}{relativePath}");
     }
 
     private static Process CreateWorkerProcess(string workerProcessPath, DesiredWorkerInstance desired)
