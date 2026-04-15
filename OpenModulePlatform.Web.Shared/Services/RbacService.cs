@@ -46,6 +46,45 @@ public sealed class RbacService
         return roleContext.EffectivePermissions;
     }
 
+    public async Task<HashSet<string>> GetPermissionsForRoleAsync(
+        ClaimsPrincipal user,
+        int? roleId,
+        CancellationToken ct)
+    {
+        if (roleId is not int requestedRoleId)
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var roleContext = await GetUserRoleContextAsync(user, ct);
+        if (!roleContext.AvailableRoles.Any(x => x.RoleId == requestedRoleId))
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (roleContext.ActiveRoleId == requestedRoleId)
+        {
+            return roleContext.EffectivePermissions;
+        }
+
+        try
+        {
+            await using var conn = _db.Create();
+            await conn.OpenAsync(ct);
+            return await GetRolePermissionsAsync(conn, requestedRoleId, ct);
+        }
+        catch (SqlException ex)
+        {
+            _log.LogError(ex, "Failed to load RBAC permissions for role {RoleId} from the OMP database.", requestedRoleId);
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogError(ex, "Failed to load RBAC permissions for role {RoleId} from the OMP database.", requestedRoleId);
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     public async Task<UserRoleContext> GetUserRoleContextAsync(
         ClaimsPrincipal user,
         CancellationToken ct)

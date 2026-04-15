@@ -82,6 +82,63 @@ public sealed class PortalTopBarService
         }
     }
 
+    public async Task<bool> CanAccessReturnUrlAsync(
+        WebAppOptions options,
+        string? returnUrl,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl)
+            || !Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+        {
+            return false;
+        }
+
+        var path = ExtractPath(returnUrl);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var normalizedPath = NormalizeAbsolutePath(path);
+        if (string.Equals(normalizedPath, "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var portalBasePath = GetPortalBasePath(options);
+        if (IsPortalAdminPath(normalizedPath, portalBasePath))
+        {
+            return permissions.Contains(PortalAdminPermission);
+        }
+
+        var apps = await GetEnabledWebAppsAsync(ct);
+        var app = FindBestMatchingApp(apps, normalizedPath);
+        if (app is not null)
+        {
+            if (!HasAccess(app, permissions))
+            {
+                return false;
+            }
+
+            var appRelativePath = GetAppRelativePath(normalizedPath, app);
+            if (!RequiresElevatedAccess(appRelativePath))
+            {
+                return true;
+            }
+
+            return HasInferredAdminAccess(app, permissions);
+        }
+
+        if (IsPortalRootPath(normalizedPath, portalBasePath))
+        {
+            return true;
+        }
+
+        return !string.Equals(portalBasePath, "/", StringComparison.OrdinalIgnoreCase)
+            && IsPathMatch(normalizedPath, portalBasePath);
+    }
+
     public async Task<PortalTopBarModel> CreateAsync(
         WebAppOptions options,
         Uri currentUri,
@@ -230,6 +287,171 @@ public sealed class PortalTopBarService
         return app.RequireAll
             ? app.RequiredPermissions.All(permissions.Contains)
             : app.RequiredPermissions.Any(permissions.Contains);
+    }
+
+    private static TopBarAppEntry? FindBestMatchingApp(
+        IReadOnlyList<TopBarAppEntry> apps,
+        string normalizedPath)
+    {
+        return apps
+            .Where(app => !IsPortalApp(app))
+            .Select(app => new
+            {
+                App = app,
+                Prefix = GetAppPathPrefix(app)
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Prefix) && IsPathMatch(normalizedPath, x.Prefix!))
+            .OrderByDescending(x => x.Prefix!.Length)
+            .Select(x => x.App)
+            .FirstOrDefault();
+    }
+
+    private static string GetAppRelativePath(string normalizedPath, TopBarAppEntry app)
+    {
+        var prefix = GetAppPathPrefix(app);
+        if (string.IsNullOrWhiteSpace(prefix) || string.Equals(normalizedPath, prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return "/";
+        }
+
+        var remainder = normalizedPath[prefix.Length..].TrimStart('/');
+        return string.IsNullOrWhiteSpace(remainder)
+            ? "/"
+            : $"/{remainder}";
+    }
+
+    private static string? GetAppPathPrefix(TopBarAppEntry app)
+    {
+        var routePath = Clean(app.RoutePath);
+        if (string.IsNullOrWhiteSpace(routePath) || Uri.TryCreate(routePath, UriKind.Absolute, out _))
+        {
+            return null;
+        }
+
+        return NormalizeAbsolutePath($"/{routePath.Trim('/')}");
+    }
+
+    private static bool RequiresElevatedAccess(string appRelativePath)
+    {
+        if (string.IsNullOrWhiteSpace(appRelativePath) || string.Equals(appRelativePath, "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return appRelativePath.Contains("/edit", StringComparison.OrdinalIgnoreCase)
+            || appRelativePath.Contains("/create", StringComparison.OrdinalIgnoreCase)
+            || appRelativePath.Contains("/new", StringComparison.OrdinalIgnoreCase)
+            || appRelativePath.Contains("/delete", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasInferredAdminAccess(TopBarAppEntry app, IReadOnlySet<string> permissions)
+    {
+        var candidatePermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var permission in app.RequiredPermissions)
+        {
+            if (permission.EndsWith(".View", StringComparison.OrdinalIgnoreCase))
+            {
+                candidatePermissions.Add($"{permission[..^5]}.Admin");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(app.AppKey))
+        {
+            candidatePermissions.Add($"{app.AppKey}.Admin");
+        }
+
+        if (!string.IsNullOrWhiteSpace(app.AppInstanceKey))
+        {
+            candidatePermissions.Add($"{app.AppInstanceKey}.Admin");
+        }
+
+        return candidatePermissions.Count == 0 || candidatePermissions.Any(permissions.Contains);
+    }
+
+    private static string GetPortalBasePath(WebAppOptions options)
+    {
+        var portalBaseUrl = options.PortalTopBar?.PortalBaseUrl;
+        if (string.IsNullOrWhiteSpace(portalBaseUrl))
+        {
+            return "/";
+        }
+
+        if (Uri.TryCreate(portalBaseUrl, UriKind.Absolute, out var absolutePortalUri))
+        {
+            return NormalizeAbsolutePath(absolutePortalUri.AbsolutePath);
+        }
+
+        return portalBaseUrl.StartsWith("/", StringComparison.Ordinal)
+            ? NormalizeAbsolutePath(portalBaseUrl)
+            : "/";
+    }
+
+    private static bool IsPortalRootPath(string normalizedPath, string portalBasePath)
+        => string.Equals(normalizedPath, NormalizeAbsolutePath(portalBasePath), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPortalAdminPath(string normalizedPath, string portalBasePath)
+        => IsPathMatch(normalizedPath, CombineRelativePath(portalBasePath, "admin"));
+
+    private static bool IsPathMatch(string normalizedPath, string normalizedPrefix)
+    {
+        if (string.Equals(normalizedPrefix, "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedPath.StartsWith("/", StringComparison.Ordinal);
+        }
+
+        return string.Equals(normalizedPath, normalizedPrefix, StringComparison.OrdinalIgnoreCase)
+            || normalizedPath.StartsWith($"{normalizedPrefix}/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string CombineRelativePath(string basePath, string relativePath)
+    {
+        var normalizedBasePath = NormalizeAbsolutePath(basePath);
+        var trimmedRelativePath = relativePath.Trim('/');
+        if (string.IsNullOrWhiteSpace(trimmedRelativePath))
+        {
+            return normalizedBasePath;
+        }
+
+        return string.Equals(normalizedBasePath, "/", StringComparison.Ordinal)
+            ? $"/{trimmedRelativePath}"
+            : $"{normalizedBasePath}/{trimmedRelativePath}";
+    }
+
+    private static string NormalizeAbsolutePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        var normalizedPath = path.Trim();
+        var questionMarkIndex = normalizedPath.IndexOf('?');
+        var hashIndex = normalizedPath.IndexOf('#');
+        var queryIndex = questionMarkIndex >= 0 && hashIndex >= 0
+            ? Math.Min(questionMarkIndex, hashIndex)
+            : Math.Max(questionMarkIndex, hashIndex);
+        if (queryIndex >= 0)
+        {
+            normalizedPath = normalizedPath[..queryIndex];
+        }
+
+        normalizedPath = normalizedPath.Trim('/');
+        return string.IsNullOrWhiteSpace(normalizedPath)
+            ? "/"
+            : $"/{normalizedPath}";
+    }
+
+    private static string ExtractPath(string returnUrl)
+    {
+        var questionMarkIndex = returnUrl.IndexOf('?');
+        var hashIndex = returnUrl.IndexOf('#');
+        var queryIndex = questionMarkIndex >= 0 && hashIndex >= 0
+            ? Math.Min(questionMarkIndex, hashIndex)
+            : Math.Max(questionMarkIndex, hashIndex);
+        return queryIndex >= 0
+            ? returnUrl[..queryIndex]
+            : returnUrl;
     }
 
     private static string ToCultureDisplayText(string culture)
