@@ -124,12 +124,14 @@ ORDER BY ai.AppInstanceId;";
         }
 
         var installRoot = Path.GetFullPath(installPath.Trim());
+        var normalizedInstallRoot = installRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var sanitizedRelativePath = pluginRelativePath.Trim()
             .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var candidatePath = Path.GetFullPath(Path.Combine(installRoot, sanitizedRelativePath));
+        var candidatePath = string.IsNullOrWhiteSpace(sanitizedRelativePath)
+            ? Path.GetFullPath(normalizedInstallRoot)
+            : Path.GetFullPath($"{normalizedInstallRoot}{Path.DirectorySeparatorChar}{sanitizedRelativePath}");
 
-        var normalizedRoot = installRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
+        var normalizedRoot = normalizedInstallRoot + Path.DirectorySeparatorChar;
 
         if (!candidatePath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(candidatePath, installRoot, StringComparison.OrdinalIgnoreCase))
