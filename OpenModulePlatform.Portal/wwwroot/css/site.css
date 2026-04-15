@@ -316,6 +316,22 @@ button[aria-disabled=true]:hover,
     white-space: normal;
 }
 
+.app-instances-grid {
+    table-layout: fixed;
+}
+
+.app-instances-grid th,
+.app-instances-grid td,
+.app-instances-grid a,
+.app-instances-grid code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.app-instances-grid code {
+    white-space: normal;
+}
+
 .empty-state {
     padding: 18px;
     border: 1px dashed var(--border-strong);

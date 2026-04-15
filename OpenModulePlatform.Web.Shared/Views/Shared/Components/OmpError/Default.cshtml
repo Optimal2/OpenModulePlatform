@@ -14,16 +14,6 @@
     }
 
     <div class="omp-error-view__actions">
-        @if (Model.ShowBackButton && !string.IsNullOrWhiteSpace(Model.BackText))
-        {
-            <button type="button" class="omp-error-view__button omp-error-view__button--secondary" onclick="history.back()">@Model.BackText</button>
-        }
-
-        @if (!string.IsNullOrWhiteSpace(Model.AppHomeHref) && !string.IsNullOrWhiteSpace(Model.AppHomeText))
-        {
-            <a class="omp-error-view__button omp-error-view__button--secondary" href="@Model.AppHomeHref">@Model.AppHomeText</a>
-        }
-
         @if (!string.IsNullOrWhiteSpace(Model.PortalHref) && !string.IsNullOrWhiteSpace(Model.PortalText))
         {
             <a class="omp-error-view__button omp-error-view__button--primary" href="@Model.PortalHref">@Model.PortalText</a>

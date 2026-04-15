@@ -10,4 +10,8 @@
   <data name="HostDeployments.Lede" xml:space="preserve"><value>Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</value></data>
 <data name="More" xml:space="preserve"><value>More</value><comment>Compact portal top-bar overflow toggle.</comment></data><data name="Modules" xml:space="preserve"><value>Modules</value></data>
   <data name="Principal is already assigned to role." xml:space="preserve"><value>Principal is already assigned to role.</value></data>
+
+  <data name="Save role" xml:space="preserve">
+    <value>Save name/description</value>
+  </data>
 </root>

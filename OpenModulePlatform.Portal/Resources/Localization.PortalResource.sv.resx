@@ -910,7 +910,7 @@
     <value>Kort förklaring av vem som bör få den här rollen.</value>
   </data>
   <data name="Save role" xml:space="preserve">
-    <value>Spara roll</value>
+    <value>Spara namn/beskrivning</value>
   </data>
   <data name="Back to roles" xml:space="preserve">
     <value>Tillbaka till roller</value>
