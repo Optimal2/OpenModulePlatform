@@ -1,15 +1,40 @@
 # OpenModulePlatform.WorkerManager.WindowsService
 
-This project is the Windows Service host for the future OMP worker runtime.
+This project is the Windows Service host for the OMP worker runtime manager.
 
 Current state:
 
-- compiles as a minimal Windows Service scaffold
-- contains no worker orchestration logic yet
-- exists to reserve the project structure, package references, and naming conventions
+- runs as a real Windows Service host
+- supervises one child process per managed `AppInstanceId`
+- starts `OpenModulePlatform.WorkerProcessHost` as an external child process
+- passes runtime identity and plugin settings through command-line configuration overrides
+- applies a basic restart policy with restart delay and restart window limits
+- requests graceful shutdown through a named OS event and kills the child only if it does not exit in time
+- supports two worker catalogs:
+  - `Configuration` for conservative local bootstrap and testing
+  - `OmpDatabase` for real discovery from `omp.AppInstances` on the current host
 
-Planned responsibility:
+OMP database discovery currently resolves workers by joining:
 
-- discover worker app instances assigned to the current host
-- supervise child worker processes
-- restart or stop workers based on desired state and health
+- `omp.AppInstances`
+- `omp.Hosts`
+- `omp.Apps`
+- `omp.Artifacts`
+- `omp.AppWorkerDefinitions`
+
+The `omp.AppWorkerDefinitions` table is the minimal metadata contract for manager-driven plugin workers. It binds an app definition to:
+
+- a runtime kind, currently `windows-worker-plugin`
+- a `WorkerTypeKey`
+- a plugin assembly path relative to `omp.AppInstances.InstallPath`
+
+Current limitations:
+
+- does not yet publish observed runtime state or heartbeat back to OMP
+- does not yet perform artifact download or installation
+- does not yet include a portal UI for worker metadata administration
+
+Important compatibility rule:
+
+- classic service apps remain untouched unless they are explicitly registered in `omp.AppWorkerDefinitions`
+- this keeps the legacy service-exe model intact while the manager-based runtime matures

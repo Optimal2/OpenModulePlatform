@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
 using NLog.Extensions.Hosting;
+using OpenModulePlatform.WorkerManager.WindowsService.Contracts;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
 using OpenModulePlatform.WorkerManager.WindowsService.Services;
 
@@ -20,6 +21,10 @@ var builder = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
         services.Configure<WorkerManagerSettings>(context.Configuration.GetSection("WorkerManager"));
+        services.AddSingleton<SqlConnectionFactory>();
+        services.AddSingleton<ConfiguredWorkerInstanceCatalog>();
+        services.AddSingleton<OmpDatabaseWorkerInstanceCatalog>();
+        services.AddSingleton<IWorkerInstanceCatalog, WorkerInstanceCatalog>();
         services.AddHostedService<WorkerManagerHostedService>();
     });
 
