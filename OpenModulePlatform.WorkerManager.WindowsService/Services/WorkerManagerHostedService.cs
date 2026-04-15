@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using OpenModulePlatform.WorkerManager.WindowsService.Contracts;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
 using OpenModulePlatform.WorkerManager.WindowsService.Runtime;
+using OpenModulePlatform.WorkerManager.WindowsService.Utilities;
 
 namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 
@@ -164,17 +165,22 @@ public sealed class WorkerManagerHostedService : BackgroundService
             mode: EventResetMode.ManualReset,
             name: managed.Definition.ShutdownEventName);
 
-        shutdownEvent.Reset();
-
         var process = CreateWorkerProcess(workerProcessPath, managed.Definition);
         managed.RecordStartAttempt(nowUtc, restartWindow);
 
-        if (!process.Start())
+        try
         {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException(
+                    $"Failed to start worker process for AppInstanceId '{managed.Definition.AppInstanceId}'.");
+            }
+        }
+        catch
+        {
+            process.Dispose();
             shutdownEvent.Dispose();
-
-            throw new InvalidOperationException(
-                $"Failed to start worker process for AppInstanceId '{managed.Definition.AppInstanceId}'.");
+            throw;
         }
 
         managed.AttachProcess(process, shutdownEvent, nowUtc);
@@ -438,17 +444,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     private static string ResolvePath(string path)
     {
-        if (Path.IsPathRooted(path))
-        {
-            return Path.GetFullPath(path);
-        }
-
-        var baseDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var relativePath = path.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        return string.IsNullOrWhiteSpace(relativePath)
-            ? Path.GetFullPath(baseDirectory)
-            : Path.GetFullPath($"{baseDirectory}{Path.DirectorySeparatorChar}{relativePath}");
+        return PathResolutionUtility.ResolvePath(path);
     }
 
     private static Process CreateWorkerProcess(string workerProcessPath, DesiredWorkerInstance desired)

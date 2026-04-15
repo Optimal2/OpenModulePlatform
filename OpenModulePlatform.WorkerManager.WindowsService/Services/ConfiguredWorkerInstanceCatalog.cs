@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.WorkerManager.WindowsService.Contracts;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
+using OpenModulePlatform.WorkerManager.WindowsService.Utilities;
 
 namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 
@@ -56,17 +57,7 @@ public sealed class ConfiguredWorkerInstanceCatalog : IWorkerInstanceCatalog
 
     private static string ResolvePath(string path)
     {
-        if (Path.IsPathRooted(path))
-        {
-            return Path.GetFullPath(path);
-        }
-
-        var baseDirectory = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var relativePath = path.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        return string.IsNullOrWhiteSpace(relativePath)
-            ? Path.GetFullPath(baseDirectory)
-            : Path.GetFullPath($"{baseDirectory}{Path.DirectorySeparatorChar}{relativePath}");
+        return PathResolutionUtility.ResolvePath(path);
     }
 
     private static string BuildShutdownEventName(Guid appInstanceId)
