@@ -14,4 +14,4 @@
   <data name="Save role" xml:space="preserve">
     <value>Save name/description</value>
   </data>
-</root>
+<data name="App workers" xml:space="preserve"><value>App workers</value></data><data name="Worker runtime" xml:space="preserve"><value>Worker runtime</value></data><data name="Worker runtime states" xml:space="preserve"><value>Worker runtime states</value></data></root>

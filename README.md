@@ -22,9 +22,11 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `OpenModulePlatform.Web.ExampleWebAppBlazorModule` - Blazor-based web module reference example
 - `OpenModulePlatform.Web.ExampleServiceAppModule` - web interface for the service-backed example module
 - `OpenModulePlatform.Service.ExampleServiceAppModule` - worker/service reference example
-- `OpenModulePlatform.WorkerManager.WindowsService` - scaffold for a future generic Windows worker manager
-- `OpenModulePlatform.WorkerProcessHost` - scaffold for a future generic child worker process host
-- `OpenModulePlatform.Worker.Abstractions` - contracts for the future worker runtime model
+- `OpenModulePlatform.WorkerManager.WindowsService` - generic Windows worker manager for manager-driven worker apps
+- `OpenModulePlatform.WorkerProcessHost` - generic child worker process host for plugin-based workers
+- `OpenModulePlatform.Worker.Abstractions` - shared contracts for worker plugins
+- `OpenModulePlatform.Web.ExampleWorkerAppModule` - web interface for the manager-driven worker example module
+- `OpenModulePlatform.Worker.ExampleWorkerAppModule` - plugin-based worker reference example
 - `sql/SQL_Install_OpenModulePlatform.sql` - core schema, RBAC, Portal, and bootstrap data
 - `sql/SQL_Install_OpenModulePlatform_Examples.sql` - example modules, example instances, template topology, and sample jobs
 - `docs/` - architecture, terminology, release notes, and practical guides
@@ -52,10 +54,11 @@ The current model explicitly separates:
 - The Portal can be used for manual administration of the core model
 - RBAC can be administered from the Portal
 - The Portal builds the app catalog from `AppInstances`, not from `Apps`
-- The example modules demonstrate both a pure web scenario and a service-backed scenario
+- The example modules demonstrate pure web, classic service-backed, and manager-driven worker scenarios
 - The service example reads runtime state from `AppInstances` and updates heartbeat and observed identity
 - The SQL scripts bootstrap both core and example data
-- The worker runtime scaffold is in place for the next phase of runtime work
+- The additive Windows worker runtime is implemented with manager, child host, OMP discovery, and observed runtime reporting
+- The public examples now cover web-only, classic service-backed, and manager-driven worker patterns
 
 ## What is still in progress
 
@@ -63,7 +66,7 @@ The current model explicitly separates:
 - HostAgent does not yet exist
 - the deployment tables are more preparatory than fully operationalized
 - the configuration model is still module-owned and not yet fully formalized at the core level
-- the worker runtime scaffold does not yet implement dynamic plugin loading or process supervision
+- artifact distribution and installation are still outside the current worker manager scope
 
 ## Quick start
 
@@ -112,7 +115,7 @@ A normal manual installation should be possible without requiring the future Hos
 - [Terminology](docs/TERMINOLOGY.md)
 - [Manual administration](docs/ADMIN_CONFIGURATION.md)
 - [Project status](docs/PROJECT_STATUS.md)
-- [Worker runtime scaffold](docs/WORKER_RUNTIME.md)
+- [Worker runtime](docs/WORKER_RUNTIME.md)
 - [Logging](docs/LOGGING.md)
 - [Release notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)

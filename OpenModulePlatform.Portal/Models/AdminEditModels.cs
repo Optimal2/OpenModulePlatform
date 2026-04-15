@@ -231,3 +231,20 @@ public sealed class AppDefinitionContext
 
     public string AppType { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Editable worker-runtime metadata stored per app definition.
+/// </summary>
+public sealed class AppWorkerDefinitionEditData
+{
+    public int AppId { get; set; }
+
+    public string RuntimeKind { get; set; } = string.Empty;
+
+    public string WorkerTypeKey { get; set; } = string.Empty;
+
+    public string PluginRelativePath { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; }
+}
+

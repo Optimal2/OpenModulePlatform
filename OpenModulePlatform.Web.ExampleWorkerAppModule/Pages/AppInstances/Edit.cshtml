@@ -1,0 +1,44 @@
+@page
+@model OpenModulePlatform.Web.ExampleWorkerAppModule.Pages.AppInstances.EditModel
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Example module"]</div>
+        <h1>@L["Edit app instance"]</h1>
+        <p class="lede">@L["Update governing values for the selected app instance."]</p>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="Input.AppInstanceId" />
+
+    <div class="form-field checkbox-row">
+        <input asp-for="Input.IsAllowed" type="checkbox" />
+        <label asp-for="Input.IsAllowed"></label>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.DesiredState"></label>
+        <input asp-for="Input.DesiredState" type="text" />
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.ConfigId"></label>
+        <input asp-for="Input.ConfigId" type="text" />
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.ArtifactId"></label>
+        <input asp-for="Input.ArtifactId" type="text" />
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save"]</button>
+        <a class="action-link" href="~/appinstances">@L["Back to app instances"]</a>
+    </div>
+</form>

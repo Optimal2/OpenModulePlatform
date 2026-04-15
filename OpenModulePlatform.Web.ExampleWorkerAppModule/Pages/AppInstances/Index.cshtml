@@ -1,0 +1,73 @@
+@page
+@model OpenModulePlatform.Web.ExampleWorkerAppModule.Pages.AppInstances.IndexModel
+
+@functions {
+    private static string FormatObservedState(byte? observedState)
+    {
+        return observedState switch
+        {
+            1 => "starting",
+            2 => "running",
+            3 => "stopping",
+            4 => "stopped",
+            5 => "failed",
+            _ => "unknown"
+        };
+    }
+}
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Example module"]</div>
+        <h1>@L["App Instances"]</h1>
+        <p class="lede">
+            @L["Runtime instance level for the manager-driven worker app. Manage allowance, desired state, artifact, configuration link, and observe the current worker process state."]
+        </p>
+    </div>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">@L["No app instances were found."]</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>@L["Host"]</th>
+                <th>@L["App instance"]</th>
+                <th>@L["Installation"]</th>
+                <th>@L["Allowed"]</th>
+                <th>@L["Desired state"]</th>
+                <th>@L["Observed state"]</th>
+                <th>@L["PID"]</th>
+                <th>@L["Artifact"]</th>
+                <th>@L["Config"]</th>
+                <th>@L["Runtime last seen"]</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><span class="pill">@row.HostKey</span></td>
+                <td>
+                    <div>@row.AppInstanceKey</div>
+                    <div class="muted small-text"><code>@row.WorkerTypeKey</code></div>
+                </td>
+                <td>@row.InstallationName</td>
+                <td>@(row.IsAllowed ? L["Yes"] : L["No"])</td>
+                <td>@row.DesiredState</td>
+                <td>@FormatObservedState(row.ObservedState)</td>
+                <td>@row.ProcessId</td>
+                <td>@row.ArtifactVersion</td>
+                <td>@row.ConfigId</td>
+                <td>@row.RuntimeLastSeenUtc?.ToString("u")</td>
+                <td><a class="action-link" href="~/appinstances/edit?appInstanceId=@row.AppInstanceId">@L["Edit"]</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

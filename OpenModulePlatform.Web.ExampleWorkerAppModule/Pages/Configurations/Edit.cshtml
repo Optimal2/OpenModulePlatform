@@ -1,0 +1,34 @@
+@page
+@model OpenModulePlatform.Web.ExampleWorkerAppModule.Pages.Configurations.EditModel
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Example module"]</div>
+        <h1>@L["Edit configuration"]</h1>
+        <p class="lede">@L["Update comment and JSON content for the selected configuration."]</p>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="Input.ConfigId" />
+
+    <div class="form-field">
+        <label asp-for="Input.Comment"></label>
+        <input asp-for="Input.Comment" type="text" />
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.ConfigJson"></label>
+        <textarea asp-for="Input.ConfigJson"></textarea>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save"]</button>
+        <a class="action-link" href="~/configurations">@L["Back to configurations"]</a>
+    </div>
+</form>

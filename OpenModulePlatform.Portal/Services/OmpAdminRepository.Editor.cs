@@ -71,6 +71,114 @@ INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
 ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;",
             ct);
 
+    // -------------------------------------------------------------------------
+    // App worker-definition editing
+    // -------------------------------------------------------------------------
+
+    public async Task<AppWorkerDefinitionEditData?> GetAppWorkerDefinitionAsync(int appId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await TableExistsAsync(conn, "omp.AppWorkerDefinitions", ct))
+        {
+            return null;
+        }
+
+        const string sql = @"
+SELECT AppId,
+       RuntimeKind,
+       WorkerTypeKey,
+       PluginRelativePath,
+       IsEnabled
+FROM omp.AppWorkerDefinitions
+WHERE AppId = @AppId;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@AppId", appId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new AppWorkerDefinitionEditData
+        {
+            AppId = rdr.GetInt32(0),
+            RuntimeKind = rdr.GetString(1),
+            WorkerTypeKey = rdr.GetString(2),
+            PluginRelativePath = rdr.GetString(3),
+            IsEnabled = rdr.GetBoolean(4)
+        };
+    }
+
+    public async Task<int> SaveAppWorkerDefinitionAsync(AppWorkerDefinitionEditData input, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await TableExistsAsync(conn, "omp.AppWorkerDefinitions", ct))
+        {
+            throw new InvalidOperationException("Database schema missing omp.AppWorkerDefinitions. Run SQL_Install_OpenModulePlatform.sql.");
+        }
+
+        const string updateSql = @"
+UPDATE omp.AppWorkerDefinitions
+SET RuntimeKind = @RuntimeKind,
+    WorkerTypeKey = @WorkerTypeKey,
+    PluginRelativePath = @PluginRelativePath,
+    IsEnabled = @IsEnabled,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppId = @AppId;";
+
+        await using var update = new SqlCommand(updateSql, conn);
+        BindAppWorkerDefinition(update, input);
+        var affected = await update.ExecuteNonQueryAsync(ct);
+        if (affected > 0)
+        {
+            return input.AppId;
+        }
+
+        const string insertSql = @"
+INSERT INTO omp.AppWorkerDefinitions
+(
+    AppId,
+    RuntimeKind,
+    WorkerTypeKey,
+    PluginRelativePath,
+    IsEnabled
+)
+VALUES
+(
+    @AppId,
+    @RuntimeKind,
+    @WorkerTypeKey,
+    @PluginRelativePath,
+    @IsEnabled
+);";
+
+        await using var insert = new SqlCommand(insertSql, conn);
+        BindAppWorkerDefinition(insert, input);
+        await insert.ExecuteNonQueryAsync(ct);
+        return input.AppId;
+    }
+
+    public async Task DeleteAppWorkerDefinitionAsync(int appId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await TableExistsAsync(conn, "omp.AppWorkerDefinitions", ct))
+        {
+            throw new InvalidOperationException("Database schema missing omp.AppWorkerDefinitions. Run SQL_Install_OpenModulePlatform.sql.");
+        }
+
+        await using var cmd = new SqlCommand("DELETE FROM omp.AppWorkerDefinitions WHERE AppId = @Id;", conn);
+        Add(cmd, "@Id", appId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public Task<IReadOnlyList<OptionItem>> GetArtifactOptionsAsync(CancellationToken ct)
         => GetOptionsAsync(
             @"
@@ -1097,6 +1205,16 @@ WHERE ArtifactId = @ArtifactId
         Add(cmd, "@IsAllowed", input.IsAllowed);
         Add(cmd, "@DesiredState", input.DesiredState);
         Add(cmd, "@SortOrder", input.SortOrder);
+    }
+
+
+    private static void BindAppWorkerDefinition(SqlCommand cmd, AppWorkerDefinitionEditData input)
+    {
+        Add(cmd, "@AppId", input.AppId);
+        Add(cmd, "@RuntimeKind", input.RuntimeKind);
+        Add(cmd, "@WorkerTypeKey", input.WorkerTypeKey);
+        Add(cmd, "@PluginRelativePath", input.PluginRelativePath);
+        Add(cmd, "@IsEnabled", input.IsEnabled);
     }
 
     private async Task<IReadOnlyList<OptionItem>> GetOptionsAsync(string sql, CancellationToken ct)

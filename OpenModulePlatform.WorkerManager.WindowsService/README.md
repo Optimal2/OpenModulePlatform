@@ -13,6 +13,9 @@ Current state:
 - supports two worker catalogs:
   - `Configuration` for conservative local bootstrap and testing
   - `OmpDatabase` for real discovery from `omp.AppInstances` on the current host
+- publishes manager heartbeat back to `omp.Hosts` when running in `OmpDatabase` mode
+- publishes observed worker runtime state back to `omp.AppInstanceRuntimeStates`
+- updates `omp.AppInstances.LastSeenUtc` while a manager-driven worker is observed as starting or running
 
 OMP database discovery currently resolves workers by joining:
 
@@ -28,11 +31,21 @@ The `omp.AppWorkerDefinitions` table is the minimal metadata contract for manage
 - a `WorkerTypeKey`
 - a plugin assembly path relative to `omp.AppInstances.InstallPath`
 
+The `omp.AppInstanceRuntimeStates` table is the first generic observation surface for the manager-driven runtime. It stores:
+
+- observed lifecycle state
+- process id
+- start time
+- manager-side heartbeat
+- last exit time
+- last exit code
+- a short status message
+
 Current limitations:
 
-- does not yet publish observed runtime state or heartbeat back to OMP
 - does not yet perform artifact download or installation
-- does not yet include a portal UI for worker metadata administration
+- does not yet include a portal UI for worker metadata or runtime state administration
+- does not yet define a cross-platform worker manager model
 
 Important compatibility rule:
 

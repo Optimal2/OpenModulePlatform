@@ -46,6 +46,10 @@ public sealed class OverviewMetrics
 
     public int AppInstanceCount { get; set; }
 
+    public int AppWorkerDefinitionCount { get; set; }
+
+    public int AppInstanceRuntimeStateCount { get; set; }
+
     public int ArtifactCount { get; set; }
 
     public int HostCount { get; set; }
@@ -143,6 +147,75 @@ public sealed class AppRow
     public bool IsEnabled { get; set; }
 
     public int SortOrder { get; set; }
+}
+
+
+/// <summary>
+/// Worker-plugin runtime metadata configured per app definition.
+/// </summary>
+public sealed class AppWorkerDefinitionRow
+{
+    public int AppId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string AppType { get; set; } = string.Empty;
+
+    public string RuntimeKind { get; set; } = string.Empty;
+
+    public string WorkerTypeKey { get; set; } = string.Empty;
+
+    public string PluginRelativePath { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; }
+}
+
+/// <summary>
+/// Runtime-observation row for app instances handled by the worker runtime track.
+/// </summary>
+public sealed class AppWorkerRuntimeRow
+{
+    public Guid AppInstanceId { get; set; }
+
+    public string InstanceKey { get; set; } = string.Empty;
+
+    public string ModuleInstanceKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string AppInstanceKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? HostKey { get; set; }
+
+    public bool IsAllowed { get; set; }
+
+    public byte DesiredState { get; set; }
+
+    public string RuntimeKind { get; set; } = string.Empty;
+
+    public string WorkerTypeKey { get; set; } = string.Empty;
+
+    public string PluginRelativePath { get; set; } = string.Empty;
+
+    public byte ObservedState { get; set; }
+
+    public int? ProcessId { get; set; }
+
+    public DateTime? StartedUtc { get; set; }
+
+    public DateTime? LastSeenUtc { get; set; }
+
+    public DateTime? LastExitUtc { get; set; }
+
+    public int? LastExitCode { get; set; }
+
+    public string? StatusMessage { get; set; }
 }
 
 /// <summary>

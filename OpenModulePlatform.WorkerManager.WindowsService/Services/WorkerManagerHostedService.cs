@@ -14,16 +14,19 @@ public sealed class WorkerManagerHostedService : BackgroundService
     private readonly ILogger<WorkerManagerHostedService> _logger;
     private readonly IOptionsMonitor<WorkerManagerSettings> _settings;
     private readonly IWorkerInstanceCatalog _catalog;
+    private readonly OmpWorkerRuntimeRepository _runtimeRepository;
     private readonly Dictionary<Guid, ManagedWorkerProcess> _managedWorkers = new();
 
     public WorkerManagerHostedService(
         ILogger<WorkerManagerHostedService> logger,
         IOptionsMonitor<WorkerManagerSettings> settings,
-        IWorkerInstanceCatalog catalog)
+        IWorkerInstanceCatalog catalog,
+        OmpWorkerRuntimeRepository runtimeRepository)
     {
         _logger = logger;
         _settings = settings;
         _catalog = catalog;
+        _runtimeRepository = runtimeRepository;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -38,11 +41,13 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         try
         {
+            await TouchHostHeartbeatIfEnabledAsync(hostIdentity, stoppingToken);
             await ReconcileWorkersAsync(stoppingToken);
 
             using var timer = new PeriodicTimer(refreshInterval);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
+                await TouchHostHeartbeatIfEnabledAsync(hostIdentity, stoppingToken);
                 await ReconcileWorkersAsync(stoppingToken);
             }
         }
@@ -60,6 +65,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
     {
         var desiredWorkers = await _catalog.GetDesiredWorkersAsync(cancellationToken);
         var desiredById = desiredWorkers.ToDictionary(worker => worker.AppInstanceId);
+        var runtimeKind = GetRuntimeKindOrNull();
 
         foreach (var managed in _managedWorkers.Values)
         {
@@ -70,12 +76,14 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     managed.Definition.AppInstanceId,
                     managed.LastExitCode,
                     managed.StopRequested);
+
+                await PublishExitObservationIfEnabledAsync(managed, runtimeKind, "worker process exited", cancellationToken);
             }
         }
 
         foreach (var existing in _managedWorkers.Values.Where(worker => !desiredById.ContainsKey(worker.Definition.AppInstanceId)).ToList())
         {
-            await StopAndRemoveWorkerAsync(existing, "worker no longer desired", cancellationToken);
+            await StopAndRemoveWorkerAsync(existing, runtimeKind, "worker no longer desired", cancellationToken);
         }
 
         foreach (var desired in desiredWorkers)
@@ -93,18 +101,22 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     desired.AppInstanceId,
                     desired.WorkerTypeKey);
 
-                await StopWorkerAsync(managed, "worker configuration changed", cancellationToken);
+                await StopWorkerAsync(managed, runtimeKind, "worker configuration changed", cancellationToken);
                 managed.UpdateDefinition(desired);
             }
 
-            await EnsureWorkerRunningAsync(managed, cancellationToken);
+            await EnsureWorkerRunningAsync(managed, runtimeKind, cancellationToken);
         }
     }
 
-    private async Task EnsureWorkerRunningAsync(ManagedWorkerProcess managed, CancellationToken cancellationToken)
+    private async Task EnsureWorkerRunningAsync(
+        ManagedWorkerProcess managed,
+        string? runtimeKind,
+        CancellationToken cancellationToken)
     {
         if (managed.IsRunning())
         {
+            await PublishRunningObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
             return;
         }
 
@@ -160,6 +172,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         managed.AttachProcess(process, shutdownEvent, nowUtc);
+        await PublishStartingObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
 
         _logger.LogInformation(
             "Started worker process. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, ProcessId={ProcessId}, WorkerProcessPath={WorkerProcessPath}, PluginAssemblyPath={PluginAssemblyPath}",
@@ -172,18 +185,21 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     private async Task StopAndRemoveWorkerAsync(
         ManagedWorkerProcess managed,
+        string? runtimeKind,
         string reason,
         CancellationToken cancellationToken)
     {
-        await StopWorkerAsync(managed, reason, cancellationToken);
+        await StopWorkerAsync(managed, runtimeKind, reason, cancellationToken);
         _managedWorkers.Remove(managed.Definition.AppInstanceId);
     }
 
     private async Task StopAllWorkersAsync(string reason, CancellationToken cancellationToken)
     {
+        var runtimeKind = GetRuntimeKindOrNull();
+
         foreach (var managed in _managedWorkers.Values.ToList())
         {
-            await StopWorkerAsync(managed, reason, cancellationToken);
+            await StopWorkerAsync(managed, runtimeKind, reason, cancellationToken);
         }
 
         _managedWorkers.Clear();
@@ -191,6 +207,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     private async Task StopWorkerAsync(
         ManagedWorkerProcess managed,
+        string? runtimeKind,
         string reason,
         CancellationToken cancellationToken)
     {
@@ -208,6 +225,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
             reason,
             managed.ProcessId);
 
+        await PublishStoppingObservationIfEnabledAsync(managed, runtimeKind, reason, cancellationToken);
+
         var stoppedGracefully = await managed.RequestStopAsync(stopTimeout, cancellationToken);
         if (!stoppedGracefully)
         {
@@ -220,10 +239,195 @@ public sealed class WorkerManagerHostedService : BackgroundService
             managed.Kill();
         }
 
+        await PublishExitObservationIfEnabledAsync(managed, runtimeKind, reason, cancellationToken);
+
         _logger.LogInformation(
             "Worker process stopped. AppInstanceId={AppInstanceId}, ExitCode={ExitCode}",
             managed.Definition.AppInstanceId,
             managed.LastExitCode);
+    }
+
+    private async Task TouchHostHeartbeatIfEnabledAsync(string hostIdentity, CancellationToken cancellationToken)
+    {
+        if (!ShouldPublishRuntimeToOmp())
+        {
+            return;
+        }
+
+        try
+        {
+            await _runtimeRepository.TouchHostHeartbeatAsync(hostIdentity, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to publish manager heartbeat. HostIdentity={HostIdentity}", hostIdentity);
+        }
+    }
+
+    private async Task PublishStartingObservationIfEnabledAsync(
+        ManagedWorkerProcess managed,
+        string? runtimeKind,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeKind))
+        {
+            return;
+        }
+
+        var observation = CreateObservation(
+            managed,
+            runtimeKind,
+            WorkerObservedStates.Starting,
+            managed.LastStartUtc,
+            null,
+            null,
+            "worker process started");
+
+        await TryPublishObservationAsync(observation, touchAppInstanceHeartbeat: true, cancellationToken);
+    }
+
+    private async Task PublishRunningObservationIfEnabledAsync(
+        ManagedWorkerProcess managed,
+        string? runtimeKind,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeKind))
+        {
+            return;
+        }
+
+        var observation = CreateObservation(
+            managed,
+            runtimeKind,
+            WorkerObservedStates.Running,
+            managed.LastStartUtc,
+            DateTimeOffset.UtcNow,
+            null,
+            "worker process running");
+
+        await TryPublishObservationAsync(observation, touchAppInstanceHeartbeat: true, cancellationToken);
+    }
+
+    private async Task PublishStoppingObservationIfEnabledAsync(
+        ManagedWorkerProcess managed,
+        string? runtimeKind,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeKind))
+        {
+            return;
+        }
+
+        var observation = CreateObservation(
+            managed,
+            runtimeKind,
+            WorkerObservedStates.Stopping,
+            managed.LastStartUtc,
+            null,
+            null,
+            reason);
+
+        await TryPublishObservationAsync(observation, touchAppInstanceHeartbeat: false, cancellationToken);
+    }
+
+    private async Task PublishExitObservationIfEnabledAsync(
+        ManagedWorkerProcess managed,
+        string? runtimeKind,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeKind))
+        {
+            return;
+        }
+
+        var observedState = managed.LastExitCode.GetValueOrDefault() == 0
+            ? WorkerObservedStates.Stopped
+            : WorkerObservedStates.Failed;
+
+        var observation = CreateObservation(
+            managed,
+            runtimeKind,
+            observedState,
+            managed.LastStartUtc,
+            null,
+            managed.LastExitUtc,
+            BuildExitMessage(managed, reason));
+
+        await TryPublishObservationAsync(observation, touchAppInstanceHeartbeat: false, cancellationToken);
+    }
+
+    private async Task TryPublishObservationAsync(
+        WorkerRuntimeObservation observation,
+        bool touchAppInstanceHeartbeat,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _runtimeRepository.PublishObservationAsync(observation, touchAppInstanceHeartbeat, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to publish worker runtime observation. AppInstanceId={AppInstanceId}, ObservedState={ObservedState}",
+                observation.AppInstanceId,
+                observation.ObservedState);
+        }
+    }
+
+    private bool ShouldPublishRuntimeToOmp()
+    {
+        return string.Equals(
+            _settings.CurrentValue.GetCatalogMode(),
+            WorkerCatalogModes.OmpDatabase,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string? GetRuntimeKindOrNull()
+    {
+        if (!ShouldPublishRuntimeToOmp())
+        {
+            return null;
+        }
+
+        return _settings.CurrentValue.OmpDatabase.RuntimeKind.Trim();
+    }
+
+    private static WorkerRuntimeObservation CreateObservation(
+        ManagedWorkerProcess managed,
+        string runtimeKind,
+        byte observedState,
+        DateTimeOffset? startedUtc,
+        DateTimeOffset? lastSeenUtc,
+        DateTimeOffset? lastExitUtc,
+        string statusMessage)
+    {
+        return new WorkerRuntimeObservation
+        {
+            AppInstanceId = managed.Definition.AppInstanceId,
+            RuntimeKind = runtimeKind,
+            WorkerTypeKey = managed.Definition.WorkerTypeKey,
+            ObservedState = observedState,
+            ProcessId = managed.IsRunning() ? managed.ProcessId : null,
+            StartedUtc = startedUtc,
+            LastSeenUtc = lastSeenUtc,
+            LastExitUtc = lastExitUtc,
+            LastExitCode = managed.LastExitCode,
+            StatusMessage = statusMessage
+        };
+    }
+
+    private static string BuildExitMessage(ManagedWorkerProcess managed, string reason)
+    {
+        var normalizedReason = string.IsNullOrWhiteSpace(reason)
+            ? "worker process exited"
+            : reason.Trim();
+
+        return managed.LastExitCode.GetValueOrDefault() == 0
+            ? normalizedReason
+            : $"{normalizedReason}; exit code {managed.LastExitCode}";
     }
 
     private static string ResolvePath(string path)
