@@ -1,6 +1,11 @@
 @using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Components.Layout
 @using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization
-@inject Microsoft.Extensions.Localization.IStringLocalizer<ExampleWebAppBlazorModuleResource> L
+@using OpenModulePlatform.Web.Shared.Localization
+@using OpenModulePlatform.Web.Shared.Options
+@using OpenModulePlatform.Web.Shared.Services
+@inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> SharedL
+@inject Microsoft.Extensions.Options.IOptions<WebAppOptions> Options
+@inject NavigationManager NavigationManager
 
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(Program).Assembly">
@@ -10,16 +15,25 @@
         </Found>
         <NotFound>
             <LayoutView Layout="@typeof(MainLayout)">
-                <PageTitle>@L["Page not found"]</PageTitle>
-                <div class="page-header">
-                    <div>
-                        <div class="eyebrow">@L["Example module"]</div>
-                        <h1>@L["Page not found"]</h1>
-                        <p class="lede">@L["Check the address or navigate back using the menu."]</p>
-                    </div>
-                </div>
-                <div class="empty-state">@L["There is no page at the specified address."]</div>
+                <PageTitle>@SharedL["StatusPageTitle404"]</PageTitle>
+                <OmpErrorView Model="@BuildNotFoundModel()" />
             </LayoutView>
         </NotFound>
     </Router>
 </CascadingAuthenticationState>
+
+
+@code {
+    private OpenModulePlatform.Web.Shared.Models.OmpErrorDisplayModel BuildNotFoundModel()
+    {
+        var requestedUrl = Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri)
+            ? $"{currentUri.AbsolutePath}{currentUri.Query}"
+            : NavigationManager.Uri;
+
+        return OmpErrorDisplayModelFactory.CreateNotFound(
+            requestedUrl,
+            OmpUrlPathHelper.CombinePortalHref(Options.Value.PortalTopBar.PortalBaseUrl, "/"),
+            NavigationManager.BaseUri,
+            SharedL);
+    }
+}

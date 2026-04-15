@@ -8,9 +8,9 @@
 {
     <div class="empty-state">@L["Loading configurations..."]</div>
 }
-else if (!IsAuthorized)
+else if (PageError is not null)
 {
-    <div class="empty-state">@AccessDeniedMessage</div>
+    <OmpErrorView Model="@PageError" />
 }
 else
 {
