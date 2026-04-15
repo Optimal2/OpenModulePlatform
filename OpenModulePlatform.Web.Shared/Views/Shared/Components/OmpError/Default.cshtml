@@ -1,0 +1,32 @@
+@model OpenModulePlatform.Web.Shared.Models.OmpErrorDisplayModel
+
+<section class="omp-error-view" aria-live="polite">
+    <div class="omp-error-view__code">@Model.StatusCode</div>
+    <h1 class="omp-error-view__title">@Model.Title</h1>
+    <p class="omp-error-view__message">@Model.Message</p>
+
+    @if (!string.IsNullOrWhiteSpace(Model.RequestedUrl))
+    {
+        <p class="omp-error-view__detail">
+            <strong>@Model.RequestedUrlLabel:</strong>
+            <code>@Model.RequestedUrl</code>
+        </p>
+    }
+
+    <div class="omp-error-view__actions">
+        @if (Model.ShowBackButton && !string.IsNullOrWhiteSpace(Model.BackText))
+        {
+            <button type="button" class="omp-error-view__button omp-error-view__button--secondary" onclick="history.back()">@Model.BackText</button>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.AppHomeHref) && !string.IsNullOrWhiteSpace(Model.AppHomeText))
+        {
+            <a class="omp-error-view__button omp-error-view__button--secondary" href="@Model.AppHomeHref">@Model.AppHomeText</a>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.PortalHref) && !string.IsNullOrWhiteSpace(Model.PortalText))
+        {
+            <a class="omp-error-view__button omp-error-view__button--primary" href="@Model.PortalHref">@Model.PortalText</a>
+        }
+    </div>
+</section>

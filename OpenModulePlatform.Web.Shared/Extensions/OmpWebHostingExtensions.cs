@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.Shared/Extensions/OmpWebHostingExtensions.cs
 using OpenModulePlatform.Web.Shared.Localization;
+using OpenModulePlatform.Web.Shared.Models;
 using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
@@ -162,22 +163,34 @@ public static class OmpWebHostingExtensions
         app.UseStaticFiles();
         app.UseStatusCodePagesWithReExecute("/status/{0}");
 
-        app.MapGet("/status/{statusCode:int}", (
-            HttpContext context,
-            int statusCode,
-            IStringLocalizer<SharedResource> localizer) =>
+        if (!mapRazorPages)
         {
-            var feature = context.Features.Get<IStatusCodeReExecuteFeature>();
-            var originalPath = BuildOriginalPath(feature);
-            var portalHref = PortalTopBarModelFactory.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
-            var html = BuildStatusPageHtml(statusCode, originalPath, portalHref, localizer);
+            app.MapGet("/status/{statusCode:int}", (
+                HttpContext context,
+                int statusCode,
+                IStringLocalizer<SharedResource> localizer) =>
+            {
+                var feature = context.Features.Get<IStatusCodeReExecuteFeature>();
+                var requestedUrl = feature is null
+                    ? context.Request.Path.ToString()
+                    : string.Concat(feature.OriginalPathBase, feature.OriginalPath, feature.OriginalQueryString);
+                var portalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
+                var appHomeHref = OmpUrlPathHelper.BuildAppHomeHref(context.Request.PathBase);
+                var model = OmpErrorDisplayModelFactory.CreateForStatusCode(
+                    statusCode,
+                    requestedUrl,
+                    portalHref,
+                    appHomeHref,
+                    localizer,
+                    showBackButton: true);
 
-            return Results.Content(
-                html,
-                contentType: "text/html; charset=utf-8",
-                contentEncoding: System.Text.Encoding.UTF8,
-                statusCode: statusCode);
-        }).AllowAnonymous();
+                return Results.Content(
+                    BuildFallbackStatusPageHtml(model),
+                    contentType: "text/html; charset=utf-8",
+                    contentEncoding: System.Text.Encoding.UTF8,
+                    statusCode: statusCode);
+            }).AllowAnonymous();
+        }
 
         app.MapGet("/localization/set-language", (
             HttpContext context,
@@ -226,7 +239,7 @@ public static class OmpWebHostingExtensions
                 context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/", Secure = true });
             }
 
-            var safePortalHref = PortalTopBarModelFactory.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
+            var safePortalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
             var canReturnToRequestedUrl = !string.IsNullOrWhiteSpace(returnUrl)
                 && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
                 && await portalTopBarService.CanAccessReturnUrlAsync(options, returnUrl, targetPermissions, ct);
@@ -327,58 +340,30 @@ public static class OmpWebHostingExtensions
         }
     }
 
-    private static string BuildOriginalPath(IStatusCodeReExecuteFeature? feature)
+    private static string BuildFallbackStatusPageHtml(OmpErrorDisplayModel model)
     {
-        if (feature is null)
-        {
-            return string.Empty;
-        }
-
-        return string.Concat(
-            feature.OriginalPathBase,
-            feature.OriginalPath,
-            feature.OriginalQueryString);
-    }
-
-    private static string BuildStatusPageHtml(
-        int statusCode,
-        string originalPath,
-        string portalHref,
-        IStringLocalizer<SharedResource> localizer)
-    {
-        var title = statusCode switch
-        {
-            StatusCodes.Status403Forbidden => localizer["StatusPageTitle403"],
-            StatusCodes.Status404NotFound => localizer["StatusPageTitle404"],
-            _ => localizer["StatusPageTitleDefault"]
-        };
-
-        var heading = statusCode switch
-        {
-            StatusCodes.Status403Forbidden => localizer["StatusPageHeading403"],
-            StatusCodes.Status404NotFound => localizer["StatusPageHeading404"],
-            _ => localizer["StatusPageHeadingDefault"]
-        };
-
-        var message = statusCode switch
-        {
-            StatusCodes.Status403Forbidden => localizer["StatusPageMessage403"],
-            StatusCodes.Status404NotFound => localizer["StatusPageMessage404"],
-            _ => localizer["StatusPageMessageDefault"]
-        };
-
-        var safeTitle = WebUtility.HtmlEncode(title.Value);
-        var safeHeading = WebUtility.HtmlEncode(heading.Value);
-        var safeMessage = WebUtility.HtmlEncode(message.Value);
-        var safePortalHref = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(portalHref) ? "/" : portalHref);
-        var safeBackText = WebUtility.HtmlEncode(localizer["StatusPageBackToPortal"].Value);
-        var safePathLabel = WebUtility.HtmlEncode(localizer["StatusPageOriginalPath"].Value);
-        var safeOriginalPath = WebUtility.HtmlEncode(originalPath);
-        var safeCulture = WebUtility.HtmlEncode(CultureInfo.CurrentUICulture.Name);
-
-        var originalPathMarkup = string.IsNullOrWhiteSpace(originalPath)
+        var safeTitle = WebUtility.HtmlEncode(model.Title);
+        var safeMessage = WebUtility.HtmlEncode(model.Message);
+        var safeRequestedUrlLabel = WebUtility.HtmlEncode(model.RequestedUrlLabel ?? string.Empty);
+        var safeRequestedUrl = WebUtility.HtmlEncode(model.RequestedUrl ?? string.Empty);
+        var safePortalHref = WebUtility.HtmlEncode(model.PortalHref ?? "/");
+        var safePortalText = WebUtility.HtmlEncode(model.PortalText ?? string.Empty);
+        var safeAppHomeHref = WebUtility.HtmlEncode(model.AppHomeHref ?? string.Empty);
+        var safeAppHomeText = WebUtility.HtmlEncode(model.AppHomeText ?? string.Empty);
+        var safeBackText = WebUtility.HtmlEncode(model.BackText ?? string.Empty);
+        var requestedUrlMarkup = string.IsNullOrWhiteSpace(model.RequestedUrl)
             ? string.Empty
-            : $"<p class='omp-status-detail'><strong>{safePathLabel}:</strong> <code>{safeOriginalPath}</code></p>";
+            : $"<p class='omp-error-view__detail'><strong>{safeRequestedUrlLabel}:</strong> <code>{safeRequestedUrl}</code></p>";
+        var backButtonMarkup = model.ShowBackButton && !string.IsNullOrWhiteSpace(model.BackText)
+            ? $"<button type='button' class='omp-error-view__button omp-error-view__button--secondary' onclick='history.back()'>{safeBackText}</button>"
+            : string.Empty;
+        var appHomeMarkup = string.IsNullOrWhiteSpace(model.AppHomeHref) || string.IsNullOrWhiteSpace(model.AppHomeText)
+            ? string.Empty
+            : $"<a class='omp-error-view__button omp-error-view__button--secondary' href='{safeAppHomeHref}'>{safeAppHomeText}</a>";
+        var portalMarkup = string.IsNullOrWhiteSpace(model.PortalHref) || string.IsNullOrWhiteSpace(model.PortalText)
+            ? string.Empty
+            : $"<a class='omp-error-view__button omp-error-view__button--primary' href='{safePortalHref}'>{safePortalText}</a>";
+        var safeCulture = WebUtility.HtmlEncode(CultureInfo.CurrentUICulture.Name);
 
         return $$"""
 <!doctype html>
@@ -390,36 +375,30 @@ public static class OmpWebHostingExtensions
   <style>
     :root { color-scheme: light dark; }
     body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f5f7fa; color: #16202a; }
-    .omp-status-shell { min-height: 100vh; display: grid; place-items: center; padding: 2rem; }
-    .omp-status-card { width: min(42rem, 100%); background: #fff; border: 1px solid #d7dde5; border-radius: 16px; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08); padding: 2rem; }
-    .omp-status-code { display: inline-block; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3559e0; margin-bottom: 1rem; }
-    h1 { margin: 0 0 0.75rem; font-size: 1.75rem; line-height: 1.2; }
-    p { margin: 0 0 1rem; line-height: 1.6; }
-    .omp-status-detail { color: #4b5563; word-break: break-word; }
-    code { display: inline-block; padding: 0.125rem 0.375rem; border-radius: 6px; background: #eef2ff; color: #1f2937; }
-    .omp-status-actions { margin-top: 1.5rem; }
-    .omp-status-button { display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1rem; border-radius: 999px; background: #3559e0; color: #fff; text-decoration: none; font-weight: 600; }
-    .omp-status-button:hover { background: #2948bc; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #0f172a; color: #e5e7eb; }
-      .omp-status-card { background: #111827; border-color: #374151; box-shadow: none; }
-      .omp-status-code { color: #93c5fd; }
-      .omp-status-detail { color: #cbd5e1; }
-      code { background: #1f2937; color: #e5e7eb; }
-      .omp-status-button { background: #60a5fa; color: #0f172a; }
-      .omp-status-button:hover { background: #93c5fd; }
-    }
+    .omp-error-fallback { min-height: 100vh; display: grid; place-items: center; padding: 2rem; }
+    .omp-error-view { width: min(46rem, 100%); margin: 0 auto; padding: 2rem; border: 1px solid #d7dde5; border-radius: 18px; background: #fff; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08); }
+    .omp-error-view__code { display: inline-block; margin-bottom: 1rem; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3559e0; }
+    .omp-error-view__title { margin: 0 0 0.75rem; font-size: 1.9rem; line-height: 1.2; }
+    .omp-error-view__message { margin: 0 0 1rem; line-height: 1.6; color: #223044; }
+    .omp-error-view__detail { margin: 0; color: #4b5563; word-break: break-word; }
+    .omp-error-view__detail code { display: inline-block; margin-top: 0.35rem; padding: 0.2rem 0.45rem; border-radius: 6px; background: #eef2ff; color: #1f2937; }
+    .omp-error-view__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+    .omp-error-view__button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0.75rem 1rem; border: 1px solid transparent; border-radius: 999px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+    .omp-error-view__button--primary { background: #3559e0; border-color: #3559e0; color: #fff; }
+    .omp-error-view__button--secondary { background: #fff; border-color: #c8d1dc; color: #223044; }
   </style>
 </head>
 <body>
-  <main class="omp-status-shell">
-    <section class="omp-status-card">
-      <div class="omp-status-code">{{statusCode}}</div>
-      <h1>{{safeHeading}}</h1>
-      <p>{{safeMessage}}</p>
-      {{originalPathMarkup}}
-      <div class="omp-status-actions">
-        <a class="omp-status-button" href="{{safePortalHref}}">{{safeBackText}}</a>
+  <main class="omp-error-fallback">
+    <section class="omp-error-view">
+      <div class="omp-error-view__code">{{model.StatusCode}}</div>
+      <h1 class="omp-error-view__title">{{safeTitle}}</h1>
+      <p class="omp-error-view__message">{{safeMessage}}</p>
+      {{requestedUrlMarkup}}
+      <div class="omp-error-view__actions">
+        {{backButtonMarkup}}
+        {{appHomeMarkup}}
+        {{portalMarkup}}
       </div>
     </section>
   </main>
