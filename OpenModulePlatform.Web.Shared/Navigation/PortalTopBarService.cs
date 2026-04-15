@@ -350,12 +350,9 @@ public sealed class PortalTopBarService
     {
         var candidatePermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var permission in app.RequiredPermissions)
+        foreach (var permission in app.RequiredPermissions.Where(permission => permission.EndsWith(".View", StringComparison.OrdinalIgnoreCase)))
         {
-            if (permission.EndsWith(".View", StringComparison.OrdinalIgnoreCase))
-            {
-                candidatePermissions.Add($"{permission[..^5]}.Admin");
-            }
+            candidatePermissions.Add($"{permission[..^5]}.Admin");
         }
 
         if (!string.IsNullOrWhiteSpace(app.AppKey))
@@ -544,7 +541,7 @@ public sealed class PortalTopBarService
             var currentPath = currentUri.AbsolutePath;
             var firstSlash = currentPath.IndexOf('/', 1);
             var basePath = firstSlash > 0 ? currentPath[..firstSlash] : string.Empty;
-            return string.IsNullOrWhiteSpace(basePath) ? "/" : $"{authority}{basePath}";
+            return string.IsNullOrWhiteSpace(basePath) ? authority : $"{authority}{basePath}";
         }
 
         return null;

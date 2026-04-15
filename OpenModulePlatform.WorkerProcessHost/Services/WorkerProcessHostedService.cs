@@ -17,8 +17,6 @@ public sealed class WorkerProcessHostedService : BackgroundService
     private readonly WorkerRuntimeContextFactory _contextFactory;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHostApplicationLifetime _applicationLifetime;
-    private EventWaitHandle? _shutdownEvent;
-    private RegisteredWaitHandle? _shutdownRegistration;
 
     public WorkerProcessHostedService(
         ILogger<WorkerProcessHostedService> logger,
@@ -38,10 +36,13 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        RegisteredWaitHandle? shutdownRegistration = null;
+
         try
         {
             _settings.Validate();
-            RegisterExternalShutdownSignal();
+            using var shutdownEvent = TryOpenShutdownEvent();
+            shutdownRegistration = RegisterExternalShutdownSignal(shutdownEvent);
 
             var factory = _loader.LoadFactory(_settings.PluginAssemblyPath, _settings.WorkerTypeKey);
             using var scope = _scopeFactory.CreateScope();
@@ -77,7 +78,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 _settings.AppInstanceId,
                 _settings.WorkerTypeKey);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Environment.ExitCode = 1;
 
@@ -90,17 +91,16 @@ public sealed class WorkerProcessHostedService : BackgroundService
         }
         finally
         {
-            _shutdownRegistration?.Unregister(null);
-            _shutdownEvent?.Dispose();
+            shutdownRegistration?.Unregister(null);
             _applicationLifetime.StopApplication();
         }
     }
 
-    private void RegisterExternalShutdownSignal()
+    private EventWaitHandle? TryOpenShutdownEvent()
     {
         if (string.IsNullOrWhiteSpace(_settings.ShutdownEventName))
         {
-            return;
+            return null;
         }
 
         if (!OperatingSystem.IsWindows())
@@ -108,14 +108,33 @@ public sealed class WorkerProcessHostedService : BackgroundService
             _logger.LogWarning(
                 "Configured shutdown events are only supported on Windows. ShutdownEventName={ShutdownEventName}",
                 _settings.ShutdownEventName);
-            return;
+            return null;
         }
 
         try
         {
-            _shutdownEvent = EventWaitHandle.OpenExisting(_settings.ShutdownEventName);
-            _shutdownRegistration = ThreadPool.RegisterWaitForSingleObject(
-                _shutdownEvent,
+            return EventWaitHandle.OpenExisting(_settings.ShutdownEventName);
+        }
+        catch (WaitHandleCannotBeOpenedException)
+        {
+            _logger.LogWarning(
+                "Configured shutdown event was not found. ShutdownEventName={ShutdownEventName}",
+                _settings.ShutdownEventName);
+            return null;
+        }
+    }
+
+    private RegisteredWaitHandle? RegisterExternalShutdownSignal(EventWaitHandle? shutdownEvent)
+    {
+        if (shutdownEvent is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return ThreadPool.RegisterWaitForSingleObject(
+                shutdownEvent,
                 static (state, _) =>
                 {
                     var service = (WorkerProcessHostedService)state!;
@@ -129,11 +148,10 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 Timeout.Infinite,
                 executeOnlyOnce: true);
         }
-        catch (WaitHandleCannotBeOpenedException)
+        catch
         {
-            _logger.LogWarning(
-                "Configured shutdown event was not found. ShutdownEventName={ShutdownEventName}",
-                _settings.ShutdownEventName);
+            shutdownEvent.Dispose();
+            throw;
         }
     }
 }

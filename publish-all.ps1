@@ -43,7 +43,7 @@ function Get-SolutionPath {
         }
     }
 
-    $anySolution = Get-ChildItem -LiteralPath $RootPath -File | Where-Object { $_.Extension -in '.slnx', '.sln' } | Select-Object -First 1
+    $anySolution = Get-ChildItem -LiteralPath $RootPath -File | Where-Object { $_.Extension -in @('.slnx', '.sln') } | Select-Object -First 1
     if ($null -ne $anySolution) {
         return $anySolution.FullName
     }
