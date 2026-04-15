@@ -8,6 +8,12 @@ The public repository contains neutral platform code and neutral example modules
 It does not contain customer-specific integrations, credentials, or domain-specific
 business components from previous internal projects.
 
+## Runtime baseline
+
+The repository is now aligned on **.NET 10** for active development, package versioning, and publish profiles.
+
+For Windows/IIS hosting prerequisites and official Microsoft links, see [Hosting OMP on Windows and IIS](docs/HOSTING_WINDOWS_IIS.md).
+
 ## Release status
 
 The repository is being prepared for the first public beta release: **0.1.0**.
@@ -117,6 +123,7 @@ A normal manual installation should be possible without requiring the future Hos
 - [Project status](docs/PROJECT_STATUS.md)
 - [Worker runtime](docs/WORKER_RUNTIME.md)
 - [Logging](docs/LOGGING.md)
+- [Hosting OMP on Windows and IIS](docs/HOSTING_WINDOWS_IIS.md)
 - [Release notes](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
