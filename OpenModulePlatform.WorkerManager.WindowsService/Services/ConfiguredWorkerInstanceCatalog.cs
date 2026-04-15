@@ -61,7 +61,8 @@ public sealed class ConfiguredWorkerInstanceCatalog : IWorkerInstanceCatalog
             return Path.GetFullPath(path);
         }
 
-        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, path));
+        var relativePath = path.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
     }
 
     private static string BuildShutdownEventName(Guid appInstanceId)

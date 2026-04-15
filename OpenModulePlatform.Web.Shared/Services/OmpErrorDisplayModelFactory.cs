@@ -31,6 +31,7 @@ public static class OmpErrorDisplayModelFactory
         });
 
         var normalizedPortalHref = string.IsNullOrWhiteSpace(portalHref) ? "/" : portalHref;
+        var normalizedAppHomeHref = string.IsNullOrWhiteSpace(appHomeHref) ? null : appHomeHref;
 
         return new OmpErrorDisplayModel
         {
@@ -43,10 +44,10 @@ public static class OmpErrorDisplayModelFactory
             RequestedUrl = string.IsNullOrWhiteSpace(requestedUrl) ? null : requestedUrl,
             PortalHref = normalizedPortalHref,
             PortalText = localizer["StatusPageBackToPortal"].Value,
-            AppHomeHref = null,
-            AppHomeText = null,
-            ShowBackButton = false,
-            BackText = null
+            AppHomeHref = normalizedAppHomeHref,
+            AppHomeText = normalizedAppHomeHref is null ? null : localizer["StatusPageBackToApp"].Value,
+            ShowBackButton = showBackButton,
+            BackText = showBackButton ? localizer["StatusPageBack"].Value : null
         };
     }
 

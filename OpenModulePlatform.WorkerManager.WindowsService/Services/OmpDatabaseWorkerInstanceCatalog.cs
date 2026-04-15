@@ -124,7 +124,9 @@ ORDER BY ai.AppInstanceId;";
         }
 
         var installRoot = Path.GetFullPath(installPath.Trim());
-        var candidatePath = Path.GetFullPath(Path.Combine(installRoot, pluginRelativePath.Trim()));
+        var sanitizedRelativePath = pluginRelativePath.Trim()
+            .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidatePath = Path.GetFullPath(Path.Combine(installRoot, sanitizedRelativePath));
 
         var normalizedRoot = installRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;

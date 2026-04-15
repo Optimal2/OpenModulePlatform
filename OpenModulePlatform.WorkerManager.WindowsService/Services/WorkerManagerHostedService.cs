@@ -67,18 +67,24 @@ public sealed class WorkerManagerHostedService : BackgroundService
         var desiredById = desiredWorkers.ToDictionary(worker => worker.AppInstanceId);
         var runtimeKind = GetRuntimeKindOrNull();
 
+        var exitedWorkers = new List<ManagedWorkerProcess>();
         foreach (var managed in _managedWorkers.Values)
         {
             if (managed.ObserveExitIfNeeded())
             {
-                _logger.LogWarning(
-                    "Worker process exited. AppInstanceId={AppInstanceId}, ExitCode={ExitCode}, StopRequested={StopRequested}",
-                    managed.Definition.AppInstanceId,
-                    managed.LastExitCode,
-                    managed.StopRequested);
-
-                await PublishExitObservationIfEnabledAsync(managed, runtimeKind, "worker process exited", cancellationToken);
+                exitedWorkers.Add(managed);
             }
+        }
+
+        foreach (var managed in exitedWorkers)
+        {
+            _logger.LogWarning(
+                "Worker process exited. AppInstanceId={AppInstanceId}, ExitCode={ExitCode}, StopRequested={StopRequested}",
+                managed.Definition.AppInstanceId,
+                managed.LastExitCode,
+                managed.StopRequested);
+
+            await PublishExitObservationIfEnabledAsync(managed, runtimeKind, "worker process exited", cancellationToken);
         }
 
         foreach (var existing in _managedWorkers.Values.Where(worker => !desiredById.ContainsKey(worker.Definition.AppInstanceId)).ToList())
@@ -437,7 +443,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
             return Path.GetFullPath(path);
         }
 
-        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, path));
+        var relativePath = path.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
     }
 
     private static Process CreateWorkerProcess(string workerProcessPath, DesiredWorkerInstance desired)
