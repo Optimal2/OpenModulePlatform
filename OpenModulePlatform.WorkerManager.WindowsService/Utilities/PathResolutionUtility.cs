@@ -26,6 +26,6 @@ internal static class PathResolutionUtility
                 nameof(path));
         }
 
-        return Path.GetFullPath($"{baseDirectory}{Path.DirectorySeparatorChar}{relativePath}");
+        return Path.GetFullPath(Path.Combine(baseDirectory, relativePath));
     }
 }
