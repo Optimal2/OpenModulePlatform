@@ -91,16 +91,10 @@ public sealed class ManagedWorkerProcess
             return false;
         }
 
-        var process = Process;
-        if (process is null)
-        {
-            return false;
-        }
-
         LastExitUtc = DateTimeOffset.UtcNow;
-        LastExitCode = process.ExitCode;
+        LastExitCode = Process.ExitCode;
         ExitObserved = true;
-        process.Dispose();
+        Process.Dispose();
         Process = null;
         ShutdownEvent?.Dispose();
         ShutdownEvent = null;
@@ -112,14 +106,15 @@ public sealed class ManagedWorkerProcess
         StopRequested = true;
         ShutdownEvent?.Set();
 
-        if (Process is null)
+        var process = Process;
+        if (process is null)
         {
             ShutdownEvent?.Dispose();
             ShutdownEvent = null;
             return true;
         }
 
-        if (Process.HasExited)
+        if (process.HasExited)
         {
             ObserveExitIfNeeded();
             return true;
@@ -127,7 +122,7 @@ public sealed class ManagedWorkerProcess
 
         try
         {
-            await Process.WaitForExitAsync(cancellationToken).WaitAsync(stopTimeout, cancellationToken);
+            await process.WaitForExitAsync(CancellationToken.None).WaitAsync(stopTimeout, cancellationToken);
             ObserveExitIfNeeded();
             return true;
         }

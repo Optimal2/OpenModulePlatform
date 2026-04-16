@@ -17,7 +17,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
 using SystemNetIPNetwork = System.Net.IPNetwork;
@@ -210,55 +209,23 @@ public static class OmpWebHostingExtensions
             return Results.LocalRedirect("/");
         });
 
-        async Task<IResult> HandleSetActiveRoleAsync(HttpContext context, int? roleId, string? returnUrl, RbacService rbac, PortalTopBarService portalTopBarService, CancellationToken ct)
-        {
-            var roleContext = await rbac.GetUserRoleContextAsync(context.User, ct);
-            var validRoleIds = roleContext.AvailableRoles.Select(x => x.RoleId).ToHashSet();
-            var roleChanged = roleId is int requestedRoleId && requestedRoleId != roleContext.ActiveRoleId;
-            var targetPermissions = roleChanged
-                ? await rbac.GetPermissionsForRoleAsync(context.User, roleId, ct)
-                : roleContext.EffectivePermissions;
+        app.MapGet("/security/set-active-role", (
+            HttpContext context,
+            int? roleId,
+            string? returnUrl,
+            RbacService rbac,
+            PortalTopBarService portalTopBarService,
+            CancellationToken ct) =>
+            HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct));
 
-            if (roleId is int selectedRoleId && validRoleIds.Contains(selectedRoleId))
-            {
-                context.Response.Cookies.Append(
-                    ActiveRoleCookie.CookieName,
-                    selectedRoleId.ToString(CultureInfo.InvariantCulture),
-                    new CookieOptions
-                    {
-                        Expires = DateTimeOffset.UtcNow.AddYears(1),
-                        IsEssential = true,
-                        HttpOnly = false,
-                        SameSite = SameSiteMode.Lax,
-                        Secure = true,
-                        Path = "/"
-                    });
-            }
-            else
-            {
-                context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/", Secure = true });
-            }
-
-            var safePortalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
-            var canReturnToRequestedUrl = !string.IsNullOrWhiteSpace(returnUrl)
-                && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
-                && await portalTopBarService.CanAccessReturnUrlAsync(options, returnUrl, targetPermissions, ct);
-
-            if (canReturnToRequestedUrl)
-            {
-                return Results.LocalRedirect(returnUrl!);
-            }
-
-            if (Uri.IsWellFormedUriString(safePortalHref, UriKind.Absolute))
-            {
-                return Results.Redirect(safePortalHref);
-            }
-
-            return Results.LocalRedirect(safePortalHref);
-        }
-
-        app.MapGet("/security/set-active-role", HandleSetActiveRoleAsync);
-        app.MapGet("/rbac/set-active-role", HandleSetActiveRoleAsync);
+        app.MapGet("/rbac/set-active-role", (
+            HttpContext context,
+            int? roleId,
+            string? returnUrl,
+            RbacService rbac,
+            PortalTopBarService portalTopBarService,
+            CancellationToken ct) =>
+            HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct));
 
         if (!options.AllowAnonymous)
         {
@@ -272,6 +239,60 @@ public static class OmpWebHostingExtensions
         }
 
         return app;
+    }
+
+    private static async Task<IResult> HandleSetActiveRoleAsync(
+        HttpContext context,
+        int? roleId,
+        string? returnUrl,
+        RbacService rbac,
+        PortalTopBarService portalTopBarService,
+        WebAppOptions options,
+        CancellationToken ct)
+    {
+        var roleContext = await rbac.GetUserRoleContextAsync(context.User, ct);
+        var validRoleIds = roleContext.AvailableRoles.Select(x => x.RoleId).ToHashSet();
+        var roleChanged = roleId is int requestedRoleId && requestedRoleId != roleContext.ActiveRoleId;
+        var targetPermissions = roleChanged
+            ? await rbac.GetPermissionsForRoleAsync(context.User, roleId, ct)
+            : roleContext.EffectivePermissions;
+
+        if (roleId is int selectedRoleId && validRoleIds.Contains(selectedRoleId))
+        {
+            context.Response.Cookies.Append(
+                ActiveRoleCookie.CookieName,
+                selectedRoleId.ToString(CultureInfo.InvariantCulture),
+                new CookieOptions
+                {
+                    Expires = DateTimeOffset.UtcNow.AddYears(1),
+                    IsEssential = true,
+                    HttpOnly = false,
+                    SameSite = SameSiteMode.Lax,
+                    Secure = true,
+                    Path = "/"
+                });
+        }
+        else
+        {
+            context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/", Secure = true });
+        }
+
+        var safePortalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
+        var canReturnToRequestedUrl = !string.IsNullOrWhiteSpace(returnUrl)
+            && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
+            && await portalTopBarService.CanAccessReturnUrlAsync(options, returnUrl, targetPermissions, ct);
+
+        if (canReturnToRequestedUrl)
+        {
+            return Results.LocalRedirect(returnUrl!);
+        }
+
+        if (Uri.IsWellFormedUriString(safePortalHref, UriKind.Absolute))
+        {
+            return Results.Redirect(safePortalHref);
+        }
+
+        return Results.LocalRedirect(safePortalHref);
     }
 
     /// <summary>
@@ -331,7 +352,7 @@ public static class OmpWebHostingExtensions
             {
                 if (TryParseCidrNetwork(cidr, out var network))
                 {
-                    options.KnownIPNetworks.Add(network!);
+                    options.KnownIPNetworks.Add(network);
                 }
                 else
                 {
@@ -414,9 +435,9 @@ public static class OmpWebHostingExtensions
 
     private static bool TryParseCidrNetwork(
         string? cidr,
-        [NotNullWhen(true)] out SystemNetIPNetwork? network)
+        out SystemNetIPNetwork network)
     {
-        network = null;
+        network = default;
 
         if (string.IsNullOrWhiteSpace(cidr))
         {
