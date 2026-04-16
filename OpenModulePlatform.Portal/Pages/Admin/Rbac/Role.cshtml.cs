@@ -150,7 +150,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("/Admin/Rbac/Roles");
+            return RedirectToSecurityRoles();
         }
 
         if (permissionId <= 0)
@@ -163,7 +163,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         await _repo.AddPermissionToRoleAsync(Input.RoleId, permissionId, ct);
         StatusMessage = T("Permission added to role.");
-        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
+        return RedirectToSecurityRole(Input.RoleId);
     }
 
     public async Task<IActionResult> OnPostRemovePermission(int permissionId, CancellationToken ct)
@@ -176,12 +176,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("/Admin/Rbac/Roles");
+            return RedirectToSecurityRoles();
         }
 
         await _repo.RemovePermissionFromRoleAsync(Input.RoleId, permissionId, ct);
         StatusMessage = T("Permission removed from role.");
-        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
+        return RedirectToSecurityRole(Input.RoleId);
     }
 
     public async Task<IActionResult> OnPostAddPrincipal(string principalType, string principal, CancellationToken ct)
@@ -194,7 +194,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("/Admin/Rbac/Roles");
+            return RedirectToSecurityRoles();
         }
 
         principalType = Clean(principalType) ?? string.Empty;
@@ -223,7 +223,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         StatusMessage = added
             ? T("Principal added to role.")
             : T("Principal is already assigned to role.");
-        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
+        return RedirectToSecurityRole(Input.RoleId);
     }
 
     public async Task<IActionResult> OnPostRemovePrincipal(string principalType, string principal, CancellationToken ct)
@@ -236,12 +236,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("/Admin/Rbac/Roles");
+            return RedirectToSecurityRoles();
         }
 
         await _repo.RemovePrincipalFromRoleAsync(Input.RoleId, principalType, principal, ct);
         StatusMessage = T("Principal removed from role.");
-        return RedirectToPage("/Admin/Rbac/Role", new { roleId = Input.RoleId });
+        return RedirectToSecurityRole(Input.RoleId);
     }
 
     /// <summary>
@@ -279,14 +279,14 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (Input.RoleId <= 0)
         {
-            return RedirectToPage("/Admin/Rbac/Roles");
+            return RedirectToSecurityRoles();
         }
 
         try
         {
             await _repo.DeleteRoleAsync(Input.RoleId, ct);
             StatusMessage = T("Role deleted.");
-            return RedirectToPage("/Admin/Rbac/Roles");
+            return RedirectToSecurityRoles();
         }
         catch (SqlException ex)
         {
@@ -365,6 +365,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         OriginalDescription = description ?? string.Empty;
     }
 
+    private RedirectResult RedirectToSecurityRoles()
+        => Redirect("/admin/security/roles");
+
+    private RedirectResult RedirectToSecurityRole(int roleId)
+        => Redirect($"/admin/security/role?roleId={roleId}");
+
     private IActionResult RedirectAfterSave(int roleId)
     {
         if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
@@ -372,7 +378,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return LocalRedirect(ReturnUrl);
         }
 
-        return RedirectToPage("/Admin/Rbac/Role", new { roleId });
+        return RedirectToSecurityRole(roleId);
     }
 
     public sealed class InputModel

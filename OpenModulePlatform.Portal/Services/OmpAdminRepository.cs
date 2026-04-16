@@ -194,9 +194,9 @@ ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;";
                 AppKey = rdr.GetString(2),
                 DisplayName = rdr.GetString(3),
                 AppType = rdr.GetString(4),
-                RuntimeKind = rdr.GetString(5),
-                WorkerTypeKey = rdr.GetString(6),
-                PluginRelativePath = rdr.GetString(7),
+                RuntimeKind = rdr.IsDBNull(5) ? string.Empty : rdr.GetString(5),
+                WorkerTypeKey = rdr.IsDBNull(6) ? string.Empty : rdr.GetString(6),
+                PluginRelativePath = rdr.IsDBNull(7) ? string.Empty : rdr.GetString(7),
                 IsEnabled = rdr.GetBoolean(8)
             });
         }
@@ -219,7 +219,7 @@ SELECT ai.AppInstanceId,
        awd.RuntimeKind,
        awd.WorkerTypeKey,
        awd.PluginRelativePath,
-       COALESCE(rs.ObservedState, 0),
+       CAST(ISNULL(rs.ObservedState, CAST(0 AS tinyint)) AS tinyint),
        rs.ProcessId,
        rs.StartedUtc,
        rs.LastSeenUtc,
@@ -249,7 +249,7 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
             ? sql
             : sql
                 .Replace("LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId", string.Empty)
-                .Replace("COALESCE(rs.ObservedState, 0)", "CAST(0 AS tinyint)")
+                .Replace("CAST(ISNULL(rs.ObservedState, CAST(0 AS tinyint)) AS tinyint)", "CAST(0 AS tinyint)")
                 .Replace("rs.ProcessId", "CAST(NULL AS int)")
                 .Replace("rs.StartedUtc", "CAST(NULL AS datetime2(3))")
                 .Replace("rs.LastSeenUtc", "CAST(NULL AS datetime2(3))")
@@ -272,9 +272,9 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
                 HostKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
                 IsAllowed = rdr.GetBoolean(7),
                 DesiredState = rdr.GetByte(8),
-                RuntimeKind = rdr.GetString(9),
-                WorkerTypeKey = rdr.GetString(10),
-                PluginRelativePath = rdr.GetString(11),
+                RuntimeKind = rdr.IsDBNull(9) ? string.Empty : rdr.GetString(9),
+                WorkerTypeKey = rdr.IsDBNull(10) ? string.Empty : rdr.GetString(10),
+                PluginRelativePath = rdr.IsDBNull(11) ? string.Empty : rdr.GetString(11),
                 ObservedState = rdr.GetByte(12),
                 ProcessId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
                 StartedUtc = rdr.IsDBNull(14) ? null : rdr.GetDateTime(14),

@@ -3,7 +3,7 @@
 @{
     var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
     string BuildLanguageHref(string culture) => $"{Context.Request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
-    string BuildRoleHref(int? roleId) => $"{Context.Request.PathBase}/rbac/set-active-role?roleId={(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    string BuildRoleHref(int? roleId) => $"{Context.Request.PathBase}/security/set-active-role?roleId={(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     string CultureText(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : L[value];
     string DisplayUserName(string? value)
     {
