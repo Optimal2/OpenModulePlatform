@@ -86,15 +86,16 @@ public sealed class ManagedWorkerProcess
 
     public bool ObserveExitIfNeeded()
     {
-        if (!NeedsExitObservation())
+        var process = Process;
+        if (process is null || !process.HasExited || ExitObserved)
         {
             return false;
         }
 
         LastExitUtc = DateTimeOffset.UtcNow;
-        LastExitCode = Process.ExitCode;
+        LastExitCode = process.ExitCode;
         ExitObserved = true;
-        Process.Dispose();
+        process.Dispose();
         Process = null;
         ShutdownEvent?.Dispose();
         ShutdownEvent = null;
