@@ -396,6 +396,11 @@ public static class OmpWebHostingExtensions
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{safeTitle}} - OMP</title>
+  <!--
+    NOTE: These fallback styles intentionally mirror omp-error-view.css so this page remains fully styled
+    even if static assets are unavailable during error handling. Keep this block and omp-error-view.css
+    synchronized whenever styles are changed.
+  -->
   <style>
     :root { color-scheme: light dark; }
     body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f5f7fa; color: #16202a; }
