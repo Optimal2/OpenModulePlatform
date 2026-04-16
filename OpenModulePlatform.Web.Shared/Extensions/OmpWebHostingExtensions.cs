@@ -331,7 +331,7 @@ public static class OmpWebHostingExtensions
             {
                 if (TryParseCidrNetwork(cidr, out var network))
                 {
-                    options.KnownIPNetworks.Add(network);
+                    options.KnownIPNetworks.Add(network!);
                 }
                 else
                 {
@@ -390,6 +390,7 @@ public static class OmpWebHostingExtensions
     .omp-error-view__button--primary { background: #3559e0; border-color: #3559e0; color: #fff; }
     .omp-error-view__button--primary:hover, .omp-error-view__button--primary:focus, .omp-error-view__button--primary:focus-visible { background: #2948bc; border-color: #2948bc; color: #fff; text-decoration: none; }
     .omp-error-view__button--secondary { background: #fff; border-color: #c8d1dc; color: #223044; }
+    .omp-error-view__button--secondary:hover, .omp-error-view__button--secondary:focus, .omp-error-view__button--secondary:focus-visible { background: #f5f7fa; }
   </style>
 </head>
 <body>
