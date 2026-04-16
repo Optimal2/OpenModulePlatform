@@ -26,7 +26,7 @@ public sealed class IndexModel : Pages.Admin.OmpPortalPageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("RBAC");
+        SetTitles("Security");
         RoleCount = (await _repo.GetRolesAsync(ct)).Count;
         PermissionCount = (await _repo.GetPermissionsAsync(ct)).Count;
         return Page();

@@ -14,4 +14,4 @@
   <data name="Save role" xml:space="preserve">
     <value>Save name/description</value>
   </data>
-<data name="App workers" xml:space="preserve"><value>App workers</value></data><data name="Worker runtime" xml:space="preserve"><value>Worker runtime</value></data><data name="Worker runtime states" xml:space="preserve"><value>Worker runtime states</value></data></root>
+<data name="App workers" xml:space="preserve"><value>App workers</value></data><data name="Worker runtime" xml:space="preserve"><value>Worker runtime</value></data><data name="Worker runtime states" xml:space="preserve"><value>Worker runtime states</value></data><data name="Security" xml:space="preserve"><value>Security</value></data><data name="Open Security" xml:space="preserve"><value>Open Security</value></data><data name="Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable." xml:space="preserve"><value>Roles are the main security editing surface. Add permissions and principals here so access remains grouped and auditable.</value></data></root>

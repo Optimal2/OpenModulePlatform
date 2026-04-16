@@ -8,7 +8,7 @@
         <p class="lede">@L["Roles bundle permissions and principals. Use roles to keep direct principal management small and predictable."]</p>
     </div>
     <div class="toolbar">
-        <a class="action-link" href="~/admin/rbac/role">@L["Create role"]</a>
+        <a class="action-link" href="~/admin/security/role">@L["Create role"]</a>
     </div>
 </section>
 
@@ -33,13 +33,13 @@ else
             {
                 <tr>
                     <td>
-                        <a href="~/admin/rbac/role?roleId=@row.RoleId">@row.Name</a>
+                        <a href="~/admin/security/role?roleId=@row.RoleId">@row.Name</a>
                     </td>
                     <td>@row.Description</td>
                     <td><span class="pill">@row.PermissionCount</span></td>
                     <td><span class="pill">@row.PrincipalCount</span></td>
                     <td>
-                        <a class="action-link" href="~/admin/rbac/role?roleId=@row.RoleId">@L["Edit"]</a>
+                        <a class="action-link" href="~/admin/security/role?roleId=@row.RoleId">@L["Edit"]</a>
                     </td>
                 </tr>
             }
