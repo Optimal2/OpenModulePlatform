@@ -20,7 +20,7 @@ using Microsoft.Extensions.Options;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
-using AspNetIPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
+using SystemNetIPNetwork = System.Net.IPNetwork;
 
 namespace OpenModulePlatform.Web.Shared.Extensions;
 
@@ -292,7 +292,7 @@ public static class OmpWebHostingExtensions
 
         if (webAppOptions.ForwardedHeadersTrustAllProxies)
         {
-            options.KnownNetworks.Clear();
+            options.KnownIPNetworks.Clear();
             options.KnownProxies.Clear();
 
             logger.LogWarning(
@@ -324,14 +324,14 @@ public static class OmpWebHostingExtensions
 
         if (webAppOptions.ForwardedHeadersKnownNetworks.Length > 0)
         {
-            options.KnownNetworks.Clear();
+            options.KnownIPNetworks.Clear();
 
             foreach (var cidr in webAppOptions.ForwardedHeadersKnownNetworks
                          .Where(x => !string.IsNullOrWhiteSpace(x)))
             {
                 if (TryParseCidrNetwork(cidr, out var network))
                 {
-                    options.KnownNetworks.Add(network);
+                    options.KnownIPNetworks.Add(network);
                 }
                 else
                 {
@@ -413,7 +413,7 @@ public static class OmpWebHostingExtensions
 
     private static bool TryParseCidrNetwork(
         string? cidr,
-        [NotNullWhen(true)] out AspNetIPNetwork? network)
+        [NotNullWhen(true)] out SystemNetIPNetwork? network)
     {
         network = null;
 
@@ -451,7 +451,7 @@ public static class OmpWebHostingExtensions
             return false;
         }
 
-        network = new AspNetIPNetwork(prefix, prefixLength);
+        network = new SystemNetIPNetwork(prefix, prefixLength);
         return true;
     }
 }

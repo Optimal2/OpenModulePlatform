@@ -87,6 +87,8 @@
     color: #223044;
 }
 
-.omp-error-view__button--secondary:hover {
+.omp-error-view__button--secondary:hover,
+.omp-error-view__button--secondary:focus,
+.omp-error-view__button--secondary:focus-visible {
     background: #f5f7fa;
 }
