@@ -91,10 +91,16 @@ public sealed class ManagedWorkerProcess
             return false;
         }
 
+        var process = Process;
+        if (process is null)
+        {
+            return false;
+        }
+
         LastExitUtc = DateTimeOffset.UtcNow;
-        LastExitCode = Process.ExitCode;
+        LastExitCode = process.ExitCode;
         ExitObserved = true;
-        Process.Dispose();
+        process.Dispose();
         Process = null;
         ShutdownEvent?.Dispose();
         ShutdownEvent = null;
