@@ -276,7 +276,7 @@ public sealed class PortalTopBarService
         new("App instances", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/appinstances")),
         new("Artifacts", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/artifacts")),
         new("Automation", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/automation")),
-        new("RBAC", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/rbac"))
+        new("Security", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/security"))
     ];
 
     private static bool HasAccess(TopBarAppEntry app, IReadOnlySet<string> permissions)

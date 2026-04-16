@@ -210,7 +210,7 @@ public static class OmpWebHostingExtensions
             return Results.LocalRedirect("/");
         });
 
-        app.MapGet("/rbac/set-active-role", async (HttpContext context, int? roleId, string? returnUrl, RbacService rbac, PortalTopBarService portalTopBarService, CancellationToken ct) =>
+        async Task<IResult> HandleSetActiveRoleAsync(HttpContext context, int? roleId, string? returnUrl, RbacService rbac, PortalTopBarService portalTopBarService, CancellationToken ct)
         {
             var roleContext = await rbac.GetUserRoleContextAsync(context.User, ct);
             var validRoleIds = roleContext.AvailableRoles.Select(x => x.RoleId).ToHashSet();
@@ -255,7 +255,10 @@ public static class OmpWebHostingExtensions
             }
 
             return Results.LocalRedirect(safePortalHref);
-        });
+        }
+
+        app.MapGet("/security/set-active-role", HandleSetActiveRoleAsync);
+        app.MapGet("/rbac/set-active-role", HandleSetActiveRoleAsync);
 
         if (!options.AllowAnonymous)
         {
@@ -385,6 +388,7 @@ public static class OmpWebHostingExtensions
     .omp-error-view__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
     .omp-error-view__button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0.75rem 1rem; border: 1px solid transparent; border-radius: 999px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
     .omp-error-view__button--primary { background: #3559e0; border-color: #3559e0; color: #fff; }
+    .omp-error-view__button--primary:hover, .omp-error-view__button--primary:focus, .omp-error-view__button--primary:focus-visible { background: #2948bc; border-color: #2948bc; color: #fff; text-decoration: none; }
     .omp-error-view__button--secondary { background: #fff; border-color: #c8d1dc; color: #223044; }
   </style>
 </head>

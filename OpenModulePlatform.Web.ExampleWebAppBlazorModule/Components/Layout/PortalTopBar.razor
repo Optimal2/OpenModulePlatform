@@ -234,7 +234,7 @@
     {
         var currentUri = new Uri(NavigationManager.Uri, UriKind.Absolute);
         var returnUrl = $"{currentUri.AbsolutePath}{currentUri.Query}";
-        return $"{BuildAppBaseRelativePath("rbac/set-active-role")}?roleId={Uri.EscapeDataString(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        return $"{BuildAppBaseRelativePath("security/set-active-role")}?roleId={Uri.EscapeDataString(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     }
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)

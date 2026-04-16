@@ -72,9 +72,13 @@
     color: #fff;
 }
 
-.omp-error-view__button--primary:hover {
+.omp-error-view__button--primary:hover,
+.omp-error-view__button--primary:focus,
+.omp-error-view__button--primary:focus-visible {
     background: #2948bc;
     border-color: #2948bc;
+    color: #fff;
+    text-decoration: none;
 }
 
 .omp-error-view__button--secondary {
