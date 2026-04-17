@@ -11,7 +11,65 @@
     <div><b>@L["Portal admin"]</b>: @(Model.IsPortalAdmin ? L["Yes"] : L["No"])</div>
 </div>
 
-<div class="card">
+@if (Model.IsPortalAdmin)
+{
+    <section class="card top-gap portal-overview-panel">
+        <details class="portal-overview" open>
+            <summary class="portal-overview__summary">
+                <div class="page-header portal-overview__header">
+                    <h3>@L["Overview"]</h3>
+                    <span class="portal-overview__toggle" aria-hidden="true">
+                        <span class="portal-overview__toggle-label portal-overview__toggle-label--open">@L["Minimize"]</span>
+                        <span class="portal-overview__toggle-label portal-overview__toggle-label--closed">@L["Expand"]</span>
+                    </span>
+                </div>
+            </summary>
+
+            <div class="portal-overview__body">
+                <div class="card-grid portal-admin-metrics">
+                    <a class="card metric-card" href="~/admin/instances">
+                        <div class="metric">@Model.Metrics.InstanceCount</div>
+                        <div>@L["Instances"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/hosts">
+                        <div class="metric">@Model.Metrics.HostCount</div>
+                        <div>@L["Hosts"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/modules">
+                        <div class="metric">@Model.Metrics.ModuleCount</div>
+                        <div>@L["Module definitions"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/moduleinstances">
+                        <div class="metric">@Model.Metrics.ModuleInstanceCount</div>
+                        <div>@L["Module instances"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/apps">
+                        <div class="metric">@Model.Metrics.AppCount</div>
+                        <div>@L["App definitions"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/appinstances">
+                        <div class="metric">@Model.Metrics.AppInstanceCount</div>
+                        <div>@L["App instances"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/workers">
+                        <div class="metric">@Model.Metrics.AppWorkerDefinitionCount</div>
+                        <div>@L["App workers"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/workers">
+                        <div class="metric">@Model.Metrics.AppInstanceRuntimeStateCount</div>
+                        <div>@L["Worker runtime states"]</div>
+                    </a>
+                    <a class="card metric-card" href="~/admin/artifacts">
+                        <div class="metric">@Model.Metrics.ArtifactCount</div>
+                        <div>@L["Artifacts"]</div>
+                    </a>
+                </div>
+            </div>
+        </details>
+    </section>
+}
+
+<div class="card top-gap">
     <h3>@L["Available OMP web app instances"]</h3>
     @if (Model.Apps.Count == 0)
     {

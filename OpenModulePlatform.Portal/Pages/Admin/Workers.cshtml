@@ -34,7 +34,8 @@
     }
     else
     {
-        <table class="grid">
+        <div class="table-scroll">
+        <table class="grid workers-grid">
             <thead>
                 <tr>
                     <th>@L["Module"]</th>
@@ -65,6 +66,7 @@
             }
             </tbody>
         </table>
+    </div>
     }
 </section>
 
@@ -90,7 +92,8 @@
     }
     else
     {
-        <table class="grid">
+        <div class="table-scroll">
+        <table class="grid workers-grid">
             <thead>
                 <tr>
                     <th>@L["Instance"]</th>
@@ -143,10 +146,11 @@
                         <div class="small-text">@row.StatusMessage</div>
                         <div class="muted small-text"><code>@row.PluginRelativePath</code></div>
                     </td>
-                    <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit app instance"]</a></td>
+                    <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit"]</a></td>
                 </tr>
             }
             </tbody>
         </table>
+    </div>
     }
 </section>

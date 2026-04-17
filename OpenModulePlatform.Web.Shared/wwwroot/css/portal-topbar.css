@@ -381,6 +381,32 @@
     font-weight: 600;
 }
 
+.portal-topbar__profile-copy-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-muted, #5f6b7a);
+    cursor: pointer;
+    flex: 0 0 auto;
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    user-select: none;
+}
+
+.portal-topbar__profile-copy-button:hover,
+.portal-topbar__profile-copy-button:focus-visible {
+    color: var(--text);
+    background: var(--surface-muted);
+    outline: none;
+}
+
 .portal-topbar__profile-current-role {
     display: block;
     min-width: 0;

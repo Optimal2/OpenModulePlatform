@@ -146,6 +146,54 @@
         initializedTopbars.forEach(scheduleRebalance);
     }
 
+
+    function copyTextToClipboard(text) {
+        if (!text) {
+            return Promise.resolve();
+        }
+
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text);
+        }
+
+        return new Promise(function (resolve, reject) {
+            try {
+                var textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.setAttribute('readonly', 'readonly');
+                textArea.style.position = 'fixed';
+                textArea.style.top = '-9999px';
+                textArea.style.left = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                if (document.execCommand('copy')) {
+                    document.body.removeChild(textArea);
+                    resolve();
+                    return;
+                }
+
+                document.body.removeChild(textArea);
+                reject(new Error('Copy command failed.'));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    function tryCopyFromButton(target) {
+        var button = target.closest('[data-copy-to-clipboard]');
+        if (!button) {
+            return false;
+        }
+
+        var text = button.getAttribute('data-copy-text') || '';
+        copyTextToClipboard(text).catch(function () {
+            return null;
+        });
+        return true;
+    }
     function closeOverlaysOnOutsideClick(event) {
         document.querySelectorAll('[data-portal-topbar-overlay][open]').forEach(function (overlay) {
             if (!overlay.contains(event.target)) {
@@ -160,7 +208,13 @@
         }
 
         globalHandlersRegistered = true;
-        document.addEventListener('click', closeOverlaysOnOutsideClick);
+        document.addEventListener('click', function (event) {
+            if (tryCopyFromButton(event.target)) {
+                return;
+            }
+
+            closeOverlaysOnOutsideClick(event);
+        });
         window.addEventListener('resize', rebalanceAll);
         window.addEventListener('load', rebalanceAll);
     }
