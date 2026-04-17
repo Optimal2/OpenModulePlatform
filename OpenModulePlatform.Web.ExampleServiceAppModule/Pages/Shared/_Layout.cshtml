@@ -17,10 +17,10 @@
     <header class="app-header">
         @await Component.InvokeAsync("PortalTopBar")
         <div class="topbar">
-            <div class="brand-wrap">
+            <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Overview"]">
                 <div class="brand">@ViewData["PortalTitle"]</div>
                 <div class="brand-subtitle">@L["Example Service App Module"]</div>
-            </div>
+            </a>
             <nav class="nav nav--primary">
                 <a href="~/">@L["Overview"]</a>
                 <a href="~/appinstances">@L["App Instances"]</a>

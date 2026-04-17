@@ -7,10 +7,10 @@
     <header class="app-header">
         <OpenModulePlatform.Web.Shared.Components.Layout.PortalTopBar />
         <div class="topbar">
-            <div class="brand-wrap">
+            <NavLink class="brand-wrap brand-wrap--link" href="" Match="NavLinkMatch.All" aria-label="@L["Overview"]">
                 <div class="brand">@PortalTitle</div>
                 <div class="brand-subtitle">@L["Example Web App Blazor Module"]</div>
-            </div>
+            </NavLink>
             <nav class="nav nav--primary">
                 <NavLink href="" Match="NavLinkMatch.All">@L["Overview"]</NavLink>
                 <NavLink href="configurations">@L["Configurations"]</NavLink>

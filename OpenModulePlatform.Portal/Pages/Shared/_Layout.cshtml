@@ -17,10 +17,10 @@
     <header class="app-header">
         @await Component.InvokeAsync("PortalTopBar")
         <div class="topbar">
-        <div class="brand-wrap">
+        <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Home"]">
             <div class="brand">@ViewData["PortalTitle"]</div>
             <div class="brand-subtitle">@L["Portal"]</div>
-        </div>
+        </a>
         <nav class="nav nav--primary">
             <a href="~/">@L["Home"]</a>
             @if (ViewData["IsPortalAdmin"] is bool isPortalAdmin && isPortalAdmin)
@@ -37,19 +37,28 @@
                     <div class="nav-dropdown__menu">
                         <a href="~/admin/apps">@L["Definitions"]</a>
                         <a href="~/admin/appinstances">@L["Instances"]</a>
+                        <div class="nav-dropdown__separator" role="separator" aria-hidden="true"></div>
                         <a href="~/admin/artifacts">@L["Artifacts"]</a>
                         <a href="~/admin/workers">@L["Workers"]</a>
                     </div>
                 </details>
                 <details class="nav-dropdown">
-                    <summary>@L["System"]</summary>
+                    <summary>@L["Hosts"]</summary>
                     <div class="nav-dropdown__menu">
-                        <a href="~/admin/instances">@L["Instances"]</a>
-                        <a href="~/admin/automation">@L["Automation"]</a>
-                        <a href="~/admin/hosts">@L["Hosts"]</a>
+                        <a href="~/admin/hosttemplates">@L["Definitions"]</a>
+                        <a href="~/admin/hosts">@L["Instances"]</a>
                     </div>
                 </details>
-                <a href="~/admin/security">@L["Security"]</a>
+                <details class="nav-dropdown">
+                    <summary>@L["System"]</summary>
+                    <div class="nav-dropdown__menu">
+                        <a href="~/admin/instancetemplates">@L["Definitions"]</a>
+                        <a href="~/admin/instances">@L["Instances"]</a>
+                        <div class="nav-dropdown__separator" role="separator" aria-hidden="true"></div>
+                        <a href="~/admin/security">@L["Security"]</a>
+                        <a href="~/admin/automation">@L["Automation"]</a>
+                    </div>
+                </details>
             }
         </nav>
         </div>
