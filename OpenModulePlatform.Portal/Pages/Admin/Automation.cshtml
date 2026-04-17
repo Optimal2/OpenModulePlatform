@@ -9,48 +9,11 @@
     </div>
 </section>
 
-<div class="section-grid section-grid--wide">
-    <section class="card section-card">
-        <h3>@L["Template model"]</h3>
-        <p class="muted">@L["Use these pages when defining desired topology for automated rollout."]</p>
-        <div class="link-list">
-            <a class="action-link" href="~/admin/instancetemplates">@L["Instance templates"]</a>
-            <a class="action-link" href="~/admin/hosttemplates">@L["Host templates"]</a>
-        </div>
-        <div class="muted small-text top-gap">
-            @L["Topology detail pages for InstanceTemplateHosts, InstanceTemplateModuleInstances and InstanceTemplateAppInstances."]
-            are not exposed as dedicated admin pages yet in this repo.
-        </div>
-    </section>
-
-    <section class="card section-card">
-        <h3>@L["Deployment planning"]</h3>
-        <p class="muted">@L["These pages are related to deployment orchestration and future HostAgent-driven execution."]</p>
-        <div class="link-list">
-            <a class="action-link" href="~/admin/hostdeploymentassignments">@L["Host deployment assignments"]</a>
-            <a class="action-link" href="~/admin/hostdeployments">@L["Host deployments"]</a>
-        </div>
-    </section>
-
-    <section class="card section-card">
-        <h3>@L["Current counts"]</h3>
-        <div class="mini-metrics">
-            <div>
-                <span class="metric-inline">@Model.Metrics.InstanceCount</span>
-                <span>@L["Instances"]</span>
-            </div>
-            <div>
-                <span class="metric-inline">@Model.Metrics.HostCount</span>
-                <span>@L["Hosts"]</span>
-            </div>
-            <div>
-                <span class="metric-inline">@Model.Metrics.ModuleInstanceCount</span>
-                <span>@L["Module instances"]</span>
-            </div>
-            <div>
-                <span class="metric-inline">@Model.Metrics.AppInstanceCount</span>
-                <span>@L["App instances"]</span>
-            </div>
-        </div>
-    </section>
-</div>
+<section class="card section-card section-card--wide">
+    <h3>@L["Deployment planning"]</h3>
+    <p class="muted">@L["These pages are related to deployment orchestration and future HostAgent-driven execution."]</p>
+    <div class="link-list">
+        <a class="action-link" href="~/admin/hostdeploymentassignments">@L["Host deployment assignments"]</a>
+        <a class="action-link" href="~/admin/hostdeployments">@L["Host deployments"]</a>
+    </div>
+</section>
