@@ -69,6 +69,22 @@ a:hover {
     color: var(--text-muted);
 }
 
+.brand-wrap--link {
+    width: fit-content;
+    min-width: 0;
+    flex: 0 0 auto;
+    text-decoration: none;
+    color: inherit;
+}
+
+.brand-wrap--link:hover,
+.brand-wrap--link:focus,
+.brand-wrap--link:focus-visible,
+.brand-wrap--link.active {
+    color: inherit;
+    text-decoration: none;
+}
+
 .nav {
     display: flex;
     flex-wrap: wrap;
