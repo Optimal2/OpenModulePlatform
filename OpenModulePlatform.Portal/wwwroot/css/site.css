@@ -55,7 +55,7 @@ a:hover {
 .brand-wrap {
     display: flex;
     flex-direction: column;
-    min-width: 180px;
+    min-width: 200px;
 }
 
 .brand {
@@ -91,6 +91,8 @@ a:hover {
 
 .nav-dropdown {
     position: relative;
+    padding-bottom: 10px;
+    margin-bottom: -10px;
 }
 
 .nav-dropdown summary {
@@ -124,9 +126,9 @@ a:hover {
 
 .nav-dropdown__menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 2px);
     left: 0;
-    min-width: 180px;
+    min-width: 200px;
     display: grid;
     gap: 6px;
     padding: 10px;
@@ -139,6 +141,104 @@ a:hover {
 
 .nav-dropdown__menu a {
     display: block;
+}
+
+.portal-admin-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 180px));
+}
+
+.portal-overview-panel {
+    padding: 0;
+    overflow: hidden;
+}
+
+.portal-overview {
+    display: block;
+}
+
+.portal-overview__summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 14px 16px;
+}
+
+.portal-overview__summary::-webkit-details-marker {
+    display: none;
+}
+
+.portal-overview__header {
+    margin-bottom: 0;
+    align-items: center;
+}
+
+.portal-overview__header h3 {
+    margin-bottom: 0;
+}
+
+.portal-overview__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    min-width: 108px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-muted);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.portal-overview__toggle-label--closed {
+    display: none;
+}
+
+.portal-overview:not([open]) .portal-overview__toggle-label--open {
+    display: none;
+}
+
+.portal-overview:not([open]) .portal-overview__toggle-label--closed {
+    display: inline;
+}
+
+.portal-overview:not([open]) .portal-overview__summary {
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
+.portal-overview:not([open]) .portal-overview__header {
+    align-items: center;
+}
+
+.portal-overview:not([open]) .eyebrow {
+    margin-bottom: 4px;
+}
+
+.portal-overview__body {
+    padding: 0 16px 16px;
+}
+
+
+.metric-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    min-height: 0;
+    transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.metric-card:hover,
+.metric-card:focus-visible {
+    border-color: var(--border-strong);
+    background: var(--surface-muted);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface-muted) 55%, transparent);
+    outline: none;
+}
+
+.metric-card .metric {
+    margin-bottom: 4px;
 }
 
 .user {
@@ -162,7 +262,6 @@ a:hover {
     justify-content: space-between;
     gap: 16px;
     align-items: flex-start;
-    margin-bottom: 18px;
 }
 
 .page-header h1,
@@ -382,6 +481,23 @@ button[aria-disabled=true]:hover,
 }
 
 .app-instances-grid code {
+    white-space: normal;
+}
+
+.workers-grid {
+    table-layout: fixed;
+}
+
+.workers-grid th,
+.workers-grid td,
+.workers-grid a,
+.workers-grid code,
+.workers-grid .small-text {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.workers-grid code {
     white-space: normal;
 }
 

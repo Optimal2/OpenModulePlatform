@@ -1,3 +1,4 @@
+<?xml version='1.0' encoding='utf-8'?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -37,6 +38,9 @@
   </data>
   <data name="Automation" xml:space="preserve">
     <value>Automation</value>
+  </data>
+  <data name="System" xml:space="preserve">
+    <value>System</value>
   </data>
   <data name="RBAC" xml:space="preserve">
     <value>RBAC</value>
@@ -1305,4 +1309,4 @@
     <value>More</value>
     <comment>Compact portal top-bar overflow toggle.</comment>
   </data>
-<data name="Unsaved changes" xml:space="preserve"><value>Unsaved changes</value></data><data name="You have unsaved changes to the role name or description." xml:space="preserve"><value>You have unsaved changes to the role name or description.</value></data><data name="Save changes" xml:space="preserve"><value>Save changes</value></data><data name="Discard changes" xml:space="preserve"><value>Discard changes</value></data><data name="Stay on page" xml:space="preserve"><value>Stay on page</value></data><data name="You have unsaved role changes. Press OK to discard them and leave this page, or Cancel to stay." xml:space="preserve"><value>You have unsaved role changes. Press OK to discard them and leave this page, or Cancel to stay.</value></data><data name="App workers" xml:space="preserve"><value>App workers</value></data><data name="Worker runtime" xml:space="preserve"><value>Worker runtime</value></data><data name="Worker runtime states" xml:space="preserve"><value>Worker runtime states</value></data><data name="Security" xml:space="preserve"><value>Security</value></data><data name="Open Security" xml:space="preserve"><value>Open Security</value></data><data name="Workers" xml:space="preserve"><value>Workers</value></data><data name="Back to workers" xml:space="preserve"><value>Back to workers</value></data><data name="Runtime" xml:space="preserve"><value>Runtime</value></data><data name="Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place." xml:space="preserve"><value>Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place.</value></data></root>
+<data name="Unsaved changes" xml:space="preserve"><value>Unsaved changes</value></data><data name="You have unsaved changes to the role name or description." xml:space="preserve"><value>You have unsaved changes to the role name or description.</value></data><data name="Save changes" xml:space="preserve"><value>Save changes</value></data><data name="Discard changes" xml:space="preserve"><value>Discard changes</value></data><data name="Stay on page" xml:space="preserve"><value>Stay on page</value></data><data name="You have unsaved role changes. Press OK to discard them and leave this page, or Cancel to stay." xml:space="preserve"><value>You have unsaved role changes. Press OK to discard them and leave this page, or Cancel to stay.</value></data><data name="App workers" xml:space="preserve"><value>App workers</value></data><data name="Worker runtime" xml:space="preserve"><value>Worker runtime</value></data><data name="Worker runtime states" xml:space="preserve"><value>Worker runtime states</value></data><data name="Security" xml:space="preserve"><value>Security</value></data><data name="Open Security" xml:space="preserve"><value>Open Security</value></data><data name="Workers" xml:space="preserve"><value>Workers</value></data><data name="Back to workers" xml:space="preserve"><value>Back to workers</value></data><data name="Runtime" xml:space="preserve"><value>Runtime</value></data><data name="Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place." xml:space="preserve"><value>Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place.</value></data><data name="Expand" xml:space="preserve"><value>Expand</value></data><data name="Minimize" xml:space="preserve"><value>Minimize</value></data></root>
