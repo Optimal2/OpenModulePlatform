@@ -19,17 +19,31 @@
         <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
             <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@L[_portalTopBar.PortalLink.TextKey]</a>
 
-            @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminLinks.Count > 0)
+            @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminSections.Count > 0)
             {
-                <details class="portal-topbar__admin" data-portal-topbar-overlay>
+                <details class="portal-topbar__admin" data-portal-topbar-overlay data-portal-topbar-hover-menu>
                     <summary title="@L[_portalTopBar.PortalAdminToggleTextKey]" aria-label="@L[_portalTopBar.PortalAdminToggleTextKey]">
                         <span aria-hidden="true">&#9881;</span>
                         <span class="visually-hidden">@L[_portalTopBar.PortalAdminToggleTextKey]</span>
                     </summary>
-                    <div class="portal-topbar__admin-menu">
-                        @foreach (var link in _portalTopBar.PortalAdminLinks)
+                    <div class="portal-topbar__admin-menu" data-portal-topbar-admin-menu>
+                        @foreach (var section in _portalTopBar.PortalAdminSections)
                         {
-                            <a class="portal-topbar__admin-link" href="@link.Href">@L[link.TextKey]</a>
+                            <details class="portal-topbar__admin-submenu" data-portal-topbar-admin-submenu data-portal-topbar-overlay>
+                                <summary class="portal-topbar__admin-submenu-trigger">
+                                    <span>@L[section.TextKey]</span>
+                                </summary>
+                                <div class="portal-topbar__admin-submenu-menu">
+                                    @foreach (var item in section.Items)
+                                    {
+                                        if (item.SeparatorBefore)
+                                        {
+                                            <div class="portal-topbar__admin-separator" role="separator" aria-hidden="true"></div>
+                                        }
+                                        <a class="portal-topbar__admin-link" href="@item.Href">@L[item.TextKey]</a>
+                                    }
+                                </div>
+                            </details>
                         }
                     </div>
                 </details>
@@ -69,7 +83,7 @@
         <div class="portal-topbar__actions">
             @if (_portalTopBar.LanguageOptions.Count > 1)
             {
-                <details class="portal-topbar__language" data-portal-topbar-overlay>
+                <details class="portal-topbar__language" data-portal-topbar-overlay data-portal-topbar-hover-menu>
                     <summary title="@L[_portalTopBar.LanguageToggleTextKey]" aria-label="@L[_portalTopBar.LanguageToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
                             <span class="portal-topbar__icon" aria-hidden="true">
@@ -109,7 +123,7 @@
 
             @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
             {
-                <details class="portal-topbar__profile" data-portal-topbar-overlay>
+                <details class="portal-topbar__profile" data-portal-topbar-overlay data-portal-topbar-hover-menu>
                     <summary title="@L["User"]" aria-label="@L["User"]">
                         <span class="portal-topbar__icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
@@ -123,7 +137,32 @@
                         <div class="portal-topbar__profile-identity">
                             <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
                             <div class="portal-topbar__profile-user-row">
-                                <div class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@_portalTopBar.CurrentUserName</div>
+                                <button type="button"
+                                        class="portal-topbar__profile-copy-name"
+                                        title="@L["Copy full user name"]"
+                                        aria-label="@L["Copy full user name"]"
+                                        data-copy-to-clipboard="true"
+                                        data-copy-text="@_portalTopBar.CurrentUserName">
+                                    <span class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@DisplayUserName(_portalTopBar.CurrentUserName)</span>
+                                    <span class="portal-topbar__profile-copy-inline-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                            <rect x="9" y="9" width="10" height="10" rx="2"></rect>
+                                            <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+                                        </svg>
+                                    </span>
+                                </button>
+                                <button type="button"
+                                        class="portal-topbar__profile-action-button"
+                                        title="@L["Log out"]"
+                                        aria-label="@L["Log out"]">
+                                    <span class="portal-topbar__icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                            <path d="M14 8l4 4-4 4"></path>
+                                            <path d="M18 12H9"></path>
+                                            <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5"></path>
+                                        </svg>
+                                    </span>
+                                </button>
                             </div>
                         </div>
                         <div class="portal-topbar__profile-section">
@@ -245,4 +284,17 @@
 
     private string CultureText(string? text)
         => string.IsNullOrWhiteSpace(text) ? string.Empty : L[text];
+
+    private static string DisplayUserName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var separatorIndex = value.LastIndexOf('\\');
+        return separatorIndex >= 0 && separatorIndex < value.Length - 1
+            ? value[(separatorIndex + 1)..]
+            : value;
+    }
 }
