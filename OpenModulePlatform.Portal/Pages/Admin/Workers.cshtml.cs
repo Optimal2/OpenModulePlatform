@@ -1,4 +1,4 @@
-// File: OpenModulePlatform.Portal/Pages/Admin/WorkerRuntime.cshtml.cs
+// File: OpenModulePlatform.Portal/Pages/Admin/Workers.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
@@ -8,17 +8,19 @@ using OpenModulePlatform.Web.Shared.Services;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
-public sealed class WorkerRuntimeModel : OmpPortalPageModel
+public sealed class WorkersModel : OmpPortalPageModel
 {
     private readonly OmpAdminRepository _repo;
 
-    public WorkerRuntimeModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
+    public WorkersModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
         : base(options, rbac)
     {
         _repo = repo;
     }
 
-    public IReadOnlyList<AppWorkerRuntimeRow> Rows { get; private set; } = [];
+    public IReadOnlyList<AppWorkerDefinitionRow> AppWorkerRows { get; private set; } = [];
+
+    public IReadOnlyList<AppWorkerRuntimeRow> RuntimeRows { get; private set; } = [];
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -28,7 +30,10 @@ public sealed class WorkerRuntimeModel : OmpPortalPageModel
             return guard;
         }
 
-        return RedirectToPage("/Admin/Workers");
+        SetTitles("Workers");
+        AppWorkerRows = await _repo.GetAppWorkerDefinitionsAsync(ct);
+        RuntimeRows = await _repo.GetAppWorkerRuntimeAsync(ct);
+        return Page();
     }
 
     public string GetObservedStateLabel(byte observedState)

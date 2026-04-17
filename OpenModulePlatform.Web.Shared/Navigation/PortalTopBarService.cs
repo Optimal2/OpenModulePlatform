@@ -274,6 +274,7 @@ public sealed class PortalTopBarService
         new("Apps", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/apps")),
         new("Module instances", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/moduleinstances")),
         new("App instances", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/appinstances")),
+        new("Workers", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/workers")),
         new("Artifacts", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/artifacts")),
         new("Automation", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/automation")),
         new("Security", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/security"))

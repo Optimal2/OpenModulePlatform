@@ -88,6 +88,59 @@ a:hover {
     border-color: var(--border);
 }
 
+
+.nav-dropdown {
+    position: relative;
+}
+
+.nav-dropdown summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--text);
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+
+.nav-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.nav-dropdown summary::after {
+    content: "▾";
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.nav-dropdown summary:hover,
+.nav-dropdown[open] summary {
+    background: var(--surface-muted);
+    border-color: var(--border);
+}
+
+.nav-dropdown__menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 180px;
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    z-index: 20;
+}
+
+.nav-dropdown__menu a {
+    display: block;
+}
+
 .user {
     margin-left: auto;
     font-size: 0.9rem;

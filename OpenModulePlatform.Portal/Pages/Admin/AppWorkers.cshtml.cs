@@ -28,8 +28,6 @@ public sealed class AppWorkersModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("App workers");
-        Rows = await _repo.GetAppWorkerDefinitionsAsync(ct);
-        return Page();
+        return RedirectToPage("/Admin/Workers");
     }
 }

@@ -146,7 +146,7 @@ public sealed class AppWorkerEditModel : OmpPortalPageModel
         {
             await _repo.DeleteAppWorkerDefinitionAsync(Input.AppId, ct);
             StatusMessage = T("App worker definition deleted.");
-            return RedirectToPage("/Admin/AppWorkers");
+            return RedirectToPage("/Admin/Workers");
         }
         catch (InvalidOperationException ex)
         {
