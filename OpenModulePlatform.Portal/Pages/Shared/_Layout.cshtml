@@ -28,12 +28,16 @@
                 <a href="~/admin/overview">@L["Admin"]</a>
                 <a href="~/admin/instances">@L["Instances"]</a>
                 <a href="~/admin/hosts">@L["Hosts"]</a>
-                <a href="~/admin/modules">@L["Modules"]</a>
+                <details class="nav-dropdown">
+                    <summary>@L["Modules"]</summary>
+                    <div class="nav-dropdown__menu">
+                        <a href="~/admin/moduleinstances">@L["Instances"]</a>
+                        <a href="~/admin/modules">@L["Definitions"]</a>
+                    </div>
+                </details>
                 <a href="~/admin/apps">@L["Apps"]</a>
-                <a href="~/admin/moduleinstances">@L["Module instances"]</a>
                 <a href="~/admin/appinstances">@L["App instances"]</a>
-                <a href="~/admin/appworkers">@L["App workers"]</a>
-                <a href="~/admin/workerruntime">@L["Worker runtime"]</a>
+                <a href="~/admin/workers">@L["Workers"]</a>
                 <a href="~/admin/artifacts">@L["Artifacts"]</a>
                 <a href="~/admin/automation">@L["Automation"]</a>
                 <a href="~/admin/security">@L["Security"]</a>
