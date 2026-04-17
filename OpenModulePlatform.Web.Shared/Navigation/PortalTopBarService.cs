@@ -220,30 +220,37 @@ public sealed class PortalTopBarService
         bool isPortalAdmin,
         IReadOnlyList<PortalTopBarLink> moduleLinks,
         WebAppOptions options)
-        => new()
         {
-            IsVisible = true,
-            PortalLink = portalLink,
-            ModuleLinks = moduleLinks,
-            Links = [portalLink, .. moduleLinks],
-            IsPortalAdmin = isPortalAdmin,
-            PortalAdminLinks = isPortalAdmin
-                ? CreatePortalAdminLinks(topBarOptions.PortalBaseUrl)
-                : Array.Empty<PortalTopBarLink>(),
-            LanguageOptions = CreateLanguageOptions(options, cultureSelection),
-            PreferredCulture = cultureSelection.PreferredCulture,
-            EffectiveCulture = cultureSelection.EffectiveCulture,
-            PreferredCultureDisplayText = cultureSelection.PreferredCultureDisplayText,
-            EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
-            IsCultureFallback = cultureSelection.IsFallback,
-            CurrentUserName = currentUserName,
-            AvailableRoles = roleContext.AvailableRoles,
-            ActiveRoleId = roleContext.ActiveRoleId,
-            ActiveRoleName = roleContext.ActiveRoleName,
-            OverflowToggleTextKey = "More",
-            PortalAdminToggleTextKey = "Admin",
-            LanguageToggleTextKey = "Language"
-        };
+            var portalAdminSections = isPortalAdmin
+                ? PortalAdminNavigation.CreateSections(relativePath => PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, relativePath))
+                : Array.Empty<PortalAdminMenuSection>();
+
+            return new()
+            {
+                IsVisible = true,
+                PortalLink = portalLink,
+                ModuleLinks = moduleLinks,
+                Links = [portalLink, .. moduleLinks],
+                IsPortalAdmin = isPortalAdmin,
+                PortalAdminSections = portalAdminSections,
+                PortalAdminLinks = portalAdminSections
+                    .SelectMany(section => section.Items.Select(item => new PortalTopBarLink(item.TextKey, item.Href)))
+                    .ToArray(),
+                LanguageOptions = CreateLanguageOptions(options, cultureSelection),
+                PreferredCulture = cultureSelection.PreferredCulture,
+                EffectiveCulture = cultureSelection.EffectiveCulture,
+                PreferredCultureDisplayText = cultureSelection.PreferredCultureDisplayText,
+                EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
+                IsCultureFallback = cultureSelection.IsFallback,
+                CurrentUserName = currentUserName,
+                AvailableRoles = roleContext.AvailableRoles,
+                ActiveRoleId = roleContext.ActiveRoleId,
+                ActiveRoleName = roleContext.ActiveRoleName,
+                OverflowToggleTextKey = "More",
+                PortalAdminToggleTextKey = "Admin",
+                LanguageToggleTextKey = "Language"
+            };
+        }
 
     private static IReadOnlyList<PortalTopBarCultureOption> CreateLanguageOptions(
         WebAppOptions options,
@@ -265,20 +272,6 @@ public sealed class PortalTopBarService
             .ToArray();
     }
 
-    private static IReadOnlyList<PortalTopBarLink> CreatePortalAdminLinks(string portalBaseUrl) =>
-    [
-        new("Admin", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/overview")),
-        new("Instances", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/instances")),
-        new("Hosts", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/hosts")),
-        new("Modules", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/modules")),
-        new("Apps", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/apps")),
-        new("Module instances", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/moduleinstances")),
-        new("App instances", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/appinstances")),
-        new("Workers", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/workers")),
-        new("Artifacts", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/artifacts")),
-        new("Automation", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/automation")),
-        new("Security", PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, "/admin/security"))
-    ];
 
     private static bool HasAccess(TopBarAppEntry app, IReadOnlySet<string> permissions)
     {

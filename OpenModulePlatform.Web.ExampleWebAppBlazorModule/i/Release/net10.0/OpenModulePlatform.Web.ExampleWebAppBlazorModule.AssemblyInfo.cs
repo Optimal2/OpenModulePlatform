@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("OpenModulePlatform")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.1.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+8b1f5008f9c27b5784c60310a285602c9ef60004")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+d1b2a1e6d91bc4165f0b4b06b58888163bddd158")]
 [assembly: System.Reflection.AssemblyProductAttribute("OpenModulePlatform")]
 [assembly: System.Reflection.AssemblyTitleAttribute("OpenModulePlatform.Web.ExampleWebAppBlazorModule")]
 [assembly: System.Reflection.AssemblyVersionAttribute("0.1.0.0")]

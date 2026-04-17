@@ -8,6 +8,9 @@
     var scheduledTopbars = new Set();
     var globalHandlersRegistered = false;
     var rebalanceFrameRequested = false;
+    var canHoverMedia = typeof window.matchMedia === 'function'
+        ? window.matchMedia('(hover: hover) and (pointer: fine)')
+        : null;
     var resizeObserver = typeof ResizeObserver !== 'undefined'
         ? new ResizeObserver(function (entries) {
             entries.forEach(function (entry) {
@@ -15,6 +18,10 @@
             });
         })
         : null;
+
+    function canHover() {
+        return !!(canHoverMedia && canHoverMedia.matches);
+    }
 
     function sortByIndex(nodes) {
         return Array.from(nodes).sort(function (left, right) {
@@ -68,9 +75,7 @@
             return;
         }
 
-        var allLinks = sortByIndex(
-            topbar.querySelectorAll('[data-portal-topbar-item]')
-        );
+        var allLinks = sortByIndex(topbar.querySelectorAll('[data-portal-topbar-item]'));
 
         allLinks.forEach(function (link) {
             modulesHost.appendChild(link);
@@ -146,7 +151,6 @@
         initializedTopbars.forEach(scheduleRebalance);
     }
 
-
     function copyTextToClipboard(text) {
         if (!text) {
             return Promise.resolve();
@@ -194,8 +198,187 @@
         });
         return true;
     }
+
+    function getAdminSubmenus(root) {
+        var scope = root || document;
+        return Array.from(scope.querySelectorAll('[data-portal-topbar-admin-submenu]'));
+    }
+
+    function getHoverMenus(root) {
+        var scope = root || document;
+        return Array.from(scope.querySelectorAll('[data-portal-topbar-hover-menu]'));
+    }
+
+    function isPinned(menu) {
+        return menu.dataset.pinned === 'true';
+    }
+
+    function setPinned(menu, value) {
+        menu.dataset.pinned = value ? 'true' : 'false';
+    }
+
+    function closeAdminSubmenu(submenu) {
+        if (!submenu) {
+            return;
+        }
+
+        submenu.open = false;
+        setPinned(submenu, false);
+    }
+
+    function closeSiblingAdminSubmenus(submenu) {
+        var parentMenu = submenu ? submenu.closest('[data-portal-topbar-admin-menu]') : null;
+        if (!parentMenu) {
+            return;
+        }
+
+        getAdminSubmenus(parentMenu).forEach(function (candidate) {
+            if (candidate !== submenu) {
+                closeAdminSubmenu(candidate);
+            }
+        });
+    }
+
+    function openAdminSubmenu(submenu, pinned) {
+        if (!submenu) {
+            return;
+        }
+
+        closeSiblingAdminSubmenus(submenu);
+        submenu.open = true;
+        setPinned(submenu, !!pinned);
+    }
+
+    function closeHoverMenu(menu) {
+        if (!menu) {
+            return;
+        }
+
+        menu.open = false;
+        setPinned(menu, false);
+        getAdminSubmenus(menu).forEach(closeAdminSubmenu);
+    }
+
+    function closeSiblingHoverMenus(menu) {
+        var root = menu ? menu.closest('[data-portal-topbar-root]') : null;
+        var scope = root || document;
+        getHoverMenus(scope).forEach(function (candidate) {
+            if (candidate !== menu) {
+                closeHoverMenu(candidate);
+            }
+        });
+    }
+
+    function openHoverMenu(menu, pinned) {
+        if (!menu) {
+            return;
+        }
+
+        closeSiblingHoverMenus(menu);
+        menu.open = true;
+        setPinned(menu, !!pinned);
+    }
+
+    function initAdminSubmenu(submenu) {
+        if (!submenu || submenu.dataset.portalTopbarAdminSubmenuInitialized === 'true') {
+            return;
+        }
+
+        submenu.dataset.portalTopbarAdminSubmenuInitialized = 'true';
+        setPinned(submenu, false);
+
+        var summary = submenu.querySelector('summary');
+        if (!summary) {
+            return;
+        }
+
+        summary.addEventListener('click', function (event) {
+            event.preventDefault();
+
+            var shouldOpenPinned = !submenu.open || !isPinned(submenu);
+            if (shouldOpenPinned) {
+                openAdminSubmenu(submenu, true);
+            } else {
+                closeAdminSubmenu(submenu);
+            }
+        });
+
+        submenu.addEventListener('mouseenter', function () {
+            if (!canHover() || isPinned(submenu)) {
+                return;
+            }
+
+            openAdminSubmenu(submenu, false);
+        });
+
+        submenu.addEventListener('mouseleave', function () {
+            if (!canHover() || isPinned(submenu)) {
+                return;
+            }
+
+            closeAdminSubmenu(submenu);
+        });
+    }
+
+    function initHoverMenu(menu) {
+        if (!menu || menu.dataset.portalTopbarHoverMenuInitialized === 'true') {
+            return;
+        }
+
+        menu.dataset.portalTopbarHoverMenuInitialized = 'true';
+        setPinned(menu, false);
+
+        var summary = menu.querySelector(':scope > summary');
+        if (!summary) {
+            return;
+        }
+
+        summary.addEventListener('click', function (event) {
+            event.preventDefault();
+
+            var shouldOpenPinned = !menu.open || !isPinned(menu);
+            if (shouldOpenPinned) {
+                openHoverMenu(menu, true);
+            } else {
+                closeHoverMenu(menu);
+            }
+        });
+
+        menu.addEventListener('mouseenter', function () {
+            if (!canHover() || isPinned(menu)) {
+                return;
+            }
+
+            openHoverMenu(menu, false);
+        });
+
+        menu.addEventListener('mouseleave', function () {
+            if (!canHover() || isPinned(menu)) {
+                return;
+            }
+
+            closeHoverMenu(menu);
+        });
+    }
+
     function closeOverlaysOnOutsideClick(event) {
+        document.querySelectorAll('[data-portal-topbar-admin-submenu][open]').forEach(function (submenu) {
+            if (!submenu.contains(event.target)) {
+                closeAdminSubmenu(submenu);
+            }
+        });
+
+        document.querySelectorAll('[data-portal-topbar-hover-menu][open]').forEach(function (menu) {
+            if (!menu.contains(event.target)) {
+                closeHoverMenu(menu);
+            }
+        });
+
         document.querySelectorAll('[data-portal-topbar-overlay][open]').forEach(function (overlay) {
+            if (overlay.matches('[data-portal-topbar-hover-menu], [data-portal-topbar-admin-submenu]')) {
+                return;
+            }
+
             if (!overlay.contains(event.target)) {
                 overlay.open = false;
             }
@@ -215,6 +398,19 @@
 
             closeOverlaysOnOutsideClick(event);
         });
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape') {
+                return;
+            }
+
+            document.querySelectorAll('[data-portal-topbar-admin-submenu][open]').forEach(closeAdminSubmenu);
+            document.querySelectorAll('[data-portal-topbar-hover-menu][open]').forEach(closeHoverMenu);
+            document.querySelectorAll('[data-portal-topbar-overlay][open]').forEach(function (overlay) {
+                if (!overlay.matches('[data-portal-topbar-hover-menu], [data-portal-topbar-admin-submenu]')) {
+                    overlay.open = false;
+                }
+            });
+        });
         window.addEventListener('resize', rebalanceAll);
         window.addEventListener('load', rebalanceAll);
     }
@@ -228,12 +424,33 @@
 
         if (topbar.dataset.portalTopbarInitialized === 'true') {
             initializedTopbars.add(topbar);
+            topbar.querySelectorAll('[data-portal-topbar-hover-menu]').forEach(initHoverMenu);
+            topbar.querySelectorAll('[data-portal-topbar-admin-submenu]').forEach(initAdminSubmenu);
             scheduleRebalance(topbar);
             return;
         }
 
         topbar.dataset.portalTopbarInitialized = 'true';
         initializedTopbars.add(topbar);
+        topbar.querySelectorAll('[data-portal-topbar-hover-menu]').forEach(initHoverMenu);
+        topbar.querySelectorAll('[data-portal-topbar-admin-submenu]').forEach(initAdminSubmenu);
+
+        topbar.querySelectorAll('[data-portal-topbar-admin-menu]').forEach(function (menu) {
+            var parentDetails = menu.closest('details');
+            if (!parentDetails || parentDetails.dataset.portalTopbarAdminMenuInitialized === 'true') {
+                return;
+            }
+
+            parentDetails.dataset.portalTopbarAdminMenuInitialized = 'true';
+            parentDetails.addEventListener('toggle', function () {
+                if (parentDetails.open) {
+                    return;
+                }
+
+                getAdminSubmenus(menu).forEach(closeAdminSubmenu);
+            });
+        });
+
         scheduleRebalance(topbar);
 
         if (resizeObserver) {
@@ -242,7 +459,7 @@
     }
 
     function initAll() {
-        document.querySelectorAll('[data-portal-topbar]').forEach(initTopbar);
+        document.querySelectorAll('[data-portal-topbar-root]').forEach(initTopbar);
     }
 
     window.ompPortalTopBar = window.ompPortalTopBar || {};

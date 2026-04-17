@@ -11,6 +11,7 @@ public sealed class PortalTopBarModel
         Links = Array.Empty<PortalTopBarLink>(),
         ModuleLinks = Array.Empty<PortalTopBarLink>(),
         PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
+        PortalAdminSections = Array.Empty<PortalAdminMenuSection>(),
         LanguageOptions = Array.Empty<PortalTopBarCultureOption>(),
         OverflowToggleTextKey = "More",
         CollapsedToggleTextKey = "Modules",
@@ -37,6 +38,8 @@ public sealed class PortalTopBarModel
     public bool IsPortalAdmin { get; init; }
 
     public IReadOnlyList<PortalTopBarLink> PortalAdminLinks { get; init; } = Array.Empty<PortalTopBarLink>();
+
+    public IReadOnlyList<PortalAdminMenuSection> PortalAdminSections { get; init; } = Array.Empty<PortalAdminMenuSection>();
 
     public IReadOnlyList<PortalTopBarCultureOption> LanguageOptions { get; init; } = Array.Empty<PortalTopBarCultureOption>();
 
