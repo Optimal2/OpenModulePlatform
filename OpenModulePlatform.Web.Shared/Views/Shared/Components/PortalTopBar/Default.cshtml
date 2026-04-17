@@ -132,6 +132,15 @@
                             <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
                             <div class="portal-topbar__profile-user-row">
                                 <div class="portal-topbar__profile-current-user" title="@Model.CurrentUserName">@currentUserDisplayName</div>
+                                @if (!string.IsNullOrWhiteSpace(Model.CurrentUserName))
+                                {
+                                    <button type="button"
+                                            class="portal-topbar__profile-copy-button"
+                                            title="@L["Copy full user name"]"
+                                            aria-label="@L["Copy full user name"]"
+                                            data-copy-to-clipboard="true"
+                                            data-copy-text="@Model.CurrentUserName">⎘</button>
+                                }
                             </div>
                         </div>
                         <div class="portal-topbar__profile-section">
@@ -148,7 +157,7 @@
                                         <div class="portal-topbar__profile-switch-menu">
                                             @foreach (var role in Model.AvailableRoles.Where(role => role.RoleId != Model.ActiveRoleId))
                                             {
-                                                <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)">@role.Name</a>
+                                                <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
                                             }
                                         </div>
                                     </details>

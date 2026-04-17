@@ -124,6 +124,15 @@
                             <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
                             <div class="portal-topbar__profile-user-row">
                                 <div class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@DisplayUserName(_portalTopBar.CurrentUserName)</div>
+                                @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
+                                {
+                                    <button type="button"
+                                            class="portal-topbar__profile-copy-button"
+                                            title="@L["Copy full user name"]"
+                                            aria-label="@L["Copy full user name"]"
+                                            data-copy-to-clipboard="true"
+                                            data-copy-text="@_portalTopBar.CurrentUserName">⎘</button>
+                                }
                             </div>
                         </div>
                         <div class="portal-topbar__profile-section">
