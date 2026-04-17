@@ -1,3 +1,4 @@
+@using OpenModulePlatform.Web.Shared.Navigation
 @* File: OpenModulePlatform.Portal/Pages/Shared/_Layout.cshtml *@
 <!doctype html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
@@ -25,40 +26,24 @@
             <a href="~/">@L["Home"]</a>
             @if (ViewData["IsPortalAdmin"] is bool isPortalAdmin && isPortalAdmin)
             {
-                <details class="nav-dropdown">
-                    <summary>@L["Modules"]</summary>
-                    <div class="nav-dropdown__menu">
-                        <a href="~/admin/moduleinstances">@L["Instances"]</a>
-                        <a href="~/admin/modules">@L["Definitions"]</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>@L["Apps"]</summary>
-                    <div class="nav-dropdown__menu">
-                        <a href="~/admin/apps">@L["Definitions"]</a>
-                        <a href="~/admin/appinstances">@L["Instances"]</a>
-                        <div class="nav-dropdown__separator" role="separator" aria-hidden="true"></div>
-                        <a href="~/admin/artifacts">@L["Artifacts"]</a>
-                        <a href="~/admin/workers">@L["Workers"]</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>@L["Hosts"]</summary>
-                    <div class="nav-dropdown__menu">
-                        <a href="~/admin/hosttemplates">@L["Definitions"]</a>
-                        <a href="~/admin/hosts">@L["Instances"]</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>@L["System"]</summary>
-                    <div class="nav-dropdown__menu">
-                        <a href="~/admin/instancetemplates">@L["Definitions"]</a>
-                        <a href="~/admin/instances">@L["Instances"]</a>
-                        <div class="nav-dropdown__separator" role="separator" aria-hidden="true"></div>
-                        <a href="~/admin/security">@L["Security"]</a>
-                        <a href="~/admin/automation">@L["Automation"]</a>
-                    </div>
-                </details>
+                var adminSections = PortalAdminNavigation.CreateSections(relativePath => Url.Content($"~{relativePath}"));
+
+                foreach (var section in adminSections)
+                {
+                    <details class="nav-dropdown">
+                        <summary>@L[section.TextKey]</summary>
+                        <div class="nav-dropdown__menu">
+                            @foreach (var item in section.Items)
+                            {
+                                if (item.SeparatorBefore)
+                                {
+                                    <div class="nav-dropdown__separator" role="separator" aria-hidden="true"></div>
+                                }
+                                <a href="@item.Href">@L[item.TextKey]</a>
+                            }
+                        </div>
+                    </details>
+                }
             }
         </nav>
         </div>
