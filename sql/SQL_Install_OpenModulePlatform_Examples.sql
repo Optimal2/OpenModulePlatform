@@ -146,6 +146,54 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM omp_iframe_module.urls WHERE [id] = 1)
+BEGIN
+    INSERT INTO omp_iframe_module.urls([id], [url], [displayname], [allowed_roles], [enabled])
+    VALUES(1, N'/', N'Portal', NULL, 1);
+END
+ELSE
+BEGIN
+    UPDATE omp_iframe_module.urls
+    SET [url] = N'/',
+        [displayname] = N'Portal',
+        [allowed_roles] = NULL,
+        [enabled] = 1
+    WHERE [id] = 1;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM omp_iframe_module.urls WHERE [id] = 2)
+BEGIN
+    INSERT INTO omp_iframe_module.urls([id], [url], [displayname], [allowed_roles], [enabled])
+    VALUES(2, N'/ExampleWebAppModule', N'Example Web App Module', NULL, 1);
+END
+ELSE
+BEGIN
+    UPDATE omp_iframe_module.urls
+    SET [url] = N'/ExampleWebAppModule',
+        [displayname] = N'Example Web App Module',
+        [allowed_roles] = NULL,
+        [enabled] = 1
+    WHERE [id] = 2;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM omp_iframe_module.urls WHERE [id] = 3)
+BEGIN
+    INSERT INTO omp_iframe_module.urls([id], [url], [displayname], [allowed_roles], [enabled])
+    VALUES(3, N'/ExampleServiceAppModule', N'Example Service App Module', NULL, 1);
+END
+ELSE
+BEGIN
+    UPDATE omp_iframe_module.urls
+    SET [url] = N'/ExampleServiceAppModule',
+        [displayname] = N'Example Service App Module',
+        [allowed_roles] = NULL,
+        [enabled] = 1
+    WHERE [id] = 3;
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM omp_example_serviceapp_module.Configurations WHERE VersionNo = 0)
 BEGIN
     /*
@@ -252,6 +300,14 @@ DECLARE @WebBlazorAppId int;
 DECLARE @WebBlazorAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111212';
 DECLARE @WebBlazorViewPermissionId int;
 DECLARE @WebBlazorAdminPermissionId int;
+
+DECLARE @IFrameModuleId int;
+DECLARE @IFrameModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111221';
+DECLARE @IFrameTemplateModuleInstanceId int;
+DECLARE @IFrameAppId int;
+DECLARE @IFrameAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111222';
+DECLARE @IFrameViewPermissionId int;
+DECLARE @IFrameAdminPermissionId int;
 
 DECLARE @ServiceModuleId int;
 DECLARE @ServiceModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111301';
@@ -805,6 +861,259 @@ BEGIN
         N'webapp',
         1,
         310);
+END
+
+-------------------------------------------------------------------------------
+-- iFrame Web App Module registration
+-------------------------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'IFrameWebAppModule.View')
+    INSERT INTO omp.Permissions(Name, Description) VALUES(N'IFrameWebAppModule.View', N'Read access to the iFrame Web App Module');
+
+IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'IFrameWebAppModule.Admin')
+    INSERT INTO omp.Permissions(Name, Description)
+    VALUES(
+        N'IFrameWebAppModule.Admin',
+        N'Administrative access to the iFrame Web App Module');
+
+SELECT @IFrameViewPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'IFrameWebAppModule.View';
+SELECT @IFrameAdminPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'IFrameWebAppModule.Admin';
+
+IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'iframe_webapp_module')
+BEGIN
+    UPDATE omp.Modules
+    SET DisplayName = N'iFrame Web App Module',
+        ModuleType = N'WebAppModule',
+        SchemaName = N'omp_iframe_module',
+        Description = N'Razor wrapper module that renders three database-backed iframe targets inside an OMP shell',
+        IsEnabled = 1,
+        SortOrder = 320,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleKey = N'iframe_webapp_module';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Modules(
+        ModuleKey,
+        DisplayName,
+        ModuleType,
+        SchemaName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        N'iframe_webapp_module',
+        N'iFrame Web App Module',
+        N'WebAppModule',
+        N'omp_iframe_module',
+        N'Razor wrapper module that renders three database-backed iframe targets inside an OMP shell',
+        1,
+        320);
+END
+
+SELECT @IFrameModuleId = ModuleId FROM omp.Modules WHERE ModuleKey = N'iframe_webapp_module';
+
+IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @IFrameModuleId AND AppKey = N'iframe_webapp_module_webapp')
+BEGIN
+    UPDATE omp.Apps
+    SET DisplayName = N'iFrame Web App Module',
+        AppType = N'WebApp',
+        Description = N'Web app definition for the iFrame proof-of-concept wrapper module',
+        IsEnabled = 1,
+        SortOrder = 320,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleId = @IFrameModuleId AND AppKey = N'iframe_webapp_module_webapp';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Apps(
+        ModuleId,
+        AppKey,
+        DisplayName,
+        AppType,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @IFrameModuleId,
+        N'iframe_webapp_module_webapp',
+        N'iFrame Web App Module',
+        N'WebApp',
+        N'Web app definition for the iFrame proof-of-concept wrapper module',
+        1,
+        320);
+END
+
+SELECT @IFrameAppId = AppId FROM omp.Apps WHERE ModuleId = @IFrameModuleId AND AppKey = N'iframe_webapp_module_webapp';
+
+IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @IFrameAppId AND PermissionId = @IFrameViewPermissionId)
+    INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@IFrameAppId, @IFrameViewPermissionId, 0);
+
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @IFrameViewPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @IFrameViewPermissionId);
+
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePermissions
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PermissionId = @IFrameAdminPermissionId
+   )
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
+    VALUES(@PortalAdminsRoleId, @IFrameAdminPermissionId);
+
+IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @IFrameModuleInstanceId)
+BEGIN
+    INSERT INTO omp.ModuleInstances(
+        ModuleInstanceId,
+        InstanceId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @IFrameModuleInstanceId,
+        @InstanceId,
+        @IFrameModuleId,
+        N'iframe_webapp_module',
+        N'iFrame Web App Module',
+        N'Proof-of-concept iframe wrapper module instance',
+        1,
+        320);
+END
+ELSE
+BEGIN
+    UPDATE omp.ModuleInstances
+    SET InstanceId = @InstanceId,
+        ModuleId = @IFrameModuleId,
+        ModuleInstanceKey = N'iframe_webapp_module',
+        DisplayName = N'iFrame Web App Module',
+        Description = N'Proof-of-concept iframe wrapper module instance',
+        IsEnabled = 1,
+        SortOrder = 320,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleInstanceId = @IFrameModuleInstanceId;
+END
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateModuleInstances
+    WHERE InstanceTemplateId = @InstanceTemplateId
+      AND ModuleInstanceKey = N'iframe_webapp_module'
+)
+BEGIN
+    INSERT INTO omp.InstanceTemplateModuleInstances(
+        InstanceTemplateId,
+        ModuleId,
+        ModuleInstanceKey,
+        DisplayName,
+        Description,
+        SortOrder)
+    VALUES(
+        @InstanceTemplateId,
+        @IFrameModuleId,
+        N'iframe_webapp_module',
+        N'iFrame Web App Module',
+        N'Proof-of-concept iframe wrapper module instance in the default template',
+        320);
+END
+
+SELECT @IFrameTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateId = @InstanceTemplateId
+  AND ModuleInstanceKey = N'iframe_webapp_module';
+
+IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @IFrameAppInstanceId)
+BEGIN
+    INSERT INTO omp.AppInstances(
+        AppInstanceId,
+        ModuleInstanceId,
+        HostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        IsEnabled,
+        IsAllowed,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @IFrameAppInstanceId,
+        @IFrameModuleInstanceId,
+        @SampleHostId,
+        @IFrameAppId,
+        N'iframe_webapp_module_webapp',
+        N'iFrame Web App Module',
+        N'Primary web app instance for the iFrame proof-of-concept module',
+        N'iFrameWebAppModule',
+        N'iframe-webapp',
+        1,
+        1,
+        1,
+        320);
+END
+ELSE
+BEGIN
+    UPDATE omp.AppInstances
+    SET ModuleInstanceId = @IFrameModuleInstanceId,
+        HostId = @SampleHostId,
+        AppId = @IFrameAppId,
+        AppInstanceKey = N'iframe_webapp_module_webapp',
+        DisplayName = N'iFrame Web App Module',
+        Description = N'Primary web app instance for the iFrame proof-of-concept module',
+        RoutePath = N'iFrameWebAppModule',
+        InstallationName = N'iframe-webapp',
+        IsEnabled = 1,
+        IsAllowed = 1,
+        DesiredState = 1,
+        SortOrder = 320,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE AppInstanceId = @IFrameAppInstanceId;
+END
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateModuleInstanceId = @IFrameTemplateModuleInstanceId
+      AND AppInstanceKey = N'iframe_webapp_module_webapp'
+)
+BEGIN
+    INSERT INTO omp.InstanceTemplateAppInstances(
+        InstanceTemplateModuleInstanceId,
+        InstanceTemplateHostId,
+        AppId,
+        AppInstanceKey,
+        DisplayName,
+        Description,
+        RoutePath,
+        InstallationName,
+        DesiredState,
+        SortOrder)
+    VALUES(
+        @IFrameTemplateModuleInstanceId,
+        @SampleTemplateHostId,
+        @IFrameAppId,
+        N'iframe_webapp_module_webapp',
+        N'iFrame Web App Module',
+        N'Primary web app instance for the iFrame proof-of-concept module',
+        N'iFrameWebAppModule',
+        N'iframe-webapp',
+        1,
+        320);
 END
 
 -------------------------------------------------------------------------------

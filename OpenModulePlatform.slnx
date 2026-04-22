@@ -2,6 +2,7 @@
   <Project Path="OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj" />
   <Project Path="OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj" />
   <Project Path="OpenModulePlatform.Web.ExampleWebAppModule/OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
+  <Project Path="OpenModulePlatform.Web.iFrameWebAppModule/OpenModulePlatform.Web.iFrameWebAppModule.csproj" />
   <Project Path="OpenModulePlatform.Web.ExampleServiceAppModule/OpenModulePlatform.Web.ExampleServiceAppModule.csproj" />
   <Project Path="OpenModulePlatform.Service.ExampleServiceAppModule/OpenModulePlatform.Service.ExampleServiceAppModule.csproj" />
   <Project Path="OpenModulePlatform.Web.ExampleWorkerAppModule/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj" />

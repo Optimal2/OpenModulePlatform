@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
+    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
+    @if (ViewData["OmpPreventBackCache"] is true)
+    {
+        <meta name="omp-prevent-back-cache" content="true" />
+    }
+</head>
+<body>
+    <header class="app-header">
+        @await Component.InvokeAsync("PortalTopBar")
+        <div class="topbar">
+            <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Overview"]">
+                <div class="brand">@ViewData["PortalTitle"]</div>
+                <div class="brand-subtitle">@L["iFrame Web App Module"]</div>
+            </a>
+        </div>
+    </header>
+    <main class="content-shell">
+        @RenderBody()
+    </main>
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/portal-topbar.js"></script>
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-secure-page-navigation.js"></script>
+</body>
+</html>

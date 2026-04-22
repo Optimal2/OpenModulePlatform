@@ -171,6 +171,7 @@ $projects = @(
     'OpenModulePlatform.Web.ExampleServiceAppModule/OpenModulePlatform.Web.ExampleServiceAppModule.csproj',
     'OpenModulePlatform.Web.ExampleWebAppBlazorModule/OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj',
     'OpenModulePlatform.Web.ExampleWebAppModule/OpenModulePlatform.Web.ExampleWebAppModule.csproj',
+    'OpenModulePlatform.Web.iFrameWebAppModule/OpenModulePlatform.Web.iFrameWebAppModule.csproj',
     'OpenModulePlatform.Web.ExampleWorkerAppModule/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj',
     'OpenModulePlatform.Worker.ExampleWorkerAppModule/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj',
     'OpenModulePlatform.WorkerManager.WindowsService/OpenModulePlatform.WorkerManager.WindowsService.csproj',
