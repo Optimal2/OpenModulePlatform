@@ -1,0 +1,4 @@
+@page "/status/{statusCode:int}"
+@model OpenModulePlatform.Web.iFrameWebAppModule.Pages.StatusModel
+
+@await Component.InvokeAsync("OmpError", new { model = Model.Error })

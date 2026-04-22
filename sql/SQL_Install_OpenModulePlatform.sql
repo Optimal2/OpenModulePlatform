@@ -21,6 +21,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp')
     EXEC('CREATE SCHEMA [omp]');
 GO
 
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_iframe_module')
+    EXEC('CREATE SCHEMA [omp_iframe_module]');
+GO
+
+IF OBJECT_ID(N'omp_iframe_module.urls', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_iframe_module.urls
+    (
+        [id] int NOT NULL CONSTRAINT PK_omp_iframe_module_urls PRIMARY KEY,
+        [url] nvarchar(500) NOT NULL,
+        [displayname] nvarchar(200) NOT NULL,
+        [allowed_roles] nvarchar(500) NULL,
+        [enabled] bit NOT NULL CONSTRAINT DF_omp_iframe_module_urls_enabled DEFAULT(1)
+    );
+END
+GO
+
 -------------------------------------------------------------------------------
 -- RBAC
 -------------------------------------------------------------------------------

@@ -10,6 +10,20 @@ public static class PortalAdminNavigation
         =>
         [
             new(
+                "System",
+                [
+                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/instancetemplates")),
+                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/instances")),
+                    new PortalAdminMenuItem("Security", hrefFactory("/admin/security"), SeparatorBefore: true),
+                    new PortalAdminMenuItem("Automation", hrefFactory("/admin/automation"))
+                ]),
+            new(
+                "Hosts",
+                [
+                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/hosttemplates")),
+                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/hosts"))
+                ]),
+            new(
                 "Modules",
                 [
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/moduleinstances")),
@@ -22,20 +36,6 @@ public static class PortalAdminNavigation
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/appinstances")),
                     new PortalAdminMenuItem("Artifacts", hrefFactory("/admin/artifacts"), SeparatorBefore: true),
                     new PortalAdminMenuItem("Workers", hrefFactory("/admin/workers"))
-                ]),
-            new(
-                "Hosts",
-                [
-                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/hosttemplates")),
-                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/hosts"))
-                ]),
-            new(
-                "System",
-                [
-                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/instancetemplates")),
-                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/instances")),
-                    new PortalAdminMenuItem("Security", hrefFactory("/admin/security"), SeparatorBefore: true),
-                    new PortalAdminMenuItem("Automation", hrefFactory("/admin/automation"))
                 ])
         ];
 }

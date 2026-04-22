@@ -1,0 +1,35 @@
+@page
+@model OpenModulePlatform.Web.iFrameWebAppModule.Pages.IndexModel
+
+<div class="iframe-toolbar" role="toolbar" aria-label="@L["Select URL"]">
+@foreach (var button in Model.UrlButtons)
+{
+    var css = button.IsSelected ? "btn btn--active" : "btn";
+    if (!button.IsAvailable)
+    {
+        css += " btn--disabled";
+    }
+
+    <a class="@css" href="?urlId=@button.Id" aria-current="@(button.IsSelected ? "page" : null)">@button.Label</a>
+}
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.SelectedUrl))
+{
+    <div class="iframe-shell">
+        <iframe
+            class="iframe-shell__frame"
+            src="@Model.SelectedUrl"
+            title="@Model.SelectedDisplayName"
+            loading="eager"
+            referrerpolicy="strict-origin-when-cross-origin">
+        </iframe>
+    </div>
+}
+else
+{
+    <section class="card iframe-message">
+        <h2>@L["iFrame unavailable"]</h2>
+        <p class="muted">@Model.SelectedError</p>
+    </section>
+}
