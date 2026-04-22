@@ -1,0 +1,34 @@
+@page
+@model OpenModulePlatform.Web.IframeModule.Pages.IndexModel
+
+@if (!Model.HasUrls)
+{
+    <section class="iframe-empty-state">
+        <h1>@L["No iframe URLs are available."]</h1>
+        <p>@L["Add enabled rows to omp_iframe_module.urls to start using the iframe module."]</p>
+    </section>
+}
+else
+{
+    <div class="iframe-toolbar" role="toolbar" aria-label="@L["Iframe URL buttons"]">
+        @for (var i = 0; i < Model.UrlSlots.Count; i++)
+        {
+            var slotNumber = i + 1;
+            var row = Model.UrlSlots[i];
+            <a class="iframe-slot-button @(Model.SelectedSlot == slotNumber ? "iframe-slot-button--active" : null)"
+               href="?slot=@slotNumber"
+               title="@row.DisplayName"
+               aria-current="@(Model.SelectedSlot == slotNumber ? "page" : null)">
+                @L["URL"] @slotNumber
+            </a>
+        }
+    </div>
+
+    <div class="iframe-shell">
+        <iframe
+            class="iframe-shell__frame"
+            src="@Model.SelectedUrl!.Url"
+            title="@Model.SelectedUrl.DisplayName"
+            loading="eager"></iframe>
+    </div>
+}
