@@ -50,6 +50,15 @@ a:hover {
     align-items: center;
     gap: 16px;
     padding: 14px 20px;
+    flex-wrap: wrap;
+}
+
+.topbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 0 1 auto;
 }
 
 .brand-wrap {
@@ -93,41 +102,41 @@ a:hover {
 .iframe-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
 }
 
 .iframe-toolbar {
-    margin-bottom: 14px;
+    margin-bottom: 0;
 }
 
-button,
-.btn {
+.iframe-toolbar__link {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--text);
+    border: 1px solid transparent;
+    background: transparent;
+    white-space: nowrap;
+}
+
+.iframe-toolbar__link:hover,
+.iframe-toolbar__link:focus,
+.iframe-toolbar__link:focus-visible {
     background: var(--surface-muted);
+    border-color: var(--border);
     color: var(--text);
     text-decoration: none;
-    cursor: pointer;
 }
 
-button:hover,
-.btn:hover {
-    border-color: var(--link);
-    color: var(--link-hover);
+.iframe-toolbar__link--active {
+    background: var(--surface-muted);
+    border-color: var(--border);
 }
 
-.btn--active {
-    background: var(--accent);
-    border-color: var(--link);
-    color: var(--link-hover);
-}
-
-.btn--disabled {
+.iframe-toolbar__link--disabled {
     opacity: 0.72;
 }
 
@@ -168,6 +177,19 @@ button:hover,
     .content-shell {
         padding-inline: 16px;
     }
+
+    .topbar {
+        align-items: flex-start;
+    }
+
+    .topbar-nav {
+        width: 100%;
+    }
+
+    .topbar-nav .iframe-toolbar {
+        width: 100%;
+    }
+
 
     .iframe-shell,
     .iframe-shell__frame {

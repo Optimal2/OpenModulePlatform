@@ -10,7 +10,7 @@ namespace OpenModulePlatform.Web.iFrameWebAppModule.Pages;
 
 public sealed class IndexModel : iFrameWebAppModulePageModel
 {
-    private static readonly int[] SupportedUrlIds = [1, 2, 3];
+    private const string DefaultSetKey = "default";
 
     private readonly IFrameWebAppModuleRepository _repo;
     private readonly RbacService _rbac;
@@ -28,13 +28,14 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
         _logger = logger;
     }
 
-    public int SelectedUrlId { get; private set; } = 1;
+    public string CurrentSetKey { get; private set; } = DefaultSetKey;
+    public int SelectedUrlId { get; private set; }
     public string? SelectedUrl { get; private set; }
     public string SelectedDisplayName { get; private set; } = string.Empty;
     public string? SelectedError { get; private set; }
     public IReadOnlyList<IFrameUrlButton> UrlButtons { get; private set; } = [];
 
-    public async Task<IActionResult> OnGet(int? urlId, CancellationToken ct)
+    public async Task<IActionResult> OnGet(string? setKey, int? urlId, CancellationToken ct)
     {
         _logger.LogInformation("Loading iFrame Web App Module page.");
 
@@ -45,30 +46,41 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
             return guard;
         }
 
-        SelectedUrlId = SupportedUrlIds.Contains(urlId ?? 1) ? (urlId ?? 1) : 1;
+        CurrentSetKey = string.IsNullOrWhiteSpace(setKey) ? DefaultSetKey : setKey.Trim();
         SetTitles("Overview");
 
         var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
-        var configuredRows = await _repo.GetConfiguredUrlsAsync(ct);
-        var availableRows = configuredRows.ToDictionary(x => x.Id);
+        var urlSet = await _repo.GetUrlSetAsync(CurrentSetKey, ct);
+        if (urlSet is null || !urlSet.Enabled)
+        {
+            SelectedError = T("The selected URL set is not configured.");
+            return Page();
+        }
 
-        UrlButtons = SupportedUrlIds
-            .Select(id =>
+        var configuredRows = await _repo.GetConfiguredUrlsForSetAsync(urlSet.Id, ct);
+        if (configuredRows.Count == 0)
+        {
+            SelectedError = T("The selected URL set has no configured URLs.");
+            return Page();
+        }
+
+        var firstAvailableRow = configuredRows.FirstOrDefault(row => row.Enabled && IsAllowedForRole(row.AllowedRoles, roleContext.ActiveRoleName));
+        SelectedUrlId = urlId.HasValue && configuredRows.Any(row => row.Id == urlId.Value)
+            ? urlId.Value
+            : (firstAvailableRow?.Id ?? configuredRows[0].Id);
+
+        UrlButtons = configuredRows
+            .Select(row => new IFrameUrlButton
             {
-                availableRows.TryGetValue(id, out var row);
-                var isAvailable = row is not null && row.Enabled && IsAllowedForRole(row.AllowedRoles, roleContext.ActiveRoleName);
-
-                return new IFrameUrlButton
-                {
-                    Id = id,
-                    Label = row?.DisplayName ?? $"URL {id}",
-                    IsSelected = id == SelectedUrlId,
-                    IsAvailable = isAvailable
-                };
+                Id = row.Id,
+                Label = row.DisplayName,
+                IsSelected = row.Id == SelectedUrlId,
+                IsAvailable = row.Enabled && IsAllowedForRole(row.AllowedRoles, roleContext.ActiveRoleName)
             })
             .ToArray();
 
-        if (!availableRows.TryGetValue(SelectedUrlId, out var selectedRow))
+        var selectedRow = configuredRows.FirstOrDefault(row => row.Id == SelectedUrlId);
+        if (selectedRow is null)
         {
             SelectedError = T("The selected URL is not configured.");
             return Page();
