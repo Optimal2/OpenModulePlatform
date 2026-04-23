@@ -108,8 +108,12 @@
 .portal-topbar__admin,
 .portal-topbar__language,
 .portal-topbar__profile {
-    padding-bottom: 10px;
-    margin-bottom: -10px;
+    padding-right: 6px;
+    padding-bottom: 16px;
+    padding-left: 6px;
+    margin-right: -6px;
+    margin-bottom: -16px;
+    margin-left: -6px;
 }
 
 .portal-topbar__admin > summary,
@@ -192,7 +196,7 @@
 .portal-topbar__language-menu,
 .portal-topbar__profile-menu {
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 1px);
     z-index: 1100;
     min-width: 220px;
     padding: 8px;
@@ -250,6 +254,8 @@
 
 .portal-topbar__admin-submenu {
     position: relative;
+    padding-right: 12px;
+    margin-right: -12px;
 }
 
 .portal-topbar__admin-submenu > summary {
@@ -285,7 +291,7 @@
 .portal-topbar__admin-submenu-menu {
     position: absolute;
     top: -8px;
-    left: calc(100% + 6px);
+    left: calc(100% - 2px);
     z-index: 1150;
     min-width: 220px;
     padding: 8px;
@@ -626,7 +632,7 @@
 
 .portal-topbar__profile-switch-menu {
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 1px);
     right: 0;
     z-index: 1200;
     min-width: 220px;

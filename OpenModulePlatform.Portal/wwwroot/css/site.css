@@ -112,8 +112,12 @@ a:hover {
 
 .nav-dropdown {
     position: relative;
-    padding-bottom: 10px;
-    margin-bottom: -10px;
+    padding-right: 6px;
+    padding-bottom: 18px;
+    padding-left: 6px;
+    margin-right: -6px;
+    margin-bottom: -18px;
+    margin-left: -6px;
 }
 
 .nav-dropdown summary {
@@ -147,7 +151,7 @@ a:hover {
 
 .nav-dropdown__menu {
     position: absolute;
-    top: calc(100% + 2px);
+    top: calc(100% - 2px);
     left: 0;
     min-width: 200px;
     display: grid;
