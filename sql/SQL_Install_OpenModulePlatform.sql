@@ -38,6 +38,33 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp_iframe_module.url_sets', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_iframe_module.url_sets
+    (
+        [id] int IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_iframe_module_url_sets PRIMARY KEY,
+        [set_key] nvarchar(100) NOT NULL,
+        [displayname] nvarchar(200) NOT NULL,
+        [enabled] bit NOT NULL CONSTRAINT DF_omp_iframe_module_url_sets_enabled DEFAULT(1),
+        CONSTRAINT UQ_omp_iframe_module_url_sets_set_key UNIQUE([set_key])
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp_iframe_module.url_set_urls', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_iframe_module.url_set_urls
+    (
+        [url_set_id] int NOT NULL,
+        [url_id] int NOT NULL,
+        [sort_order] int NOT NULL CONSTRAINT DF_omp_iframe_module_url_set_urls_sort_order DEFAULT(0),
+        CONSTRAINT PK_omp_iframe_module_url_set_urls PRIMARY KEY([url_set_id], [url_id]),
+        CONSTRAINT FK_omp_iframe_module_url_set_urls_url_set FOREIGN KEY([url_set_id]) REFERENCES omp_iframe_module.url_sets([id]),
+        CONSTRAINT FK_omp_iframe_module_url_set_urls_url FOREIGN KEY([url_id]) REFERENCES omp_iframe_module.urls([id])
+    );
+END
+GO
+
 -------------------------------------------------------------------------------
 -- RBAC
 -------------------------------------------------------------------------------

@@ -194,6 +194,74 @@ BEGIN
 END
 GO
 
+DECLARE @IFrameDefaultUrlSetId int;
+DECLARE @IFramePortalUrlSetId int;
+DECLARE @IFrameExamplesUrlSetId int;
+
+IF EXISTS (SELECT 1 FROM omp_iframe_module.url_sets WHERE [set_key] = N'default')
+BEGIN
+    UPDATE omp_iframe_module.url_sets
+    SET [displayname] = N'Default',
+        [enabled] = 1
+    WHERE [set_key] = N'default';
+END
+ELSE
+BEGIN
+    INSERT INTO omp_iframe_module.url_sets([set_key], [displayname], [enabled])
+    VALUES(N'default', N'Default', 1);
+END
+
+SELECT @IFrameDefaultUrlSetId = [id]
+FROM omp_iframe_module.url_sets
+WHERE [set_key] = N'default';
+
+IF EXISTS (SELECT 1 FROM omp_iframe_module.url_sets WHERE [set_key] = N'portal')
+BEGIN
+    UPDATE omp_iframe_module.url_sets
+    SET [displayname] = N'Portal',
+        [enabled] = 1
+    WHERE [set_key] = N'portal';
+END
+ELSE
+BEGIN
+    INSERT INTO omp_iframe_module.url_sets([set_key], [displayname], [enabled])
+    VALUES(N'portal', N'Portal', 1);
+END
+
+SELECT @IFramePortalUrlSetId = [id]
+FROM omp_iframe_module.url_sets
+WHERE [set_key] = N'portal';
+
+IF EXISTS (SELECT 1 FROM omp_iframe_module.url_sets WHERE [set_key] = N'examples')
+BEGIN
+    UPDATE omp_iframe_module.url_sets
+    SET [displayname] = N'Examples',
+        [enabled] = 1
+    WHERE [set_key] = N'examples';
+END
+ELSE
+BEGIN
+    INSERT INTO omp_iframe_module.url_sets([set_key], [displayname], [enabled])
+    VALUES(N'examples', N'Examples', 1);
+END
+
+SELECT @IFrameExamplesUrlSetId = [id]
+FROM omp_iframe_module.url_sets
+WHERE [set_key] = N'examples';
+
+DELETE FROM omp_iframe_module.url_set_urls
+WHERE [url_set_id] IN (@IFrameDefaultUrlSetId, @IFramePortalUrlSetId, @IFrameExamplesUrlSetId);
+
+INSERT INTO omp_iframe_module.url_set_urls([url_set_id], [url_id], [sort_order])
+VALUES
+    (@IFrameDefaultUrlSetId, 1, 10),
+    (@IFrameDefaultUrlSetId, 2, 20),
+    (@IFrameDefaultUrlSetId, 3, 30),
+    (@IFramePortalUrlSetId, 1, 10),
+    (@IFrameExamplesUrlSetId, 2, 10),
+    (@IFrameExamplesUrlSetId, 3, 20);
+GO
+
 IF NOT EXISTS (SELECT 1 FROM omp_example_serviceapp_module.Configurations WHERE VersionNo = 0)
 BEGIN
     /*

@@ -20,6 +20,12 @@
                 <div class="brand">@ViewData["PortalTitle"]</div>
                 <div class="brand-subtitle">@L["iFrame Web App Module"]</div>
             </a>
+            @if (IsSectionDefined("ModuleNav"))
+            {
+                <nav class="topbar-nav" aria-label="@L["Select URL"]">
+                    @RenderSection("ModuleNav", required: false)
+                </nav>
+            }
         </div>
     </header>
     <main class="content-shell">
