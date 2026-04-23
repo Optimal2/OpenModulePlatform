@@ -11,4 +11,6 @@
   <data name="The selected URL is disabled." xml:space="preserve"><value>The selected URL is disabled.</value></data>
   <data name="The selected URL is not allowed for the active role." xml:space="preserve"><value>The selected URL is not allowed for the active role.</value></data>
   <data name="iFrame unavailable" xml:space="preserve"><value>iFrame unavailable</value></data>
+  <data name="The selected URL set is not configured." xml:space="preserve"><value>The selected URL set is not configured.</value></data>
+  <data name="The selected URL set has no configured URLs." xml:space="preserve"><value>The selected URL set has no configured URLs.</value></data>
 </root>

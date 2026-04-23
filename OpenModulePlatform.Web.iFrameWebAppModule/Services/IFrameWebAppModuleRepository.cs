@@ -13,17 +13,49 @@ public sealed class IFrameWebAppModuleRepository
         _db = db;
     }
 
-    public async Task<IReadOnlyList<IFrameUrlRow>> GetConfiguredUrlsAsync(CancellationToken ct)
+    public async Task<IFrameUrlSetRow?> GetUrlSetAsync(string setKey, CancellationToken ct)
     {
         const string sql = @"
 SELECT [id],
-       [url],
+       [set_key],
        [displayname],
-       [allowed_roles],
        [enabled]
-FROM omp_iframe_module.urls
-WHERE [id] IN (1, 2, 3)
-ORDER BY [id];";
+FROM omp_iframe_module.url_sets
+WHERE [set_key] = @SetKey;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@SetKey", setKey);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new IFrameUrlSetRow
+        {
+            Id = rdr.GetInt32(0),
+            SetKey = rdr.GetString(1),
+            DisplayName = rdr.GetString(2),
+            Enabled = rdr.GetBoolean(3)
+        };
+    }
+
+    public async Task<IReadOnlyList<IFrameUrlRow>> GetConfiguredUrlsForSetAsync(int urlSetId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT u.[id],
+       u.[url],
+       u.[displayname],
+       u.[allowed_roles],
+       u.[enabled]
+FROM omp_iframe_module.url_set_urls usu
+INNER JOIN omp_iframe_module.urls u ON u.[id] = usu.[url_id]
+WHERE usu.[url_set_id] = @UrlSetId
+ORDER BY usu.[sort_order], u.[id];";
 
         var rows = new List<IFrameUrlRow>();
 
@@ -31,6 +63,7 @@ ORDER BY [id];";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@UrlSetId", urlSetId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         while (await rdr.ReadAsync(ct))

@@ -11,4 +11,6 @@
   <data name="The selected URL is disabled." xml:space="preserve"><value>Den valda URL:en är inaktiverad.</value></data>
   <data name="The selected URL is not allowed for the active role." xml:space="preserve"><value>Den valda URL:en är inte tillåten för den aktiva rollen.</value></data>
   <data name="iFrame unavailable" xml:space="preserve"><value>iFrame inte tillgänglig</value></data>
+  <data name="The selected URL set is not configured." xml:space="preserve"><value>Den valda URL-gruppen är inte konfigurerad.</value></data>
+  <data name="The selected URL set has no configured URLs." xml:space="preserve"><value>Den valda URL-gruppen har inga konfigurerade URL:er.</value></data>
 </root>
