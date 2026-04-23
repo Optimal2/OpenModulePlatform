@@ -35,7 +35,7 @@ try {
 
     Write-Host "Removing stale build folders..." -ForegroundColor Cyan
     Get-ChildItem -Path $scriptRoot -Directory -Recurse -Force |
-        Where-Object { $_.Name -in @("bin", "obj", "i") } |
+        Where-Object { $_.Name -in @("bin", "obj") } |
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
     if (-not $NoRestore) {
