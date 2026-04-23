@@ -10,9 +10,4 @@
     <NeutralLanguage>en</NeutralLanguage>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'OpenModulePlatform.Web.ExampleWebAppBlazorModule'">
-    <BaseIntermediateOutputPath>i\</BaseIntermediateOutputPath>
-    <MSBuildProjectExtensionsPath>i\</MSBuildProjectExtensionsPath>
-    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;i\**</DefaultItemExcludes>
-  </PropertyGroup>
 </Project>
