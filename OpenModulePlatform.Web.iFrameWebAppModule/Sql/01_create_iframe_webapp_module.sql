@@ -1,1 +1,0 @@
--- Use sql/SQL_Install_OpenModulePlatform.sql from the repository root.
