@@ -61,7 +61,7 @@ For the current public repository, the recommended baseline is:
 - `global.json`
 - `Directory.Packages.props`
 - `OpenModulePlatform.Portal/Properties/PublishProfiles/`
-- `OpenModulePlatform.Web.ExampleWebAppModule/Properties/PublishProfiles/`
-- `OpenModulePlatform.Web.ExampleWebAppBlazorModule/Properties/PublishProfiles/`
-- `OpenModulePlatform.Web.ExampleServiceAppModule/Properties/PublishProfiles/`
-- `OpenModulePlatform.Web.ExampleWorkerAppModule/Properties/PublishProfiles/`
+- `examples/WebAppModule/Properties/PublishProfiles/`
+- `examples/WebAppBlazorModule/Properties/PublishProfiles/`
+- `examples/ServiceAppModule/WebApp/Properties/PublishProfiles/`
+- `examples/WorkerAppModule/WebApp/Properties/PublishProfiles/`

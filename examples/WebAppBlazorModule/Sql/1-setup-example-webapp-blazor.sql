@@ -1,4 +1,4 @@
--- File: OpenModulePlatform.Web.ExampleWebAppBlazorModule/sql/1-setup-example-webapp-blazor.sql
+-- File: examples/WebAppBlazorModule/Sql/1-setup-example-webapp-blazor.sql
 /*
 Creates the example Web App Blazor module schema and tables.
 

@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
+    <ProjectReference Include="..\..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

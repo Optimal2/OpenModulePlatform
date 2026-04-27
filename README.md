@@ -24,17 +24,17 @@ documentation, and iterative hardening, not as a feature-complete production pla
 
 - `OpenModulePlatform.Portal` - Portal for navigation and manual administration
 - `OpenModulePlatform.Web.Shared` - shared web infrastructure for the Portal and web modules
-- `OpenModulePlatform.Web.ExampleWebAppModule` - simple web module used as a reference example
-- `OpenModulePlatform.Web.ExampleWebAppBlazorModule` - Blazor-based web module reference example
-- `OpenModulePlatform.Web.ExampleServiceAppModule` - web interface for the service-backed example module
-- `OpenModulePlatform.Service.ExampleServiceAppModule` - worker/service reference example
+- `examples/WebAppModule` - simple web module used as a reference example
+- `examples/WebAppBlazorModule` - Blazor-based web module reference example
+- `examples/ServiceAppModule/WebApp` - web interface for the service-backed example module
+- `examples/ServiceAppModule/ServiceApp` - worker/service reference example
 - `OpenModulePlatform.WorkerManager.WindowsService` - generic Windows worker manager for manager-driven worker apps
 - `OpenModulePlatform.WorkerProcessHost` - generic child worker process host for plugin-based workers
 - `OpenModulePlatform.Worker.Abstractions` - shared contracts for worker plugins
-- `OpenModulePlatform.Web.ExampleWorkerAppModule` - web interface for the manager-driven worker example module
-- `OpenModulePlatform.Worker.ExampleWorkerAppModule` - plugin-based worker reference example
-- `sql/SQL_Install_OpenModulePlatform.sql` - core schema, RBAC, Portal, and bootstrap data
-- `sql/SQL_Install_OpenModulePlatform_Examples.sql` - example modules, example instances, template topology, and sample jobs
+- `examples/WorkerAppModule/WebApp` - web interface for the manager-driven worker example module
+- `examples/WorkerAppModule/WorkerApp` - plugin-based worker reference example
+- `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - core schema, RBAC, Portal, and bootstrap data
+- `sql/dev/2-install-openmoduleplatform-examples.sql` - example modules, example instances, template topology, and sample jobs
 - `docs/` - architecture, terminology, release notes, and practical guides
 
 ## Current architecture model

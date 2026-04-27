@@ -578,9 +578,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleWebAppModule/sql/1-setup-example-webapp.sql
+-- Included from examples/WebAppModule/Sql/1-setup-example-webapp.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleWebAppModule/sql/1-setup-example-webapp.sql
+-- File: examples/WebAppModule/Sql/1-setup-example-webapp.sql
 /*
 Creates the example Web App module schema and tables.
 
@@ -610,9 +610,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleWebAppBlazorModule/sql/1-setup-example-webapp-blazor.sql
+-- Included from examples/WebAppBlazorModule/Sql/1-setup-example-webapp-blazor.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleWebAppBlazorModule/sql/1-setup-example-webapp-blazor.sql
+-- File: examples/WebAppBlazorModule/Sql/1-setup-example-webapp-blazor.sql
 /*
 Creates the example Web App Blazor module schema and tables.
 
@@ -642,9 +642,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleServiceAppModule/sql/1-setup-example-serviceapp.sql
+-- Included from examples/ServiceAppModule/WebApp/Sql/1-setup-example-serviceapp.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleServiceAppModule/sql/1-setup-example-serviceapp.sql
+-- File: examples/ServiceAppModule/WebApp/Sql/1-setup-example-serviceapp.sql
 /*
 Creates the example Service App module schema and tables.
 
@@ -711,9 +711,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleWorkerAppModule/sql/1-setup-example-workerapp.sql
+-- Included from examples/WorkerAppModule/WebApp/Sql/1-setup-example-workerapp.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleWorkerAppModule/sql/1-setup-example-workerapp.sql
+-- File: examples/WorkerAppModule/WebApp/Sql/1-setup-example-workerapp.sql
 /*
 Creates the example Worker App module schema and tables.
 

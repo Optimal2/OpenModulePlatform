@@ -11,11 +11,11 @@ Det innehåller inte domänspecifika verksamhetsdelar från tidigare interna pro
 
 - `OpenModulePlatform.Portal` - Portal för navigation och manuell administration
 - `OpenModulePlatform.Web.Shared` - delad webb-infrastruktur för Portal och webbmoduler
-- `OpenModulePlatform.Web.ExampleWebAppModule` - enkel webbmodul som referensexempel
-- `OpenModulePlatform.Web.ExampleServiceAppModule` - webbgränssnitt för service-backed exempelmodul
-- `OpenModulePlatform.Service.ExampleServiceAppModule` - worker/service-exempel
-- `sql/SQL_Install_OpenModulePlatform.sql` - core-schema, RBAC, Portal och bootstrapdata
-- `sql/SQL_Install_OpenModulePlatform_Examples.sql` - exempelmoduler, exempelinstanser, template-topologi och sample jobs
+- `examples/WebAppModule` - enkel webbmodul som referensexempel
+- `examples/ServiceAppModule/WebApp` - webbgränssnitt för service-backed exempelmodul
+- `examples/ServiceAppModule/ServiceApp` - worker/service-exempel
+- `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - core-schema, RBAC, Portal och bootstrapdata
+- `sql/dev/2-install-openmoduleplatform-examples.sql` - exempelmoduler, exempelinstanser, template-topologi och sample jobs
 - `docs/` - arkitektur, terminologi och handfasta guider
 
 ## Nuvarande modell

@@ -167,13 +167,13 @@ else {
 
 $projects = @(
     'OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj',
-    'OpenModulePlatform.Service.ExampleServiceAppModule/OpenModulePlatform.Service.ExampleServiceAppModule.csproj',
-    'OpenModulePlatform.Web.ExampleServiceAppModule/OpenModulePlatform.Web.ExampleServiceAppModule.csproj',
-    'OpenModulePlatform.Web.ExampleWebAppBlazorModule/OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj',
-    'OpenModulePlatform.Web.ExampleWebAppModule/OpenModulePlatform.Web.ExampleWebAppModule.csproj',
+    'examples/ServiceAppModule/ServiceApp/OpenModulePlatform.Service.ExampleServiceAppModule.csproj',
+    'examples/ServiceAppModule/WebApp/OpenModulePlatform.Web.ExampleServiceAppModule.csproj',
+    'examples/WebAppBlazorModule/OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj',
+    'examples/WebAppModule/OpenModulePlatform.Web.ExampleWebAppModule.csproj',
     'OpenModulePlatform.Web.iFrameWebAppModule/OpenModulePlatform.Web.iFrameWebAppModule.csproj',
-    'OpenModulePlatform.Web.ExampleWorkerAppModule/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj',
-    'OpenModulePlatform.Worker.ExampleWorkerAppModule/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj',
+    'examples/WorkerAppModule/WebApp/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj',
+    'examples/WorkerAppModule/WorkerApp/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj',
     'OpenModulePlatform.WorkerManager.WindowsService/OpenModulePlatform.WorkerManager.WindowsService.csproj',
     'OpenModulePlatform.WorkerProcessHost/OpenModulePlatform.WorkerProcessHost.csproj'
 )
