@@ -778,9 +778,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleWebAppModule/sql/2-initialize-example-webapp.sql
+-- Included from examples/WebAppModule/Sql/2-initialize-example-webapp.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleWebAppModule/sql/2-initialize-example-webapp.sql
+-- File: examples/WebAppModule/Sql/2-initialize-example-webapp.sql
 /*
 Seeds default values and OMP registration rows for the example Web App module.
 
@@ -1082,9 +1082,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleWebAppBlazorModule/sql/2-initialize-example-webapp-blazor.sql
+-- Included from examples/WebAppBlazorModule/Sql/2-initialize-example-webapp-blazor.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleWebAppBlazorModule/sql/2-initialize-example-webapp-blazor.sql
+-- File: examples/WebAppBlazorModule/Sql/2-initialize-example-webapp-blazor.sql
 /*
 Seeds default values and OMP registration rows for the example Web App Blazor module.
 
@@ -1386,9 +1386,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleServiceAppModule/sql/2-initialize-example-serviceapp.sql
+-- Included from examples/ServiceAppModule/WebApp/Sql/2-initialize-example-serviceapp.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleServiceAppModule/sql/2-initialize-example-serviceapp.sql
+-- File: examples/ServiceAppModule/WebApp/Sql/2-initialize-example-serviceapp.sql
 /*
 Seeds default values and OMP registration rows for the example Service App module.
 
@@ -1871,9 +1871,9 @@ GO
 
 
 -------------------------------------------------------------------------------
--- Included from OpenModulePlatform.Web.ExampleWorkerAppModule/sql/2-initialize-example-workerapp.sql
+-- Included from examples/WorkerAppModule/WebApp/Sql/2-initialize-example-workerapp.sql
 -------------------------------------------------------------------------------
--- File: OpenModulePlatform.Web.ExampleWorkerAppModule/sql/2-initialize-example-workerapp.sql
+-- File: examples/WorkerAppModule/WebApp/Sql/2-initialize-example-workerapp.sql
 /*
 Seeds default values and OMP registration rows for the example Worker App module.
 

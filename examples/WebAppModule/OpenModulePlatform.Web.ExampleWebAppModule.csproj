@@ -3,11 +3,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>OpenModulePlatform.Web.ExampleWorkerAppModule</RootNamespace>
+    <RootNamespace>OpenModulePlatform.Web.ExampleWebAppModule</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
+    <ProjectReference Include="..\..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>
