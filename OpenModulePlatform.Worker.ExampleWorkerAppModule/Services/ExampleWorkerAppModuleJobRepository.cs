@@ -19,7 +19,7 @@ public sealed class ExampleWorkerAppModuleJobRepository
 ;WITH next_job AS
 (
     SELECT TOP (1) j.JobId
-    FROM omp_example_workerapp_module.Jobs j WITH (READPAST, UPDLOCK, ROWLOCK)
+    FROM omp_example_workerapp.Jobs j WITH (READPAST, UPDLOCK, ROWLOCK)
     WHERE j.Status = 0
     ORDER BY j.RequestedUtc, j.JobId
 )
@@ -35,7 +35,7 @@ OUTPUT INSERTED.JobId,
        INSERTED.PayloadJson,
        INSERTED.RequestedUtc,
        INSERTED.RequestedBy
-FROM omp_example_workerapp_module.Jobs j
+FROM omp_example_workerapp.Jobs j
 INNER JOIN next_job n ON n.JobId = j.JobId;";
 
         await using var conn = _db.Create();
@@ -59,7 +59,7 @@ INNER JOIN next_job n ON n.JobId = j.JobId;";
     public async Task CompleteAsync(long jobId, Guid appInstanceId, DateTime startedUtc, string resultJson, CancellationToken ct)
     {
         const string sql = @"
-UPDATE omp_example_workerapp_module.Jobs
+UPDATE omp_example_workerapp.Jobs
 SET Status = 2,
     CompletedUtc = SYSUTCDATETIME(),
     ResultJson = @resultJson,
@@ -67,7 +67,7 @@ SET Status = 2,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE JobId = @jobId;
 
-INSERT INTO omp_example_workerapp_module.JobExecutions(JobId, AppInstanceId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
+INSERT INTO omp_example_workerapp.JobExecutions(JobId, AppInstanceId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
 VALUES(@jobId, @appInstanceId, @startedUtc, SYSUTCDATETIME(), N'Completed', @resultJson, NULL);";
 
         await using var conn = _db.Create();
@@ -83,14 +83,14 @@ VALUES(@jobId, @appInstanceId, @startedUtc, SYSUTCDATETIME(), N'Completed', @res
     public async Task FailAsync(long jobId, Guid appInstanceId, DateTime startedUtc, string errorMessage, CancellationToken ct)
     {
         const string sql = @"
-UPDATE omp_example_workerapp_module.Jobs
+UPDATE omp_example_workerapp.Jobs
 SET Status = 3,
     CompletedUtc = SYSUTCDATETIME(),
     LastError = @errorMessage,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE JobId = @jobId;
 
-INSERT INTO omp_example_workerapp_module.JobExecutions(JobId, AppInstanceId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
+INSERT INTO omp_example_workerapp.JobExecutions(JobId, AppInstanceId, StartedUtc, FinishedUtc, Outcome, ResultJson, ErrorMessage)
 VALUES(@jobId, @appInstanceId, @startedUtc, SYSUTCDATETIME(), N'Failed', NULL, @errorMessage);";
 
         await using var conn = _db.Create();

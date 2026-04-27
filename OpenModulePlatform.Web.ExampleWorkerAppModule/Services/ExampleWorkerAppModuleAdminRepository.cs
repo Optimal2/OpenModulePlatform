@@ -14,9 +14,9 @@ public sealed class ExampleWorkerAppModuleAdminRepository
     private readonly SqlConnectionFactory _db;
     private readonly ILogger<ExampleWorkerAppModuleAdminRepository> _log;
 
-    private const string ModuleKey = "example_workerapp_module";
-    private const string ModuleSchema = "omp_example_workerapp_module";
-    private const string WorkerAppKey = "example_workerapp_module_worker";
+    private const string ModuleKey = "example_workerapp";
+    private const string ModuleSchema = "omp_example_workerapp";
+    private const string WorkerAppKey = "example_workerapp_worker";
 
     public ExampleWorkerAppModuleAdminRepository(
         SqlConnectionFactory db,
@@ -31,7 +31,7 @@ public sealed class ExampleWorkerAppModuleAdminRepository
         const string sql = @"
 SELECT @moduleKey,
        @moduleSchema,
-       (SELECT COUNT(1) FROM omp_example_workerapp_module.Configurations WHERE VersionNo = 0),
+       (SELECT COUNT(1) FROM omp_example_workerapp.Configurations WHERE VersionNo = 0),
        (SELECT COUNT(1)
         FROM omp.AppInstances ai
         INNER JOIN omp.Apps a ON a.AppId = ai.AppId
@@ -42,7 +42,7 @@ SELECT @moduleKey,
         INNER JOIN omp.Apps a ON a.AppId = ai.AppId
         WHERE a.AppKey = @workerAppKey
           AND rs.ObservedState = 2),
-       (SELECT COUNT(1) FROM omp_example_workerapp_module.Jobs WHERE Status IN (0,1));";
+       (SELECT COUNT(1) FROM omp_example_workerapp.Jobs WHERE Status IN (0,1));";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -233,7 +233,7 @@ SELECT c.ConfigId,
        c.CreatedUtc,
        c.CreatedBy,
        CAST(ISNULL(a.AssignedInstances, 0) AS int)
-FROM omp_example_workerapp_module.Configurations c
+FROM omp_example_workerapp.Configurations c
 OUTER APPLY (
     SELECT COUNT(*) AS AssignedInstances
     FROM omp.AppInstances ai
@@ -270,7 +270,7 @@ ORDER BY c.ConfigId DESC;";
     {
         const string sql = @"
 SELECT ConfigId, VersionNo, ConfigJson, Comment, CreatedUtc, CreatedBy
-FROM omp_example_workerapp_module.Configurations
+FROM omp_example_workerapp.Configurations
 WHERE ConfigId = @configId AND VersionNo = 0;";
 
         await using var conn = _db.Create();
@@ -297,7 +297,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
     public async Task UpdateConfigurationAsync(int configId, string configJson, string? comment, string actor, CancellationToken ct)
     {
         const string sql = @"
-UPDATE omp_example_workerapp_module.Configurations
+UPDATE omp_example_workerapp.Configurations
 SET ConfigJson = @configJson,
     Comment = @comment,
     CreatedBy = @actor,
@@ -318,7 +318,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
     {
         const string sql = @"
 SELECT JobId, RequestType, PayloadJson, Status, Attempts, RequestedUtc, RequestedBy, LastError, ResultJson
-FROM omp_example_workerapp_module.Jobs
+FROM omp_example_workerapp.Jobs
 ORDER BY JobId DESC;";
 
         var rows = new List<JobRow>();
@@ -348,7 +348,7 @@ ORDER BY JobId DESC;";
     public async Task EnqueueJobAsync(string requestType, string payloadJson, string actor, CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp_example_workerapp_module.Jobs(RequestType, PayloadJson, Status, RequestedUtc, RequestedBy, UpdatedUtc)
+INSERT INTO omp_example_workerapp.Jobs(RequestType, PayloadJson, Status, RequestedUtc, RequestedBy, UpdatedUtc)
 VALUES(@requestType, @payloadJson, 0, SYSUTCDATETIME(), @actor, SYSUTCDATETIME());";
 
         await using var conn = _db.Create();

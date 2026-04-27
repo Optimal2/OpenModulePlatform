@@ -20,7 +20,7 @@ SELECT [id],
        [set_key],
        [displayname],
        [enabled]
-FROM omp_iframe_module.url_sets
+FROM omp_iframe.url_sets
 WHERE [set_key] = @SetKey;";
 
         await using var conn = _db.Create();
@@ -52,8 +52,8 @@ SELECT u.[id],
        u.[displayname],
        u.[allowed_roles],
        u.[enabled]
-FROM omp_iframe_module.url_set_urls usu
-INNER JOIN omp_iframe_module.urls u ON u.[id] = usu.[url_id]
+FROM omp_iframe.url_set_urls usu
+INNER JOIN omp_iframe.urls u ON u.[id] = usu.[url_id]
 WHERE usu.[url_set_id] = @UrlSetId
 ORDER BY usu.[sort_order], u.[id];";
 

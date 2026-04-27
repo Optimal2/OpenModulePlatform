@@ -16,7 +16,7 @@ public sealed class ExampleServiceAppModuleConfigurationRepository
     {
         const string sql = @"
 SELECT c.ConfigJson
-FROM omp_example_serviceapp_module.Configurations c
+FROM omp_example_serviceapp.Configurations c
 WHERE c.ConfigId = @configId AND c.VersionNo = 0;";
 
         await using var conn = _db.Create();
