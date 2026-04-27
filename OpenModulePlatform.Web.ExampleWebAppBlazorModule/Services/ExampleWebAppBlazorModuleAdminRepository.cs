@@ -12,8 +12,8 @@ public sealed class ExampleWebAppBlazorModuleAdminRepository
 {
     private readonly SqlConnectionFactory _db;
 
-    public const string ModuleKey = "example_webapp_blazor_module";
-    public const string ModuleSchema = "omp_example_webapp_blazor_module";
+    public const string ModuleKey = "example_webapp_blazor";
+    public const string ModuleSchema = "omp_example_webapp_blazor";
 
     public ExampleWebAppBlazorModuleAdminRepository(SqlConnectionFactory db)
     {
@@ -26,7 +26,7 @@ public sealed class ExampleWebAppBlazorModuleAdminRepository
 SELECT @moduleKey,
        @moduleSchema,
        COUNT(1)
-FROM omp_example_webapp_blazor_module.Configurations
+FROM omp_example_webapp_blazor.Configurations
 WHERE VersionNo = 0;";
 
         await using var conn = _db.Create();
@@ -56,7 +56,7 @@ SELECT ConfigId,
        Comment,
        CreatedUtc,
        CreatedBy
-FROM omp_example_webapp_blazor_module.Configurations
+FROM omp_example_webapp_blazor.Configurations
 WHERE VersionNo = 0
 ORDER BY ConfigId DESC;";
 
@@ -93,7 +93,7 @@ SELECT ConfigId,
        Comment,
        CreatedUtc,
        CreatedBy
-FROM omp_example_webapp_blazor_module.Configurations
+FROM omp_example_webapp_blazor.Configurations
 WHERE ConfigId = @configId
   AND VersionNo = 0;";
 
@@ -128,7 +128,7 @@ WHERE ConfigId = @configId
         CancellationToken ct)
     {
         const string sql = @"
-UPDATE omp_example_webapp_blazor_module.Configurations
+UPDATE omp_example_webapp_blazor.Configurations
 SET ConfigJson = @configJson,
     Comment = @comment,
     CreatedBy = @actor,

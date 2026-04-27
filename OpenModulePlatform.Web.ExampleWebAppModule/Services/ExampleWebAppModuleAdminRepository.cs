@@ -12,8 +12,8 @@ public sealed class ExampleWebAppModuleAdminRepository
 {
     private readonly SqlConnectionFactory _db;
 
-    public const string ModuleKey = "example_webapp_module";
-    public const string ModuleSchema = "omp_example_webapp_module";
+    public const string ModuleKey = "example_webapp";
+    public const string ModuleSchema = "omp_example_webapp";
 
     public ExampleWebAppModuleAdminRepository(SqlConnectionFactory db)
     {
@@ -26,7 +26,7 @@ public sealed class ExampleWebAppModuleAdminRepository
 SELECT @moduleKey,
        @moduleSchema,
        COUNT(1)
-FROM omp_example_webapp_module.Configurations
+FROM omp_example_webapp.Configurations
 WHERE VersionNo = 0;";
 
         await using var conn = _db.Create();
@@ -56,7 +56,7 @@ SELECT ConfigId,
        Comment,
        CreatedUtc,
        CreatedBy
-FROM omp_example_webapp_module.Configurations
+FROM omp_example_webapp.Configurations
 WHERE VersionNo = 0
 ORDER BY ConfigId DESC;";
 
@@ -93,7 +93,7 @@ SELECT ConfigId,
        Comment,
        CreatedUtc,
        CreatedBy
-FROM omp_example_webapp_module.Configurations
+FROM omp_example_webapp.Configurations
 WHERE ConfigId = @configId
   AND VersionNo = 0;";
 
@@ -128,7 +128,7 @@ WHERE ConfigId = @configId
         CancellationToken ct)
     {
         const string sql = @"
-UPDATE omp_example_webapp_module.Configurations
+UPDATE omp_example_webapp.Configurations
 SET ConfigJson = @configJson,
     Comment = @comment,
     CreatedBy = @actor,
