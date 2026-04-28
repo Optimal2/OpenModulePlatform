@@ -16,18 +16,21 @@ public sealed class WorkerManagerHostedService : BackgroundService
     private readonly IOptionsMonitor<WorkerManagerSettings> _settings;
     private readonly IWorkerInstanceCatalog _catalog;
     private readonly OmpWorkerRuntimeRepository _runtimeRepository;
+    private readonly HostAgentRpcClient _hostAgentRpcClient;
     private readonly Dictionary<Guid, ManagedWorkerProcess> _managedWorkers = new();
 
     public WorkerManagerHostedService(
         ILogger<WorkerManagerHostedService> logger,
         IOptionsMonitor<WorkerManagerSettings> settings,
         IWorkerInstanceCatalog catalog,
-        OmpWorkerRuntimeRepository runtimeRepository)
+        OmpWorkerRuntimeRepository runtimeRepository,
+        HostAgentRpcClient hostAgentRpcClient)
     {
         _logger = logger;
         _settings = settings;
         _catalog = catalog;
         _runtimeRepository = runtimeRepository;
+        _hostAgentRpcClient = hostAgentRpcClient;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -64,8 +67,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     private async Task ReconcileWorkersAsync(CancellationToken cancellationToken)
     {
-        var desiredWorkers = await _catalog.GetDesiredWorkersAsync(cancellationToken);
-        var desiredById = desiredWorkers.ToDictionary(worker => worker.AppInstanceId);
+        var desiredWorkers = await ResolveDesiredWorkerArtifactsAsync(
+            await _catalog.GetDesiredWorkersAsync(cancellationToken),
+            cancellationToken);
+
+        var desiredById = desiredWorkers.ToDictionary(worker => worker.WorkerInstanceId);
         var runtimeKind = GetRuntimeKindOrNull();
 
         var exitedWorkers = _managedWorkers.Values
@@ -80,32 +86,34 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
 
             _logger.LogWarning(
-                "Worker process exited. AppInstanceId={AppInstanceId}, ExitCode={ExitCode}, StopRequested={StopRequested}",
+                "Worker process exited. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ExitCode={ExitCode}, StopRequested={StopRequested}",
                 managed.Definition.AppInstanceId,
+                managed.Definition.WorkerInstanceId,
                 managed.LastExitCode,
                 managed.StopRequested);
 
             await PublishExitObservationIfEnabledAsync(managed, runtimeKind, "worker process exited", cancellationToken);
         }
 
-        foreach (var existing in _managedWorkers.Values.Where(worker => !desiredById.ContainsKey(worker.Definition.AppInstanceId)).ToList())
+        foreach (var existing in _managedWorkers.Values.Where(worker => !desiredById.ContainsKey(worker.Definition.WorkerInstanceId)).ToList())
         {
             await StopAndRemoveWorkerAsync(existing, runtimeKind, "worker no longer desired", cancellationToken);
         }
 
         foreach (var desired in desiredWorkers)
         {
-            if (!_managedWorkers.TryGetValue(desired.AppInstanceId, out var managed))
+            if (!_managedWorkers.TryGetValue(desired.WorkerInstanceId, out var managed))
             {
                 managed = new ManagedWorkerProcess(desired);
-                _managedWorkers.Add(desired.AppInstanceId, managed);
+                _managedWorkers.Add(desired.WorkerInstanceId, managed);
             }
 
             if (!managed.HasEquivalentConfiguration(desired))
             {
                 _logger.LogInformation(
-                    "Worker configuration changed. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                    "Worker configuration changed. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}",
                     desired.AppInstanceId,
+                    desired.WorkerInstanceId,
                     desired.WorkerTypeKey);
 
                 await StopWorkerAsync(managed, runtimeKind, "worker configuration changed", cancellationToken);
@@ -114,6 +122,58 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
             await EnsureWorkerRunningAsync(managed, runtimeKind, cancellationToken);
         }
+    }
+
+    private async Task<IReadOnlyList<DesiredWorkerInstance>> ResolveDesiredWorkerArtifactsAsync(
+        IReadOnlyList<DesiredWorkerInstance> desiredWorkers,
+        CancellationToken cancellationToken)
+    {
+        var settings = _settings.CurrentValue;
+        var resolvedWorkers = new List<DesiredWorkerInstance>(desiredWorkers.Count);
+
+        foreach (var desired in desiredWorkers)
+        {
+            var resolved = desired;
+            var shouldAskHostAgent = settings.HostAgentRpc.Enabled
+                && desired.ArtifactId.HasValue
+                && !string.IsNullOrWhiteSpace(desired.PluginRelativePath)
+                && (!desired.IsProvisionedFromHostArtifactCache || string.IsNullOrWhiteSpace(desired.PluginAssemblyPath) || !File.Exists(desired.PluginAssemblyPath));
+
+            if (shouldAskHostAgent)
+            {
+                var response = await _hostAgentRpcClient.EnsureArtifactAsync(
+                    desired.ArtifactId!.Value,
+                    null,
+                    cancellationToken);
+
+                if (response?.Success == true && !string.IsNullOrWhiteSpace(response.LocalPath))
+                {
+                    resolved = desired.WithInstallRootPath(response.LocalPath);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "HostAgent could not provision worker artifact. WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}, Error={Error}",
+                        desired.WorkerInstanceId,
+                        desired.ArtifactId,
+                        response?.ErrorMessage ?? "no response");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(resolved.PluginAssemblyPath))
+            {
+                _logger.LogWarning(
+                    "Skipping desired worker with unresolved plugin path. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}",
+                    resolved.AppInstanceId,
+                    resolved.WorkerInstanceId,
+                    resolved.ArtifactId);
+                continue;
+            }
+
+            resolvedWorkers.Add(resolved);
+        }
+
+        return resolvedWorkers;
     }
 
     private async Task EnsureWorkerRunningAsync(
@@ -137,8 +197,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         if (nextAllowedStartUtc.HasValue && nextAllowedStartUtc.Value > nowUtc)
         {
             _logger.LogWarning(
-                "Worker restart delayed by restart policy. AppInstanceId={AppInstanceId}, NextAllowedStartUtc={NextAllowedStartUtc:O}",
+                "Worker restart delayed by restart policy. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, NextAllowedStartUtc={NextAllowedStartUtc:O}",
                 managed.Definition.AppInstanceId,
+                managed.Definition.WorkerInstanceId,
                 nextAllowedStartUtc.Value);
             return;
         }
@@ -160,6 +221,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 $"Configured WorkerManager:WorkerProcessPath '{workerProcessPath}' does not exist.");
         }
 
+        if (!File.Exists(managed.Definition.PluginAssemblyPath))
+        {
+            throw new InvalidOperationException(
+                $"Worker plugin assembly path does not exist: '{managed.Definition.PluginAssemblyPath}'.");
+        }
+
         var shutdownEvent = new EventWaitHandle(
             initialState: false,
             mode: EventResetMode.ManualReset,
@@ -173,7 +240,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
             if (!process.Start())
             {
                 throw new InvalidOperationException(
-                    $"Failed to start worker process for AppInstanceId '{managed.Definition.AppInstanceId}'.");
+                    $"Failed to start worker process for WorkerInstanceId '{managed.Definition.WorkerInstanceId}'.");
             }
         }
         catch
@@ -187,8 +254,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         await PublishStartingObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
 
         _logger.LogInformation(
-            "Started worker process. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, ProcessId={ProcessId}, WorkerProcessPath={WorkerProcessPath}, PluginAssemblyPath={PluginAssemblyPath}",
+            "Started worker process. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}, ProcessId={ProcessId}, WorkerProcessPath={WorkerProcessPath}, PluginAssemblyPath={PluginAssemblyPath}",
             managed.Definition.AppInstanceId,
+            managed.Definition.WorkerInstanceId,
             managed.Definition.WorkerTypeKey,
             managed.ProcessId,
             workerProcessPath,
@@ -202,7 +270,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         CancellationToken cancellationToken)
     {
         await StopWorkerAsync(managed, runtimeKind, reason, cancellationToken);
-        _managedWorkers.Remove(managed.Definition.AppInstanceId);
+        _managedWorkers.Remove(managed.Definition.WorkerInstanceId);
     }
 
     private async Task StopAllWorkersAsync(string reason, CancellationToken cancellationToken)
@@ -232,8 +300,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         var stopTimeout = TimeSpan.FromSeconds(settings.StopTimeoutSeconds);
 
         _logger.LogInformation(
-            "Stopping worker process. AppInstanceId={AppInstanceId}, Reason={Reason}, ProcessId={ProcessId}",
+            "Stopping worker process. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, Reason={Reason}, ProcessId={ProcessId}",
             managed.Definition.AppInstanceId,
+            managed.Definition.WorkerInstanceId,
             reason,
             managed.ProcessId);
 
@@ -243,8 +312,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         if (!stoppedGracefully)
         {
             _logger.LogWarning(
-                "Worker process did not stop within timeout and will be killed. AppInstanceId={AppInstanceId}, StopTimeoutSeconds={StopTimeoutSeconds}, ProcessId={ProcessId}",
+                "Worker process did not stop within timeout and will be killed. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, StopTimeoutSeconds={StopTimeoutSeconds}, ProcessId={ProcessId}",
                 managed.Definition.AppInstanceId,
+                managed.Definition.WorkerInstanceId,
                 settings.StopTimeoutSeconds,
                 managed.ProcessId);
 
@@ -254,8 +324,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         await PublishExitObservationIfEnabledAsync(managed, runtimeKind, reason, cancellationToken);
 
         _logger.LogInformation(
-            "Worker process stopped. AppInstanceId={AppInstanceId}, ExitCode={ExitCode}",
+            "Worker process stopped. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ExitCode={ExitCode}",
             managed.Definition.AppInstanceId,
+            managed.Definition.WorkerInstanceId,
             managed.LastExitCode);
     }
 
@@ -383,8 +454,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         {
             _logger.LogWarning(
                 ex,
-                "Failed to publish worker runtime observation. AppInstanceId={AppInstanceId}, ObservedState={ObservedState}",
+                "Failed to publish worker runtime observation. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ObservedState={ObservedState}",
                 observation.AppInstanceId,
+                observation.WorkerInstanceId,
                 observation.ObservedState);
         }
     }
@@ -419,6 +491,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
         return new WorkerRuntimeObservation
         {
             AppInstanceId = managed.Definition.AppInstanceId,
+            WorkerInstanceId = managed.Definition.WorkerInstanceId,
+            WorkerInstanceKey = managed.Definition.WorkerInstanceKey,
             RuntimeKind = runtimeKind,
             WorkerTypeKey = managed.Definition.WorkerTypeKey,
             ObservedState = observedState,
@@ -460,6 +534,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
         };
 
         startInfo.ArgumentList.Add($"--WorkerProcess:AppInstanceId={desired.AppInstanceId:D}");
+        startInfo.ArgumentList.Add($"--WorkerProcess:WorkerInstanceId={desired.WorkerInstanceId:D}");
+        startInfo.ArgumentList.Add($"--WorkerProcess:WorkerInstanceKey={desired.WorkerInstanceKey}");
+        if (!string.IsNullOrWhiteSpace(desired.ConfigurationJson))
+        {
+            startInfo.ArgumentList.Add($"--WorkerProcess:ConfigurationJson={desired.ConfigurationJson}");
+        }
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerTypeKey={desired.WorkerTypeKey}");
         startInfo.ArgumentList.Add($"--WorkerProcess:PluginAssemblyPath={desired.PluginAssemblyPath}");
         startInfo.ArgumentList.Add($"--WorkerProcess:ShutdownEventName={desired.ShutdownEventName}");

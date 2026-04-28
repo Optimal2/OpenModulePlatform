@@ -7,6 +7,8 @@ public sealed class OmpDatabaseWorkerCatalogSettings
 
     public byte RunningDesiredState { get; set; } = 1;
 
+    public bool UseHostArtifactCache { get; set; }
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(RuntimeKind))

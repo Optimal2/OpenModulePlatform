@@ -19,6 +19,12 @@ internal sealed class WorkerPluginLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
+        if (string.Equals(assemblyName.Name, "OpenModulePlatform.Worker.Abstractions", StringComparison.Ordinal)
+            || assemblyName.Name?.StartsWith("Microsoft.Extensions.", StringComparison.Ordinal) == true)
+        {
+            return null;
+        }
+
         var assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
         return assemblyPath is null
             ? null

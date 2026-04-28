@@ -23,6 +23,8 @@ public sealed class WorkerManagerSettings
 
     public OmpDatabaseWorkerCatalogSettings OmpDatabase { get; set; } = new();
 
+    public HostAgentRpcSettings HostAgentRpc { get; set; } = new();
+
     public List<ConfiguredWorkerInstance> Workers { get; set; } = new();
 
     public string GetCatalogMode()
@@ -86,6 +88,8 @@ public sealed class WorkerManagerSettings
         {
             throw new InvalidOperationException("WorkerManager:WorkerProcessPath must be configured.");
         }
+
+        HostAgentRpc.Validate();
 
         if (string.Equals(catalogMode, WorkerCatalogModes.OmpDatabase, StringComparison.OrdinalIgnoreCase))
         {

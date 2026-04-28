@@ -5,11 +5,22 @@ public sealed class ConfiguredWorkerInstance
 {
     public Guid AppInstanceId { get; set; }
 
+    public Guid WorkerInstanceId { get; set; }
+
+    public string WorkerInstanceKey { get; set; } = string.Empty;
+
     public string WorkerTypeKey { get; set; } = string.Empty;
 
     public string PluginAssemblyPath { get; set; } = string.Empty;
 
+    public string? ConfigurationJson { get; set; }
+
     public bool Enabled { get; set; } = true;
+
+    public Guid ResolveWorkerInstanceId()
+    {
+        return WorkerInstanceId == Guid.Empty ? AppInstanceId : WorkerInstanceId;
+    }
 
     public void Validate(int index)
     {

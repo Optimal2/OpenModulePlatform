@@ -99,6 +99,62 @@ BEGIN
     );
 END
 
+IF EXISTS (SELECT 1 FROM omp.WorkerInstances WHERE WorkerInstanceId = @workerInstanceId)
+BEGIN
+    MERGE omp.WorkerInstanceRuntimeStates AS target
+    USING (SELECT @workerInstanceId AS WorkerInstanceId) AS source
+    ON target.WorkerInstanceId = source.WorkerInstanceId
+    WHEN MATCHED THEN
+        UPDATE SET
+            AppInstanceId = @appInstanceId,
+            WorkerInstanceKey = @workerInstanceKey,
+            RuntimeKind = @runtimeKind,
+            WorkerTypeKey = @workerTypeKey,
+            ObservedState = @observedState,
+            ProcessId = @processId,
+            StartedUtc = @startedUtc,
+            LastSeenUtc = @lastSeenUtc,
+            LastExitUtc = @lastExitUtc,
+            LastExitCode = @lastExitCode,
+            StatusMessage = @statusMessage,
+            UpdatedUtc = @nowUtc
+    WHEN NOT MATCHED THEN
+        INSERT
+        (
+            WorkerInstanceId,
+            AppInstanceId,
+            WorkerInstanceKey,
+            RuntimeKind,
+            WorkerTypeKey,
+            ObservedState,
+            ProcessId,
+            StartedUtc,
+            LastSeenUtc,
+            LastExitUtc,
+            LastExitCode,
+            StatusMessage,
+            CreatedUtc,
+            UpdatedUtc
+        )
+        VALUES
+        (
+            @workerInstanceId,
+            @appInstanceId,
+            @workerInstanceKey,
+            @runtimeKind,
+            @workerTypeKey,
+            @observedState,
+            @processId,
+            @startedUtc,
+            @lastSeenUtc,
+            @lastExitUtc,
+            @lastExitCode,
+            @statusMessage,
+            @nowUtc,
+            @nowUtc
+        );
+END
+
 IF @touchAppInstanceHeartbeat = 1
 BEGIN
     UPDATE omp.AppInstances
@@ -123,6 +179,8 @@ END";
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@appInstanceId", observation.AppInstanceId);
+        cmd.Parameters.AddWithValue("@workerInstanceId", observation.WorkerInstanceId == Guid.Empty ? observation.AppInstanceId : observation.WorkerInstanceId);
+        cmd.Parameters.AddWithValue("@workerInstanceKey", ToNullableStringValue(observation.WorkerInstanceKey, 150));
         cmd.Parameters.AddWithValue("@runtimeKind", observation.RuntimeKind.Trim());
         cmd.Parameters.AddWithValue("@workerTypeKey", observation.WorkerTypeKey.Trim());
         cmd.Parameters.AddWithValue("@observedState", observation.ObservedState);
@@ -141,14 +199,19 @@ END";
         return value.HasValue ? value.Value.UtcDateTime : DBNull.Value;
     }
 
-    private static object ToStatusMessageValue(string? statusMessage)
+    private static object ToNullableStringValue(string? value, int maxLength)
     {
-        if (string.IsNullOrWhiteSpace(statusMessage))
+        if (string.IsNullOrWhiteSpace(value))
         {
             return DBNull.Value;
         }
 
-        var trimmed = statusMessage.Trim();
-        return trimmed.Length <= 500 ? trimmed : trimmed[..500];
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private static object ToStatusMessageValue(string? statusMessage)
+    {
+        return ToNullableStringValue(statusMessage, 500);
     }
 }

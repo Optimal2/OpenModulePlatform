@@ -5,6 +5,10 @@ public sealed class WorkerRuntimeObservation
 {
     public Guid AppInstanceId { get; init; }
 
+    public Guid WorkerInstanceId { get; init; }
+
+    public string WorkerInstanceKey { get; init; } = string.Empty;
+
     public string RuntimeKind { get; init; } = string.Empty;
 
     public string WorkerTypeKey { get; init; } = string.Empty;

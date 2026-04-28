@@ -25,6 +25,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<OmpWorkerRuntimeRepository>();
         services.AddSingleton<ConfiguredWorkerInstanceCatalog>();
         services.AddSingleton<OmpDatabaseWorkerInstanceCatalog>();
+        services.AddSingleton<HostAgentRpcClient>();
         services.AddSingleton<IWorkerInstanceCatalog, WorkerInstanceCatalog>();
         services.AddHostedService<WorkerManagerHostedService>();
     });
