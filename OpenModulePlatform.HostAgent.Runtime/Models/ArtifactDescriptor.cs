@@ -25,7 +25,7 @@ public sealed class ArtifactDescriptor
         var package = Sanitize(PackageType, "package");
         var target = Sanitize(TargetName, $"artifact-{ArtifactId}");
         var version = Sanitize(Version, "version");
-        return Path.Combine(package, target, version);
+        return Path.Join(package, target, version);
     }
 
     private static string Sanitize(string? value, string fallback)

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.IO.Pipes;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
@@ -57,12 +58,29 @@ public sealed class HostAgentRpcHostedService : BackgroundService
                 await pipe.DisposeAsync();
                 break;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (IOException ex)
             {
-                await pipe.DisposeAsync();
-                _logger.LogError(ex, "HostAgent RPC accept loop failed.");
+                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
             }
         }
+    }
+
+    private async Task DisposePipeAfterAcceptFailureAsync(NamedPipeServerStream pipe, Exception exception)
+    {
+        await pipe.DisposeAsync();
+        _logger.LogError(exception, "HostAgent RPC accept loop failed.");
     }
 
     private async Task HandleClientAsync(NamedPipeServerStream pipe, CancellationToken serviceCancellationToken)
@@ -93,10 +111,35 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             var response = await ExecuteRequestAsync(request, timeoutCts.Token);
             await WriteResponseAsync(writer, response, timeoutCts.Token);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException ex) when (!serviceCancellationToken.IsCancellationRequested)
         {
-            _logger.LogError(ex, "HostAgent RPC request failed.");
+            LogRequestFailure(ex);
         }
+        catch (IOException ex)
+        {
+            LogRequestFailure(ex);
+        }
+        catch (DbException ex)
+        {
+            LogRequestFailure(ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            LogRequestFailure(ex);
+        }
+        catch (JsonException ex)
+        {
+            LogRequestFailure(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogRequestFailure(ex);
+        }
+    }
+
+    private void LogRequestFailure(Exception exception)
+    {
+        _logger.LogError(exception, "HostAgent RPC request failed.");
     }
 
     private async Task<HostAgentRpcResponse> ExecuteRequestAsync(
