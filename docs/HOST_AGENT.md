@@ -82,3 +82,9 @@ The named-pipe RPC response writer uses an `async Task` method and awaits `Strea
 - artifact retention/cleanup
 - signing/certificate verification
 - remote HostAgent management API
+
+## v2.2 stabilization note
+
+HostAgent remains the owner of artifact provisioning. WorkerManager should not copy artifacts directly; it should consume provisioned local paths from HostAgent or the local immutable artifact cache.
+
+The repository build helper now only passes `--no-restore` to `dotnet build` when the caller explicitly uses `-NoRestore`. This keeps normal local builds sensitive to dependency changes while still allowing CI-style no-restore builds when requested.

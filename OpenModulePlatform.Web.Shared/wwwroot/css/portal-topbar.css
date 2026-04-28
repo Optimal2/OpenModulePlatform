@@ -332,8 +332,6 @@
 
 @media (max-width: 710px) {
     .portal-topbar {
-    /* Keep the JS breakpoint reader in sync with this component-level value. */
-    --portal-topbar-compact-breakpoint: 710px;
         padding: 6px 16px;
         gap: 8px;
     }
