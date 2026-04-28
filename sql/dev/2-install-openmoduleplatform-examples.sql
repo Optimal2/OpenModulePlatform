@@ -43,6 +43,11 @@ DECLARE @DefaultTemplateHostId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\\UserOrGroup';
 
+IF @BootstrapPortalAdminPrincipal LIKE N'REPLACE_ME%'
+BEGIN
+    THROW 51000, 'Replace @BootstrapPortalAdminPrincipal before running this dev initialization script.', 1;
+END
+
 IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplates WHERE TemplateKey = N'default')
 BEGIN
     INSERT INTO omp.InstanceTemplates(TemplateKey, DisplayName, Description)
@@ -124,9 +129,6 @@ END
 -------------------------------------------------------------------------------
 -- Seed baseline administrative placeholder role
 -------------------------------------------------------------------------------
-DECLARE @PortalAdminsRoleId int;
-DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\\UserOrGroup';
-
 IF NOT EXISTS (SELECT 1 FROM omp.Roles WHERE Name = N'PortalAdmins')
     INSERT INTO omp.Roles(Name, Description) VALUES(N'PortalAdmins', N'Administrative bootstrap role for OMP modules and portal');
 
@@ -169,6 +171,16 @@ Prerequisites:
 */
 USE [OpenModulePlatform];
 GO
+
+DECLARE @PortalViewPermissionId int;
+DECLARE @PortalAdminPermissionId int;
+DECLARE @PortalAdminsRoleId int;
+DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\\UserOrGroup';
+
+IF @BootstrapPortalAdminPrincipal LIKE N'REPLACE_ME%'
+BEGIN
+    THROW 51000, 'Replace @BootstrapPortalAdminPrincipal before running this dev initialization script.', 1;
+END
 
 -- Seed OMP Portal definitions and instance rows
 -------------------------------------------------------------------------------

@@ -53,7 +53,11 @@ try {
     }
 
     Write-Host "Building ($Configuration)..." -ForegroundColor Cyan
-    dotnet build $solution.FullName -c $Configuration --no-restore
+    $buildArgs = @("build", $solution.FullName, "-c", $Configuration)
+    if ($NoRestore) {
+        $buildArgs += "--no-restore"
+    }
+    & dotnet @buildArgs
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet build failed with exit code $LASTEXITCODE"
     }
