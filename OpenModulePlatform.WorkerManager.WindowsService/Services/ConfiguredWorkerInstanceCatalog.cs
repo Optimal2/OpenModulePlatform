@@ -1,4 +1,3 @@
-// File: OpenModulePlatform.WorkerManager.WindowsService/Services/ConfiguredWorkerInstanceCatalog.cs
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.WorkerManager.WindowsService.Contracts;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
@@ -37,18 +36,24 @@ public sealed class ConfiguredWorkerInstanceCatalog : IWorkerInstanceCatalog
                 continue;
             }
 
-            if (!seen.Add(configured.AppInstanceId))
+            var workerInstanceId = configured.ResolveWorkerInstanceId();
+            if (!seen.Add(workerInstanceId))
             {
                 throw new InvalidOperationException(
-                    $"WorkerManager:Workers contains duplicate AppInstanceId '{configured.AppInstanceId}'.");
+                    $"WorkerManager:Workers contains duplicate WorkerInstanceId '{workerInstanceId}'.");
             }
 
             desired.Add(new DesiredWorkerInstance
             {
                 AppInstanceId = configured.AppInstanceId,
+                WorkerInstanceId = workerInstanceId,
+                WorkerInstanceKey = string.IsNullOrWhiteSpace(configured.WorkerInstanceKey)
+                    ? configured.AppInstanceId.ToString("N")
+                    : configured.WorkerInstanceKey.Trim(),
                 WorkerTypeKey = configured.WorkerTypeKey.Trim(),
                 PluginAssemblyPath = ResolvePath(configured.PluginAssemblyPath),
-                ShutdownEventName = BuildShutdownEventName(configured.AppInstanceId)
+                ConfigurationJson = configured.ConfigurationJson,
+                ShutdownEventName = BuildShutdownEventName(workerInstanceId)
             });
         }
 
@@ -60,8 +65,8 @@ public sealed class ConfiguredWorkerInstanceCatalog : IWorkerInstanceCatalog
         return PathResolutionUtility.ResolvePath(path);
     }
 
-    private static string BuildShutdownEventName(Guid appInstanceId)
+    private static string BuildShutdownEventName(Guid workerInstanceId)
     {
-        return $"OpenModulePlatform.WorkerShutdown.{appInstanceId:N}";
+        return $"OpenModulePlatform.WorkerShutdown.{workerInstanceId:N}";
     }
 }

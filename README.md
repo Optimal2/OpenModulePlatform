@@ -140,3 +140,12 @@ The repository includes:
 ## License
 
 The project is published under the MIT License.
+
+## HostAgent v1
+
+This package includes a first HostAgent implementation:
+
+- `OpenModulePlatform.HostAgent.WindowsService`
+- `OpenModulePlatform.HostAgent.Runtime`
+
+HostAgent v1 provisions immutable artifact versions from a central artifact root to a local host cache and writes status to `omp.HostArtifactStates`. See `docs/HOST_AGENT.md`.

@@ -357,6 +357,99 @@ END
 GO
 
 -------------------------------------------------------------------------------
+-- Host-local artifact provisioning and worker process instances
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.HostArtifactRequirements', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostArtifactRequirements
+    (
+        HostArtifactRequirementId bigint IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_HostArtifactRequirements PRIMARY KEY,
+        HostId uniqueidentifier NOT NULL,
+        ArtifactId int NOT NULL,
+        RequirementKey nvarchar(200) NOT NULL,
+        DesiredLocalPath nvarchar(500) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_HostArtifactRequirements_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostArtifactRequirements_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostArtifactRequirements_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_HostArtifactRequirements_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_HostArtifactRequirements_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId),
+        CONSTRAINT UQ_omp_HostArtifactRequirements_Host_Requirement UNIQUE(HostId, RequirementKey)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.HostArtifactStates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostArtifactStates
+    (
+        HostId uniqueidentifier NOT NULL,
+        ArtifactId int NOT NULL,
+        ProvisioningState tinyint NOT NULL CONSTRAINT DF_omp_HostArtifactStates_ProvisioningState DEFAULT(0),
+        LocalPath nvarchar(500) NULL,
+        ContentSha256 nvarchar(128) NULL,
+        LastCheckedUtc datetime2(3) NULL,
+        LastProvisionedUtc datetime2(3) NULL,
+        LastError nvarchar(max) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostArtifactStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostArtifactStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_omp_HostArtifactStates PRIMARY KEY(HostId, ArtifactId),
+        CONSTRAINT FK_omp_HostArtifactStates_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_HostArtifactStates_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.WorkerInstances
+    (
+        WorkerInstanceId uniqueidentifier NOT NULL CONSTRAINT PK_omp_WorkerInstances PRIMARY KEY,
+        AppInstanceId uniqueidentifier NOT NULL,
+        HostId uniqueidentifier NULL,
+        ArtifactId int NULL,
+        WorkerInstanceKey nvarchar(150) NOT NULL,
+        DisplayName nvarchar(200) NOT NULL,
+        Description nvarchar(500) NULL,
+        ConfigurationJson nvarchar(max) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_WorkerInstances_IsEnabled DEFAULT(1),
+        IsAllowed bit NOT NULL CONSTRAINT DF_omp_WorkerInstances_IsAllowed DEFAULT(1),
+        DesiredState tinyint NOT NULL CONSTRAINT DF_omp_WorkerInstances_DesiredState DEFAULT(1),
+        SortOrder int NOT NULL CONSTRAINT DF_omp_WorkerInstances_SortOrder DEFAULT(0),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WorkerInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WorkerInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_WorkerInstances_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId),
+        CONSTRAINT FK_omp_WorkerInstances_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_WorkerInstances_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId),
+        CONSTRAINT UQ_omp_WorkerInstances_AppInstance_Key UNIQUE(AppInstanceId, WorkerInstanceKey)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.WorkerInstanceRuntimeStates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.WorkerInstanceRuntimeStates
+    (
+        WorkerInstanceId uniqueidentifier NOT NULL CONSTRAINT PK_omp_WorkerInstanceRuntimeStates PRIMARY KEY,
+        AppInstanceId uniqueidentifier NOT NULL,
+        WorkerInstanceKey nvarchar(150) NULL,
+        RuntimeKind nvarchar(100) NOT NULL,
+        WorkerTypeKey nvarchar(200) NOT NULL,
+        ObservedState tinyint NOT NULL CONSTRAINT DF_omp_WorkerInstanceRuntimeStates_ObservedState DEFAULT(0),
+        ProcessId int NULL,
+        StartedUtc datetime2(3) NULL,
+        LastSeenUtc datetime2(3) NULL,
+        LastExitUtc datetime2(3) NULL,
+        LastExitCode int NULL,
+        StatusMessage nvarchar(500) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WorkerInstanceRuntimeStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WorkerInstanceRuntimeStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_WorkerInstanceRuntimeStates_WorkerInstance FOREIGN KEY(WorkerInstanceId) REFERENCES omp.WorkerInstances(WorkerInstanceId),
+        CONSTRAINT FK_omp_WorkerInstanceRuntimeStates_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId)
+    );
+END
+GO
+
+-------------------------------------------------------------------------------
 -- Template topology model
 -------------------------------------------------------------------------------
 IF OBJECT_ID(N'omp.InstanceTemplateHosts', N'U') IS NULL

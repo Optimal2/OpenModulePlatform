@@ -2,7 +2,7 @@
 namespace OpenModulePlatform.Worker.Abstractions.Models;
 
 /// <summary>
-/// Minimal execution context passed to a worker module.
+/// Execution context passed to a worker module.
 /// </summary>
 public sealed class WorkerExecutionContext
 {
@@ -10,6 +10,16 @@ public sealed class WorkerExecutionContext
     /// Gets the app instance being executed.
     /// </summary>
     public Guid AppInstanceId { get; init; }
+
+    /// <summary>
+    /// Gets the worker instance being executed. For legacy app-instance workers this equals AppInstanceId.
+    /// </summary>
+    public Guid WorkerInstanceId { get; init; }
+
+    /// <summary>
+    /// Gets the stable worker instance key, when the manager resolved one.
+    /// </summary>
+    public string WorkerInstanceKey { get; init; } = string.Empty;
 
     /// <summary>
     /// Gets the stable worker type key resolved by the child host.
@@ -20,6 +30,11 @@ public sealed class WorkerExecutionContext
     /// Gets the fully qualified plugin assembly path used by the child host.
     /// </summary>
     public string PluginAssemblyPath { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets optional worker-instance configuration JSON from OMP.
+    /// </summary>
+    public string? ConfigurationJson { get; init; }
 
     /// <summary>
     /// Gets the UTC timestamp when the child host created the runtime context.
