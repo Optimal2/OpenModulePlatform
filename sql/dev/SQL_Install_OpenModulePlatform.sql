@@ -319,11 +319,6 @@ BEGIN
 END
 GO
 
-IF COL_LENGTH(N'omp.Hosts', N'BaseUrl') IS NULL
-BEGIN
-    ALTER TABLE omp.Hosts ADD BaseUrl nvarchar(300) NULL;
-END
-GO
 
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NULL
 BEGIN
@@ -553,6 +548,12 @@ DECLARE @DefaultHostTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\\UserOrGroup';
+
+IF @BootstrapPortalAdminPrincipal LIKE N'REPLACE_ME%'
+BEGIN
+    THROW 51000, 'Replace @BootstrapPortalAdminPrincipal before running this dev installation script.', 1;
+END
+
 
 IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplates WHERE TemplateKey = N'default')
 BEGIN

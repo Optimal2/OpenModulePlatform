@@ -272,11 +272,6 @@ BEGIN
 END
 GO
 
-IF COL_LENGTH(N'omp.Hosts', N'BaseUrl') IS NULL
-BEGIN
-    ALTER TABLE omp.Hosts ADD BaseUrl nvarchar(300) NULL;
-END
-GO
 
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NULL
 BEGIN
