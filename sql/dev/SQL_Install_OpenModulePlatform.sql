@@ -21,6 +21,10 @@ IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp')
     EXEC('CREATE SCHEMA [omp]');
 GO
 
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_portal')
+    EXEC('CREATE SCHEMA [omp_portal]');
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_iframe')
     EXEC('CREATE SCHEMA [omp_iframe]');
 GO
@@ -681,7 +685,7 @@ BEGIN
     UPDATE omp.Modules
     SET DisplayName = N'OMP Portal',
         ModuleType = N'WebAppModule',
-        SchemaName = N'omp',
+        SchemaName = N'omp_portal',
         Description = N'Core portal web app for OpenModulePlatform',
         IsEnabled = 1,
         SortOrder = 100,
@@ -691,7 +695,7 @@ END
 ELSE
 BEGIN
     INSERT INTO omp.Modules(ModuleKey, DisplayName, ModuleType, SchemaName, Description, IsEnabled, SortOrder)
-    VALUES(N'omp_portal', N'OMP Portal', N'WebAppModule', N'omp', N'Core portal web app for OpenModulePlatform', 1, 100);
+    VALUES(N'omp_portal', N'OMP Portal', N'WebAppModule', N'omp_portal', N'Core portal web app for OpenModulePlatform', 1, 100);
 END
 
 SELECT @PortalModuleId = ModuleId FROM omp.Modules WHERE ModuleKey = N'omp_portal';

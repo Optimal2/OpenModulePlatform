@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -51,9 +52,30 @@ public sealed class HostAgentHostedService : BackgroundService
         {
             await _engine.RunOnceAsync(cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "HostAgent cycle failed.");
+            LogCycleFailure(ex);
         }
+        catch (IOException ex)
+        {
+            LogCycleFailure(ex);
+        }
+        catch (DbException ex)
+        {
+            LogCycleFailure(ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            LogCycleFailure(ex);
+        }
+        catch (TimeoutException ex)
+        {
+            LogCycleFailure(ex);
+        }
+    }
+
+    private void LogCycleFailure(Exception exception)
+    {
+        _logger.LogError(exception, "HostAgent cycle failed.");
     }
 }
