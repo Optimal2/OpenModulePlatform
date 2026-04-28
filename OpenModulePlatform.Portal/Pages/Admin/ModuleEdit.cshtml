@@ -40,7 +40,7 @@
     <div class="field-grid field-grid--3">
         <div class="form-field">
             <label asp-for="Input.ModuleType"></label>
-            <select asp-for="Input.ModuleType">
+            <select asp-for="Input.ModuleType" class="module-type-select" data-contain-wheel-scroll>
                 @foreach (var option in Model.ModuleTypeOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -56,7 +56,7 @@
             <span asp-validation-for="Input.SchemaName" class="field-validation-error"></span>
         </div>
 
-        <div class="form-field">
+        <div class="form-field form-field--compact">
             <label asp-for="Input.SortOrder"></label>
             <input asp-for="Input.SortOrder" type="number" />
         </div>
@@ -92,4 +92,17 @@
         </p>
         <button type="submit" class="btn btn-danger">@L["Delete module"]</button>
     </form>
+}
+
+@section Scripts {
+    <script>
+        (() => {
+            document.querySelectorAll('[data-contain-wheel-scroll]').forEach((element) => {
+                element.addEventListener('wheel', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }, { passive: false });
+            });
+        })();
+    </script>
 }

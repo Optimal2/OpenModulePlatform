@@ -222,6 +222,7 @@ public sealed class AppEditModel : OmpPortalPageModel
         public string AppType { get; set; } = string.Empty;
 
         [StringLength(500)]
+        [Display(Name = "Description")]
         public string? Description { get; set; }
 
         [Display(Name = "Enabled")]
