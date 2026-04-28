@@ -13,11 +13,18 @@ public sealed class WorkerRuntimeContextFactory
     {
         ArgumentNullException.ThrowIfNull(settings);
 
+        var workerInstanceId = settings.WorkerInstanceId == Guid.Empty
+            ? settings.AppInstanceId
+            : settings.WorkerInstanceId;
+
         return new WorkerExecutionContext
         {
             AppInstanceId = settings.AppInstanceId,
+            WorkerInstanceId = workerInstanceId,
+            WorkerInstanceKey = settings.WorkerInstanceKey.Trim(),
             WorkerTypeKey = settings.WorkerTypeKey,
             PluginAssemblyPath = Path.GetFullPath(settings.PluginAssemblyPath),
+            ConfigurationJson = settings.ConfigurationJson,
             StartedUtc = DateTimeOffset.UtcNow
         };
     }
