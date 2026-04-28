@@ -779,3 +779,37 @@ code {
 .unsaved-dialog__body .toolbar {
     margin-top: 16px;
 }
+
+.form-field--compact {
+    align-self: start;
+}
+
+.workers-grid .action-link {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+    font-size: clamp(0.72rem, 1.5vw, 0.9rem);
+    padding: 10px 12px;
+}
+
+.workers-grid th:last-child,
+.workers-grid td:last-child {
+    width: 6rem;
+    max-width: 6rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+    .workers-grid th:last-child,
+    .workers-grid td:last-child {
+        width: 5.25rem;
+        max-width: 5.25rem;
+    }
+
+    .workers-grid .action-link {
+        font-size: 0.72rem;
+    }
+}

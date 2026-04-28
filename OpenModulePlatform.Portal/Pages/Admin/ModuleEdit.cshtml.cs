@@ -217,6 +217,7 @@ public sealed class ModuleEditModel : OmpPortalPageModel
         public string SchemaName { get; set; } = string.Empty;
 
         [StringLength(500)]
+        [Display(Name = "Description")]
         public string? Description { get; set; }
 
         [Display(Name = "Enabled")]

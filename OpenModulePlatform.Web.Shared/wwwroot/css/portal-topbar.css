@@ -5,6 +5,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    --portal-topbar-dropdown-bridge: 16px;
     min-height: 34px;
     padding: 6px 20px;
     border-bottom: 1px solid var(--border);
@@ -196,7 +197,7 @@
 .portal-topbar__language-menu,
 .portal-topbar__profile-menu {
     position: absolute;
-    top: calc(100% + 1px);
+    top: calc(100% - var(--portal-topbar-dropdown-bridge));
     z-index: 1100;
     min-width: 220px;
     padding: 8px;
@@ -659,3 +660,4 @@
 .portal-topbar__profile-role-link.is-current {
     font-weight: 700;
 }
+
