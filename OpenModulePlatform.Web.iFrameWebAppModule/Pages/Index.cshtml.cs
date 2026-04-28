@@ -64,9 +64,10 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
             return Page();
         }
 
+        var requestedUrlId = urlId.GetValueOrDefault();
         var firstAvailableRow = configuredRows.FirstOrDefault(row => row.Enabled && IsAllowedForRole(row.AllowedRoles, roleContext.ActiveRoleName));
-        SelectedUrlId = urlId.HasValue && configuredRows.Any(row => row.Id == urlId.Value)
-            ? urlId.Value
+        SelectedUrlId = urlId is not null && configuredRows.Any(row => row.Id == requestedUrlId)
+            ? requestedUrlId
             : (firstAvailableRow?.Id ?? configuredRows[0].Id);
 
         UrlButtons = configuredRows

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -82,18 +83,21 @@ public sealed class HostAgentEngine
         {
             result = await _provisioner.EnsureAsync(artifact, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogError(
-                ex,
-                "Artifact provisioning failed. ArtifactId={ArtifactId}, Version={Version}",
-                artifact.ArtifactId,
-                artifact.Version);
-
-            result = ArtifactProvisioningResult.Failed(
-                ArtifactProvisioningState.Failed,
-                string.Empty,
-                ex.Message);
+            result = CreateProvisioningFailure(artifact, ex);
+        }
+        catch (IOException ex)
+        {
+            result = CreateProvisioningFailure(artifact, ex);
+        }
+        catch (DbException ex)
+        {
+            result = CreateProvisioningFailure(artifact, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            result = CreateProvisioningFailure(artifact, ex);
         }
 
         await _repository.PublishResultAsync(artifact, result, cancellationToken);
@@ -118,4 +122,19 @@ public sealed class HostAgentEngine
 
         return result;
     }
+
+    private ArtifactProvisioningResult CreateProvisioningFailure(ArtifactDescriptor artifact, Exception exception)
+    {
+        _logger.LogError(
+            exception,
+            "Artifact provisioning failed. ArtifactId={ArtifactId}, Version={Version}",
+            artifact.ArtifactId,
+            artifact.Version);
+
+        return ArtifactProvisioningResult.Failed(
+            ArtifactProvisioningState.Failed,
+            string.Empty,
+            exception.Message);
+    }
 }
+

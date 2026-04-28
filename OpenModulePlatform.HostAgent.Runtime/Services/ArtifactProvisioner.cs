@@ -58,9 +58,9 @@ public sealed class ArtifactProvisioner
                 $"Artifact source path does not exist: '{sourcePath}'.");
         }
 
-        var stagingRoot = Path.Combine(settings.LocalArtifactCacheRoot, ".staging");
+        var stagingRoot = CombineUnderRoot(settings.LocalArtifactCacheRoot, ".staging", nameof(settings.LocalArtifactCacheRoot));
         Directory.CreateDirectory(stagingRoot);
-        var stagingPath = Path.Combine(stagingRoot, $"artifact-{artifact.ArtifactId}-{Guid.NewGuid():N}");
+        var stagingPath = CombineUnderRoot(stagingRoot, $"artifact-{artifact.ArtifactId}-{Guid.NewGuid():N}", nameof(stagingRoot));
 
         try
         {
@@ -111,7 +111,7 @@ public sealed class ArtifactProvisioner
         var relativeOrRooted = artifact.RelativePath.Trim();
         return Path.IsPathRooted(relativeOrRooted)
             ? Path.GetFullPath(relativeOrRooted)
-            : Path.GetFullPath(Path.Combine(settings.CentralArtifactRoot, relativeOrRooted));
+            : CombineUnderRoot(settings.CentralArtifactRoot, relativeOrRooted, nameof(artifact.RelativePath));
     }
 
     private static string ResolveLocalPath(HostAgentSettings settings, ArtifactDescriptor artifact)
@@ -121,7 +121,53 @@ public sealed class ArtifactProvisioner
             return Path.GetFullPath(artifact.DesiredLocalPath.Trim());
         }
 
-        return Path.GetFullPath(Path.Combine(settings.LocalArtifactCacheRoot, artifact.GetCacheRelativePath()));
+        return CombineUnderRoot(settings.LocalArtifactCacheRoot, artifact.GetCacheRelativePath(), nameof(artifact.RelativePath));
+    }
+
+    private static string CombineUnderRoot(string rootPath, string relativePath, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+        {
+            throw new InvalidOperationException($"Root path for '{parameterName}' is not configured.");
+        }
+
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new InvalidOperationException($"Relative path for '{parameterName}' is not configured.");
+        }
+
+        var trimmedRelativePath = relativePath.Trim();
+        if (Path.IsPathRooted(trimmedRelativePath))
+        {
+            throw new InvalidOperationException($"Expected a relative path for '{parameterName}', but got '{relativePath}'.");
+        }
+
+        var fullRoot = Path.GetFullPath(rootPath.Trim());
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, trimmedRelativePath));
+        if (!IsSameOrChildPath(fullRoot, fullPath))
+        {
+            throw new InvalidOperationException($"Path '{relativePath}' escapes root path '{fullRoot}'.");
+        }
+
+        return fullPath;
+    }
+
+    private static bool IsSameOrChildPath(string rootPath, string candidatePath)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (string.Equals(rootPath, candidatePath, comparison))
+        {
+            return true;
+        }
+
+        var normalizedRoot = Path.EndsInDirectorySeparator(rootPath)
+            ? rootPath
+            : rootPath + Path.DirectorySeparatorChar;
+
+        return candidatePath.StartsWith(normalizedRoot, comparison);
     }
 
     private static string? NormalizeHash(string? hash)
@@ -136,13 +182,15 @@ public sealed class ArtifactProvisioner
         foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Directory.CreateDirectory(Path.Combine(targetDirectory, Path.GetRelativePath(sourceDirectory, directory)));
+            var relativeDirectory = Path.GetRelativePath(sourceDirectory, directory);
+            Directory.CreateDirectory(CombineUnderRoot(targetDirectory, relativeDirectory, nameof(targetDirectory)));
         }
 
         foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var targetFile = Path.Combine(targetDirectory, Path.GetRelativePath(sourceDirectory, file));
+            var relativeFile = Path.GetRelativePath(sourceDirectory, file);
+            var targetFile = CombineUnderRoot(targetDirectory, relativeFile, nameof(targetDirectory));
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
             File.Copy(file, targetFile, overwrite: false);
         }
@@ -175,7 +223,11 @@ public sealed class ArtifactProvisioner
                 Directory.Delete(path, recursive: true);
             }
         }
-        catch
+        catch (IOException)
+        {
+            // Best effort cleanup only.
+        }
+        catch (UnauthorizedAccessException)
         {
             // Best effort cleanup only.
         }
