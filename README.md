@@ -33,8 +33,9 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `OpenModulePlatform.Worker.Abstractions` - shared contracts for worker plugins
 - `examples/WorkerAppModule/WebApp` - web interface for the manager-driven worker example module
 - `examples/WorkerAppModule/WorkerApp` - plugin-based worker reference example
-- `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - core schema, RBAC, Portal, and bootstrap data
-- `sql/dev/2-install-openmoduleplatform-examples.sql` - example modules, example instances, template topology, and sample jobs
+- `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - neutral core schema, RBAC, default instance, host, and bootstrap data
+- `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` and `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-owned schema and Portal registration data
+- `examples/**/Sql/1-setup-*.sql` and `examples/**/Sql/2-initialize-*.sql` - optional example-module setup and initialization scripts
 - `docs/` - architecture, terminology, release notes, and practical guides
 
 ## Current architecture model
@@ -62,14 +63,14 @@ The current model explicitly separates:
 - The Portal builds the app catalog from `AppInstances`, not from `Apps`
 - The example modules demonstrate pure web, classic service-backed, and manager-driven worker scenarios
 - The service example reads runtime state from `AppInstances` and updates heartbeat and observed identity
-- The SQL scripts bootstrap both core and example data
+- The SQL scripts use a two-step setup/initialization layout per module
 - The additive Windows worker runtime is implemented with manager, child host, OMP discovery, and observed runtime reporting
 - The public examples now cover web-only, classic service-backed, and manager-driven worker patterns
 
 ## What is still in progress
 
 - template materialization is not yet fully implemented
-- HostAgent does not yet exist
+- HostAgent and worker runtime hardening is still ongoing
 - the deployment tables are more preparatory than fully operationalized
 - the configuration model is still module-owned and not yet fully formalized at the core level
 - artifact distribution and installation are still outside the current worker manager scope
@@ -82,25 +83,38 @@ Create the `OpenModulePlatform` database in SQL Server.
 
 ### 2. Install core
 
-Run:
+Run the root OMP core scripts in order:
 
 ```sql
-sql/SQL_Install_OpenModulePlatform.sql
+sql/1-setup-openmoduleplatform.sql
+sql/2-initialize-openmoduleplatform.sql
 ```
 
-After running it, review and replace all `REPLACE_ME` values before the Portal or any service app is used outside a local example environment.
+Before running `2-initialize-openmoduleplatform.sql`, replace the bootstrap administrator placeholder `REPLACE_ME\UserOrGroup` with the local Windows user or group that should receive the initial Portal administrator role.
 
-### 3. Install examples
+### 3. Install the Portal module
 
-Run:
+Run the Portal-owned setup and initialization scripts in order:
 
 ```sql
-sql/SQL_Install_OpenModulePlatform_Examples.sql
+OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql
+OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
 ```
 
-This adds neutral example modules, module instances, app instances, template topology, and sample jobs.
+Before running `2-initialize-omp-portal.sql`, replace the bootstrap administrator placeholder `REPLACE_ME\UserOrGroup` if it is still present.
 
-### 4. Configure the Portal
+### 4. Optionally install example modules
+
+Each example module owns its own SQL folder and follows the same two-file pattern:
+
+```text
+examples/<module>/Sql/1-setup-*.sql
+examples/<module>/Sql/2-initialize-*.sql
+```
+
+Run only the example modules you explicitly want in the local environment.
+
+### 5. Configure the Portal
 
 Set `ConnectionStrings:OmpDb` for the Portal and start `OpenModulePlatform.Portal`.
 

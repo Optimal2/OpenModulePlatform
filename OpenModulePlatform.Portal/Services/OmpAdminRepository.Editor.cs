@@ -120,7 +120,7 @@ WHERE AppId = @AppId;";
 
         if (!await TableExistsAsync(conn, "omp.AppWorkerDefinitions", ct))
         {
-            throw new InvalidOperationException("Database schema missing omp.AppWorkerDefinitions. Run SQL_Install_OpenModulePlatform.sql.");
+            throw new InvalidOperationException("Database schema missing omp.AppWorkerDefinitions. Run sql/1-setup-openmoduleplatform.sql and sql/2-initialize-openmoduleplatform.sql.");
         }
 
         const string updateSql = @"
@@ -171,7 +171,7 @@ VALUES
 
         if (!await TableExistsAsync(conn, "omp.AppWorkerDefinitions", ct))
         {
-            throw new InvalidOperationException("Database schema missing omp.AppWorkerDefinitions. Run SQL_Install_OpenModulePlatform.sql.");
+            throw new InvalidOperationException("Database schema missing omp.AppWorkerDefinitions. Run sql/1-setup-openmoduleplatform.sql and sql/2-initialize-openmoduleplatform.sql.");
         }
 
         await using var cmd = new SqlCommand("DELETE FROM omp.AppWorkerDefinitions WHERE AppId = @Id;", conn);
@@ -342,7 +342,7 @@ WHERE HostId = @HostId;";
         var hasHostBaseUrl = await HostBaseUrlColumnExistsAsync(conn, ct);
         if (!hasHostBaseUrl && !string.IsNullOrWhiteSpace(input.BaseUrl))
         {
-            throw new InvalidOperationException("Database schema missing omp.Hosts.BaseUrl. Run SQL_Install_OpenModulePlatform.sql.");
+            throw new InvalidOperationException("Database schema missing omp.Hosts.BaseUrl. Run sql/1-setup-openmoduleplatform.sql and sql/2-initialize-openmoduleplatform.sql.");
         }
 
         var hostBaseUrlInsertColumns = hasHostBaseUrl
