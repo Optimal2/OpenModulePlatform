@@ -59,7 +59,7 @@ function Invoke-NativeChecked {
     Write-Host "> $FilePath $($Arguments -join ' ')"
     & $FilePath @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code $LASTEXITCODE: $FilePath $($Arguments -join ' ')"
+        throw "Command failed with exit code $($LASTEXITCODE): $FilePath $($Arguments -join ' ')"
     }
 }
 
@@ -73,7 +73,7 @@ function Invoke-RobocopyChecked {
     Write-Host "> robocopy $Source $Destination $($Options -join ' ')"
     & robocopy $Source $Destination @Options
     if ($LASTEXITCODE -ge 8) {
-        throw "robocopy failed with exit code $LASTEXITCODE: $Source -> $Destination"
+        throw "robocopy failed with exit code $($LASTEXITCODE): $Source -> $Destination"
     }
 }
 
@@ -129,6 +129,55 @@ function Invoke-SqlFileWithBootstrapPrincipal {
     }
 }
 
+function Get-IisAppPoolStateValue {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    try {
+        $state = Get-WebAppPoolState -Name $Name -ErrorAction Stop
+        return [string]$state.Value
+    }
+    catch {
+        Write-Warning "Could not read IIS app pool state for '$Name': $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Stop-IisAppPoolIfRunning {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    if (-not (Test-Path "IIS:\AppPools\$Name")) {
+        Write-Host "App pool does not exist, skipping stop: $Name"
+        return
+    }
+
+    $state = Get-IisAppPoolStateValue -Name $Name
+    if ($state -eq 'Stopped') {
+        Write-Host "App pool already stopped: $Name"
+        return
+    }
+
+    Write-Host "Stopping app pool: $Name"
+    Stop-WebAppPool -Name $Name -ErrorAction Stop
+}
+
+function Start-IisAppPoolIfStopped {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    if (-not (Test-Path "IIS:\AppPools\$Name")) {
+        Write-Host "App pool does not exist, skipping start: $Name"
+        return
+    }
+
+    $state = Get-IisAppPoolStateValue -Name $Name
+    if ($state -eq 'Started') {
+        Write-Host "App pool already started: $Name"
+        return
+    }
+
+    Write-Host "Starting app pool: $Name"
+    Start-WebAppPool -Name $Name -ErrorAction Stop
+}
+
 function Stop-LocalRuntime {
     Write-Step 'Stopping local OMP runtime'
 
@@ -136,17 +185,18 @@ function Stop-LocalRuntime {
         $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
         if ($null -ne $service -and $service.Status -ne 'Stopped') {
             Write-Host "Stopping service: $serviceName"
-            Stop-Service -Name $serviceName -Force -ErrorAction Continue
+            Stop-Service -Name $serviceName -Force -ErrorAction Stop
+            $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        }
+        elseif ($null -ne $service) {
+            Write-Host "Service already stopped: $serviceName"
         }
     }
 
     if (-not $SkipIis -and (Get-Module -ListAvailable -Name WebAdministration)) {
         Import-Module WebAdministration
         foreach ($poolName in $appPools) {
-            if (Test-Path "IIS:\AppPools\$poolName") {
-                Write-Host "Stopping app pool: $poolName"
-                Stop-WebAppPool -Name $poolName -ErrorAction Continue
-            }
+            Stop-IisAppPoolIfRunning -Name $poolName
         }
     }
 }
@@ -157,10 +207,7 @@ function Start-LocalRuntime {
     if (-not $SkipIis -and (Get-Module -ListAvailable -Name WebAdministration)) {
         Import-Module WebAdministration
         foreach ($poolName in $appPools) {
-            if (Test-Path "IIS:\AppPools\$poolName") {
-                Write-Host "Starting app pool: $poolName"
-                Start-WebAppPool -Name $poolName -ErrorAction Continue
-            }
+            Start-IisAppPoolIfStopped -Name $poolName
         }
     }
 
@@ -168,11 +215,13 @@ function Start-LocalRuntime {
         $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
         if ($null -ne $service -and $service.Status -ne 'Running') {
             Write-Host "Starting service: $serviceName"
-            Start-Service -Name $serviceName -ErrorAction Continue
+            Start-Service -Name $serviceName -ErrorAction Stop
+        }
+        elseif ($null -ne $service) {
+            Write-Host "Service already running: $serviceName"
         }
     }
 }
-
 function Drop-DatabaseIfExists {
     Write-Step 'Dropping database'
     if (-not (Confirm-LocalAction "Drop database '$Database' on '$SqlServer'?")) {
