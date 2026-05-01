@@ -25,6 +25,11 @@ DECLARE @DefaultTemplateHostId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\UserOrGroup';
 
+IF @BootstrapPortalAdminPrincipal LIKE N'REPLACE_ME%'
+BEGIN
+    THROW 51000, 'Replace @BootstrapPortalAdminPrincipal before running this initialization script.', 1;
+END
+
 SELECT @DefaultInstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
 WHERE InstanceId = @DefaultInstanceId;

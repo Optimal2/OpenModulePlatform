@@ -70,11 +70,7 @@ public abstract class OmpSecurePageModel<TResource> : OmpPageModel<TResource> wh
             _ => required.Any(current.Contains)
         };
 
-        // Hide RBAC-denied pages behind the shared OMP status page. Returning
-        // NotFound lets UseStatusCodePagesWithReExecute route the user to
-        // /status/404, which provides a Portal link instead of exposing a raw
-        // authentication/authorization response from the web host.
-        return allowed ? null : NotFound();
+        return allowed ? null : Forbid();
     }
 
     protected Task<IActionResult?> RequireAnyAsync(

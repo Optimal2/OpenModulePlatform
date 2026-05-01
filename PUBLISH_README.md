@@ -159,38 +159,3 @@ and normally uses database catalog mode:
 ```json
 "CatalogMode": "OmpDatabase"
 ```
-
-## Local install/reset menu
-
-For repeated local smoke tests from a clean or semi-clean machine, use the local
-install manager script:
-
-```powershell
-.\scripts\manage-local-install.ps1
-```
-
-Menu actions:
-
-1. install/update local OMP runtime
-2. uninstall/reset local OMP runtime
-3. uninstall/reset first, then install again
-
-Non-interactive reinstall example:
-
-```powershell
-.\scripts\manage-local-install.ps1 `
-  -Action Reinstall `
-  -RuntimeRoot "E:\OMP" `
-  -SqlServer "localhost" `
-  -Database "OpenModulePlatform" `
-  -BootstrapPortalAdminPrincipal "DESKTOP-7DTCBN3\linus" `
-  -DatabaseOwnerPrincipal "DESKTOP-7DTCBN3\linus" `
-  -ClearDatabaseObjects `
-  -RemoveRuntimeFiles `
-  -Yes
-```
-
-Use `-DropDatabase` when you intentionally want to drop and recreate the whole
-database. The login passed as `-DatabaseOwnerPrincipal` must already exist on the
-SQL Server instance; the script can create the database user and add `db_owner`,
-but it does not create Windows/SQL Server logins.

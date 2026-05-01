@@ -27,9 +27,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$serviceNames = @('OpenModulePlatform.WorkerManager', 'OpenModulePlatform.HostAgent')
-$appPools = @('OMP_Portal')
-$publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
+$script:serviceNames = @('OpenModulePlatform.WorkerManager', 'OpenModulePlatform.HostAgent')
+$script:startServiceNames = @('OpenModulePlatform.HostAgent', 'OpenModulePlatform.WorkerManager')
+$script:appPools = @('OMP_Portal')
+$script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 
 function Write-Step {
     param([string]$Message)
@@ -108,19 +109,36 @@ function Invoke-SqlFile {
     Invoke-NativeChecked sqlcmd '-S' $SqlServer '-d' $TargetDatabase '-E' '-b' '-i' $Path
 }
 
-function Invoke-SqlFileWithBootstrapPrincipal {
+function New-BootstrapPatchedSqlFile {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "SQL file does not exist: $Path"
     }
 
+    if ([string]::IsNullOrWhiteSpace($BootstrapPortalAdminPrincipal) -or $BootstrapPortalAdminPrincipal -like 'REPLACE_ME*') {
+        throw 'BootstrapPortalAdminPrincipal must be an actual Windows user or group, not REPLACE_ME.'
+    }
+
     $escapedPrincipal = $BootstrapPortalAdminPrincipal.Replace("'", "''")
     $content = Get-Content -LiteralPath $Path -Raw
-    $content = $content -replace "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'REPLACE_ME\\UserOrGroup';", "DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$escapedPrincipal';"
+    $pattern = "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'REPLACE_ME\\UserOrGroup';"
+    $replacement = "DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$escapedPrincipal';"
+    $content = [System.Text.RegularExpressions.Regex]::Replace($content, $pattern, $replacement)
+
+    if ($content -like '*REPLACE_ME\UserOrGroup*') {
+        throw "Failed to patch bootstrap principal in SQL file: $Path"
+    }
 
     $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("omp-init-{0}.sql" -f ([guid]::NewGuid().ToString('N')))
     Set-Content -LiteralPath $temp -Value $content -Encoding UTF8
+    return $temp
+}
+
+function Invoke-SqlFileWithBootstrapPrincipal {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $temp = New-BootstrapPatchedSqlFile -Path $Path
     try {
         Invoke-SqlFile -Path $temp -TargetDatabase $Database
     }
@@ -129,74 +147,38 @@ function Invoke-SqlFileWithBootstrapPrincipal {
     }
 }
 
-function Get-IisAppPoolStateValue {
-    param([Parameter(Mandatory = $true)][string]$Name)
-
-    try {
-        $state = Get-WebAppPoolState -Name $Name -ErrorAction Stop
-        return [string]$state.Value
-    }
-    catch {
-        Write-Warning "Could not read IIS app pool state for '$Name': $($_.Exception.Message)"
-        return $null
-    }
-}
-
-function Stop-IisAppPoolIfRunning {
-    param([Parameter(Mandatory = $true)][string]$Name)
-
-    if (-not (Test-Path "IIS:\AppPools\$Name")) {
-        Write-Host "App pool does not exist, skipping stop: $Name"
-        return
-    }
-
-    $state = Get-IisAppPoolStateValue -Name $Name
-    if ($state -eq 'Stopped') {
-        Write-Host "App pool already stopped: $Name"
-        return
-    }
-
-    Write-Host "Stopping app pool: $Name"
-    Stop-WebAppPool -Name $Name -ErrorAction Stop
-}
-
-function Start-IisAppPoolIfStopped {
-    param([Parameter(Mandatory = $true)][string]$Name)
-
-    if (-not (Test-Path "IIS:\AppPools\$Name")) {
-        Write-Host "App pool does not exist, skipping start: $Name"
-        return
-    }
-
-    $state = Get-IisAppPoolStateValue -Name $Name
-    if ($state -eq 'Started') {
-        Write-Host "App pool already started: $Name"
-        return
-    }
-
-    Write-Host "Starting app pool: $Name"
-    Start-WebAppPool -Name $Name -ErrorAction Stop
-}
-
 function Stop-LocalRuntime {
     Write-Step 'Stopping local OMP runtime'
 
-    foreach ($serviceName in $serviceNames) {
+    foreach ($serviceName in $script:serviceNames) {
         $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-        if ($null -ne $service -and $service.Status -ne 'Stopped') {
-            Write-Host "Stopping service: $serviceName"
-            Stop-Service -Name $serviceName -Force -ErrorAction Stop
-            $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        if ($null -eq $service) {
+            Write-Host "Service not installed: $serviceName"
+            continue
         }
-        elseif ($null -ne $service) {
+        if ($service.Status -eq 'Stopped') {
             Write-Host "Service already stopped: $serviceName"
+            continue
         }
+        Write-Host "Stopping service: $serviceName"
+        Stop-Service -Name $serviceName -Force -ErrorAction Continue
+        try { (Get-Service -Name $serviceName).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) } catch { }
     }
 
     if (-not $SkipIis -and (Get-Module -ListAvailable -Name WebAdministration)) {
         Import-Module WebAdministration
-        foreach ($poolName in $appPools) {
-            Stop-IisAppPoolIfRunning -Name $poolName
+        foreach ($poolName in $script:appPools) {
+            if (-not (Test-Path "IIS:\AppPools\$poolName")) {
+                Write-Host "App pool not found: $poolName"
+                continue
+            }
+            $state = (Get-WebAppPoolState -Name $poolName).Value
+            if ($state -eq 'Stopped') {
+                Write-Host "App pool already stopped: $poolName"
+                continue
+            }
+            Write-Host "Stopping app pool: $poolName"
+            Stop-WebAppPool -Name $poolName -ErrorAction Continue
         }
     }
 }
@@ -206,35 +188,28 @@ function Start-LocalRuntime {
 
     if (-not $SkipIis -and (Get-Module -ListAvailable -Name WebAdministration)) {
         Import-Module WebAdministration
-        foreach ($poolName in $appPools) {
-            Start-IisAppPoolIfStopped -Name $poolName
+        foreach ($poolName in $script:appPools) {
+            if (-not (Test-Path "IIS:\AppPools\$poolName")) { continue }
+            $state = (Get-WebAppPoolState -Name $poolName).Value
+            if ($state -eq 'Started') {
+                Write-Host "App pool already started: $poolName"
+                continue
+            }
+            Write-Host "Starting app pool: $poolName"
+            Start-WebAppPool -Name $poolName -ErrorAction Continue
         }
     }
 
-    foreach ($serviceName in @('OpenModulePlatform.HostAgent', 'OpenModulePlatform.WorkerManager')) {
+    foreach ($serviceName in $script:startServiceNames) {
         $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-        if ($null -ne $service -and $service.Status -ne 'Running') {
-            Write-Host "Starting service: $serviceName"
-            Start-Service -Name $serviceName -ErrorAction Stop
-        }
-        elseif ($null -ne $service) {
+        if ($null -eq $service) { continue }
+        if ($service.Status -eq 'Running') {
             Write-Host "Service already running: $serviceName"
+            continue
         }
+        Write-Host "Starting service: $serviceName"
+        Start-Service -Name $serviceName -ErrorAction Continue
     }
-}
-function Drop-DatabaseIfExists {
-    Write-Step 'Dropping database'
-    if (-not (Confirm-LocalAction "Drop database '$Database' on '$SqlServer'?")) {
-        throw 'Database drop was not confirmed.'
-    }
-
-    Invoke-SqlText -TargetDatabase master -Query @"
-IF DB_ID(N'$Database') IS NOT NULL
-BEGIN
-    ALTER DATABASE [$Database] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE [$Database];
-END
-"@
 }
 
 function Ensure-Database {
@@ -303,32 +278,27 @@ BEGIN
     SELECT @sql += N'ALTER TABLE ' + QUOTENAME(OBJECT_SCHEMA_NAME(parent_object_id)) + N'.' + QUOTENAME(OBJECT_NAME(parent_object_id)) +
                    N' DROP CONSTRAINT ' + QUOTENAME(name) + N';' + CHAR(13) + CHAR(10)
     FROM sys.foreign_keys;
-
     IF LEN(@sql) > 0 EXEC sys.sp_executesql @sql;
 
     SET @sql = N'';
     SELECT @sql += N'DROP VIEW ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(13) + CHAR(10)
-    FROM sys.views
-    WHERE is_ms_shipped = 0;
+    FROM sys.views WHERE is_ms_shipped = 0;
     IF LEN(@sql) > 0 EXEC sys.sp_executesql @sql;
 
     SET @sql = N'';
     SELECT @sql += N'DROP PROCEDURE ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(13) + CHAR(10)
-    FROM sys.procedures
-    WHERE is_ms_shipped = 0;
+    FROM sys.procedures WHERE is_ms_shipped = 0;
     IF LEN(@sql) > 0 EXEC sys.sp_executesql @sql;
 
     SET @sql = N'';
     SELECT @sql += N'DROP FUNCTION ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(13) + CHAR(10)
     FROM sys.objects
-    WHERE type IN (N'FN', N'IF', N'TF', N'FS', N'FT')
-      AND is_ms_shipped = 0;
+    WHERE type IN (N'FN', N'IF', N'TF', N'FS', N'FT') AND is_ms_shipped = 0;
     IF LEN(@sql) > 0 EXEC sys.sp_executesql @sql;
 
     SET @sql = N'';
     SELECT @sql += N'DROP TABLE ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(13) + CHAR(10)
-    FROM sys.tables
-    WHERE is_ms_shipped = 0;
+    FROM sys.tables WHERE is_ms_shipped = 0;
     IF LEN(@sql) > 0 EXEC sys.sp_executesql @sql;
 
     IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE is_ms_shipped = 0)
@@ -350,19 +320,19 @@ function Build-And-Publish {
 
     Push-Location $RepositoryRoot
     try {
+        $solution = Join-Path $RepositoryRoot 'OpenModulePlatform.slnx'
         if (-not $SkipBuild) {
             Write-Step 'Building OpenModulePlatform'
-            if (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'build-release.ps1')) {
-                & (Join-Path $RepositoryRoot 'build-release.ps1')
-            }
-            else {
-                Invoke-NativeChecked dotnet 'build' (Join-Path $RepositoryRoot 'OpenModulePlatform.slnx') '-c' 'Release'
-            }
+            Invoke-NativeChecked dotnet 'restore' $solution
+            Invoke-NativeChecked dotnet 'build' $solution '-c' 'Release' '--no-restore'
         }
 
         if (-not $SkipPublish) {
             Write-Step 'Publishing OpenModulePlatform'
-            & (Join-Path $RepositoryRoot 'publish-all.ps1') -Configuration Release -OutputRoot $publishRoot -Restore -CleanOutput
+            & (Join-Path $RepositoryRoot 'publish-all.ps1') -Configuration Release -OutputRoot $script:publishRoot -Restore -CleanOutput
+            if ($LASTEXITCODE -ne 0) {
+                throw "publish-all.ps1 failed with exit code $($LASTEXITCODE)."
+            }
 
             $deployments = @(
                 @{ Source = 'OpenModulePlatform.Portal'; Destination = 'Sites\Portal' },
@@ -372,7 +342,7 @@ function Build-And-Publish {
             )
 
             foreach ($deployment in $deployments) {
-                $sourcePath = Join-Path $publishRoot $deployment.Source
+                $sourcePath = Join-Path $script:publishRoot $deployment.Source
                 $destinationPath = Join-Path $RuntimeRoot $deployment.Destination
                 New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
                 Invoke-RobocopyChecked -Source $sourcePath -Destination $destinationPath
@@ -391,7 +361,7 @@ function Run-SqlInstall {
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'sql\1-setup-openmoduleplatform.sql') -TargetDatabase $Database
     Invoke-SqlFileWithBootstrapPrincipal -Path (Join-Path $RepositoryRoot 'sql\2-initialize-openmoduleplatform.sql')
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql') -TargetDatabase $Database
-    Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql') -TargetDatabase $Database
+    Invoke-SqlFileWithBootstrapPrincipal -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql')
 }
 
 function Write-RuntimeConfig {
@@ -489,12 +459,42 @@ function Install-LocalOmp {
 function Uninstall-LocalOmp {
     Stop-LocalRuntime
     if ($DropDatabase) {
-        Drop-DatabaseIfExists
+        if (-not (Confirm-LocalAction "Drop database '$Database' on '$SqlServer'?")) {
+            throw 'Database drop was not confirmed.'
+        }
+        Invoke-SqlText -TargetDatabase master -Query @"
+IF DB_ID(N'$Database') IS NOT NULL
+BEGIN
+    ALTER DATABASE [$Database] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [$Database];
+END
+"@
     }
     elseif ($ClearDatabaseObjects) {
         Clear-DatabaseUserObjects
     }
     Remove-RuntimeFiles
+}
+
+function Reinstall-LocalOmp {
+    Stop-LocalRuntime
+    if ($DropDatabase) {
+        Ensure-Database
+    }
+    elseif ($ClearDatabaseObjects) {
+        Clear-DatabaseUserObjects
+        Ensure-Database
+    }
+    else {
+        Ensure-Database
+    }
+    Remove-RuntimeFiles
+    Build-And-Publish
+    Write-RuntimeConfig
+    Run-SqlInstall
+    Ensure-IisPortal
+    Ensure-WindowsServices
+    Start-LocalRuntime
 }
 
 function Show-Menu {
@@ -521,6 +521,6 @@ if ($Action -eq 'Menu') {
 switch ($Action) {
     'Install' { Install-LocalOmp }
     'Uninstall' { Uninstall-LocalOmp }
-    'Reinstall' { Uninstall-LocalOmp; Install-LocalOmp }
+    'Reinstall' { Reinstall-LocalOmp }
     default { Write-Host 'No action selected.' }
 }
