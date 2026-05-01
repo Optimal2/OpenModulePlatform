@@ -46,6 +46,17 @@ OpenModulePlatform.WorkerProcessHost      -> E:\OMP\Services\WorkerProcessHost
 
 The Portal IIS application can then point to `E:\OMP\Sites\Portal`; the Windows services should point to their corresponding service folders.
 
+## Local Windows service names
+
+The standard local service names are:
+
+```text
+OpenModulePlatform.HostAgent
+OpenModulePlatform.WorkerManager
+```
+
+Use those names when stopping or starting the runtime around publish operations.
+
 Default usage without an explicit output root is also supported:
 
 ```powershell
