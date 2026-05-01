@@ -14,8 +14,9 @@ Det innehåller inte domänspecifika verksamhetsdelar från tidigare interna pro
 - `examples/WebAppModule` - enkel webbmodul som referensexempel
 - `examples/ServiceAppModule/WebApp` - webbgränssnitt för service-backed exempelmodul
 - `examples/ServiceAppModule/ServiceApp` - worker/service-exempel
-- `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - core-schema, RBAC, Portal och bootstrapdata
-- `sql/dev/2-install-openmoduleplatform-examples.sql` - exempelmoduler, exempelinstanser, template-topologi och sample jobs
+- `sql/1-setup-openmoduleplatform.sql` och `sql/2-initialize-openmoduleplatform.sql` - neutralt core-schema, RBAC, default-instans, host och bootstrapdata
+- `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` och `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-ägt schema och Portal-registrering
+- `examples/**/Sql/1-setup-*.sql` och `examples/**/Sql/2-initialize-*.sql` - valfria setup- och initieringsskript för exempelmoduler
 - `docs/` - arkitektur, terminologi och handfasta guider
 
 ## Nuvarande modell
@@ -43,12 +44,12 @@ Nuvarande modell separerar uttryckligen:
 - Portal bygger appkatalogen från `AppInstances`, inte från `Apps`
 - Exempelmodulerna visar både rent webbscenario och service-backed scenario
 - Service-exemplet läser runtime-state från `AppInstances` och uppdaterar heartbeat/observed identity
-- SQL-skripten bootstrappar både core och exempeldata
+- SQL-skripten följer en tvåstegsmodell per modul: setup och initiering
 
 ## Vad som fortfarande är pågående
 
 - template-materialisering är ännu inte fullt genomförd
-- HostAgent finns ännu inte
+- HostAgent och worker-runtime behöver fortsatt härdning
 - deploymenttabellerna är mer förberedande än fullt operationaliserade
 - configmodellen är fortfarande modulägd och inte fullt formaliserad på core-nivå
 
@@ -60,25 +61,38 @@ Skapa databasen `OpenModulePlatform` i SQL Server.
 
 ### 2. Installera core
 
-Kör:
+Kör OMP:s root-skript i ordning:
 
 ```sql
-sql/SQL_Install_OpenModulePlatform.sql
+sql/1-setup-openmoduleplatform.sql
+sql/2-initialize-openmoduleplatform.sql
 ```
 
-Efter körning måste alla `REPLACE_ME`-värden granskas och ersättas innan Portal eller serviceappar kan användas på riktigt.
+Innan `2-initialize-openmoduleplatform.sql` körs ska bootstrap-placeholdern `REPLACE_ME\UserOrGroup` ersättas med den lokala Windows-användare eller grupp som ska få initial Portal-adminroll.
 
-### 3. Installera exempel
+### 3. Installera Portal-modulen
 
-Kör:
+Kör Portalens modulägda SQL-skript i ordning:
 
 ```sql
-sql/SQL_Install_OpenModulePlatform_Examples.sql
+OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql
+OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
 ```
 
-Detta lägger till neutrala exempelmoduler, modulinstanser, appinstanser, template-topologi och sample jobs.
+Innan `2-initialize-omp-portal.sql` körs ska bootstrap-placeholdern `REPLACE_ME\UserOrGroup` ersättas om den fortfarande finns kvar.
 
-### 4. Konfigurera Portal
+### 4. Installera eventuella exempelmoduler
+
+Varje exempelmodul äger sin egen SQL-mapp och följer samma tvåfilsmönster:
+
+```text
+examples/<module>/Sql/1-setup-*.sql
+examples/<module>/Sql/2-initialize-*.sql
+```
+
+Kör bara de exempelmoduler som uttryckligen ska finnas i den lokala miljön.
+
+### 5. Konfigurera Portal
 
 Sätt `ConnectionStrings:OmpDb` för Portal och starta `OpenModulePlatform.Portal`.
 
