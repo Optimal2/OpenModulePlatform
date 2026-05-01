@@ -100,3 +100,62 @@ Restore also gets its own log file:
 ```text
 artifacts\publish\restore.log
 ```
+
+
+## Example module folder layout
+
+Example modules use this layout:
+
+```text
+examples/<ModuleName>/
+  sql/
+    1-setup-*.sql
+    2-initialize-*.sql
+  WebApp/
+  WorkerApp/      # when the module includes a worker app
+  ServiceApp/     # when the module includes a Windows service app
+```
+
+The folder directly under `examples` is always the module folder. Application
+projects live under app-specific subfolders such as `WebApp`, `WorkerApp`, or
+`ServiceApp`. SQL scripts are module-owned and stay in the module-level `sql`
+folder, not under an individual app project.
+
+
+## Local runtime configuration
+
+Published service folders need runtime `appsettings.json` files with real local
+paths and a real OMP database connection string. Repository defaults intentionally
+keep those values empty.
+
+For a local development machine you can generate standard runtime configuration:
+
+```powershell
+.\scripts\write-local-runtime-config.ps1 `
+  -RuntimeRoot "E:\OMP" `
+  -SqlServer "localhost" `
+  -Database "OpenModulePlatform" `
+  -HostKey "sample-host"
+```
+
+The script preserves existing config files by default. Pass `-Overwrite` only when
+you intentionally want to replace the runtime files.
+
+The standard service names are:
+
+```text
+OpenModulePlatform.HostAgent
+OpenModulePlatform.WorkerManager
+```
+
+The WorkerManager runtime config must point to:
+
+```text
+E:\OMP\Services\WorkerProcessHost\OpenModulePlatform.WorkerProcessHost.exe
+```
+
+and normally uses database catalog mode:
+
+```json
+"CatalogMode": "OmpDatabase"
+```
