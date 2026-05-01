@@ -1,4 +1,4 @@
--- File: examples/WorkerAppModule/WebApp/Sql/2-initialize-example-workerapp.sql
+-- File: examples/WorkerAppModule/sql/2-initialize-example-workerapp.sql
 /*
 Seeds default values and OMP registration rows for the example Worker App module.
 

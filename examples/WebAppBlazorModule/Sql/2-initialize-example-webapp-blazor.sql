@@ -1,4 +1,4 @@
--- File: examples/WebAppBlazorModule/Sql/2-initialize-example-webapp-blazor.sql
+-- File: examples/WebAppBlazorModule/sql/2-initialize-example-webapp-blazor.sql
 /*
 Seeds default values and OMP registration rows for the example Web App Blazor module.
 

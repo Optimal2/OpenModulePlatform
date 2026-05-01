@@ -1,4 +1,4 @@
--- File: examples/WebAppModule/Sql/1-setup-example-webapp.sql
+-- File: examples/WebAppModule/sql/1-setup-example-webapp.sql
 /*
 Creates the example Web App module schema and tables.
 

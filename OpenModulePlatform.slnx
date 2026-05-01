@@ -1,13 +1,13 @@
 <Solution>
   <Project Path="OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj" />
   <Project Path="OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj" />
-  <Project Path="examples/WebAppModule/OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
+  <Project Path="examples/WebAppModule/WebApp/OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
   <Project Path="OpenModulePlatform.Web.iFrameWebAppModule/OpenModulePlatform.Web.iFrameWebAppModule.csproj" />
   <Project Path="examples/ServiceAppModule/WebApp/OpenModulePlatform.Web.ExampleServiceAppModule.csproj" />
   <Project Path="examples/ServiceAppModule/ServiceApp/OpenModulePlatform.Service.ExampleServiceAppModule.csproj" />
   <Project Path="examples/WorkerAppModule/WebApp/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj" />
   <Project Path="examples/WorkerAppModule/WorkerApp/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj" />
-  <Project Path="examples/WebAppBlazorModule/OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj" />
+  <Project Path="examples/WebAppBlazorModule/WebApp/OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj" />
   <Project Path="OpenModulePlatform.Worker.Abstractions/OpenModulePlatform.Worker.Abstractions.csproj" />
   <Project Path="OpenModulePlatform.WorkerProcessHost/OpenModulePlatform.WorkerProcessHost.csproj" />
   <Project Path="OpenModulePlatform.WorkerManager.WindowsService/OpenModulePlatform.WorkerManager.WindowsService.csproj" />

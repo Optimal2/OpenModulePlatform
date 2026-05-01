@@ -24,8 +24,8 @@ documentation, and iterative hardening, not as a feature-complete production pla
 
 - `OpenModulePlatform.Portal` - Portal for navigation and manual administration
 - `OpenModulePlatform.Web.Shared` - shared web infrastructure for the Portal and web modules
-- `examples/WebAppModule` - simple web module used as a reference example
-- `examples/WebAppBlazorModule` - Blazor-based web module reference example
+- `examples/WebAppModule` - simple web module; app code lives in `WebApp`, SQL lives in `sql`
+- `examples/WebAppBlazorModule` - Blazor-based web module; app code lives in `WebApp`, SQL lives in `sql`
 - `examples/ServiceAppModule/WebApp` - web interface for the service-backed example module
 - `examples/ServiceAppModule/ServiceApp` - worker/service reference example
 - `OpenModulePlatform.WorkerManager.WindowsService` - generic Windows worker manager for manager-driven worker apps
@@ -35,7 +35,7 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `examples/WorkerAppModule/WorkerApp` - plugin-based worker reference example
 - `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - neutral core schema, RBAC, default instance, host, and bootstrap data
 - `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` and `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-owned schema and Portal registration data
-- `examples/**/Sql/1-setup-*.sql` and `examples/**/Sql/2-initialize-*.sql` - optional example-module setup and initialization scripts
+- `examples/**/sql/1-setup-*.sql` and `examples/**/sql/2-initialize-*.sql` - optional example-module setup and initialization scripts
 - `docs/` - architecture, terminology, release notes, and practical guides
 
 ## Current architecture model
@@ -108,8 +108,8 @@ Before running `2-initialize-omp-portal.sql`, replace the bootstrap administrato
 Each example module owns its own SQL folder and follows the same two-file pattern:
 
 ```text
-examples/<module>/Sql/1-setup-*.sql
-examples/<module>/Sql/2-initialize-*.sql
+examples/<module>/sql/1-setup-*.sql
+examples/<module>/sql/2-initialize-*.sql
 ```
 
 Run only the example modules you explicitly want in the local environment.
