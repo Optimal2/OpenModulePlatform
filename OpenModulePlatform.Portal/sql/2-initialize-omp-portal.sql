@@ -1,4 +1,5 @@
 -- File: OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
+-- IMPORTANT: Replace @BootstrapPortalAdminPrincipal before running this script.
 /*
 Seeds default values and OMP registration rows for the OMP Portal.
 

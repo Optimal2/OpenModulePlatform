@@ -12,6 +12,9 @@ GO
 
 -- Seed default iframe targets and sets
 -------------------------------------------------------------------------------
+SET IDENTITY_INSERT omp_iframe.urls ON;
+GO
+
 IF NOT EXISTS (SELECT 1 FROM omp_iframe.urls WHERE [id] = 1)
 BEGIN
     INSERT INTO omp_iframe.urls([id], [url], [displayname], [allowed_roles], [enabled])
@@ -58,6 +61,9 @@ BEGIN
         [enabled] = 1
     WHERE [id] = 3;
 END
+GO
+
+SET IDENTITY_INSERT omp_iframe.urls OFF;
 GO
 
 DECLARE @IFrameDefaultUrlSetId int;

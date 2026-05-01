@@ -175,6 +175,7 @@ $projects = @(
     'examples/WorkerAppModule/WebApp/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj',
     'examples/WorkerAppModule/WorkerApp/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj',
     'OpenModulePlatform.WorkerManager.WindowsService/OpenModulePlatform.WorkerManager.WindowsService.csproj',
+    'OpenModulePlatform.HostAgent.WindowsService/OpenModulePlatform.HostAgent.WindowsService.csproj',
     'OpenModulePlatform.WorkerProcessHost/OpenModulePlatform.WorkerProcessHost.csproj'
 )
 
