@@ -157,16 +157,16 @@ BEGIN
 
         -- Optional scope. NULL means instance-wide/default setting. A scoped row
         -- may target a specific role or user when the setting model needs that.
-        role_id int NULL,
-        user_id int NULL,
+        -- Use PascalCase for references into the existing OMP core/RBAC model.
+        -- The account/user model itself is still intentionally snake_case until
+        -- the broader account design is finalized.
+        RoleId int NULL,
+        UserId int NULL,
 
         CONSTRAINT PK_omp_config_settings PRIMARY KEY(config_setting_id),
-        -- RBAC tables currently use the original PascalCase OMP core naming
-        -- (`omp.Roles(RoleId)`). Keep this reference aligned with the core
-        -- schema until RBAC table naming is migrated in one coordinated change.
-        CONSTRAINT FK_omp_config_settings_role FOREIGN KEY(role_id) REFERENCES omp.Roles(RoleId),
-        CONSTRAINT FK_omp_config_settings_user FOREIGN KEY(user_id) REFERENCES omp.users(user_id),
-        CONSTRAINT UQ_omp_config_settings_scope UNIQUE(category, setting, role_id, user_id)
+        CONSTRAINT FK_omp_config_settings_role FOREIGN KEY(RoleId) REFERENCES omp.Roles(RoleId),
+        CONSTRAINT FK_omp_config_settings_user FOREIGN KEY(UserId) REFERENCES omp.users(user_id),
+        CONSTRAINT UQ_omp_config_settings_scope UNIQUE(category, setting, RoleId, UserId)
     );
 END
 GO
