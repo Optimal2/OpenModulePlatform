@@ -1,4 +1,4 @@
--- File: examples/WebAppModule/Sql/2-initialize-example-webapp.sql
+-- File: examples/WebAppModule/sql/2-initialize-example-webapp.sql
 /*
 Seeds default values and OMP registration rows for the example Web App module.
 

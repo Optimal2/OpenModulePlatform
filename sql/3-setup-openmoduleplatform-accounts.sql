@@ -91,22 +91,27 @@ IF OBJECT_ID(N'omp.user_auth', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.user_auth
     (
+        user_auth_id int IDENTITY(1,1) NOT NULL,
         user_id int NOT NULL,
         provider_id int NOT NULL,
 
-        -- Provider-specific user key. For example:
-        -- - AD/Windows provider: DOMAIN\user
-        -- - Local password provider: local login user name
-        -- The provider implementation owns the exact value format.
-        provider_user_key nvarchar(256) NOT NULL,
+        -- Provider-specific stable subject/user key. This is intended for
+        -- identifiers such as DOMAIN\user, Entra object id, OIDC sub, or local
+        -- login name. Do not store OAuth access tokens or refresh tokens here.
+        -- The wide column allows federated identity keys longer than a Windows
+        -- login while lookups use provider_user_hash for index efficiency.
+        provider_user_key nvarchar(1000) NOT NULL,
+        provider_user_hash AS CONVERT(binary(32), HASHBYTES('SHA2_256', CONVERT(varbinary(max), provider_user_key))) PERSISTED,
 
         -- Last time this linked provider identity was successfully used.
         last_used_at datetime2(3) NULL,
         created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_user_auth_created_at DEFAULT SYSUTCDATETIME(),
 
-        CONSTRAINT PK_omp_user_auth PRIMARY KEY(user_id, provider_id, provider_user_key),
+        CONSTRAINT PK_omp_user_auth PRIMARY KEY(user_auth_id),
         CONSTRAINT FK_omp_user_auth_user FOREIGN KEY(user_id) REFERENCES omp.users(user_id),
-        CONSTRAINT FK_omp_user_auth_provider FOREIGN KEY(provider_id) REFERENCES omp.auth_providers(provider_id)
+        CONSTRAINT FK_omp_user_auth_provider FOREIGN KEY(provider_id) REFERENCES omp.auth_providers(provider_id),
+        CONSTRAINT UQ_omp_user_auth_provider_key UNIQUE(provider_id, provider_user_hash),
+        CONSTRAINT UQ_omp_user_auth_user_provider_key UNIQUE(user_id, provider_id, provider_user_hash)
     );
 END
 GO
@@ -156,6 +161,9 @@ BEGIN
         user_id int NULL,
 
         CONSTRAINT PK_omp_config_settings PRIMARY KEY(config_setting_id),
+        -- RBAC tables currently use the original PascalCase OMP core naming
+        -- (`omp.Roles(RoleId)`). Keep this reference aligned with the core
+        -- schema until RBAC table naming is migrated in one coordinated change.
         CONSTRAINT FK_omp_config_settings_role FOREIGN KEY(role_id) REFERENCES omp.Roles(RoleId),
         CONSTRAINT FK_omp_config_settings_user FOREIGN KEY(user_id) REFERENCES omp.users(user_id),
         CONSTRAINT UQ_omp_config_settings_scope UNIQUE(category, setting, role_id, user_id)

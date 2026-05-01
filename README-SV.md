@@ -11,12 +11,12 @@ Det innehåller inte domänspecifika verksamhetsdelar från tidigare interna pro
 
 - `OpenModulePlatform.Portal` - Portal för navigation och manuell administration
 - `OpenModulePlatform.Web.Shared` - delad webb-infrastruktur för Portal och webbmoduler
-- `examples/WebAppModule` - enkel webbmodul som referensexempel
+- `examples/WebAppModule` - enkel webbmodul; appkod ligger i `WebApp`, SQL ligger i `sql`
 - `examples/ServiceAppModule/WebApp` - webbgränssnitt för service-backed exempelmodul
 - `examples/ServiceAppModule/ServiceApp` - worker/service-exempel
 - `sql/1-setup-openmoduleplatform.sql` och `sql/2-initialize-openmoduleplatform.sql` - neutralt core-schema, RBAC, default-instans, host och bootstrapdata
 - `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` och `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-ägt schema och Portal-registrering
-- `examples/**/Sql/1-setup-*.sql` och `examples/**/Sql/2-initialize-*.sql` - valfria setup- och initieringsskript för exempelmoduler
+- `examples/**/sql/1-setup-*.sql` och `examples/**/sql/2-initialize-*.sql` - valfria setup- och initieringsskript för exempelmoduler
 - `docs/` - arkitektur, terminologi och handfasta guider
 
 ## Nuvarande modell
@@ -86,8 +86,8 @@ Innan `2-initialize-omp-portal.sql` körs ska bootstrap-placeholdern `REPLACE_ME
 Varje exempelmodul äger sin egen SQL-mapp och följer samma tvåfilsmönster:
 
 ```text
-examples/<module>/Sql/1-setup-*.sql
-examples/<module>/Sql/2-initialize-*.sql
+examples/<module>/sql/1-setup-*.sql
+examples/<module>/sql/2-initialize-*.sql
 ```
 
 Kör bara de exempelmoduler som uttryckligen ska finnas i den lokala miljön.
