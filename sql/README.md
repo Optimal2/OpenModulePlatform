@@ -22,7 +22,7 @@ Each module owns its own setup and initialization scripts. The expected pattern 
 2. `2-initialize-<module>.sql`
    - Registers module/app definitions and seeds optional local/default data for that module.
 
-Examples in this repository follow the same pattern under each module's own `Sql` folder. The Portal module keeps its SQL in `OpenModulePlatform.Portal/sql`.
+Examples in this repository follow the same pattern under each module's own `sql` folder. The Portal module keeps its SQL in `OpenModulePlatform.Portal/sql`.
 
 ## Schema names
 
