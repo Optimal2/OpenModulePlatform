@@ -16,7 +16,7 @@ IF OBJECT_ID(N'omp_iframe.urls', N'U') IS NULL
 BEGIN
     CREATE TABLE omp_iframe.urls
     (
-        [id] int NOT NULL CONSTRAINT PK_omp_iframe_urls PRIMARY KEY,
+        [id] int IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_iframe_urls PRIMARY KEY,
         [url] nvarchar(500) NOT NULL,
         [displayname] nvarchar(200) NOT NULL,
         [allowed_roles] nvarchar(500) NULL,

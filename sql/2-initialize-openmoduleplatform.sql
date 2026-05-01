@@ -1,4 +1,5 @@
 -- File: sql/2-initialize-openmoduleplatform.sql
+-- IMPORTANT: Replace @BootstrapPortalAdminPrincipal before running this script.
 /*
 OpenModulePlatform core initialization script.
 
