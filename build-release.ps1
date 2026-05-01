@@ -8,22 +8,22 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 function Wait-ForKeyPress {
-    if ($env:CI -eq 'true' -or [Console]::IsInputRedirected) {
+    if ($env:CI -eq 'true' -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
+        return
+    }
+
+    if ($null -eq $Host -or $null -eq $Host.UI -or $null -eq $Host.UI.RawUI) {
         return
     }
 
     try {
         Write-Host ""
         Write-Host "Press any key to close..." -ForegroundColor DarkGray
-        if ($null -ne $Host.UI.RawUI) {
-            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        }
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     }
-    catch [System.NotImplementedException] {
-        # Some hosts expose RawUI but do not implement ReadKey. Build has already completed.
-    }
-    catch [System.Management.Automation.Host.HostException] {
-        # Non-interactive hosts cannot read keys. Build has already completed.
+    catch {
+        # Non-interactive hosts and some embedded hosts expose RawUI but cannot read keys.
+        # The build result has already been reported, so never fail here.
     }
 }
 
