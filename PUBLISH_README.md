@@ -11,6 +11,7 @@ This helper publishes the currently publishable OMP projects and skips the share
 - OpenModulePlatform.Web.ExampleWebAppModule
 - OpenModulePlatform.Web.ExampleWorkerAppModule
 - OpenModulePlatform.Worker.ExampleWorkerAppModule
+- OpenModulePlatform.HostAgent.WindowsService
 - OpenModulePlatform.WorkerManager.WindowsService
 - OpenModulePlatform.WorkerProcessHost
 
@@ -29,6 +30,23 @@ Excluded on purpose:
 ## Basic usage
 
 Run the script from the repo root:
+
+```powershell
+.\publish-all.ps1 -Configuration Release -OutputRoot "E:\OMP\Publish\OMP" -Restore -CleanOutput
+```
+
+For the standard local runtime layout, copy or deploy these published folders:
+
+```text
+OpenModulePlatform.Portal                 -> E:\OMP\Sites\Portal
+OpenModulePlatform.HostAgent.WindowsService -> E:\OMP\Services\HostAgent
+OpenModulePlatform.WorkerManager.WindowsService -> E:\OMP\Services\WorkerManager
+OpenModulePlatform.WorkerProcessHost      -> E:\OMP\Services\WorkerProcessHost
+```
+
+The Portal IIS application can then point to `E:\OMP\Sites\Portal`; the Windows services should point to their corresponding service folders.
+
+Default usage without an explicit output root is also supported:
 
 ```powershell
 .\publish-all.ps1 -Restore -CleanOutput

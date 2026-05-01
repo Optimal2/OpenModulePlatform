@@ -1,5 +1,6 @@
 -- File: sql/SQL_Install_OpenModulePlatform.sql
 -- IMPORTANT: Replace @BootstrapPortalAdminPrincipal before running this script.
+-- The default placeholder value REPLACE_ME\UserOrGroup is intentionally invalid and the script will stop until it is changed.
 /*
 OpenModulePlatform dev convenience setup script.
 
@@ -13,7 +14,7 @@ Use for quick local/test environment setup.
 For the modular layout instead use:
 - SQL_Setup_OpenModulePlatform.sql
 - SQL_Initialize_OpenModulePlatform.sql
-- each modules own sql/SQL_Setup_*.sql and sql/SQL_Initialize_*.sql files
+- each module's own sql/SQL_Setup_*.sql and sql/SQL_Initialize_*.sql files
 */
 USE [OpenModulePlatform];
 GO
