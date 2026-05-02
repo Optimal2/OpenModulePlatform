@@ -29,6 +29,12 @@ public abstract class OmpStatusPageModelBase : PageModel
 
     public virtual void OnGet(int statusCode)
     {
+        var effectiveStatusCode = statusCode is >= StatusCodes.Status400BadRequest and <= 599
+            ? statusCode
+            : StatusCodes.Status500InternalServerError;
+
+        Response.StatusCode = effectiveStatusCode;
+
         var feature = HttpContext.Features.Get<IStatusCodeReExecuteFeature>();
         var requestedUrl = feature is null
             ? null
@@ -37,14 +43,14 @@ public abstract class OmpStatusPageModelBase : PageModel
         var appHomeHref = OmpUrlPathHelper.BuildAppHomeHref(HttpContext.Request.PathBase);
 
         Error = OmpErrorDisplayModelFactory.CreateForStatusCode(
-            statusCode,
+            effectiveStatusCode,
             requestedUrl,
             portalHref,
             appHomeHref,
             _localizer,
             showBackButton: true);
 
-        ViewData["Title"] = statusCode switch
+        ViewData["Title"] = effectiveStatusCode switch
         {
             StatusCodes.Status403Forbidden => _localizer["StatusPageTitle403"].Value,
             StatusCodes.Status404NotFound => _localizer["StatusPageTitle404"].Value,
