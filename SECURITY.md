@@ -38,7 +38,7 @@ No specific response-time SLA is guaranteed for the public beta release line.
 
 This repository intentionally contains no customer-specific integrations, credentials, or environment-specific deployment secrets.
 
-The SQL bootstrap scripts include placeholder values such as `REPLACE_ME`. Those placeholders are deliberate and must be replaced by the operator during installation. They are not working credentials.
+The SQL bootstrap scripts require operator-provided values such as the `BootstrapPortalAdminPrincipal` SQLCMD variable. These values are installation inputs, not working credentials.
 
 ## Operational guidance
 

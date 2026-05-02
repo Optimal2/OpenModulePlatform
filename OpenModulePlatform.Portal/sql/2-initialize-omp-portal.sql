@@ -1,5 +1,6 @@
 -- File: OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
--- IMPORTANT: Replace @BootstrapPortalAdminPrincipal before running this script.
+-- IMPORTANT: pass BootstrapPortalAdminPrincipal as a SQLCMD variable, or run
+-- scripts/manage-local-install.ps1 with -BootstrapPortalAdminPrincipal.
 /*
 Seeds default values and OMP registration rows for the OMP Portal.
 
@@ -7,6 +8,8 @@ Prerequisites:
 - Run ../../sql/1-setup-openmoduleplatform.sql
 - Run ../../sql/2-initialize-openmoduleplatform.sql
 - Run 1-setup-omp-portal.sql
+- Run with sqlcmd variable BootstrapPortalAdminPrincipal set to the Windows user
+  or group that should receive the initial PortalAdmins role.
 */
 USE [OpenModulePlatform];
 GO
@@ -23,11 +26,12 @@ DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
-DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\UserOrGroup';
+DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$(BootstrapPortalAdminPrincipal)';
 
 IF @BootstrapPortalAdminPrincipal LIKE N'REPLACE_ME%'
+   OR @BootstrapPortalAdminPrincipal LIKE N'$' + N'(%'
 BEGIN
-    THROW 51000, 'Replace @BootstrapPortalAdminPrincipal before running this initialization script.', 1;
+    THROW 51000, 'Set SQLCMD variable BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal to let the local installer do it.', 1;
 END
 
 SELECT @DefaultInstanceTemplateId = InstanceTemplateId
@@ -63,7 +67,8 @@ IF @PortalAdminsRoleId IS NOT NULL
 /*
 Bootstrap portal administrator rows.
 
-Replace the placeholder principal below before you try to sign in to OMP Portal.
+Set the BootstrapPortalAdminPrincipal SQLCMD variable before you try to sign in
+to OMP Portal.
 Examples:
 - DOMAIN\your.user
 - DOMAIN\OMP Portal Admins
