@@ -38,7 +38,7 @@ No specific response-time SLA is guaranteed for the public beta release line.
 
 This repository intentionally contains no customer-specific integrations, credentials, or environment-specific deployment secrets.
 
-The SQL bootstrap scripts require operator-provided values such as the `BootstrapPortalAdminPrincipal` SQLCMD variable. These values are installation inputs, not working credentials.
+The SQL bootstrap scripts require operator-provided values such as `@BootstrapPortalAdminPrincipal`. These values are installation inputs, not working credentials. Prefer the local PowerShell installer for automated bootstrap runs because it escapes principal values before invoking `sqlcmd`.
 
 ## Operational guidance
 
