@@ -1,6 +1,7 @@
 -- File: OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
--- IMPORTANT: pass BootstrapPortalAdminPrincipal as a SQLCMD variable, or run
--- scripts/manage-local-install.ps1 with -BootstrapPortalAdminPrincipal.
+-- IMPORTANT: run scripts/manage-local-install.ps1 with
+-- -BootstrapPortalAdminPrincipal for automated local installs, or replace the
+-- bootstrap literal below manually with a single-quote-escaped Windows principal.
 /*
 Seeds default values and OMP registration rows for the OMP Portal.
 
@@ -8,8 +9,9 @@ Prerequisites:
 - Run ../../sql/1-setup-openmoduleplatform.sql
 - Run ../../sql/2-initialize-openmoduleplatform.sql
 - Run 1-setup-omp-portal.sql
-- Run with sqlcmd variable BootstrapPortalAdminPrincipal set to the Windows user
-  or group that should receive the initial PortalAdmins role.
+- Set @BootstrapPortalAdminPrincipal to the Windows user or group that should
+  receive the initial PortalAdmins role. Prefer scripts/manage-local-install.ps1
+  for local installs because it escapes the value before running sqlcmd.
 */
 USE [OpenModulePlatform];
 GO
@@ -26,12 +28,11 @@ DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
-DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$(BootstrapPortalAdminPrincipal)';
+DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
 
-IF @BootstrapPortalAdminPrincipal LIKE N'REPLACE_ME%'
-   OR @BootstrapPortalAdminPrincipal LIKE N'$' + N'(%'
+IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
 BEGIN
-    THROW 51000, 'Set SQLCMD variable BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal to let the local installer do it.', 1;
+    THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. The parameter accepts multiple principals as an array.', 1;
 END
 
 SELECT @DefaultInstanceTemplateId = InstanceTemplateId
@@ -67,8 +68,7 @@ IF @PortalAdminsRoleId IS NOT NULL
 /*
 Bootstrap portal administrator rows.
 
-Set the BootstrapPortalAdminPrincipal SQLCMD variable before you try to sign in
-to OMP Portal.
+Set @BootstrapPortalAdminPrincipal before you try to sign in to OMP Portal.
 Examples:
 - DOMAIN\your.user
 - DOMAIN\OMP Portal Admins
@@ -76,6 +76,12 @@ Examples:
 The core initialization script owns the initial role principal insert. This
 script only ensures the configured principal is present and intentionally does
 not overwrite existing PortalAdmins principals.
+
+Do not pass the principal through sqlcmd -v. SQLCMD variables are textual
+substitution before T-SQL parsing, so values containing SQL metacharacters cannot
+be safely validated inside this script after substitution. Use the PowerShell
+installer for automated local runs, or manually escape single quotes in the
+literal above.
 */
 IF @PortalAdminsRoleId IS NOT NULL
    AND NOT EXISTS

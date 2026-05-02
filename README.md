@@ -37,6 +37,7 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` and `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-owned schema and Portal registration data
 - `examples/**/sql/1-setup-*.sql` and `examples/**/sql/2-initialize-*.sql` - optional example-module setup and initialization scripts
 - `docs/` - architecture, terminology, release notes, and practical guides
+- `docs/CODEX_DEVELOPMENT.md` - compact development guide for Codex/VS Code workflows
 
 ## Current architecture model
 
@@ -90,7 +91,7 @@ sql/1-setup-openmoduleplatform.sql
 sql/2-initialize-openmoduleplatform.sql
 ```
 
-Run `2-initialize-openmoduleplatform.sql` with the `BootstrapPortalAdminPrincipal` SQLCMD variable set to the local Windows user or group that should receive the initial Portal administrator role. The local installer sets this automatically and can also seed multiple administrator principals by passing multiple values to `-BootstrapPortalAdminPrincipal`, for example both a Windows account name and its display-name form.
+Set `@BootstrapPortalAdminPrincipal` in `2-initialize-openmoduleplatform.sql` to the local Windows user or group that should receive the initial Portal administrator role. The local installer patches this safely and can also seed multiple administrator principals by passing multiple values to `-BootstrapPortalAdminPrincipal`, for example both a Windows account name and its display-name form.
 
 ### 3. Install the Portal module
 
@@ -101,7 +102,7 @@ OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql
 OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
 ```
 
-Run `2-initialize-omp-portal.sql` with the same `BootstrapPortalAdminPrincipal` SQLCMD variable, or use `scripts/manage-local-install.ps1` so the local installer handles it.
+Set the same `@BootstrapPortalAdminPrincipal` value in `2-initialize-omp-portal.sql`, or use `scripts/manage-local-install.ps1` so the local installer handles it.
 
 ### 4. Optionally install example modules
 

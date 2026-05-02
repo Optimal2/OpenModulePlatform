@@ -4,13 +4,17 @@
 
 This repository is developed on Windows with Visual Studio, VS Code, PowerShell, .NET, IIS, Windows Services, and SQL Server.
 
+Read `docs/CODEX_DEVELOPMENT.md` for the repository map, validation ladder, and local publish workflow before doing broad changes.
+
 Before making changes:
 - Inspect actual files and repository structure first.
 - Do not assume file paths, project names, SQL schema, or script behavior.
 - Prefer direct file edits over generated shell scripts.
 - Keep changes small and reviewable.
-- Show a concise summary and git diff after changes.
+- Show a concise summary, validation results, and git diff after changes.
 - Do not mix customer-specific IbsPackager logic into OpenModulePlatform.
+- Keep code, comments, SQL, scripts, and development documentation in English. Swedish belongs only in application localization resources.
+- If a change must be visible in the local IIS/runtime environment, run the matching publish or install script after the code change.
 
 ## Security / antivirus compatibility
 
@@ -28,7 +32,7 @@ Follow these rules strictly:
 - Prefer standard `dotnet`, `git`, `sqlcmd`, `robocopy`, and short explicit commands when command execution is needed.
 - If PowerShell is needed, prefer existing `.ps1` files in the repository.
 - If a new script is needed, create a readable `.ps1` file in the repository instead of passing a large inline command.
-- Ask before running terminal commands.
+- Run normal inspection, build, test, git, sqlcmd, robocopy, and repository scripts when they are needed for the task. Ask before destructive actions, registry/security changes, database drops, or broad service/runtime resets.
 - Do not touch registry, startup settings, scheduled tasks, antivirus settings, Windows security settings, or Bitdefender settings.
 - If a command is blocked or likely to trigger antivirus heuristics, stop and propose the smallest safe manual alternative.
 

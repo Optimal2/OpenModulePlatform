@@ -13,7 +13,7 @@ Start by confirming that the correct principal has Portal administrator access.
 
 Important:
 
-- set the `BootstrapPortalAdminPrincipal` SQLCMD variable when running bootstrap SQL directly, or use `scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal`
+- set `@BootstrapPortalAdminPrincipal` when running bootstrap SQL directly, or use `scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal` so the installer escapes it safely
 - verify that the correct user or group exists in `RolePrincipals`
 - sign in to the Portal and confirm that the administration pages are available
 
