@@ -90,7 +90,7 @@ sql/1-setup-openmoduleplatform.sql
 sql/2-initialize-openmoduleplatform.sql
 ```
 
-Before running `2-initialize-openmoduleplatform.sql`, replace the bootstrap administrator placeholder `REPLACE_ME\UserOrGroup` with the local Windows user or group that should receive the initial Portal administrator role.
+Before running `2-initialize-openmoduleplatform.sql`, replace the bootstrap administrator placeholder `REPLACE_ME\UserOrGroup` with the local Windows user or group that should receive the initial Portal administrator role. The local installer can also seed multiple administrator principals by passing multiple values to `-BootstrapPortalAdminPrincipal`, for example both a Windows account name and its display-name form.
 
 ### 3. Install the Portal module
 

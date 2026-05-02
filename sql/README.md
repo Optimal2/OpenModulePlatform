@@ -12,6 +12,8 @@ Use these scripts for the neutral OMP core installation flow:
 
 `2-initialize-openmoduleplatform.sql` contains a bootstrap administrator principal placeholder. Replace `REPLACE_ME\UserOrGroup` before running the script. The script intentionally stops with `THROW` while the placeholder is unchanged.
 
+The local installer patches that placeholder automatically. Pass one or more values to `-BootstrapPortalAdminPrincipal` when a development machine can authenticate the same operator under more than one Windows principal string.
+
 ## Module-owned SQL
 
 Each module owns its own setup and initialization scripts. The expected pattern is:
