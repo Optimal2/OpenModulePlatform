@@ -119,21 +119,26 @@ IF NOT EXISTS (SELECT 1 FROM omp.Roles WHERE Name = N'PortalAdmins')
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 
 /*
-Bootstrap administrative principal row.
+Bootstrap administrative principal rows.
 
 Replace the placeholder principal below before you try to sign in to OMP Portal
 or other OMP modules that rely on the shared PortalAdmins bootstrap role.
 Examples:
 - DOMAIN\your.user
 - DOMAIN\OMP Portal Admins
+
+The installer may add more principals after this script runs. This script inserts
+the configured principal if it is missing and intentionally does not overwrite
+existing bootstrap principals.
 */
-IF EXISTS (SELECT 1 FROM omp.RolePrincipals WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User')
-BEGIN
-    UPDATE omp.RolePrincipals
-    SET Principal = @BootstrapPortalAdminPrincipal
-    WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User';
-END
-ELSE
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.RolePrincipals
+    WHERE RoleId = @PortalAdminsRoleId
+      AND PrincipalType = N'User'
+      AND Principal = @BootstrapPortalAdminPrincipal
+)
 BEGIN
     INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
     VALUES(@PortalAdminsRoleId, N'User', @BootstrapPortalAdminPrincipal);

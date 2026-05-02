@@ -36,3 +36,4 @@ coverage/
 *.rej
 *.swp
 *.swo
+/scripts/tmp

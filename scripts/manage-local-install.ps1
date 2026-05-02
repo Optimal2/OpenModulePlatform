@@ -8,7 +8,7 @@ param(
     [string]$RuntimeRoot = 'E:\OMP',
     [string]$SqlServer = 'localhost',
     [string]$Database = 'OpenModulePlatform',
-    [string]$BootstrapPortalAdminPrincipal = "$env:USERDOMAIN\$env:USERNAME",
+    [string[]]$BootstrapPortalAdminPrincipal = @("$env:USERDOMAIN\$env:USERNAME"),
     [string]$DatabaseOwnerPrincipal = "$env:USERDOMAIN\$env:USERNAME",
     [string]$HostKey = 'sample-host',
     [string]$IisSiteName = 'OpenModulePlatform',
@@ -31,6 +31,7 @@ $script:serviceNames = @('OpenModulePlatform.WorkerManager', 'OpenModulePlatform
 $script:startServiceNames = @('OpenModulePlatform.HostAgent', 'OpenModulePlatform.WorkerManager')
 $script:appPools = @('OMP_Portal')
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
+$script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
 
 function Write-Step {
     param([string]$Message)
@@ -41,6 +42,7 @@ function Confirm-LocalAction {
     param([string]$Message)
     if ($Yes) { return $true }
     $answer = Read-Host "$Message [y/N]"
+    # Accept Swedish j/ja as well as English y/yes for local developer prompts.
     return $answer -match '^(y|yes|j|ja)$'
 }
 
@@ -49,6 +51,29 @@ function Require-Command {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         throw "Required command '$Name' was not found in PATH."
     }
+}
+
+function Test-AppCmdAvailable {
+    if (Test-Path -LiteralPath $script:appcmdPath) {
+        return $true
+    }
+
+    Write-Warning "IIS appcmd.exe not found: $script:appcmdPath. Skipping IIS configuration."
+    return $false
+}
+
+function Test-IsWindowsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Assert-LocalInstallPrivileges {
+    if (($SkipIis -and $SkipServices) -or (Test-IsWindowsAdministrator)) {
+        return
+    }
+
+    throw "Local reinstall requires an elevated PowerShell when IIS or Windows services are enabled. Re-run as Administrator, or pass -SkipIis and -SkipServices for a non-IIS/service pass."
 }
 
 function Invoke-NativeChecked {
@@ -76,6 +101,60 @@ function Invoke-RobocopyChecked {
     if ($LASTEXITCODE -ge 8) {
         throw "robocopy failed with exit code $($LASTEXITCODE): $Source -> $Destination"
     }
+
+    $global:LASTEXITCODE = 0
+}
+
+function Invoke-AppCmdChecked {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+
+    if (-not (Test-AppCmdAvailable)) {
+        return
+    }
+
+    Invoke-NativeChecked $script:appcmdPath @Arguments
+}
+
+function Get-IisAppPoolState {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    if (-not (Test-AppCmdAvailable)) {
+        return $null
+    }
+
+    $output = & $script:appcmdPath list apppool "/name:$Name" 2>$null
+    if ($LASTEXITCODE -ne 0 -or $null -eq $output) {
+        $global:LASTEXITCODE = 0
+        return $null
+    }
+
+    $global:LASTEXITCODE = 0
+    $text = $output -join "`n"
+    if ($text -match 'state:([^,\)]+)') {
+        return $Matches[1]
+    }
+
+    return $null
+}
+
+function Test-IisAppPool {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $state = Get-IisAppPoolState -Name $Name
+    return $null -ne $state
+}
+
+function Test-IisSite {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    if (-not (Test-AppCmdAvailable)) {
+        return $false
+    }
+
+    $output = & $script:appcmdPath list site "/name:$Name" 2>$null
+    $exists = $LASTEXITCODE -eq 0 -and $null -ne $output
+    $global:LASTEXITCODE = 0
+    return $exists
 }
 
 function Invoke-SqlText {
@@ -85,7 +164,7 @@ function Invoke-SqlText {
     )
 
     Require-Command sqlcmd
-    $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("omp-sql-{0}.sql" -f ([guid]::NewGuid().ToString('N')))
+    $temp = [System.IO.Path]::GetTempFileName()
     Set-Content -LiteralPath $temp -Value $Query -Encoding UTF8
     try {
         Invoke-NativeChecked sqlcmd '-S' $SqlServer '-d' $TargetDatabase '-E' '-b' '-i' $temp
@@ -116,11 +195,14 @@ function New-BootstrapPatchedSqlFile {
         throw "SQL file does not exist: $Path"
     }
 
-    if ([string]::IsNullOrWhiteSpace($BootstrapPortalAdminPrincipal) -or $BootstrapPortalAdminPrincipal -like 'REPLACE_ME*') {
-        throw 'BootstrapPortalAdminPrincipal must be an actual Windows user or group, not REPLACE_ME.'
+    $bootstrapPrincipals = @(Get-BootstrapPortalAdminPrincipals)
+    $primaryBootstrapPrincipal = $bootstrapPrincipals[0]
+
+    if ([string]::IsNullOrWhiteSpace($primaryBootstrapPrincipal) -or $primaryBootstrapPrincipal -like 'REPLACE_ME*') {
+        throw 'BootstrapPortalAdminPrincipal must contain at least one actual Windows user or group, not REPLACE_ME.'
     }
 
-    $escapedPrincipal = $BootstrapPortalAdminPrincipal.Replace("'", "''")
+    $escapedPrincipal = $primaryBootstrapPrincipal.Replace("'", "''")
     $content = Get-Content -LiteralPath $Path -Raw
     $pattern = "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'REPLACE_ME\\UserOrGroup';"
     $replacement = "DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$escapedPrincipal';"
@@ -130,9 +212,21 @@ function New-BootstrapPatchedSqlFile {
         throw "Failed to patch bootstrap principal in SQL file: $Path"
     }
 
-    $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("omp-init-{0}.sql" -f ([guid]::NewGuid().ToString('N')))
+    $temp = [System.IO.Path]::GetTempFileName()
     Set-Content -LiteralPath $temp -Value $content -Encoding UTF8
     return $temp
+}
+
+function Get-BootstrapPortalAdminPrincipals {
+    $principals = @(@($BootstrapPortalAdminPrincipal) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique)
+
+    if ($principals.Count -eq 0 -or ($principals | Where-Object { $_ -like 'REPLACE_ME*' })) {
+        throw 'BootstrapPortalAdminPrincipal must contain at least one actual Windows user or group, not REPLACE_ME.'
+    }
+
+    return $principals
 }
 
 function Invoke-SqlFileWithBootstrapPrincipal {
@@ -145,6 +239,40 @@ function Invoke-SqlFileWithBootstrapPrincipal {
     finally {
         Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Ensure-BootstrapPortalAdminPrincipals {
+    if ($SkipSql) { return }
+
+    $values = @()
+    foreach ($principal in Get-BootstrapPortalAdminPrincipals) {
+        $values += "(N'$($principal.Replace("'", "''"))')"
+    }
+
+    Invoke-SqlText -TargetDatabase $Database -Query @"
+DECLARE @PortalAdminsRoleId int;
+SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
+
+IF @PortalAdminsRoleId IS NULL
+    THROW 51002, 'PortalAdmins role is missing after OMP initialization.', 1;
+
+DECLARE @BootstrapPrincipals table(Principal nvarchar(256) NOT NULL PRIMARY KEY);
+INSERT INTO @BootstrapPrincipals(Principal)
+VALUES
+$(($values -join ",`r`n"));
+
+INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
+SELECT @PortalAdminsRoleId, N'User', bp.Principal
+FROM @BootstrapPrincipals bp
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM omp.RolePrincipals rp
+    WHERE rp.RoleId = @PortalAdminsRoleId
+      AND rp.PrincipalType = N'User'
+      AND rp.Principal = bp.Principal
+);
+"@
 }
 
 function Stop-LocalRuntime {
@@ -165,20 +293,19 @@ function Stop-LocalRuntime {
         try { (Get-Service -Name $serviceName).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) } catch { }
     }
 
-    if (-not $SkipIis -and (Get-Module -ListAvailable -Name WebAdministration)) {
-        Import-Module WebAdministration
+    if (-not $SkipIis) {
         foreach ($poolName in $script:appPools) {
-            if (-not (Test-Path "IIS:\AppPools\$poolName")) {
+            $state = Get-IisAppPoolState -Name $poolName
+            if ($null -eq $state) {
                 Write-Host "App pool not found: $poolName"
                 continue
             }
-            $state = (Get-WebAppPoolState -Name $poolName).Value
             if ($state -eq 'Stopped') {
                 Write-Host "App pool already stopped: $poolName"
                 continue
             }
             Write-Host "Stopping app pool: $poolName"
-            Stop-WebAppPool -Name $poolName -ErrorAction Continue
+            Invoke-AppCmdChecked stop apppool "/apppool.name:$poolName"
         }
     }
 }
@@ -186,17 +313,16 @@ function Stop-LocalRuntime {
 function Start-LocalRuntime {
     Write-Step 'Starting local OMP runtime'
 
-    if (-not $SkipIis -and (Get-Module -ListAvailable -Name WebAdministration)) {
-        Import-Module WebAdministration
+    if (-not $SkipIis) {
         foreach ($poolName in $script:appPools) {
-            if (-not (Test-Path "IIS:\AppPools\$poolName")) { continue }
-            $state = (Get-WebAppPoolState -Name $poolName).Value
+            $state = Get-IisAppPoolState -Name $poolName
+            if ($null -eq $state) { continue }
             if ($state -eq 'Started') {
                 Write-Host "App pool already started: $poolName"
                 continue
             }
             Write-Host "Starting app pool: $poolName"
-            Start-WebAppPool -Name $poolName -ErrorAction Continue
+            Invoke-AppCmdChecked start apppool "/apppool.name:$poolName"
         }
     }
 
@@ -362,6 +488,7 @@ function Run-SqlInstall {
     Invoke-SqlFileWithBootstrapPrincipal -Path (Join-Path $RepositoryRoot 'sql\2-initialize-openmoduleplatform.sql')
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql') -TargetDatabase $Database
     Invoke-SqlFileWithBootstrapPrincipal -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql')
+    Ensure-BootstrapPortalAdminPrincipals
 }
 
 function Write-RuntimeConfig {
@@ -376,29 +503,28 @@ function Write-RuntimeConfig {
 
 function Ensure-IisPortal {
     if ($SkipIis) { return }
-    if (-not (Get-Module -ListAvailable -Name WebAdministration)) {
-        Write-Warning 'WebAdministration module not available. Skipping IIS configuration.'
-        return
-    }
 
     Write-Step 'Ensuring IIS Portal site/app pool'
-    Import-Module WebAdministration
-
     $portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
     New-Item -ItemType Directory -Path $portalPath -Force | Out-Null
 
-    if (-not (Test-Path 'IIS:\AppPools\OMP_Portal')) {
-        New-WebAppPool -Name 'OMP_Portal' | Out-Null
+    if (-not (Test-AppCmdAvailable)) {
+        return
     }
-    Set-ItemProperty 'IIS:\AppPools\OMP_Portal' -Name managedRuntimeVersion -Value ''
 
-    if (-not (Test-Path "IIS:\Sites\$IisSiteName")) {
-        New-Website -Name $IisSiteName -Port $IisPort -PhysicalPath $portalPath -ApplicationPool 'OMP_Portal' | Out-Null
+    if (-not (Test-IisAppPool -Name 'OMP_Portal')) {
+        Invoke-AppCmdChecked add apppool '/name:OMP_Portal'
+    }
+    Invoke-AppCmdChecked set apppool '/apppool.name:OMP_Portal' '/managedRuntimeVersion:'
+
+    if (-not (Test-IisSite -Name $IisSiteName)) {
+        Invoke-AppCmdChecked add site "/name:$IisSiteName" ("/bindings:http/*:{0}:" -f $IisPort) "/physicalPath:$portalPath"
     }
     else {
-        Set-ItemProperty "IIS:\Sites\$IisSiteName" -Name physicalPath -Value $portalPath
-        Set-ItemProperty "IIS:\Sites\$IisSiteName" -Name applicationPool -Value 'OMP_Portal'
+        Invoke-AppCmdChecked set vdir "$IisSiteName/" "/physicalPath:$portalPath"
     }
+
+    Invoke-AppCmdChecked set app "$IisSiteName/" '/applicationPool:OMP_Portal'
 }
 
 function Ensure-WindowsServices {
@@ -445,6 +571,7 @@ function Remove-RuntimeFiles {
 }
 
 function Install-LocalOmp {
+    Assert-LocalInstallPrivileges
     Stop-LocalRuntime
     Ensure-Database
     if ($ClearDatabaseObjects) { Clear-DatabaseUserObjects }
@@ -457,6 +584,7 @@ function Install-LocalOmp {
 }
 
 function Uninstall-LocalOmp {
+    Assert-LocalInstallPrivileges
     Stop-LocalRuntime
     if ($DropDatabase) {
         if (-not (Confirm-LocalAction "Drop database '$Database' on '$SqlServer'?")) {
@@ -477,6 +605,7 @@ END
 }
 
 function Reinstall-LocalOmp {
+    Assert-LocalInstallPrivileges
     Stop-LocalRuntime
     if ($DropDatabase) {
         Ensure-Database

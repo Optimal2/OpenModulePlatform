@@ -33,6 +33,7 @@ function Write-JsonFile {
     Write-Host "Wrote config: $Path"
 }
 
+# TrustServerCertificate=true is only for local development with dev SQL Server certificates.
 $connectionString = "Server=$SqlServer;Database=$Database;Integrated Security=true;TrustServerCertificate=true;"
 
 $portalConfig = [ordered]@{
