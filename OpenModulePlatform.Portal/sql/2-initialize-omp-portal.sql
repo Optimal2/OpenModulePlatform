@@ -61,18 +61,29 @@ IF @PortalAdminsRoleId IS NOT NULL
     INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @PortalAdminPermissionId);
 
 /*
-Bootstrap portal administrator row.
+Bootstrap portal administrator rows.
 
 Replace the placeholder principal below before you try to sign in to OMP Portal.
 Examples:
 - DOMAIN\your.user
 - DOMAIN\OMP Portal Admins
+
+The core initialization script owns the initial role principal insert. This
+script only ensures the configured principal is present and intentionally does
+not overwrite existing PortalAdmins principals.
 */
-IF @PortalAdminsRoleId IS NOT NULL AND EXISTS (SELECT 1 FROM omp.RolePrincipals WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User')
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePrincipals
+       WHERE RoleId = @PortalAdminsRoleId
+         AND PrincipalType = N'User'
+         AND Principal = @BootstrapPortalAdminPrincipal
+   )
 BEGIN
-    UPDATE omp.RolePrincipals
-    SET Principal = @BootstrapPortalAdminPrincipal
-    WHERE RoleId = @PortalAdminsRoleId AND PrincipalType = N'User';
+    INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
+    VALUES(@PortalAdminsRoleId, N'User', @BootstrapPortalAdminPrincipal);
 END
 
 IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'omp_portal')
