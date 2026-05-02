@@ -68,7 +68,7 @@ sql/1-setup-openmoduleplatform.sql
 sql/2-initialize-openmoduleplatform.sql
 ```
 
-Innan `2-initialize-openmoduleplatform.sql` körs ska bootstrap-placeholdern `REPLACE_ME\UserOrGroup` ersättas med den lokala Windows-användare eller grupp som ska få initial Portal-adminroll. Den lokala installern kan också seeda flera administratörsprincipals genom att skicka flera värden till `-BootstrapPortalAdminPrincipal`, till exempel både ett Windows-kontonamn och dess visningsnamnsform.
+Kör `2-initialize-openmoduleplatform.sql` med SQLCMD-variabeln `BootstrapPortalAdminPrincipal` satt till den lokala Windows-användare eller grupp som ska få initial Portal-adminroll. Den lokala installern sätter detta automatiskt och kan också seeda flera administratörsprincipals genom att skicka flera värden till `-BootstrapPortalAdminPrincipal`, till exempel både ett Windows-kontonamn och dess visningsnamnsform.
 
 ### 3. Installera Portal-modulen
 
@@ -79,7 +79,7 @@ OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql
 OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
 ```
 
-Innan `2-initialize-omp-portal.sql` körs ska bootstrap-placeholdern `REPLACE_ME\UserOrGroup` ersättas om den fortfarande finns kvar.
+Kör `2-initialize-omp-portal.sql` med samma SQLCMD-variabel `BootstrapPortalAdminPrincipal`, eller använd `scripts/manage-local-install.ps1` så hanterar den lokala installern detta.
 
 ### 4. Installera eventuella exempelmoduler
 

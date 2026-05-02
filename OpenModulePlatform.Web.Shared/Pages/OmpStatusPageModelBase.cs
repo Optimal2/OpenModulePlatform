@@ -14,6 +14,8 @@ namespace OpenModulePlatform.Web.Shared.Pages;
 [AllowAnonymous]
 public abstract class OmpStatusPageModelBase : PageModel
 {
+    private const int MaxHttpErrorStatusCode = 599;
+
     private readonly IOptions<WebAppOptions> _webAppOptions;
     private readonly IStringLocalizer<SharedResource> _localizer;
 
@@ -29,7 +31,7 @@ public abstract class OmpStatusPageModelBase : PageModel
 
     public virtual void OnGet(int statusCode)
     {
-        var effectiveStatusCode = statusCode is >= StatusCodes.Status400BadRequest and <= 599
+        var effectiveStatusCode = statusCode is >= StatusCodes.Status400BadRequest and <= MaxHttpErrorStatusCode
             ? statusCode
             : StatusCodes.Status500InternalServerError;
 

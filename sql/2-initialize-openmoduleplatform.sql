@@ -1,5 +1,6 @@
 -- File: sql/2-initialize-openmoduleplatform.sql
--- IMPORTANT: Replace @BootstrapPortalAdminPrincipal before running this script.
+-- IMPORTANT: pass BootstrapPortalAdminPrincipal as a SQLCMD variable, or run
+-- scripts/manage-local-install.ps1 with -BootstrapPortalAdminPrincipal.
 /*
 OpenModulePlatform core initialization script.
 
@@ -8,6 +9,10 @@ rows, and shared structural values that live in the omp schema.
 
 Prerequisite:
 - Run 1-setup-openmoduleplatform.sql first.
+- Run with sqlcmd variable BootstrapPortalAdminPrincipal set to the Windows user
+  or group that should receive the initial PortalAdmins role.
+  Example:
+  sqlcmd -S localhost -d OpenModulePlatform -E -b -v BootstrapPortalAdminPrincipal="DOMAIN\User" -i sql\2-initialize-openmoduleplatform.sql
 
 Portal, iframe, and example modules are initialized separately from their own
 module sql folders.
@@ -24,11 +29,12 @@ DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultHostTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
-DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'REPLACE_ME\UserOrGroup';
+DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$(BootstrapPortalAdminPrincipal)';
 
 IF @BootstrapPortalAdminPrincipal LIKE N'REPLACE_ME%'
+   OR @BootstrapPortalAdminPrincipal LIKE N'$' + N'(%'
 BEGIN
-    THROW 51000, 'Replace @BootstrapPortalAdminPrincipal before running this initialization script.', 1;
+    THROW 51000, 'Set SQLCMD variable BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal to let the local installer do it.', 1;
 END
 
 
@@ -121,15 +127,16 @@ SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 /*
 Bootstrap administrative principal rows.
 
-Replace the placeholder principal below before you try to sign in to OMP Portal
-or other OMP modules that rely on the shared PortalAdmins bootstrap role.
+Set the BootstrapPortalAdminPrincipal SQLCMD variable before you try to sign in
+to OMP Portal or other OMP modules that rely on the shared PortalAdmins
+bootstrap role.
 Examples:
 - DOMAIN\your.user
 - DOMAIN\OMP Portal Admins
 
-The installer may add more principals after this script runs. This script inserts
-the configured principal if it is missing and intentionally does not overwrite
-existing bootstrap principals.
+The local installer can add more principals after this script runs. This script
+inserts the configured principal if it is missing and intentionally does not
+overwrite existing bootstrap principals.
 */
 IF NOT EXISTS
 (

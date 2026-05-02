@@ -10,9 +10,13 @@ Use these scripts for the neutral OMP core installation flow:
 2. `2-initialize-openmoduleplatform.sql`
    - Seeds the default OMP instance, host/template baseline, RBAC baseline, and bootstrap administrator principal.
 
-`2-initialize-openmoduleplatform.sql` contains a bootstrap administrator principal placeholder. Replace `REPLACE_ME\UserOrGroup` before running the script. The script intentionally stops with `THROW` while the placeholder is unchanged.
+`2-initialize-openmoduleplatform.sql` expects a `BootstrapPortalAdminPrincipal` SQLCMD variable. Pass the Windows user or group that should receive the initial Portal administrator role:
 
-The local installer patches that placeholder automatically. Pass one or more values to `-BootstrapPortalAdminPrincipal` when a development machine can authenticate the same operator under more than one Windows principal string.
+```powershell
+sqlcmd -S localhost -d OpenModulePlatform -E -b -v BootstrapPortalAdminPrincipal="DOMAIN\User" -i sql\2-initialize-openmoduleplatform.sql
+```
+
+The local installer sets this automatically. Pass one or more values to `-BootstrapPortalAdminPrincipal` when a development machine can authenticate the same operator under more than one Windows principal string.
 
 ## Module-owned SQL
 

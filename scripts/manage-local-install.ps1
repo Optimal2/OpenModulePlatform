@@ -204,11 +204,17 @@ function New-BootstrapPatchedSqlFile {
 
     $escapedPrincipal = $primaryBootstrapPrincipal.Replace("'", "''")
     $content = Get-Content -LiteralPath $Path -Raw
-    $pattern = "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'REPLACE_ME\\UserOrGroup';"
-    $replacement = "DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$escapedPrincipal';"
-    $content = [System.Text.RegularExpressions.Regex]::Replace($content, $pattern, $replacement)
+    $sqlcmdVariableToken = '$(BootstrapPortalAdminPrincipal)'
+    if ($content.Contains($sqlcmdVariableToken)) {
+        $content = $content.Replace($sqlcmdVariableToken, $escapedPrincipal)
+    }
+    else {
+        $pattern = "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'REPLACE_ME\\UserOrGroup';"
+        $replacement = "DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$escapedPrincipal';"
+        $content = [System.Text.RegularExpressions.Regex]::Replace($content, $pattern, $replacement)
+    }
 
-    if ($content -like '*REPLACE_ME\UserOrGroup*') {
+    if ($content -like '*REPLACE_ME\UserOrGroup*' -or $content.Contains($sqlcmdVariableToken)) {
         throw "Failed to patch bootstrap principal in SQL file: $Path"
     }
 

@@ -165,7 +165,7 @@ These show the intended direction, but the full materialization model is not yet
 - `AppInstance` already works as a shared runtime model for both web and service scenarios
 - the Portal genuinely uses the instance level in its app catalog
 - RBAC is compact and understandable
-- the SQL scripts are explicit and use deliberate placeholders instead of guessing environment-specific values
+- the SQL scripts are explicit and require operator-provided bootstrap values instead of guessing environment-specific values
 - the example projects demonstrate web-only, classic service-backed, and manager-driven worker patterns
 
 ## Known limitations
