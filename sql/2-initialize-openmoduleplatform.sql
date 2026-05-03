@@ -1,7 +1,8 @@
 -- File: sql/2-initialize-openmoduleplatform.sql
 -- IMPORTANT: run scripts/manage-local-install.ps1 with
 -- -BootstrapPortalAdminPrincipal for automated local installs, or replace the
--- bootstrap literal below manually with a single-quote-escaped Windows principal.
+-- bootstrap literals below manually with a single-quote-escaped Windows principal
+-- and the matching principal type.
 /*
 OpenModulePlatform core initialization script.
 
@@ -11,8 +12,10 @@ rows, and shared structural values that live in the omp schema.
 Prerequisites:
 - Run 1-setup-openmoduleplatform.sql first.
 - Set @BootstrapPortalAdminPrincipal to the Windows user or group that should
-  receive the initial PortalAdmins role. Prefer scripts/manage-local-install.ps1
-  for local installs because it escapes the value before running sqlcmd.
+  receive the initial PortalAdmins role.
+- Set @BootstrapPortalAdminPrincipalType to N'User' for a Windows user or
+  N'ADGroup' for a Windows group. Prefer scripts/manage-local-install.ps1 for
+  local user installs because it escapes the value before running sqlcmd.
 
 Portal, iframe, and example modules are initialized separately from their own
 module sql folders.
@@ -30,27 +33,66 @@ DECLARE @DefaultHostTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
+DECLARE @BootstrapPortalAdminPrincipalType nvarchar(50) = N'User';
+DECLARE @InsertedInstanceTemplateIds TABLE (InstanceTemplateId int NOT NULL);
+DECLARE @InsertedHostTemplateIds TABLE (HostTemplateId int NOT NULL);
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
 BEGIN
     THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. This SQL variable inserts one principal; use repeated executions or the PowerShell installer to add multiple principals.', 1;
 END
 
+IF @BootstrapPortalAdminPrincipalType NOT IN (N'User', N'ADGroup')
+BEGIN
+    THROW 51003, 'Set @BootstrapPortalAdminPrincipalType to N''User'' for a Windows user or N''ADGroup'' for a Windows group.', 1;
+END
+
 
 IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplates WHERE TemplateKey = N'default')
 BEGIN
     INSERT INTO omp.InstanceTemplates(TemplateKey, DisplayName, Description)
+    OUTPUT inserted.InstanceTemplateId INTO @InsertedInstanceTemplateIds(InstanceTemplateId)
     VALUES(N'default', N'Default Instance Template', N'Minimal baseline template for an OMP instance');
 END
 
 IF NOT EXISTS (SELECT 1 FROM omp.HostTemplates WHERE TemplateKey = N'default-host')
 BEGIN
     INSERT INTO omp.HostTemplates(TemplateKey, DisplayName, Description)
+    OUTPUT inserted.HostTemplateId INTO @InsertedHostTemplateIds(HostTemplateId)
     VALUES(N'default-host', N'Default Host Template', N'Minimal baseline host template for development and examples');
 END
 
-SELECT @DefaultInstanceTemplateId = InstanceTemplateId FROM omp.InstanceTemplates WHERE TemplateKey = N'default';
-SELECT @DefaultHostTemplateId = HostTemplateId FROM omp.HostTemplates WHERE TemplateKey = N'default-host';
+SELECT TOP (1) @DefaultInstanceTemplateId = InstanceTemplateId
+FROM @InsertedInstanceTemplateIds;
+
+IF @DefaultInstanceTemplateId IS NULL
+BEGIN
+    SELECT TOP (1) @DefaultInstanceTemplateId = InstanceTemplateId
+    FROM omp.InstanceTemplates
+    WHERE TemplateKey = N'default'
+    ORDER BY InstanceTemplateId;
+END
+
+IF @DefaultInstanceTemplateId IS NULL
+BEGIN
+    THROW 51001, 'Unable to resolve the default instance template id after seeding omp.InstanceTemplates.', 1;
+END
+
+SELECT TOP (1) @DefaultHostTemplateId = HostTemplateId
+FROM @InsertedHostTemplateIds;
+
+IF @DefaultHostTemplateId IS NULL
+BEGIN
+    SELECT TOP (1) @DefaultHostTemplateId = HostTemplateId
+    FROM omp.HostTemplates
+    WHERE TemplateKey = N'default-host'
+    ORDER BY HostTemplateId;
+END
+
+IF @DefaultHostTemplateId IS NULL
+BEGIN
+    THROW 51002, 'Unable to resolve the default host template id after seeding omp.HostTemplates.', 1;
+END
 
 IF NOT EXISTS (SELECT 1 FROM omp.Instances WHERE InstanceId = @DefaultInstanceId)
 BEGIN
@@ -129,8 +171,8 @@ Bootstrap administrative principal rows.
 Set @BootstrapPortalAdminPrincipal before you try to sign in to OMP Portal or
 other OMP modules that rely on the shared PortalAdmins bootstrap role.
 Examples:
-- DOMAIN\your.user
-- DOMAIN\OMP Portal Admins
+- PrincipalType N'User' with principal DOMAIN\your.user
+- PrincipalType N'ADGroup' with principal DOMAIN\OMP Portal Admins
 
 The local installer can add more principals after this script runs. This script
 inserts the configured principal if it is missing and intentionally does not
@@ -147,11 +189,11 @@ IF NOT EXISTS
     SELECT 1
     FROM omp.RolePrincipals
     WHERE RoleId = @PortalAdminsRoleId
-      AND PrincipalType = N'User'
+      AND PrincipalType = @BootstrapPortalAdminPrincipalType
       AND Principal = @BootstrapPortalAdminPrincipal
 )
 BEGIN
     INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
-    VALUES(@PortalAdminsRoleId, N'User', @BootstrapPortalAdminPrincipal);
+    VALUES(@PortalAdminsRoleId, @BootstrapPortalAdminPrincipalType, @BootstrapPortalAdminPrincipal);
 END
 GO
