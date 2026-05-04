@@ -50,6 +50,8 @@ function Confirm-LocalAction {
     param([string]$Message)
     if ($Yes) { return $true }
     $answer = Read-Host "$Message [y/N]"
+    # Accept English and Swedish yes responses because this helper is commonly run on Swedish
+    # developer workstations, while keeping prompts English for repository-neutral automation.
     return $answer -match '^(?i)(y|yes|j|ja)$'
 }
 
@@ -75,6 +77,8 @@ function Resolve-WindowsAccountName {
 function ConvertFrom-SecureStringToPlainText {
     param([Parameter(Mandatory = $true)][Security.SecureString]$SecureString)
 
+    # IIS appcmd.exe and Win32_Service.Change still require plain-text passwords. Keep the
+    # returned string in the narrowest possible scope and clear script references after use.
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
     try {
         return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
@@ -167,6 +171,8 @@ function Invoke-RobocopyChecked {
     Assert-PathUnderRoot -Root $RuntimeRoot -Path $Destination
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 
+    # /MIR mirrors the source and deletes destination-only files. /R:2 and /W:2 keep retries
+    # short; /NFL, /NDL, and /NP reduce file, directory, and progress log noise.
     $options = @('/MIR', '/R:2', '/W:2', '/NFL', '/NDL', '/NP')
     Write-Host "> robocopy $Source $Destination $($options -join ' ')"
     & robocopy $Source $Destination @options
@@ -819,6 +825,8 @@ function Ensure-IisAppPool {
             Invoke-NativeCheckedRedacted -FilePath $script:appcmdPath -Arguments $arguments -DisplayArguments $displayArguments
         }
         finally {
+            # This drops the script reference only. Managed strings cannot be reliably zeroed,
+            # so the plain-text password scope is intentionally kept short.
             $runAsPasswordPlain = ''
         }
     }
@@ -972,9 +980,9 @@ function Set-WindowsServiceConfiguration {
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    $serviceWmi = Get-WmiObject -Class Win32_Service -Filter ("Name='{0}'" -f $ServiceName)
-    if ($null -eq $serviceWmi) {
-        throw "Windows service exists in Service Control Manager but could not be loaded through WMI: $ServiceName"
+    $serviceCim = Get-CimInstance -ClassName Win32_Service -Filter ("Name='{0}'" -f $ServiceName)
+    if ($null -eq $serviceCim) {
+        throw "Windows service exists in Service Control Manager but could not be loaded through CIM: $ServiceName"
     }
 
     $runAsPasswordPlain = $null
@@ -984,18 +992,19 @@ function Set-WindowsServiceConfiguration {
 
     try {
         $serviceAccount = if ([string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) { $null } else { $script:resolvedRunAsUser }
-        $changeResult = $serviceWmi.Change(
-            $DisplayName,
-            $BinaryPath,
-            $null,
-            $null,
-            'Automatic',
-            $false,
-            $serviceAccount,
-            $runAsPasswordPlain,
-            $null,
-            $null,
-            $null)
+        $changeArguments = @{
+            DisplayName = $DisplayName
+            PathName = $BinaryPath
+            StartMode = 'Automatic'
+            DesktopInteract = $false
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($serviceAccount)) {
+            $changeArguments['StartName'] = $serviceAccount
+            $changeArguments['StartPassword'] = $runAsPasswordPlain
+        }
+
+        $changeResult = Invoke-CimMethod -InputObject $serviceCim -MethodName Change -Arguments $changeArguments
 
         if ($changeResult.ReturnValue -ne 0) {
             throw "Failed to update Windows service '$ServiceName'. Win32_Service.Change returned $($changeResult.ReturnValue)."
@@ -1004,6 +1013,8 @@ function Set-WindowsServiceConfiguration {
         Invoke-ScChecked -Arguments @('description', $ServiceName, $Description)
     }
     finally {
+        # This drops the script reference only. Managed strings cannot be reliably zeroed,
+        # so the plain-text password scope is intentionally kept short.
         $runAsPasswordPlain = ''
     }
 }
