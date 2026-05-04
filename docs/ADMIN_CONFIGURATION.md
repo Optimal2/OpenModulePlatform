@@ -26,6 +26,8 @@ Important:
 
 The built-in auth app is mounted at `/auth`. AD sign-in goes through `/auth/ad`, and local password sign-in goes through `/auth/login`.
 
+For the full authentication and RBAC model, see [`AUTHENTICATION_AND_RBAC.md`](AUTHENTICATION_AND_RBAC.md).
+
 ### 2. Create or adjust the instance
 
 An `Instance` is the highest manual scope in OMP.
