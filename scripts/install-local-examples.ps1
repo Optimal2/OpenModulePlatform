@@ -870,9 +870,9 @@ function Set-IisAuthentication {
 function Set-IisWindowsAuthenticationProviders {
     param([string]$Location)
 
-    # Keep every OMP web application on the same provider list as the Portal.
-    # Mixing Negotiate+NTLM on the root app with NTLM-only child apps can make
-    # browsers issue a new Windows-auth challenge when navigating between apps.
+    # Keep Windows-auth enabled locations on the same provider list. Mixing
+    # Negotiate+NTLM with NTLM-only child apps can make browsers issue a new
+    # Windows-auth challenge when navigating between apps.
     Invoke-AppCmdOptional -IgnoredExitCodes @(183, 4312) set config $Location `
         '/section:system.webServer/security/authentication/windowsAuthentication' `
         "/-providers.[value='Negotiate']" `

@@ -40,12 +40,11 @@ Follow these rules strictly:
 
 Default local development paths:
 
-- OpenModulePlatform repo: `E:\Linus Dunkers\Documents\GitHub\OpenModulePlatform`
-- IbsPackager repo: `E:\Linus Dunkers\Documents\GitHub\IbsPackager`
+- OpenModulePlatform repo: `<workspace>\OpenModulePlatform`
+- Optional consumer repos: `<workspace>\IbsPackager`, `<workspace>\OpenDocViewer`
 - Runtime root: `E:\OMP`
 - SQL Server: `localhost`
 - Database: `OpenModulePlatform`
 - Portal URL: `http://localhost:8088/`
-- IbsPackager URL: `http://localhost:8088/ibspackager/`
 
 These paths are local development defaults. Do not hardcode user-specific paths into reusable scripts unless explicitly requested.

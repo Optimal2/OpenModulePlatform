@@ -1,0 +1,30 @@
+name: Dependency Submission
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  dependency-submission:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Submit dependency snapshot
+        id: component-detection
+        uses: advanced-security/component-detection-dependency-submission-action@v0.1.1
+        continue-on-error: true
+
+      - name: Report dependency submission failure
+        if: steps.component-detection.outcome == 'failure'
+        run: |
+          echo "::warning::Dependency submission failed. This step uses GitHub's dependency submission API and can fail transiently; the CI build remains authoritative."

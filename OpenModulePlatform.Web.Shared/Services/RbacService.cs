@@ -244,12 +244,16 @@ ORDER BY r.Name, r.RoleId;";
     {
         var result = new HashSet<RolePrincipalKey>();
 
-        foreach (var claim in user.FindAll(OmpAuthDefaults.PrincipalClaimType))
+        var claimPrincipals = user.FindAll(OmpAuthDefaults.PrincipalClaimType)
+            .Select(claim => TryParsePrincipalClaim(claim.Value, out var principal)
+                ? principal
+                : (RolePrincipalKey?)null)
+            .Where(principal => principal.HasValue)
+            .Select(principal => principal!.Value);
+
+        foreach (var principal in claimPrincipals)
         {
-            if (TryParsePrincipalClaim(claim.Value, out var principal))
-            {
-                result.Add(principal);
-            }
+            result.Add(principal);
         }
 
         var userIdClaim = user.FindFirstValue(OmpAuthDefaults.UserIdClaimType);

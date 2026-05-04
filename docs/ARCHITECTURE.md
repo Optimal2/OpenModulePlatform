@@ -112,6 +112,9 @@ This makes `AppInstance` the natural runtime unit for both web apps and service 
 
 ### Security
 
+For the full authentication, user, role-principal, and RBAC model, see
+[`AUTHENTICATION_AND_RBAC.md`](AUTHENTICATION_AND_RBAC.md).
+
 Authentication is split from authorization:
 
 - `OpenModulePlatform.Auth` owns sign-in and issues the shared OMP cookie.

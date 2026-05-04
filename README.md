@@ -23,6 +23,7 @@ documentation, and iterative hardening, not as a feature-complete production pla
 ## Repository contents
 
 - `OpenModulePlatform.Portal` - Portal for navigation and manual administration
+- `OpenModulePlatform.Auth` - shared OMP authentication app for AD and local password sign-in
 - `OpenModulePlatform.Web.Shared` - shared web infrastructure for the Portal and web modules
 - `examples/WebAppModule` - simple web module; app code lives in `WebApp`, SQL lives in `sql`
 - `examples/WebAppBlazorModule` - Blazor-based web module; app code lives in `WebApp`, SQL lives in `sql`
@@ -133,6 +134,7 @@ A normal manual installation should be possible without requiring the future Hos
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Authentication and RBAC](docs/AUTHENTICATION_AND_RBAC.md)
 - [Terminology](docs/TERMINOLOGY.md)
 - [Manual administration](docs/ADMIN_CONFIGURATION.md)
 - [Project status](docs/PROJECT_STATUS.md)

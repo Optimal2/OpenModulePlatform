@@ -26,16 +26,13 @@ public sealed class OmpAuthenticatedUser
             claims.Add(new Claim(OmpAuthDefaults.UserIdClaimType, userId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         }
 
-        foreach (var principal in RolePrincipals)
-        {
-            if (!string.IsNullOrWhiteSpace(principal.PrincipalType) &&
+        claims.AddRange(RolePrincipals
+            .Where(principal =>
+                !string.IsNullOrWhiteSpace(principal.PrincipalType) &&
                 !string.IsNullOrWhiteSpace(principal.Principal))
-            {
-                claims.Add(new Claim(
-                    OmpAuthDefaults.PrincipalClaimType,
-                    principal.PrincipalType + "|" + principal.Principal));
-            }
-        }
+            .Select(principal => new Claim(
+                OmpAuthDefaults.PrincipalClaimType,
+                principal.PrincipalType + "|" + principal.Principal)));
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, OmpAuthDefaults.AuthenticationScheme));
     }
