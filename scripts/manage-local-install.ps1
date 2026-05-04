@@ -29,7 +29,7 @@ Set-StrictMode -Version Latest
 
 $script:serviceNames = @('OpenModulePlatform.WorkerManager', 'OpenModulePlatform.HostAgent')
 $script:startServiceNames = @('OpenModulePlatform.HostAgent', 'OpenModulePlatform.WorkerManager')
-$script:appPools = @('OMP_Portal')
+$script:appPools = @('OMP_Portal', 'OMP_Auth')
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
 
@@ -113,6 +113,25 @@ function Invoke-AppCmdChecked {
     }
 
     Invoke-NativeChecked $script:appcmdPath @Arguments
+}
+
+function Invoke-AppCmdOptional {
+    param(
+        [int[]]$IgnoredExitCodes = @(0),
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
+    )
+
+    if (-not (Test-AppCmdAvailable)) {
+        return
+    }
+
+    Write-Host "> $script:appcmdPath $($Arguments -join ' ')"
+    & $script:appcmdPath @Arguments
+    if ($IgnoredExitCodes -notcontains $LASTEXITCODE) {
+        throw "Command failed with exit code $($LASTEXITCODE): $script:appcmdPath $($Arguments -join ' ')"
+    }
+
+    $global:LASTEXITCODE = 0
 }
 
 function Get-IisAppPoolState {
@@ -471,6 +490,7 @@ function Build-And-Publish {
             }
 
             $deployments = @(
+                @{ Source = 'OpenModulePlatform.Auth'; Destination = 'WebApps\auth' },
                 @{ Source = 'OpenModulePlatform.Portal'; Destination = 'Sites\Portal' },
                 @{ Source = 'OpenModulePlatform.HostAgent.WindowsService'; Destination = 'Services\HostAgent' },
                 @{ Source = 'OpenModulePlatform.WorkerManager.WindowsService'; Destination = 'Services\WorkerManager' },
@@ -516,7 +536,9 @@ function Ensure-IisPortal {
 
     Write-Step 'Ensuring IIS Portal site/app pool'
     $portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
+    $authPath = Join-Path $RuntimeRoot 'WebApps\auth'
     New-Item -ItemType Directory -Path $portalPath -Force | Out-Null
+    New-Item -ItemType Directory -Path $authPath -Force | Out-Null
 
     if (-not (Test-AppCmdAvailable)) {
         return
@@ -527,6 +549,11 @@ function Ensure-IisPortal {
     }
     Invoke-AppCmdChecked set apppool '/apppool.name:OMP_Portal' '/managedRuntimeVersion:'
 
+    if (-not (Test-IisAppPool -Name 'OMP_Auth')) {
+        Invoke-AppCmdChecked add apppool '/name:OMP_Auth'
+    }
+    Invoke-AppCmdChecked set apppool '/apppool.name:OMP_Auth' '/managedRuntimeVersion:'
+
     if (-not (Test-IisSite -Name $IisSiteName)) {
         Invoke-AppCmdChecked add site "/name:$IisSiteName" ("/bindings:http/*:{0}:" -f $IisPort) "/physicalPath:$portalPath"
     }
@@ -535,6 +562,38 @@ function Ensure-IisPortal {
     }
 
     Invoke-AppCmdChecked set app "$IisSiteName/" '/applicationPool:OMP_Portal'
+    Set-IisAuthentication -Location $IisSiteName -AnonymousEnabled $true
+
+    Invoke-AppCmdOptional -IgnoredExitCodes @(0, 50, 1168) delete app "$IisSiteName/auth"
+    Invoke-AppCmdChecked add app "/site.name:$IisSiteName" '/path:/auth' "/physicalPath:$authPath" '/applicationPool:OMP_Auth'
+    Set-IisAuthentication -Location "$IisSiteName/auth" -AnonymousEnabled $true -WindowsEnabled $true
+}
+
+function Set-IisAuthentication {
+    param(
+        [Parameter(Mandatory = $true)][string]$Location,
+        [Parameter(Mandatory = $true)][bool]$AnonymousEnabled,
+        [object]$WindowsEnabled = $null
+    )
+
+    $anonymousValue = $AnonymousEnabled.ToString().ToLowerInvariant()
+    if ($null -eq $WindowsEnabled) {
+        $WindowsEnabled = -not $AnonymousEnabled
+    }
+
+    $windowsValue = ([bool]$WindowsEnabled).ToString().ToLowerInvariant()
+
+    Invoke-AppCmdOptional set config $Location `
+        '/section:system.webServer/security/authentication/anonymousAuthentication' `
+        "/enabled:$anonymousValue" `
+        '/userName:' `
+        '/password:' `
+        '/commit:apphost'
+
+    Invoke-AppCmdOptional set config $Location `
+        '/section:system.webServer/security/authentication/windowsAuthentication' `
+        "/enabled:$windowsValue" `
+        '/commit:apphost'
 }
 
 function Ensure-WindowsServices {
@@ -571,7 +630,7 @@ function Remove-RuntimeFiles {
     }
 
     Write-Step 'Removing runtime folders'
-    foreach ($relativePath in @('Sites\Portal', 'Services\HostAgent', 'Services\WorkerManager', 'Services\WorkerProcessHost', 'Publish\OMP')) {
+    foreach ($relativePath in @('Sites\Portal', 'WebApps\auth', 'Services\HostAgent', 'Services\WorkerManager', 'Services\WorkerProcessHost', 'Publish\OMP')) {
         $path = Join-Path $RuntimeRoot $relativePath
         if (Test-Path -LiteralPath $path) {
             Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Continue

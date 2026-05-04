@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
+using OpenModulePlatform.Web.Shared.Security;
 using System.Globalization;
 using System.Runtime.Versioning;
 using System.Security.Claims;
@@ -94,22 +95,18 @@ public sealed class RbacService
             return UserRoleContext.Empty;
         }
 
-        var userName = user.Identity?.Name ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(userName))
+        var rolePrincipals = GetRolePrincipalsFromUser(user);
+        if (rolePrincipals.Count == 0)
         {
             return UserRoleContext.Empty;
         }
-
-        var groupPrincipals = OperatingSystem.IsWindows()
-            ? GetGroupPrincipalsFromUser(user)
-            : [];
 
         try
         {
             await using var conn = _db.Create();
             await conn.OpenAsync(ct);
 
-            var roles = await GetAssignableRolesAsync(conn, userName, groupPrincipals, ct);
+            var roles = await GetAssignableRolesAsync(conn, rolePrincipals, ct);
             if (roles.Count == 0)
             {
                 return UserRoleContext.Empty;
@@ -162,17 +159,21 @@ public sealed class RbacService
 
     private static async Task<List<UserRoleOption>> GetAssignableRolesAsync(
         SqlConnection conn,
-        string userName,
-        IReadOnlyList<string> groupPrincipals,
+        IReadOnlyList<RolePrincipalKey> rolePrincipals,
         CancellationToken ct)
     {
-        var sql = BuildAssignableRolesQuery(groupPrincipals.Count);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@user", userName);
-
-        for (var i = 0; i < groupPrincipals.Count; i++)
+        if (rolePrincipals.Count == 0)
         {
-            cmd.Parameters.AddWithValue($"@g{i}", groupPrincipals[i]);
+            return [];
+        }
+
+        var sql = BuildAssignableRolesQuery(rolePrincipals.Count);
+        await using var cmd = new SqlCommand(sql, conn);
+
+        for (var i = 0; i < rolePrincipals.Count; i++)
+        {
+            cmd.Parameters.AddWithValue($"@pt{i}", rolePrincipals[i].PrincipalType);
+            cmd.Parameters.AddWithValue($"@p{i}", rolePrincipals[i].Principal);
         }
 
         var roles = new List<UserRoleOption>();
@@ -216,37 +217,98 @@ WHERE rp.RoleId = @roleId;";
         return permissions;
     }
 
-    private static string BuildAssignableRolesQuery(int groupCount)
+    private static string BuildAssignableRolesQuery(int principalCount)
     {
-        var inList = groupCount > 0
-            ? string.Join(",", Enumerable.Range(0, groupCount).Select(i => $"@g{i}"))
-            : string.Empty;
-
-        var groupClause = groupCount > 0
-            ? $" OR (rp.PrincipalType='ADGroup' AND rp.Principal IN ({inList}))"
-            : string.Empty;
+        var values = string.Join(
+            ",",
+            Enumerable.Range(0, principalCount).Select(i => $"(@pt{i}, @p{i})"));
 
         return $@"
+WITH RequestedPrincipals(PrincipalType, Principal) AS
+(
+    SELECT v.PrincipalType, v.Principal
+    FROM (VALUES {values}) AS v(PrincipalType, Principal)
+)
 SELECT DISTINCT r.RoleId,
        r.Name,
        r.Description
 FROM omp.RolePrincipals rp
 INNER JOIN omp.Roles r ON r.RoleId = rp.RoleId
-WHERE (rp.PrincipalType='User' AND rp.Principal = @user)
-{groupClause}
+INNER JOIN RequestedPrincipals requested
+    ON requested.PrincipalType = rp.PrincipalType
+   AND requested.Principal = rp.Principal
 ORDER BY r.Name, r.RoleId;";
+    }
+
+    private List<RolePrincipalKey> GetRolePrincipalsFromUser(ClaimsPrincipal user)
+    {
+        var result = new HashSet<RolePrincipalKey>();
+
+        foreach (var claim in user.FindAll(OmpAuthDefaults.PrincipalClaimType))
+        {
+            if (TryParsePrincipalClaim(claim.Value, out var principal))
+            {
+                result.Add(principal);
+            }
+        }
+
+        var userIdClaim = user.FindFirstValue(OmpAuthDefaults.UserIdClaimType);
+        if (!string.IsNullOrWhiteSpace(userIdClaim))
+        {
+            result.Add(new RolePrincipalKey("OmpUser", userIdClaim.Trim()));
+        }
+
+        if (user.Identity is WindowsIdentity windowsIdentity)
+        {
+            var userName = user.Identity.Name;
+            if (!string.IsNullOrWhiteSpace(userName))
+            {
+                result.Add(new RolePrincipalKey("User", userName));
+                result.Add(new RolePrincipalKey("ADUser", userName));
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                foreach (var group in GetGroupPrincipalsFromUser(windowsIdentity))
+                {
+                    result.Add(new RolePrincipalKey("ADGroup", group));
+                }
+            }
+        }
+
+        return result.ToList();
+    }
+
+    private static bool TryParsePrincipalClaim(string? value, out RolePrincipalKey principal)
+    {
+        principal = default;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var parts = value.Split('|', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 ||
+            string.IsNullOrWhiteSpace(parts[0]) ||
+            string.IsNullOrWhiteSpace(parts[1]))
+        {
+            return false;
+        }
+
+        principal = new RolePrincipalKey(parts[0], parts[1]);
+        return true;
     }
 
     /// <summary>
     /// Enumerates Windows groups for the current user and stores both SID and translated name.
     /// </summary>
     [SupportedOSPlatform("windows")]
-    private List<string> GetGroupPrincipalsFromUser(ClaimsPrincipal user)
+    private List<string> GetGroupPrincipalsFromUser(WindowsIdentity windowsIdentity)
     {
         try
         {
-            if (user.Identity is not WindowsIdentity windowsIdentity ||
-                windowsIdentity.Groups is null)
+            if (windowsIdentity.Groups is null)
             {
                 return [];
             }
@@ -303,4 +365,6 @@ ORDER BY r.Name, r.RoleId;";
             return [];
         }
     }
+
+    private readonly record struct RolePrincipalKey(string PrincipalType, string Principal);
 }

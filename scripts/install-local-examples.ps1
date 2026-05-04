@@ -31,6 +31,7 @@ Set-StrictMode -Version Latest
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:webAppsRoot = Join-Path $RuntimeRoot 'WebApps'
 $script:portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
+$script:authAppPath = Join-Path $RuntimeRoot 'WebApps\auth'
 $script:servicesRoot = Join-Path $RuntimeRoot 'Services'
 $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
 $script:exampleServiceName = 'OpenModulePlatform.Service.ExampleServiceAppModule'
@@ -319,8 +320,10 @@ function Deploy-PublishedOutputs {
     if ($SkipPublish) { return }
 
     Write-Step 'Deploying published web applications'
+    Stop-IisAppPoolsForDeployment
 
     $deployments = @(
+        @{ Source = 'OpenModulePlatform.Auth'; Destination = 'WebApps\auth' },
         @{ Source = 'OpenModulePlatform.Portal'; Destination = 'Sites\Portal' },
         @{ Source = 'OpenModulePlatform.Web.ExampleWebAppModule'; Destination = 'WebApps\ExampleWebAppModule' },
         @{ Source = 'OpenModulePlatform.Web.ExampleWebAppBlazorModule'; Destination = 'WebApps\ExampleWebAppBlazorModule' },
@@ -386,12 +389,67 @@ function Deploy-PublishedOutputs {
     }
 }
 
+function Stop-IisAppPoolsForDeployment {
+    if ($SkipIis -or -not (Test-Path -LiteralPath $script:appcmdPath)) {
+        return
+    }
+
+    foreach ($pool in @('OMP_Auth', 'OMP_Portal', 'OMP_ExampleWebAppModule', 'OMP_ExampleWebAppBlazorModule', 'OMP_ExampleServiceAppModule', 'OMP_ExampleWorkerAppModule', 'OMP_iFrameWebAppModule', 'OMP_OpenDocViewer')) {
+        if (Test-IisAppPool -Name $pool) {
+            Invoke-AppCmdOptional stop apppool "/apppool.name:$pool"
+        }
+    }
+}
+
 function Write-ExampleRuntimeConfig {
     Write-Step 'Writing example runtime configuration overrides'
 
     $connectionString = Get-OmpConnectionString
     $odvBaseUrl = '/' + $OpenDocViewerAppPath.Trim('/') + '/'
     $odvSampleUrl = $odvBaseUrl + 'sample.pdf'
+    $dataProtectionKeyPath = Join-Path $RuntimeRoot 'DataProtectionKeys'
+    New-Item -ItemType Directory -Path $dataProtectionKeyPath -Force | Out-Null
+
+    $ompAuth = [ordered]@{
+        CookieName = '.OpenModulePlatform.Auth'
+        LoginPath = '/auth/login'
+        AccessDeniedPath = '/status/403'
+        ApplicationName = 'OpenModulePlatform'
+        DataProtectionKeyPath = $dataProtectionKeyPath
+    }
+
+    if (Test-Path -LiteralPath $script:portalPath) {
+        $portalOverride = [ordered]@{
+            ConnectionStrings = [ordered]@{
+                OmpDb = $connectionString
+            }
+            OmpAuth = $ompAuth
+            Portal = [ordered]@{
+                PortalTopBar = [ordered]@{
+                    PortalBaseUrl = '/'
+                }
+            }
+        }
+
+        $target = Join-Path $script:portalPath 'appsettings.Production.json'
+        $json = $portalOverride | ConvertTo-Json -Depth 8
+        Set-Content -LiteralPath $target -Value $json -Encoding UTF8
+        Write-Host "Wrote: $target"
+    }
+
+    if (Test-Path -LiteralPath $script:authAppPath) {
+        $authOverride = [ordered]@{
+            ConnectionStrings = [ordered]@{
+                OmpDb = $connectionString
+            }
+            OmpAuth = $ompAuth
+        }
+
+        $target = Join-Path $script:authAppPath 'appsettings.Production.json'
+        $json = $authOverride | ConvertTo-Json -Depth 8
+        Set-Content -LiteralPath $target -Value $json -Encoding UTF8
+        Write-Host "Wrote: $target"
+    }
 
     $appFolders = @(
         'ExampleWebAppModule',
@@ -411,6 +469,7 @@ function Write-ExampleRuntimeConfig {
             ConnectionStrings = [ordered]@{
                 OmpDb = $connectionString
             }
+            OmpAuth = $ompAuth
             Portal = [ordered]@{
                 PortalTopBar = [ordered]@{
                     PortalBaseUrl = '/'
@@ -592,6 +651,7 @@ function Remove-LegacyAppPoolDatabaseUsers {
 
     $principals = @(
         'IIS APPPOOL\OMP_Portal',
+        'IIS APPPOOL\OMP_Auth',
         'IIS APPPOOL\OMP_ExampleWebAppModule',
         'IIS APPPOOL\OMP_ExampleWebAppBlazorModule',
         'IIS APPPOOL\OMP_ExampleServiceAppModule',
@@ -772,18 +832,23 @@ function Ensure-IisWebApplication {
         "/physicalPath:$PhysicalPath" `
         "/applicationPool:$AppPoolName"
 
-    Set-IisAuthentication -Location "$IisSiteName/$AppPath" -AnonymousEnabled $AnonymousEnabled -PreferNtlm (-not $AnonymousEnabled)
+    Set-IisAuthentication -Location "$IisSiteName/$AppPath" -AnonymousEnabled $AnonymousEnabled
 }
 
 function Set-IisAuthentication {
     param(
         [string]$Location,
         [bool]$AnonymousEnabled,
-        [bool]$PreferNtlm = $false
+        [object]$WindowsEnabled = $null
     )
 
     $anonymousValue = $AnonymousEnabled.ToString().ToLowerInvariant()
-    $windowsValue = (-not $AnonymousEnabled).ToString().ToLowerInvariant()
+    if ($null -eq $WindowsEnabled) {
+        $WindowsEnabled = -not $AnonymousEnabled
+    }
+
+    $windowsEnabledBool = [bool]$WindowsEnabled
+    $windowsValue = $windowsEnabledBool.ToString().ToLowerInvariant()
 
     Invoke-AppCmdOptional set config $Location `
         '/section:system.webServer/security/authentication/anonymousAuthentication' `
@@ -797,12 +862,36 @@ function Set-IisAuthentication {
         "/enabled:$windowsValue" `
         '/commit:apphost'
 
-    if ((-not $AnonymousEnabled) -and $PreferNtlm) {
-        Invoke-AppCmdOptional -IgnoredExitCodes @(4312) set config $Location `
-            '/section:system.webServer/security/authentication/windowsAuthentication' `
-            "/-providers.[value='Negotiate']" `
-            '/commit:apphost'
+    if ($windowsEnabledBool) {
+        Set-IisWindowsAuthenticationProviders -Location $Location
     }
+}
+
+function Set-IisWindowsAuthenticationProviders {
+    param([string]$Location)
+
+    # Keep every OMP web application on the same provider list as the Portal.
+    # Mixing Negotiate+NTLM on the root app with NTLM-only child apps can make
+    # browsers issue a new Windows-auth challenge when navigating between apps.
+    Invoke-AppCmdOptional -IgnoredExitCodes @(183, 4312) set config $Location `
+        '/section:system.webServer/security/authentication/windowsAuthentication' `
+        "/-providers.[value='Negotiate']" `
+        '/commit:apphost'
+
+    Invoke-AppCmdOptional -IgnoredExitCodes @(183, 4312) set config $Location `
+        '/section:system.webServer/security/authentication/windowsAuthentication' `
+        "/-providers.[value='NTLM']" `
+        '/commit:apphost'
+
+    Invoke-AppCmdChecked set config $Location `
+        '/section:system.webServer/security/authentication/windowsAuthentication' `
+        "/+providers.[value='Negotiate']" `
+        '/commit:apphost'
+
+    Invoke-AppCmdChecked set config $Location `
+        '/section:system.webServer/security/authentication/windowsAuthentication' `
+        "/+providers.[value='NTLM']" `
+        '/commit:apphost'
 }
 
 function Grant-RunAsRuntimeAccess {
@@ -995,6 +1084,7 @@ function Ensure-IisExamples {
 
     New-Item -ItemType Directory -Path $script:portalPath -Force | Out-Null
     New-Item -ItemType Directory -Path $script:webAppsRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $script:authAppPath -Force | Out-Null
 
     Ensure-IisAppPool -Name 'OMP_Portal'
 
@@ -1009,14 +1099,22 @@ function Ensure-IisExamples {
     }
 
     Invoke-AppCmdChecked set app "$IisSiteName/" '/applicationPool:OMP_Portal'
-    Set-IisAuthentication -Location $IisSiteName -AnonymousEnabled $false
+    Set-IisAuthentication -Location $IisSiteName -AnonymousEnabled $true
+
+    Ensure-IisWebApplication `
+        -AppPath 'auth' `
+        -PhysicalPath $script:authAppPath `
+        -AppPoolName 'OMP_Auth' `
+        -AnonymousEnabled $true
+
+    Set-IisAuthentication -Location "$IisSiteName/auth" -AnonymousEnabled $true -WindowsEnabled $true
 
     $apps = @(
-        @{ Path = 'ExampleWebAppModule'; Pool = 'OMP_ExampleWebAppModule'; Anonymous = $false },
-        @{ Path = 'ExampleWebAppBlazorModule'; Pool = 'OMP_ExampleWebAppBlazorModule'; Anonymous = $false },
-        @{ Path = 'ExampleServiceAppModule'; Pool = 'OMP_ExampleServiceAppModule'; Anonymous = $false },
-        @{ Path = 'ExampleWorkerAppModule'; Pool = 'OMP_ExampleWorkerAppModule'; Anonymous = $false },
-        @{ Path = 'iFrameWebAppModule'; Pool = 'OMP_iFrameWebAppModule'; Anonymous = $false }
+        @{ Path = 'ExampleWebAppModule'; Pool = 'OMP_ExampleWebAppModule'; Anonymous = $true },
+        @{ Path = 'ExampleWebAppBlazorModule'; Pool = 'OMP_ExampleWebAppBlazorModule'; Anonymous = $true },
+        @{ Path = 'ExampleServiceAppModule'; Pool = 'OMP_ExampleServiceAppModule'; Anonymous = $true },
+        @{ Path = 'ExampleWorkerAppModule'; Pool = 'OMP_ExampleWorkerAppModule'; Anonymous = $true },
+        @{ Path = 'iFrameWebAppModule'; Pool = 'OMP_iFrameWebAppModule'; Anonymous = $true }
     )
 
     foreach ($app in $apps) {
@@ -1039,7 +1137,7 @@ function Ensure-IisExamples {
         }
     }
 
-    foreach ($pool in @('OMP_Portal', 'OMP_ExampleWebAppModule', 'OMP_ExampleWebAppBlazorModule', 'OMP_ExampleServiceAppModule', 'OMP_ExampleWorkerAppModule', 'OMP_iFrameWebAppModule', 'OMP_OpenDocViewer')) {
+    foreach ($pool in @('OMP_Portal', 'OMP_Auth', 'OMP_ExampleWebAppModule', 'OMP_ExampleWebAppBlazorModule', 'OMP_ExampleServiceAppModule', 'OMP_ExampleWorkerAppModule', 'OMP_iFrameWebAppModule', 'OMP_OpenDocViewer')) {
         if (Test-IisAppPool -Name $pool) {
             Invoke-AppCmdOptional start apppool "/apppool.name:$pool"
         }
@@ -1051,6 +1149,7 @@ $RuntimeRoot = [System.IO.Path]::GetFullPath($RuntimeRoot)
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:webAppsRoot = Join-Path $RuntimeRoot 'WebApps'
 $script:portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
+$script:authAppPath = Join-Path $RuntimeRoot 'WebApps\auth'
 $script:servicesRoot = Join-Path $RuntimeRoot 'Services'
 
 Initialize-RunAsIdentity
@@ -1072,6 +1171,7 @@ try {
     Write-Host ''
     Write-Host 'Local OMP examples are installed.' -ForegroundColor Green
     Write-Host "Portal: http://localhost:$IisPort/"
+    Write-Host "OMP Auth: http://localhost:$IisPort/auth/login"
     Write-Host "OpenDocViewer: http://localhost:$IisPort/$OpenDocViewerAppPath/"
     Write-Host "Example WebApp: http://localhost:$IisPort/ExampleWebAppModule/"
     Write-Host "Example Blazor WebApp: http://localhost:$IisPort/ExampleWebAppBlazorModule/"

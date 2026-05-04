@@ -112,6 +112,22 @@ This makes `AppInstance` the natural runtime unit for both web apps and service 
 
 ### Security
 
+Authentication is split from authorization:
+
+- `OpenModulePlatform.Auth` owns sign-in and issues the shared OMP cookie.
+- OMP web apps use anonymous IIS access and validate the shared cookie in application code.
+- `/auth/ad` is the built-in AD/Windows provider endpoint. It uses IIS Windows Authentication only inside the auth app and converts the Windows principal into OMP role principals.
+- `/auth/login` also supports the built-in `lpwd` provider backed by `omp.auth_provider_lpwd`.
+
+The auth tables are:
+
+- `omp.users`
+- `omp.auth_providers`
+- `omp.user_auth`
+- `omp.auth_provider_lpwd`
+
+An OMP user row is required for local password sign-in and for provider identities that should be attached to a first-class OMP user. It is not required for large AD groups.
+
 RBAC is built on four core tables:
 
 - `omp.Permissions`
@@ -119,7 +135,7 @@ RBAC is built on four core tables:
 - `omp.RolePermissions`
 - `omp.RolePrincipals`
 
-The Portal and module UIs read effective permissions through `RbacService`, which maps users and Windows groups to permissions stored in the database.
+The Portal and module UIs read effective permissions through `RbacService`. `RolePrincipals` can target first-class OMP users with `PrincipalType = 'OmpUser'`, direct AD users with `PrincipalType = 'ADUser'`, large AD groups with `PrincipalType = 'ADGroup'`, or other provider-specific principal types such as `LocalUser`. This lets an administrator grant access to an AD group with many users without creating one `omp.users` row per member.
 
 ### Templates and deployment
 
@@ -138,8 +154,8 @@ These show the intended direction, but the full materialization model is not yet
 ## Request flow in web applications
 
 1. The application starts with shared hosting defaults from `OpenModulePlatform.Web.Shared`.
-2. Windows-integrated authentication is used when anonymous access is not allowed.
-3. `RbacService` reads the user's effective permissions from the database.
+2. The shared OMP cookie authenticates the request. Unauthenticated users are redirected to `/auth/login`.
+3. `RbacService` expands OMP auth claims into role-principal keys and reads effective permissions from the database.
 4. Razor Pages build views from permissions and repository data.
 5. The Portal home page filters the app catalog based on permissions.
 

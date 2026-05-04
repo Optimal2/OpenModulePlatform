@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj" />
+  <Project Path="OpenModulePlatform.Auth/OpenModulePlatform.Auth.csproj" />
   <Project Path="OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj" />
   <Project Path="examples/WebAppModule/WebApp/OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
   <Project Path="OpenModulePlatform.Web.iFrameWebAppModule/OpenModulePlatform.Web.iFrameWebAppModule.csproj" />

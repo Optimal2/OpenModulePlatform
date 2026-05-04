@@ -165,6 +165,17 @@ IF NOT EXISTS (SELECT 1 FROM omp.Roles WHERE Name = N'PortalAdmins')
 
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 
+-------------------------------------------------------------------------------
+-- Seed built-in authentication providers
+-------------------------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM omp.auth_providers WHERE display_name = N'AD')
+    INSERT INTO omp.auth_providers(display_name, is_enabled)
+    VALUES(N'AD', 1);
+
+IF NOT EXISTS (SELECT 1 FROM omp.auth_providers WHERE display_name = N'lpwd')
+    INSERT INTO omp.auth_providers(display_name, is_enabled)
+    VALUES(N'lpwd', 1);
+
 /*
 Bootstrap administrative principal rows.
 
