@@ -58,8 +58,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> PrincipalTypeOptions =>
     [
+        new() { Value = "OmpUser", Label = T("OmpUser") },
         new() { Value = "User", Label = T("User") },
-        new() { Value = "Group", Label = T("Group") },
+        new() { Value = "ADUser", Label = T("ADUser") },
+        new() { Value = "ADGroup", Label = T("ADGroup") },
+        new() { Value = "LocalUser", Label = T("LocalUser") },
         new() { Value = "ServiceAccount", Label = T("ServiceAccount") },
         new() { Value = "Host", Label = T("Host") }
     ];

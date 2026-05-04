@@ -35,6 +35,15 @@ function Write-JsonFile {
 
 # TrustServerCertificate=true is only for local development with dev SQL Server certificates.
 $connectionString = "Server=$SqlServer;Database=$Database;Integrated Security=true;TrustServerCertificate=true;"
+$dataProtectionKeyPath = Join-Path $RuntimeRoot 'DataProtectionKeys'
+
+$ompAuthConfig = [ordered]@{
+    CookieName = '.OpenModulePlatform.Auth'
+    LoginPath = '/auth/login'
+    AccessDeniedPath = '/status/403'
+    ApplicationName = 'OpenModulePlatform'
+    DataProtectionKeyPath = $dataProtectionKeyPath
+}
 
 $portalConfig = [ordered]@{
     Portal = [ordered]@{
@@ -52,6 +61,20 @@ $portalConfig = [ordered]@{
     ConnectionStrings = [ordered]@{
         OmpDb = $connectionString
     }
+    OmpAuth = $ompAuthConfig
+    Logging = [ordered]@{
+        LogLevel = [ordered]@{
+            Default = 'Information'
+            'Microsoft.AspNetCore' = 'Warning'
+        }
+    }
+}
+
+$authConfig = [ordered]@{
+    ConnectionStrings = [ordered]@{
+        OmpDb = $connectionString
+    }
+    OmpAuth = $ompAuthConfig
     Logging = [ordered]@{
         LogLevel = [ordered]@{
             Default = 'Information'
@@ -119,6 +142,8 @@ $workerManagerConfig = [ordered]@{
     }
 }
 
+New-Item -ItemType Directory -Path $dataProtectionKeyPath -Force | Out-Null
 Write-JsonFile -Path (Join-Path $RuntimeRoot 'Sites\Portal\appsettings.json') -Object $portalConfig -Overwrite:$Overwrite
+Write-JsonFile -Path (Join-Path $RuntimeRoot 'WebApps\auth\appsettings.json') -Object $authConfig -Overwrite:$Overwrite
 Write-JsonFile -Path (Join-Path $RuntimeRoot 'Services\HostAgent\appsettings.json') -Object $hostAgentConfig -Overwrite:$Overwrite
 Write-JsonFile -Path (Join-Path $RuntimeRoot 'Services\WorkerManager\appsettings.json') -Object $workerManagerConfig -Overwrite:$Overwrite

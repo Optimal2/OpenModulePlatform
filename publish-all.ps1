@@ -166,6 +166,7 @@ else {
 }
 
 $projects = @(
+    'OpenModulePlatform.Auth/OpenModulePlatform.Auth.csproj',
     'OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj',
     'examples/ServiceAppModule/ServiceApp/OpenModulePlatform.Service.ExampleServiceAppModule.csproj',
     'examples/ServiceAppModule/WebApp/OpenModulePlatform.Web.ExampleServiceAppModule.csproj',
