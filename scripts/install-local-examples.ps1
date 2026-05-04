@@ -28,6 +28,9 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Local confirmations accept English "y/yes" and Swedish "j/ja" because the script is often
+# run interactively on Swedish Windows developer machines. Prompts stay English otherwise so the
+# script remains neutral for shared repository use.
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:webAppsRoot = Join-Path $RuntimeRoot 'WebApps'
 $script:portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
@@ -68,8 +71,6 @@ function Confirm-LocalAction {
     param([string]$Message)
     if ($Yes) { return $true }
     $answer = Read-Host "$Message [y/j/N]"
-    # Accept English and Swedish yes responses because this helper is commonly run on Swedish
-    # developer workstations, while keeping prompts English for repository-neutral automation.
     return $answer -imatch '^(y|yes|j|ja)$'
 }
 
@@ -244,6 +245,14 @@ function Invoke-SqlText {
     finally {
         Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Test-SqlIntegratedAccess {
+    if ($SkipSql) { return }
+
+    Write-Step 'Validating SQL integrated authentication'
+    Require-Command sqlcmd
+    Invoke-NativeChecked sqlcmd '-S' $SqlServer '-d' $Database '-E' '-b' '-Q' 'SET NOCOUNT ON; SELECT 1;'
 }
 
 function Test-IsWindowsAdministrator {
@@ -638,10 +647,10 @@ function Run-ExampleSql {
         'examples\WebAppModule\Sql\2-initialize-example-webapp.sql',
         'examples\WebAppBlazorModule\Sql\1-setup-example-webapp-blazor.sql',
         'examples\WebAppBlazorModule\Sql\2-initialize-example-webapp-blazor.sql',
-        'examples\ServiceAppModule\sql\1-setup-example-serviceapp.sql',
-        'examples\ServiceAppModule\sql\2-initialize-example-serviceapp.sql',
-        'examples\WorkerAppModule\sql\1-setup-example-workerapp.sql',
-        'examples\WorkerAppModule\sql\2-initialize-example-workerapp.sql',
+        'examples\ServiceAppModule\Sql\1-setup-example-serviceapp.sql',
+        'examples\ServiceAppModule\Sql\2-initialize-example-serviceapp.sql',
+        'examples\WorkerAppModule\Sql\1-setup-example-workerapp.sql',
+        'examples\WorkerAppModule\Sql\2-initialize-example-workerapp.sql',
         'OpenModulePlatform.Web.iFrameWebAppModule\Sql\1-setup-iframe-webapp.sql',
         'OpenModulePlatform.Web.iFrameWebAppModule\Sql\2-initialize-iframe-webapp.sql'
     )
@@ -1213,6 +1222,7 @@ $script:servicesRoot = Join-Path $RuntimeRoot 'Services'
 Initialize-RunAsIdentity
 
 try {
+    Test-SqlIntegratedAccess
     $openDocViewerRoot = Resolve-OpenDocViewerRoot
     $openDocViewerDist = Publish-OpenDocViewer -OpenDocViewerRoot $openDocViewerRoot
     Publish-OpenModulePlatform

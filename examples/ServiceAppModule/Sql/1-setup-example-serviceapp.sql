@@ -1,4 +1,4 @@
--- File: examples/ServiceAppModule/sql/1-setup-example-serviceapp.sql
+-- File: examples/ServiceAppModule/Sql/1-setup-example-serviceapp.sql
 /*
 Creates the example Service App module schema and tables.
 
