@@ -1,0 +1,82 @@
+/* File: OpenModulePlatform.Web.Shared/wwwroot/css/odv-demo.css */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 18px;
+}
+
+.page-header h1 {
+    margin: 0 0 8px;
+}
+
+.eyebrow {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted, #5b667a);
+    margin-bottom: 6px;
+}
+
+.lede {
+    margin: 0;
+    max-width: 900px;
+    color: var(--text-muted, #5b667a);
+}
+
+.odv-demo-panel {
+    display: grid;
+    gap: 14px;
+}
+
+.odv-demo-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.odv-demo-toolbar .action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 12px;
+    background: var(--surface-muted, #f8fafc);
+    color: var(--text, #172033);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.odv-demo-toolbar .action-link:hover {
+    border-color: var(--link, #0b57d0);
+    color: var(--link-hover, #0842a1);
+}
+
+.odv-demo-frame-shell {
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 16px;
+    background: var(--surface, #ffffff);
+    box-shadow: var(--shadow, 0 8px 24px rgba(17, 24, 39, 0.05));
+    overflow: hidden;
+    min-height: min(760px, calc(100vh - 230px));
+}
+
+.odv-demo-frame {
+    display: block;
+    width: 100%;
+    min-height: min(760px, calc(100vh - 230px));
+    border: 0;
+    background: var(--surface-muted, #f8fafc);
+}
+
+@media (max-width: 820px) {
+    .odv-demo-frame-shell,
+    .odv-demo-frame {
+        min-height: calc(100vh - 270px);
+    }
+}
