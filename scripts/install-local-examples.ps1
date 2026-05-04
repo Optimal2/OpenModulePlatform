@@ -38,7 +38,7 @@ $script:exampleServiceName = 'OpenModulePlatform.Service.ExampleServiceAppModule
 $script:hostAgentServiceName = 'OpenModulePlatform.HostAgent'
 $script:workerManagerServiceName = 'OpenModulePlatform.WorkerManager'
 $script:resolvedRunAsUser = ''
-$script:resolvedRunAsPasswordPlain = ''
+$script:resolvedRunAsPasswordSecure = $null
 $script:resolvedRunAsCredential = $null
 
 function Write-Step {
@@ -96,24 +96,30 @@ function Initialize-RunAsIdentity {
 
     $script:resolvedRunAsUser = Resolve-WindowsAccountName -Account $account
     if ([string]::IsNullOrWhiteSpace($RunAsPassword)) {
-        $securePassword = Read-Host "Password for $script:resolvedRunAsUser" -AsSecureString
-        $script:resolvedRunAsPasswordPlain = ConvertFrom-SecureStringToPlainText -SecureString $securePassword
+        $script:resolvedRunAsPasswordSecure = Read-Host "Password for $script:resolvedRunAsUser" -AsSecureString
     }
     else {
-        $script:resolvedRunAsPasswordPlain = $RunAsPassword
+        $script:resolvedRunAsPasswordSecure = ConvertTo-SecureString -String $RunAsPassword -AsPlainText -Force
     }
 
-    if ([string]::IsNullOrEmpty($script:resolvedRunAsPasswordPlain)) {
+    if ($null -eq $script:resolvedRunAsPasswordSecure) {
         throw "A password is required when RunAsUser is set."
     }
 
-    $credentialPassword = ConvertTo-SecureString -String $script:resolvedRunAsPasswordPlain -AsPlainText -Force
-    $script:resolvedRunAsCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $script:resolvedRunAsUser, $credentialPassword
+    $script:resolvedRunAsCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $script:resolvedRunAsUser, $script:resolvedRunAsPasswordSecure
 }
 
 function Clear-RunAsIdentity {
-    $script:resolvedRunAsPasswordPlain = ''
+    $script:resolvedRunAsPasswordSecure = $null
     $script:resolvedRunAsCredential = $null
+}
+
+function Get-RunAsPasswordPlainText {
+    if ($null -eq $script:resolvedRunAsPasswordSecure) {
+        return ''
+    }
+
+    return ConvertFrom-SecureStringToPlainText -SecureString $script:resolvedRunAsPasswordSecure
 }
 
 function Require-Command {
@@ -790,23 +796,29 @@ function Ensure-IisAppPool {
     Invoke-AppCmdChecked set apppool "/apppool.name:$Name" '/processModel.loadUserProfile:true'
 
     if (-not [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) {
-        $arguments = @(
-            'set',
-            'apppool',
-            "/apppool.name:$Name",
-            '/processModel.identityType:SpecificUser',
-            "/processModel.userName:$script:resolvedRunAsUser",
-            "/processModel.password:$script:resolvedRunAsPasswordPlain"
-        )
-        $displayArguments = @(
-            'set',
-            'apppool',
-            "/apppool.name:$Name",
-            '/processModel.identityType:SpecificUser',
-            "/processModel.userName:$script:resolvedRunAsUser",
-            '/processModel.password:***'
-        )
-        Invoke-NativeCheckedRedacted -FilePath $script:appcmdPath -Arguments $arguments -DisplayArguments $displayArguments
+        $runAsPasswordPlain = Get-RunAsPasswordPlainText
+        try {
+            $arguments = @(
+                'set',
+                'apppool',
+                "/apppool.name:$Name",
+                '/processModel.identityType:SpecificUser',
+                "/processModel.userName:$script:resolvedRunAsUser",
+                "/processModel.password:$runAsPasswordPlain"
+            )
+            $displayArguments = @(
+                'set',
+                'apppool',
+                "/apppool.name:$Name",
+                '/processModel.identityType:SpecificUser',
+                "/processModel.userName:$script:resolvedRunAsUser",
+                '/processModel.password:***'
+            )
+            Invoke-NativeCheckedRedacted -FilePath $script:appcmdPath -Arguments $arguments -DisplayArguments $displayArguments
+        }
+        finally {
+            $runAsPasswordPlain = ''
+        }
     }
 }
 
@@ -958,25 +970,40 @@ function Set-WindowsServiceConfiguration {
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    $arguments = @(
-        'config',
-        $ServiceName,
-        'binPath=',
-        $BinaryPath,
-        'start=',
-        'auto',
-        'DisplayName=',
-        $DisplayName
-    )
-    $displayArguments = @($arguments)
-
-    if (-not [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) {
-        $arguments += @("obj=$script:resolvedRunAsUser", "password=$script:resolvedRunAsPasswordPlain")
-        $displayArguments += @("obj=$script:resolvedRunAsUser", 'password=***')
+    $serviceWmi = Get-WmiObject -Class Win32_Service -Filter ("Name='{0}'" -f $ServiceName)
+    if ($null -eq $serviceWmi) {
+        throw "Windows service exists in Service Control Manager but could not be loaded through WMI: $ServiceName"
     }
 
-    Invoke-ScChecked -Arguments $arguments -DisplayArguments $displayArguments
-    Invoke-ScChecked -Arguments @('description', $ServiceName, $Description)
+    $runAsPasswordPlain = $null
+    if (-not [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) {
+        $runAsPasswordPlain = Get-RunAsPasswordPlainText
+    }
+
+    try {
+        $serviceAccount = if ([string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) { $null } else { $script:resolvedRunAsUser }
+        $changeResult = $serviceWmi.Change(
+            $DisplayName,
+            $BinaryPath,
+            $null,
+            $null,
+            'Automatic',
+            $false,
+            $serviceAccount,
+            $runAsPasswordPlain,
+            $null,
+            $null,
+            $null)
+
+        if ($changeResult.ReturnValue -ne 0) {
+            throw "Failed to update Windows service '$ServiceName'. Win32_Service.Change returned $($changeResult.ReturnValue)."
+        }
+
+        Invoke-ScChecked -Arguments @('description', $ServiceName, $Description)
+    }
+    finally {
+        $runAsPasswordPlain = ''
+    }
 }
 
 function Ensure-WindowsService {
