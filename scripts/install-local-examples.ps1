@@ -52,7 +52,7 @@ function Confirm-LocalAction {
     $answer = Read-Host "$Message [y/N]"
     # Accept English and Swedish yes responses because this helper is commonly run on Swedish
     # developer workstations, while keeping prompts English for repository-neutral automation.
-    return $answer -match '^(?i)(y|yes|j|ja)$'
+    return $answer -imatch '^(y|yes|j|ja)$'
 }
 
 function Resolve-WindowsAccountName {
@@ -177,6 +177,8 @@ function Invoke-RobocopyChecked {
     Write-Host "> robocopy $Source $Destination $($options -join ' ')"
     & robocopy $Source $Destination @options
     $exitCode = $LASTEXITCODE
+    # Robocopy uses 0-7 for successful outcomes, including copied, skipped, or mismatched
+    # files. Exit code 8 and above indicate copy failures.
     if ($exitCode -ge 8) {
         throw "robocopy failed with exit code ${exitCode}: $Source -> $Destination"
     }
@@ -760,8 +762,7 @@ function Test-IisAppPool {
     param([string]$Name)
 
     Require-AppCmd
-    $output = & $script:appcmdPath list apppool "/name:$Name" 2>&1
-    $null = $output
+    & $script:appcmdPath list apppool "/name:$Name" 2>&1 | Out-Null
     return $LASTEXITCODE -eq 0
 }
 
@@ -769,8 +770,7 @@ function Test-IisSite {
     param([string]$Name)
 
     Require-AppCmd
-    $output = & $script:appcmdPath list site "/name:$Name" 2>&1
-    $null = $output
+    & $script:appcmdPath list site "/name:$Name" 2>&1 | Out-Null
     return $LASTEXITCODE -eq 0
 }
 
@@ -895,6 +895,9 @@ function Set-IisWindowsAuthenticationProviders {
     # Keep Windows-auth enabled locations on the same provider list. Mixing
     # Negotiate+NTLM with NTLM-only child apps can make browsers issue a new
     # Windows-auth challenge when navigating between apps.
+    # Removing providers is intentionally idempotent: 183 means the target
+    # collection already has the requested shape, and 4312 is returned by IIS
+    # when the provider entry is absent at this configuration level.
     Invoke-AppCmdOptional -IgnoredExitCodes @(183, 4312) set config $Location `
         '/section:system.webServer/security/authentication/windowsAuthentication' `
         "/-providers.[value='Negotiate']" `
