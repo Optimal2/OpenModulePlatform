@@ -14,8 +14,17 @@ Start by confirming that the correct principal has Portal administrator access.
 Important:
 
 - set `@BootstrapPortalAdminPrincipal` when running bootstrap SQL directly, or use `scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal` so the installer escapes it safely
-- verify that the correct user or group exists in `RolePrincipals`
+- verify that the correct user, OMP user, provider principal, or AD group exists in `RolePrincipals`
 - sign in to the Portal and confirm that the administration pages are available
+
+`RolePrincipals` supports both first-class OMP users and external principals:
+
+- use `OmpUser` when the role should follow a row in `omp.users`
+- use `ADUser` for a direct Windows/AD user assignment
+- use `ADGroup` for large AD groups that should grant access without creating `omp.users` rows for every member
+- use `LocalUser` for identities authenticated by the built-in `lpwd` provider
+
+The built-in auth app is mounted at `/auth`. AD sign-in goes through `/auth/ad`, and local password sign-in goes through `/auth/login`.
 
 ### 2. Create or adjust the instance
 

@@ -3,15 +3,16 @@ using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Models;
 using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Negotiate;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
-using Microsoft.AspNetCore.Server.IISIntegration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -64,18 +65,7 @@ public static class OmpWebHostingExtensions
                     factory.Create(typeof(TAppResource));
             });
 
-        var runningUnderIis = !string.IsNullOrWhiteSpace(
-            Environment.GetEnvironmentVariable("ASPNETCORE_IIS_PHYSICAL_PATH"));
-
-        if (runningUnderIis)
-        {
-            builder.Services.AddAuthentication(IISDefaults.AuthenticationScheme);
-        }
-        else
-        {
-            builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme)
-                .AddNegotiate();
-        }
+        ConfigureOmpAuthentication(builder.Services, builder.Configuration);
 
         builder.Services.AddAuthorization(options =>
         {
@@ -138,6 +128,14 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
 
         return builder;
+    }
+
+    public static IServiceCollection AddOmpCookieAuthentication(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        ConfigureOmpAuthentication(services, configuration);
+        return services;
     }
 
     public static WebApplication UseOmpWebDefaults(
@@ -293,6 +291,63 @@ public static class OmpWebHostingExtensions
         }
 
         return Results.LocalRedirect(safePortalHref);
+    }
+
+    private static void ConfigureOmpAuthentication(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var authOptions = configuration
+            .GetSection(OmpAuthOptions.SectionName)
+            .Get<OmpAuthOptions>() ?? new OmpAuthOptions();
+
+        services.AddOptions<OmpAuthOptions>()
+            .Bind(configuration.GetSection(OmpAuthOptions.SectionName));
+
+        var dataProtectionBuilder = services
+            .AddDataProtection()
+            .SetApplicationName(string.IsNullOrWhiteSpace(authOptions.ApplicationName)
+                ? "OpenModulePlatform"
+                : authOptions.ApplicationName);
+
+        if (!string.IsNullOrWhiteSpace(authOptions.DataProtectionKeyPath))
+        {
+            dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(authOptions.DataProtectionKeyPath));
+        }
+
+        services.AddAuthentication(OmpAuthDefaults.AuthenticationScheme)
+            .AddCookie(OmpAuthDefaults.AuthenticationScheme, options =>
+            {
+                options.Cookie.Name = string.IsNullOrWhiteSpace(authOptions.CookieName)
+                    ? OmpAuthDefaults.CookieName
+                    : authOptions.CookieName;
+                options.Cookie.Path = "/";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.IsEssential = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.LoginPath = authOptions.LoginPath;
+                options.AccessDeniedPath = authOptions.AccessDeniedPath;
+                options.SlidingExpiration = true;
+                options.ExpireTimeSpan = TimeSpan.FromHours(10);
+
+                options.Events = new CookieAuthenticationEvents
+                {
+                    OnRedirectToLogin = context =>
+                    {
+                        var loginPath = string.IsNullOrWhiteSpace(authOptions.LoginPath)
+                            ? "/auth/login"
+                            : authOptions.LoginPath;
+                        var returnUrl = string.Concat(
+                            context.Request.PathBase,
+                            context.Request.Path,
+                            context.Request.QueryString);
+                        var separator = loginPath.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+                        context.Response.Redirect(loginPath + separator + "returnUrl=" + Uri.EscapeDataString(returnUrl));
+                        return Task.CompletedTask;
+                    }
+                };
+            });
     }
 
     /// <summary>
