@@ -15,6 +15,7 @@ Use these files as the main map:
 - `AGENTS.md` - operational rules for Codex and other coding agents.
 - `README.md` - human project overview and quick start.
 - `docs/ARCHITECTURE.md` - platform model and request flows.
+- `docs/AUTHENTICATION_AND_RBAC.md` - shared OMP authentication, users, role principals, and RBAC.
 - `docs/ADMIN_CONFIGURATION.md` - manual Portal administration guidance.
 - `PUBLISH_README.md` - publish helper behavior and local runtime layout.
 - `sql/README.md` - SQL setup and initialization conventions.
@@ -52,13 +53,12 @@ OpenModulePlatform first, then dependent repositories such as IbsPackager.
 Default local paths and endpoints:
 
 ```text
-OpenModulePlatform repo: E:\Linus Dunkers\Documents\GitHub\OpenModulePlatform
-IbsPackager repo:        E:\Linus Dunkers\Documents\GitHub\IbsPackager
+OpenModulePlatform repo: <workspace>\OpenModulePlatform
+Optional consumer repos: <workspace>\IbsPackager, <workspace>\OpenDocViewer
 Runtime root:            E:\OMP
 SQL Server:              localhost
 Database:                OpenModulePlatform
 Portal URL:              http://localhost:8088/
-IbsPackager URL:         http://localhost:8088/ibspackager/
 ```
 
 These are local development defaults. Do not hardcode user-specific paths into

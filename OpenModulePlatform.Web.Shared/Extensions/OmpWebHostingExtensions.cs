@@ -18,6 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.WebUtilities;
 using System.Globalization;
 using System.Net;
 using SystemNetIPNetwork = System.Net.IPNetwork;
@@ -29,7 +30,7 @@ namespace OpenModulePlatform.Web.Shared.Extensions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The shared defaults deliberately stay small: Razor Pages, Windows-integrated
+/// The shared defaults deliberately stay small: Razor Pages, shared OMP cookie
 /// authentication, optional forwarded-header support, and the shared services that
 /// every OMP web application depends on.
 /// </para>
@@ -199,9 +200,9 @@ public static class OmpWebHostingExtensions
             var effectiveCulture = cultureSelectionService.ResolveEffectiveCulture(preferredCulture, options);
             cultureSelectionService.ApplyCookies(context.Response, preferredCulture, effectiveCulture);
 
-            if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+            if (IsSafeLocalReturnUrl(returnUrl))
             {
-                return Results.LocalRedirect(returnUrl);
+                return Results.LocalRedirect(returnUrl!);
             }
 
             return Results.LocalRedirect("/");
@@ -276,8 +277,7 @@ public static class OmpWebHostingExtensions
         }
 
         var safePortalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
-        var canReturnToRequestedUrl = !string.IsNullOrWhiteSpace(returnUrl)
-            && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
+        var canReturnToRequestedUrl = IsSafeLocalReturnUrl(returnUrl)
             && await portalTopBarService.CanAccessReturnUrlAsync(options, returnUrl, targetPermissions, ct);
 
         if (canReturnToRequestedUrl)
@@ -342,13 +342,29 @@ public static class OmpWebHostingExtensions
                             context.Request.PathBase,
                             context.Request.Path,
                             context.Request.QueryString);
-                        var separator = loginPath.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-                        context.Response.Redirect(loginPath + separator + "returnUrl=" + Uri.EscapeDataString(returnUrl));
+                        var safeReturnUrl = IsSafeLocalReturnUrl(returnUrl) ? returnUrl : "/";
+                        context.Response.Redirect(BuildLoginRedirectUrl(loginPath, safeReturnUrl));
                         return Task.CompletedTask;
                     }
                 };
             });
     }
+
+    private static string BuildLoginRedirectUrl(string? configuredLoginPath, string returnUrl)
+    {
+        var loginPath = IsSafeLocalReturnUrl(configuredLoginPath)
+            ? configuredLoginPath!
+            : "/auth/login";
+
+        return QueryHelpers.AddQueryString(loginPath, "returnUrl", returnUrl);
+    }
+
+    private static bool IsSafeLocalReturnUrl(string? returnUrl)
+        => !string.IsNullOrWhiteSpace(returnUrl)
+            && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
+            && returnUrl.StartsWith("/", StringComparison.Ordinal)
+            && !returnUrl.StartsWith("//", StringComparison.Ordinal)
+            && !returnUrl.Contains('\\', StringComparison.Ordinal);
 
     /// <summary>
     /// Applies the forwarded-header trust model defined in configuration.
