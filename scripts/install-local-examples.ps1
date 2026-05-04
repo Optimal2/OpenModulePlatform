@@ -754,7 +754,8 @@ function Test-IisAppPool {
     param([string]$Name)
 
     Require-AppCmd
-    $null = & $script:appcmdPath list apppool "/name:$Name" 2>$null
+    $output = & $script:appcmdPath list apppool "/name:$Name" 2>&1
+    $null = $output
     return $LASTEXITCODE -eq 0
 }
 
@@ -762,7 +763,8 @@ function Test-IisSite {
     param([string]$Name)
 
     Require-AppCmd
-    $null = & $script:appcmdPath list site "/name:$Name" 2>$null
+    $output = & $script:appcmdPath list site "/name:$Name" 2>&1
+    $null = $output
     return $LASTEXITCODE -eq 0
 }
 
@@ -771,7 +773,7 @@ function Get-IisAppName {
 
     Require-AppCmd
     $expected = "$IisSiteName/$AppPath"
-    $output = & $script:appcmdPath list app 2>$null
+    $output = & $script:appcmdPath list app 2>&1
     foreach ($line in @($output)) {
         $text = $line.ToString()
         if ($text -match '^APP "([^"]+)"') {
