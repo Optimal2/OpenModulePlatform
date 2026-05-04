@@ -971,8 +971,8 @@ function Set-WindowsServiceConfiguration {
     $displayArguments = @($arguments)
 
     if (-not [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) {
-        $arguments += @('obj=', $script:resolvedRunAsUser, 'password=', $script:resolvedRunAsPasswordPlain)
-        $displayArguments += @('obj=', $script:resolvedRunAsUser, 'password=', '***')
+        $arguments += @("obj=$script:resolvedRunAsUser", "password=$script:resolvedRunAsPasswordPlain")
+        $displayArguments += @("obj=$script:resolvedRunAsUser", 'password=***')
     }
 
     Invoke-ScChecked -Arguments $arguments -DisplayArguments $displayArguments
