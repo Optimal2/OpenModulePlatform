@@ -37,6 +37,24 @@ $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
 $script:exampleServiceName = 'OpenModulePlatform.Service.ExampleServiceAppModule'
 $script:hostAgentServiceName = 'OpenModulePlatform.HostAgent'
 $script:workerManagerServiceName = 'OpenModulePlatform.WorkerManager'
+$script:authAppPoolName = 'OMP_Auth'
+$script:portalAppPoolName = 'OMP_Portal'
+$script:openDocViewerAppPoolName = 'OMP_OpenDocViewer'
+$script:exampleWebAppPoolName = 'OMP_ExampleWebAppModule'
+$script:exampleWebAppBlazorPoolName = 'OMP_ExampleWebAppBlazorModule'
+$script:exampleServiceWebAppPoolName = 'OMP_ExampleServiceAppModule'
+$script:exampleWorkerWebAppPoolName = 'OMP_ExampleWorkerAppModule'
+$script:iframeWebAppPoolName = 'OMP_iFrameWebAppModule'
+$script:exampleWebAppPoolNames = @(
+    $script:exampleWebAppPoolName,
+    $script:exampleWebAppBlazorPoolName,
+    $script:exampleServiceWebAppPoolName,
+    $script:exampleWorkerWebAppPoolName,
+    $script:iframeWebAppPoolName
+)
+$script:deploymentStopAppPoolNames = @($script:authAppPoolName, $script:portalAppPoolName) + $script:exampleWebAppPoolNames + @($script:openDocViewerAppPoolName)
+$script:deploymentStartAppPoolNames = @($script:portalAppPoolName, $script:authAppPoolName) + $script:exampleWebAppPoolNames + @($script:openDocViewerAppPoolName)
+$script:legacyVirtualAppPoolPrincipals = $script:deploymentStartAppPoolNames | ForEach-Object { "IIS APPPOOL\$_" }
 $script:resolvedRunAsUser = ''
 $script:resolvedRunAsPasswordSecure = $null
 $script:resolvedRunAsCredential = $null
@@ -49,7 +67,7 @@ function Write-Step {
 function Confirm-LocalAction {
     param([string]$Message)
     if ($Yes) { return $true }
-    $answer = Read-Host "$Message [y/N]"
+    $answer = Read-Host "$Message [y/j/N]"
     # Accept English and Swedish yes responses because this helper is commonly run on Swedish
     # developer workstations, while keeping prompts English for repository-neutral automation.
     return $answer -imatch '^(y|yes|j|ja)$'
@@ -79,6 +97,8 @@ function ConvertFrom-SecureStringToPlainText {
 
     # IIS appcmd.exe and Win32_Service.Change still require plain-text passwords. Keep the
     # returned string in the narrowest possible scope and clear script references after use.
+    # The managed string can remain in memory until garbage collection, so this script treats
+    # the conversion as a legacy Windows API boundary rather than a secure storage mechanism.
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
     try {
         return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
@@ -263,6 +283,8 @@ function Publish-OpenModulePlatform {
 
     Push-Location $RepositoryRoot
     try {
+        # Prefer Visual Studio's newer .slnx format when the repository has it, while keeping
+        # compatibility with older checkouts that still use the traditional .sln file.
         $solution = Join-Path $RepositoryRoot 'OpenModulePlatform.slnx'
         if (-not (Test-Path -LiteralPath $solution)) {
             $solution = Join-Path $RepositoryRoot 'OpenModulePlatform.sln'
@@ -408,7 +430,7 @@ function Stop-IisAppPoolsForDeployment {
         return
     }
 
-    foreach ($pool in @('OMP_Auth', 'OMP_Portal', 'OMP_ExampleWebAppModule', 'OMP_ExampleWebAppBlazorModule', 'OMP_ExampleServiceAppModule', 'OMP_ExampleWorkerAppModule', 'OMP_iFrameWebAppModule', 'OMP_OpenDocViewer')) {
+    foreach ($pool in $script:deploymentStopAppPoolNames) {
         if (Test-IisAppPool -Name $pool) {
             Invoke-AppCmdOptional stop apppool "/apppool.name:$pool"
         }
@@ -663,16 +685,7 @@ function Remove-LegacyAppPoolDatabaseUsers {
 
     Write-Step 'Removing legacy virtual app pool database users'
 
-    $principals = @(
-        'IIS APPPOOL\OMP_Portal',
-        'IIS APPPOOL\OMP_Auth',
-        'IIS APPPOOL\OMP_ExampleWebAppModule',
-        'IIS APPPOOL\OMP_ExampleWebAppBlazorModule',
-        'IIS APPPOOL\OMP_ExampleServiceAppModule',
-        'IIS APPPOOL\OMP_ExampleWorkerAppModule',
-        'IIS APPPOOL\OMP_iFrameWebAppModule',
-        'IIS APPPOOL\OMP_OpenDocViewer'
-    )
+    $principals = $script:legacyVirtualAppPoolPrincipals
 
     $values = @()
     foreach ($principal in $principals) {
@@ -825,8 +838,9 @@ function Ensure-IisAppPool {
             Invoke-NativeCheckedRedacted -FilePath $script:appcmdPath -Arguments $arguments -DisplayArguments $displayArguments
         }
         finally {
-            # This drops the script reference only. Managed strings cannot be reliably zeroed,
-            # so the plain-text password scope is intentionally kept short.
+            # This drops the script reference only. Managed strings cannot be reliably zeroed
+            # and may remain until garbage collection, so the plain-text password scope is
+            # intentionally kept short.
             $runAsPasswordPlain = ''
         }
     }
@@ -1016,9 +1030,10 @@ function Set-WindowsServiceConfiguration {
         Invoke-ScChecked -Arguments @('description', $ServiceName, $Description)
     }
     finally {
-        # This drops the script reference only. Managed strings cannot be reliably zeroed,
-        # so the plain-text password scope is intentionally kept short.
-        $runAsPasswordPlain = ''
+            # This drops the script reference only. Managed strings cannot be reliably zeroed
+            # and may remain until garbage collection, so the plain-text password scope is
+            # intentionally kept short.
+            $runAsPasswordPlain = ''
     }
 }
 
@@ -1141,23 +1156,23 @@ function Ensure-IisExamples {
         Invoke-AppCmdChecked set vdir "$IisSiteName/" "/physicalPath:$script:portalPath"
     }
 
-    Invoke-AppCmdChecked set app "$IisSiteName/" '/applicationPool:OMP_Portal'
+    Invoke-AppCmdChecked set app "$IisSiteName/" ('/applicationPool:{0}' -f $script:portalAppPoolName)
     Set-IisAuthentication -Location $IisSiteName -AnonymousEnabled $true
 
     Ensure-IisWebApplication `
         -AppPath 'auth' `
         -PhysicalPath $script:authAppPath `
-        -AppPoolName 'OMP_Auth' `
+        -AppPoolName $script:authAppPoolName `
         -AnonymousEnabled $true
 
     Set-IisAuthentication -Location "$IisSiteName/auth" -AnonymousEnabled $true -WindowsEnabled $true
 
     $apps = @(
-        @{ Path = 'ExampleWebAppModule'; Pool = 'OMP_ExampleWebAppModule'; Anonymous = $true },
-        @{ Path = 'ExampleWebAppBlazorModule'; Pool = 'OMP_ExampleWebAppBlazorModule'; Anonymous = $true },
-        @{ Path = 'ExampleServiceAppModule'; Pool = 'OMP_ExampleServiceAppModule'; Anonymous = $true },
-        @{ Path = 'ExampleWorkerAppModule'; Pool = 'OMP_ExampleWorkerAppModule'; Anonymous = $true },
-        @{ Path = 'iFrameWebAppModule'; Pool = 'OMP_iFrameWebAppModule'; Anonymous = $true }
+        @{ Path = 'ExampleWebAppModule'; Pool = $script:exampleWebAppPoolName; Anonymous = $true },
+        @{ Path = 'ExampleWebAppBlazorModule'; Pool = $script:exampleWebAppBlazorPoolName; Anonymous = $true },
+        @{ Path = 'ExampleServiceAppModule'; Pool = $script:exampleServiceWebAppPoolName; Anonymous = $true },
+        @{ Path = 'ExampleWorkerAppModule'; Pool = $script:exampleWorkerWebAppPoolName; Anonymous = $true },
+        @{ Path = 'iFrameWebAppModule'; Pool = $script:iframeWebAppPoolName; Anonymous = $true }
     )
 
     foreach ($app in $apps) {
@@ -1175,12 +1190,12 @@ function Ensure-IisExamples {
             Ensure-IisWebApplication `
                 -AppPath $OpenDocViewerAppPath `
                 -PhysicalPath $odvPhysicalPath `
-                -AppPoolName 'OMP_OpenDocViewer' `
+                -AppPoolName $script:openDocViewerAppPoolName `
                 -AnonymousEnabled $true
         }
     }
 
-    foreach ($pool in @('OMP_Portal', 'OMP_Auth', 'OMP_ExampleWebAppModule', 'OMP_ExampleWebAppBlazorModule', 'OMP_ExampleServiceAppModule', 'OMP_ExampleWorkerAppModule', 'OMP_iFrameWebAppModule', 'OMP_OpenDocViewer')) {
+    foreach ($pool in $script:deploymentStartAppPoolNames) {
         if (Test-IisAppPool -Name $pool) {
             Invoke-AppCmdOptional start apppool "/apppool.name:$pool"
         }
