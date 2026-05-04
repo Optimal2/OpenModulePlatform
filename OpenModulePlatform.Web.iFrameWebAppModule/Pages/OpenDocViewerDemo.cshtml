@@ -1,0 +1,33 @@
+@page "/opendocviewer-demo"
+@model OpenModulePlatform.Web.iFrameWebAppModule.Pages.OpenDocViewerDemoModel
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Example integration"]</div>
+        <h1>@L["OpenDocViewer integration"]</h1>
+        <p class="lede">
+            @L["This page embeds OpenDocViewer by passing a session URL to a Portable Document Bundle endpoint in the hosting web application."]
+        </p>
+    </div>
+</div>
+
+<section class="card odv-demo-panel">
+    <div class="odv-demo-toolbar">
+        <a class="action-link" href="@Model.OpenDocViewerNewTabUrl" target="_blank" rel="noopener">
+            @L["Open ODV in new tab"]
+        </a>
+        <span class="muted small-text">@L["The sample document is OpenDocViewer public/sample.pdf."]</span>
+    </div>
+    <script>
+        window.ODV_BOOTSTRAP = @Html.Raw(Model.BundleJson);
+    </script>
+    <div class="odv-demo-frame-shell">
+        <iframe
+            class="odv-demo-frame"
+            src="@Model.OpenDocViewerFrameUrl"
+            title="@L["OpenDocViewer sample document"]"
+            loading="eager"
+            referrerpolicy="strict-origin-when-cross-origin">
+        </iframe>
+    </div>
+</section>

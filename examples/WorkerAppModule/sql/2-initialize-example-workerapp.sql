@@ -29,6 +29,7 @@ DECLARE @WorkerWebAppId int;
 DECLARE @WorkerWebAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111322';
 DECLARE @WorkerAppId int;
 DECLARE @WorkerAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111323';
+DECLARE @WorkerInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111324';
 DECLARE @WorkerViewPermissionId int;
 DECLARE @WorkerAdminPermissionId int;
 DECLARE @InitialWorkerConfigId int;
@@ -176,24 +177,30 @@ IF @PortalAdminsRoleId IS NOT NULL
     INSERT INTO omp.RolePermissions(RoleId, PermissionId)
     VALUES(@PortalAdminsRoleId, @WorkerAdminPermissionId);
 
-IF NOT EXISTS
-(
-    SELECT 1
-    FROM omp.Artifacts
-    WHERE AppId = @WorkerAppId
-      AND Version = N'1.0.0'
-      AND PackageType = N'folder'
-      AND TargetName = N'win-x64'
-)
-    INSERT INTO omp.Artifacts(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(@WorkerAppId, N'1.0.0', N'folder', N'win-x64', N'publish/ExampleWorkerAppModule', 1);
-
-SELECT @WorkerArtifactId = ArtifactId
+SELECT TOP (1) @WorkerArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WorkerAppId
   AND Version = N'1.0.0'
-  AND PackageType = N'folder'
-  AND TargetName = N'win-x64';
+ORDER BY CASE WHEN PackageType = N'worker' AND TargetName = N'example-workerapp' THEN 0 ELSE 1 END,
+         ArtifactId;
+
+IF @WorkerArtifactId IS NULL
+BEGIN
+    INSERT INTO omp.Artifacts(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(@WorkerAppId, N'1.0.0', N'worker', N'example-workerapp', N'example-workerapp/worker/1.0.0', 1);
+
+    SELECT @WorkerArtifactId = CONVERT(int, SCOPE_IDENTITY());
+END
+ELSE
+BEGIN
+    UPDATE omp.Artifacts
+    SET PackageType = N'worker',
+        TargetName = N'example-workerapp',
+        RelativePath = N'example-workerapp/worker/1.0.0',
+        IsEnabled = 1,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ArtifactId = @WorkerArtifactId;
+END
 
 IF EXISTS (SELECT 1 FROM omp.AppWorkerDefinitions WHERE AppId = @WorkerAppId)
 BEGIN
@@ -388,7 +395,7 @@ BEGIN
         N'example_workerapp_worker',
         N'Example Managed Worker',
         N'Primary manager-driven worker app instance for the example module',
-        N'C:\Program Files\OpenModulePlatform\WorkerApps\ExampleWorkerAppModule',
+        NULL,
         N'default',
         @WorkerArtifactId,
         @InitialWorkerConfigId,
@@ -406,7 +413,7 @@ BEGIN
         AppInstanceKey = N'example_workerapp_worker',
         DisplayName = N'Example Managed Worker',
         Description = N'Primary manager-driven worker app instance for the example module',
-        InstallPath = N'C:\Program Files\OpenModulePlatform\WorkerApps\ExampleWorkerAppModule',
+        InstallPath = NULL,
         InstallationName = N'default',
         ArtifactId = @WorkerArtifactId,
         ConfigId = @InitialWorkerConfigId,
@@ -417,6 +424,68 @@ BEGIN
         UpdatedUtc = SYSUTCDATETIME()
     WHERE AppInstanceId = @WorkerAppInstanceId;
 END
+
+MERGE omp.WorkerInstances AS target
+USING
+(
+    SELECT @WorkerInstanceId AS WorkerInstanceId,
+           @WorkerAppInstanceId AS AppInstanceId,
+           @SampleHostId AS HostId,
+           @WorkerArtifactId AS ArtifactId,
+           N'example_workerapp_worker_default' AS WorkerInstanceKey,
+           N'Example WorkerApp Worker Default' AS DisplayName,
+           N'Default manager-driven worker process for the example WorkerApp module.' AS Description,
+           CAST(NULL AS nvarchar(max)) AS ConfigurationJson,
+           1 AS IsEnabled,
+           1 AS IsAllowed,
+           1 AS DesiredState,
+           411 AS SortOrder
+) AS source
+ON target.WorkerInstanceId = source.WorkerInstanceId
+WHEN MATCHED THEN
+    UPDATE SET AppInstanceId = source.AppInstanceId,
+               HostId = source.HostId,
+               ArtifactId = source.ArtifactId,
+               WorkerInstanceKey = source.WorkerInstanceKey,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               ConfigurationJson = source.ConfigurationJson,
+               IsEnabled = source.IsEnabled,
+               IsAllowed = source.IsAllowed,
+               DesiredState = source.DesiredState,
+               SortOrder = source.SortOrder,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT
+    (
+        WorkerInstanceId,
+        AppInstanceId,
+        HostId,
+        ArtifactId,
+        WorkerInstanceKey,
+        DisplayName,
+        Description,
+        ConfigurationJson,
+        IsEnabled,
+        IsAllowed,
+        DesiredState,
+        SortOrder
+    )
+    VALUES
+    (
+        source.WorkerInstanceId,
+        source.AppInstanceId,
+        source.HostId,
+        source.ArtifactId,
+        source.WorkerInstanceKey,
+        source.DisplayName,
+        source.Description,
+        source.ConfigurationJson,
+        source.IsEnabled,
+        source.IsAllowed,
+        source.DesiredState,
+        source.SortOrder
+    );
 
 IF NOT EXISTS
 (
@@ -446,7 +515,7 @@ BEGIN
         N'example_workerapp_worker',
         N'Example Managed Worker',
         N'Primary manager-driven worker app instance for the example module',
-        N'C:\Program Files\OpenModulePlatform\WorkerApps\ExampleWorkerAppModule',
+        NULL,
         N'default',
         @WorkerArtifactId,
         @InitialWorkerConfigId,

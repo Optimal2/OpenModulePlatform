@@ -1,0 +1,85 @@
+@page "/opendocviewer-demo"
+@inherits ExampleWebAppBlazorModuleComponentBase
+@using Microsoft.AspNetCore.Http
+@using Microsoft.Extensions.Options
+@using OpenModulePlatform.Web.Shared.OpenDocViewer
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IOptions<OpenDocViewerExampleOptions> OpenDocViewerOptions
+
+<PageTitle>@PageTitle</PageTitle>
+
+@if (!AuthorizationResolved)
+{
+    <div class="empty-state">@L["Loading OpenDocViewer integration..."]</div>
+}
+else if (PageError is not null)
+{
+    <OmpErrorView Model="@PageError" />
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <div class="eyebrow">@L["Example integration"]</div>
+            <h1>@L["OpenDocViewer integration"]</h1>
+            <p class="lede">
+                @L["This page embeds OpenDocViewer by passing a session URL to a Portable Document Bundle endpoint in the hosting web application."]
+            </p>
+        </div>
+    </div>
+
+    <section class="card odv-demo-panel">
+        <div class="odv-demo-toolbar">
+            <a class="action-link" href="@OpenDocViewerNewTabUrl" target="_blank" rel="noopener">
+                @L["Open ODV in new tab"]
+            </a>
+            <span class="muted small-text">@L["The sample document is OpenDocViewer public/sample.pdf."]</span>
+        </div>
+        <div class="odv-demo-frame-shell">
+            <iframe
+                class="odv-demo-frame"
+                src="@OpenDocViewerFrameUrl"
+                title="@L["OpenDocViewer sample document"]"
+                loading="eager"
+                referrerpolicy="strict-origin-when-cross-origin">
+            </iframe>
+        </div>
+    </section>
+}
+
+@code {
+    private string OpenDocViewerFrameUrl { get; set; } = "/opendocviewer/";
+
+    private string OpenDocViewerNewTabUrl => OpenDocViewerFrameUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SetPageTitle(L["OpenDocViewer integration"]);
+
+        if (await EnsureAnyPermissionAsync(
+                CancellationToken.None,
+                ExampleWebAppBlazorModulePermissions.View,
+                ExampleWebAppBlazorModulePermissions.Admin))
+        {
+            var bundleUrl = BuildBundleUrl();
+            OpenDocViewerFrameUrl = OpenDocViewerExampleBundleFactory.BuildFrameUrl(
+                OpenDocViewerOptions.Value,
+                bundleUrl);
+        }
+    }
+
+    private string BuildBundleUrl()
+    {
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext is not null)
+        {
+            return OpenDocViewerExampleBundleFactory.ToAbsoluteUrl(
+                httpContext.Request,
+                OpenDocViewerExampleBundleFactory.DefaultBundleEndpointPath);
+        }
+
+        return OpenDocViewerExampleBundleFactory.ToAbsoluteUrl(
+            new Uri(NavigationManager.BaseUri),
+            OpenDocViewerExampleBundleFactory.DefaultBundleEndpointPath);
+    }
+}
