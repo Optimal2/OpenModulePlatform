@@ -1,4 +1,4 @@
--- File: examples/WorkerAppModule/sql/1-setup-example-workerapp.sql
+-- File: examples/WorkerAppModule/Sql/1-setup-example-workerapp.sql
 /*
 Creates the example Worker App module schema and tables.
 

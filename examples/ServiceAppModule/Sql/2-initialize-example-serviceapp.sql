@@ -1,4 +1,4 @@
--- File: examples/ServiceAppModule/sql/2-initialize-example-serviceapp.sql
+-- File: examples/ServiceAppModule/Sql/2-initialize-example-serviceapp.sql
 /*
 Seeds default values and OMP registration rows for the example Service App module.
 
