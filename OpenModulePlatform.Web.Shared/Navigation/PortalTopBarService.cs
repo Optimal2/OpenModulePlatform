@@ -257,7 +257,8 @@ public sealed class PortalTopBarService
             OverflowToggleTextKey = "More",
             PortalAdminToggleTextKey = "Admin",
             LanguageToggleTextKey = "Language",
-            LogoutUrl = logoutUrl
+            LogoutUrl = logoutUrl,
+            SettingsUrl = PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath)
         };
     }
 

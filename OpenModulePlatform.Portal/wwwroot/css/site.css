@@ -584,6 +584,36 @@ textarea {
     margin-bottom: 14px;
 }
 
+.settings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0 12px;
+}
+
+.settings-tabs__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.settings-tabs__link:hover,
+.settings-tabs__link.is-active {
+    border-color: var(--link);
+    background: var(--accent);
+    color: var(--link-hover);
+}
+
+.settings-panel {
+    max-width: 760px;
+}
+
 code {
     font-family: ui-monospace, Consolas, monospace;
 }

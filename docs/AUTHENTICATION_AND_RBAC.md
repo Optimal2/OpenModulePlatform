@@ -68,6 +68,12 @@ The core user tables are:
 
 An OMP user row is required when the identity needs local password sign-in or durable OMP-owned user state. It is optional for AD identities that are only authorized through direct AD user or AD group role principals.
 
+## User Settings
+
+The Portal exposes `/account/settings` for the signed-in OMP user. The first version lets the user update `omp.users.display_name`, which is core user state and updates `omp.users.updated_at`.
+
+Portal-specific user settings live under the Portal schema. `omp_portal.user_settings.admin_metrics_collapsed` controls only the default expanded/collapsed state of the Portal admin metrics panel on page load. Clicks on the panel do not auto-save in this iteration. A missing row, or `admin_metrics_collapsed = false`, means the admin panel is expanded by default.
+
 ## RBAC Tables
 
 RBAC is stored in:

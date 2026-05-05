@@ -454,6 +454,13 @@
     text-align: left;
 }
 
+.portal-topbar__profile-name {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+}
+
 .portal-topbar__profile-copy-name:hover,
 .portal-topbar__profile-copy-name:focus-visible {
     background: var(--surface-muted);
@@ -528,6 +535,28 @@
 .portal-topbar__profile-action-button:focus-visible {
     color: var(--text);
     background: var(--surface-muted);
+    outline: none;
+}
+
+.portal-topbar__profile-settings-link {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 34px;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 0.88rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.portal-topbar__profile-settings-link:hover,
+.portal-topbar__profile-settings-link:focus-visible {
+    background: var(--surface-muted);
+    color: var(--text);
     outline: none;
 }
 
