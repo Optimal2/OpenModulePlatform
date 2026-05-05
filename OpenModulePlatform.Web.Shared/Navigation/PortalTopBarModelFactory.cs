@@ -1,5 +1,6 @@
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Security;
 using System.Globalization;
 
 namespace OpenModulePlatform.Web.Shared.Navigation;
@@ -49,7 +50,8 @@ public static class PortalTopBarModelFactory
             AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>(),
             OverflowToggleTextKey = "More",
             CollapsedToggleTextKey = "Modules",
-            LanguageToggleTextKey = "Language"
+            LanguageToggleTextKey = "Language",
+            LogoutUrl = OmpAuthDefaults.LogoutPath
         };
     }
 

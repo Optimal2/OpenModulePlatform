@@ -1,10 +1,12 @@
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Security.Claims;
 
@@ -20,17 +22,20 @@ public sealed class PortalTopBarService
     private readonly SqlConnectionFactory _db;
     private readonly RbacService _rbac;
     private readonly CultureSelectionService _cultureSelectionService;
+    private readonly IOptions<OmpAuthOptions> _authOptions;
     private readonly ILogger<PortalTopBarService> _log;
 
     public PortalTopBarService(
         SqlConnectionFactory db,
         RbacService rbac,
         CultureSelectionService cultureSelectionService,
+        IOptions<OmpAuthOptions> authOptions,
         ILogger<PortalTopBarService> log)
     {
         _db = db;
         _rbac = rbac;
         _cultureSelectionService = cultureSelectionService;
+        _authOptions = authOptions;
         _log = log;
     }
 
@@ -68,17 +73,17 @@ public sealed class PortalTopBarService
                 .Where(link => !string.IsNullOrWhiteSpace(link.Href))
                 .ToArray();
 
-            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options);
+            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options, GetLogoutUrl());
         }
         catch (SqlException ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
         }
         catch (InvalidOperationException ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
         }
     }
 
@@ -173,17 +178,17 @@ public sealed class PortalTopBarService
                 .Where(link => !string.IsNullOrWhiteSpace(link.Href))
                 .ToArray();
 
-            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options);
+            return CreateModel(topBarOptions, portalLink, cultureSelection, currentUserName, roleContext, isPortalAdmin, moduleLinks, options, GetLogoutUrl());
         }
         catch (SqlException ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
         }
         catch (InvalidOperationException ex)
         {
             _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options);
+            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
         }
     }
 
@@ -200,7 +205,8 @@ public sealed class PortalTopBarService
         PortalTopBarLink portalLink,
         CultureSelectionResult cultureSelection,
         ClaimsPrincipal user,
-        WebAppOptions options)
+        WebAppOptions options,
+        string logoutUrl)
         => CreateModel(
             topBarOptions,
             portalLink,
@@ -209,7 +215,8 @@ public sealed class PortalTopBarService
             UserRoleContext.Empty,
             isPortalAdmin: false,
             moduleLinks: Array.Empty<PortalTopBarLink>(),
-            options);
+            options,
+            logoutUrl);
 
     private static PortalTopBarModel CreateModel(
         PortalTopBarOptions topBarOptions,
@@ -219,38 +226,45 @@ public sealed class PortalTopBarService
         UserRoleContext roleContext,
         bool isPortalAdmin,
         IReadOnlyList<PortalTopBarLink> moduleLinks,
-        WebAppOptions options)
-        {
-            var portalAdminSections = isPortalAdmin
-                ? PortalAdminNavigation.CreateSections(relativePath => PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, relativePath))
-                : Array.Empty<PortalAdminMenuSection>();
+        WebAppOptions options,
+        string logoutUrl)
+    {
+        var portalAdminSections = isPortalAdmin
+            ? PortalAdminNavigation.CreateSections(relativePath => PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, relativePath))
+            : Array.Empty<PortalAdminMenuSection>();
 
-            return new()
-            {
-                IsVisible = true,
-                PortalLink = portalLink,
-                ModuleLinks = moduleLinks,
-                Links = [portalLink, .. moduleLinks],
-                IsPortalAdmin = isPortalAdmin,
-                PortalAdminSections = portalAdminSections,
-                PortalAdminLinks = portalAdminSections
-                    .SelectMany(section => section.Items.Select(item => new PortalTopBarLink(item.TextKey, item.Href)))
-                    .ToArray(),
-                LanguageOptions = CreateLanguageOptions(options, cultureSelection),
-                PreferredCulture = cultureSelection.PreferredCulture,
-                EffectiveCulture = cultureSelection.EffectiveCulture,
-                PreferredCultureDisplayText = cultureSelection.PreferredCultureDisplayText,
-                EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
-                IsCultureFallback = cultureSelection.IsFallback,
-                CurrentUserName = currentUserName,
-                AvailableRoles = roleContext.AvailableRoles,
-                ActiveRoleId = roleContext.ActiveRoleId,
-                ActiveRoleName = roleContext.ActiveRoleName,
-                OverflowToggleTextKey = "More",
-                PortalAdminToggleTextKey = "Admin",
-                LanguageToggleTextKey = "Language"
-            };
-        }
+        return new()
+        {
+            IsVisible = true,
+            PortalLink = portalLink,
+            ModuleLinks = moduleLinks,
+            Links = [portalLink, .. moduleLinks],
+            IsPortalAdmin = isPortalAdmin,
+            PortalAdminSections = portalAdminSections,
+            PortalAdminLinks = portalAdminSections
+                .SelectMany(section => section.Items.Select(item => new PortalTopBarLink(item.TextKey, item.Href)))
+                .ToArray(),
+            LanguageOptions = CreateLanguageOptions(options, cultureSelection),
+            PreferredCulture = cultureSelection.PreferredCulture,
+            EffectiveCulture = cultureSelection.EffectiveCulture,
+            PreferredCultureDisplayText = cultureSelection.PreferredCultureDisplayText,
+            EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
+            IsCultureFallback = cultureSelection.IsFallback,
+            CurrentUserName = currentUserName,
+            AvailableRoles = roleContext.AvailableRoles,
+            ActiveRoleId = roleContext.ActiveRoleId,
+            ActiveRoleName = roleContext.ActiveRoleName,
+            OverflowToggleTextKey = "More",
+            PortalAdminToggleTextKey = "Admin",
+            LanguageToggleTextKey = "Language",
+            LogoutUrl = logoutUrl
+        };
+    }
+
+    private string GetLogoutUrl()
+        => string.IsNullOrWhiteSpace(_authOptions.Value.LogoutPath)
+            ? OmpAuthDefaults.LogoutPath
+            : _authOptions.Value.LogoutPath;
 
     private static IReadOnlyList<PortalTopBarCultureOption> CreateLanguageOptions(
         WebAppOptions options,

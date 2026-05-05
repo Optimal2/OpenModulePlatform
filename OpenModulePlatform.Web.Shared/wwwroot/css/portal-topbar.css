@@ -531,6 +531,11 @@
     outline: none;
 }
 
+.portal-topbar__logout-form {
+    display: inline-flex;
+    margin: 0;
+}
+
 .portal-topbar__profile-current-role {
     display: block;
     min-width: 0;
@@ -658,4 +663,3 @@
 .portal-topbar__profile-role-link.is-current {
     font-weight: 700;
 }
-
