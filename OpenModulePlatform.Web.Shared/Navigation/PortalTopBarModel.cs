@@ -7,6 +7,8 @@ namespace OpenModulePlatform.Web.Shared.Navigation;
 /// </summary>
 public sealed class PortalTopBarModel
 {
+    public const string DefaultSettingsPath = "/account/settings";
+
     public static PortalTopBarModel Hidden { get; } = new()
     {
         IsVisible = false,
@@ -24,7 +26,8 @@ public sealed class PortalTopBarModel
         PreferredCultureDisplayText = "English",
         EffectiveCultureDisplayText = "English",
         AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>(),
-        LogoutUrl = OmpAuthDefaults.LogoutPath
+        LogoutUrl = OmpAuthDefaults.LogoutPath,
+        SettingsUrl = DefaultSettingsPath
     };
 
     public bool IsVisible { get; init; }
@@ -73,4 +76,6 @@ public sealed class PortalTopBarModel
     public string LanguageToggleTextKey { get; init; } = "Language";
 
     public string LogoutUrl { get; init; } = OmpAuthDefaults.LogoutPath;
+
+    public string SettingsUrl { get; init; } = DefaultSettingsPath;
 }

@@ -1,0 +1,69 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Account.SettingsModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Settings"]</div>
+        <h2>@L["Settings"]</h2>
+        <p class="lede">@L["Manage your OMP user profile and portal defaults."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<nav class="settings-tabs" aria-label="@L["Settings"]">
+    <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.UserTab) ? " is-active" : string.Empty)"
+       asp-page="/Account/Settings"
+       asp-route-tab="@SettingsModel.UserTab">@L["User"]</a>
+    <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.PortalTab) ? " is-active" : string.Empty)"
+       asp-page="/Account/Settings"
+       asp-route-tab="@SettingsModel.PortalTab">@L["Portal"]</a>
+</nav>
+
+@if (Model.IsActiveTab(SettingsModel.UserTab))
+{
+    <form method="post" asp-page-handler="User" class="card form-grid settings-panel">
+        <div class="form-field">
+            <label asp-for="UserInput.DisplayName">@L["Display name"]</label>
+            <input asp-for="UserInput.DisplayName" maxlength="@OpenModulePlatform.Portal.Services.PortalUserSettingsService.DisplayNameMaxLength" />
+            <span asp-validation-for="UserInput.DisplayName" class="field-validation-error"></span>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit">@L["Save"]</button>
+        </div>
+    </form>
+}
+else
+{
+    @if (Model.IsPortalAdmin)
+    {
+        <form method="post" asp-page-handler="Portal" class="card form-grid settings-panel">
+            <h3>@L["Admin"]</h3>
+            <div class="form-field checkbox-row checkbox-row--boxed">
+                <input asp-for="PortalInput.AdminMetricsCollapsed" type="checkbox" />
+                <label for="PortalInput_AdminMetricsCollapsed">@L["Collapse admin overview by default"]</label>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Save"]</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <div class="card empty-state settings-panel">@L["No portal settings are available."]</div>
+    }
+}
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

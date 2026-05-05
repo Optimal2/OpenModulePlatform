@@ -145,20 +145,29 @@
                         <div class="portal-topbar__profile-identity">
                             <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
                             <div class="portal-topbar__profile-user-row">
-                                <button type="button"
-                                        class="portal-topbar__profile-copy-name"
-                                        title="@L["Copy full user name"]"
-                                        aria-label="@L["Copy full user name"]"
-                                        data-copy-to-clipboard="true"
-                                        data-copy-text="@Model.CurrentUserName">
-                                    <span class="portal-topbar__profile-current-user" title="@Model.CurrentUserName">@currentUserDisplayName</span>
-                                    <span class="portal-topbar__profile-copy-inline-icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                            <rect x="9" y="9" width="10" height="10" rx="2"></rect>
-                                            <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
-                                        </svg>
+                                @if (Model.IsPortalAdmin)
+                                {
+                                    <button type="button"
+                                            class="portal-topbar__profile-copy-name"
+                                            title="@L["Copy full user name"]"
+                                            aria-label="@L["Copy full user name"]"
+                                            data-copy-to-clipboard="true"
+                                            data-copy-text="@Model.CurrentUserName">
+                                        <span class="portal-topbar__profile-current-user" title="@Model.CurrentUserName">@currentUserDisplayName</span>
+                                        <span class="portal-topbar__profile-copy-inline-icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                                <rect x="9" y="9" width="10" height="10" rx="2"></rect>
+                                                <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="portal-topbar__profile-name">
+                                        <span class="portal-topbar__profile-current-user">@currentUserDisplayName</span>
                                     </span>
-                                </button>
+                                }
                                 <form method="post" action="@Model.LogoutUrl" class="portal-topbar__logout-form">
                                     <button type="submit"
                                             class="portal-topbar__profile-action-button"
@@ -174,6 +183,7 @@
                                     </button>
                                 </form>
                             </div>
+                            <a class="portal-topbar__profile-settings-link" href="@Model.SettingsUrl">@L["Settings"]</a>
                         </div>
                         <div class="portal-topbar__profile-section">
                             <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>
