@@ -95,36 +95,97 @@ function Invoke-NativeChecked {
     }
 }
 
-function Get-SqlcmdBaseArguments {
+function Get-SqlConnectionString {
     param([string]$TargetDatabase)
 
-    $args = @('-S', $script:SqlServer, '-d', $TargetDatabase, '-b')
+    Add-Type -AssemblyName System.Data
+    $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
+    $builder['Data Source'] = $script:SqlServer
+    $builder['Initial Catalog'] = $TargetDatabase
+    $builder['TrustServerCertificate'] = $true
     if ([string]::Equals($script:SqlAuthentication, 'SqlLogin', [StringComparison]::OrdinalIgnoreCase)) {
-        $args += @('-U', $script:SqlUser, '-P', $script:SqlPassword)
+        $builder['Integrated Security'] = $false
+        $builder['User ID'] = $script:SqlUser
+        $builder['Password'] = $script:SqlPassword
     }
     else {
-        $args += '-E'
+        $builder['Integrated Security'] = $true
     }
 
-    return $args
+    return $builder.ConnectionString
+}
+
+function Split-SqlBatches {
+    param([Parameter(Mandatory = $true)][string]$SqlText)
+
+    $batches = New-Object System.Collections.Generic.List[string]
+    $reader = New-Object System.IO.StringReader($SqlText)
+    $builder = New-Object System.Text.StringBuilder
+
+    while ($true) {
+        $line = $reader.ReadLine()
+        if ($null -eq $line) {
+            break
+        }
+
+        if ($line -match '^\s*GO(?:\s+([0-9]+))?\s*(?:--.*)?$') {
+            $batch = $builder.ToString()
+            if (-not [string]::IsNullOrWhiteSpace($batch)) {
+                $repeat = 1
+                if ($Matches[1]) {
+                    $repeat = [int]$Matches[1]
+                }
+
+                for ($i = 0; $i -lt $repeat; $i++) {
+                    $batches.Add($batch)
+                }
+            }
+
+            [void]$builder.Clear()
+            continue
+        }
+
+        [void]$builder.AppendLine($line)
+    }
+
+    $lastBatch = $builder.ToString()
+    if (-not [string]::IsNullOrWhiteSpace($lastBatch)) {
+        $batches.Add($lastBatch)
+    }
+
+    return $batches
 }
 
 function Invoke-SqlText {
     param(
         [Parameter(Mandatory = $true)][string]$Query,
-        [string]$TargetDatabase = $script:Database
+        [string]$TargetDatabase = $script:Database,
+        [string]$SourceName = '<inline SQL>'
     )
 
-    Require-Command sqlcmd
-    $tempPath = [System.IO.Path]::GetTempFileName()
-    Set-Content -LiteralPath $tempPath -Value $Query -Encoding UTF8
+    $connection = New-Object System.Data.SqlClient.SqlConnection (Get-SqlConnectionString -TargetDatabase $TargetDatabase)
+    $connection.Open()
     try {
-        $args = Get-SqlcmdBaseArguments -TargetDatabase $TargetDatabase
-        $args += @('-i', $tempPath)
-        Invoke-NativeChecked sqlcmd @args
+        $batchNumber = 0
+        foreach ($batch in (Split-SqlBatches -SqlText $Query)) {
+            $batchNumber++
+            $command = $connection.CreateCommand()
+            $command.CommandText = $batch
+            # Finite timeout avoids indefinite hangs while still allowing large cleanup scripts.
+            $command.CommandTimeout = 3600
+            try {
+                [void]$command.ExecuteNonQuery()
+            }
+            catch {
+                throw "SQL failed in '$SourceName' batch $batchNumber on database '$TargetDatabase'. $($_.Exception.Message)"
+            }
+            finally {
+                $command.Dispose()
+            }
+        }
     }
     finally {
-        Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        $connection.Dispose()
     }
 }
 
