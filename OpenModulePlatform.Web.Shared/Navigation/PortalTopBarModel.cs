@@ -1,3 +1,5 @@
+using OpenModulePlatform.Web.Shared.Security;
+
 namespace OpenModulePlatform.Web.Shared.Navigation;
 
 /// <summary>
@@ -21,7 +23,8 @@ public sealed class PortalTopBarModel
         EffectiveCulture = "en-US",
         PreferredCultureDisplayText = "English",
         EffectiveCultureDisplayText = "English",
-        AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>()
+        AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>(),
+        LogoutUrl = OmpAuthDefaults.LogoutPath
     };
 
     public bool IsVisible { get; init; }
@@ -68,4 +71,6 @@ public sealed class PortalTopBarModel
     public string PortalAdminToggleTextKey { get; init; } = "Admin";
 
     public string LanguageToggleTextKey { get; init; } = "Language";
+
+    public string LogoutUrl { get; init; } = OmpAuthDefaults.LogoutPath;
 }

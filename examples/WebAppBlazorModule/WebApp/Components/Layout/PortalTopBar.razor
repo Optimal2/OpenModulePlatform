@@ -151,18 +151,20 @@
                                         </svg>
                                     </span>
                                 </button>
-                                <button type="button"
-                                        class="portal-topbar__profile-action-button"
-                                        title="@L["Log out"]"
-                                        aria-label="@L["Log out"]">
-                                    <span class="portal-topbar__icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                                            <path d="M14 8l4 4-4 4"></path>
-                                            <path d="M18 12H9"></path>
-                                            <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5"></path>
-                                        </svg>
-                                    </span>
-                                </button>
+                                <form method="post" action="@_portalTopBar.LogoutUrl" class="portal-topbar__logout-form" data-enhance="false">
+                                    <button type="submit"
+                                            class="portal-topbar__profile-action-button"
+                                            title="@L["Log out"]"
+                                            aria-label="@L["Log out"]">
+                                        <span class="portal-topbar__icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                                <path d="M14 8l4 4-4 4"></path>
+                                                <path d="M18 12H9"></path>
+                                                <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5"></path>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                </form>
                             </div>
                         </div>
                         <div class="portal-topbar__profile-section">
