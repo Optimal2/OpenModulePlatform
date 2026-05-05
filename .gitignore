@@ -37,3 +37,6 @@ coverage/
 *.swp
 *.swo
 /scripts/tmp
+
+# Machine- and environment-specific deployment settings
+/scripts/deployment/*.local.psd1
