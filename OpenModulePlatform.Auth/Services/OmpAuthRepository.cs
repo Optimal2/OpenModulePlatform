@@ -10,6 +10,7 @@ public sealed class OmpAuthRepository
 {
     private const string AdProvider = "AD";
     private const string LocalPasswordProvider = "lpwd";
+    private const int AdGroupPrincipalQueryChunkSize = 500;
 
     private readonly SqlConnectionFactory _db;
     private readonly LocalPasswordHasher _passwordHasher;
@@ -74,7 +75,18 @@ public sealed class OmpAuthRepository
             principals.Add(("ADUser", userSid));
         }
 
-        foreach (var group in _windows.GetGroupPrincipals(windowsPrincipal))
+        var windowsGroupPrincipals = _windows.GetGroupPrincipals(windowsPrincipal);
+        var mappedAdGroupPrincipals = await GetMappedAdGroupPrincipalsAsync(
+            conn,
+            windowsGroupPrincipals,
+            ct);
+
+        _log.LogDebug(
+            "Resolved {MappedCount} matching AD group role principals from {TotalCount} Windows group principals.",
+            mappedAdGroupPrincipals.Count,
+            windowsGroupPrincipals.Count);
+
+        foreach (var group in mappedAdGroupPrincipals)
         {
             principals.Add(("ADGroup", group));
         }
@@ -238,6 +250,61 @@ WHERE user_name = @user_name;";
         cmd.Parameters.AddWithValue("@user_name", userName);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result as string;
+    }
+
+    private static async Task<IReadOnlyList<string>> GetMappedAdGroupPrincipalsAsync(
+        SqlConnection conn,
+        IReadOnlyCollection<string> groupPrincipals,
+        CancellationToken ct)
+    {
+        var groups = groupPrincipals
+            .Where(group => !string.IsNullOrWhiteSpace(group))
+            .Select(group => group.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (groups.Length == 0)
+        {
+            return [];
+        }
+
+        var mapped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var chunk in groups.Chunk(AdGroupPrincipalQueryChunkSize))
+        {
+            var values = string.Join(
+                ",",
+                Enumerable.Range(0, chunk.Length).Select(i => $"(@group{i})"));
+
+            var sql = $@"
+WITH CandidateGroups(Principal) AS
+(
+    SELECT v.Principal
+    FROM (VALUES {values}) AS v(Principal)
+)
+SELECT DISTINCT rp.Principal
+FROM omp.RolePrincipals rp
+INNER JOIN CandidateGroups candidate
+    ON candidate.Principal = rp.Principal
+WHERE rp.PrincipalType = N'ADGroup';";
+
+            await using var cmd = new SqlCommand(sql, conn);
+            for (var i = 0; i < chunk.Length; i++)
+            {
+                cmd.Parameters.AddWithValue("@group" + i, chunk[i]);
+            }
+
+            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                var principal = rdr.GetString(0);
+                if (!string.IsNullOrWhiteSpace(principal))
+                {
+                    mapped.Add(principal);
+                }
+            }
+        }
+
+        return mapped.ToList();
     }
 
     private static async Task MarkUserAuthUsedAsync(

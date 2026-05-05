@@ -41,9 +41,11 @@ The AD provider emits role principals for:
 - `User` with the Windows account name for legacy compatibility
 - `ADUser` with the Windows account name
 - `ADUser` with the user SID when available
-- `ADGroup` with group SIDs and translated `DOMAIN\Group` names when available
+- `ADGroup` only for group SIDs or translated `DOMAIN\Group` names that already exist in `omp.RolePrincipals`
 
 If an `omp.user_auth` row links the AD provider identity to an active `omp.users` row, the cookie also includes the OMP user id.
+
+The AD provider intentionally filters Windows group memberships before issuing the shared OMP cookie. A Windows identity can contain hundreds or thousands of AD groups, and writing all of them into the cookie can exceed IIS/HTTP header limits. The provider still enumerates the Windows groups during sign-in, but only persists the groups that are actually used by RBAC.
 
 ### Local Password Provider
 
@@ -113,3 +115,12 @@ For customer or enterprise AD groups, prefer `ADGroup` role principals. This kee
 For local password users, create the OMP user first, then link the `lpwd` provider identity through `omp.user_auth`.
 
 Keep provider-specific secrets and environment-specific bootstrap values out of public repositories.
+
+## Troubleshooting AD Header Size
+
+If `/auth/ad` fails with `HTTP Error 400. The size of the request headers is too long`, first determine where the rejection happens:
+
+- If the error appears before the OMP auth app can sign the user in, IIS/HTTP.sys is rejecting the Windows Authentication header, often because the Kerberos token contains many AD group memberships. This happens before ASP.NET Core receives the request, so normal application logging may stay quiet.
+- If the error appears after a successful AD challenge and redirect, the browser may be sending an oversized OMP cookie. The built-in AD provider filters AD group claims to avoid this, but old cookies may need to be deleted after upgrading.
+
+On Windows/IIS hosts, HTTP.sys request header limits are controlled by the `HKLM\SYSTEM\CurrentControlSet\Services\HTTP\Parameters` registry values `MaxFieldLength` and `MaxRequestBytes`. Changing those values is an infrastructure decision and requires a restart of HTTP.sys or the server. Use the HTTPERR logs under `%SystemRoot%\System32\LogFiles\HTTPERR` to confirm `RequestHeadersTooLong` before changing host-level limits.
