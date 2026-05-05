@@ -45,7 +45,7 @@ Hosts belong to a specific `Instance`.
 For a manual installation, this is part of the core runtime model.
 Template-related host rows are not required to make the system function manually.
 
-If a web app instance uses a relative `RoutePath` and runs on a different host than the Portal, set `Hosts.BaseUrl` to an absolute root URL that includes the scheme, host, and optional port.
+If a web app instance uses a relative `RoutePath`, Portal resolves it relative to `Hosts.BaseUrl` when that value is set. When `Hosts.BaseUrl` is empty, Portal assumes the app is reachable through the same public base URL as Portal. Set `Hosts.BaseUrl` to an absolute root URL, including scheme, host, and optional port, only when that host must resolve through a different public base URL.
 
 ### 4. Verify or create modules and apps
 

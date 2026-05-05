@@ -93,7 +93,7 @@ These tables represent the concrete environment. `ModuleInstances` and `AppInsta
 
 ### Runtime
 
-`omp.Hosts` can hold an optional `BaseUrl` used by the Portal when it needs to generate a link for an `AppInstance` that uses a relative `RoutePath` on a different host than the Portal.
+`omp.Hosts` can hold an optional `BaseUrl` used by the Portal when it needs to generate a link for an `AppInstance` that uses a relative `RoutePath`. When `BaseUrl` is empty, Portal assumes the app is reachable through the same public base URL as Portal.
 
 `omp.AppInstances` currently contains, among other things:
 
