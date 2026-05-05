@@ -460,6 +460,7 @@ function Write-ExampleRuntimeConfig {
     $ompAuth = [ordered]@{
         CookieName = '.OpenModulePlatform.Auth'
         LoginPath = '/auth/login'
+        LogoutPath = '/auth/logout'
         AccessDeniedPath = '/status/403'
         ApplicationName = 'OpenModulePlatform'
         DataProtectionKeyPath = $dataProtectionKeyPath

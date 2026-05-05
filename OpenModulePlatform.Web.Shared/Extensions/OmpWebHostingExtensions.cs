@@ -273,7 +273,7 @@ public static class OmpWebHostingExtensions
         }
         else
         {
-            context.Response.Cookies.Delete(ActiveRoleCookie.CookieName, new CookieOptions { Path = "/", Secure = true });
+            ActiveRoleCookie.Clear(context.Response);
         }
 
         var safePortalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
@@ -336,7 +336,7 @@ public static class OmpWebHostingExtensions
                     OnRedirectToLogin = context =>
                     {
                         var loginPath = string.IsNullOrWhiteSpace(authOptions.LoginPath)
-                            ? "/auth/login"
+                            ? OmpAuthDefaults.LoginPath
                             : authOptions.LoginPath;
                         var returnUrl = string.Concat(
                             context.Request.PathBase,
@@ -354,7 +354,7 @@ public static class OmpWebHostingExtensions
     {
         var loginPath = IsSafeLocalReturnUrl(configuredLoginPath)
             ? configuredLoginPath!
-            : "/auth/login";
+            : OmpAuthDefaults.LoginPath;
 
         return QueryHelpers.AddQueryString(loginPath, "returnUrl", returnUrl);
     }

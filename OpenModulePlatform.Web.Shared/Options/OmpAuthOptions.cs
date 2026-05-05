@@ -9,8 +9,9 @@ public sealed class OmpAuthOptions
     public const string SectionName = "OmpAuth";
 
     public string CookieName { get; set; } = Security.OmpAuthDefaults.CookieName;
-    public string LoginPath { get; set; } = "/auth/login";
-    public string AccessDeniedPath { get; set; } = "/status/403";
+    public string LoginPath { get; set; } = Security.OmpAuthDefaults.LoginPath;
+    public string LogoutPath { get; set; } = Security.OmpAuthDefaults.LogoutPath;
+    public string AccessDeniedPath { get; set; } = Security.OmpAuthDefaults.AccessDeniedPath;
     public string ApplicationName { get; set; } = "OpenModulePlatform";
 
     /// <summary>

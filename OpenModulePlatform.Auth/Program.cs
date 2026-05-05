@@ -1,9 +1,10 @@
 // File: OpenModulePlatform.Auth/Program.cs
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Negotiate;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
 using OpenModulePlatform.Auth.Services;
 using OpenModulePlatform.Web.Shared.Extensions;
+using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 
@@ -36,10 +37,16 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
-app.MapPost("/logout", async (HttpContext context) =>
+app.MapPost("/logout", async (HttpContext context, IOptions<OmpAuthOptions> authOptions) =>
 {
     await context.SignOutAsync(OmpAuthDefaults.AuthenticationScheme);
-    return Results.LocalRedirect("/auth/login");
-}).RequireAuthorization();
+    ActiveRoleCookie.Clear(context.Response);
+
+    var loginPath = string.IsNullOrWhiteSpace(authOptions.Value.LoginPath)
+        ? OmpAuthDefaults.LoginPath
+        : authOptions.Value.LoginPath;
+
+    return Results.LocalRedirect(loginPath);
+});
 
 app.Run();
