@@ -184,26 +184,101 @@ function Remove-Iis {
     )
 
     foreach ($app in $apps) {
-        & $script:appcmdPath list app $app 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Invoke-NativeChecked $script:appcmdPath delete app $app
-        }
+        Remove-IisApplicationIfExists -Name $app
     }
 
-    & $script:appcmdPath list site "/name:$script:IisSiteName" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        Invoke-NativeChecked $script:appcmdPath delete site $script:IisSiteName
-    }
+    Remove-IisSiteIfExists -Name $script:IisSiteName
 
     foreach ($poolName in @($script:AppPools.Portal, $script:AppPools.Auth, $script:AppPools.OpenDocViewer, $script:AppPools.ExampleWebApp, $script:AppPools.ExampleWebAppBlazor, $script:AppPools.ExampleServiceWebApp, $script:AppPools.ExampleWorkerWebApp, $script:AppPools.IFrameWebApp)) {
         if ([string]::IsNullOrWhiteSpace($poolName)) {
             continue
         }
 
-        & $script:appcmdPath list apppool "/name:$poolName" 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Invoke-NativeChecked $script:appcmdPath delete apppool $poolName
+        Remove-IisAppPoolIfExists -Name $poolName
+    }
+}
+
+function Test-IisApplicationExact {
+    param([string]$Name)
+
+    foreach ($line in @(& $script:appcmdPath list app 2>$null)) {
+        $text = $line.ToString()
+        if ($text -match '^APP "([^"]+)"' -and [string]::Equals($Matches[1], $Name, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
         }
+    }
+
+    return $false
+}
+
+function Test-IisSiteExact {
+    param([string]$Name)
+
+    foreach ($line in @(& $script:appcmdPath list site 2>$null)) {
+        $text = $line.ToString()
+        if ($text -match '^SITE "([^"]+)"' -and [string]::Equals($Matches[1], $Name, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-IisAppPoolExact {
+    param([string]$Name)
+
+    foreach ($line in @(& $script:appcmdPath list apppool 2>$null)) {
+        $text = $line.ToString()
+        if ($text -match '^APPPOOL "([^"]+)"' -and [string]::Equals($Matches[1], $Name, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Remove-IisApplicationIfExists {
+    param([string]$Name)
+
+    if (-not (Test-IisApplicationExact -Name $Name)) {
+        return
+    }
+
+    Write-Host "> $script:appcmdPath delete app $Name"
+    & $script:appcmdPath delete app $Name
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0 -and (Test-IisApplicationExact -Name $Name)) {
+        throw "Command failed with exit code ${exitCode}: $script:appcmdPath delete app $Name"
+    }
+}
+
+function Remove-IisSiteIfExists {
+    param([string]$Name)
+
+    if (-not (Test-IisSiteExact -Name $Name)) {
+        return
+    }
+
+    Write-Host "> $script:appcmdPath delete site $Name"
+    & $script:appcmdPath delete site $Name
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0 -and (Test-IisSiteExact -Name $Name)) {
+        throw "Command failed with exit code ${exitCode}: $script:appcmdPath delete site $Name"
+    }
+}
+
+function Remove-IisAppPoolIfExists {
+    param([string]$Name)
+
+    if (-not (Test-IisAppPoolExact -Name $Name)) {
+        return
+    }
+
+    Write-Host "> $script:appcmdPath delete apppool $Name"
+    & $script:appcmdPath delete apppool $Name
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0 -and (Test-IisAppPoolExact -Name $Name)) {
+        throw "Command failed with exit code ${exitCode}: $script:appcmdPath delete apppool $Name"
     }
 }
 
