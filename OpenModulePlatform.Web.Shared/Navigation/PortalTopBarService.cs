@@ -631,18 +631,7 @@ ORDER BY ai.SortOrder,
             return absoluteBaseUrl.GetLeftPart(UriPartial.Authority);
         }
 
-        var hostKey = Clean(app.HostKey);
-        if (string.IsNullOrWhiteSpace(hostKey) || HostMatchesCurrentRequest(request, hostKey))
-        {
-            return request.GetPublicBaseUrl();
-        }
-
-        if (Uri.TryCreate(hostKey, UriKind.Absolute, out var absoluteHostKey))
-        {
-            return absoluteHostKey.GetLeftPart(UriPartial.Authority);
-        }
-
-        return null;
+        return request.GetPublicBaseUrl();
     }
 
     private static string? ResolveHostRoot(Uri currentUri, TopBarAppEntry app)
@@ -656,12 +645,6 @@ ORDER BY ai.SortOrder,
 
         var authority = currentUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
         return authority;
-    }
-
-    private static bool HostMatchesCurrentRequest(HttpRequest request, string hostKey)
-    {
-        return string.Equals(hostKey, request.Host.Host, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(hostKey, request.Host.Value, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CombineHostRootAndRoute(string hostRoot, string routePath)

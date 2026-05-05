@@ -423,7 +423,7 @@ function Write-RuntimeConfiguration {
         @{ Path = (Join-Path $script:WebAppsRoot 'ExampleWebAppBlazorModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $true },
         @{ Path = (Join-Path $script:WebAppsRoot 'ExampleServiceAppModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $true },
         @{ Path = (Join-Path $script:WebAppsRoot 'ExampleWorkerAppModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $true },
-        @{ Path = (Join-Path $script:WebAppsRoot 'iFrameWebAppModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $true }
+        @{ Path = (Join-Path $script:WebAppsRoot 'iFrameWebAppModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $false }
     )
 
     foreach ($folder in $webAppFolders) {
@@ -636,6 +636,18 @@ function Test-IisAppPool {
     return $exitCode -eq 0 -and $null -ne $output
 }
 
+function Get-IisAppPoolState {
+    param([string]$Name)
+
+    $output = & $script:appcmdPath list apppool "/name:$Name" /text:state 2>$null
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0 -or $null -eq $output) {
+        return $null
+    }
+
+    return [string]$output
+}
+
 function Test-IisSite {
     param([string]$Name)
 
@@ -655,6 +667,60 @@ function Test-IisApplicationExact {
     }
 
     return $false
+}
+
+function Stop-ExistingRuntime {
+    Write-Step 'Stopping existing runtime'
+
+    foreach ($serviceName in @($script:Services.HostAgent, $script:Services.WorkerManager, $script:Services.ExampleService)) {
+        if ([string]::IsNullOrWhiteSpace($serviceName)) {
+            continue
+        }
+
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+        if ($null -ne $service -and $service.Status -ne [System.ServiceProcess.ServiceControllerStatus]::Stopped) {
+            Write-Host "Stopping service: $serviceName"
+            Stop-Service -Name $serviceName -Force -ErrorAction Stop
+            (Get-Service -Name $serviceName).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        }
+    }
+
+    if (-not $script:ConfigureIis -or -not (Test-Path -LiteralPath $script:appcmdPath -PathType Leaf)) {
+        return
+    }
+
+    $appPoolNames = @($script:AppPools.PSObject.Properties.Value) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        Sort-Object -Unique
+
+    foreach ($appPoolName in $appPoolNames) {
+        if (Test-IisAppPool -Name $appPoolName) {
+            Write-Host "Stopping app pool: $appPoolName"
+            & $script:appcmdPath stop apppool "/apppool.name:$appPoolName" 2>$null | Out-Null
+        }
+    }
+}
+
+function Start-ConfiguredAppPools {
+    if (-not $script:ConfigureIis -or -not (Test-Path -LiteralPath $script:appcmdPath -PathType Leaf)) {
+        return
+    }
+
+    Write-Step 'Starting configured app pools'
+    $appPoolNames = @($script:AppPools.PSObject.Properties.Value) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        Sort-Object -Unique
+
+    foreach ($appPoolName in $appPoolNames) {
+        if (-not (Test-IisAppPool -Name $appPoolName)) {
+            continue
+        }
+
+        $state = Get-IisAppPoolState -Name $appPoolName
+        if (-not [string]::Equals($state, 'Started', [StringComparison]::OrdinalIgnoreCase)) {
+            Invoke-NativeChecked $script:appcmdPath start apppool "/apppool.name:$appPoolName"
+        }
+    }
 }
 
 function Ensure-IisAppPool {
@@ -952,11 +1018,13 @@ if (-not (Confirm-DeploymentAction 'Continue with installation')) {
     return
 }
 
+Stop-ExistingRuntime
 Deploy-Payloads
 Grant-RunAsFolderAccess
 Write-RuntimeConfiguration
 Run-InstallSql
 Ensure-Iis
+Start-ConfiguredAppPools
 Ensure-Services
 
 Write-Host ''

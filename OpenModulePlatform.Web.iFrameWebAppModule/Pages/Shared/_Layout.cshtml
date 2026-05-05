@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="~/css/site.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
-    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/odv-demo.css" />
     @if (ViewData["OmpPreventBackCache"] is true)
     {
         <meta name="omp-prevent-back-cache" content="true" />
@@ -26,7 +25,6 @@
                 {
                     @RenderSection("ModuleNav", required: false)
                 }
-                <a class="iframe-toolbar__link" href="~/opendocviewer-demo">@L["OpenDocViewer"]</a>
             </nav>
         </div>
     </header>

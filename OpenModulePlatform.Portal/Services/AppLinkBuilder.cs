@@ -13,11 +13,12 @@ namespace OpenModulePlatform.Portal.Services;
 /// 1. RoutePath when present.
 /// 2. RoutePath as-is when it is already an absolute URL.
 /// 3. RoutePath relative to the configured host base URL.
-/// 4. RoutePath relative to the current request only when the app has no host or the host matches the current request host.
+/// 4. RoutePath relative to the current Portal base URL when the host has no base URL.
 /// 5. PublicUrl as a legacy fallback when RoutePath is empty.
 ///
-/// The Portal no longer fabricates absolute URLs from <c>HostKey</c> alone.
-/// A cross-host app should instead use <c>omp.Hosts.BaseUrl</c> or an absolute <c>RoutePath</c>/<c>PublicUrl</c>.
+/// <c>HostKey</c> is an identity key, not a URL source. Cross-host apps should
+/// use <c>omp.Hosts.BaseUrl</c> or an absolute <c>RoutePath</c>/<c>PublicUrl</c>
+/// when they are not reachable through the same public Portal base URL.
 /// </remarks>
 public static class AppLinkBuilder
 {
@@ -80,24 +81,7 @@ public static class AppLinkBuilder
             return absoluteBaseUrl.GetLeftPart(UriPartial.Authority);
         }
 
-        var hostKey = Clean(app.HostKey);
-        if (string.IsNullOrWhiteSpace(hostKey) || HostMatchesCurrentRequest(request, hostKey))
-        {
-            return request.GetPublicBaseUrl();
-        }
-
-        if (Uri.TryCreate(hostKey, UriKind.Absolute, out var absoluteHostKey))
-        {
-            return absoluteHostKey.GetLeftPart(UriPartial.Authority);
-        }
-
-        return null;
-    }
-
-    private static bool HostMatchesCurrentRequest(HttpRequest request, string hostKey)
-    {
-        return string.Equals(hostKey, request.Host.Host, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(hostKey, request.Host.Value, StringComparison.OrdinalIgnoreCase);
+        return request.GetPublicBaseUrl();
     }
 
     private static string CombineHostRootAndRoute(string hostRoot, string routePath)

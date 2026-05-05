@@ -502,8 +502,7 @@ function Write-ExampleRuntimeConfig {
         'ExampleWebAppModule',
         'ExampleWebAppBlazorModule',
         'ExampleServiceAppModule',
-        'ExampleWorkerAppModule',
-        'iFrameWebAppModule'
+        'ExampleWorkerAppModule'
     )
 
     foreach ($appFolder in $appFolders) {
@@ -530,6 +529,26 @@ function Write-ExampleRuntimeConfig {
 
         $target = Join-Path $appPath 'appsettings.Production.json'
         $json = $override | ConvertTo-Json -Depth 8
+        Set-Content -LiteralPath $target -Value $json -Encoding UTF8
+        Write-Host "Wrote: $target"
+    }
+
+    $iframeAppPath = Join-Path $script:webAppsRoot 'iFrameWebAppModule'
+    if (Test-Path -LiteralPath $iframeAppPath) {
+        $iframeOverride = [ordered]@{
+            ConnectionStrings = [ordered]@{
+                OmpDb = $connectionString
+            }
+            OmpAuth = $ompAuth
+            Portal = [ordered]@{
+                PortalTopBar = [ordered]@{
+                    PortalBaseUrl = '/'
+                }
+            }
+        }
+
+        $target = Join-Path $iframeAppPath 'appsettings.Production.json'
+        $json = $iframeOverride | ConvertTo-Json -Depth 8
         Set-Content -LiteralPath $target -Value $json -Encoding UTF8
         Write-Host "Wrote: $target"
     }
