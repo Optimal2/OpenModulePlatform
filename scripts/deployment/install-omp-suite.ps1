@@ -73,6 +73,23 @@ function Get-NestedConfigValue {
     return $DefaultValue
 }
 
+function Resolve-DeploymentPath {
+    param(
+        [string]$Path,
+        [string]$BasePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ''
+    }
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
+}
+
 function Require-Command {
     param([string]$Name)
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -1047,6 +1064,8 @@ function Grant-RunAsFolderAccess {
 }
 
 $config = Import-RequiredDeploymentConfig -Path $ConfigPath
+$configPathForResolution = [System.IO.Path]::GetFullPath($ConfigPath)
+$configDirectory = Split-Path -Parent $configPathForResolution
 $scriptRootParent = Split-Path -Parent $PSScriptRoot
 $defaultRepositoryRoot = Split-Path -Parent $scriptRootParent
 
@@ -1059,7 +1078,7 @@ $script:RepositoryRoot = [string](Get-ConfigValue -Config $config -Name 'Reposit
 if ([string]::IsNullOrWhiteSpace($script:RepositoryRoot)) {
     $script:RepositoryRoot = $defaultRepositoryRoot
 }
-$script:RepositoryRoot = [System.IO.Path]::GetFullPath($script:RepositoryRoot)
+$script:RepositoryRoot = Resolve-DeploymentPath -Path $script:RepositoryRoot -BasePath $configDirectory
 
 $script:RuntimeRoot = [System.IO.Path]::GetFullPath([string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue 'C:\OMP'))
 $script:WebRoot = [System.IO.Path]::GetFullPath([string](Get-ConfigValue -Config $config -Name 'WebRoot' -DefaultValue (Join-Path $script:RuntimeRoot 'Sites')))
@@ -1160,14 +1179,17 @@ if ([string]::Equals($DeploymentMode, 'Source', [StringComparison]::OrdinalIgnor
     }
 
     $outputRoot = [string](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'OutputRoot' -DefaultValue (Join-Path $script:RepositoryRoot 'artifacts\suite-release'))
-    $script:PackageRoot = Join-Path ([System.IO.Path]::GetFullPath($outputRoot)) ("OpenModulePlatformSuite-$script:Version")
+    if ([string]::IsNullOrWhiteSpace($outputRoot)) {
+        $outputRoot = Join-Path $script:RepositoryRoot 'artifacts\suite-release'
+    }
+    $script:PackageRoot = Join-Path (Resolve-DeploymentPath -Path $outputRoot -BasePath $script:RepositoryRoot) ("OpenModulePlatformSuite-$script:Version")
 }
 else {
     $script:PackageRoot = [string](Get-ConfigValue -Config $config -Name 'PackageRoot' -DefaultValue $PSScriptRoot)
     if ([string]::IsNullOrWhiteSpace($script:PackageRoot)) {
         $script:PackageRoot = $PSScriptRoot
     }
-    $script:PackageRoot = [System.IO.Path]::GetFullPath($script:PackageRoot)
+    $script:PackageRoot = Resolve-DeploymentPath -Path $script:PackageRoot -BasePath $PSScriptRoot
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $script:PackageRoot 'payload') -PathType Container)) {
