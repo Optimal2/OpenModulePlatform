@@ -173,14 +173,14 @@ if (-not (Test-Path -LiteralPath $publishScript -PathType Leaf)) {
 }
 
 $publishRoot = Join-Path $buildRoot 'omp-publish'
-$publishArgs = @(
-    '-Root', $RepositoryRoot,
-    '-Configuration', $Configuration,
-    '-OutputRoot', $publishRoot,
-    '-CleanOutput'
-)
+$publishArgs = @{
+    Root = $RepositoryRoot
+    Configuration = $Configuration
+    OutputRoot = $publishRoot
+    CleanOutput = $true
+}
 if (-not $SkipRestore) {
-    $publishArgs += '-Restore'
+    $publishArgs.Restore = $true
 }
 & $publishScript @publishArgs
 
