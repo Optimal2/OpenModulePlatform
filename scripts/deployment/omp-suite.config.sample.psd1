@@ -7,6 +7,7 @@
     RepositoryRoot = ''
     OpenDocViewerRoot = ''
     PackageRoot = ''
+    PublicBaseUrl = 'http://localhost:8088/'
 
     Version = '0.3.3'
     Configuration = 'Release'
@@ -31,8 +32,30 @@
     RunAsUser = ''
     RunAsPassword = ''
 
-    HostKey = 'sample-host'
+    # Leave HostKey empty when Hosts contains this machine; the installer then
+    # resolves the host profile from COMPUTERNAME or the short FQDN prefix.
+    HostKey = ''
     HostName = ''
+    Hosts = @(
+        @{
+            HostKey = 'sample-host'
+            DisplayName = 'Sample host'
+            CertificateThumbprint = ''
+            CertificateSerialNumber = ''
+            SortOrder = 10
+        }
+    )
+
+    Portal = @{
+        Title = 'OpenModulePlatform'
+        DefaultCulture = 'sv-SE'
+        SupportedCultures = @('sv-SE', 'en-US')
+        AllowAnonymous = $false
+        UseForwardedHeaders = $false
+        PermissionMode = 'Any'
+        # Leave empty to use PublicBaseUrl, or set '/' for a root-relative portal.
+        PortalBaseUrl = '/'
+    }
 
     Iis = @{
         SiteName = 'OpenModulePlatform'
@@ -40,6 +63,8 @@
         Port = 8088
         HostHeader = ''
         CertificateThumbprint = ''
+        CertificateSerialNumber = ''
+        RemoveOtherBindings = $false
         PortalPhysicalPath = ''
         OpenDocViewerAppPath = 'opendocviewer'
         AppPools = @{
