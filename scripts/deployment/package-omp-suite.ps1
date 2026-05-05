@@ -101,6 +101,32 @@ function Compress-FolderToZip {
     Compress-Archive -Path (Join-Path $Source '*') -DestinationPath $Destination -Force
 }
 
+function Compress-PackageRootToZip {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageRoot,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    if (-not (Test-Path -LiteralPath $PackageRoot -PathType Container)) {
+        throw "Cannot package missing folder: $PackageRoot"
+    }
+
+    $items = @(Get-ChildItem -LiteralPath $PackageRoot -Force | Where-Object {
+            -not [string]::Equals($_.Name, '.build', [StringComparison]::OrdinalIgnoreCase)
+        })
+    if ($items.Count -eq 0) {
+        throw "Package root has no distributable content: $PackageRoot"
+    }
+
+    $parent = Split-Path -Parent $Destination
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    if (Test-Path -LiteralPath $Destination) {
+        Remove-Item -LiteralPath $Destination -Force
+    }
+
+    Compress-Archive -Path @($items | ForEach-Object { $_.FullName }) -DestinationPath $Destination -Force
+}
+
 function Copy-RequiredFile {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -265,11 +291,7 @@ $manifest.payloads['OpenDocViewer'] = 'payload/OpenDocViewer.dist.zip'
 
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'manifest.json') -Encoding UTF8
 
-if (Test-Path -LiteralPath $zipPath) {
-    Remove-Item -LiteralPath $zipPath -Force
-}
-
-Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $zipPath -Force
+Compress-PackageRootToZip -PackageRoot $packageRoot -Destination $zipPath
 
 if (-not $KeepStaging) {
     Remove-Item -LiteralPath $buildRoot -Recurse -Force -ErrorAction SilentlyContinue
