@@ -97,6 +97,9 @@ It does not create the database or grant the run-as account database access
 unless `Options.CreateDatabase = $true` or
 `Options.GrantRunAsDatabaseAccess = $true` is explicitly set.
 
+SQL scripts are executed through the .NET `System.Data.SqlClient` provider that
+ships with Windows PowerShell 5. `sqlcmd` is not required on target servers.
+
 ## Sensitive Data
 
 Do not commit `*.local.psd1` files. They may contain service accounts, database
