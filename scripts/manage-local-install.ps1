@@ -9,11 +9,13 @@ param(
     [string]$SqlServer = 'localhost',
     [string]$Database = 'OpenModulePlatform',
     [string[]]$BootstrapPortalAdminPrincipal = @("$env:USERDOMAIN\$env:USERNAME"),
-    [string]$DatabaseOwnerPrincipal = "$env:USERDOMAIN\$env:USERNAME",
+    [string]$DatabaseOwnerPrincipal = '',
     [string]$HostKey = 'sample-host',
     [string]$IisSiteName = 'OpenModulePlatform',
     [int]$IisPort = 8088,
+    [switch]$CreateDatabase,
     [switch]$DropDatabase,
+    [switch]$GrantDatabaseOwnerAccess,
     [switch]$ClearDatabaseObjects,
     [switch]$RemoveRuntimeFiles,
     [switch]$SkipBuild,
@@ -368,7 +370,7 @@ function Start-LocalRuntime {
 }
 
 function Ensure-Database {
-    Write-Step 'Ensuring database'
+    Write-Step 'Checking database'
 
     if ($DropDatabase) {
         if (-not (Confirm-LocalAction "Drop and recreate database '$Database' on '$SqlServer'?")) {
@@ -384,14 +386,20 @@ END
 CREATE DATABASE [$Database];
 "@
     }
-    else {
+    elseif ($CreateDatabase) {
         Invoke-SqlText -TargetDatabase master -Query @"
 IF DB_ID(N'$Database') IS NULL
     CREATE DATABASE [$Database];
 "@
     }
+    else {
+        Invoke-SqlText -TargetDatabase master -Query @"
+IF DB_ID(N'$Database') IS NULL
+    RAISERROR('Database does not exist. Create it before running the installer, or pass -CreateDatabase for explicit local bootstrap.', 11, 1);
+"@
+    }
 
-    if (-not [string]::IsNullOrWhiteSpace($DatabaseOwnerPrincipal)) {
+    if ($GrantDatabaseOwnerAccess -and -not [string]::IsNullOrWhiteSpace($DatabaseOwnerPrincipal)) {
         $escapedPrincipal = $DatabaseOwnerPrincipal.Replace("'", "''")
         Invoke-SqlText -TargetDatabase $Database -Query @"
 DECLARE @principal sysname = N'$escapedPrincipal';
