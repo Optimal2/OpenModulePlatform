@@ -180,6 +180,74 @@ function ConvertTo-SqlUnicodeLiteral {
     return "N'$($Value.Replace("'", "''"))'"
 }
 
+function ConvertTo-NormalizedCertificateText {
+    param([string]$Value)
+
+    return ($Value -replace '\s', '').ToLowerInvariant()
+}
+
+function Get-ConfigEntryValue {
+    param(
+        [object]$Entry,
+        [string]$Name,
+        $DefaultValue = $null
+    )
+
+    if ($null -eq $Entry) {
+        return $DefaultValue
+    }
+
+    if ($Entry -is [hashtable] -and $Entry.ContainsKey($Name) -and $null -ne $Entry[$Name]) {
+        return $Entry[$Name]
+    }
+
+    $property = $Entry.PSObject.Properties[$Name]
+    if ($null -ne $property -and $null -ne $property.Value) {
+        return $property.Value
+    }
+
+    return $DefaultValue
+}
+
+function Resolve-ConfiguredHostProfile {
+    if ($script:ConfiguredHosts.Count -eq 0) {
+        return
+    }
+
+    $candidate = $script:HostKey
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        $candidate = $env:COMPUTERNAME
+    }
+
+    foreach ($hostEntry in $script:ConfiguredHosts) {
+        $knownHost = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'HostKey' -DefaultValue '')
+        if ([string]::IsNullOrWhiteSpace($knownHost)) {
+            continue
+        }
+
+        $knownShortName = ($knownHost -split '\.')[0]
+        if ($candidate.Equals($knownHost, [StringComparison]::OrdinalIgnoreCase) -or
+            $candidate.Equals($knownShortName, [StringComparison]::OrdinalIgnoreCase)) {
+            $script:HostKey = $knownHost
+
+            if ([string]::IsNullOrWhiteSpace($script:HostName)) {
+                $displayName = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'DisplayName' -DefaultValue '')
+                $script:HostName = if ([string]::IsNullOrWhiteSpace($displayName)) { $env:COMPUTERNAME } else { $displayName }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($script:IisCertificateSerialNumber)) {
+                $script:IisCertificateSerialNumber = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'CertificateSerialNumber' -DefaultValue '')
+            }
+
+            if ([string]::IsNullOrWhiteSpace($script:IisCertificateThumbprint)) {
+                $script:IisCertificateThumbprint = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'CertificateThumbprint' -DefaultValue '')
+            }
+
+            return
+        }
+    }
+}
+
 function Get-SqlcmdBaseArguments {
     param([string]$TargetDatabase)
 
@@ -405,6 +473,10 @@ function Write-RuntimeConfiguration {
     $odvAppPath = $script:OpenDocViewerAppPath.Trim('/')
     $odvBaseUrl = '/' + $odvAppPath + '/'
     $odvSampleUrl = $odvBaseUrl + 'sample.pdf'
+    $portalTopBar = [ordered]@{
+        Enabled = $true
+        PortalBaseUrl = $script:PortalBaseUrl
+    }
 
     New-Item -ItemType Directory -Path $script:DataProtectionKeyPath -Force | Out-Null
 
@@ -440,10 +512,17 @@ function Write-RuntimeConfiguration {
 
         if ([bool]$folder.IncludePortalTopBar) {
             $settings.Portal = [ordered]@{
-                PortalTopBar = [ordered]@{
-                    PortalBaseUrl = '/'
-                }
+                PortalTopBar = $portalTopBar
             }
+        }
+
+        if ([string]::Equals([System.IO.Path]::GetFullPath([string]$folder.Path), [System.IO.Path]::GetFullPath($script:PortalPath), [StringComparison]::OrdinalIgnoreCase)) {
+            $settings.Portal['Title'] = $script:PortalTitle
+            $settings.Portal['DefaultCulture'] = $script:DefaultCulture
+            $settings.Portal['SupportedCultures'] = $script:SupportedCultures
+            $settings.Portal['AllowAnonymous'] = $script:PortalAllowAnonymous
+            $settings.Portal['UseForwardedHeaders'] = $script:PortalUseForwardedHeaders
+            $settings.Portal['PermissionMode'] = $script:PortalPermissionMode
         }
 
         if ([bool]$folder.IncludeOpenDocViewer) {
@@ -656,6 +735,67 @@ function Test-IisSite {
     return $exitCode -eq 0 -and $null -ne $output
 }
 
+function Get-IisCertificateThumbprint {
+    if (-not [string]::IsNullOrWhiteSpace($script:IisCertificateThumbprint)) {
+        return (ConvertTo-NormalizedCertificateText -Value $script:IisCertificateThumbprint)
+    }
+
+    if ([string]::IsNullOrWhiteSpace($script:IisCertificateSerialNumber)) {
+        throw 'Iis.CertificateThumbprint or Iis.CertificateSerialNumber is required when Iis.Protocol is https.'
+    }
+
+    $expectedSerial = ConvertTo-NormalizedCertificateText -Value $script:IisCertificateSerialNumber
+    $matches = @(Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {
+            (ConvertTo-NormalizedCertificateText -Value $_.SerialNumber) -eq $expectedSerial
+        })
+
+    if ($matches.Count -eq 0) {
+        throw "Certificate with serial number '$script:IisCertificateSerialNumber' was not found in Cert:\LocalMachine\My."
+    }
+
+    if ($matches.Count -gt 1) {
+        throw "More than one certificate matched serial number '$script:IisCertificateSerialNumber'."
+    }
+
+    if ($matches[0].NotAfter -lt (Get-Date)) {
+        throw "Certificate '$($matches[0].Subject)' expired at $($matches[0].NotAfter)."
+    }
+
+    return $matches[0].Thumbprint
+}
+
+function Ensure-IisSiteBinding {
+    Import-Module WebAdministration -ErrorAction Stop
+
+    $bindingInformation = "*:$($script:IisPort):$($script:IisHostHeader)"
+    if ($script:IisRemoveOtherBindings) {
+        foreach ($binding in @(Get-WebBinding -Name $script:IisSiteName)) {
+            $isDesiredBinding = $binding.protocol -eq $script:IisProtocol -and $binding.bindingInformation -eq $bindingInformation
+            if (-not $isDesiredBinding) {
+                Write-Host "Removing IIS binding: $($binding.protocol) $($binding.bindingInformation)"
+                Remove-WebBinding -Name $script:IisSiteName -Protocol $binding.protocol -BindingInformation $binding.bindingInformation
+            }
+        }
+    }
+
+    $binding = @(Get-WebBinding -Name $script:IisSiteName -Protocol $script:IisProtocol -ErrorAction SilentlyContinue |
+        Where-Object { $_.bindingInformation -eq $bindingInformation }) |
+        Select-Object -First 1
+
+    if ($null -eq $binding) {
+        New-WebBinding -Name $script:IisSiteName -Protocol $script:IisProtocol -IPAddress '*' -Port $script:IisPort -HostHeader $script:IisHostHeader | Out-Null
+        $binding = @(Get-WebBinding -Name $script:IisSiteName -Protocol $script:IisProtocol |
+            Where-Object { $_.bindingInformation -eq $bindingInformation }) |
+            Select-Object -First 1
+    }
+
+    if ([string]::Equals($script:IisProtocol, 'https', [StringComparison]::OrdinalIgnoreCase)) {
+        $thumbprint = Get-IisCertificateThumbprint
+        $binding.AddSslCertificate($thumbprint, 'My')
+        Write-Host "Bound certificate $thumbprint to $($script:IisProtocol)/$bindingInformation"
+    }
+}
+
 function Test-IisApplicationExact {
     param([string]$Name)
 
@@ -807,6 +947,7 @@ function Ensure-Iis {
     }
 
     Invoke-NativeChecked $script:appcmdPath set app "/app.name:$script:IisSiteName/" "/applicationPool:$($script:AppPools.Portal)"
+    Ensure-IisSiteBinding
     Set-IisAuthentication -Location $script:IisSiteName -AnonymousEnabled $true
 
     Ensure-IisWebApplication -AppPath 'auth' -PhysicalPath (Join-Path $script:WebAppsRoot 'auth') -AppPoolName $script:AppPools.Auth -AnonymousEnabled $true -WindowsEnabled $true
@@ -934,19 +1075,40 @@ $script:SqlUser = [string](Get-ConfigValue -Config $config -Name 'SqlUser' -Defa
 $script:SqlPassword = [string](Get-ConfigValue -Config $config -Name 'SqlPassword' -DefaultValue '')
 $script:BootstrapPortalAdminPrincipals = @((Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipals' -DefaultValue @("$env:USERDOMAIN\$env:USERNAME")))
 $script:BootstrapPortalAdminPrincipalType = [string](Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipalType' -DefaultValue 'User')
-$script:HostKey = [string](Get-ConfigValue -Config $config -Name 'HostKey' -DefaultValue 'sample-host')
+$script:HostKey = [string](Get-ConfigValue -Config $config -Name 'HostKey' -DefaultValue '')
 $script:HostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -DefaultValue '')
+$script:ConfiguredHosts = @((Get-ConfigValue -Config $config -Name 'Hosts' -DefaultValue @()))
+$script:PublicBaseUrl = [string](Get-ConfigValue -Config $config -Name 'PublicBaseUrl' -DefaultValue '')
 
 $script:IisSiteName = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'SiteName' -DefaultValue 'OpenModulePlatform')
 $script:IisProtocol = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'Protocol' -DefaultValue 'http')
 $script:IisPort = [int](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'Port' -DefaultValue 8088)
 $script:IisHostHeader = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'HostHeader' -DefaultValue '')
+$script:IisCertificateThumbprint = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'CertificateThumbprint' -DefaultValue '')
+$script:IisCertificateSerialNumber = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'CertificateSerialNumber' -DefaultValue '')
+$script:IisRemoveOtherBindings = [bool](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'RemoveOtherBindings' -DefaultValue $false)
 $script:OpenDocViewerAppPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'OpenDocViewerAppPath' -DefaultValue 'opendocviewer')
 $portalPhysicalPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'PortalPhysicalPath' -DefaultValue '')
 if ([string]::IsNullOrWhiteSpace($portalPhysicalPath)) {
     $portalPhysicalPath = Join-Path $script:WebRoot 'Portal'
 }
 $script:PortalPath = [System.IO.Path]::GetFullPath($portalPhysicalPath)
+
+Resolve-ConfiguredHostProfile
+if ([string]::IsNullOrWhiteSpace($script:HostKey)) {
+    $script:HostKey = 'sample-host'
+}
+
+$script:PortalTitle = [string](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'Title' -DefaultValue 'OpenModulePlatform')
+$script:DefaultCulture = [string](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'DefaultCulture' -DefaultValue 'sv-SE')
+$script:SupportedCultures = @((Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'SupportedCultures' -DefaultValue @('sv-SE', 'en-US')))
+$script:PortalAllowAnonymous = [bool](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'AllowAnonymous' -DefaultValue $false)
+$script:PortalUseForwardedHeaders = [bool](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'UseForwardedHeaders' -DefaultValue $false)
+$script:PortalPermissionMode = [string](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'PermissionMode' -DefaultValue 'Any')
+$script:PortalBaseUrl = [string](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'PortalBaseUrl' -DefaultValue '')
+if ([string]::IsNullOrWhiteSpace($script:PortalBaseUrl)) {
+    $script:PortalBaseUrl = if ([string]::IsNullOrWhiteSpace($script:PublicBaseUrl)) { '/' } else { $script:PublicBaseUrl }
+}
 
 $defaultAppPools = @{
     Portal = 'OMP_Portal'

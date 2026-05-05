@@ -10,7 +10,9 @@ for the public OpenModulePlatform components:
 
 Environment-specific values are intentionally kept out of Git. Copy
 `omp-suite.config.sample.psd1` to `omp-suite.local.psd1` and adjust the local file
-for the target machine or server.
+for the target machine or server. You can also keep several ignored
+environment files, for example `omp-suite.dev.local.psd1` and
+`omp-suite.prod.local.psd1`, and select one with `-ConfigPath`.
 
 ## Scripts
 
@@ -34,6 +36,9 @@ Use `DeploymentMode = 'Source'` for development machines. The installer will
 create a local package first and then deploy that package, so the same deployment
 path is exercised locally and in packaged environments.
 
+The configured database is expected to already exist unless
+`Options.CreateDatabase = $true` is explicitly set.
+
 ## Typical Test/Production Flow
 
 Build the package on a build/developer machine:
@@ -49,6 +54,16 @@ run:
 ```powershell
 .\install-omp-suite.ps1 -DeploymentMode Package
 ```
+
+For HTTPS deployments, set `Iis.Protocol = 'https'` and either
+`Iis.CertificateThumbprint` or `Iis.CertificateSerialNumber`. If different
+servers use different certificates, add a `Hosts` entry per server and leave
+`HostKey` empty. The installer resolves the current server from `COMPUTERNAME`
+and applies that host's certificate settings.
+
+`PublicBaseUrl` should contain the externally visible root URL. When a module
+does not provide its own base URL, portal topbar links are generated from the
+portal base URL because that is the normal OMP hosting layout.
 
 ## Uninstall
 
