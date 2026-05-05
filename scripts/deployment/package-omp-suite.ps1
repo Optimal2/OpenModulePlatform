@@ -68,6 +68,23 @@ function Get-NestedConfigValue {
     return $DefaultValue
 }
 
+function Resolve-DeploymentPath {
+    param(
+        [string]$Path,
+        [string]$BasePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ''
+    }
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
+}
+
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -143,18 +160,27 @@ function Copy-RequiredFile {
 }
 
 $config = Import-DeploymentConfig -Path $ConfigPath
+$configPathForResolution = if (Test-Path -LiteralPath $ConfigPath -PathType Leaf) { [System.IO.Path]::GetFullPath($ConfigPath) } else { Join-Path $PSScriptRoot 'omp-suite.local.psd1' }
+$configDirectory = Split-Path -Parent $configPathForResolution
 $scriptRootParent = Split-Path -Parent $PSScriptRoot
 $defaultRepositoryRoot = Split-Path -Parent $scriptRootParent
 
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = [string](Get-ConfigValue -Config $config -Name 'RepositoryRoot' -DefaultValue $defaultRepositoryRoot)
 }
-$RepositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
+if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    $RepositoryRoot = $defaultRepositoryRoot
+}
+$RepositoryRoot = Resolve-DeploymentPath -Path $RepositoryRoot -BasePath $configDirectory
 
 $workspaceRoot = Split-Path -Parent $RepositoryRoot
 if ([string]::IsNullOrWhiteSpace($OpenDocViewerRoot)) {
     $OpenDocViewerRoot = [string](Get-ConfigValue -Config $config -Name 'OpenDocViewerRoot' -DefaultValue (Join-Path $workspaceRoot 'OpenDocViewer'))
 }
+if ([string]::IsNullOrWhiteSpace($OpenDocViewerRoot)) {
+    $OpenDocViewerRoot = Join-Path $workspaceRoot 'OpenDocViewer'
+}
+$OpenDocViewerRoot = Resolve-DeploymentPath -Path $OpenDocViewerRoot -BasePath $configDirectory
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = [string](Get-ConfigValue -Config $config -Name 'Version' -DefaultValue '0.3.3')
@@ -164,6 +190,9 @@ if ([string]::IsNullOrWhiteSpace($Configuration)) {
 }
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = [string](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'OutputRoot' -DefaultValue (Join-Path $RepositoryRoot 'artifacts\suite-release'))
+}
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    $OutputRoot = Join-Path $RepositoryRoot 'artifacts\suite-release'
 }
 
 if (-not $PSBoundParameters.ContainsKey('SkipRestore')) {
@@ -179,7 +208,7 @@ if (-not $PSBoundParameters.ContainsKey('KeepStaging')) {
     $KeepStaging = [bool](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'KeepStaging' -DefaultValue $false)
 }
 
-$OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
+$OutputRoot = Resolve-DeploymentPath -Path $OutputRoot -BasePath $RepositoryRoot
 $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformSuite-$Version")
 $payloadRoot = Join-Path $packageRoot 'payload'
 $sqlRoot = Join-Path $packageRoot 'sql'

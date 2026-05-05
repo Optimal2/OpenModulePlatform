@@ -47,6 +47,10 @@ Build the package on a build/developer machine:
 .\package-omp-suite.ps1 -ConfigPath .\omp-suite.local.psd1
 ```
 
+Relative `Package.OutputRoot` values are resolved from the repository root, not
+from the current PowerShell directory. This keeps elevated shells from writing
+packages under `C:\Windows\System32`.
+
 Copy `OpenModulePlatformSuite-<version>.zip` to the target server, extract it,
 create an environment-specific `omp-suite.local.psd1` next to the installer, and
 run:
