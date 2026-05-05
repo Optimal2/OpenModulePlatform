@@ -173,6 +173,14 @@ function Remove-Iis {
     }
 
     Write-Step 'Removing IIS applications, site, and app pools'
+    foreach ($poolName in @($script:AppPools.Portal, $script:AppPools.Auth, $script:AppPools.OpenDocViewer, $script:AppPools.ExampleWebApp, $script:AppPools.ExampleWebAppBlazor, $script:AppPools.ExampleServiceWebApp, $script:AppPools.ExampleWorkerWebApp, $script:AppPools.IFrameWebApp)) {
+        if ([string]::IsNullOrWhiteSpace($poolName)) {
+            continue
+        }
+
+        Stop-IisAppPoolIfExists -Name $poolName
+    }
+
     $apps = @(
         "$script:IisSiteName/$script:OpenDocViewerAppPath",
         "$script:IisSiteName/iFrameWebAppModule",
@@ -235,6 +243,45 @@ function Test-IisAppPoolExact {
     }
 
     return $false
+}
+
+function Get-IisAppPoolState {
+    param([string]$Name)
+
+    foreach ($line in @(& $script:appcmdPath list apppool "/name:$Name" 2>$null)) {
+        $text = $line.ToString()
+        if ($text -match 'state:([^,\)]+)') {
+            return $Matches[1]
+        }
+    }
+
+    return ''
+}
+
+function Stop-IisAppPoolIfExists {
+    param([string]$Name)
+
+    if (-not (Test-IisAppPoolExact -Name $Name)) {
+        return
+    }
+
+    if ([string]::Equals((Get-IisAppPoolState -Name $Name), 'Stopped', [StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+
+    Write-Host "> $script:appcmdPath stop apppool /apppool.name:$Name"
+    & $script:appcmdPath stop apppool "/apppool.name:$Name" | Out-Null
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if ([string]::Equals((Get-IisAppPoolState -Name $Name), 'Stopped', [StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    throw "Timed out waiting for IIS app pool to stop: $Name"
 }
 
 function Remove-IisApplicationIfExists {
