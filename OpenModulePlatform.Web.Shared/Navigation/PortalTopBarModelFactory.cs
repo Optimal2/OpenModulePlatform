@@ -51,7 +51,8 @@ public static class PortalTopBarModelFactory
             OverflowToggleTextKey = "More",
             CollapsedToggleTextKey = "Modules",
             LanguageToggleTextKey = "Language",
-            LogoutUrl = OmpAuthDefaults.LogoutPath
+            LogoutUrl = OmpAuthDefaults.LogoutPath,
+            SettingsUrl = CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath)
         };
     }
 

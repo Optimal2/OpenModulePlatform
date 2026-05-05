@@ -14,7 +14,7 @@
 @if (Model.IsPortalAdmin)
 {
     <section class="card top-gap portal-overview-panel">
-        <details class="portal-overview" open>
+        <details class="portal-overview" open="@(!Model.AdminMetricsCollapsed)">
             <summary class="portal-overview__summary">
                 <div class="page-header portal-overview__header">
                     <h3>@L["Overview"]</h3>

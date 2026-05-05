@@ -10,6 +10,7 @@ builder.AddOmpWebDefaults<PortalResource>(optionsSectionName: "Portal");
 
 builder.Services.AddScoped<AppCatalogService>();
 builder.Services.AddScoped<OmpAdminRepository>();
+builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<RbacAdminRepository>();
 
 builder.Services.Configure<RazorPagesOptions>(options =>
