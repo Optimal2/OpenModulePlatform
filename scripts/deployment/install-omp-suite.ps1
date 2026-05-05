@@ -262,9 +262,13 @@ function Ensure-Database {
     Write-Step 'Ensuring database exists'
     $dbName = $script:Database.Replace("'", "''")
     Invoke-SqlText -TargetDatabase 'master' -Query @"
-IF DB_ID(N'$dbName') IS NULL
+DECLARE @DatabaseName sysname = N'$dbName';
+DECLARE @sql nvarchar(max);
+
+IF DB_ID(@DatabaseName) IS NULL
 BEGIN
-    EXEC(N'CREATE DATABASE ' + QUOTENAME(N'$dbName'));
+    SET @sql = N'CREATE DATABASE ' + QUOTENAME(@DatabaseName);
+    EXEC sys.sp_executesql @sql;
 END
 "@
 }
@@ -560,7 +564,7 @@ function Run-InstallSql {
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform\2-initialize-openmoduleplatform.sql') -PatchBootstrapPrincipal
     Ensure-AdditionalBootstrapPrincipals
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\1-setup-omp-portal.sql')
-    Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\2-initialize-omp-portal.sql')
+    Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\2-initialize-omp-portal.sql') -PatchBootstrapPrincipal
 
     if ($script:InstallExamples) {
         $exampleSqlFiles = @(
@@ -627,6 +631,19 @@ function Test-IisSite {
     return $exitCode -eq 0 -and $null -ne $output
 }
 
+function Test-IisApplicationExact {
+    param([string]$Name)
+
+    foreach ($line in @(& $script:appcmdPath list app 2>$null)) {
+        $text = $line.ToString()
+        if ($text -match '^APP "([^"]+)"' -and [string]::Equals($Matches[1], $Name, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Ensure-IisAppPool {
     param([string]$Name)
 
@@ -675,15 +692,14 @@ function Ensure-IisWebApplication {
     Ensure-IisAppPool -Name $AppPoolName
 
     $fullAppName = "$script:IisSiteName/$AppPath"
-    & $script:appcmdPath list app $fullAppName 2>$null | Out-Null
-    $exists = $LASTEXITCODE -eq 0
+    $exists = Test-IisApplicationExact -Name $fullAppName
 
     if (-not $exists) {
         Invoke-NativeChecked $script:appcmdPath add app "/site.name:$script:IisSiteName" "/path:/$AppPath" "/physicalPath:$PhysicalPath" "/applicationPool:$AppPoolName"
     }
     else {
-        Invoke-NativeChecked $script:appcmdPath set vdir "/vdir.name:$script:IisSiteName/$AppPath/" "/physicalPath:$PhysicalPath"
-        Invoke-NativeChecked $script:appcmdPath set app "/app.name:$script:IisSiteName/$AppPath" "/applicationPool:$AppPoolName"
+        Invoke-NativeChecked $script:appcmdPath set vdir "$script:IisSiteName/$AppPath/" "/physicalPath:$PhysicalPath"
+        Invoke-NativeChecked $script:appcmdPath set app "$script:IisSiteName/$AppPath" "/applicationPool:$AppPoolName"
     }
 
     Set-IisAuthentication -Location "$script:IisSiteName/$AppPath" -AnonymousEnabled $AnonymousEnabled -WindowsEnabled $WindowsEnabled
