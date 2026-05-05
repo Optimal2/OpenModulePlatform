@@ -71,11 +71,22 @@ portal base URL because that is the normal OMP hosting layout.
 .\uninstall-omp-suite.ps1
 ```
 
+Use `-ConfigPath` when uninstalling an environment that uses a named local
+configuration file:
+
+```powershell
+.\uninstall-omp-suite.ps1 -ConfigPath .\omp-suite.prod.local.psd1
+```
+
 The uninstall script is deliberately config-driven. It removes only the IIS
 objects, Windows services, and paths listed in the local config by default. It
 does not drop the database, change database permissions, or remove database
 objects unless `Options.RemoveDatabaseObjects = $true` is explicitly set in the
 local configuration.
+
+Temporary safety switches are available for partial cleanup: `-KeepFiles`,
+`-KeepDatabaseObjects`, `-KeepIis`, and `-KeepServices`. These switches override
+the removal options in the local config for that run only.
 
 The install script expects the configured database to already exist by default.
 It does not create the database or grant the run-as account database access
