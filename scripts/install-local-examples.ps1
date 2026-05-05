@@ -21,6 +21,8 @@ param(
     [switch]$SkipStartRuntimeServices,
     [string]$RunAsUser = '',
     [string]$RunAsPassword = '',
+    [switch]$GrantRunAsDatabaseAccess,
+    [switch]$RemoveLegacyAppPoolDatabaseUsers,
     [switch]$KeepLegacyAppPoolDatabaseUsers,
     [switch]$Yes
 )
@@ -661,7 +663,7 @@ function Run-ExampleSql {
 }
 
 function Ensure-RunAsDatabaseAccess {
-    if ($SkipSql -or [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) { return }
+    if ($SkipSql -or -not $GrantRunAsDatabaseAccess -or [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) { return }
 
     Write-Step 'Ensuring database access for configured run-as account'
 
@@ -690,7 +692,7 @@ END
 }
 
 function Remove-LegacyAppPoolDatabaseUsers {
-    if ($SkipSql -or $KeepLegacyAppPoolDatabaseUsers -or [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) { return }
+    if ($SkipSql -or -not $RemoveLegacyAppPoolDatabaseUsers -or $KeepLegacyAppPoolDatabaseUsers -or [string]::IsNullOrWhiteSpace($script:resolvedRunAsUser)) { return }
 
     Write-Step 'Removing legacy virtual app pool database users'
 

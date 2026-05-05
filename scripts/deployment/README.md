@@ -18,7 +18,8 @@ for the target machine or server.
 - `install-omp-suite.ps1` installs from source or from an expanded package,
   depending on `DeploymentMode` in the config.
 - `uninstall-omp-suite.ps1` removes IIS apps/app pools, Windows services, files,
-  and configured database objects while leaving the database itself in place.
+  and, only when explicitly enabled, configured database objects while leaving
+  the database itself in place.
 
 ## Typical Local Developer Flow
 
@@ -56,8 +57,15 @@ run:
 ```
 
 The uninstall script is deliberately config-driven. It removes only the IIS
-objects, Windows services, paths, and database schemas listed in the local config.
-The database itself is not dropped.
+objects, Windows services, and paths listed in the local config by default. It
+does not drop the database, change database permissions, or remove database
+objects unless `Options.RemoveDatabaseObjects = $true` is explicitly set in the
+local configuration.
+
+The install script expects the configured database to already exist by default.
+It does not create the database or grant the run-as account database access
+unless `Options.CreateDatabase = $true` or
+`Options.GrantRunAsDatabaseAccess = $true` is explicitly set.
 
 ## Sensitive Data
 

@@ -27,7 +27,6 @@
 
     BootstrapPortalAdminPrincipals = @('DOMAIN\UserOrGroup')
     BootstrapPortalAdminPrincipalType = 'User' # User or ADGroup.
-    DatabaseOwnerPrincipal = ''
 
     RunAsUser = ''
     RunAsPassword = ''
@@ -77,11 +76,14 @@
         ConfigureIis = $true
         RunSql = $true
         StartServices = $true
+        # Production/customer databases should normally be created and secured by a DBA.
+        CreateDatabase = $false
+        GrantRunAsDatabaseAccess = $false
         RemoveIis = $true
         RemoveServices = $true
         RemoveFiles = $true
-        RemoveDatabaseObjects = $true
-        DropSchemas = $true
+        RemoveDatabaseObjects = $false
+        DropSchemas = $false
     }
 
     DatabaseSchemas = @(

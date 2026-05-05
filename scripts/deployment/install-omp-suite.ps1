@@ -259,9 +259,11 @@ function Invoke-SqlFile {
 }
 
 function Ensure-Database {
-    Write-Step 'Ensuring database exists'
+    Write-Step 'Checking target database'
     $dbName = $script:Database.Replace("'", "''")
-    Invoke-SqlText -TargetDatabase 'master' -Query @"
+
+    if ($script:CreateDatabase) {
+        Invoke-SqlText -TargetDatabase 'master' -Query @"
 DECLARE @DatabaseName sysname = N'$dbName';
 DECLARE @sql nvarchar(max);
 
@@ -269,6 +271,17 @@ IF DB_ID(@DatabaseName) IS NULL
 BEGIN
     SET @sql = N'CREATE DATABASE ' + QUOTENAME(@DatabaseName);
     EXEC sys.sp_executesql @sql;
+END
+"@
+        return
+    }
+
+    Invoke-SqlText -TargetDatabase 'master' -Query @"
+DECLARE @DatabaseName sysname = N'$dbName';
+
+IF DB_ID(@DatabaseName) IS NULL
+BEGIN
+    RAISERROR('Database does not exist: %s. Create the database before running the installer, or set Options.CreateDatabase to true for explicit dev/test bootstrap.', 11, 1, @DatabaseName);
 END
 "@
 }
@@ -314,7 +327,7 @@ WHERE @PortalAdminsRoleId IS NOT NULL
 }
 
 function Ensure-RunAsDatabaseAccess {
-    if ($null -eq $script:RunAsCredential) {
+    if (-not $script:GrantRunAsDatabaseAccess -or $null -eq $script:RunAsCredential) {
         return
     }
 
@@ -903,6 +916,8 @@ $script:InstallExampleService = [bool](Get-NestedConfigValue -Config $config -Se
 $script:ConfigureIis = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'ConfigureIis' -DefaultValue $true)
 $script:RunSql = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RunSql' -DefaultValue $true)
 $script:StartServices = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'StartServices' -DefaultValue $true)
+$script:CreateDatabase = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'CreateDatabase' -DefaultValue $false)
+$script:GrantRunAsDatabaseAccess = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'GrantRunAsDatabaseAccess' -DefaultValue $false)
 
 $runAsUser = [string](Get-ConfigValue -Config $config -Name 'RunAsUser' -DefaultValue '')
 $runAsPassword = [string](Get-ConfigValue -Config $config -Name 'RunAsPassword' -DefaultValue '')

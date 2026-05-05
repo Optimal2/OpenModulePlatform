@@ -450,14 +450,19 @@ $script:Services = [pscustomobject]$defaultServices
 $script:RemoveIis = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RemoveIis' -DefaultValue $true)
 $script:RemoveServices = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RemoveServices' -DefaultValue $true)
 $script:RemoveFiles = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RemoveFiles' -DefaultValue $true)
-$script:RemoveDatabaseObjects = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RemoveDatabaseObjects' -DefaultValue $true)
-$script:DropSchemas = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'DropSchemas' -DefaultValue $true)
+$script:RemoveDatabaseObjects = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RemoveDatabaseObjects' -DefaultValue $false)
+$script:DropSchemas = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'DropSchemas' -DefaultValue $false)
 $script:DatabaseSchemas = @((Get-ConfigValue -Config $config -Name 'DatabaseSchemas' -DefaultValue @('omp_iframe', 'omp_example_workerapp', 'omp_example_serviceapp', 'omp_example_webapp_blazor', 'omp_example_webapp', 'omp_portal', 'omp')))
 $script:RemovePaths = @((Get-ConfigValue -Config $config -Name 'RemovePaths' -DefaultValue @()))
 
 Write-Host ''
 Write-Host "This will uninstall OpenModulePlatform/ODV/example components for '$([string](Get-ConfigValue -Config $config -Name 'EnvironmentName' -DefaultValue 'environment'))'." -ForegroundColor Yellow
-Write-Host "Database '$script:Database' on '$script:SqlServer' will be kept, but configured schemas/tables can be removed."
+if ($script:RemoveDatabaseObjects) {
+    Write-Host "Database '$script:Database' on '$script:SqlServer' will be kept, but configured schemas/tables will be removed."
+}
+else {
+    Write-Host "Database '$script:Database' on '$script:SqlServer' and its objects will be left untouched."
+}
 if (-not (Confirm-DeploymentAction 'Continue with uninstall')) {
     Write-Host 'Uninstall cancelled.'
     return
