@@ -82,7 +82,17 @@ principals. This keeps `account_status` authoritative for linked OMP users.
 
 ## User Settings
 
-The Portal exposes `/account/settings` for the signed-in OMP user. The first version lets the user update `omp.users.display_name`, which is core user state and updates `omp.users.updated_at`.
+The Portal exposes `/account/settings` for the signed-in user. A signed-in AD
+identity that is authorized by AD user or AD group principals, but does not yet
+have an `omp.users` row, can create a first-class OMP user account from this
+page. The self-service action creates an active `omp.users` row and links the
+current AD provider keys in `omp.user_auth` in one transaction. The current
+session cookie is then refreshed with the new `omp:user_id` claim, while the AD
+user/group principal claims remain in place.
+
+After an OMP user exists, the settings page lets the user update
+`omp.users.display_name`, which is core user state and updates
+`omp.users.updated_at`.
 
 Portal-specific user settings live under the Portal schema. `omp_portal.user_settings.admin_metrics_collapsed` controls only the default expanded/collapsed state of the Portal admin metrics panel on page load. Clicks on the panel do not auto-save in this iteration. A missing row, or `admin_metrics_collapsed = false`, means the admin panel is expanded by default.
 
