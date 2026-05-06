@@ -1,7 +1,7 @@
 # File: scripts/deployment/package-omp-suite.ps1
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot 'omp-suite.local.psd1'),
+    [string]$ConfigPath = '',
     [string]$RepositoryRoot = '',
     [string]$OpenDocViewerRoot = '',
     [string]$OutputRoot = '',
@@ -15,6 +15,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $PSScriptRoot 'omp-suite.local.psd1'
+}
 
 function Write-Step {
     param([string]$Message)
@@ -303,6 +306,8 @@ foreach ($file in $sqlFiles) {
 Write-Step 'Copying deployment scripts'
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'install-omp-suite.ps1') -Destination (Join-Path $packageRoot 'install-omp-suite.ps1')
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'uninstall-omp-suite.ps1') -Destination (Join-Path $packageRoot 'uninstall-omp-suite.ps1')
+Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'install-omp-suite.cmd') -Destination (Join-Path $packageRoot 'install-omp-suite.cmd')
+Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'uninstall-omp-suite.cmd') -Destination (Join-Path $packageRoot 'uninstall-omp-suite.cmd')
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'omp-suite.config.sample.psd1') -Destination (Join-Path $packageRoot 'omp-suite.config.sample.psd1')
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $packageRoot 'INSTALLATION.md')
 

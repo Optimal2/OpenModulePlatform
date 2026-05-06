@@ -22,6 +22,9 @@ environment files, for example `omp-suite.dev.local.psd1` and
 - `uninstall-omp-suite.ps1` removes IIS apps/app pools, Windows services, files,
   and, only when explicitly enabled, configured database objects while leaving
   the database itself in place.
+- `install-omp-suite.cmd` and `uninstall-omp-suite.cmd` are double-click
+  wrappers for Windows servers. They run the matching PowerShell script without
+  extra arguments and keep the console open so the operator can read errors.
 
 ## Typical Local Developer Flow
 
@@ -56,8 +59,12 @@ create an environment-specific `omp-suite.local.psd1` next to the installer, and
 run:
 
 ```powershell
-.\install-omp-suite.ps1 -DeploymentMode Package
+.\install-omp-suite.ps1
 ```
+
+`DeploymentMode` is read from `omp-suite.local.psd1`, so the same no-argument
+installer command works for source-based developer installs and package-based
+test/production installs.
 
 For HTTPS deployments, set `Iis.Protocol = 'https'` and either
 `Iis.CertificateThumbprint` or `Iis.CertificateSerialNumber`. If different
