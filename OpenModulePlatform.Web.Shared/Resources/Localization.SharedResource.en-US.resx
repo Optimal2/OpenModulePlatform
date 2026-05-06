@@ -3,4 +3,5 @@
   <data name="Module instances" xml:space="preserve">
     <value>Module instances</value>
   </data>
-<data name="Security" xml:space="preserve"><value>Security</value></data><data name="Workers" xml:space="preserve"><value>Workers</value></data><data name="Copy full user name" xml:space="preserve"><value>Copy full user name</value></data><data name="Definitions" xml:space="preserve"><value>Definitions</value></data><data name="System" xml:space="preserve"><value>System</value></data><data name="Log out" xml:space="preserve"><value>Log out</value></data><data name="Settings" xml:space="preserve"><value>Settings</value></data></root>
+<data name="Security" xml:space="preserve"><value>Security</value></data><data name="Workers" xml:space="preserve"><value>Workers</value></data><data name="Copy full user name" xml:space="preserve"><value>Copy full user name</value></data><data name="Definitions" xml:space="preserve"><value>Definitions</value></data><data name="System" xml:space="preserve"><value>System</value></data><data name="Log out" xml:space="preserve"><value>Log out</value></data><data name="Settings" xml:space="preserve"><value>Settings</value></data>  <data name="Users" xml:space="preserve"><value>Users</value></data>
+</root>

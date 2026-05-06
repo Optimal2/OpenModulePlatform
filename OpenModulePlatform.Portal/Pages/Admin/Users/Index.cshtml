@@ -1,0 +1,62 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.Users.IndexModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@L["Users"]</h2>
+        <p class="lede">@L["Manage OMP users and their authentication links. Users can exist before they are linked to an AD account."]</p>
+    </div>
+    <div class="toolbar">
+        <a class="action-link" href="~/admin/users/create">@L["Create user"]</a>
+    </div>
+</section>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="card empty-state">@L["No OMP users have been created yet."]</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>@L["Display name"]</th>
+                <th>@L["User ID"]</th>
+                <th>@L["Account status"]</th>
+                <th>@L["Last login UTC"]</th>
+                <th>@L["Auth links"]</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in Model.Rows)
+            {
+                <tr>
+                    <td>
+                        <a href="~/admin/users/edit/@row.UserId">@row.DisplayName</a>
+                    </td>
+                    <td>@row.UserId</td>
+                    <td><span class="pill">@Model.AccountStatusText(row.AccountStatus)</span></td>
+                    <td>@Model.FormatUtc(row.LastLoginAt)</td>
+                    <td>
+                        @if (row.AuthLinks.Count == 0)
+                        {
+                            <span class="muted">@L["No auth links"]</span>
+                        }
+                        else
+                        {
+                            @foreach (var link in row.AuthLinks)
+                            {
+                                <div><span class="example-token">@link.ProviderDisplayName</span> @link.ProviderUserKey</div>
+                            }
+                        }
+                    </td>
+                    <td>
+                        <a class="action-link" href="~/admin/users/edit/@row.UserId">@L["Edit"]</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
