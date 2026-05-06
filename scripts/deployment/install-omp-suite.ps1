@@ -1,7 +1,7 @@
 # File: scripts/deployment/install-omp-suite.ps1
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot 'omp-suite.local.psd1'),
+    [string]$ConfigPath = '',
     [ValidateSet('Source', 'Package', '')]
     [string]$DeploymentMode = '',
     [switch]$SkipPackageBuild,
@@ -10,6 +10,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $PSScriptRoot 'omp-suite.local.psd1'
+}
 
 $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
 
