@@ -59,9 +59,17 @@ public sealed class OmpAuthRepository
         userKeys.Add(userName);
 
         var linkedUser = await TryResolveLinkedUserAsync(conn, provider.Value.ProviderId, userKeys, ct);
-        if (linkedUser is not null)
+        if (linkedUser is not null && linkedUser.Value.IsActive)
         {
             await MarkUserAuthUsedAsync(conn, linkedUser.Value.UserAuthId, linkedUser.Value.UserId, ct);
+        }
+        else if (linkedUser is not null)
+        {
+            _log.LogWarning(
+                "Windows identity '{UserName}' matched disabled OMP user {UserId}. AD-principal fallback is blocked.",
+                userName,
+                linkedUser.Value.UserId);
+            return null;
         }
 
         var principals = new List<(string PrincipalType, string Principal)>
@@ -142,6 +150,15 @@ public sealed class OmpAuthRepository
             return (null, "The local password account is not linked to an OMP user.");
         }
 
+        if (!linkedUser.Value.IsActive)
+        {
+            _log.LogWarning(
+                "Local password user '{UserName}' matched disabled OMP user {UserId}.",
+                normalizedUserName,
+                linkedUser.Value.UserId);
+            return (null, "The linked OMP user is disabled.");
+        }
+
         await MarkUserAuthUsedAsync(conn, linkedUser.Value.UserAuthId, linkedUser.Value.UserId, ct);
 
         return (new OmpAuthenticatedUser
@@ -212,13 +229,14 @@ WHERE display_name = @display_name;";
 SELECT TOP (1)
        ua.user_auth_id,
        u.user_id,
-       u.display_name
+       u.display_name,
+       u.account_status
 FROM omp.user_auth ua
 INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ua.provider_id = @provider_id
   AND ua.provider_user_key IN ({inList})
-  AND u.account_status = 1
-ORDER BY ua.user_auth_id;";
+ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
+         ua.user_auth_id;";
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@provider_id", providerId);
@@ -233,7 +251,7 @@ ORDER BY ua.user_auth_id;";
             return null;
         }
 
-        return new LinkedUserRow(rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetString(2));
+        return new LinkedUserRow(rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetString(2), rdr.GetInt32(3));
     }
 
     private static async Task<string?> GetLocalPasswordHashAsync(
@@ -330,5 +348,8 @@ WHERE user_id = @user_id;";
     }
 
     private readonly record struct ProviderRow(int ProviderId, bool IsEnabled);
-    private readonly record struct LinkedUserRow(int UserAuthId, int UserId, string DisplayName);
+    private readonly record struct LinkedUserRow(int UserAuthId, int UserId, string DisplayName, int AccountStatus)
+    {
+        public bool IsActive => AccountStatus == 1;
+    }
 }

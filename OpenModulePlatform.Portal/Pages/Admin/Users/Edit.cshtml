@@ -1,0 +1,131 @@
+@page "{userId:int}"
+@model OpenModulePlatform.Portal.Pages.Admin.Users.EditModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@L["Edit user"]</h2>
+        <p class="lede">@L["Update the OMP user record and link AD identities that Windows sign-in can resolve."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+@if (Model.UserRow is not null)
+{
+    <section class="card form-grid bottom-gap">
+        <div class="field-grid field-grid--3">
+            <div class="form-field">
+                <label>@L["User ID"]</label>
+                <input value="@Model.UserRow.UserId" readonly />
+            </div>
+            <div class="form-field">
+                <label>@L["Created UTC"]</label>
+                <input value="@Model.FormatUtc(Model.UserRow.CreatedAt)" readonly />
+            </div>
+            <div class="form-field">
+                <label>@L["Updated UTC"]</label>
+                <input value="@Model.FormatUtc(Model.UserRow.UpdatedAt)" readonly />
+            </div>
+        </div>
+        <div class="field-grid field-grid--2">
+            <div class="form-field">
+                <label>@L["Last login UTC"]</label>
+                <input value="@Model.FormatUtc(Model.UserRow.LastLoginAt)" readonly />
+            </div>
+            <div class="form-field">
+                <label>@L["Current account status"]</label>
+                <input value="@Model.AccountStatusText(Model.UserRow.AccountStatus)" readonly />
+            </div>
+        </div>
+    </section>
+
+    <form method="post" class="card form-grid bottom-gap">
+        <input type="hidden" asp-for="Input.UserId" />
+
+        <div class="field-grid field-grid--2">
+            <div class="form-field">
+                <label asp-for="Input.DisplayName"></label>
+                <input asp-for="Input.DisplayName" />
+                <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="Input.AccountStatus"></label>
+                <select asp-for="Input.AccountStatus">
+                    @foreach (var option in Model.AccountStatusOptions)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+                <span asp-validation-for="Input.AccountStatus" class="field-validation-error"></span>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit">@L["Save user"]</button>
+            <a class="action-link" href="~/admin/users">@L["Back to users"]</a>
+        </div>
+    </form>
+
+    <section class="card section-card bottom-gap">
+        <div class="eyebrow">@L["Authentication"]</div>
+        <h3>@L["Auth links"]</h3>
+        <p class="muted">@L["These provider identities are linked to this OMP user. They are shown read-only in this version."]</p>
+
+        @if (Model.UserRow.AuthLinks.Count == 0)
+        {
+            <div class="empty-state top-gap">@L["This OMP user has no auth links."]</div>
+        }
+        else
+        {
+            <table class="grid compact-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Provider"]</th>
+                        <th>@L["Provider user key"]</th>
+                        <th>@L["Created UTC"]</th>
+                        <th>@L["Last used UTC"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var link in Model.UserRow.AuthLinks)
+                    {
+                        <tr>
+                            <td>@link.ProviderDisplayName</td>
+                            <td>@link.ProviderUserKey</td>
+                            <td>@Model.FormatUtc(link.CreatedAt)</td>
+                            <td>@Model.FormatUtc(link.LastUsedAt)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <form method="post" asp-page-handler="LinkAdAccount" class="card form-grid">
+        <div class="eyebrow">@L["Authentication"]</div>
+        <h3>@L["Link AD account"]</h3>
+        <p class="muted">@L["Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-..."]</p>
+
+        <div class="field-grid field-grid--2">
+            <div class="form-field">
+                <label asp-for="NewAdProviderUserKey">@L["AD provider user key"]</label>
+                <input asp-for="NewAdProviderUserKey" autocomplete="off" />
+                <span asp-validation-for="NewAdProviderUserKey" class="field-validation-error"></span>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit">@L["Link AD account"]</button>
+        </div>
+    </form>
+}

@@ -1,0 +1,41 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.Users.CreateModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@L["Create user"]</h2>
+        <p class="lede">@L["Create the OMP user first. AD authentication links can be added from the edit page."]</p>
+    </div>
+</section>
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" class="card form-grid">
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.DisplayName"></label>
+            <input asp-for="Input.DisplayName" />
+            <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.AccountStatus"></label>
+            <select asp-for="Input.AccountStatus">
+                @foreach (var option in Model.AccountStatusOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <span asp-validation-for="Input.AccountStatus" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save user"]</button>
+        <a class="action-link" href="~/admin/users">@L["Back to users"]</a>
+    </div>
+</form>
