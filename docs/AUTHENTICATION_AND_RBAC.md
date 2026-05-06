@@ -70,6 +70,16 @@ The core user tables are:
 
 An OMP user row is required when the identity needs local password sign-in or durable OMP-owned user state. It is optional for AD identities that are only authorized through direct AD user or AD group role principals.
 
+Portal administrators can manage first-class OMP users at `/admin/users`. The
+minimal admin UI can list, create and edit `omp.users` rows and add AD provider
+links in `omp.user_auth`. AD links use the same provider display name (`AD`) and
+provider user key formats that `/auth/ad` resolves, such as `DOMAIN\User`,
+`name:DOMAIN\User`, or `sid:S-1-5-21-...`.
+
+If a Windows identity matches an `omp.user_auth` AD link to a disabled OMP user,
+the auth app blocks sign-in instead of falling back to direct AD user/group role
+principals. This keeps `account_status` authoritative for linked OMP users.
+
 ## User Settings
 
 The Portal exposes `/account/settings` for the signed-in OMP user. The first version lets the user update `omp.users.display_name`, which is core user state and updates `omp.users.updated_at`.

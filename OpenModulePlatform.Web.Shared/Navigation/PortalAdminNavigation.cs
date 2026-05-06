@@ -15,6 +15,7 @@ public static class PortalAdminNavigation
                     new PortalAdminMenuItem("Definitions", hrefFactory("/admin/instancetemplates")),
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/instances")),
                     new PortalAdminMenuItem("Security", hrefFactory("/admin/security"), SeparatorBefore: true),
+                    new PortalAdminMenuItem("Users", hrefFactory("/admin/users")),
                     new PortalAdminMenuItem("Automation", hrefFactory("/admin/automation"))
                 ]),
             new(
