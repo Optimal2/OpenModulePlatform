@@ -23,24 +23,48 @@
     <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.UserTab) ? " is-active" : string.Empty)"
        asp-page="/Account/Settings"
        asp-route-tab="@SettingsModel.UserTab">@L["User"]</a>
-    <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.PortalTab) ? " is-active" : string.Empty)"
-       asp-page="/Account/Settings"
-       asp-route-tab="@SettingsModel.PortalTab">@L["Portal"]</a>
+    @if (Model.HasOmpUser)
+    {
+        <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.PortalTab) ? " is-active" : string.Empty)"
+           asp-page="/Account/Settings"
+           asp-route-tab="@SettingsModel.PortalTab">@L["Portal"]</a>
+    }
 </nav>
 
 @if (Model.IsActiveTab(SettingsModel.UserTab))
 {
-    <form method="post" asp-page-handler="User" class="card form-grid settings-panel">
-        <div class="form-field">
-            <label asp-for="UserInput.DisplayName">@L["Display name"]</label>
-            <input asp-for="UserInput.DisplayName" maxlength="@OpenModulePlatform.Portal.Services.PortalUserSettingsService.DisplayNameMaxLength" />
-            <span asp-validation-for="UserInput.DisplayName" class="field-validation-error"></span>
-        </div>
+    @if (Model.CanCreateOmpUser)
+    {
+        <form method="post" asp-page-handler="CreateAccount" class="card form-grid settings-panel">
+            <h3>@L["Create your OMP account"]</h3>
+            <p class="lede">@L["You are signed in with Windows/AD, but this sign-in is not linked to an OMP user account yet."]</p>
+            <p>@L["Create an OMP account to save profile settings and link this AD sign-in to your account."]</p>
 
-        <div class="toolbar">
-            <button type="submit">@L["Save"]</button>
-        </div>
-    </form>
+            <div class="form-field">
+                <label asp-for="UserInput.DisplayName">@L["Display name"]</label>
+                <input asp-for="UserInput.DisplayName" maxlength="@OpenModulePlatform.Portal.Services.PortalUserSettingsService.DisplayNameMaxLength" />
+                <span asp-validation-for="UserInput.DisplayName" class="field-validation-error"></span>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Create OMP account"]</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <form method="post" asp-page-handler="User" class="card form-grid settings-panel">
+            <div class="form-field">
+                <label asp-for="UserInput.DisplayName">@L["Display name"]</label>
+                <input asp-for="UserInput.DisplayName" maxlength="@OpenModulePlatform.Portal.Services.PortalUserSettingsService.DisplayNameMaxLength" />
+                <span asp-validation-for="UserInput.DisplayName" class="field-validation-error"></span>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Save"]</button>
+            </div>
+        </form>
+    }
 }
 else
 {

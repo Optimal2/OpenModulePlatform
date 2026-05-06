@@ -43,11 +43,22 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     public bool IsPortalAdmin { get; private set; }
 
+    public bool HasOmpUser { get; private set; }
+
+    public bool CanCreateOmpUser { get; private set; }
+
     public async Task<IActionResult> OnGet(string? tab, CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
-            return Forbid();
+            if (GetCurrentAdProviderUserKeys().Count == 0)
+            {
+                return Forbid();
+            }
+
+            LoadSelfServiceAccountState();
+            UserInput.DisplayName = SuggestedDisplayName();
+            return Page();
         }
 
         var guard = await LoadAsync(userId, tab, loadUserInput: true, loadPortalInput: true, ct);
@@ -98,6 +109,71 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         return RedirectToSettings(UserTab);
     }
 
+    public async Task<IActionResult> OnPostCreateAccount(CancellationToken ct)
+    {
+        if (TryGetCurrentUserId(out _))
+        {
+            return RedirectToSettings(UserTab);
+        }
+
+        LoadSelfServiceAccountState();
+        var providerUserKeys = GetCurrentAdProviderUserKeys();
+        if (providerUserKeys.Count == 0)
+        {
+            ModelState.AddModelError(string.Empty, T("The current sign-in is not an AD sign-in that can be linked."));
+            return Page();
+        }
+
+        UserInput.DisplayName = UserInput.DisplayName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(UserInput.DisplayName))
+        {
+            ModelState.AddModelError(
+                $"{nameof(UserInput)}.{nameof(UserInputModel.DisplayName)}",
+                T("Display name is required."));
+        }
+
+        if (UserInput.DisplayName.Length > PortalUserSettingsService.DisplayNameMaxLength)
+        {
+            ModelState.AddModelError(
+                $"{nameof(UserInput)}.{nameof(UserInputModel.DisplayName)}",
+                T("Display name must be 200 characters or fewer."));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+
+        var result = await _settings.CreateSelfServiceAdAccountAsync(
+            UserInput.DisplayName,
+            providerUserKeys,
+            ct);
+
+        switch (result.Status)
+        {
+            case CreateSelfServiceAdAccountStatus.Created when result.UserId is int userId:
+                await RefreshAccountClaimsAsync(UserInput.DisplayName, userId);
+                StatusMessage = T("OMP user account created.");
+                return RedirectToSettings(UserTab);
+
+            case CreateSelfServiceAdAccountStatus.ProviderUnavailable:
+                ModelState.AddModelError(string.Empty, T("The AD authentication provider is not available."));
+                return Page();
+
+            case CreateSelfServiceAdAccountStatus.MissingProviderKeys:
+                ModelState.AddModelError(string.Empty, T("The current sign-in is not an AD sign-in that can be linked."));
+                return Page();
+
+            case CreateSelfServiceAdAccountStatus.AlreadyLinkedToAnotherUser:
+                ModelState.AddModelError(string.Empty, T("This AD account is already linked to an OMP user. Sign out and sign in again."));
+                return Page();
+
+            default:
+                ModelState.AddModelError(string.Empty, T("The OMP user account could not be created."));
+                return Page();
+        }
+    }
+
     public async Task<IActionResult> OnPostPortal(CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -133,6 +209,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     {
         SetTitles("Settings");
         ActiveTab = NormalizeTab(tab);
+        HasOmpUser = true;
+        CanCreateOmpUser = false;
 
         var settings = await _settings.GetAccountSettingsAsync(userId, ct);
         if (settings is null)
@@ -157,6 +235,16 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         return null;
     }
 
+    private void LoadSelfServiceAccountState()
+    {
+        SetTitles("Settings");
+        ActiveTab = UserTab;
+        HasOmpUser = false;
+        CanCreateOmpUser = true;
+        IsPortalAdmin = false;
+        ViewData["IsPortalAdmin"] = false;
+    }
+
     private static string NormalizeTab(string? tab)
         => string.Equals(tab, PortalTab, StringComparison.OrdinalIgnoreCase)
             ? PortalTab
@@ -172,6 +260,9 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     }
 
     private async Task RefreshDisplayNameClaimAsync(string displayName)
+        => await RefreshAccountClaimsAsync(displayName, userId: null);
+
+    private async Task RefreshAccountClaimsAsync(string displayName, int? userId)
     {
         var sourceIdentity = User.Identities.FirstOrDefault(identity =>
             string.Equals(identity.AuthenticationType, OmpAuthDefaults.AuthenticationScheme, StringComparison.Ordinal));
@@ -182,10 +273,19 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         }
 
         var claims = sourceIdentity.Claims
-            .Where(claim => claim.Type != ClaimTypes.Name && claim.Type != ActiveRoleCookie.ClaimType)
+            .Where(claim =>
+                claim.Type != ClaimTypes.Name &&
+                claim.Type != ActiveRoleCookie.ClaimType &&
+                (!userId.HasValue || claim.Type != OmpAuthDefaults.UserIdClaimType))
             .ToList();
 
         claims.Insert(0, new Claim(ClaimTypes.Name, displayName));
+        if (userId is int createdUserId)
+        {
+            claims.Add(new Claim(
+                OmpAuthDefaults.UserIdClaimType,
+                createdUserId.ToString(CultureInfo.InvariantCulture)));
+        }
 
         var identity = new ClaimsIdentity(
             claims,
@@ -197,6 +297,93 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             OmpAuthDefaults.AuthenticationScheme,
             new ClaimsPrincipal(identity));
     }
+
+    private IReadOnlyList<string> GetCurrentAdProviderUserKeys()
+    {
+        var provider = User.FindFirstValue(OmpAuthDefaults.ProviderClaimType);
+        if (!string.Equals(provider, "AD", StringComparison.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddProviderKey(keys, User.FindFirstValue(OmpAuthDefaults.ProviderUserKeyClaimType));
+
+        foreach (var claim in User.FindAll(OmpAuthDefaults.PrincipalClaimType))
+        {
+            if (!TryParsePrincipalClaim(claim.Value, out var principalType, out var principal))
+            {
+                continue;
+            }
+
+            if (!string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(principalType, "User", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (IsSidLike(principal))
+            {
+                AddProviderKey(keys, "sid:" + principal);
+            }
+            else
+            {
+                AddProviderKey(keys, "name:" + principal);
+                AddProviderKey(keys, principal);
+            }
+        }
+
+        return keys.ToArray();
+    }
+
+    private string SuggestedDisplayName()
+    {
+        var name = User.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name.Trim();
+        }
+
+        return User.FindFirstValue(ClaimTypes.Name)?.Trim() ?? string.Empty;
+    }
+
+    private static void AddProviderKey(HashSet<string> keys, string? providerUserKey)
+    {
+        providerUserKey = providerUserKey?.Trim();
+        if (!string.IsNullOrWhiteSpace(providerUserKey))
+        {
+            keys.Add(providerUserKey);
+        }
+    }
+
+    private static bool TryParsePrincipalClaim(
+        string? value,
+        out string principalType,
+        out string principal)
+    {
+        principalType = string.Empty;
+        principal = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var parts = value.Split('|', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 ||
+            string.IsNullOrWhiteSpace(parts[0]) ||
+            string.IsNullOrWhiteSpace(parts[1]))
+        {
+            return false;
+        }
+
+        principalType = parts[0];
+        principal = parts[1];
+        return true;
+    }
+
+    private static bool IsSidLike(string value)
+        => value.StartsWith("S-", StringComparison.OrdinalIgnoreCase);
 
     public sealed class UserInputModel
     {

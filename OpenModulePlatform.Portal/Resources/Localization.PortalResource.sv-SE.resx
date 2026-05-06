@@ -1346,4 +1346,14 @@
   <data name="The AD authentication provider is missing." xml:space="preserve"><value>AD-autentiseringsprovidern saknas.</value></data>
   <data name="The AD account could not be linked." xml:space="preserve"><value>AD-kontot kunde inte länkas.</value></data>
   <data name="User ID is required." xml:space="preserve"><value>Användar-ID krävs.</value></data>
-  <data name="Select an account status." xml:space="preserve"><value>Välj en kontostatus.</value></data></root>
+  <data name="Select an account status." xml:space="preserve"><value>Välj en kontostatus.</value></data>
+  <data name="Create your OMP account" xml:space="preserve"><value>Skapa ditt OMP-konto</value></data>
+  <data name="You are signed in with Windows/AD, but this sign-in is not linked to an OMP user account yet." xml:space="preserve"><value>Du är inloggad med Windows/AD, men den här inloggningen är inte länkad till ett OMP-användarkonto ännu.</value></data>
+  <data name="Create an OMP account to save profile settings and link this AD sign-in to your account." xml:space="preserve"><value>Skapa ett OMP-konto för att spara profilinställningar och länka den här AD-inloggningen till ditt konto.</value></data>
+  <data name="Create OMP account" xml:space="preserve"><value>Skapa OMP-konto</value></data>
+  <data name="OMP user account created." xml:space="preserve"><value>OMP-användarkontot har skapats.</value></data>
+  <data name="The current sign-in is not an AD sign-in that can be linked." xml:space="preserve"><value>Den aktuella inloggningen är inte en AD-inloggning som kan länkas.</value></data>
+  <data name="The AD authentication provider is not available." xml:space="preserve"><value>AD-autentiseringsprovidern är inte tillgänglig.</value></data>
+  <data name="This AD account is already linked to an OMP user. Sign out and sign in again." xml:space="preserve"><value>Det här AD-kontot är redan länkat till en OMP-användare. Logga ut och logga in igen.</value></data>
+  <data name="The OMP user account could not be created." xml:space="preserve"><value>OMP-användarkontot kunde inte skapas.</value></data>
+</root>
