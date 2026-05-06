@@ -42,6 +42,11 @@ path is exercised locally and in packaged environments.
 The configured database is expected to already exist unless
 `Options.CreateDatabase = $true` is explicitly set.
 
+`Options.StartServices` controls whether Windows services are started by the
+installer. Services are still installed with Automatic startup. In
+load-balanced/customer environments it is usually safer to keep this set to
+`$false`, validate all nodes, and then start HostAgent/WorkerManager manually.
+
 ## Typical Test/Production Flow
 
 Build the package on a build/developer machine:
@@ -75,6 +80,12 @@ and applies that host's certificate settings.
 `PublicBaseUrl` should contain the externally visible root URL. When a module
 does not provide its own base URL, portal topbar links are generated from the
 portal base URL because that is the normal OMP hosting layout.
+
+All OMP web apps that share authentication must use the same
+`DataProtectionKeyPath`. In a load-balanced environment this must be a shared
+folder reachable by every IIS node; otherwise cookies and antiforgery tokens
+created by one node may fail with HTTP 400 when a later request reaches another
+node.
 
 ## Uninstall
 

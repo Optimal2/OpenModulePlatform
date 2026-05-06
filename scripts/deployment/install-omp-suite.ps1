@@ -1097,6 +1097,10 @@ function Ensure-Services {
     if ($script:InstallExampleService) {
         Install-WindowsService -Name $script:Services.ExampleService -DisplayName 'OpenModulePlatform Service - ExampleServiceAppModule' -Description 'Example OMP service app module.' -ExecutablePath (Join-Path $script:ServicesRoot 'ExampleServiceAppModule\OpenModulePlatform.Service.ExampleServiceAppModule.exe')
     }
+
+    if (-not $script:StartServices) {
+        Write-Host 'Windows services were installed/configured with Automatic startup but were not started. Start them manually after validating the deployment.' -ForegroundColor Yellow
+    }
 }
 
 function Grant-RunAsFolderAccess {
@@ -1211,7 +1215,7 @@ $script:InstallRuntimeServices = [bool](Get-NestedConfigValue -Config $config -S
 $script:InstallExampleService = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallExampleService' -DefaultValue $true)
 $script:ConfigureIis = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'ConfigureIis' -DefaultValue $true)
 $script:RunSql = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RunSql' -DefaultValue $true)
-$script:StartServices = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'StartServices' -DefaultValue $true)
+$script:StartServices = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'StartServices' -DefaultValue $false)
 $script:CreateDatabase = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'CreateDatabase' -DefaultValue $false)
 $script:GrantRunAsDatabaseAccess = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'GrantRunAsDatabaseAccess' -DefaultValue $false)
 

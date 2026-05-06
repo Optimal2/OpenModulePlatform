@@ -18,6 +18,7 @@
     ServicesRoot = 'C:\OMP\Services'
     ArtifactStoreRoot = 'C:\OMP\ArtifactStore'
     ArtifactCacheRoot = 'C:\OMP\ArtifactCache'
+    # Use a shared folder for every IIS node in a load-balanced environment.
     DataProtectionKeyPath = 'C:\OMP\DataProtectionKeys'
 
     SqlServer = 'localhost'
@@ -100,7 +101,9 @@
         InstallExampleService = $true
         ConfigureIis = $true
         RunSql = $true
-        StartServices = $true
+        # Services are installed/configured for Automatic startup, but operators
+        # usually start them manually after validating a deployment.
+        StartServices = $false
         # Production/customer databases should normally be created and secured by a DBA.
         CreateDatabase = $false
         GrantRunAsDatabaseAccess = $false
