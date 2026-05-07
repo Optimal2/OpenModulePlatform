@@ -30,6 +30,9 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     [StringLength(1000)]
     public string? NewAdProviderUserKey { get; set; }
 
+    [BindProperty]
+    public LocalLoginInputModel LocalLogin { get; set; } = new();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -40,6 +43,12 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         new() { Value = "1", Label = T("Active") },
         new() { Value = "2", Label = T("Disabled") }
     ];
+
+    public bool HasLocalPasswordLogin =>
+        UserRow?.AuthLinks.Any(link => string.Equals(link.ProviderDisplayName, "lpwd", StringComparison.OrdinalIgnoreCase)) == true;
+
+    public string? LocalPasswordUserName =>
+        UserRow?.AuthLinks.FirstOrDefault(link => string.Equals(link.ProviderDisplayName, "lpwd", StringComparison.OrdinalIgnoreCase))?.ProviderUserKey;
 
     public async Task<IActionResult> OnGet(int userId, CancellationToken ct)
     {
@@ -54,12 +63,7 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             return NotFound();
         }
 
-        Input = new InputModel
-        {
-            UserId = UserRow!.UserId,
-            DisplayName = UserRow.DisplayName,
-            AccountStatus = UserRow.AccountStatus
-        };
+        PopulateInputFromLoadedUser();
 
         SetTitles("Edit user");
         return Page();
@@ -114,12 +118,8 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             return NotFound();
         }
 
-        Input = new InputModel
-        {
-            UserId = UserRow!.UserId,
-            DisplayName = UserRow.DisplayName,
-            AccountStatus = UserRow.AccountStatus
-        };
+        PopulateInputFromLoadedUser();
+        ModelState.Clear();
 
         NewAdProviderUserKey = NewAdProviderUserKey?.Trim();
         if (string.IsNullOrWhiteSpace(NewAdProviderUserKey))
@@ -164,6 +164,65 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnPostAddLocalLogin(int userId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Edit user");
+        if (!await LoadAsync(userId, ct))
+        {
+            return NotFound();
+        }
+
+        PopulateInputFromLoadedUser();
+        ModelState.Clear();
+        ValidateLocalLogin();
+        if (!ModelState.IsValid)
+        {
+            ClearLocalPasswordFields();
+            return Page();
+        }
+
+        var result = await _repo.AddLocalPasswordLoginAsync(
+            userId,
+            LocalLogin.UserName.Trim(),
+            LocalLogin.Password,
+            ct);
+
+        switch (result.Status)
+        {
+            case AddLocalPasswordLoginStatus.Added:
+                StatusMessage = T("Local login added.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
+            case AddLocalPasswordLoginStatus.UserAlreadyHasLocalLogin:
+                ModelState.AddModelError(nameof(LocalLogin.UserName), T("Local login already exists."));
+                break;
+
+            case AddLocalPasswordLoginStatus.UserNameAlreadyInUse:
+                ModelState.AddModelError(nameof(LocalLogin.UserName), T("User name is already in use."));
+                break;
+
+            case AddLocalPasswordLoginStatus.ProviderMissing:
+                ModelState.AddModelError(nameof(LocalLogin.UserName), T("The local password authentication provider is missing or disabled."));
+                break;
+
+            case AddLocalPasswordLoginStatus.UserMissing:
+                return NotFound();
+
+            default:
+                ModelState.AddModelError(nameof(LocalLogin.UserName), T("The local login could not be added."));
+                break;
+        }
+
+        ClearLocalPasswordFields();
+        return Page();
+    }
+
     public string AccountStatusText(int status)
         => T(AccountStatusLabelKey(status));
 
@@ -176,6 +235,21 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     {
         UserRow = await _repo.GetUserAsync(userId, ct);
         return UserRow is not null;
+    }
+
+    private void PopulateInputFromLoadedUser()
+    {
+        if (UserRow is null)
+        {
+            return;
+        }
+
+        Input = new InputModel
+        {
+            UserId = UserRow.UserId,
+            DisplayName = UserRow.DisplayName,
+            AccountStatus = UserRow.AccountStatus
+        };
     }
 
     private void ValidateInput()
@@ -203,6 +277,47 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         }
     }
 
+    private void ValidateLocalLogin()
+    {
+        LocalLogin.UserName = LocalLogin.UserName?.Trim() ?? string.Empty;
+
+        if (HasLocalPasswordLogin)
+        {
+            ModelState.AddModelError(nameof(LocalLogin.UserName), T("Local login already exists."));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(LocalLogin.UserName))
+        {
+            ModelState.AddModelError(nameof(LocalLogin.UserName), T("User name is required."));
+        }
+
+        if (LocalLogin.UserName.Length > 256)
+        {
+            ModelState.AddModelError(nameof(LocalLogin.UserName), T("User name must be 256 characters or fewer."));
+        }
+
+        if (string.IsNullOrEmpty(LocalLogin.Password))
+        {
+            ModelState.AddModelError(nameof(LocalLogin.Password), T("Password is required."));
+        }
+        else if (LocalLogin.Password.Length < 8)
+        {
+            ModelState.AddModelError(nameof(LocalLogin.Password), T("Password must be at least 8 characters."));
+        }
+
+        if (!string.Equals(LocalLogin.Password, LocalLogin.ConfirmPassword, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError(nameof(LocalLogin.ConfirmPassword), T("Password and confirmation password do not match."));
+        }
+    }
+
+    private void ClearLocalPasswordFields()
+    {
+        LocalLogin.Password = string.Empty;
+        LocalLogin.ConfirmPassword = string.Empty;
+    }
+
     private static string AccountStatusLabelKey(int status)
         => status switch
         {
@@ -223,5 +338,19 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
         [Display(Name = "Account status")]
         public int AccountStatus { get; set; }
+    }
+
+    public sealed class LocalLoginInputModel
+    {
+        [Display(Name = "User name")]
+        public string UserName { get; set; } = string.Empty;
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Password")]
+        public string Password { get; set; } = string.Empty;
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Confirm password")]
+        public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

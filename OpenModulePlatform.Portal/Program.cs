@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Extensions;
+using OpenModulePlatform.Web.Shared.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddOmpWebDefaults<PortalResource>(optionsSectionName: "Portal");
 
 builder.Services.AddScoped<AppCatalogService>();
+builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddScoped<OmpAdminRepository>();
 builder.Services.AddScoped<OmpUserAdminRepository>();
 builder.Services.AddScoped<PortalUserSettingsService>();

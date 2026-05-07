@@ -1356,4 +1356,20 @@
   <data name="The AD authentication provider is not available." xml:space="preserve"><value>AD-autentiseringsprovidern är inte tillgänglig.</value></data>
   <data name="This AD account is already linked to an OMP user. Sign out and sign in again." xml:space="preserve"><value>Det här AD-kontot är redan länkat till en OMP-användare. Logga ut och logga in igen.</value></data>
   <data name="The OMP user account could not be created." xml:space="preserve"><value>OMP-användarkontot kunde inte skapas.</value></data>
+  <data name="Local login" xml:space="preserve"><value>Lokal inloggning</value></data>
+  <data name="Add local login" xml:space="preserve"><value>Lägg till lokal inloggning</value></data>
+  <data name="Add a local password login linked to this OMP user." xml:space="preserve"><value>Lägg till en lokal lösenordsinloggning kopplad till den här OMP-användaren.</value></data>
+  <data name="User name" xml:space="preserve"><value>Användarnamn</value></data>
+  <data name="Password" xml:space="preserve"><value>Lösenord</value></data>
+  <data name="Confirm password" xml:space="preserve"><value>Bekräfta lösenord</value></data>
+  <data name="Local login already exists." xml:space="preserve"><value>Lokal inloggning finns redan.</value></data>
+  <data name="User name is already in use." xml:space="preserve"><value>Användarnamnet används redan.</value></data>
+  <data name="The local password authentication provider is missing or disabled." xml:space="preserve"><value>Providern för lokal lösenordsinloggning saknas eller är inaktiverad.</value></data>
+  <data name="The local login could not be added." xml:space="preserve"><value>Den lokala inloggningen kunde inte läggas till.</value></data>
+  <data name="Local login added." xml:space="preserve"><value>Lokal inloggning har lagts till.</value></data>
+  <data name="User name is required." xml:space="preserve"><value>Användarnamn krävs.</value></data>
+  <data name="User name must be 256 characters or fewer." xml:space="preserve"><value>Användarnamn får vara högst 256 tecken.</value></data>
+  <data name="Password is required." xml:space="preserve"><value>Lösenord krävs.</value></data>
+  <data name="Password must be at least 8 characters." xml:space="preserve"><value>Lösenordet måste vara minst 8 tecken.</value></data>
+  <data name="Password and confirmation password do not match." xml:space="preserve"><value>Lösenord och bekräftelse matchar inte.</value></data>
 </root>
