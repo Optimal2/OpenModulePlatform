@@ -111,6 +111,49 @@
         }
     </section>
 
+    <section class="card section-card bottom-gap">
+        <div class="eyebrow">@L["Authentication"]</div>
+        <h3>@L["Local login"]</h3>
+
+        @if (Model.HasLocalPasswordLogin)
+        {
+            <p class="muted">
+                @L["Local login"]:
+                <span class="example-token">@Model.LocalPasswordUserName</span>
+            </p>
+        }
+        else
+        {
+            <p class="muted">@L["Add a local password login linked to this OMP user."]</p>
+
+            <form method="post" asp-page-handler="AddLocalLogin" class="form-grid">
+                <div class="field-grid field-grid--3">
+                    <div class="form-field">
+                        <label asp-for="LocalLogin.UserName"></label>
+                        <input asp-for="LocalLogin.UserName" autocomplete="off" />
+                        <span asp-validation-for="LocalLogin.UserName" class="field-validation-error"></span>
+                    </div>
+
+                    <div class="form-field">
+                        <label asp-for="LocalLogin.Password"></label>
+                        <input asp-for="LocalLogin.Password" type="password" value="" autocomplete="new-password" />
+                        <span asp-validation-for="LocalLogin.Password" class="field-validation-error"></span>
+                    </div>
+
+                    <div class="form-field">
+                        <label asp-for="LocalLogin.ConfirmPassword"></label>
+                        <input asp-for="LocalLogin.ConfirmPassword" type="password" value="" autocomplete="new-password" />
+                        <span asp-validation-for="LocalLogin.ConfirmPassword" class="field-validation-error"></span>
+                    </div>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Add local login"]</button>
+                </div>
+            </form>
+        }
+    </section>
+
     <form method="post" asp-page-handler="LinkAdAccount" class="card form-grid">
         <div class="eyebrow">@L["Authentication"]</div>
         <h3>@L["Link AD account"]</h3>
