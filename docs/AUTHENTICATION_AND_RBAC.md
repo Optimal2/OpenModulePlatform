@@ -59,6 +59,12 @@ Local password sign-in requires:
 
 Raw passwords must never be stored. The current hash format is `PBKDF2-SHA256$<iterations>$<saltBase64>$<hashBase64>`.
 
+LPWD login records are always authentication links to first-class OMP users.
+They cannot exist as standalone platform users. Portal administrators can add a
+local login from `/admin/users/edit/{userId}`, which writes
+`omp.auth_provider_lpwd` and the matching `omp.user_auth` row in one
+transaction.
+
 ## User Tables
 
 The core user tables are:

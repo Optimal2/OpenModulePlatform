@@ -1,7 +1,7 @@
-// File: OpenModulePlatform.Auth/Services/LocalPasswordHasher.cs
+// File: OpenModulePlatform.Web.Shared/Security/LocalPasswordHasher.cs
 using System.Security.Cryptography;
 
-namespace OpenModulePlatform.Auth.Services;
+namespace OpenModulePlatform.Web.Shared.Security;
 
 public sealed class LocalPasswordHasher
 {

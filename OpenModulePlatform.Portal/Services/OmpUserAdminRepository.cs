@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal/Services/OmpUserAdminRepository.cs
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 
 namespace OpenModulePlatform.Portal.Services;
@@ -12,10 +13,12 @@ public sealed class OmpUserAdminRepository
     private const string AdProviderDisplayName = "AD";
 
     private readonly SqlConnectionFactory _db;
+    private readonly LocalPasswordHasher _passwordHasher;
 
-    public OmpUserAdminRepository(SqlConnectionFactory db)
+    public OmpUserAdminRepository(SqlConnectionFactory db, LocalPasswordHasher passwordHasher)
     {
         _db = db;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<IReadOnlyList<OmpUserListRow>> GetUsersAsync(CancellationToken ct)
@@ -203,6 +206,70 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
         }
     }
 
+    public async Task<AddLocalPasswordLoginResult> AddLocalPasswordLoginAsync(
+        int userId,
+        string userName,
+        string password,
+        CancellationToken ct)
+    {
+        var normalizedUserName = LocalPasswordIdentity.NormalizeUserName(userName);
+        var passwordHash = _passwordHasher.Hash(password);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            if (!await UserExistsAsync(conn, tx, userId, ct))
+            {
+                await tx.RollbackAsync(ct);
+                return new AddLocalPasswordLoginResult(AddLocalPasswordLoginStatus.UserMissing);
+            }
+
+            var providerId = await GetEnabledAuthProviderIdAsync(
+                conn,
+                tx,
+                LocalPasswordIdentity.ProviderDisplayName,
+                ct);
+
+            if (providerId is null)
+            {
+                await tx.RollbackAsync(ct);
+                return new AddLocalPasswordLoginResult(AddLocalPasswordLoginStatus.ProviderMissing);
+            }
+
+            if (await UserHasProviderLinkAsync(conn, tx, userId, providerId.Value, ct))
+            {
+                await tx.RollbackAsync(ct);
+                return new AddLocalPasswordLoginResult(AddLocalPasswordLoginStatus.UserAlreadyHasLocalLogin);
+            }
+
+            if (await LocalPasswordUserExistsAsync(conn, tx, normalizedUserName, ct) ||
+                await GetExistingAuthLinkAsync(conn, tx, providerId.Value, normalizedUserName, ct) is not null)
+            {
+                await tx.RollbackAsync(ct);
+                return new AddLocalPasswordLoginResult(AddLocalPasswordLoginStatus.UserNameAlreadyInUse);
+            }
+
+            await InsertLocalPasswordUserAsync(conn, tx, normalizedUserName, passwordHash, ct);
+            await InsertAuthLinkAsync(conn, tx, userId, providerId.Value, normalizedUserName, ct);
+            await tx.CommitAsync(ct);
+
+            return new AddLocalPasswordLoginResult(AddLocalPasswordLoginStatus.Added, normalizedUserName);
+        }
+        catch (SqlException ex) when (ex.Number is 2601 or 2627)
+        {
+            await tx.RollbackAsync(ct);
+            return new AddLocalPasswordLoginResult(AddLocalPasswordLoginStatus.UserNameAlreadyInUse, normalizedUserName);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     private static async Task<IReadOnlyList<OmpUserAuthLinkRow>> GetAuthLinksAsync(
         SqlConnection conn,
         int userId,
@@ -258,6 +325,25 @@ WHERE display_name = @display_name;";
         return result is null or DBNull ? null : Convert.ToInt32(result);
     }
 
+    private static async Task<int?> GetEnabledAuthProviderIdAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string displayName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT provider_id
+FROM omp.auth_providers
+WHERE display_name = @display_name
+  AND is_enabled = 1;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@display_name", displayName);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : Convert.ToInt32(result);
+    }
+
     private static async Task<ExistingAuthLink?> GetExistingAuthLinkAsync(
         SqlConnection conn,
         int providerId,
@@ -284,6 +370,122 @@ ORDER BY user_auth_id;";
         }
 
         return new ExistingAuthLink(rdr.GetInt32(0), rdr.GetInt32(1));
+    }
+
+    private static async Task<ExistingAuthLink?> GetExistingAuthLinkAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int providerId,
+        string providerUserKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       user_auth_id,
+       user_id
+FROM omp.user_auth
+WHERE provider_id = @provider_id
+  AND provider_user_key = @provider_user_key
+ORDER BY user_auth_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@provider_id", providerId);
+        Add(cmd, "@provider_user_key", providerUserKey);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ExistingAuthLink(rdr.GetInt32(0), rdr.GetInt32(1));
+    }
+
+    private static async Task<bool> UserExistsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        CancellationToken ct)
+    {
+        const string sql = "SELECT COUNT(1) FROM omp.users WHERE user_id = @user_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    private static async Task<bool> UserHasProviderLinkAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        int providerId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.user_auth
+WHERE user_id = @user_id
+  AND provider_id = @provider_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+        Add(cmd, "@provider_id", providerId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    private static async Task<bool> LocalPasswordUserExistsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string userName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.auth_provider_lpwd
+WHERE user_name = @user_name;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_name", userName);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    private static async Task InsertLocalPasswordUserAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string userName,
+        string passwordHash,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.auth_provider_lpwd(user_name, password_hash)
+VALUES(@user_name, @password_hash);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_name", userName);
+        Add(cmd, "@password_hash", passwordHash);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task InsertAuthLinkAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        int providerId,
+        string providerUserKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, created_at)
+VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+        Add(cmd, "@provider_id", providerId);
+        Add(cmd, "@provider_user_key", providerUserKey);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static void Add(SqlCommand cmd, string name, object? value)
@@ -360,4 +562,15 @@ public enum AddAuthLinkStatus
     AlreadyLinkedToThisUser,
     AlreadyLinkedToAnotherUser,
     ProviderMissing
+}
+
+public sealed record AddLocalPasswordLoginResult(AddLocalPasswordLoginStatus Status, string? NormalizedUserName = null);
+
+public enum AddLocalPasswordLoginStatus
+{
+    Added,
+    UserMissing,
+    ProviderMissing,
+    UserAlreadyHasLocalLogin,
+    UserNameAlreadyInUse
 }

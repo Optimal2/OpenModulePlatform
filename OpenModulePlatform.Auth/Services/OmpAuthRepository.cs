@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Auth/Services/OmpAuthRepository.cs
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Auth.Models;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using System.Security.Claims;
 
@@ -9,7 +10,6 @@ namespace OpenModulePlatform.Auth.Services;
 public sealed class OmpAuthRepository
 {
     private const string AdProvider = "AD";
-    private const string LocalPasswordProvider = "lpwd";
     private const int AdGroupPrincipalQueryChunkSize = 500;
 
     private readonly SqlConnectionFactory _db;
@@ -123,7 +123,7 @@ public sealed class OmpAuthRepository
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
-        var provider = await EnsureProviderAsync(conn, LocalPasswordProvider, ct);
+        var provider = await EnsureProviderAsync(conn, LocalPasswordIdentity.ProviderDisplayName, ct);
         if (provider is null)
         {
             return (null, "Local password sign-in is disabled.");
@@ -165,7 +165,7 @@ public sealed class OmpAuthRepository
         {
             UserId = linkedUser.Value.UserId,
             DisplayName = linkedUser.Value.DisplayName,
-            Provider = LocalPasswordProvider,
+            Provider = LocalPasswordIdentity.ProviderDisplayName,
             ProviderUserKey = normalizedUserName,
             RolePrincipals =
             [
@@ -176,7 +176,7 @@ public sealed class OmpAuthRepository
     }
 
     private static string NormalizeLocalUserName(string userName)
-        => userName.Trim().ToLowerInvariant();
+        => LocalPasswordIdentity.NormalizeUserName(userName);
 
     private static async Task<ProviderRow?> EnsureProviderAsync(
         SqlConnection conn,
