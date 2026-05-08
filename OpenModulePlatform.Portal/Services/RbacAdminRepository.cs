@@ -261,7 +261,7 @@ ORDER BY rp.PrincipalType,
     /// <summary>
     /// Returns OMP users for lightweight role-principal autocomplete suggestions.
     /// </summary>
-    public async Task<IReadOnlyList<OmpUserPrincipalSuggestion>> SearchOmpUserPrincipalSuggestionsAsync(
+    public async Task<IReadOnlyList<PrincipalSuggestion>> SearchOmpUserPrincipalSuggestionsAsync(
         string? term,
         int maxResults,
         CancellationToken ct)
@@ -281,7 +281,7 @@ WHERE account_status = 1
 ORDER BY display_name,
          user_id;";
 
-        var rows = new List<OmpUserPrincipalSuggestion>();
+        var rows = new List<PrincipalSuggestion>();
         term = term?.Trim() ?? string.Empty;
 
         await using var conn = _db.Create();
@@ -297,9 +297,51 @@ ORDER BY display_name,
         {
             var userId = rdr.GetInt32(0);
             var displayName = rdr.GetString(1);
-            rows.Add(new OmpUserPrincipalSuggestion(
+            rows.Add(new PrincipalSuggestion(
                 userId.ToString(CultureInfo.InvariantCulture),
                 $"{displayName} (id: {userId.ToString(CultureInfo.InvariantCulture)})"));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Returns existing AD user principals for lightweight role-principal autocomplete suggestions.
+    /// </summary>
+    public async Task<IReadOnlyList<PrincipalSuggestion>> SearchAdUserPrincipalSuggestionsAsync(
+        string? term,
+        int maxResults,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT DISTINCT TOP (@maxResults)
+       Principal
+FROM omp.RolePrincipals
+WHERE PrincipalType = N'ADUser'
+  AND LTRIM(RTRIM(Principal)) <> N''
+  AND
+  (
+      @term = ''
+      OR Principal LIKE @termPattern
+  )
+ORDER BY Principal;";
+
+        var rows = new List<PrincipalSuggestion>();
+        term = term?.Trim() ?? string.Empty;
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@maxResults", maxResults);
+        cmd.Parameters.AddWithValue("@term", term);
+        cmd.Parameters.AddWithValue("@termPattern", $"%{term}%");
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var principal = rdr.GetString(0).Trim();
+            rows.Add(new PrincipalSuggestion(principal, principal));
         }
 
         return rows;
@@ -701,7 +743,7 @@ public sealed class RolePrincipalRow
     public string DisplayPrincipal { get; set; } = string.Empty;
 }
 
-public sealed record OmpUserPrincipalSuggestion(string Value, string Label);
+public sealed record PrincipalSuggestion(string Value, string Label);
 
 /// <summary>
 /// Mutable edit model for a role.

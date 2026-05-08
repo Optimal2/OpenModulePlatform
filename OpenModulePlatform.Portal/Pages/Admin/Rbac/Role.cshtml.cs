@@ -261,7 +261,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     }
 
     /// <summary>
-    /// Returns lightweight autocomplete suggestions for known OMP user principals.
+    /// Returns lightweight autocomplete suggestions for known role principals.
     /// </summary>
     public async Task<IActionResult> OnGetPrincipalSuggestions(string principalType, string? term, CancellationToken ct)
     {
@@ -274,13 +274,19 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         principalType = Clean(principalType) ?? string.Empty;
         term = Clean(term) ?? string.Empty;
 
-        if (!string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
         {
-            return new JsonResult(Array.Empty<OmpUserPrincipalSuggestion>());
+            var suggestions = await _repo.SearchOmpUserPrincipalSuggestionsAsync(term, 12, ct);
+            return new JsonResult(suggestions);
         }
 
-        var suggestions = await _repo.SearchOmpUserPrincipalSuggestionsAsync(term, 12, ct);
-        return new JsonResult(suggestions);
+        if (string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase))
+        {
+            var suggestions = await _repo.SearchAdUserPrincipalSuggestionsAsync(term, 12, ct);
+            return new JsonResult(suggestions);
+        }
+
+        return new JsonResult(Array.Empty<PrincipalSuggestion>());
     }
 
     public async Task<IActionResult> OnPostDelete(CancellationToken ct)

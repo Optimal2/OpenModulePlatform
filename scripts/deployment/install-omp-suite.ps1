@@ -1146,7 +1146,19 @@ $script:SqlAuthentication = [string](Get-ConfigValue -Config $config -Name 'SqlA
 $script:SqlUser = [string](Get-ConfigValue -Config $config -Name 'SqlUser' -DefaultValue '')
 $script:SqlPassword = [string](Get-ConfigValue -Config $config -Name 'SqlPassword' -DefaultValue '')
 $script:BootstrapPortalAdminPrincipals = @((Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipals' -DefaultValue @("$env:USERDOMAIN\$env:USERNAME")))
-$script:BootstrapPortalAdminPrincipalType = [string](Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipalType' -DefaultValue 'User')
+$script:BootstrapPortalAdminPrincipalType = [string](Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipalType' -DefaultValue 'ADUser')
+if ($script:BootstrapPortalAdminPrincipalType -ieq 'User') {
+    $script:BootstrapPortalAdminPrincipalType = 'ADUser'
+}
+elseif ($script:BootstrapPortalAdminPrincipalType -ieq 'ADUser') {
+    $script:BootstrapPortalAdminPrincipalType = 'ADUser'
+}
+elseif ($script:BootstrapPortalAdminPrincipalType -ieq 'ADGroup') {
+    $script:BootstrapPortalAdminPrincipalType = 'ADGroup'
+}
+else {
+    throw "BootstrapPortalAdminPrincipalType must be ADUser or ADGroup."
+}
 $script:HostKey = [string](Get-ConfigValue -Config $config -Name 'HostKey' -DefaultValue '')
 $script:HostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -DefaultValue '')
 $script:ConfiguredHosts = @((Get-ConfigValue -Config $config -Name 'Hosts' -DefaultValue @()))

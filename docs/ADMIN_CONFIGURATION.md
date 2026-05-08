@@ -24,6 +24,9 @@ Important:
 - use `ADGroup` for large AD groups that should grant access without creating `omp.users` rows for every member
 - use `LocalUser` for identities authenticated by the built-in `lpwd` provider
 
+Legacy `User` role-principal rows are migrated to `ADUser` by the OMP SQL setup
+and initialization scripts.
+
 The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
 principal types. Existing `ADGroup` assignments still resolve, but adding new AD
 group assignments is disabled in the editor until group selection has its own

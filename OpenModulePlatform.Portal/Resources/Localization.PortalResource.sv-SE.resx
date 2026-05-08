@@ -1376,7 +1376,7 @@
   <data name="AD user" xml:space="preserve"><value>AD-användare</value></data>
   <data name="AD group" xml:space="preserve"><value>AD-grupp</value></data>
   <data name="Bind OMP users or AD users to the role. AD group assignment is not available yet." xml:space="preserve"><value>Koppla OMP-användare eller AD-användare till rollen. AD-grupper kan inte tilldelas ännu.</value></data>
-  <data name="For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, enter DOMAIN\\User." xml:space="preserve"><value>För OMP-användare: börja skriva visningsnamn eller användar-ID och välj ett förslag. För AD-användare: ange DOMAIN\\User.</value></data>
+  <data name="For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, start typing an existing AD user principal or enter DOMAIN\\User." xml:space="preserve"><value>För OMP-användare: börja skriva visningsnamn eller användar-ID och välj ett förslag. För AD-användare: börja skriva en befintlig AD-principal eller ange DOMAIN\\User.</value></data>
   <data name="Select a supported principal type." xml:space="preserve"><value>Välj en stödd principaltyp.</value></data>
   <data name="AD group assignment is not available yet." xml:space="preserve"><value>AD-grupper kan inte tilldelas ännu.</value></data>
   <data name="Select an OMP user from the suggestions or enter a valid user ID." xml:space="preserve"><value>Välj en OMP-användare från förslagen eller ange ett giltigt användar-ID.</value></data>

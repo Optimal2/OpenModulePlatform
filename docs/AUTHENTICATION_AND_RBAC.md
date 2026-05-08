@@ -123,10 +123,10 @@ RBAC is stored in:
 - `ADUser` - a Windows/AD account name or SID
 - `ADGroup` - a Windows/AD group name or SID
 - `LocalUser` - a local password provider user name
-- `User` - legacy Windows account name compatibility
 - `ServiceAccount` and `Host` - reserved for non-interactive or host-oriented assignments
 
 Use `ADGroup` for large AD groups. OMP does not need to create `omp.users` rows for every AD group member.
+Legacy `User` role-principal rows are migrated to `ADUser` by the core setup and initialization scripts.
 
 ## Request Flow
 
@@ -145,7 +145,9 @@ For individual platform users, prefer `OmpUser` role principals once the user ex
 For customer or enterprise AD groups, prefer `ADGroup` role principals. This keeps group membership in AD and avoids synchronizing large groups into OMP.
 
 The Portal role editor currently supports adding `OmpUser` and `ADUser`
-principals directly. `ADGroup` remains part of the RBAC model and existing
+principals directly. `OmpUser` suggestions come from active `omp.users` rows;
+`ADUser` suggestions come from distinct existing `ADUser` rows in
+`omp.RolePrincipals`. `ADGroup` remains part of the RBAC model and existing
 assignments continue to resolve, but direct AD group assignment in the editor is
 left disabled until group selection has a dedicated workflow.
 

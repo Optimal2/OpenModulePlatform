@@ -293,14 +293,14 @@ VALUES
 $(($values -join ",`r`n"));
 
 INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
-SELECT @PortalAdminsRoleId, N'User', bp.Principal
+SELECT @PortalAdminsRoleId, N'ADUser', bp.Principal
 FROM @BootstrapPrincipals bp
 WHERE NOT EXISTS
 (
     SELECT 1
     FROM omp.RolePrincipals rp
     WHERE rp.RoleId = @PortalAdminsRoleId
-      AND rp.PrincipalType = N'User'
+      AND rp.PrincipalType = N'ADUser'
       AND rp.Principal = bp.Principal
 );
 "@
