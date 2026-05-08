@@ -69,6 +69,13 @@ function Write-Step {
     Write-Host "`n== $Message ==" -ForegroundColor Cyan
 }
 
+function Test-IsUncPath {
+    param([string]$Path)
+
+    return -not [string]::IsNullOrWhiteSpace($Path) -and
+        $Path.StartsWith('\\', [System.StringComparison]::Ordinal)
+}
+
 function Confirm-LocalAction {
     param([string]$Message)
     if ($Yes) { return $true }
@@ -970,6 +977,11 @@ function Grant-RunAsRuntimeAccess {
     Write-Step 'Granting runtime folder access to configured run-as account'
 
     New-Item -ItemType Directory -Path $RuntimeRoot -Force | Out-Null
+    if (Test-IsUncPath -Path $RuntimeRoot) {
+        Write-Warning "Skipping ACL grant on UNC path. Ensure the run-as account has access: $RuntimeRoot"
+        return
+    }
+
     Invoke-NativeChecked icacls $RuntimeRoot '/grant' ('{0}:(OI)(CI)M' -f $script:resolvedRunAsUser) '/T' '/C' '/Q'
 }
 
