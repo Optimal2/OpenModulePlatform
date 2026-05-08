@@ -13,9 +13,10 @@ Prerequisites:
 - Run 1-setup-openmoduleplatform.sql first.
 - Set @BootstrapPortalAdminPrincipal to the Windows user or group that should
   receive the initial PortalAdmins role.
-- Set @BootstrapPortalAdminPrincipalType to N'User' for a Windows user or
-  N'ADGroup' for a Windows group. Prefer scripts/manage-local-install.ps1 for
-  local user installs because it escapes the value before running sqlcmd.
+- Set @BootstrapPortalAdminPrincipalType to N'ADUser' for a Windows user or
+  N'ADGroup' for a Windows group. Legacy N'User' values are normalized to
+  N'ADUser'. Prefer scripts/manage-local-install.ps1 for local user installs
+  because it escapes the value before running sqlcmd.
 
 Portal, iframe, and example modules are initialized separately from their own
 module sql folders.
@@ -33,7 +34,7 @@ DECLARE @DefaultHostTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
-DECLARE @BootstrapPortalAdminPrincipalType nvarchar(50) = N'User';
+DECLARE @BootstrapPortalAdminPrincipalType nvarchar(50) = N'ADUser';
 DECLARE @InsertedInstanceTemplateIds TABLE (InstanceTemplateId int NOT NULL);
 DECLARE @InsertedHostTemplateIds TABLE (HostTemplateId int NOT NULL);
 
@@ -42,9 +43,24 @@ BEGIN
     THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. This SQL variable inserts one principal; use repeated executions or the PowerShell installer to add multiple principals.', 1;
 END
 
-IF @BootstrapPortalAdminPrincipalType NOT IN (N'User', N'ADGroup')
+IF UPPER(@BootstrapPortalAdminPrincipalType) = N'USER'
 BEGIN
-    THROW 51003, 'Set @BootstrapPortalAdminPrincipalType to N''User'' for a Windows user or N''ADGroup'' for a Windows group.', 1;
+    SET @BootstrapPortalAdminPrincipalType = N'ADUser';
+END
+
+IF UPPER(@BootstrapPortalAdminPrincipalType) = N'ADUSER'
+BEGIN
+    SET @BootstrapPortalAdminPrincipalType = N'ADUser';
+END
+
+IF UPPER(@BootstrapPortalAdminPrincipalType) = N'ADGROUP'
+BEGIN
+    SET @BootstrapPortalAdminPrincipalType = N'ADGroup';
+END
+
+IF @BootstrapPortalAdminPrincipalType NOT IN (N'ADUser', N'ADGroup')
+BEGIN
+    THROW 51003, 'Set @BootstrapPortalAdminPrincipalType to N''ADUser'' for a Windows user or N''ADGroup'' for a Windows group.', 1;
 END
 
 
@@ -182,7 +198,7 @@ Bootstrap administrative principal rows.
 Set @BootstrapPortalAdminPrincipal before you try to sign in to OMP Portal or
 other OMP modules that rely on the shared PortalAdmins bootstrap role.
 Examples:
-- PrincipalType N'User' with principal DOMAIN\your.user
+- PrincipalType N'ADUser' with principal DOMAIN\your.user
 - PrincipalType N'ADGroup' with principal DOMAIN\OMP Portal Admins
 
 The local installer can add more principals after this script runs. This script
@@ -195,6 +211,22 @@ be safely validated inside this script after substitution. Use the PowerShell
 installer for automated local runs, or manually escape single quotes in the
 literal above.
 */
+DELETE legacy
+FROM omp.RolePrincipals legacy
+WHERE legacy.PrincipalType = N'User'
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.RolePrincipals currentPrincipal
+      WHERE currentPrincipal.RoleId = legacy.RoleId
+        AND currentPrincipal.PrincipalType = N'ADUser'
+        AND currentPrincipal.Principal = legacy.Principal
+  );
+
+UPDATE omp.RolePrincipals
+SET PrincipalType = N'ADUser'
+WHERE PrincipalType = N'User';
+
 IF NOT EXISTS
 (
     SELECT 1

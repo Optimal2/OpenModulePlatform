@@ -88,6 +88,26 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.RolePrincipals', N'U') IS NOT NULL
+BEGIN
+    DELETE legacy
+    FROM omp.RolePrincipals legacy
+    WHERE legacy.PrincipalType = N'User'
+      AND EXISTS
+      (
+          SELECT 1
+          FROM omp.RolePrincipals currentPrincipal
+          WHERE currentPrincipal.RoleId = legacy.RoleId
+            AND currentPrincipal.PrincipalType = N'ADUser'
+            AND currentPrincipal.Principal = legacy.Principal
+      );
+
+    UPDATE omp.RolePrincipals
+    SET PrincipalType = N'ADUser'
+    WHERE PrincipalType = N'User';
+END
+GO
+
 IF OBJECT_ID(N'omp.AuditLog', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.AuditLog
@@ -745,4 +765,3 @@ BEGIN
     );
 END
 GO
-
