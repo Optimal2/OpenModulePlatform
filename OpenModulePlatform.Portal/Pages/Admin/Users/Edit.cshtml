@@ -109,6 +109,30 @@
                 </tbody>
             </table>
         }
+
+        @if (Model.HasAdAuthLink)
+        {
+            <div class="top-gap">
+                <h4>@L["AD rights migration"]</h4>
+
+                @if (Model.UserRow.MigratableAdUserRoleAssignmentCount > 0)
+                {
+                    <p class="muted">
+                        @string.Format(
+                            System.Globalization.CultureInfo.CurrentCulture,
+                            L["There are {0} direct AD-user role assignments that can be moved to this OMP user."].Value,
+                            Model.UserRow.MigratableAdUserRoleAssignmentCount)
+                    </p>
+                    <form method="post" asp-page-handler="MigrateAdRights" class="inline-form">
+                        <button type="submit">@L["Move AD rights to OMP user"]</button>
+                    </form>
+                }
+                else
+                {
+                    <div class="empty-state top-gap">@L["No direct AD-user rights are available to move."]</div>
+                }
+            </div>
+        }
     </section>
 
     <section class="card section-card bottom-gap">

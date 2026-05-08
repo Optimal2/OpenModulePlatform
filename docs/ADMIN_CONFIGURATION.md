@@ -27,6 +27,11 @@ Important:
 Legacy `User` role-principal rows are migrated to `ADUser` by the OMP SQL setup
 and initialization scripts.
 
+When an AD account is linked to an OMP user, use the OMP user as the primary
+role principal. Direct `ADUser` assignments for linked AD keys can be moved to
+the OMP user from `/admin/users/edit/{userId}`. The migration only handles
+direct `ADUser` assignments; `ADGroup` assignments are intentionally left as-is.
+
 The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
 principal types. Existing `ADGroup` assignments still resolve, but adding new AD
 group assignments is disabled in the editor until group selection has its own

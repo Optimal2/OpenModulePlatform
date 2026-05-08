@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Auth/Services/WindowsPasswordAuthenticator.cs
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -11,7 +12,16 @@ namespace OpenModulePlatform.Auth.Services;
 public sealed class WindowsPasswordAuthenticator
 {
     private const int Logon32LogonInteractive = 2;
+    private const int Logon32LogonNetworkCleartext = 8;
     private const int Logon32ProviderDefault = 0;
+    private const int ErrorLogonTypeNotGranted = 1385;
+
+    private readonly ILogger<WindowsPasswordAuthenticator> _log;
+
+    public WindowsPasswordAuthenticator(ILogger<WindowsPasswordAuthenticator> log)
+    {
+        _log = log;
+    }
 
     public WindowsPasswordAuthenticationResult Authenticate(string accountName, string password)
     {
@@ -30,16 +40,27 @@ public sealed class WindowsPasswordAuthenticator
             return WindowsPasswordAuthenticationResult.Failed("Enter a Windows password.");
         }
 
-        if (!LogonUser(
+        if (!TryLogon(
+            accountName,
             userName,
             domain,
             password,
             Logon32LogonInteractive,
-            Logon32ProviderDefault,
-            out var token))
+            out var token,
+            out var error))
         {
-            var error = new Win32Exception(Marshal.GetLastWin32Error());
-            return WindowsPasswordAuthenticationResult.Failed(error.Message);
+            if (error.NativeErrorCode != ErrorLogonTypeNotGranted ||
+                !TryLogon(
+                    accountName,
+                    userName,
+                    domain,
+                    password,
+                    Logon32LogonNetworkCleartext,
+                    out token,
+                    out error))
+            {
+                return WindowsPasswordAuthenticationResult.Failed(error.Message);
+            }
         }
 
         try
@@ -52,6 +73,39 @@ public sealed class WindowsPasswordAuthenticator
             token.Dispose();
             throw;
         }
+    }
+
+    private bool TryLogon(
+        string accountName,
+        string userName,
+        string? domain,
+        string password,
+        int logonType,
+        out SafeAccessTokenHandle token,
+        out Win32Exception error)
+    {
+        if (LogonUser(
+            userName,
+            domain,
+            password,
+            logonType,
+            Logon32ProviderDefault,
+            out token))
+        {
+            error = new Win32Exception(0);
+            return true;
+        }
+
+        error = new Win32Exception(Marshal.GetLastWin32Error());
+        _log.LogWarning(
+            "Alternate Windows sign-in validation failed for account '{AccountName}' using domain '{Domain}' and logon type {LogonType}. Win32 error {ErrorCode}: {ErrorMessage}",
+            accountName,
+            domain,
+            logonType,
+            error.NativeErrorCode,
+            error.Message);
+
+        return false;
     }
 
     private static bool TrySplitAccountName(
@@ -71,15 +125,20 @@ public sealed class WindowsPasswordAuthenticator
         var slashIndex = accountName.IndexOf('\\');
         if (slashIndex >= 0)
         {
-            domain = accountName[..slashIndex].Trim();
+            domain = NormalizeLocalDomain(accountName[..slashIndex].Trim());
             userName = accountName[(slashIndex + 1)..].Trim();
             return !string.IsNullOrWhiteSpace(domain) && !string.IsNullOrWhiteSpace(userName);
         }
 
         userName = accountName;
-        domain = accountName.Contains('@', StringComparison.Ordinal) ? null : ".";
+        domain = accountName.Contains('@', StringComparison.Ordinal) ? null : Environment.MachineName;
         return true;
     }
+
+    private static string? NormalizeLocalDomain(string? domain)
+        => string.Equals(domain, ".", StringComparison.Ordinal)
+            ? Environment.MachineName
+            : domain;
 
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool LogonUser(

@@ -119,6 +119,7 @@ WHERE user_id = @user_id;";
         }
 
         user.AuthLinks.AddRange(await GetAuthLinksAsync(conn, userId, ct));
+        user.MigratableAdUserRoleAssignmentCount = await GetMigratableAdUserRoleAssignmentCountAsync(conn, userId, ct);
         return user;
     }
 
@@ -270,6 +271,33 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
         }
     }
 
+    public async Task<MigrateAdUserRoleAssignmentsResult> MigrateAdUserRoleAssignmentsToOmpUserAsync(
+        int userId,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            if (!await UserExistsAsync(conn, tx, userId, ct))
+            {
+                await tx.RollbackAsync(ct);
+                return new MigrateAdUserRoleAssignmentsResult(MigrateAdUserRoleAssignmentsStatus.UserMissing);
+            }
+
+            var result = await ExecuteAdUserRoleAssignmentMigrationAsync(conn, tx, userId, ct);
+            await tx.CommitAsync(ct);
+            return result;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     private static async Task<IReadOnlyList<OmpUserAuthLinkRow>> GetAuthLinksAsync(
         SqlConnection conn,
         int userId,
@@ -306,6 +334,136 @@ ORDER BY ap.display_name,
         }
 
         return rows;
+    }
+
+    private static async Task<int> GetMigratableAdUserRoleAssignmentCountAsync(
+        SqlConnection conn,
+        int userId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.RolePrincipals rp
+WHERE rp.PrincipalType = N'ADUser'
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.user_auth ua
+      INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+      WHERE ua.user_id = @user_id
+        AND ap.display_name = @provider_display_name
+        AND ua.provider_user_key = rp.Principal
+  );";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@user_id", userId);
+        Add(cmd, "@provider_display_name", AdProviderDisplayName);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task<MigrateAdUserRoleAssignmentsResult> ExecuteAdUserRoleAssignmentMigrationAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @OmpUserPrincipal nvarchar(256) = CONVERT(nvarchar(20), @user_id);
+
+DECLARE @AdKeys table
+(
+    Principal nvarchar(256) NOT NULL PRIMARY KEY
+);
+
+INSERT INTO @AdKeys(Principal)
+SELECT DISTINCT CONVERT(nvarchar(256), ua.provider_user_key)
+FROM omp.user_auth ua
+INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+WHERE ua.user_id = @user_id
+  AND ap.display_name = @provider_display_name
+  AND LTRIM(RTRIM(ua.provider_user_key)) <> N''
+  AND LEN(ua.provider_user_key) <= 256;
+
+DECLARE @AdLinkCount int = @@ROWCOUNT;
+
+DECLARE @DirectAssignmentCount int =
+(
+    SELECT COUNT(1)
+    FROM omp.RolePrincipals rp
+    INNER JOIN @AdKeys ad ON ad.Principal = rp.Principal
+    WHERE rp.PrincipalType = N'ADUser'
+);
+
+DECLARE @TargetRoles table
+(
+    RoleId int NOT NULL PRIMARY KEY
+);
+
+INSERT INTO @TargetRoles(RoleId)
+SELECT DISTINCT rp.RoleId
+FROM omp.RolePrincipals rp
+INNER JOIN @AdKeys ad ON ad.Principal = rp.Principal
+WHERE rp.PrincipalType = N'ADUser';
+
+INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
+SELECT target.RoleId,
+       N'OmpUser',
+       @OmpUserPrincipal
+FROM @TargetRoles target
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM omp.RolePrincipals existing
+    WHERE existing.RoleId = target.RoleId
+      AND existing.PrincipalType = N'OmpUser'
+      AND existing.Principal = @OmpUserPrincipal
+);
+
+DECLARE @CreatedOmpUserAssignmentCount int = @@ROWCOUNT;
+
+DELETE rp
+FROM omp.RolePrincipals rp
+INNER JOIN @AdKeys ad ON ad.Principal = rp.Principal
+WHERE rp.PrincipalType = N'ADUser';
+
+DECLARE @RemovedAdUserAssignmentCount int = @@ROWCOUNT;
+
+SELECT @AdLinkCount AS AdLinkCount,
+       @DirectAssignmentCount AS DirectAssignmentCount,
+       @CreatedOmpUserAssignmentCount AS CreatedOmpUserAssignmentCount,
+       @RemovedAdUserAssignmentCount AS RemovedAdUserAssignmentCount;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+        Add(cmd, "@provider_display_name", AdProviderDisplayName);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return new MigrateAdUserRoleAssignmentsResult(MigrateAdUserRoleAssignmentsStatus.NoAssignments);
+        }
+
+        var adLinkCount = rdr.GetInt32(0);
+        var directAssignmentCount = rdr.GetInt32(1);
+        var createdOmpUserAssignmentCount = rdr.GetInt32(2);
+        var removedAdUserAssignmentCount = rdr.GetInt32(3);
+
+        if (adLinkCount == 0)
+        {
+            return new MigrateAdUserRoleAssignmentsResult(MigrateAdUserRoleAssignmentsStatus.NoAdLinks);
+        }
+
+        if (directAssignmentCount == 0)
+        {
+            return new MigrateAdUserRoleAssignmentsResult(MigrateAdUserRoleAssignmentsStatus.NoAssignments);
+        }
+
+        return new MigrateAdUserRoleAssignmentsResult(
+            MigrateAdUserRoleAssignmentsStatus.Migrated,
+            directAssignmentCount,
+            createdOmpUserAssignmentCount,
+            removedAdUserAssignmentCount);
     }
 
     private static async Task<int?> GetAuthProviderIdAsync(
@@ -528,6 +686,8 @@ public sealed class OmpUserDetail
     public DateTime UpdatedAt { get; set; }
 
     public List<OmpUserAuthLinkRow> AuthLinks { get; } = [];
+
+    public int MigratableAdUserRoleAssignmentCount { get; set; }
 }
 
 public sealed record OmpUserAuthLinkSummary(string ProviderDisplayName, string ProviderUserKey);
@@ -573,4 +733,18 @@ public enum AddLocalPasswordLoginStatus
     ProviderMissing,
     UserAlreadyHasLocalLogin,
     UserNameAlreadyInUse
+}
+
+public sealed record MigrateAdUserRoleAssignmentsResult(
+    MigrateAdUserRoleAssignmentsStatus Status,
+    int DirectAssignmentCount = 0,
+    int CreatedOmpUserAssignmentCount = 0,
+    int RemovedAdUserAssignmentCount = 0);
+
+public enum MigrateAdUserRoleAssignmentsStatus
+{
+    Migrated,
+    UserMissing,
+    NoAdLinks,
+    NoAssignments
 }

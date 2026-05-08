@@ -364,6 +364,24 @@ WHERE user_id = @userId
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
     }
 
+    public async Task<bool> IsAdUserPrincipalLinkedToOmpUserAsync(string principal, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.user_auth ua
+INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+WHERE ap.display_name = N'AD'
+  AND ua.provider_user_key = @principal;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@principal", principal);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
     /// <summary>
     /// Returns permissions that are not yet linked to the specified role.
     /// </summary>
