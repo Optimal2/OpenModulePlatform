@@ -252,7 +252,7 @@
         <section class="card section-card">
             <div class="eyebrow">@L["Principals"]</div>
             <h3>@L["Assigned principals"]</h3>
-            <p class="muted">@L["Bind users, groups or service identities to the role. Prefer groups where possible."]</p>
+            <p class="muted">@L["Bind OMP users or AD users to the role. AD group assignment is not available yet."]</p>
 
             @if (Model.Principals.Count == 0)
             {
@@ -273,7 +273,7 @@
                         {
                             <tr>
                                 <td>@L[row.PrincipalType]</td>
-                                <td>@row.Principal</td>
+                                <td>@row.DisplayPrincipal</td>
                                 <td>
                                     <form method="post" asp-page-handler="RemovePrincipal" class="inline-form">
                                         <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
@@ -288,7 +288,7 @@
                 </table>
             }
 
-            <form method="post" asp-page-handler="AddPrincipal" class="top-gap form-grid-inline form-grid-inline--triple">
+            <form method="post" asp-page-handler="AddPrincipal" class="top-gap form-grid-inline form-grid-inline--triple" id="add-principal-form">
                 <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
 
                 <div class="form-field">
@@ -296,7 +296,7 @@
                     <select id="principalType" name="principalType">
                         @foreach (var option in Model.PrincipalTypeOptions)
                         {
-                            <option value="@option.Value">@option.Label</option>
+                            <option value="@option.Value" disabled="@option.Disabled">@option.Label</option>
                         }
                     </select>
                 </div>
@@ -306,11 +306,7 @@
                     <input id="principal" name="principal" value="@Model.NewPrincipal" list="principal-suggestions" autocomplete="off" />
                     <datalist id="principal-suggestions"></datalist>
                     <div class="field-help">
-                        @L["Examples:"]
-                        <span class="example-token">123</span>,
-                        <span class="example-token">DOMAIN\User</span>,
-                        <span class="example-token">DOMAIN\Group</span>,
-                        <span class="example-token">S-1-5-21-...</span>.
+                        @L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, enter DOMAIN\\User."]
                     </div>
                 </div>
 
@@ -336,19 +332,20 @@
             const principalType = document.getElementById('principalType');
             const principalInput = document.getElementById('principal');
             const dataList = document.getElementById('principal-suggestions');
+            const form = document.getElementById('add-principal-form');
 
-            if (!principalType || !principalInput || !dataList) {
+            if (!principalType || !principalInput || !dataList || !form) {
                 return;
             }
 
             let controller = null;
+            let suggestionValues = new Map();
 
             async function refreshSuggestions() {
                 dataList.replaceChildren();
+                suggestionValues = new Map();
 
-                // Only user principals are suggested. Other principal types are environment-specific
-                // enough that broad autocomplete tends to create noise instead of saving time.
-                if (principalType.value !== 'User') {
+                if (principalType.value !== 'OmpUser') {
                     return;
                 }
 
@@ -378,10 +375,13 @@
                     const suggestions = await response.json();
                     dataList.replaceChildren();
 
-                    for (const value of suggestions) {
+                    for (const suggestion of suggestions) {
+                        const label = suggestion.label ?? suggestion.Label ?? suggestion;
+                        const value = suggestion.value ?? suggestion.Value ?? label;
                         const option = document.createElement('option');
-                        option.value = value;
+                        option.value = label;
                         dataList.appendChild(option);
+                        suggestionValues.set(label, value);
                     }
                 } catch (error) {
                     if (error.name !== 'AbortError') {
@@ -393,6 +393,16 @@
             principalType.addEventListener('change', refreshSuggestions);
             principalInput.addEventListener('input', refreshSuggestions);
             principalInput.addEventListener('focus', refreshSuggestions);
+            form.addEventListener('submit', () => {
+                if (principalType.value !== 'OmpUser') {
+                    return;
+                }
+
+                const selectedValue = suggestionValues.get(principalInput.value);
+                if (selectedValue) {
+                    principalInput.value = selectedValue;
+                }
+            });
         })();
     </script>
 

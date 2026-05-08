@@ -24,6 +24,11 @@ Important:
 - use `ADGroup` for large AD groups that should grant access without creating `omp.users` rows for every member
 - use `LocalUser` for identities authenticated by the built-in `lpwd` provider
 
+The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
+principal types. Existing `ADGroup` assignments still resolve, but adding new AD
+group assignments is disabled in the editor until group selection has its own
+workflow.
+
 The built-in auth app is mounted at `/auth`. AD sign-in goes through `/auth/ad`, and local password sign-in goes through `/auth/login`.
 
 For the full authentication and RBAC model, see [`AUTHENTICATION_AND_RBAC.md`](AUTHENTICATION_AND_RBAC.md).

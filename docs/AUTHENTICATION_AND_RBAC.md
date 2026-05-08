@@ -36,6 +36,11 @@ The built-in AD provider is exposed at `/auth/ad`.
 
 This endpoint is the only built-in OMP endpoint that needs IIS Windows Authentication. It reads the Windows principal from IIS, resolves direct user identifiers and group identifiers, and then signs in with the shared OMP cookie.
 
+The login page also has an alternate Windows/AD account prompt. It validates the
+entered account with Windows `LogonUser` before issuing the same shared OMP
+cookie. The password is not stored by OMP. Use this alternate-account path only
+on trusted local development hosts or over HTTPS.
+
 The AD provider emits role principals for:
 
 - `User` with the Windows account name for legacy compatibility
@@ -92,7 +97,8 @@ The Portal exposes `/account/settings` for the signed-in user. A signed-in AD
 identity that is authorized by AD user or AD group principals, but does not yet
 have an `omp.users` row, can create a first-class OMP user account from this
 page. The self-service action creates an active `omp.users` row and links the
-current AD provider keys in `omp.user_auth` in one transaction. The current
+current AD account name (`DOMAIN\User`) in `omp.user_auth` in one transaction.
+It does not create additional `name:` or `sid:` AD provider links. The current
 session cookie is then refreshed with the new `omp:user_id` claim, while the AD
 user/group principal claims remain in place.
 
@@ -137,6 +143,11 @@ Use `ADGroup` for large AD groups. OMP does not need to create `omp.users` rows 
 For individual platform users, prefer `OmpUser` role principals once the user exists in `omp.users`.
 
 For customer or enterprise AD groups, prefer `ADGroup` role principals. This keeps group membership in AD and avoids synchronizing large groups into OMP.
+
+The Portal role editor currently supports adding `OmpUser` and `ADUser`
+principals directly. `ADGroup` remains part of the RBAC model and existing
+assignments continue to resolve, but direct AD group assignment in the editor is
+left disabled until group selection has a dedicated workflow.
 
 For local password users, create the OMP user first, then link the `lpwd` provider identity through `omp.user_auth`.
 
