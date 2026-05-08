@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Services/RbacAdminRepository.cs
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
+using System.Globalization;
 
 namespace OpenModulePlatform.Portal.Services;
 
@@ -218,13 +219,21 @@ ORDER BY p.Name;";
     public async Task<IReadOnlyList<RolePrincipalRow>> GetRolePrincipalsAsync(int roleId, CancellationToken ct)
     {
         const string sql = @"
-SELECT RoleId,
-       PrincipalType,
-       Principal
-FROM omp.RolePrincipals
-WHERE RoleId = @roleId
-ORDER BY PrincipalType,
-         Principal;";
+SELECT rp.RoleId,
+       rp.PrincipalType,
+       rp.Principal,
+       CASE
+           WHEN rp.PrincipalType = N'OmpUser' AND u.user_id IS NOT NULL
+               THEN CONCAT(u.display_name, N' (id: ', CONVERT(nvarchar(20), u.user_id), N')')
+           ELSE rp.Principal
+       END AS DisplayPrincipal
+FROM omp.RolePrincipals rp
+LEFT JOIN omp.users u
+    ON rp.PrincipalType = N'OmpUser'
+   AND TRY_CONVERT(int, rp.Principal) = u.user_id
+WHERE rp.RoleId = @roleId
+ORDER BY rp.PrincipalType,
+         DisplayPrincipal;";
 
         var rows = new List<RolePrincipalRow>();
 
@@ -241,7 +250,8 @@ ORDER BY PrincipalType,
             {
                 RoleId = rdr.GetInt32(0),
                 PrincipalType = rdr.GetString(1),
-                Principal = rdr.GetString(2)
+                Principal = rdr.GetString(2),
+                DisplayPrincipal = rdr.GetString(3)
             });
         }
 
@@ -249,45 +259,67 @@ ORDER BY PrincipalType,
     }
 
     /// <summary>
-    /// Returns distinct previously used principals for lightweight autocomplete suggestions.
-    /// The query intentionally reuses existing assignments instead of reaching into an external
-    /// identity provider so that the portal stays self-contained and predictable in beta deployments.
+    /// Returns OMP users for lightweight role-principal autocomplete suggestions.
     /// </summary>
-    public async Task<IReadOnlyList<string>> SearchKnownPrincipalsAsync(
-        string principalType,
+    public async Task<IReadOnlyList<OmpUserPrincipalSuggestion>> SearchOmpUserPrincipalSuggestionsAsync(
         string? term,
         int maxResults,
         CancellationToken ct)
     {
         const string sql = @"
 SELECT DISTINCT TOP (@maxResults)
-       Principal
-FROM omp.RolePrincipals
-WHERE PrincipalType = @principalType
-  AND Principal IS NOT NULL
-  AND LTRIM(RTRIM(Principal)) <> ''
-  AND (@term = '' OR Principal LIKE @termPattern)
-ORDER BY Principal;";
+       user_id,
+       display_name
+FROM omp.users
+WHERE account_status = 1
+  AND
+  (
+      @term = ''
+      OR display_name LIKE @termPattern
+      OR CONVERT(nvarchar(20), user_id) LIKE @termPattern
+  )
+ORDER BY display_name,
+         user_id;";
 
-        var rows = new List<string>();
-        term ??= string.Empty;
+        var rows = new List<OmpUserPrincipalSuggestion>();
+        term = term?.Trim() ?? string.Empty;
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@maxResults", maxResults);
-        cmd.Parameters.AddWithValue("@principalType", principalType);
         cmd.Parameters.AddWithValue("@term", term);
         cmd.Parameters.AddWithValue("@termPattern", $"%{term}%");
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            rows.Add(rdr.GetString(0));
+            var userId = rdr.GetInt32(0);
+            var displayName = rdr.GetString(1);
+            rows.Add(new OmpUserPrincipalSuggestion(
+                userId.ToString(CultureInfo.InvariantCulture),
+                $"{displayName} (id: {userId.ToString(CultureInfo.InvariantCulture)})"));
         }
 
         return rows;
+    }
+
+    public async Task<bool> OmpUserExistsAsync(int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.users
+WHERE user_id = @userId
+  AND account_status = 1;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@userId", userId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
     }
 
     /// <summary>
@@ -665,7 +697,11 @@ public sealed class RolePrincipalRow
     public string PrincipalType { get; set; } = string.Empty;
 
     public string Principal { get; set; } = string.Empty;
+
+    public string DisplayPrincipal { get; set; } = string.Empty;
 }
+
+public sealed record OmpUserPrincipalSuggestion(string Value, string Label);
 
 /// <summary>
 /// Mutable edit model for a role.
