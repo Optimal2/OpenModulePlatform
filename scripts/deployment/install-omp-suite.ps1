@@ -93,6 +93,13 @@ function Resolve-DeploymentPath {
     return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
 }
 
+function Test-IsUncPath {
+    param([string]$Path)
+
+    return -not [string]::IsNullOrWhiteSpace($Path) -and
+        $Path.StartsWith('\\', [System.StringComparison]::Ordinal)
+}
+
 function Require-Command {
     param([string]$Name)
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -1111,6 +1118,11 @@ function Grant-RunAsFolderAccess {
     Write-Step 'Granting runtime folder access'
     foreach ($path in @($script:RuntimeRoot, $script:WebRoot, $script:WebAppsRoot, $script:ServicesRoot, $script:ArtifactStoreRoot, $script:ArtifactCacheRoot, $script:DataProtectionKeyPath)) {
         New-Item -ItemType Directory -Path $path -Force | Out-Null
+        if (Test-IsUncPath -Path $path) {
+            Write-Warning "Skipping ACL grant on UNC path. Ensure the run-as account has access: $path"
+            continue
+        }
+
         Invoke-NativeChecked icacls $path '/grant' ('{0}:(OI)(CI)M' -f $script:RunAsCredential.UserName) '/T' '/C' '/Q'
     }
 }
