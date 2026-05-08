@@ -17,12 +17,19 @@
         h1 { margin: 0 0 1rem; font-size: 1.7rem; }
         .muted { color: #586173; line-height: 1.5; }
         .stack { display: grid; gap: 1rem; }
+        .windows-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: stretch; }
         label { display: block; margin-bottom: .3rem; font-weight: 700; }
         input { box-sizing: border-box; width: 100%; min-height: 2.5rem; padding: .5rem .65rem; border: 1px solid #c8d1dc; border-radius: 6px; font: inherit; }
         button, .button { display: inline-flex; justify-content: center; align-items: center; min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid #2f5fb3; border-radius: 6px; background: #2f5fb3; color: #fff; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
         .button.secondary { background: #fff; color: #223044; border-color: #c8d1dc; }
+        .button.compact { padding-inline: .7rem; white-space: nowrap; }
         .error { padding: .75rem; border: 1px solid #f1a9a9; border-radius: 6px; background: #fff0f0; color: #8a1f1f; }
         .divider { border-top: 1px solid #e2e8f0; padding-top: 1rem; }
+        dialog { border: 1px solid #c8d1dc; border-radius: 8px; padding: 0; width: min(25rem, calc(100% - 2rem)); box-shadow: 0 18px 48px rgba(15, 23, 42, .18); }
+        dialog::backdrop { background: rgba(15, 23, 42, .35); }
+        .dialog-body { padding: 1.25rem; }
+        .dialog-actions { display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
+        @@media (max-width: 34rem) { .windows-actions { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -39,7 +46,16 @@
                 <div class="error">@Model.ErrorMessage</div>
             }
 
-            <a class="button" href="@Model.WindowsLoginUrl">Sign in with Windows / AD</a>
+            <div class="windows-actions">
+                <a class="button" href="@Model.WindowsLoginUrl">Sign in with Windows / AD</a>
+                <button
+                    type="button"
+                    class="button secondary compact"
+                    id="alternate-windows-button"
+                    title="Sign in with another Windows / AD account">
+                    Other account
+                </button>
+            </div>
 
             <form method="post" asp-page-handler="Local" class="stack divider">
                 <input type="hidden" asp-for="ReturnUrl" />
@@ -53,8 +69,59 @@
                 </div>
                 <button type="submit">Sign in with local password</button>
             </form>
+
+            <dialog id="alternate-windows-dialog" open="@Model.ShowAlternateWindowsPrompt">
+                <form method="post" asp-page-handler="AlternateWindows" class="stack dialog-body">
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <div>
+                        <h2 style="margin: 0 0 .35rem; font-size: 1.25rem;">Other Windows / AD account</h2>
+                        <p class="muted" style="margin: 0;">Use DOMAIN\user, .\user, user@@domain, or a local account name.</p>
+                    </div>
+                    <div>
+                        <label asp-for="AlternateWindowsUserName">Windows account</label>
+                        <input asp-for="AlternateWindowsUserName" autocomplete="username" />
+                    </div>
+                    <div>
+                        <label asp-for="AlternateWindowsPassword">Password</label>
+                        <input asp-for="AlternateWindowsPassword" type="password" value="" autocomplete="current-password" />
+                    </div>
+                    <div class="dialog-actions">
+                        <button type="button" class="button secondary" id="alternate-windows-cancel">Cancel</button>
+                        <button type="submit">Sign in</button>
+                    </div>
+                </form>
+            </dialog>
         </div>
     </section>
 </main>
+<script>
+    (() => {
+        const button = document.getElementById('alternate-windows-button');
+        const dialog = document.getElementById('alternate-windows-dialog');
+        const cancel = document.getElementById('alternate-windows-cancel');
+
+        if (!button || !dialog) {
+            return;
+        }
+
+        if (dialog.hasAttribute('open') && typeof dialog.showModal === 'function') {
+            dialog.close();
+            dialog.showModal();
+        }
+
+        button.addEventListener('click', () => {
+            if (typeof dialog.showModal === 'function') {
+                dialog.showModal();
+                return;
+            }
+
+            dialog.setAttribute('open', '');
+        });
+
+        cancel?.addEventListener('click', () => {
+            dialog.close();
+        });
+    })();
+</script>
 </body>
 </html>

@@ -16,6 +16,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<SqlConnectionFactory>();
 builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddSingleton<WindowsPrincipalReader>();
+builder.Services.AddSingleton<WindowsPasswordAuthenticator>();
 builder.Services.AddScoped<OmpAuthRepository>();
 builder.Services.AddOmpCookieAuthentication(builder.Configuration);
 var runningUnderIis = !string.IsNullOrWhiteSpace(

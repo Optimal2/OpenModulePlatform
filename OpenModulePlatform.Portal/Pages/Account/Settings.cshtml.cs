@@ -306,9 +306,14 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             return [];
         }
 
-        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AddProviderKey(keys, User.FindFirstValue(OmpAuthDefaults.ProviderUserKeyClaimType));
+        var providerUserKey = GetCurrentPlainAdProviderUserKey();
+        return string.IsNullOrWhiteSpace(providerUserKey)
+            ? []
+            : [providerUserKey];
+    }
 
+    private string? GetCurrentPlainAdProviderUserKey()
+    {
         foreach (var claim in User.FindAll(OmpAuthDefaults.PrincipalClaimType))
         {
             if (!TryParsePrincipalClaim(claim.Value, out var principalType, out var principal))
@@ -322,38 +327,68 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
                 continue;
             }
 
-            if (IsSidLike(principal))
+            var normalized = NormalizePlainAdProviderUserKey(principal);
+            if (!string.IsNullOrWhiteSpace(normalized))
             {
-                AddProviderKey(keys, "sid:" + principal);
-            }
-            else
-            {
-                AddProviderKey(keys, "name:" + principal);
-                AddProviderKey(keys, principal);
+                return normalized;
             }
         }
 
-        return keys.ToArray();
+        return NormalizePlainAdProviderUserKey(User.Identity?.Name)
+            ?? NormalizePlainAdProviderUserKey(User.FindFirstValue(OmpAuthDefaults.ProviderUserKeyClaimType))
+            ?? NormalizePlainAdProviderUserKey(User.FindFirstValue(ClaimTypes.Name));
     }
 
     private string SuggestedDisplayName()
     {
-        var name = User.Identity?.Name;
+        var name = GetCurrentPlainAdProviderUserKey() ?? User.Identity?.Name;
         if (!string.IsNullOrWhiteSpace(name))
         {
-            return name.Trim();
+            return ToAccountNameOnly(name) ?? string.Empty;
         }
 
-        return User.FindFirstValue(ClaimTypes.Name)?.Trim() ?? string.Empty;
+        return ToAccountNameOnly(User.FindFirstValue(ClaimTypes.Name)) ?? string.Empty;
     }
 
-    private static void AddProviderKey(HashSet<string> keys, string? providerUserKey)
+    private static string? NormalizePlainAdProviderUserKey(string? providerUserKey)
     {
         providerUserKey = providerUserKey?.Trim();
-        if (!string.IsNullOrWhiteSpace(providerUserKey))
+        if (string.IsNullOrWhiteSpace(providerUserKey))
         {
-            keys.Add(providerUserKey);
+            return null;
         }
+
+        if (providerUserKey.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
+        {
+            providerUserKey = providerUserKey["name:".Length..].Trim();
+        }
+
+        if (providerUserKey.StartsWith("sid:", StringComparison.OrdinalIgnoreCase) ||
+            IsSidLike(providerUserKey))
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(providerUserKey)
+            ? null
+            : providerUserKey;
+    }
+
+    private static string? ToAccountNameOnly(string? value)
+    {
+        value = value?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var separatorIndex = value.LastIndexOf('\\');
+        if (separatorIndex >= 0 && separatorIndex < value.Length - 1)
+        {
+            return value[(separatorIndex + 1)..].Trim();
+        }
+
+        return value;
     }
 
     private static bool TryParsePrincipalClaim(

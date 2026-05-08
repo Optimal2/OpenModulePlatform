@@ -7,6 +7,7 @@ using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace OpenModulePlatform.Portal.Pages.Admin.Rbac;
@@ -20,6 +21,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     private static readonly Regex NamePattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._-]{1,199}$",
         RegexOptions.Compiled);
+
+    private static readonly Regex OmpUserPrincipalLabelPattern = new(
+        @"\(id:\s*(\d+)\)\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly RbacAdminRepository _repo;
 
@@ -56,15 +61,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AvailablePermissionOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> PrincipalTypeOptions =>
+    public IReadOnlyList<PrincipalTypeOptionItem> PrincipalTypeOptions =>
     [
-        new() { Value = "OmpUser", Label = T("OmpUser") },
-        new() { Value = "User", Label = T("User") },
-        new() { Value = "ADUser", Label = T("ADUser") },
-        new() { Value = "ADGroup", Label = T("ADGroup") },
-        new() { Value = "LocalUser", Label = T("LocalUser") },
-        new() { Value = "ServiceAccount", Label = T("ServiceAccount") },
-        new() { Value = "Host", Label = T("Host") }
+        new() { Value = "OmpUser", Label = T("OMP user") },
+        new() { Value = "ADUser", Label = T("AD user") },
+        new() { Value = "ADGroup", Label = T("AD group"), Disabled = true }
     ];
 
     public async Task<IActionResult> OnGet(int? roleId, CancellationToken ct)
@@ -203,6 +204,18 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         principalType = Clean(principalType) ?? string.Empty;
         principal = Clean(principal) ?? string.Empty;
 
+        var normalizedPrincipal = await NormalizePrincipalAsync(principalType, principal, ct);
+        if (!string.IsNullOrWhiteSpace(normalizedPrincipal.ErrorMessage))
+        {
+            await LoadDetailsAsync(ct);
+            SetTitles("Edit role");
+            ModelState.AddModelError(string.Empty, T(normalizedPrincipal.ErrorMessage));
+            NewPrincipal = principal;
+            return Page();
+        }
+
+        principal = normalizedPrincipal.Principal ?? principal;
+
         if (string.IsNullOrWhiteSpace(principalType) || string.IsNullOrWhiteSpace(principal))
         {
             await LoadDetailsAsync(ct);
@@ -248,9 +261,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     }
 
     /// <summary>
-    /// Returns lightweight autocomplete suggestions for known user principals.
-    /// Suggestions are intentionally limited to user principals because group, host and service-account
-    /// identifiers are usually environment-specific and can be misleading when suggested broadly.
+    /// Returns lightweight autocomplete suggestions for known OMP user principals.
     /// </summary>
     public async Task<IActionResult> OnGetPrincipalSuggestions(string principalType, string? term, CancellationToken ct)
     {
@@ -263,12 +274,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         principalType = Clean(principalType) ?? string.Empty;
         term = Clean(term) ?? string.Empty;
 
-        if (!string.Equals(principalType, "User", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
         {
-            return new JsonResult(Array.Empty<string>());
+            return new JsonResult(Array.Empty<OmpUserPrincipalSuggestion>());
         }
 
-        var suggestions = await _repo.SearchKnownPrincipalsAsync("User", term, 12, ct);
+        var suggestions = await _repo.SearchOmpUserPrincipalSuggestionsAsync(term, 12, ct);
         return new JsonResult(suggestions);
     }
 
@@ -342,6 +353,59 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private async Task<NormalizedPrincipalResult> NormalizePrincipalAsync(
+        string principalType,
+        string principal,
+        CancellationToken ct)
+    {
+        if (!IsSupportedPrincipalType(principalType))
+        {
+            return new NormalizedPrincipalResult(null, "Select a supported principal type.");
+        }
+
+        if (string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase))
+        {
+            return new NormalizedPrincipalResult(null, "AD group assignment is not available yet.");
+        }
+
+        if (!string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
+        {
+            return new NormalizedPrincipalResult(principal);
+        }
+
+        if (!TryParseOmpUserPrincipal(principal, out var userId))
+        {
+            return new NormalizedPrincipalResult(null, "Select an OMP user from the suggestions or enter a valid user ID.");
+        }
+
+        if (!await _repo.OmpUserExistsAsync(userId, ct))
+        {
+            return new NormalizedPrincipalResult(null, "Select an OMP user from the suggestions or enter a valid user ID.");
+        }
+
+        return new NormalizedPrincipalResult(userId.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static bool IsSupportedPrincipalType(string principalType)
+        => string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryParseOmpUserPrincipal(string value, out int userId)
+    {
+        value = value.Trim();
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out userId) &&
+            userId > 0)
+        {
+            return true;
+        }
+
+        var match = OmpUserPrincipalLabelPattern.Match(value);
+        return match.Success &&
+            int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out userId) &&
+            userId > 0;
+    }
+
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
         => ex.Number switch
         {
@@ -396,4 +460,15 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         [StringLength(500)]
         public string? Description { get; set; }
     }
+
+    public sealed class PrincipalTypeOptionItem
+    {
+        public string Value { get; set; } = string.Empty;
+
+        public string Label { get; set; } = string.Empty;
+
+        public bool Disabled { get; set; }
+    }
+
+    private sealed record NormalizedPrincipalResult(string? Principal, string? ErrorMessage = null);
 }

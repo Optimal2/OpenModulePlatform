@@ -83,4 +83,12 @@
   <data name="Password is required." xml:space="preserve"><value>Password is required.</value></data>
   <data name="Password must be at least 8 characters." xml:space="preserve"><value>Password must be at least 8 characters.</value></data>
   <data name="Password and confirmation password do not match." xml:space="preserve"><value>Password and confirmation password do not match.</value></data>
+  <data name="OMP user" xml:space="preserve"><value>OMP user</value></data>
+  <data name="AD user" xml:space="preserve"><value>AD user</value></data>
+  <data name="AD group" xml:space="preserve"><value>AD group</value></data>
+  <data name="Bind OMP users or AD users to the role. AD group assignment is not available yet." xml:space="preserve"><value>Bind OMP users or AD users to the role. AD group assignment is not available yet.</value></data>
+  <data name="For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, enter DOMAIN\\User." xml:space="preserve"><value>For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, enter DOMAIN\\User.</value></data>
+  <data name="Select a supported principal type." xml:space="preserve"><value>Select a supported principal type.</value></data>
+  <data name="AD group assignment is not available yet." xml:space="preserve"><value>AD group assignment is not available yet.</value></data>
+  <data name="Select an OMP user from the suggestions or enter a valid user ID." xml:space="preserve"><value>Select an OMP user from the suggestions or enter a valid user ID.</value></data>
 </root>
