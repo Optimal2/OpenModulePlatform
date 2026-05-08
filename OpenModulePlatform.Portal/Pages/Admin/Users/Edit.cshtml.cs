@@ -47,6 +47,9 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     public bool HasLocalPasswordLogin =>
         UserRow?.AuthLinks.Any(link => string.Equals(link.ProviderDisplayName, "lpwd", StringComparison.OrdinalIgnoreCase)) == true;
 
+    public bool HasAdAuthLink =>
+        UserRow?.AuthLinks.Any(link => string.Equals(link.ProviderDisplayName, "AD", StringComparison.OrdinalIgnoreCase)) == true;
+
     public string? LocalPasswordUserName =>
         UserRow?.AuthLinks.FirstOrDefault(link => string.Equals(link.ProviderDisplayName, "lpwd", StringComparison.OrdinalIgnoreCase))?.ProviderUserKey;
 
@@ -221,6 +224,42 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
         ClearLocalPasswordFields();
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostMigrateAdRights(int userId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var result = await _repo.MigrateAdUserRoleAssignmentsToOmpUserAsync(userId, ct);
+        switch (result.Status)
+        {
+            case MigrateAdUserRoleAssignmentsStatus.Migrated:
+                StatusMessage = string.Format(
+                    CultureInfo.CurrentCulture,
+                    T("Moved {0} direct AD-user role assignments to this OMP user. Created {1} OMP-user role assignments."),
+                    result.RemovedAdUserAssignmentCount.ToString(CultureInfo.InvariantCulture),
+                    result.CreatedOmpUserAssignmentCount.ToString(CultureInfo.InvariantCulture));
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
+            case MigrateAdUserRoleAssignmentsStatus.NoAssignments:
+                StatusMessage = T("No direct AD-user rights are available to move.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
+            case MigrateAdUserRoleAssignmentsStatus.NoAdLinks:
+                StatusMessage = T("This OMP user has no AD links.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
+            case MigrateAdUserRoleAssignmentsStatus.UserMissing:
+                return NotFound();
+
+            default:
+                StatusMessage = T("The AD rights could not be moved.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+        }
     }
 
     public string AccountStatusText(int status)

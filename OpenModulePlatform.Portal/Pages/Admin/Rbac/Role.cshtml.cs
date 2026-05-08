@@ -374,6 +374,18 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return new NormalizedPrincipalResult(null, "AD group assignment is not available yet.");
         }
 
+        if (string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase))
+        {
+            if (await _repo.IsAdUserPrincipalLinkedToOmpUserAsync(principal, ct))
+            {
+                return new NormalizedPrincipalResult(
+                    null,
+                    "This AD account is already linked to an OMP user. Assign the role to the OMP user instead.");
+            }
+
+            return new NormalizedPrincipalResult(principal);
+        }
+
         if (!string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
         {
             return new NormalizedPrincipalResult(principal);
