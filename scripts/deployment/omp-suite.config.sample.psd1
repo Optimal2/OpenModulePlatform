@@ -28,7 +28,7 @@
     SqlPassword = ''
 
     BootstrapPortalAdminPrincipals = @('DOMAIN\UserOrGroup')
-    BootstrapPortalAdminPrincipalType = 'User' # User or ADGroup.
+    BootstrapPortalAdminPrincipalType = 'ADUser' # ADUser or ADGroup. Legacy User is normalized to ADUser.
 
     RunAsUser = ''
     RunAsPassword = ''

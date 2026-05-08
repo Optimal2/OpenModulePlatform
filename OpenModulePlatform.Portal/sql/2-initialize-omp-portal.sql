@@ -89,12 +89,12 @@ IF @PortalAdminsRoleId IS NOT NULL
        SELECT 1
        FROM omp.RolePrincipals
        WHERE RoleId = @PortalAdminsRoleId
-         AND PrincipalType = N'User'
+         AND PrincipalType = N'ADUser'
          AND Principal = @BootstrapPortalAdminPrincipal
    )
 BEGIN
     INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
-    VALUES(@PortalAdminsRoleId, N'User', @BootstrapPortalAdminPrincipal);
+    VALUES(@PortalAdminsRoleId, N'ADUser', @BootstrapPortalAdminPrincipal);
 END
 
 IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'omp_portal')

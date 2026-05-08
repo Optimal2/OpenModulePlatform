@@ -306,7 +306,7 @@
                     <input id="principal" name="principal" value="@Model.NewPrincipal" list="principal-suggestions" autocomplete="off" />
                     <datalist id="principal-suggestions"></datalist>
                     <div class="field-help">
-                        @L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, enter DOMAIN\\User."]
+                        @L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, start typing an existing AD user principal or enter DOMAIN\\User."]
                     </div>
                 </div>
 
@@ -345,7 +345,7 @@
                 dataList.replaceChildren();
                 suggestionValues = new Map();
 
-                if (principalType.value !== 'OmpUser') {
+                if (principalType.value !== 'OmpUser' && principalType.value !== 'ADUser') {
                     return;
                 }
 
@@ -394,10 +394,6 @@
             principalInput.addEventListener('input', refreshSuggestions);
             principalInput.addEventListener('focus', refreshSuggestions);
             form.addEventListener('submit', () => {
-                if (principalType.value !== 'OmpUser') {
-                    return;
-                }
-
                 const selectedValue = suggestionValues.get(principalInput.value);
                 if (selectedValue) {
                     principalInput.value = selectedValue;
