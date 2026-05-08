@@ -210,6 +210,11 @@ if (-not $PSBoundParameters.ContainsKey('SkipOpenDocViewerNpmInstall')) {
 if (-not $PSBoundParameters.ContainsKey('KeepStaging')) {
     $KeepStaging = [bool](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'KeepStaging' -DefaultValue $false)
 }
+$includeInstallConfig = [bool](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'IncludeInstallConfig' -DefaultValue $false)
+$installConfigFileName = [string](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'InstallConfigFileName' -DefaultValue 'omp-suite.local.psd1')
+if ([string]::IsNullOrWhiteSpace($installConfigFileName)) {
+    $installConfigFileName = 'omp-suite.local.psd1'
+}
 
 $OutputRoot = Resolve-DeploymentPath -Path $OutputRoot -BasePath $RepositoryRoot
 $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformSuite-$Version")
@@ -309,6 +314,9 @@ Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'uninstall-omp-suite.ps1') -D
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'install-omp-suite.cmd') -Destination (Join-Path $packageRoot 'install-omp-suite.cmd')
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'uninstall-omp-suite.cmd') -Destination (Join-Path $packageRoot 'uninstall-omp-suite.cmd')
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'omp-suite.config.sample.psd1') -Destination (Join-Path $packageRoot 'omp-suite.config.sample.psd1')
+if ($includeInstallConfig) {
+    Copy-RequiredFile -Source $configPathForResolution -Destination (Join-Path $packageRoot $installConfigFileName)
+}
 Copy-RequiredFile -Source (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $packageRoot 'INSTALLATION.md')
 
 $manifest = [ordered]@{

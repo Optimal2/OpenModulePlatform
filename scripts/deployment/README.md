@@ -71,6 +71,12 @@ run:
 installer command works for source-based developer installs and package-based
 test/production installs.
 
+Protected/customer-specific packages can be made ready to run by setting
+`Package.IncludeInstallConfig = $true` in the local config used for packaging.
+The package script then copies that config into the package as
+`omp-suite.local.psd1`, next to `install-omp-suite.ps1`. Only enable this for
+private packages that are allowed to contain customer paths and credentials.
+
 For HTTPS deployments, set `Iis.Protocol = 'https'` and either
 `Iis.CertificateThumbprint` or `Iis.CertificateSerialNumber`. If different
 servers use different certificates, add a `Hosts` entry per server and leave
