@@ -141,6 +141,11 @@ Legacy `User` role-principal rows are migrated to `ADUser` by the core setup and
 ## Administration Guidance
 
 For individual platform users, prefer `OmpUser` role principals once the user exists in `omp.users`.
+When an AD provider identity is linked to an OMP user through `omp.user_auth`,
+use the `OmpUser` principal as the primary assignment target. Portal
+administrators can move direct `ADUser` role assignments for linked AD keys to
+the OMP user from `/admin/users/edit/{userId}`. This migration does not move
+`ADGroup` assignments.
 
 For customer or enterprise AD groups, prefer `ADGroup` role principals. This keeps group membership in AD and avoids synchronizing large groups into OMP.
 

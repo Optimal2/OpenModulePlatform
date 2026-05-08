@@ -46,6 +46,13 @@
   <data name="Provider" xml:space="preserve"><value>Provider</value></data>
   <data name="Provider user key" xml:space="preserve"><value>Provider user key</value></data>
   <data name="Last used UTC" xml:space="preserve"><value>Last used UTC</value></data>
+  <data name="AD rights migration" xml:space="preserve"><value>AD rights migration</value></data>
+  <data name="There are {0} direct AD-user role assignments that can be moved to this OMP user." xml:space="preserve"><value>There are {0} direct AD-user role assignments that can be moved to this OMP user.</value></data>
+  <data name="Move AD rights to OMP user" xml:space="preserve"><value>Move AD rights to OMP user</value></data>
+  <data name="No direct AD-user rights are available to move." xml:space="preserve"><value>No direct AD-user rights are available to move.</value></data>
+  <data name="Moved {0} direct AD-user role assignments to this OMP user. Created {1} OMP-user role assignments." xml:space="preserve"><value>Moved {0} direct AD-user role assignments to this OMP user. Created {1} OMP-user role assignments.</value></data>
+  <data name="This OMP user has no AD links." xml:space="preserve"><value>This OMP user has no AD links.</value></data>
+  <data name="The AD rights could not be moved." xml:space="preserve"><value>The AD rights could not be moved.</value></data>
   <data name="Link AD account" xml:space="preserve"><value>Link AD account</value></data>
   <data name="Use the same AD key format that Windows sign-in resolves, for example DOMAIN\username, name:DOMAIN\username or sid:S-1-5-21-..." xml:space="preserve"><value>Use the same AD key format that Windows sign-in resolves, for example DOMAIN\username, name:DOMAIN\username or sid:S-1-5-21-...</value></data>
   <data name="AD provider user key" xml:space="preserve"><value>AD provider user key</value></data>
@@ -91,4 +98,5 @@
   <data name="Select a supported principal type." xml:space="preserve"><value>Select a supported principal type.</value></data>
   <data name="AD group assignment is not available yet." xml:space="preserve"><value>AD group assignment is not available yet.</value></data>
   <data name="Select an OMP user from the suggestions or enter a valid user ID." xml:space="preserve"><value>Select an OMP user from the suggestions or enter a valid user ID.</value></data>
+  <data name="This AD account is already linked to an OMP user. Assign the role to the OMP user instead." xml:space="preserve"><value>This AD account is already linked to an OMP user. Assign the role to the OMP user instead.</value></data>
 </root>
