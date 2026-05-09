@@ -41,6 +41,7 @@ Follow these rules strictly:
 
 Default local development paths:
 
+- `<workspace>` means the local parent folder where these sibling repositories are cloned.
 - OpenModulePlatform repo: `<workspace>\OpenModulePlatform`
 - Optional consumer repos: `<workspace>\IbsPackager`, `<workspace>\OpenDocViewer`
 - Runtime root: `E:\OMP`

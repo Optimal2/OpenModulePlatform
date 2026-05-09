@@ -76,7 +76,11 @@ public sealed class WindowsPrincipalReader
             {
                 _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sid.Value);
             }
-            catch (SystemException ex)
+            catch (UnauthorizedAccessException ex)
+            {
+                _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sid.Value);
+            }
+            catch (NotSupportedException ex)
             {
                 _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sid.Value);
             }
