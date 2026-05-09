@@ -74,18 +74,23 @@ public sealed class WindowsPrincipalReader
             }
             catch (IdentityNotMappedException ex)
             {
-                _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sid.Value);
+                LogSkippedSidTranslation(ex, sid.Value);
             }
             catch (UnauthorizedAccessException ex)
             {
-                _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sid.Value);
+                LogSkippedSidTranslation(ex, sid.Value);
             }
             catch (NotSupportedException ex)
             {
-                _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sid.Value);
+                LogSkippedSidTranslation(ex, sid.Value);
             }
         }
 
         return result;
+    }
+
+    private void LogSkippedSidTranslation(Exception ex, string sidValue)
+    {
+        _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sidValue);
     }
 }
