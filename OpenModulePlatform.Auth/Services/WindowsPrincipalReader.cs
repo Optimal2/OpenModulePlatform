@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Auth/Services/WindowsPrincipalReader.cs
+using Microsoft.Extensions.Logging;
 using System.Runtime.Versioning;
 using System.Security.Claims;
 using System.Security.Principal;
