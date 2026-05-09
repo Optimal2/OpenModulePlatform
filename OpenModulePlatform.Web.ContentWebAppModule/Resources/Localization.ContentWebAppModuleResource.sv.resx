@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Content" xml:space="preserve"><value>Innehåll</value></data>
+  <data name="Content home" xml:space="preserve"><value>Innehåll startsida</value></data>
+  <data name="Content navigation" xml:space="preserve"><value>Innehållsnavigering</value></data>
+  <data name="Manage pages" xml:space="preserve"><value>Hantera sidor</value></data>
+  <data name="Create, edit, publish and unpublish simple content pages for this app instance." xml:space="preserve"><value>Skapa, redigera, publicera och avpublicera enkla informationssidor för den här appinstansen.</value></data>
+  <data name="New page" xml:space="preserve"><value>Ny sida</value></data>
+  <data name="No content pages were found." xml:space="preserve"><value>Inga innehållssidor hittades.</value></data>
+  <data name="Title" xml:space="preserve"><value>Titel</value></data>
+  <data name="Slug" xml:space="preserve"><value>Sökväg</value></data>
+  <data name="State" xml:space="preserve"><value>Status</value></data>
+  <data name="Updated" xml:space="preserve"><value>Uppdaterad</value></data>
+  <data name="Sort order" xml:space="preserve"><value>Sortering</value></data>
+  <data name="Published" xml:space="preserve"><value>Publicerad</value></data>
+  <data name="Draft" xml:space="preserve"><value>Utkast</value></data>
+  <data name="Edit" xml:space="preserve"><value>Redigera</value></data>
+  <data name="Preview" xml:space="preserve"><value>Förhandsgranska</value></data>
+  <data name="Open" xml:space="preserve"><value>Öppna</value></data>
+  <data name="Edit page" xml:space="preserve"><value>Redigera sida</value></data>
+  <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Använd Markdown för enkla sidor. Renderat innehåll saneras innan det visas för användare.</value></data>
+  <data name="Back to pages" xml:space="preserve"><value>Tillbaka till sidor</value></data>
+  <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Lämna tomt för rotsidan. Sökvägar normaliseras när sidan sparas.</value></data>
+  <data name="Content format" xml:space="preserve"><value>Innehållsformat</value></data>
+  <data name="Summary" xml:space="preserve"><value>Sammanfattning</value></data>
+  <data name="Meta title" xml:space="preserve"><value>Metatitel</value></data>
+  <data name="Meta description" xml:space="preserve"><value>Metabeskrivning</value></data>
+  <data name="Change note" xml:space="preserve"><value>Ändringsnotering</value></data>
+  <data name="Save draft" xml:space="preserve"><value>Spara utkast</value></data>
+  <data name="Publish" xml:space="preserve"><value>Publicera</value></data>
+  <data name="Unpublish" xml:space="preserve"><value>Avpublicera</value></data>
+  <data name="Delete" xml:space="preserve"><value>Ta bort</value></data>
+  <data name="Revisions" xml:space="preserve"><value>Revisioner</value></data>
+  <data name="Version" xml:space="preserve"><value>Version</value></data>
+  <data name="Created" xml:space="preserve"><value>Skapad</value></data>
+  <data name="Note" xml:space="preserve"><value>Notering</value></data>
+  <data name="Page saved." xml:space="preserve"><value>Sidan sparades.</value></data>
+  <data name="Page published." xml:space="preserve"><value>Sidan publicerades.</value></data>
+  <data name="Page unpublished." xml:space="preserve"><value>Sidan avpublicerades.</value></data>
+  <data name="A content page with the same slug already exists for this app instance." xml:space="preserve"><value>Det finns redan en innehållssida med samma sökväg för den här appinstansen.</value></data>
+  <data name="This page is published." xml:space="preserve"><value>Den här sidan är publicerad.</value></data>
+  <data name="This page is not published and is only visible to managers." xml:space="preserve"><value>Den här sidan är inte publicerad och visas bara för administratörer.</value></data>
+  <data name="Page not found" xml:space="preserve"><value>Sidan hittades inte</value></data>
+  <data name="The requested content page is not published or does not exist." xml:space="preserve"><value>Den begärda innehållssidan är inte publicerad eller finns inte.</value></data>
+  <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId är inte konfigurerad.</value></data>
+</root>
