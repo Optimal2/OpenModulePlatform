@@ -39,12 +39,10 @@ public sealed class WindowsPrincipalReader
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var claim in principal.FindAll(ClaimTypes.GroupSid)
-                     .Concat(principal.FindAll(ClaimTypes.Role)))
+                     .Concat(principal.FindAll(ClaimTypes.Role))
+                     .Where(claim => !string.IsNullOrWhiteSpace(claim.Value)))
         {
-            if (!string.IsNullOrWhiteSpace(claim.Value))
-            {
-                result.Add(claim.Value);
-            }
+            result.Add(claim.Value);
         }
 
         return result.ToList();
