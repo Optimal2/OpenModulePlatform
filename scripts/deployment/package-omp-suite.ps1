@@ -258,6 +258,7 @@ $payloadItems = @(
     @{ Source = 'OpenModulePlatform.Web.ExampleServiceAppModule'; Zip = 'OpenModulePlatform.Web.ExampleServiceAppModule.zip' },
     @{ Source = 'OpenModulePlatform.Web.ExampleWebAppBlazorModule'; Zip = 'OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip' },
     @{ Source = 'OpenModulePlatform.Web.ExampleWebAppModule'; Zip = 'OpenModulePlatform.Web.ExampleWebAppModule.zip' },
+    @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule'; Zip = 'OpenModulePlatform.Web.ContentWebAppModule.zip' },
     @{ Source = 'OpenModulePlatform.Web.ExampleWorkerAppModule'; Zip = 'OpenModulePlatform.Web.ExampleWorkerAppModule.zip' },
     @{ Source = 'OpenModulePlatform.Web.iFrameWebAppModule'; Zip = 'OpenModulePlatform.Web.iFrameWebAppModule.zip' },
     @{ Source = 'OpenModulePlatform.Worker.ExampleWorkerAppModule'; Zip = 'OpenModulePlatform.Worker.ExampleWorkerAppModule.zip' }
@@ -301,6 +302,8 @@ $sqlFiles = @(
     @{ Source = 'examples\ServiceAppModule\Sql\2-initialize-example-serviceapp.sql'; Destination = 'examples\ServiceAppModule\2-initialize-example-serviceapp.sql' },
     @{ Source = 'examples\WorkerAppModule\Sql\1-setup-example-workerapp.sql'; Destination = 'examples\WorkerAppModule\1-setup-example-workerapp.sql' },
     @{ Source = 'examples\WorkerAppModule\Sql\2-initialize-example-workerapp.sql'; Destination = 'examples\WorkerAppModule\2-initialize-example-workerapp.sql' },
+    @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\1-setup-content-webapp.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql' },
+    @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\2-initialize-content-webapp.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\2-initialize-content-webapp.sql' },
     @{ Source = 'OpenModulePlatform.Web.iFrameWebAppModule\Sql\1-setup-iframe-webapp.sql'; Destination = 'OpenModulePlatform.Web.iFrameWebAppModule\1-setup-iframe-webapp.sql' },
     @{ Source = 'OpenModulePlatform.Web.iFrameWebAppModule\Sql\2-initialize-iframe-webapp.sql'; Destination = 'OpenModulePlatform.Web.iFrameWebAppModule\2-initialize-iframe-webapp.sql' }
 )
