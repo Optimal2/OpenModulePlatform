@@ -7,11 +7,11 @@ namespace OpenModulePlatform.Auth.Services;
 
 public sealed class WindowsPrincipalReader
 {
-    private readonly ILogger<WindowsPrincipalReader> _log;
+    private readonly ILogger<WindowsPrincipalReader> _logger;
 
-    public WindowsPrincipalReader(ILogger<WindowsPrincipalReader> log)
+    public WindowsPrincipalReader(ILogger<WindowsPrincipalReader> logger)
     {
-        _log = log;
+        _logger = logger;
     }
 
     public string? GetUserName(ClaimsPrincipal principal)
@@ -61,6 +61,8 @@ public sealed class WindowsPrincipalReader
         {
             if (!string.IsNullOrWhiteSpace(sid.Value))
             {
+                // Keep the SID even when NTAccount translation succeeds. Role principals may
+                // intentionally target either the stable SID or the readable account name.
                 result.Add(sid.Value);
             }
 
@@ -91,6 +93,6 @@ public sealed class WindowsPrincipalReader
 
     private void LogSkippedSidTranslation(Exception ex, string sidValue)
     {
-        _log.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sidValue);
+        _logger.LogDebug(ex, "Skipped SID to NTAccount translation for SID {SidValue}.", sidValue);
     }
 }
