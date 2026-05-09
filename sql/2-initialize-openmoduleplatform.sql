@@ -43,20 +43,16 @@ BEGIN
     THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. This SQL variable inserts one principal; use repeated executions or the PowerShell installer to add multiple principals.', 1;
 END
 
-IF UPPER(@BootstrapPortalAdminPrincipalType) = N'USER'
-BEGIN
-    SET @BootstrapPortalAdminPrincipalType = N'ADUser';
-END
-
-IF UPPER(@BootstrapPortalAdminPrincipalType) = N'ADUSER'
-BEGIN
-    SET @BootstrapPortalAdminPrincipalType = N'ADUser';
-END
-
-IF UPPER(@BootstrapPortalAdminPrincipalType) = N'ADGROUP'
-BEGIN
-    SET @BootstrapPortalAdminPrincipalType = N'ADGroup';
-END
+-- Keep bootstrap principal type normalization here even though the setup script
+-- also migrates stored legacy values. This script is often patched and executed
+-- independently by installers, so it must validate its own input.
+SET @BootstrapPortalAdminPrincipalType =
+    CASE UPPER(LTRIM(RTRIM(@BootstrapPortalAdminPrincipalType)))
+        WHEN N'USER' THEN N'ADUser'
+        WHEN N'ADUSER' THEN N'ADUser'
+        WHEN N'ADGROUP' THEN N'ADGroup'
+        ELSE @BootstrapPortalAdminPrincipalType
+    END;
 
 IF @BootstrapPortalAdminPrincipalType NOT IN (N'ADUser', N'ADGroup')
 BEGIN
@@ -211,6 +207,9 @@ be safely validated inside this script after substitution. Use the PowerShell
 installer for automated local runs, or manually escape single quotes in the
 literal above.
 */
+-- Repeat the legacy User -> ADUser migration here so rerunning only the
+-- initialization script after an older deployment still leaves RBAC principals
+-- in the current provider-aware format.
 DELETE legacy
 FROM omp.RolePrincipals legacy
 WHERE legacy.PrincipalType = N'User'
