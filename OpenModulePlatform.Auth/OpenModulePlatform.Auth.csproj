@@ -12,5 +12,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" />
+    <PackageReference Include="System.DirectoryServices.AccountManagement" />
   </ItemGroup>
 </Project>

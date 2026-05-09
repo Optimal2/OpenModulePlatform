@@ -37,9 +37,9 @@ The built-in AD provider is exposed at `/auth/ad`.
 This endpoint is the only built-in OMP endpoint that needs IIS Windows Authentication. It reads the Windows principal from IIS, resolves direct user identifiers and group identifiers, and then signs in with the shared OMP cookie.
 
 The login page also has an alternate Windows/AD account prompt. It validates the
-entered account with Windows `LogonUser` before issuing the same shared OMP
-cookie. The password is not stored by OMP. Use this alternate-account path only
-on trusted local development hosts or over HTTPS.
+entered account through Windows account-management APIs before issuing the same
+shared OMP cookie. The password is not stored by OMP. Use this
+alternate-account path only on trusted local development hosts or over HTTPS.
 
 The AD provider emits role principals for:
 
