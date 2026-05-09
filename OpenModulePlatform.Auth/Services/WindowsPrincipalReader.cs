@@ -24,7 +24,7 @@ public sealed class WindowsPrincipalReader
             ? windowsIdentity.User?.Value
             : principal.FindFirstValue(ClaimTypes.PrimarySid);
 
-    public IReadOnlyList<string> GetGroupPrincipals(ClaimsPrincipal principal)
+    public IReadOnlyCollection<string> GetGroupPrincipals(ClaimsPrincipal principal)
     {
         if (!OperatingSystem.IsWindows() ||
             principal.Identity is not WindowsIdentity windowsIdentity)
@@ -35,7 +35,7 @@ public sealed class WindowsPrincipalReader
         return GetGroupPrincipals(windowsIdentity);
     }
 
-    private static IReadOnlyList<string> GetGroupPrincipalsFromClaims(ClaimsPrincipal principal)
+    private static IReadOnlyCollection<string> GetGroupPrincipalsFromClaims(ClaimsPrincipal principal)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var claim in principal.FindAll(ClaimTypes.GroupSid)
@@ -45,11 +45,11 @@ public sealed class WindowsPrincipalReader
             result.Add(claim.Value);
         }
 
-        return result.ToList();
+        return result;
     }
 
     [SupportedOSPlatform("windows")]
-    private IReadOnlyList<string> GetGroupPrincipals(WindowsIdentity windowsIdentity)
+    private IReadOnlyCollection<string> GetGroupPrincipals(WindowsIdentity windowsIdentity)
     {
         if (windowsIdentity.Groups is null)
         {
@@ -86,6 +86,6 @@ public sealed class WindowsPrincipalReader
             }
         }
 
-        return result.ToList();
+        return result;
     }
 }
