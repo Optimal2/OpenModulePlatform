@@ -90,6 +90,8 @@ GO
 
 IF OBJECT_ID(N'omp.RolePrincipals', N'U') IS NOT NULL
 BEGIN
+    -- Schema setup owns stored data migrations. The initialize script repeats
+    -- this small legacy cleanup for standalone initialization reruns.
     DELETE legacy
     FROM omp.RolePrincipals legacy
     WHERE legacy.PrincipalType = N'User'
