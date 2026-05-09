@@ -33,6 +33,10 @@ DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultHostTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
+-- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
+-- scripts. It must never be executed in production unchanged. Deployment
+-- automation should patch it from a protected environment-specific value; the
+-- THROW check below is a fail-safe, not the primary control.
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
 DECLARE @BootstrapPortalAdminPrincipalType nvarchar(50) = N'ADUser';
 DECLARE @InsertedInstanceTemplateIds TABLE (InstanceTemplateId int NOT NULL);
