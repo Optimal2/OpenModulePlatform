@@ -85,11 +85,13 @@ public sealed class WindowsPrincipalReader
                     result.Add(account.Value);
                 }
             }
-            catch (SystemException ex)
+            catch (Exception ex) when (
+                ex is IdentityNotMappedException or UnauthorizedAccessException or NotSupportedException)
             {
                 // SID translation depends on Windows account lookup infrastructure and can
                 // fail for unmapped SIDs, access limitations, or unavailable providers. Keep
-                // the SID principal and log the readable NTAccount translation failure only.
+                // the SID principal and log expected readable NTAccount translation failures.
+                // Unexpected SystemException failures are intentionally not swallowed here.
                 LogSkippedSidTranslation(ex, sid.Value);
             }
         }
