@@ -14,5 +14,6 @@
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.7" />
     <PackageVersion Include="NLog.Extensions.Hosting" Version="6.1.2" />
     <PackageVersion Include="NLog.Web.AspNetCore" Version="6.1.2" />
+    <PackageVersion Include="System.DirectoryServices.AccountManagement" Version="10.0.7" />
   </ItemGroup>
 </Project>

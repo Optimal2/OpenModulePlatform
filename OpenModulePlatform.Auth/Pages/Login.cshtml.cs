@@ -108,26 +108,22 @@ public sealed class LoginModel : PageModel
             AlternateWindowsUserName,
             AlternateWindowsPassword);
 
-        if (!result.Succeeded || result.Ticket is null)
+        if (!result.Succeeded || result.Principal is null)
         {
             ErrorMessage = "Windows credentials could not be validated.";
             BuildProviderUrls();
             return Page();
         }
 
-        using (result.Ticket)
+        var user = await _repository.ResolveWindowsAsync(result.Principal, ct);
+        if (user is null)
         {
-            var user = await _repository.ResolveWindowsAsync(result.Ticket.Principal, ct);
-            if (user is null)
-            {
-                ErrorMessage = "Windows sign-in could not be resolved.";
-                BuildProviderUrls();
-                return Page();
-            }
-
-            await SignInAsync(user);
+            ErrorMessage = "Windows sign-in could not be resolved.";
+            BuildProviderUrls();
+            return Page();
         }
 
+        await SignInAsync(user);
         return RedirectToSafeReturnUrl();
     }
 

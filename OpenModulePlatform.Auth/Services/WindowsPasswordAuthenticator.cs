@@ -1,8 +1,5 @@
 // File: OpenModulePlatform.Auth/Services/WindowsPasswordAuthenticator.cs
-using Microsoft.Extensions.Logging;
-using Microsoft.Win32.SafeHandles;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
+using System.DirectoryServices.AccountManagement;
 using System.Runtime.Versioning;
 using System.Security.Claims;
 using System.Security.Principal;
@@ -11,10 +8,7 @@ namespace OpenModulePlatform.Auth.Services;
 
 public sealed class WindowsPasswordAuthenticator
 {
-    private const int Logon32LogonInteractive = 2;
-    private const int Logon32LogonNetworkCleartext = 8;
-    private const int Logon32ProviderDefault = 0;
-    private const int ErrorLogonTypeNotGranted = 1385;
+    private const string AuthenticationType = "WindowsPassword";
 
     private readonly ILogger<WindowsPasswordAuthenticator> _log;
 
@@ -40,73 +34,136 @@ public sealed class WindowsPasswordAuthenticator
             return WindowsPasswordAuthenticationResult.Failed("Enter a Windows password.");
         }
 
-        if (!TryLogon(
-            accountName,
-            userName,
-            domain,
-            password,
-            Logon32LogonInteractive,
-            out var token,
-            out var error) &&
-            (error.NativeErrorCode != ErrorLogonTypeNotGranted ||
-             !TryLogon(
-                 accountName,
-                 userName,
-                 domain,
-                 password,
-                 Logon32LogonNetworkCleartext,
-                 out token,
-                 out error)))
+        return AuthenticateWindows(accountName.Trim(), userName, domain, password);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private WindowsPasswordAuthenticationResult AuthenticateWindows(
+        string accountName,
+        string userName,
+        string? domain,
+        string password)
+    {
+        try
         {
-            return WindowsPasswordAuthenticationResult.Failed(error.Message);
+            using var context = CreatePrincipalContext(domain);
+            if (!context.ValidateCredentials(userName, password, ContextOptions.Negotiate))
+            {
+                _log.LogWarning(
+                    "Alternate Windows sign-in validation failed for account '{AccountName}' using domain '{Domain}'.",
+                    accountName,
+                    domain);
+                return WindowsPasswordAuthenticationResult.Failed("The Windows account name or password is incorrect.");
+            }
+
+            var user = FindUserPrincipal(context, userName);
+            var principal = CreateClaimsPrincipal(user, accountName, userName, domain);
+            return WindowsPasswordAuthenticationResult.Success(principal);
+        }
+        catch (PrincipalServerDownException ex)
+        {
+            _log.LogWarning(ex, "Alternate Windows sign-in could not reach the account authority for '{AccountName}'.", accountName);
+            return WindowsPasswordAuthenticationResult.Failed("Windows credentials could not be validated.");
+        }
+        catch (PrincipalOperationException ex)
+        {
+            _log.LogWarning(ex, "Alternate Windows sign-in failed for account '{AccountName}'.", accountName);
+            return WindowsPasswordAuthenticationResult.Failed("Windows credentials could not be validated.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _log.LogWarning(ex, "Alternate Windows sign-in was denied while validating account '{AccountName}'.", accountName);
+            return WindowsPasswordAuthenticationResult.Failed("Windows credentials could not be validated.");
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static PrincipalContext CreatePrincipalContext(string? domain)
+    {
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            return new PrincipalContext(ContextType.Domain);
+        }
+
+        return IsLocalDomain(domain)
+            ? new PrincipalContext(ContextType.Machine, Environment.MachineName)
+            : new PrincipalContext(ContextType.Domain, domain);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static UserPrincipal? FindUserPrincipal(PrincipalContext context, string userName)
+    {
+        if (userName.Contains('@', StringComparison.Ordinal))
+        {
+            return UserPrincipal.FindByIdentity(context, IdentityType.UserPrincipalName, userName)
+                   ?? UserPrincipal.FindByIdentity(context, userName);
+        }
+
+        return UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, userName)
+               ?? UserPrincipal.FindByIdentity(context, userName);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private ClaimsPrincipal CreateClaimsPrincipal(
+        UserPrincipal? user,
+        string accountName,
+        string userName,
+        string? domain)
+    {
+        var canonicalName = GetCanonicalAccountName(user, accountName, userName, domain);
+        var identity = new ClaimsIdentity(AuthenticationType, ClaimTypes.Name, ClaimTypes.Role);
+        identity.AddClaim(new Claim(ClaimTypes.Name, canonicalName));
+
+        if (!string.IsNullOrWhiteSpace(user?.Sid?.Value))
+        {
+            identity.AddClaim(new Claim(ClaimTypes.PrimarySid, user.Sid.Value));
+            identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Sid.Value));
+        }
+
+        foreach (var group in GetAuthorizationGroups(user, canonicalName))
+        {
+            AddGroupClaims(identity, group);
+        }
+
+        return new ClaimsPrincipal(identity);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private IEnumerable<Principal> GetAuthorizationGroups(UserPrincipal? user, string canonicalName)
+    {
+        if (user is null)
+        {
+            return [];
         }
 
         try
         {
-            var identity = new WindowsIdentity(token.DangerousGetHandle(), "WindowsPassword");
-            return WindowsPasswordAuthenticationResult.Success(new WindowsPasswordAuthenticationTicket(token, identity));
+            return user.GetAuthorizationGroups().ToArray();
         }
-        catch
+        catch (PrincipalOperationException ex)
         {
-            token.Dispose();
-            throw;
+            _log.LogWarning(ex, "Could not enumerate authorization groups for alternate Windows sign-in account '{AccountName}'.", canonicalName);
+            return [];
         }
     }
 
-    private bool TryLogon(
-        string accountName,
-        string userName,
-        string? domain,
-        string password,
-        int logonType,
-        out SafeAccessTokenHandle token,
-        out Win32Exception error)
+    [SupportedOSPlatform("windows")]
+    private static void AddGroupClaims(ClaimsIdentity identity, Principal group)
     {
-        // No managed .NET API validates both local and domain Windows passwords
-        // with this provider's semantics. LogonUser is the deliberate Windows
-        // boundary; the DllImport is private and restricted to System32 below.
-        if (LogonUser(
-            userName,
-            domain,
-            password,
-            logonType,
-            Logon32ProviderDefault,
-            out token))
+        if (!string.IsNullOrWhiteSpace(group.Sid?.Value))
         {
-            error = new Win32Exception(0);
-            return true;
+            identity.AddClaim(new Claim(ClaimTypes.GroupSid, group.Sid.Value));
+
+            var ntAccount = TryTranslateSidToNtAccount(group.Sid);
+            if (!string.IsNullOrWhiteSpace(ntAccount))
+            {
+                identity.AddClaim(new Claim(ClaimTypes.Role, ntAccount));
+            }
         }
-
-        error = new Win32Exception(Marshal.GetLastWin32Error());
-        _log.LogWarning(
-            "Alternate Windows sign-in validation failed for account '{AccountName}' using domain '{Domain}' and logon type {LogonType}. Win32 error {ErrorCode}: {ErrorMessage}",
-            accountName,
-            domain,
-            logonType,
-            error.NativeErrorCode,
-            error.Message);
-
-        return false;
+        else if (!string.IsNullOrWhiteSpace(group.Name))
+        {
+            identity.AddClaim(new Claim(ClaimTypes.Role, group.Name));
+        }
     }
 
     private static bool TrySplitAccountName(
@@ -136,55 +193,62 @@ public sealed class WindowsPasswordAuthenticator
         return true;
     }
 
+    [SupportedOSPlatform("windows")]
+    private static string GetCanonicalAccountName(
+        UserPrincipal? user,
+        string accountName,
+        string userName,
+        string? domain)
+    {
+        if (accountName.Contains('\\', StringComparison.Ordinal))
+        {
+            return accountName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(domain))
+        {
+            return domain + "\\" + (user?.SamAccountName ?? userName);
+        }
+
+        return user?.UserPrincipalName ?? accountName;
+    }
+
     private static string? NormalizeLocalDomain(string? domain)
         => string.Equals(domain, ".", StringComparison.Ordinal)
             ? Environment.MachineName
             : domain;
 
-    // Password validation for the alternate AD sign-in path is intentionally delegated
-    // to Windows. Keep the unmanaged boundary private and restrict DLL loading to
-    // System32 so the P/Invoke cannot be redirected through the normal search path.
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool LogonUser(
-        string lpszUsername,
-        string? lpszDomain,
-        string lpszPassword,
-        int dwLogonType,
-        int dwLogonProvider,
-        out SafeAccessTokenHandle phToken);
-}
+    private static bool IsLocalDomain(string domain)
+        => string.Equals(domain, Environment.MachineName, StringComparison.OrdinalIgnoreCase);
 
-[SupportedOSPlatform("windows")]
-public sealed class WindowsPasswordAuthenticationTicket : IDisposable
-{
-    private readonly SafeAccessTokenHandle _token;
-    private readonly WindowsIdentity _identity;
-
-    public WindowsPasswordAuthenticationTicket(SafeAccessTokenHandle token, WindowsIdentity identity)
+    [SupportedOSPlatform("windows")]
+    private static string? TryTranslateSidToNtAccount(SecurityIdentifier sid)
     {
-        _token = token;
-        _identity = identity;
-        Principal = new WindowsPrincipal(identity);
-    }
-
-    public ClaimsPrincipal Principal { get; }
-
-    public void Dispose()
-    {
-        _identity.Dispose();
-        _token.Dispose();
+        try
+        {
+            return sid.Translate(typeof(NTAccount)) is NTAccount account
+                ? account.Value
+                : null;
+        }
+        catch (IdentityNotMappedException)
+        {
+            return null;
+        }
+        catch (SystemException)
+        {
+            return null;
+        }
     }
 }
 
 public sealed record WindowsPasswordAuthenticationResult(
-    WindowsPasswordAuthenticationTicket? Ticket,
+    ClaimsPrincipal? Principal,
     string? ErrorMessage)
 {
-    public bool Succeeded => Ticket is not null;
+    public bool Succeeded => Principal is not null;
 
-    public static WindowsPasswordAuthenticationResult Success(WindowsPasswordAuthenticationTicket ticket)
-        => new(ticket, null);
+    public static WindowsPasswordAuthenticationResult Success(ClaimsPrincipal principal)
+        => new(principal, null);
 
     public static WindowsPasswordAuthenticationResult Failed(string errorMessage)
         => new(null, errorMessage);

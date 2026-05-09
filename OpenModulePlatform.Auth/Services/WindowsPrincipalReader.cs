@@ -29,10 +29,25 @@ public sealed class WindowsPrincipalReader
         if (!OperatingSystem.IsWindows() ||
             principal.Identity is not WindowsIdentity windowsIdentity)
         {
-            return [];
+            return GetGroupPrincipalsFromClaims(principal);
         }
 
         return GetGroupPrincipals(windowsIdentity);
+    }
+
+    private static IReadOnlyList<string> GetGroupPrincipalsFromClaims(ClaimsPrincipal principal)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var claim in principal.FindAll(ClaimTypes.GroupSid)
+                     .Concat(principal.FindAll(ClaimTypes.Role)))
+        {
+            if (!string.IsNullOrWhiteSpace(claim.Value))
+            {
+                result.Add(claim.Value);
+            }
+        }
+
+        return result.ToList();
     }
 
     [SupportedOSPlatform("windows")]
