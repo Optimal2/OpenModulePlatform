@@ -56,11 +56,11 @@ public sealed class WindowsPrincipalReader
     [SupportedOSPlatform("windows")]
     private IReadOnlyCollection<string> GetWindowsGroupPrincipals(ClaimsPrincipal principal)
         => principal.Identity is WindowsIdentity windowsIdentity
-            ? GetGroupPrincipals(windowsIdentity)
+            ? GetGroupPrincipalsFromWindowsIdentity(windowsIdentity)
             : GetGroupPrincipalsFromClaims(principal);
 
     [SupportedOSPlatform("windows")]
-    private IReadOnlyCollection<string> GetGroupPrincipals(WindowsIdentity windowsIdentity)
+    private IReadOnlyCollection<string> GetGroupPrincipalsFromWindowsIdentity(WindowsIdentity windowsIdentity)
     {
         if (windowsIdentity.Groups is null)
         {
