@@ -169,6 +169,9 @@ function Invoke-NativeChecked {
         [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
     )
 
+    # This helper prints native command output for developer diagnostics. Do not
+    # use it for commands that may echo secrets; use Invoke-NativeCheckedRedacted
+    # or suppress output at the specific call site instead.
     Write-Host "> $FilePath $($Arguments -join ' ')"
     & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
     $exitCode = $LASTEXITCODE
@@ -184,6 +187,9 @@ function Invoke-NativeCheckedRedacted {
         [Parameter(Mandatory = $true)][string[]]$DisplayArguments
     )
 
+    # DisplayArguments redacts sensitive arguments. The invoked command can still
+    # write its own output, so only use this with tools that do not echo supplied
+    # passwords or tokens.
     Write-Host "> $FilePath $($DisplayArguments -join ' ')"
     & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
     $exitCode = $LASTEXITCODE
@@ -224,6 +230,41 @@ function Assert-PathUnderRoot {
     $pathFull = [System.IO.Path]::GetFullPath($Path).TrimEnd('\') + '\'
     if (-not $pathFull.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to mirror files outside runtime root. Root: $rootFull Path: $pathFull"
+    }
+
+    Assert-NoReparsePointInPath -Root $rootFull -Path $pathFull
+}
+
+function Assert-NoReparsePointInPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    # Robocopy /MIR follows existing junctions and symbolic links. Reject a
+    # mirror target when any existing ancestor under the runtime root is a
+    # reparse point, otherwise the path prefix check can be bypassed.
+    $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd('\')
+    $current = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    while ($current.Length -ge $rootFull.Length) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Refusing to mirror files through a junction or symbolic link: $current"
+            }
+        }
+
+        if ([string]::Equals($current, $rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+            break
+        }
+
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrWhiteSpace($parent) -or
+            [string]::Equals($parent, $current, [System.StringComparison]::OrdinalIgnoreCase)) {
+            break
+        }
+
+        $current = $parent
     }
 }
 

@@ -24,7 +24,10 @@ function Write-JsonFile {
     }
 
     $directory = Split-Path -Parent $Path
-    if (-not [string]::IsNullOrWhiteSpace($directory)) {
+    # A bare file name has no parent directory to create; root paths such as C:\
+    # already exist and are left untouched.
+    if (-not [string]::IsNullOrWhiteSpace($directory) -and
+        -not (Test-Path -LiteralPath $directory -PathType Container)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
 
@@ -34,6 +37,7 @@ function Write-JsonFile {
 }
 
 # TrustServerCertificate=true is only for local development with dev SQL Server certificates.
+# Do not reuse the generated appsettings files for shared test or production environments.
 $connectionString = "Server=$SqlServer;Database=$Database;Integrated Security=true;TrustServerCertificate=true;"
 $dataProtectionKeyPath = Join-Path $RuntimeRoot 'DataProtectionKeys'
 

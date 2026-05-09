@@ -47,20 +47,18 @@ public sealed class WindowsPasswordAuthenticator
             password,
             Logon32LogonInteractive,
             out var token,
-            out var error))
+            out var error) &&
+            (error.NativeErrorCode != ErrorLogonTypeNotGranted ||
+             !TryLogon(
+                 accountName,
+                 userName,
+                 domain,
+                 password,
+                 Logon32LogonNetworkCleartext,
+                 out token,
+                 out error)))
         {
-            if (error.NativeErrorCode != ErrorLogonTypeNotGranted ||
-                !TryLogon(
-                    accountName,
-                    userName,
-                    domain,
-                    password,
-                    Logon32LogonNetworkCleartext,
-                    out token,
-                    out error))
-            {
-                return WindowsPasswordAuthenticationResult.Failed(error.Message);
-            }
+            return WindowsPasswordAuthenticationResult.Failed(error.Message);
         }
 
         try
@@ -140,6 +138,10 @@ public sealed class WindowsPasswordAuthenticator
             ? Environment.MachineName
             : domain;
 
+    // Password validation for the alternate AD sign-in path is intentionally delegated
+    // to Windows. Keep the unmanaged boundary private and restrict DLL loading to
+    // System32 so the P/Invoke cannot be redirected through the normal search path.
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool LogonUser(
         string lpszUsername,

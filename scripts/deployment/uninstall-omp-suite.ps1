@@ -16,6 +16,8 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 }
 
 $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
+$script:SqlCommandTimeoutSeconds = 3600
+$script:IisAppPoolStopTimeoutSeconds = 30
 
 function Write-Step {
     param([string]$Message)
@@ -26,6 +28,8 @@ function Confirm-DeploymentAction {
     param([string]$Message)
     if ($Yes) { return $true }
     $answer = Read-Host "$Message [y/j/N]"
+    # Accept Swedish "ja" alongside English yes because this script is used
+    # interactively in both local developer and Swedish customer environments.
     return $answer -imatch '^(y|yes|j|ja)$'
 }
 
@@ -175,7 +179,8 @@ function Invoke-SqlText {
             $command = $connection.CreateCommand()
             $command.CommandText = $batch
             # Finite timeout avoids indefinite hangs while still allowing large cleanup scripts.
-            $command.CommandTimeout = 3600
+            # One hour is a deliberate safety cap for schema teardown, not an expected duration.
+            $command.CommandTimeout = $script:SqlCommandTimeoutSeconds
             try {
                 [void]$command.ExecuteNonQuery()
             }
@@ -237,7 +242,8 @@ function Remove-Iis {
     }
 
     Write-Step 'Removing IIS applications, site, and app pools'
-    foreach ($poolName in @($script:AppPools.Portal, $script:AppPools.Auth, $script:AppPools.OpenDocViewer, $script:AppPools.ExampleWebApp, $script:AppPools.ExampleWebAppBlazor, $script:AppPools.ExampleServiceWebApp, $script:AppPools.ExampleWorkerWebApp, $script:AppPools.IFrameWebApp)) {
+    $appPoolNames = Get-ConfiguredAppPoolNames
+    foreach ($poolName in $appPoolNames) {
         if ([string]::IsNullOrWhiteSpace($poolName)) {
             continue
         }
@@ -261,13 +267,19 @@ function Remove-Iis {
 
     Remove-IisSiteIfExists -Name $script:IisSiteName
 
-    foreach ($poolName in @($script:AppPools.Portal, $script:AppPools.Auth, $script:AppPools.OpenDocViewer, $script:AppPools.ExampleWebApp, $script:AppPools.ExampleWebAppBlazor, $script:AppPools.ExampleServiceWebApp, $script:AppPools.ExampleWorkerWebApp, $script:AppPools.IFrameWebApp)) {
+    foreach ($poolName in $appPoolNames) {
         if ([string]::IsNullOrWhiteSpace($poolName)) {
             continue
         }
 
         Remove-IisAppPoolIfExists -Name $poolName
     }
+}
+
+function Get-ConfiguredAppPoolNames {
+    return @($script:AppPools.PSObject.Properties.Value) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        Select-Object -Unique
 }
 
 function Test-IisApplicationExact {
@@ -336,7 +348,7 @@ function Stop-IisAppPoolIfExists {
     Write-Host "> $script:appcmdPath stop apppool /apppool.name:$Name"
     & $script:appcmdPath stop apppool "/apppool.name:$Name" | Out-Null
 
-    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    $deadline = [DateTime]::UtcNow.AddSeconds($script:IisAppPoolStopTimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         if ([string]::Equals((Get-IisAppPoolState -Name $Name), 'Stopped', [StringComparison]::OrdinalIgnoreCase)) {
             return

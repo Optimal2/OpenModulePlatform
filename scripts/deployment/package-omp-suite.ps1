@@ -15,6 +15,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$DefaultSuiteVersion = '0.3.3'
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $ConfigPath = Join-Path $PSScriptRoot 'omp-suite.local.psd1'
 }
@@ -186,7 +187,7 @@ if ([string]::IsNullOrWhiteSpace($OpenDocViewerRoot)) {
 $OpenDocViewerRoot = Resolve-DeploymentPath -Path $OpenDocViewerRoot -BasePath $configDirectory
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = [string](Get-ConfigValue -Config $config -Name 'Version' -DefaultValue '0.3.3')
+    $Version = [string](Get-ConfigValue -Config $config -Name 'Version' -DefaultValue $DefaultSuiteVersion)
 }
 if ([string]::IsNullOrWhiteSpace($Configuration)) {
     $Configuration = [string](Get-ConfigValue -Config $config -Name 'Configuration' -DefaultValue 'Release')
@@ -331,7 +332,7 @@ foreach ($item in $payloadItems) {
 }
 $manifest.payloads['OpenDocViewer'] = 'payload/OpenDocViewer.dist.zip'
 
-$manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'manifest.json') -Encoding UTF8
+$manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'manifest.json') -Encoding UTF8 -NoNewline
 
 Compress-PackageRootToZip -PackageRoot $packageRoot -Destination $zipPath
 
