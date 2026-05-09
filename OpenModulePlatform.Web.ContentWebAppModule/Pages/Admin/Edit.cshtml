@@ -1,0 +1,141 @@
+@* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Admin/Edit.cshtml *@
+@page "{pageId:guid?}"
+@model OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin.EditModel
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Content"]</div>
+        <h1>@(Model.IsCreate ? L["New page"] : L["Edit page"])</h1>
+        <p class="lede">@L["Use Markdown for simple pages. Rendered output is sanitized before it is shown to users."]</p>
+    </div>
+    <div class="toolbar">
+        <a class="button" href="~/admin">@L["Back to pages"]</a>
+        @if (!Model.IsCreate)
+        {
+            <a class="button" href="~/admin/preview?pageId=@Model.Input.PageId">@L["Preview"]</a>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="Input.PageId" />
+    <input type="hidden" asp-for="Input.IsPublished" />
+    <input type="hidden" asp-for="Input.PublishedAtUtc" />
+
+    <div asp-validation-summary="ModelOnly" class="field-validation-error"></div>
+
+    <div class="form-row">
+        <div class="form-field">
+            <label asp-for="Input.Title"></label>
+            <input asp-for="Input.Title" />
+            <span asp-validation-for="Input.Title" class="field-validation-error"></span>
+        </div>
+        <div class="form-field">
+            <label asp-for="Input.Slug"></label>
+            <input asp-for="Input.Slug" placeholder="help/faq" />
+            <span class="field-hint">@L["Leave empty for the root page. Slugs are normalized when saved."]</span>
+            <span asp-validation-for="Input.Slug" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-field">
+            <label asp-for="Input.ContentFormat"></label>
+            <select asp-for="Input.ContentFormat">
+                <option value="markdown">markdown</option>
+                <option value="html">html</option>
+            </select>
+        </div>
+        <div class="form-field">
+            <label asp-for="Input.SortOrder"></label>
+            <input asp-for="Input.SortOrder" type="number" />
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.Summary"></label>
+        <input asp-for="Input.Summary" />
+        <span asp-validation-for="Input.Summary" class="field-validation-error"></span>
+    </div>
+
+    <div class="form-row">
+        <div class="form-field">
+            <label asp-for="Input.MetaTitle"></label>
+            <input asp-for="Input.MetaTitle" />
+            <span asp-validation-for="Input.MetaTitle" class="field-validation-error"></span>
+        </div>
+        <div class="form-field">
+            <label asp-for="Input.MetaDescription"></label>
+            <input asp-for="Input.MetaDescription" />
+            <span asp-validation-for="Input.MetaDescription" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.Content"></label>
+        <textarea asp-for="Input.Content" rows="18"></textarea>
+        <span asp-validation-for="Input.Content" class="field-validation-error"></span>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.ChangeNote"></label>
+        <input asp-for="Input.ChangeNote" />
+        <span asp-validation-for="Input.ChangeNote" class="field-validation-error"></span>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit" asp-page-handler="Save">@L["Save draft"]</button>
+        @if (!Model.IsCreate)
+        {
+            @if (Model.Input.IsPublished)
+            {
+                <button type="submit" asp-page-handler="Unpublish" class="button--secondary" formnovalidate>@L["Unpublish"]</button>
+            }
+            else
+            {
+                <button type="submit" asp-page-handler="Publish" class="button--primary" formnovalidate>@L["Publish"]</button>
+            }
+            <button type="submit" asp-page-handler="Delete" class="button--danger" formnovalidate>@L["Delete"]</button>
+        }
+    </div>
+</form>
+
+@if (Model.Revisions.Count > 0)
+{
+    <section class="card revisions">
+        <h2>@L["Revisions"]</h2>
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>@L["Version"]</th>
+                    <th>@L["Title"]</th>
+                    <th>@L["Slug"]</th>
+                    <th>@L["Created"]</th>
+                    <th>@L["Note"]</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var revision in Model.Revisions)
+            {
+                <tr>
+                    <td>@revision.RevisionNumber</td>
+                    <td>@revision.Title</td>
+                    <td><code>@(string.IsNullOrEmpty(revision.Slug) ? "/" : revision.Slug)</code></td>
+                    <td>
+                        <div>@revision.CreatedAtUtc.ToString("u")</div>
+                        <div class="muted">@revision.CreatedBy</div>
+                    </td>
+                    <td>@revision.ChangeNote</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </section>
+}
+
+<partial name="_ValidationScriptsPartial" />

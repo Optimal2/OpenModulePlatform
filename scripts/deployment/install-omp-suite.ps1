@@ -568,6 +568,7 @@ function Write-RuntimeConfiguration {
         @{ Path = (Join-Path $script:WebAppsRoot 'ExampleWebAppBlazorModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $true },
         @{ Path = (Join-Path $script:WebAppsRoot 'ExampleServiceAppModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $true },
         @{ Path = (Join-Path $script:WebAppsRoot 'ExampleWorkerAppModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $true },
+        @{ Path = (Join-Path $script:WebAppsRoot $script:ContentWebAppPath); IncludePortalTopBar = $true; IncludeOpenDocViewer = $false; ContentWebAppModule = $true },
         @{ Path = (Join-Path $script:WebAppsRoot 'iFrameWebAppModule'); IncludePortalTopBar = $true; IncludeOpenDocViewer = $false }
     )
 
@@ -602,6 +603,13 @@ function Write-RuntimeConfiguration {
             $settings.OpenDocViewer = [ordered]@{
                 BaseUrl = $odvBaseUrl
                 SampleFileUrl = $odvSampleUrl
+            }
+        }
+
+        if ($folder.ContainsKey('ContentWebAppModule') -and [bool]$folder.ContentWebAppModule) {
+            $settings.ContentWebAppModule = [ordered]@{
+                AppInstanceId = $script:ContentWebAppAppInstanceId
+                HomeSlug = $script:ContentWebAppHomeSlug
             }
         }
 
@@ -698,6 +706,10 @@ function Deploy-Payloads {
         Expand-PayloadZip -ZipName 'OpenDocViewer.dist.zip' -Destination (Join-Path $script:WebAppsRoot $script:OpenDocViewerAppPath)
     }
 
+    if ($script:InstallContentWebApp) {
+        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ContentWebAppModule.zip' -Destination (Join-Path $script:WebAppsRoot $script:ContentWebAppPath)
+    }
+
     if ($script:InstallExamples) {
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleWebAppModule')
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleWebAppBlazorModule')
@@ -730,6 +742,17 @@ function Run-InstallSql {
     Ensure-AdditionalBootstrapPrincipals
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\1-setup-omp-portal.sql')
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\2-initialize-omp-portal.sql') -PatchBootstrapPrincipal
+
+    if ($script:InstallContentWebApp) {
+        $contentSqlFiles = @(
+            'sql\OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql',
+            'sql\OpenModulePlatform.Web.ContentWebAppModule\2-initialize-content-webapp.sql'
+        )
+
+        foreach ($relativePath in $contentSqlFiles) {
+            Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot $relativePath)
+        }
+    }
 
     if ($script:InstallExamples) {
         $exampleSqlFiles = @(
@@ -1033,6 +1056,10 @@ function Ensure-Iis {
         Ensure-IisWebApplication -AppPath 'iFrameWebAppModule' -PhysicalPath (Join-Path $script:WebAppsRoot 'iFrameWebAppModule') -AppPoolName $script:AppPools.IFrameWebApp -AnonymousEnabled $true
     }
 
+    if ($script:InstallContentWebApp) {
+        Ensure-IisWebApplication -AppPath $script:ContentWebAppPath -PhysicalPath (Join-Path $script:WebAppsRoot $script:ContentWebAppPath) -AppPoolName $script:AppPools.ContentWebApp -AnonymousEnabled $true
+    }
+
     if ($script:InstallOpenDocViewer) {
         Ensure-IisWebApplication -AppPath $script:OpenDocViewerAppPath -PhysicalPath (Join-Path $script:WebAppsRoot $script:OpenDocViewerAppPath) -AppPoolName $script:AppPools.OpenDocViewer -AnonymousEnabled $true -WindowsEnabled $false
     }
@@ -1184,6 +1211,7 @@ $script:IisCertificateThumbprint = [string](Get-NestedConfigValue -Config $confi
 $script:IisCertificateSerialNumber = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'CertificateSerialNumber' -DefaultValue '')
 $script:IisRemoveOtherBindings = [bool](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'RemoveOtherBindings' -DefaultValue $false)
 $script:OpenDocViewerAppPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'OpenDocViewerAppPath' -DefaultValue 'opendocviewer')
+$script:ContentWebAppPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'ContentWebAppPath' -DefaultValue 'content')
 $portalPhysicalPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'PortalPhysicalPath' -DefaultValue '')
 if ([string]::IsNullOrWhiteSpace($portalPhysicalPath)) {
     $portalPhysicalPath = Join-Path $script:WebRoot 'Portal'
@@ -1205,6 +1233,8 @@ $script:PortalBaseUrl = [string](Get-NestedConfigValue -Config $config -Section 
 if ([string]::IsNullOrWhiteSpace($script:PortalBaseUrl)) {
     $script:PortalBaseUrl = if ([string]::IsNullOrWhiteSpace($script:PublicBaseUrl)) { '/' } else { $script:PublicBaseUrl }
 }
+$script:ContentWebAppAppInstanceId = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'AppInstanceId' -DefaultValue '11111111-1111-1111-1111-111111111232')
+$script:ContentWebAppHomeSlug = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HomeSlug' -DefaultValue 'home')
 
 $defaultAppPools = @{
     Portal = 'OMP_Portal'
@@ -1214,6 +1244,7 @@ $defaultAppPools = @{
     ExampleWebAppBlazor = 'OMP_ExampleWebAppBlazorModule'
     ExampleServiceWebApp = 'OMP_ExampleServiceAppModule'
     ExampleWorkerWebApp = 'OMP_ExampleWorkerAppModule'
+    ContentWebApp = 'OMP_ContentWebAppModule'
     IFrameWebApp = 'OMP_iFrameWebAppModule'
 }
 $configuredPools = Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'AppPools' -DefaultValue @{}
@@ -1234,6 +1265,7 @@ foreach ($key in @($configuredServices.Keys)) {
 $script:Services = [pscustomobject]$defaultServices
 
 $script:InstallOpenDocViewer = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallOpenDocViewer' -DefaultValue $true)
+$script:InstallContentWebApp = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallContentWebApp' -DefaultValue $true)
 $script:InstallExamples = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallExamples' -DefaultValue $true)
 $script:InstallRuntimeServices = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallRuntimeServices' -DefaultValue $true)
 $script:InstallExampleService = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallExampleService' -DefaultValue $true)

@@ -253,6 +253,7 @@ function Remove-Iis {
 
     $apps = @(
         "$script:IisSiteName/$script:OpenDocViewerAppPath",
+        "$script:IisSiteName/$script:ContentWebAppPath",
         "$script:IisSiteName/iFrameWebAppModule",
         "$script:IisSiteName/ExampleWorkerAppModule",
         "$script:IisSiteName/ExampleServiceAppModule",
@@ -542,6 +543,7 @@ $script:SqlPassword = [string](Get-ConfigValue -Config $config -Name 'SqlPasswor
 
 $script:IisSiteName = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'SiteName' -DefaultValue 'OpenModulePlatform')
 $script:OpenDocViewerAppPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'OpenDocViewerAppPath' -DefaultValue 'opendocviewer')
+$script:ContentWebAppPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'ContentWebAppPath' -DefaultValue 'content')
 
 $defaultAppPools = @{
     Portal = 'OMP_Portal'
@@ -551,6 +553,7 @@ $defaultAppPools = @{
     ExampleWebAppBlazor = 'OMP_ExampleWebAppBlazorModule'
     ExampleServiceWebApp = 'OMP_ExampleServiceAppModule'
     ExampleWorkerWebApp = 'OMP_ExampleWorkerAppModule'
+    ContentWebApp = 'OMP_ContentWebAppModule'
     IFrameWebApp = 'OMP_iFrameWebAppModule'
 }
 $configuredPools = Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'AppPools' -DefaultValue @{}
@@ -575,7 +578,7 @@ $script:RemoveServices = [bool](Get-NestedConfigValue -Config $config -Section '
 $script:RemoveFiles = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RemoveFiles' -DefaultValue $true)
 $script:RemoveDatabaseObjects = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'RemoveDatabaseObjects' -DefaultValue $false)
 $script:DropSchemas = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'DropSchemas' -DefaultValue $false)
-$script:DatabaseSchemas = @((Get-ConfigValue -Config $config -Name 'DatabaseSchemas' -DefaultValue @('omp_iframe', 'omp_example_workerapp', 'omp_example_serviceapp', 'omp_example_webapp_blazor', 'omp_example_webapp', 'omp_portal', 'omp')))
+$script:DatabaseSchemas = @((Get-ConfigValue -Config $config -Name 'DatabaseSchemas' -DefaultValue @('omp_content', 'omp_iframe', 'omp_example_workerapp', 'omp_example_serviceapp', 'omp_example_webapp_blazor', 'omp_example_webapp', 'omp_portal', 'omp')))
 $script:RemovePaths = @((Get-ConfigValue -Config $config -Name 'RemovePaths' -DefaultValue @()))
 
 Write-Host ''

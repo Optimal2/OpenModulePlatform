@@ -1,0 +1,22 @@
+@* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Index.cshtml *@
+@page "{*slug}"
+@model OpenModulePlatform.Web.ContentWebAppModule.Pages.IndexModel
+
+@if (Model.PageContent is null)
+{
+    <section class="card content-empty">
+        <h1>@L["Page not found"]</h1>
+        <p class="muted">@L["The requested content page is not published or does not exist."]</p>
+    </section>
+}
+else
+{
+    <article class="content-page">
+        <header class="content-page__header">
+            <h1>@Model.PageContent.Title</h1>
+        </header>
+        <div class="content-page__body">
+            @Html.Raw(Model.RenderedHtml)
+        </div>
+    </article>
+}

@@ -1,0 +1,66 @@
+@* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Admin/Index.cshtml *@
+@page
+@model OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin.IndexModel
+
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Content"]</div>
+        <h1>@L["Manage pages"]</h1>
+        <p class="lede">@L["Create, edit, publish and unpublish simple content pages for this app instance."]</p>
+    </div>
+    <a class="button button--primary" href="~/admin/edit">@L["New page"]</a>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">@L["No content pages were found."]</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>@L["Title"]</th>
+                <th>@L["Slug"]</th>
+                <th>@L["State"]</th>
+                <th>@L["Updated"]</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            var publicHref = Url.Content(string.IsNullOrWhiteSpace(row.Slug) ? "~/" : "~/" + row.Slug);
+            <tr>
+                <td>
+                    <strong>@row.Title</strong>
+                    <div class="muted">@L["Sort order"]: @row.SortOrder</div>
+                </td>
+                <td><code>@(string.IsNullOrEmpty(row.Slug) ? "/" : row.Slug)</code></td>
+                <td>
+                    @if (row.IsPublished)
+                    {
+                        <span class="pill pill--ok">@L["Published"]</span>
+                    }
+                    else
+                    {
+                        <span class="pill">@L["Draft"]</span>
+                    }
+                </td>
+                <td>
+                    <div>@row.UpdatedAtUtc.ToString("u")</div>
+                    <div class="muted">@row.UpdatedBy</div>
+                </td>
+                <td class="grid-actions">
+                    <a class="action-link" href="~/admin/edit/@row.PageId">@L["Edit"]</a>
+                    <a class="action-link" href="~/admin/preview?pageId=@row.PageId">@L["Preview"]</a>
+                    @if (row.IsPublished)
+                    {
+                        <a class="action-link" href="@publicHref">@L["Open"]</a>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

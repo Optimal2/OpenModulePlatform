@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Content" xml:space="preserve"><value>Content</value></data>
+  <data name="Content home" xml:space="preserve"><value>Content home</value></data>
+  <data name="Content navigation" xml:space="preserve"><value>Content navigation</value></data>
+  <data name="Manage pages" xml:space="preserve"><value>Manage pages</value></data>
+  <data name="Create, edit, publish and unpublish simple content pages for this app instance." xml:space="preserve"><value>Create, edit, publish and unpublish simple content pages for this app instance.</value></data>
+  <data name="New page" xml:space="preserve"><value>New page</value></data>
+  <data name="No content pages were found." xml:space="preserve"><value>No content pages were found.</value></data>
+  <data name="Title" xml:space="preserve"><value>Title</value></data>
+  <data name="Slug" xml:space="preserve"><value>Slug</value></data>
+  <data name="State" xml:space="preserve"><value>State</value></data>
+  <data name="Updated" xml:space="preserve"><value>Updated</value></data>
+  <data name="Sort order" xml:space="preserve"><value>Sort order</value></data>
+  <data name="Published" xml:space="preserve"><value>Published</value></data>
+  <data name="Draft" xml:space="preserve"><value>Draft</value></data>
+  <data name="Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="Open" xml:space="preserve"><value>Open</value></data>
+  <data name="Edit page" xml:space="preserve"><value>Edit page</value></data>
+  <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Use Markdown for simple pages. Rendered output is sanitized before it is shown to users.</value></data>
+  <data name="Back to pages" xml:space="preserve"><value>Back to pages</value></data>
+  <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Leave empty for the root page. Slugs are normalized when saved.</value></data>
+  <data name="Content format" xml:space="preserve"><value>Content format</value></data>
+  <data name="Summary" xml:space="preserve"><value>Summary</value></data>
+  <data name="Meta title" xml:space="preserve"><value>Meta title</value></data>
+  <data name="Meta description" xml:space="preserve"><value>Meta description</value></data>
+  <data name="Change note" xml:space="preserve"><value>Change note</value></data>
+  <data name="Save draft" xml:space="preserve"><value>Save draft</value></data>
+  <data name="Publish" xml:space="preserve"><value>Publish</value></data>
+  <data name="Unpublish" xml:space="preserve"><value>Unpublish</value></data>
+  <data name="Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="Revisions" xml:space="preserve"><value>Revisions</value></data>
+  <data name="Version" xml:space="preserve"><value>Version</value></data>
+  <data name="Created" xml:space="preserve"><value>Created</value></data>
+  <data name="Note" xml:space="preserve"><value>Note</value></data>
+  <data name="Page saved." xml:space="preserve"><value>Page saved.</value></data>
+  <data name="Page published." xml:space="preserve"><value>Page published.</value></data>
+  <data name="Page unpublished." xml:space="preserve"><value>Page unpublished.</value></data>
+  <data name="A content page with the same slug already exists for this app instance." xml:space="preserve"><value>A content page with the same slug already exists for this app instance.</value></data>
+  <data name="This page is published." xml:space="preserve"><value>This page is published.</value></data>
+  <data name="This page is not published and is only visible to managers." xml:space="preserve"><value>This page is not published and is only visible to managers.</value></data>
+  <data name="Page not found" xml:space="preserve"><value>Page not found</value></data>
+  <data name="The requested content page is not published or does not exist." xml:space="preserve"><value>The requested content page is not published or does not exist.</value></data>
+  <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId is not configured.</value></data>
+</root>

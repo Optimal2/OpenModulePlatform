@@ -6,6 +6,7 @@ for the public OpenModulePlatform components:
 - OMP Portal and Auth
 - OMP HostAgent, WorkerManager, and WorkerProcessHost
 - OpenDocViewer static web app
+- OMP Content Web App standard module
 - OMP example web, service, worker, Blazor, and iframe modules
 
 Environment-specific values are intentionally kept out of Git. Copy

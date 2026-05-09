@@ -58,6 +58,11 @@
         PortalBaseUrl = '/'
     }
 
+    ContentWebApp = @{
+        AppInstanceId = '11111111-1111-1111-1111-111111111232'
+        HomeSlug = 'home'
+    }
+
     Iis = @{
         SiteName = 'OpenModulePlatform'
         Protocol = 'http'
@@ -68,10 +73,12 @@
         RemoveOtherBindings = $false
         PortalPhysicalPath = ''
         OpenDocViewerAppPath = 'opendocviewer'
+        ContentWebAppPath = 'content'
         AppPools = @{
             Portal = 'OMP_Portal'
             Auth = 'OMP_Auth'
             OpenDocViewer = 'OMP_OpenDocViewer'
+            ContentWebApp = 'OMP_ContentWebAppModule'
             ExampleWebApp = 'OMP_ExampleWebAppModule'
             ExampleWebAppBlazor = 'OMP_ExampleWebAppBlazorModule'
             ExampleServiceWebApp = 'OMP_ExampleServiceAppModule'
@@ -101,6 +108,7 @@
 
     Options = @{
         InstallOpenDocViewer = $true
+        InstallContentWebApp = $true
         InstallExamples = $true
         InstallRuntimeServices = $true
         InstallExampleService = $true
@@ -120,6 +128,7 @@
     }
 
     DatabaseSchemas = @(
+        'omp_content',
         'omp_iframe',
         'omp_example_workerapp',
         'omp_example_serviceapp',
@@ -133,6 +142,7 @@
         'Sites\Portal',
         'WebApps\auth',
         'WebApps\opendocviewer',
+        'WebApps\content',
         'WebApps\ExampleWebAppModule',
         'WebApps\ExampleWebAppBlazorModule',
         'WebApps\ExampleServiceAppModule',
