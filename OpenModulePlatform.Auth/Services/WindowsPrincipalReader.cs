@@ -34,7 +34,7 @@ public sealed class WindowsPrincipalReader
         return GetWindowsGroupPrincipals(principal);
     }
 
-    private static IReadOnlyCollection<string> GetGroupPrincipalsFromClaims(ClaimsPrincipal principal)
+    private IReadOnlyCollection<string> GetGroupPrincipalsFromClaims(ClaimsPrincipal principal)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var claim in principal.FindAll(ClaimTypes.GroupSid)
@@ -86,12 +86,12 @@ public sealed class WindowsPrincipalReader
                 }
             }
             catch (Exception ex) when (
-                ex is IdentityNotMappedException or UnauthorizedAccessException or NotSupportedException)
+                ex is IdentityNotMappedException or UnauthorizedAccessException)
             {
                 // SID translation depends on Windows account lookup infrastructure and can
-                // fail for unmapped SIDs, access limitations, or unavailable providers. Keep
-                // the SID principal and log expected readable NTAccount translation failures.
-                // Unexpected SystemException failures are intentionally not swallowed here.
+                // fail for unmapped SIDs or access limitations. Keep the SID principal and
+                // log expected readable NTAccount translation failures only. Unexpected
+                // translation exceptions are intentionally not swallowed here.
                 LogSkippedSidTranslation(ex, sid.Value);
             }
         }
