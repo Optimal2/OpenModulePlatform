@@ -82,6 +82,9 @@ public sealed class WindowsPasswordAuthenticator
         out SafeAccessTokenHandle token,
         out Win32Exception error)
     {
+        // No managed .NET API validates both local and domain Windows passwords
+        // with this provider's semantics. LogonUser is the deliberate Windows
+        // boundary; the DllImport is private and restricted to System32 below.
         if (LogonUser(
             userName,
             domain,
