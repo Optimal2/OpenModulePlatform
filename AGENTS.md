@@ -15,6 +15,7 @@ Before making changes:
 - Do not mix customer-specific IbsPackager logic into OpenModulePlatform.
 - Keep code, comments, SQL, scripts, and development documentation in English. Swedish belongs only in application localization resources.
 - If a change must be visible in the local IIS/runtime environment, run the matching publish or install script after the code change.
+- When a task produces repository changes, validate them, commit with a focused message, and push unless the user asks not to or the worktree contains unrelated user changes.
 
 ## Security / antivirus compatibility
 
