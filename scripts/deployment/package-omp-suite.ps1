@@ -216,8 +216,10 @@ $installConfigFileName = [string](Get-NestedConfigValue -Config $config -Section
 if ([string]::IsNullOrWhiteSpace($installConfigFileName)) {
     $installConfigFileName = 'omp-suite.local.psd1'
 }
+$openDocViewerPackageZip = [string](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'OpenDocViewerPackageZip' -DefaultValue '')
 
 $OutputRoot = Resolve-DeploymentPath -Path $OutputRoot -BasePath $RepositoryRoot
+$openDocViewerPackageZip = Resolve-DeploymentPath -Path $openDocViewerPackageZip -BasePath $configDirectory
 $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformSuite-$Version")
 $payloadRoot = Join-Path $packageRoot 'payload'
 $sqlRoot = Join-Path $packageRoot 'sql'
@@ -273,20 +275,25 @@ if (-not (Test-Path -LiteralPath $OpenDocViewerRoot -PathType Container)) {
     throw "OpenDocViewer repository root was not found: $OpenDocViewerRoot"
 }
 
-if (-not $SkipOpenDocViewerBuild) {
-    Push-Location $OpenDocViewerRoot
-    try {
-        if (-not $SkipOpenDocViewerNpmInstall) {
-            Invoke-NativeChecked npm 'ci'
-        }
-        Invoke-NativeChecked npm 'run' 'build'
-    }
-    finally {
-        Pop-Location
-    }
+if (-not [string]::IsNullOrWhiteSpace($openDocViewerPackageZip)) {
+    Copy-RequiredFile -Source $openDocViewerPackageZip -Destination (Join-Path $payloadRoot 'OpenDocViewer.dist.zip')
+    Write-Host "Using prebuilt OpenDocViewer package: $openDocViewerPackageZip"
 }
-
-Compress-FolderToZip -Source (Join-Path $OpenDocViewerRoot 'dist') -Destination (Join-Path $payloadRoot 'OpenDocViewer.dist.zip')
+else {
+    if (-not $SkipOpenDocViewerBuild) {
+        Push-Location $OpenDocViewerRoot
+        try {
+            if (-not $SkipOpenDocViewerNpmInstall) {
+                Invoke-NativeChecked npm 'ci'
+            }
+            Invoke-NativeChecked npm 'run' 'build'
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    Compress-FolderToZip -Source (Join-Path $OpenDocViewerRoot 'dist') -Destination (Join-Path $payloadRoot 'OpenDocViewer.dist.zip')
+}
 
 Write-Step 'Copying SQL scripts'
 $sqlFiles = @(

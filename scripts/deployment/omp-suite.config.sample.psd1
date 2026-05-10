@@ -99,6 +99,11 @@
         SkipRestore = $false
         SkipOpenDocViewerBuild = $false
         SkipOpenDocViewerNpmInstall = $false
+        # Optional path to a prebuilt OpenDocViewer zip. Use this for customer
+        # packages that need a site-local odv.site.config.js and help/site manual.
+        # When set, the package script uses this zip as payload/OpenDocViewer.dist.zip
+        # instead of zipping OpenDocViewer\dist directly.
+        OpenDocViewerPackageZip = ''
         # Set this to true only for protected/customer-specific packages where
         # the package should include the active install config next to the
         # installer as omp-suite.local.psd1.
