@@ -78,6 +78,12 @@ The package script then copies that config into the package as
 `omp-suite.local.psd1`, next to `install-omp-suite.ps1`. Only enable this for
 private packages that are allowed to contain customer paths and credentials.
 
+If OpenDocViewer needs customer-specific runtime files, set
+`Package.OpenDocViewerPackageZip` to a prebuilt OpenDocViewer zip. The package
+script then uses that zip as `payload\OpenDocViewer.dist.zip` instead of
+zipping `OpenDocViewer\dist` directly. This is useful when the ODV package must
+include a site-local `odv.site.config.js` and `help\site` manual content.
+
 For HTTPS deployments, set `Iis.Protocol = 'https'` and either
 `Iis.CertificateThumbprint` or `Iis.CertificateSerialNumber`. If different
 servers use different certificates, add a `Hosts` entry per server and leave
