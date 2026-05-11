@@ -33,10 +33,14 @@ Each module owns its own setup and initialization scripts. The expected pattern 
 2. `2-initialize-<module>.sql`
    - Registers module/app definitions and seeds optional local/default data for that module.
 
-Examples in this repository follow the same pattern under each module's own `Sql` folder. The Portal module keeps its SQL in `OpenModulePlatform.Portal/sql`.
+First-party modules in the repository root and examples under `examples` follow
+the same pattern under each module's own `Sql` folder. The Portal module keeps
+its SQL in `OpenModulePlatform.Portal/sql`.
 
 ## Schema names
 
 - `omp` is the core OpenModulePlatform schema.
 - `omp_portal` is the OMP Portal module schema.
-- `omp_iframe` and `omp_example_*` schemas belong to optional/example modules.
+- `omp_content` is the first-party content module schema.
+- `omp_iframe` is the first-party iframe module schema.
+- `omp_example_*` schemas belong to optional example modules.

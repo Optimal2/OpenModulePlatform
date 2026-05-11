@@ -4,9 +4,10 @@ OpenModulePlatform (OMP) is a modular platform for defining, running, observing,
 and administering OMP instances, modules, app definitions, app instances,
 artifacts, hosts, and topology.
 
-The public repository contains neutral platform code and neutral example modules.
-It does not contain customer-specific integrations, credentials, or domain-specific
-business components from previous internal projects.
+The public repository contains neutral platform code, first-party OMP modules,
+and neutral example modules. It does not contain customer-specific integrations,
+credentials, or domain-specific business components from previous internal
+projects.
 
 ## Runtime baseline
 
@@ -25,6 +26,8 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `OpenModulePlatform.Portal` - Portal for navigation and manual administration
 - `OpenModulePlatform.Auth` - shared OMP authentication app for AD and local password sign-in
 - `OpenModulePlatform.Web.Shared` - shared web infrastructure for the Portal and web modules
+- `OpenModulePlatform.Web.ContentWebAppModule` - first-party content module for simple OMP-managed information pages
+- `OpenModulePlatform.Web.iFrameWebAppModule` - first-party iframe module for exposing external or separately hosted web apps inside OMP
 - `examples/WebAppModule` - simple web module; app code lives in `WebApp`, SQL lives in `sql`
 - `examples/WebAppBlazorModule` - Blazor-based web module; app code lives in `WebApp`, SQL lives in `sql`
 - `examples/ServiceAppModule/WebApp` - web interface for the service-backed example module
@@ -36,6 +39,8 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `examples/WorkerAppModule/WorkerApp` - plugin-based worker reference example
 - `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - neutral core schema, RBAC, default instance, host, and bootstrap data
 - `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` and `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-owned schema and Portal registration data
+- `OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql` and `OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql` - content module schema and registration data
+- `OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql` and `OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql` - iframe module schema and registration data
 - `examples/**/sql/1-setup-*.sql` and `examples/**/sql/2-initialize-*.sql` - optional example-module setup and initialization scripts
 - `docs/` - architecture, terminology, release notes, and practical guides
 - `docs/CODEX_DEVELOPMENT.md` - compact development guide for Codex/VS Code workflows
@@ -63,6 +68,7 @@ The current model explicitly separates:
 - The Portal can be used for manual administration of the core model
 - RBAC can be administered from the Portal
 - The Portal builds the app catalog from `AppInstances`, not from `Apps`
+- The first-party content and iframe modules are usable OMP modules, not templates
 - The example modules demonstrate pure web, classic service-backed, and manager-driven worker scenarios
 - The service example reads runtime state from `AppInstances` and updates heartbeat and observed identity
 - The SQL scripts use a two-step setup/initialization layout per module
@@ -105,7 +111,17 @@ OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
 
 Set the same `@BootstrapPortalAdminPrincipal` value in `2-initialize-omp-portal.sql`, or use `scripts/manage-local-install.ps1` so the local installer handles it.
 
-### 4. Optionally install example modules
+### 4. Install first-party OMP modules and optional examples
+
+First-party modules in the repository root are usable OMP functionality. Install
+the modules you want by running their module-owned SQL scripts in order:
+
+```text
+OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql
+OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql
+OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql
+OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql
+```
 
 Each example module owns its own SQL folder and follows the same two-file pattern:
 

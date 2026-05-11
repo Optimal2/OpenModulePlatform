@@ -18,8 +18,8 @@ Prerequisites:
   N'ADUser'. Prefer scripts/manage-local-install.ps1 for local user installs
   because it escapes the value before running sqlcmd.
 
-Portal, iframe, and example modules are initialized separately from their own
-module sql folders.
+Portal, content, iframe, and example modules are initialized separately from
+their own module sql folders.
 */
 USE [OpenModulePlatform];
 GO
