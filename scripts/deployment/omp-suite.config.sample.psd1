@@ -114,6 +114,7 @@
     Options = @{
         InstallOpenDocViewer = $true
         InstallContentWebApp = $true
+        InstallIFrameWebApp = $true
         InstallExamples = $true
         InstallRuntimeServices = $true
         InstallExampleService = $true

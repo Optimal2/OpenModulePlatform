@@ -715,8 +715,11 @@ function Deploy-Payloads {
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleWebAppBlazorModule')
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleServiceAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleServiceAppModule')
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWorkerAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleWorkerAppModule')
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.iFrameWebAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'iFrameWebAppModule')
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Worker.ExampleWorkerAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot 'example-workerapp\worker\1.0.0')
+    }
+
+    if ($script:InstallIFrameWebApp) {
+        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.iFrameWebAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'iFrameWebAppModule')
     }
 
     if ($script:InstallRuntimeServices) {
@@ -763,12 +766,21 @@ function Run-InstallSql {
             'sql\examples\ServiceAppModule\1-setup-example-serviceapp.sql',
             'sql\examples\ServiceAppModule\2-initialize-example-serviceapp.sql',
             'sql\examples\WorkerAppModule\1-setup-example-workerapp.sql',
-            'sql\examples\WorkerAppModule\2-initialize-example-workerapp.sql',
+            'sql\examples\WorkerAppModule\2-initialize-example-workerapp.sql'
+        )
+
+        foreach ($relativePath in $exampleSqlFiles) {
+            Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot $relativePath)
+        }
+    }
+
+    if ($script:InstallIFrameWebApp) {
+        $iframeSqlFiles = @(
             'sql\OpenModulePlatform.Web.iFrameWebAppModule\1-setup-iframe-webapp.sql',
             'sql\OpenModulePlatform.Web.iFrameWebAppModule\2-initialize-iframe-webapp.sql'
         )
 
-        foreach ($relativePath in $exampleSqlFiles) {
+        foreach ($relativePath in $iframeSqlFiles) {
             Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot $relativePath)
         }
     }
@@ -1053,6 +1065,9 @@ function Ensure-Iis {
         Ensure-IisWebApplication -AppPath 'ExampleWebAppBlazorModule' -PhysicalPath (Join-Path $script:WebAppsRoot 'ExampleWebAppBlazorModule') -AppPoolName $script:AppPools.ExampleWebAppBlazor -AnonymousEnabled $true
         Ensure-IisWebApplication -AppPath 'ExampleServiceAppModule' -PhysicalPath (Join-Path $script:WebAppsRoot 'ExampleServiceAppModule') -AppPoolName $script:AppPools.ExampleServiceWebApp -AnonymousEnabled $true
         Ensure-IisWebApplication -AppPath 'ExampleWorkerAppModule' -PhysicalPath (Join-Path $script:WebAppsRoot 'ExampleWorkerAppModule') -AppPoolName $script:AppPools.ExampleWorkerWebApp -AnonymousEnabled $true
+    }
+
+    if ($script:InstallIFrameWebApp) {
         Ensure-IisWebApplication -AppPath 'iFrameWebAppModule' -PhysicalPath (Join-Path $script:WebAppsRoot 'iFrameWebAppModule') -AppPoolName $script:AppPools.IFrameWebApp -AnonymousEnabled $true
     }
 
@@ -1266,6 +1281,7 @@ $script:Services = [pscustomobject]$defaultServices
 
 $script:InstallOpenDocViewer = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallOpenDocViewer' -DefaultValue $true)
 $script:InstallContentWebApp = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallContentWebApp' -DefaultValue $true)
+$script:InstallIFrameWebApp = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallIFrameWebApp' -DefaultValue $true)
 $script:InstallExamples = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallExamples' -DefaultValue $true)
 $script:InstallRuntimeServices = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallRuntimeServices' -DefaultValue $true)
 $script:InstallExampleService = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallExampleService' -DefaultValue $true)
