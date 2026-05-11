@@ -20,6 +20,8 @@ DECLARE @ContentModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111
 DECLARE @ContentTemplateModuleInstanceId int;
 DECLARE @ContentAppId int;
 DECLARE @ContentAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111232';
+DECLARE @SeedHomeContentId uniqueidentifier = '11111111-1111-1111-1111-111111111233';
+DECLARE @HomeContentId uniqueidentifier;
 DECLARE @ContentViewPermissionId int;
 DECLARE @ContentManagePermissionId int;
 
@@ -308,13 +310,39 @@ BEGIN
       AND AppInstanceKey = N'content_webapp_webapp';
 END
 
-IF NOT EXISTS
+SELECT @HomeContentId = content_id
+FROM omp_content.contents
+WHERE app_instance_id = @ContentAppInstanceId
+  AND slug = N'home';
+
+IF @HomeContentId IS NOT NULL
+BEGIN
+    UPDATE omp_content.contents
+    SET is_enabled = 1,
+        sort_order = COALESCE(sort_order, 10),
+        updated_by = N'install-script',
+        updated_at = SYSUTCDATETIME()
+    WHERE content_id = @HomeContentId;
+END
+ELSE IF EXISTS
 (
     SELECT 1
     FROM omp_content.contents
-    WHERE app_instance_id = @ContentAppInstanceId
-      AND slug = N'home'
+    WHERE content_id = @SeedHomeContentId
 )
+BEGIN
+    SET @HomeContentId = @SeedHomeContentId;
+
+    UPDATE omp_content.contents
+    SET app_instance_id = @ContentAppInstanceId,
+        slug = N'home',
+        is_enabled = 1,
+        sort_order = COALESCE(sort_order, 10),
+        updated_by = N'install-script',
+        updated_at = SYSUTCDATETIME()
+    WHERE content_id = @HomeContentId;
+END
+ELSE
 BEGIN
     INSERT INTO omp_content.contents(
         content_id,
@@ -328,7 +356,7 @@ BEGIN
         created_by,
         updated_by)
     VALUES(
-        '11111111-1111-1111-1111-111111111233',
+        @SeedHomeContentId,
         @ContentAppInstanceId,
         N'home',
         N'Content home',
@@ -338,6 +366,8 @@ BEGIN
         10,
         N'install-script',
         N'install-script');
+
+    SET @HomeContentId = @SeedHomeContentId;
 END
 
 IF @PortalAdminsRoleId IS NOT NULL
