@@ -9,6 +9,7 @@
   <data name="Content navigation" xml:space="preserve"><value>Content navigation</value></data>
   <data name="Manage pages" xml:space="preserve"><value>Manage pages</value></data>
   <data name="Create, edit, publish and unpublish simple content pages for this app instance." xml:space="preserve"><value>Create, edit, publish and unpublish simple content pages for this app instance.</value></data>
+  <data name="Create and edit content pages for this app instance." xml:space="preserve"><value>Create and edit content pages for this app instance.</value></data>
   <data name="New page" xml:space="preserve"><value>New page</value></data>
   <data name="No content pages were found." xml:space="preserve"><value>No content pages were found.</value></data>
   <data name="Title" xml:space="preserve"><value>Title</value></data>
@@ -23,14 +24,18 @@
   <data name="Open" xml:space="preserve"><value>Open</value></data>
   <data name="Edit page" xml:space="preserve"><value>Edit page</value></data>
   <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Use Markdown for simple pages. Rendered output is sanitized before it is shown to users.</value></data>
+  <data name="Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization." xml:space="preserve"><value>Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization.</value></data>
   <data name="Back to pages" xml:space="preserve"><value>Back to pages</value></data>
   <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Leave empty for the root page. Slugs are normalized when saved.</value></data>
+  <data name="Slugs are normalized when saved." xml:space="preserve"><value>Slugs are normalized when saved.</value></data>
   <data name="Content format" xml:space="preserve"><value>Content format</value></data>
+  <data name="Content type" xml:space="preserve"><value>Content type</value></data>
   <data name="Summary" xml:space="preserve"><value>Summary</value></data>
   <data name="Meta title" xml:space="preserve"><value>Meta title</value></data>
   <data name="Meta description" xml:space="preserve"><value>Meta description</value></data>
   <data name="Change note" xml:space="preserve"><value>Change note</value></data>
   <data name="Save draft" xml:space="preserve"><value>Save draft</value></data>
+  <data name="Save page" xml:space="preserve"><value>Save page</value></data>
   <data name="Publish" xml:space="preserve"><value>Publish</value></data>
   <data name="Unpublish" xml:space="preserve"><value>Unpublish</value></data>
   <data name="Delete" xml:space="preserve"><value>Delete</value></data>
@@ -41,10 +46,36 @@
   <data name="Page saved." xml:space="preserve"><value>Page saved.</value></data>
   <data name="Page published." xml:space="preserve"><value>Page published.</value></data>
   <data name="Page unpublished." xml:space="preserve"><value>Page unpublished.</value></data>
+  <data name="Page enabled." xml:space="preserve"><value>Page enabled.</value></data>
+  <data name="Page disabled." xml:space="preserve"><value>Page disabled.</value></data>
   <data name="A content page with the same slug already exists for this app instance." xml:space="preserve"><value>A content page with the same slug already exists for this app instance.</value></data>
   <data name="This page is published." xml:space="preserve"><value>This page is published.</value></data>
   <data name="This page is not published and is only visible to managers." xml:space="preserve"><value>This page is not published and is only visible to managers.</value></data>
+  <data name="This page is enabled." xml:space="preserve"><value>This page is enabled.</value></data>
+  <data name="This page is disabled and is only visible in content administration." xml:space="preserve"><value>This page is disabled and is only visible in content administration.</value></data>
   <data name="Page not found" xml:space="preserve"><value>Page not found</value></data>
   <data name="The requested content page is not published or does not exist." xml:space="preserve"><value>The requested content page is not published or does not exist.</value></data>
+  <data name="The requested content page is disabled, missing, or not available for your active role." xml:space="preserve"><value>The requested content page is disabled, missing, or not available for your active role.</value></data>
+  <data name="Pages" xml:space="preserve"><value>Pages</value></data>
+  <data name="Browse content pages available for your active role." xml:space="preserve"><value>Browse content pages available for your active role.</value></data>
+  <data name="No readable content pages were found." xml:space="preserve"><value>No readable content pages were found.</value></data>
+  <data name="Open page" xml:space="preserve"><value>Open page</value></data>
+  <data name="Enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="Access" xml:space="preserve"><value>Access</value></data>
+  <data name="No role access" xml:space="preserve"><value>No role access</value></data>
+  <data name="Role access" xml:space="preserve"><value>Role access</value></data>
+  <data name="Roles with read access can view the page. Roles with write access can edit it." xml:space="preserve"><value>Roles with read access can view the page. Roles with write access can edit it.</value></data>
+  <data name="No roles are configured." xml:space="preserve"><value>No roles are configured.</value></data>
+  <data name="Role" xml:space="preserve"><value>Role</value></data>
+  <data name="Read" xml:space="preserve"><value>Read</value></data>
+  <data name="Write" xml:space="preserve"><value>Write</value></data>
+  <data name="Disable" xml:space="preserve"><value>Disable</value></data>
+  <data name="Enable" xml:space="preserve"><value>Enable</value></data>
+  <data name="Metadata" xml:space="preserve"><value>Metadata</value></data>
+  <data name="Content ID" xml:space="preserve"><value>Content ID</value></data>
+  <data name="Slug is required." xml:space="preserve"><value>Slug is required.</value></data>
+  <data name="The Title field is required." xml:space="preserve"><value>The Title field is required.</value></data>
+  <data name="The Content field is required." xml:space="preserve"><value>The Content field is required.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId is not configured.</value></data>
 </root>

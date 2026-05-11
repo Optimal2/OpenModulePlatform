@@ -37,16 +37,22 @@ FROM omp.InstanceTemplateHosts
 WHERE InstanceTemplateId = @InstanceTemplateId
   AND HostKey = N'sample-host';
 
-IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ContentWebAppModule.View')
-    INSERT INTO omp.Permissions(Name, Description)
-    VALUES(N'ContentWebAppModule.View', N'Read access to published Content Web App pages');
-
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ContentWebAppModule.Manage')
     INSERT INTO omp.Permissions(Name, Description)
-    VALUES(N'ContentWebAppModule.Manage', N'Create, edit, publish and delete Content Web App pages');
+    VALUES(N'ContentWebAppModule.Manage', N'Create and edit Content Web App pages');
 
 SELECT @ContentViewPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ContentWebAppModule.View';
 SELECT @ContentManagePermissionId = PermissionId FROM omp.Permissions WHERE Name = N'ContentWebAppModule.Manage';
+
+IF @ContentViewPermissionId IS NOT NULL
+BEGIN
+    UPDATE omp.Permissions
+    SET Description = N'Legacy broad read permission. Content read access is page-level through omp_content.content_role_access.'
+    WHERE PermissionId = @ContentViewPermissionId;
+
+    DELETE FROM omp.RolePermissions
+    WHERE PermissionId = @ContentViewPermissionId;
+END
 
 IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'content_webapp')
 BEGIN
@@ -54,7 +60,7 @@ BEGIN
     SET DisplayName = N'Content Web App',
         ModuleType = N'WebAppModule',
         SchemaName = N'omp_content',
-        Description = N'First-party OMP module for simple informational content pages',
+        Description = N'First-party OMP module for database-backed HTML and Markdown content pages',
         IsEnabled = 1,
         SortOrder = 330,
         UpdatedUtc = SYSUTCDATETIME()
@@ -75,7 +81,7 @@ BEGIN
         N'Content Web App',
         N'WebAppModule',
         N'omp_content',
-        N'First-party OMP module for simple informational content pages',
+        N'First-party OMP module for database-backed HTML and Markdown content pages',
         1,
         330);
 END
@@ -87,7 +93,7 @@ BEGIN
     UPDATE omp.Apps
     SET DisplayName = N'Content',
         AppType = N'WebApp',
-        Description = N'Web app definition for simple OMP content pages',
+        Description = N'Web app definition for database-backed OMP content pages',
         IsEnabled = 1,
         SortOrder = 330,
         UpdatedUtc = SYSUTCDATETIME()
@@ -108,31 +114,20 @@ BEGIN
         N'content_webapp_webapp',
         N'Content',
         N'WebApp',
-        N'Web app definition for simple OMP content pages',
+        N'Web app definition for database-backed OMP content pages',
         1,
         330);
 END
 
 SELECT @ContentAppId = AppId FROM omp.Apps WHERE ModuleId = @ContentModuleId AND AppKey = N'content_webapp_webapp';
 
-IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @ContentAppId AND PermissionId = @ContentViewPermissionId)
-    INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@ContentAppId, @ContentViewPermissionId, 0);
-
-IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @ContentAppId AND PermissionId = @ContentManagePermissionId)
-    INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@ContentAppId, @ContentManagePermissionId, 0);
-
-IF @PortalAdminsRoleId IS NOT NULL
-   AND NOT EXISTS
-   (
-       SELECT 1
-       FROM omp.RolePermissions
-       WHERE RoleId = @PortalAdminsRoleId
-         AND PermissionId = @ContentViewPermissionId
-   )
-    INSERT INTO omp.RolePermissions(RoleId, PermissionId)
-    VALUES(@PortalAdminsRoleId, @ContentViewPermissionId);
+DELETE ap
+FROM omp.AppPermissions ap
+WHERE ap.AppId = @ContentAppId
+  AND ap.PermissionId IN (@ContentViewPermissionId, @ContentManagePermissionId);
 
 IF @PortalAdminsRoleId IS NOT NULL
+   AND @ContentManagePermissionId IS NOT NULL
    AND NOT EXISTS
    (
        SELECT 1
@@ -160,7 +155,7 @@ BEGIN
         @ContentModuleId,
         N'content_webapp',
         N'Content Web App',
-        N'Simple content page module instance for the default OMP instance',
+        N'Database-backed content page module instance for the default OMP instance',
         1,
         330);
 END
@@ -171,7 +166,7 @@ BEGIN
         ModuleId = @ContentModuleId,
         ModuleInstanceKey = N'content_webapp',
         DisplayName = N'Content Web App',
-        Description = N'Simple content page module instance for the default OMP instance',
+        Description = N'Database-backed content page module instance for the default OMP instance',
         IsEnabled = 1,
         SortOrder = 330,
         UpdatedUtc = SYSUTCDATETIME()
@@ -198,7 +193,7 @@ BEGIN
         @ContentModuleId,
         N'content_webapp',
         N'Content Web App',
-        N'Simple content page module instance in the default template',
+        N'Database-backed content page module instance in the default template',
         330);
 END
 ELSE
@@ -206,7 +201,7 @@ BEGIN
     UPDATE omp.InstanceTemplateModuleInstances
     SET ModuleId = @ContentModuleId,
         DisplayName = N'Content Web App',
-        Description = N'Simple content page module instance in the default template',
+        Description = N'Database-backed content page module instance in the default template',
         SortOrder = 330
     WHERE InstanceTemplateId = @InstanceTemplateId
       AND ModuleInstanceKey = N'content_webapp';
@@ -240,7 +235,7 @@ BEGIN
         @ContentAppId,
         N'content_webapp_webapp',
         N'Content',
-        N'Primary web app instance for simple OMP content pages',
+        N'Primary web app instance for database-backed OMP content pages',
         N'content',
         N'content-webapp',
         1,
@@ -256,7 +251,7 @@ BEGIN
         AppId = @ContentAppId,
         AppInstanceKey = N'content_webapp_webapp',
         DisplayName = N'Content',
-        Description = N'Primary web app instance for simple OMP content pages',
+        Description = N'Primary web app instance for database-backed OMP content pages',
         RoutePath = N'content',
         InstallationName = N'content-webapp',
         IsEnabled = 1,
@@ -292,7 +287,7 @@ BEGIN
         @ContentAppId,
         N'content_webapp_webapp',
         N'Content',
-        N'Primary web app instance for simple OMP content pages',
+        N'Primary web app instance for database-backed OMP content pages',
         N'content',
         N'content-webapp',
         1,
@@ -304,7 +299,7 @@ BEGIN
     SET InstanceTemplateHostId = @SampleTemplateHostId,
         AppId = @ContentAppId,
         DisplayName = N'Content',
-        Description = N'Primary web app instance for simple OMP content pages',
+        Description = N'Primary web app instance for database-backed OMP content pages',
         RoutePath = N'content',
         InstallationName = N'content-webapp',
         DesiredState = 1,
@@ -316,67 +311,50 @@ END
 IF NOT EXISTS
 (
     SELECT 1
-    FROM omp_content.Pages
-    WHERE AppInstanceId = @ContentAppInstanceId
-      AND Slug = N''
-      AND IsDeleted = 0
+    FROM omp_content.contents
+    WHERE app_instance_id = @ContentAppInstanceId
+      AND slug = N'home'
 )
 BEGIN
-    DECLARE @HomePageId uniqueidentifier = '11111111-1111-1111-1111-111111111233';
-    DECLARE @HomeRevisionId uniqueidentifier = '11111111-1111-1111-1111-111111111234';
-
-    INSERT INTO omp_content.Pages(
-        PageId,
-        AppInstanceId,
-        PageKey,
-        Slug,
-        Title,
-        Summary,
-        ContentFormat,
-        Content,
-        IsPublished,
-        PublishedAtUtc,
-        SortOrder,
-        CreatedBy,
-        UpdatedBy)
+    INSERT INTO omp_content.contents(
+        content_id,
+        app_instance_id,
+        slug,
+        title,
+        content_type,
+        body,
+        is_enabled,
+        sort_order,
+        created_by,
+        updated_by)
     VALUES(
-        @HomePageId,
+        '11111111-1111-1111-1111-111111111233',
         @ContentAppInstanceId,
         N'home',
-        N'',
-        N'Content',
-        N'Default content home page.',
+        N'Content home',
         N'markdown',
-        N'# Content' + CHAR(13) + CHAR(10) + CHAR(13) + CHAR(10) + N'This page is managed by the Content Web App module.',
+        N'# Content home' + CHAR(13) + CHAR(10) + CHAR(13) + CHAR(10) + N'This page is managed by the Content Web App module.',
         1,
-        SYSUTCDATETIME(),
         10,
         N'install-script',
         N'install-script');
+END
 
-    INSERT INTO omp_content.PageRevisions(
-        RevisionId,
-        PageId,
-        RevisionNumber,
-        Title,
-        Slug,
-        ContentFormat,
-        Content,
-        CreatedBy,
-        ChangeNote)
-    VALUES(
-        @HomeRevisionId,
-        @HomePageId,
-        1,
-        N'Content',
-        N'',
-        N'markdown',
-        N'# Content' + CHAR(13) + CHAR(10) + CHAR(13) + CHAR(10) + N'This page is managed by the Content Web App module.',
-        N'install-script',
-        N'Initial home page');
-
-    UPDATE omp_content.Pages
-    SET LastPublishedRevisionId = @HomeRevisionId
-    WHERE PageId = @HomePageId;
+IF @PortalAdminsRoleId IS NOT NULL
+BEGIN
+    INSERT INTO omp_content.content_role_access(content_id, role_id, can_read, can_write)
+    SELECT c.content_id,
+           @PortalAdminsRoleId,
+           1,
+           1
+    FROM omp_content.contents c
+    WHERE c.app_instance_id = @ContentAppInstanceId
+      AND NOT EXISTS
+      (
+          SELECT 1
+          FROM omp_content.content_role_access a
+          WHERE a.content_id = c.content_id
+            AND a.role_id = @PortalAdminsRoleId
+      );
 END
 GO

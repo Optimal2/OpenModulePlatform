@@ -9,18 +9,18 @@
             <div class="eyebrow">@L["Preview"]</div>
             <h1>@Model.PageContent.Title</h1>
             <p class="lede">
-                @if (Model.PageContent.IsPublished)
+                @if (Model.PageContent.IsEnabled)
                 {
-                    @L["This page is published."]
+                    @L["This page is enabled."]
                 }
                 else
                 {
-                    @L["This page is not published and is only visible to managers."]
+                    @L["This page is disabled and is only visible in content administration."]
                 }
             </p>
         </div>
         <div class="toolbar">
-            <a class="button" href="~/admin/edit/@Model.PageContent.PageId">@L["Edit"]</a>
+            <a class="button" href="~/admin/edit/@Model.PageContent.ContentId">@L["Edit"]</a>
             <a class="button" href="~/admin">@L["Back to pages"]</a>
         </div>
     </div>

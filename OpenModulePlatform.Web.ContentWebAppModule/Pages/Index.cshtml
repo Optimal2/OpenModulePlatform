@@ -1,22 +1,37 @@
 @* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Index.cshtml *@
-@page "{*slug}"
+@page
 @model OpenModulePlatform.Web.ContentWebAppModule.Pages.IndexModel
 
-@if (Model.PageContent is null)
+<div class="page-header">
+    <div>
+        <div class="eyebrow">@L["Content"]</div>
+        <h1>@L["Pages"]</h1>
+        <p class="lede">@L["Browse content pages available for your active role."]</p>
+    </div>
+</div>
+
+@if (Model.Rows.Count == 0)
 {
-    <section class="card content-empty">
-        <h1>@L["Page not found"]</h1>
-        <p class="muted">@L["The requested content page is not published or does not exist."]</p>
-    </section>
+    <div class="empty-state">@L["No readable content pages were found."]</div>
 }
 else
 {
-    <article class="content-page">
-        <header class="content-page__header">
-            <h1>@Model.PageContent.Title</h1>
-        </header>
-        <div class="content-page__body">
-            @Html.Raw(Model.RenderedHtml)
-        </div>
-    </article>
+    <div class="content-list">
+        @foreach (var row in Model.Rows)
+        {
+            <article class="content-list__item">
+                <div>
+                    <h2><a href="~/@row.Slug">@row.Title</a></h2>
+                    <div class="muted">
+                        <code>@row.Slug</code>
+                        @if (row.SortOrder is not null)
+                        {
+                            <span>@L["Sort order"]: @row.SortOrder</span>
+                        }
+                    </div>
+                </div>
+                <a class="button" href="~/@row.Slug">@L["Open page"]</a>
+            </article>
+        }
+    </div>
 }

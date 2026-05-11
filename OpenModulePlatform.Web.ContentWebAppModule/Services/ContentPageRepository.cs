@@ -14,148 +14,323 @@ public sealed class ContentPageRepository
         _db = db;
     }
 
-    public async Task<IReadOnlyList<ContentPageListRow>> ListPagesAsync(Guid appInstanceId, CancellationToken ct)
+    public async Task<IReadOnlyList<ContentPageListRow>> ListReadablePagesAsync(
+        Guid appInstanceId,
+        int? activeRoleId,
+        bool canManageAll,
+        CancellationToken ct)
     {
         const string sql = @"
-SELECT PageId,
-       Slug,
-       Title,
-       IsPublished,
-       PublishedAtUtc,
-       SortOrder,
-       UpdatedAtUtc,
-       UpdatedBy
-FROM omp_content.Pages
-WHERE AppInstanceId = @AppInstanceId
-  AND IsDeleted = 0
-ORDER BY SortOrder, Slug, Title;";
+SELECT c.content_id,
+       c.slug,
+       c.title,
+       c.content_type,
+       c.is_enabled,
+       c.sort_order,
+       c.created_at,
+       c.updated_at,
+       c.updated_by,
+       AccessSummary = STUFF(
+       (
+           SELECT N', ' + r.Name +
+                  CASE
+                      WHEN a.can_write = 1 THEN N' (read/write)'
+                      WHEN a.can_read = 1 THEN N' (read)'
+                      ELSE N''
+                  END
+           FROM omp_content.content_role_access a
+           INNER JOIN omp.Roles r ON r.RoleId = a.role_id
+           WHERE a.content_id = c.content_id
+             AND (a.can_read = 1 OR a.can_write = 1)
+           ORDER BY r.Name
+           FOR XML PATH(''), TYPE
+       ).value('.', 'nvarchar(max)'), 1, 2, N'')
+FROM omp_content.contents c
+WHERE c.app_instance_id = @AppInstanceId
+  AND c.is_enabled = 1
+  AND
+  (
+      @CanManageAll = 1
+      OR
+      (
+          @ActiveRoleId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp_content.content_role_access a
+              WHERE a.content_id = c.content_id
+                AND a.role_id = @ActiveRoleId
+                AND a.can_read = 1
+          )
+      )
+  )
+ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
 
         var rows = new List<ContentPageListRow>();
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@ActiveRoleId", activeRoleId);
+        Add(cmd, "@CanManageAll", canManageAll);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            rows.Add(new ContentPageListRow
+            rows.Add(ReadListRow(rdr));
+        }
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<ContentPageListRow>> ListEditablePagesAsync(
+        Guid appInstanceId,
+        int? activeRoleId,
+        bool canManageAll,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT c.content_id,
+       c.slug,
+       c.title,
+       c.content_type,
+       c.is_enabled,
+       c.sort_order,
+       c.created_at,
+       c.updated_at,
+       c.updated_by,
+       AccessSummary = STUFF(
+       (
+           SELECT N', ' + r.Name +
+                  CASE
+                      WHEN a.can_write = 1 THEN N' (read/write)'
+                      WHEN a.can_read = 1 THEN N' (read)'
+                      ELSE N''
+                  END
+           FROM omp_content.content_role_access a
+           INNER JOIN omp.Roles r ON r.RoleId = a.role_id
+           WHERE a.content_id = c.content_id
+             AND (a.can_read = 1 OR a.can_write = 1)
+           ORDER BY r.Name
+           FOR XML PATH(''), TYPE
+       ).value('.', 'nvarchar(max)'), 1, 2, N'')
+FROM omp_content.contents c
+WHERE c.app_instance_id = @AppInstanceId
+  AND
+  (
+      @CanManageAll = 1
+      OR
+      (
+          @ActiveRoleId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp_content.content_role_access a
+              WHERE a.content_id = c.content_id
+                AND a.role_id = @ActiveRoleId
+                AND a.can_write = 1
+          )
+      )
+  )
+ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
+
+        var rows = new List<ContentPageListRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@ActiveRoleId", activeRoleId);
+        Add(cmd, "@CanManageAll", canManageAll);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(ReadListRow(rdr));
+        }
+
+        return rows;
+    }
+
+    public async Task<ContentPageRenderRow?> GetReadablePageBySlugAsync(
+        Guid appInstanceId,
+        string slug,
+        int? activeRoleId,
+        bool canManageAll,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT c.content_id,
+       c.slug,
+       c.title,
+       c.content_type,
+       c.body,
+       c.updated_at
+FROM omp_content.contents c
+WHERE c.app_instance_id = @AppInstanceId
+  AND c.slug = @Slug
+  AND c.is_enabled = 1
+  AND
+  (
+      @CanManageAll = 1
+      OR
+      (
+          @ActiveRoleId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp_content.content_role_access a
+              WHERE a.content_id = c.content_id
+                AND a.role_id = @ActiveRoleId
+                AND a.can_read = 1
+          )
+      )
+  );";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@Slug", slug);
+        Add(cmd, "@ActiveRoleId", activeRoleId);
+        Add(cmd, "@CanManageAll", canManageAll);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        return await rdr.ReadAsync(ct) ? ReadRenderRow(rdr) : null;
+    }
+
+    public async Task<ContentPageEditRow?> GetPageForEditAsync(
+        Guid appInstanceId,
+        Guid contentId,
+        int? activeRoleId,
+        bool canManageAll,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT c.content_id,
+       c.app_instance_id,
+       c.slug,
+       c.title,
+       c.content_type,
+       c.body,
+       c.is_enabled,
+       c.sort_order,
+       c.created_at,
+       c.created_by,
+       c.updated_at,
+       c.updated_by
+FROM omp_content.contents c
+WHERE c.app_instance_id = @AppInstanceId
+  AND c.content_id = @ContentId
+  AND
+  (
+      @CanManageAll = 1
+      OR
+      (
+          @ActiveRoleId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp_content.content_role_access a
+              WHERE a.content_id = c.content_id
+                AND a.role_id = @ActiveRoleId
+                AND a.can_write = 1
+          )
+      )
+  );";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@ContentId", contentId);
+        Add(cmd, "@ActiveRoleId", activeRoleId);
+        Add(cmd, "@CanManageAll", canManageAll);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        return await rdr.ReadAsync(ct) ? ReadEditRow(rdr) : null;
+    }
+
+    public async Task<bool> ContentExistsAsync(Guid appInstanceId, Guid contentId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp_content.contents
+WHERE app_instance_id = @AppInstanceId
+  AND content_id = @ContentId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@ContentId", contentId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    public async Task<IReadOnlyList<ContentRoleAccessRow>> ListRoleAccessAsync(
+        Guid contentId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT r.RoleId,
+       r.Name,
+       CAST(ISNULL(a.can_read, 0) AS bit) AS can_read,
+       CAST(ISNULL(a.can_write, 0) AS bit) AS can_write
+FROM omp.Roles r
+LEFT JOIN omp_content.content_role_access a
+    ON a.role_id = r.RoleId
+   AND a.content_id = @ContentId
+ORDER BY r.Name,
+         r.RoleId;";
+
+        var rows = new List<ContentRoleAccessRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ContentId", contentId);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ContentRoleAccessRow
             {
-                PageId = rdr.GetGuid(0),
-                Slug = rdr.GetString(1),
-                Title = rdr.GetString(2),
-                IsPublished = rdr.GetBoolean(3),
-                PublishedAtUtc = rdr.IsDBNull(4) ? null : rdr.GetDateTime(4),
-                SortOrder = rdr.GetInt32(5),
-                UpdatedAtUtc = rdr.GetDateTime(6),
-                UpdatedBy = rdr.IsDBNull(7) ? null : rdr.GetString(7)
+                RoleId = rdr.GetInt32(0),
+                RoleName = rdr.GetString(1),
+                CanRead = rdr.GetBoolean(2),
+                CanWrite = rdr.GetBoolean(3)
             });
         }
 
         return rows;
     }
 
-    public async Task<ContentPageRenderRow?> GetPublishedPageBySlugAsync(Guid appInstanceId, string slug, CancellationToken ct)
+    public async Task<IReadOnlyList<ContentRoleAccessRow>> ListEmptyRoleAccessAsync(CancellationToken ct)
     {
         const string sql = @"
-SELECT PageId,
-       Slug,
-       Title,
-       MetaTitle,
-       MetaDescription,
-       ContentFormat,
-       Content,
-       UpdatedAtUtc
-FROM omp_content.Pages
-WHERE AppInstanceId = @AppInstanceId
-  AND Slug = @Slug
-  AND IsPublished = 1
-  AND IsDeleted = 0;";
+SELECT r.RoleId,
+       r.Name
+FROM omp.Roles r
+ORDER BY r.Name,
+         r.RoleId;";
 
+        var rows = new List<ContentRoleAccessRow>();
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
-        cmd.Parameters.AddWithValue("@Slug", slug);
-
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        return await rdr.ReadAsync(ct) ? ReadRenderRow(rdr) : null;
-    }
-
-    public async Task<ContentPageEditRow?> GetPageForEditAsync(Guid appInstanceId, Guid pageId, CancellationToken ct)
-    {
-        const string sql = @"
-SELECT PageId,
-       AppInstanceId,
-       Slug,
-       Title,
-       Summary,
-       MetaTitle,
-       MetaDescription,
-       ContentFormat,
-       Content,
-       IsPublished,
-       PublishedAtUtc,
-       SortOrder,
-       CreatedAtUtc,
-       CreatedBy,
-       UpdatedAtUtc,
-       UpdatedBy
-FROM omp_content.Pages
-WHERE AppInstanceId = @AppInstanceId
-  AND PageId = @PageId
-  AND IsDeleted = 0;";
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
-        cmd.Parameters.AddWithValue("@PageId", pageId);
-
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        return await rdr.ReadAsync(ct) ? ReadEditRow(rdr) : null;
-    }
-
-    public async Task<IReadOnlyList<ContentPageRevisionRow>> ListRevisionsAsync(Guid pageId, CancellationToken ct)
-    {
-        const string sql = @"
-SELECT RevisionId,
-       PageId,
-       RevisionNumber,
-       Title,
-       Slug,
-       ContentFormat,
-       CreatedAtUtc,
-       CreatedBy,
-       ChangeNote
-FROM omp_content.PageRevisions
-WHERE PageId = @PageId
-ORDER BY RevisionNumber DESC;";
-
-        var rows = new List<ContentPageRevisionRow>();
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@PageId", pageId);
-
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            rows.Add(new ContentPageRevisionRow
+            rows.Add(new ContentRoleAccessRow
             {
-                RevisionId = rdr.GetGuid(0),
-                PageId = rdr.GetGuid(1),
-                RevisionNumber = rdr.GetInt32(2),
-                Title = rdr.GetString(3),
-                Slug = rdr.GetString(4),
-                ContentFormat = rdr.GetString(5),
-                CreatedAtUtc = rdr.GetDateTime(6),
-                CreatedBy = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                ChangeNote = rdr.IsDBNull(8) ? null : rdr.GetString(8)
+                RoleId = rdr.GetInt32(0),
+                RoleName = rdr.GetString(1)
             });
         }
 
@@ -168,73 +343,66 @@ ORDER BY RevisionNumber DESC;";
         string actor,
         CancellationToken ct)
     {
-        var pageId = input.PageId == Guid.Empty ? Guid.NewGuid() : input.PageId;
+        var contentId = input.ContentId == Guid.Empty ? Guid.NewGuid() : input.ContentId;
         var slug = ContentSlugNormalizer.Normalize(input.Slug);
-        var contentFormat = ContentFormats.Normalize(input.ContentFormat);
+        var contentType = ContentTypes.Normalize(input.ContentType);
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
-        if (await SlugExistsAsync(conn, tx, appInstanceId, slug, pageId, ct))
+        if (await SlugExistsAsync(conn, tx, appInstanceId, slug, contentId, ct))
         {
             throw new InvalidOperationException("A content page with the same slug already exists for this app instance.");
         }
 
-        if (input.PageId == Guid.Empty)
+        if (input.ContentId == Guid.Empty)
         {
             const string insertSql = @"
-INSERT INTO omp_content.Pages(
-    PageId,
-    AppInstanceId,
-    Slug,
-    Title,
-    Summary,
-    MetaTitle,
-    MetaDescription,
-    ContentFormat,
-    Content,
-    SortOrder,
-    CreatedBy,
-    UpdatedBy)
+INSERT INTO omp_content.contents(
+    content_id,
+    app_instance_id,
+    slug,
+    title,
+    content_type,
+    body,
+    is_enabled,
+    sort_order,
+    created_by,
+    updated_by)
 VALUES(
-    @PageId,
+    @ContentId,
     @AppInstanceId,
     @Slug,
     @Title,
-    @Summary,
-    @MetaTitle,
-    @MetaDescription,
-    @ContentFormat,
-    @Content,
+    @ContentType,
+    @Body,
+    @IsEnabled,
     @SortOrder,
     @Actor,
     @Actor);";
 
             await using var insert = new SqlCommand(insertSql, conn, tx);
-            AddPageParameters(insert, appInstanceId, pageId, slug, input, contentFormat, actor);
+            AddPageParameters(insert, appInstanceId, contentId, slug, input, contentType, actor);
             await insert.ExecuteNonQueryAsync(ct);
         }
         else
         {
             const string updateSql = @"
-UPDATE omp_content.Pages
-SET Slug = @Slug,
-    Title = @Title,
-    Summary = @Summary,
-    MetaTitle = @MetaTitle,
-    MetaDescription = @MetaDescription,
-    ContentFormat = @ContentFormat,
-    Content = @Content,
-    SortOrder = @SortOrder,
-    UpdatedAtUtc = SYSUTCDATETIME(),
-    UpdatedBy = @Actor
-WHERE PageId = @PageId
-  AND AppInstanceId = @AppInstanceId
-  AND IsDeleted = 0;";
+UPDATE omp_content.contents
+SET slug = @Slug,
+    title = @Title,
+    content_type = @ContentType,
+    body = @Body,
+    is_enabled = @IsEnabled,
+    sort_order = @SortOrder,
+    updated_at = SYSUTCDATETIME(),
+    updated_by = @Actor
+WHERE content_id = @ContentId
+  AND app_instance_id = @AppInstanceId;";
 
             await using var update = new SqlCommand(updateSql, conn, tx);
-            AddPageParameters(update, appInstanceId, pageId, slug, input, contentFormat, actor);
+            AddPageParameters(update, appInstanceId, contentId, slug, input, contentType, actor);
             var affected = await update.ExecuteNonQueryAsync(ct);
             if (affected == 0)
             {
@@ -242,74 +410,71 @@ WHERE PageId = @PageId
             }
         }
 
-        await InsertRevisionAsync(conn, tx, pageId, slug, input, contentFormat, actor, ct);
+        if (input.SaveRoleAccess)
+        {
+            await ReplaceRoleAccessAsync(conn, tx, contentId, input.RoleAccesses, ct);
+        }
+
         await tx.CommitAsync(ct);
-        return pageId;
+        return contentId;
     }
 
-    public Task PublishPageAsync(Guid appInstanceId, Guid pageId, string actor, CancellationToken ct)
-        => SetPublishedAsync(appInstanceId, pageId, isPublished: true, actor, ct);
-
-    public Task UnpublishPageAsync(Guid appInstanceId, Guid pageId, string actor, CancellationToken ct)
-        => SetPublishedAsync(appInstanceId, pageId, isPublished: false, actor, ct);
-
-    public async Task SoftDeletePageAsync(Guid appInstanceId, Guid pageId, string actor, CancellationToken ct)
-    {
-        const string sql = @"
-UPDATE omp_content.Pages
-SET IsDeleted = 1,
-    IsPublished = 0,
-    UpdatedAtUtc = SYSUTCDATETIME(),
-    UpdatedBy = @Actor
-WHERE AppInstanceId = @AppInstanceId
-  AND PageId = @PageId
-  AND IsDeleted = 0;";
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
-        cmd.Parameters.AddWithValue("@PageId", pageId);
-        cmd.Parameters.AddWithValue("@Actor", actor);
-        await cmd.ExecuteNonQueryAsync(ct);
-    }
-
-    private async Task SetPublishedAsync(
+    public async Task SetEnabledAsync(
         Guid appInstanceId,
-        Guid pageId,
-        bool isPublished,
+        Guid contentId,
+        bool isEnabled,
         string actor,
         CancellationToken ct)
     {
         const string sql = @"
-UPDATE p
-SET IsPublished = @IsPublished,
-    PublishedAtUtc = CASE WHEN @IsPublished = 1 THEN SYSUTCDATETIME() ELSE NULL END,
-    LastPublishedRevisionId = CASE WHEN @IsPublished = 1 THEN latest.RevisionId ELSE p.LastPublishedRevisionId END,
-    UpdatedAtUtc = SYSUTCDATETIME(),
-    UpdatedBy = @Actor
-FROM omp_content.Pages p
-OUTER APPLY
-(
-    SELECT TOP (1) RevisionId
-    FROM omp_content.PageRevisions r
-    WHERE r.PageId = p.PageId
-    ORDER BY r.RevisionNumber DESC
-) latest
-WHERE p.AppInstanceId = @AppInstanceId
-  AND p.PageId = @PageId
-  AND p.IsDeleted = 0;";
+UPDATE omp_content.contents
+SET is_enabled = @IsEnabled,
+    updated_at = SYSUTCDATETIME(),
+    updated_by = @Actor
+WHERE app_instance_id = @AppInstanceId
+  AND content_id = @ContentId;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
-        cmd.Parameters.AddWithValue("@PageId", pageId);
-        cmd.Parameters.AddWithValue("@IsPublished", isPublished);
-        cmd.Parameters.AddWithValue("@Actor", actor);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@ContentId", contentId);
+        Add(cmd, "@IsEnabled", isEnabled);
+        Add(cmd, "@Actor", actor);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ReplaceRoleAccessAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid contentId,
+        IReadOnlyList<ContentRoleAccessSaveRow> roleAccesses,
+        CancellationToken ct)
+    {
+        const string deleteSql = @"
+DELETE FROM omp_content.content_role_access
+WHERE content_id = @ContentId;";
+
+        await using (var delete = new SqlCommand(deleteSql, conn, tx))
+        {
+            Add(delete, "@ContentId", contentId);
+            await delete.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSql = @"
+INSERT INTO omp_content.content_role_access(content_id, role_id, can_read, can_write)
+VALUES(@ContentId, @RoleId, @CanRead, @CanWrite);";
+
+        foreach (var access in roleAccesses.Where(x => x.CanRead || x.CanWrite))
+        {
+            await using var insert = new SqlCommand(insertSql, conn, tx);
+            Add(insert, "@ContentId", contentId);
+            Add(insert, "@RoleId", access.RoleId);
+            Add(insert, "@CanRead", access.CanRead || access.CanWrite);
+            Add(insert, "@CanWrite", access.CanWrite);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
     }
 
     private static async Task<bool> SlugExistsAsync(
@@ -317,108 +482,71 @@ WHERE p.AppInstanceId = @AppInstanceId
         SqlTransaction tx,
         Guid appInstanceId,
         string slug,
-        Guid pageId,
+        Guid contentId,
         CancellationToken ct)
     {
         const string sql = @"
 SELECT COUNT(1)
-FROM omp_content.Pages
-WHERE AppInstanceId = @AppInstanceId
-  AND Slug = @Slug
-  AND PageId <> @PageId
-  AND IsDeleted = 0;";
+FROM omp_content.contents
+WHERE app_instance_id = @AppInstanceId
+  AND slug = @Slug
+  AND content_id <> @ContentId;";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
-        cmd.Parameters.AddWithValue("@Slug", slug);
-        cmd.Parameters.AddWithValue("@PageId", pageId);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@Slug", slug);
+        Add(cmd, "@ContentId", contentId);
 
-        var count = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
-        return count > 0;
-    }
-
-    private static async Task InsertRevisionAsync(
-        SqlConnection conn,
-        SqlTransaction tx,
-        Guid pageId,
-        string slug,
-        ContentPageSaveRequest input,
-        string contentFormat,
-        string actor,
-        CancellationToken ct)
-    {
-        const string sql = @"
-DECLARE @RevisionNumber int;
-SELECT @RevisionNumber = ISNULL(MAX(RevisionNumber), 0) + 1
-FROM omp_content.PageRevisions
-WHERE PageId = @PageId;
-
-INSERT INTO omp_content.PageRevisions(
-    RevisionId,
-    PageId,
-    RevisionNumber,
-    Title,
-    Slug,
-    ContentFormat,
-    Content,
-    CreatedBy,
-    ChangeNote)
-VALUES(
-    NEWID(),
-    @PageId,
-    @RevisionNumber,
-    @Title,
-    @Slug,
-    @ContentFormat,
-    @Content,
-    @Actor,
-    @ChangeNote);";
-
-        await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@PageId", pageId);
-        cmd.Parameters.AddWithValue("@Title", input.Title.Trim());
-        cmd.Parameters.AddWithValue("@Slug", slug);
-        cmd.Parameters.AddWithValue("@ContentFormat", contentFormat);
-        cmd.Parameters.AddWithValue("@Content", input.Content);
-        cmd.Parameters.AddWithValue("@Actor", actor);
-        cmd.Parameters.AddWithValue("@ChangeNote", (object?)Clean(input.ChangeNote) ?? DBNull.Value);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
     }
 
     private static void AddPageParameters(
         SqlCommand cmd,
         Guid appInstanceId,
-        Guid pageId,
+        Guid contentId,
         string slug,
         ContentPageSaveRequest input,
-        string contentFormat,
+        string contentType,
         string actor)
     {
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
-        cmd.Parameters.AddWithValue("@PageId", pageId);
-        cmd.Parameters.AddWithValue("@Slug", slug);
-        cmd.Parameters.AddWithValue("@Title", input.Title.Trim());
-        cmd.Parameters.AddWithValue("@Summary", (object?)Clean(input.Summary) ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@MetaTitle", (object?)Clean(input.MetaTitle) ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@MetaDescription", (object?)Clean(input.MetaDescription) ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@ContentFormat", contentFormat);
-        cmd.Parameters.AddWithValue("@Content", input.Content);
-        cmd.Parameters.AddWithValue("@SortOrder", input.SortOrder);
-        cmd.Parameters.AddWithValue("@Actor", actor);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@ContentId", contentId);
+        Add(cmd, "@Slug", slug);
+        Add(cmd, "@Title", input.Title.Trim());
+        Add(cmd, "@ContentType", contentType);
+        Add(cmd, "@Body", input.Body);
+        Add(cmd, "@IsEnabled", input.IsEnabled);
+        Add(cmd, "@SortOrder", input.SortOrder);
+        Add(cmd, "@Actor", actor);
+    }
+
+    private static ContentPageListRow ReadListRow(SqlDataReader rdr)
+    {
+        return new ContentPageListRow
+        {
+            ContentId = rdr.GetGuid(0),
+            Slug = rdr.GetString(1),
+            Title = rdr.GetString(2),
+            ContentType = rdr.GetString(3),
+            IsEnabled = rdr.GetBoolean(4),
+            SortOrder = rdr.IsDBNull(5) ? null : rdr.GetInt32(5),
+            CreatedAtUtc = rdr.GetDateTime(6),
+            UpdatedAtUtc = rdr.GetDateTime(7),
+            UpdatedBy = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+            AccessSummary = rdr.IsDBNull(9) ? null : rdr.GetString(9)
+        };
     }
 
     private static ContentPageRenderRow ReadRenderRow(SqlDataReader rdr)
     {
         return new ContentPageRenderRow
         {
-            PageId = rdr.GetGuid(0),
+            ContentId = rdr.GetGuid(0),
             Slug = rdr.GetString(1),
             Title = rdr.GetString(2),
-            MetaTitle = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-            MetaDescription = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-            ContentFormat = rdr.GetString(5),
-            Content = rdr.GetString(6),
-            UpdatedAtUtc = rdr.GetDateTime(7)
+            ContentType = rdr.GetString(3),
+            Body = rdr.GetString(4),
+            UpdatedAtUtc = rdr.GetDateTime(5)
         };
     }
 
@@ -426,25 +554,23 @@ VALUES(
     {
         return new ContentPageEditRow
         {
-            PageId = rdr.GetGuid(0),
+            ContentId = rdr.GetGuid(0),
             AppInstanceId = rdr.GetGuid(1),
             Slug = rdr.GetString(2),
             Title = rdr.GetString(3),
-            Summary = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-            MetaTitle = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-            MetaDescription = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-            ContentFormat = rdr.GetString(7),
-            Content = rdr.GetString(8),
-            IsPublished = rdr.GetBoolean(9),
-            PublishedAtUtc = rdr.IsDBNull(10) ? null : rdr.GetDateTime(10),
-            SortOrder = rdr.GetInt32(11),
-            CreatedAtUtc = rdr.GetDateTime(12),
-            CreatedBy = rdr.IsDBNull(13) ? null : rdr.GetString(13),
-            UpdatedAtUtc = rdr.GetDateTime(14),
-            UpdatedBy = rdr.IsDBNull(15) ? null : rdr.GetString(15)
+            ContentType = rdr.GetString(4),
+            Body = rdr.GetString(5),
+            IsEnabled = rdr.GetBoolean(6),
+            SortOrder = rdr.IsDBNull(7) ? null : rdr.GetInt32(7),
+            CreatedAtUtc = rdr.GetDateTime(8),
+            CreatedBy = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+            UpdatedAtUtc = rdr.GetDateTime(10),
+            UpdatedBy = rdr.IsDBNull(11) ? null : rdr.GetString(11)
         };
     }
 
-    private static string? Clean(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static void Add(SqlCommand cmd, string name, object? value)
+    {
+        cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+    }
 }
