@@ -13,6 +13,7 @@ builder.Services.Configure<ContentWebAppModuleOptions>(
 builder.Services.Configure<RazorPagesOptions>(options =>
 {
     options.Conventions.AddPageRoute("/Admin/Edit", "/admin/create");
+    options.Conventions.AddPageRoute("/Page", "{*slug}");
 });
 builder.Services.AddScoped<ContentPageRepository>();
 builder.Services.AddScoped<ContentRenderer>();

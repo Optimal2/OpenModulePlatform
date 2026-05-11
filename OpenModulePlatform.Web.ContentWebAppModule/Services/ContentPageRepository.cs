@@ -16,11 +16,24 @@ public sealed class ContentPageRepository
 
     public async Task<IReadOnlyList<ContentPageListRow>> ListReadablePagesAsync(
         Guid appInstanceId,
-        int? activeRoleId,
+        IReadOnlyCollection<int> roleIds,
         bool canManageAll,
         CancellationToken ct)
     {
-        const string sql = @"
+        var roleIdParameters = NormalizeRoleIds(roleIds);
+        var accessFilter = canManageAll
+            ? string.Empty
+            : $@"
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp_content.content_role_access a
+      WHERE a.content_id = c.content_id
+        AND a.role_id IN ({BuildRoleParameterList(roleIdParameters)})
+        AND a.can_read = 1
+  )";
+
+        var sql = $@"
 SELECT c.content_id,
        c.slug,
        c.title,
@@ -48,22 +61,7 @@ SELECT c.content_id,
 FROM omp_content.contents c
 WHERE c.app_instance_id = @AppInstanceId
   AND c.is_enabled = 1
-  AND
-  (
-      @CanManageAll = 1
-      OR
-      (
-          @ActiveRoleId IS NOT NULL
-          AND EXISTS
-          (
-              SELECT 1
-              FROM omp_content.content_role_access a
-              WHERE a.content_id = c.content_id
-                AND a.role_id = @ActiveRoleId
-                AND a.can_read = 1
-          )
-      )
-  )
+{accessFilter}
 ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
 
         var rows = new List<ContentPageListRow>();
@@ -72,8 +70,7 @@ ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
 
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@AppInstanceId", appInstanceId);
-        Add(cmd, "@ActiveRoleId", activeRoleId);
-        Add(cmd, "@CanManageAll", canManageAll);
+        AddRoleParameters(cmd, roleIdParameters);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -86,11 +83,24 @@ ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
 
     public async Task<IReadOnlyList<ContentPageListRow>> ListEditablePagesAsync(
         Guid appInstanceId,
-        int? activeRoleId,
+        IReadOnlyCollection<int> roleIds,
         bool canManageAll,
         CancellationToken ct)
     {
-        const string sql = @"
+        var roleIdParameters = NormalizeRoleIds(roleIds);
+        var accessFilter = canManageAll
+            ? string.Empty
+            : $@"
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp_content.content_role_access a
+      WHERE a.content_id = c.content_id
+        AND a.role_id IN ({BuildRoleParameterList(roleIdParameters)})
+        AND a.can_write = 1
+  )";
+
+        var sql = $@"
 SELECT c.content_id,
        c.slug,
        c.title,
@@ -117,22 +127,7 @@ SELECT c.content_id,
        ).value('.', 'nvarchar(max)'), 1, 2, N'')
 FROM omp_content.contents c
 WHERE c.app_instance_id = @AppInstanceId
-  AND
-  (
-      @CanManageAll = 1
-      OR
-      (
-          @ActiveRoleId IS NOT NULL
-          AND EXISTS
-          (
-              SELECT 1
-              FROM omp_content.content_role_access a
-              WHERE a.content_id = c.content_id
-                AND a.role_id = @ActiveRoleId
-                AND a.can_write = 1
-          )
-      )
-  )
+{accessFilter}
 ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
 
         var rows = new List<ContentPageListRow>();
@@ -141,8 +136,7 @@ ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
 
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@AppInstanceId", appInstanceId);
-        Add(cmd, "@ActiveRoleId", activeRoleId);
-        Add(cmd, "@CanManageAll", canManageAll);
+        AddRoleParameters(cmd, roleIdParameters);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -156,11 +150,24 @@ ORDER BY COALESCE(c.sort_order, 2147483647), c.slug, c.title;";
     public async Task<ContentPageRenderRow?> GetReadablePageBySlugAsync(
         Guid appInstanceId,
         string slug,
-        int? activeRoleId,
+        IReadOnlyCollection<int> roleIds,
         bool canManageAll,
         CancellationToken ct)
     {
-        const string sql = @"
+        var roleIdParameters = NormalizeRoleIds(roleIds);
+        var accessFilter = canManageAll
+            ? string.Empty
+            : $@"
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp_content.content_role_access a
+      WHERE a.content_id = c.content_id
+        AND a.role_id IN ({BuildRoleParameterList(roleIdParameters)})
+        AND a.can_read = 1
+  )";
+
+        var sql = $@"
 SELECT c.content_id,
        c.slug,
        c.title,
@@ -171,22 +178,7 @@ FROM omp_content.contents c
 WHERE c.app_instance_id = @AppInstanceId
   AND c.slug = @Slug
   AND c.is_enabled = 1
-  AND
-  (
-      @CanManageAll = 1
-      OR
-      (
-          @ActiveRoleId IS NOT NULL
-          AND EXISTS
-          (
-              SELECT 1
-              FROM omp_content.content_role_access a
-              WHERE a.content_id = c.content_id
-                AND a.role_id = @ActiveRoleId
-                AND a.can_read = 1
-          )
-      )
-  );";
+{accessFilter};";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -194,8 +186,7 @@ WHERE c.app_instance_id = @AppInstanceId
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@AppInstanceId", appInstanceId);
         Add(cmd, "@Slug", slug);
-        Add(cmd, "@ActiveRoleId", activeRoleId);
-        Add(cmd, "@CanManageAll", canManageAll);
+        AddRoleParameters(cmd, roleIdParameters);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         return await rdr.ReadAsync(ct) ? ReadRenderRow(rdr) : null;
@@ -204,11 +195,24 @@ WHERE c.app_instance_id = @AppInstanceId
     public async Task<ContentPageEditRow?> GetPageForEditAsync(
         Guid appInstanceId,
         Guid contentId,
-        int? activeRoleId,
+        IReadOnlyCollection<int> roleIds,
         bool canManageAll,
         CancellationToken ct)
     {
-        const string sql = @"
+        var roleIdParameters = NormalizeRoleIds(roleIds);
+        var accessFilter = canManageAll
+            ? string.Empty
+            : $@"
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp_content.content_role_access a
+      WHERE a.content_id = c.content_id
+        AND a.role_id IN ({BuildRoleParameterList(roleIdParameters)})
+        AND a.can_write = 1
+  )";
+
+        var sql = $@"
 SELECT c.content_id,
        c.app_instance_id,
        c.slug,
@@ -224,22 +228,7 @@ SELECT c.content_id,
 FROM omp_content.contents c
 WHERE c.app_instance_id = @AppInstanceId
   AND c.content_id = @ContentId
-  AND
-  (
-      @CanManageAll = 1
-      OR
-      (
-          @ActiveRoleId IS NOT NULL
-          AND EXISTS
-          (
-              SELECT 1
-              FROM omp_content.content_role_access a
-              WHERE a.content_id = c.content_id
-                AND a.role_id = @ActiveRoleId
-                AND a.can_write = 1
-          )
-      )
-  );";
+{accessFilter};";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -247,8 +236,7 @@ WHERE c.app_instance_id = @AppInstanceId
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@AppInstanceId", appInstanceId);
         Add(cmd, "@ContentId", contentId);
-        Add(cmd, "@ActiveRoleId", activeRoleId);
-        Add(cmd, "@CanManageAll", canManageAll);
+        AddRoleParameters(cmd, roleIdParameters);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         return await rdr.ReadAsync(ct) ? ReadEditRow(rdr) : null;
@@ -572,5 +560,30 @@ WHERE app_instance_id = @AppInstanceId
     private static void Add(SqlCommand cmd, string name, object? value)
     {
         cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+    }
+
+    private static int[] NormalizeRoleIds(IReadOnlyCollection<int> roleIds)
+        => roleIds
+            .Where(roleId => roleId > 0)
+            .Distinct()
+            .Order()
+            .ToArray();
+
+    private static string BuildRoleParameterList(IReadOnlyList<int> roleIds)
+    {
+        if (roleIds.Count == 0)
+        {
+            return "NULL";
+        }
+
+        return string.Join(", ", Enumerable.Range(0, roleIds.Count).Select(i => $"@RoleId{i}"));
+    }
+
+    private static void AddRoleParameters(SqlCommand cmd, IReadOnlyList<int> roleIds)
+    {
+        for (var i = 0; i < roleIds.Count; i++)
+        {
+            Add(cmd, $"@RoleId{i}", roleIds[i]);
+        }
     }
 }
