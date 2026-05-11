@@ -5,8 +5,10 @@ This helper publishes the currently publishable OMP projects and skips the share
 ## Included projects
 
 - OpenModulePlatform.Portal
-- OpenModulePlatform.Service.ExampleServiceAppModule
+- OpenModulePlatform.Auth
 - OpenModulePlatform.Web.ContentWebAppModule
+- OpenModulePlatform.Web.iFrameWebAppModule
+- OpenModulePlatform.Service.ExampleServiceAppModule
 - OpenModulePlatform.Web.ExampleServiceAppModule
 - OpenModulePlatform.Web.ExampleWebAppBlazorModule
 - OpenModulePlatform.Web.ExampleWebAppModule
@@ -40,6 +42,9 @@ For the standard local runtime layout, copy or deploy these published folders:
 
 ```text
 OpenModulePlatform.Portal                 -> E:\OMP\Sites\Portal
+OpenModulePlatform.Auth                   -> E:\OMP\WebApps\auth
+OpenModulePlatform.Web.ContentWebAppModule -> E:\OMP\WebApps\content
+OpenModulePlatform.Web.iFrameWebAppModule -> E:\OMP\WebApps\iFrameWebAppModule
 OpenModulePlatform.HostAgent.WindowsService -> E:\OMP\Services\HostAgent
 OpenModulePlatform.WorkerManager.WindowsService -> E:\OMP\Services\WorkerManager
 OpenModulePlatform.WorkerProcessHost      -> E:\OMP\Services\WorkerProcessHost
@@ -104,6 +109,10 @@ artifacts\publish\restore.log
 
 
 ## Example module folder layout
+
+First-party OMP modules such as `OpenModulePlatform.Web.ContentWebAppModule`
+and `OpenModulePlatform.Web.iFrameWebAppModule` live in the repository root and
+are usable platform modules. They are not examples or templates.
 
 Example modules use this layout:
 
