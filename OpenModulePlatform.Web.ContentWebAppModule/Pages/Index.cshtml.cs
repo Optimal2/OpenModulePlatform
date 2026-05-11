@@ -33,11 +33,14 @@ public sealed class IndexModel : ContentWebAppModulePageModel
             return appInstanceGuard;
         }
 
-        var roleContext = await GetContentRoleContextAsync(ct);
-        var canManageAll = CanManageAllContent(roleContext);
+        var accessContext = await GetContentAccessContextAsync(ct);
 
         await SetContentTitlesAsync("Content", ct);
-        Rows = await _repo.ListReadablePagesAsync(AppInstanceId, roleContext.ActiveRoleId, canManageAll, ct);
+        Rows = await _repo.ListReadablePagesAsync(
+            AppInstanceId,
+            accessContext.RoleIds,
+            accessContext.CanManageAll,
+            ct);
         return Page();
     }
 }

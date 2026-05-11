@@ -38,14 +38,13 @@ public sealed class PreviewModel : ContentWebAppModulePageModel
             return appInstanceGuard;
         }
 
-        var roleContext = await GetContentRoleContextAsync(ct);
-        var canManageAll = CanManageAllContent(roleContext);
+        var accessContext = await GetContentAccessContextAsync(ct);
 
         PageContent = await _repo.GetPageForEditAsync(
             AppInstanceId,
             contentId,
-            roleContext.ActiveRoleId,
-            canManageAll,
+            accessContext.RoleIds,
+            accessContext.CanManageAll,
             ct);
 
         if (PageContent is null)

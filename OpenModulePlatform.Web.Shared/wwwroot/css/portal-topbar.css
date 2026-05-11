@@ -1,6 +1,12 @@
 .portal-topbar {
     /* Keep the JS breakpoint reader in sync with this component-level value. */
     --portal-topbar-compact-breakpoint: 710px;
+    --portal-topbar-surface: var(--surface, #fff);
+    --portal-topbar-surface-muted: var(--surface-muted, #f1f5f9);
+    --portal-topbar-border: var(--border, #d7dde5);
+    --portal-topbar-text: var(--text, #16202a);
+    --portal-topbar-text-muted: var(--text-muted, #647184);
+    --portal-topbar-shadow: var(--shadow, 0 12px 30px rgba(15, 23, 42, 0.14));
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -8,7 +14,7 @@
     --portal-topbar-dropdown-bridge: 16px;
     min-height: 34px;
     padding: 6px 20px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--portal-topbar-border);
     background: rgba(248, 250, 252, 0.96);
     overflow: visible;
 }
@@ -45,7 +51,7 @@
     min-height: 28px;
     text-decoration: none;
     font-size: 0.84rem;
-    color: var(--text-muted);
+    color: var(--portal-topbar-text-muted);
     cursor: pointer;
     list-style: none;
     white-space: nowrap;
@@ -54,7 +60,7 @@
 .portal-topbar__portal-link {
     font-weight: 800;
     font-size: 1rem;
-    color: var(--text);
+    color: var(--portal-topbar-text);
 }
 
 .portal-topbar__module-link {
@@ -76,7 +82,7 @@
 .portal-topbar__overflow summary:hover,
 .portal-topbar__language summary:hover,
 .portal-topbar__profile summary:hover {
-    color: var(--text);
+    color: var(--portal-topbar-text);
 }
 
 .portal-topbar__pipe {
@@ -127,7 +133,7 @@
     min-height: 28px;
     padding: 0 8px;
     border-radius: 8px;
-    color: var(--text-muted);
+    color: var(--portal-topbar-text-muted);
     cursor: pointer;
     list-style: none;
     user-select: none;
@@ -168,8 +174,8 @@
 .portal-topbar__collapsed[open] > summary,
 .portal-topbar__overflow > summary:hover,
 .portal-topbar__overflow[open] > summary {
-    color: var(--text);
-    background: var(--surface-muted);
+    color: var(--portal-topbar-text);
+    background: var(--portal-topbar-surface-muted);
 }
 
 
@@ -201,10 +207,10 @@
     z-index: 1100;
     min-width: 220px;
     padding: 8px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--portal-topbar-border);
     border-radius: 14px;
-    background: var(--surface);
-    box-shadow: var(--shadow);
+    background: var(--portal-topbar-surface);
+    box-shadow: var(--portal-topbar-shadow);
 }
 
 .portal-topbar__admin-menu,
@@ -242,7 +248,7 @@
     display: block;
     padding: 8px 10px;
     border-radius: 10px;
-    color: var(--text);
+    color: var(--portal-topbar-text);
     text-decoration: none;
 }
 
@@ -250,7 +256,7 @@
 .portal-topbar__collapsed-link:hover,
 .portal-topbar__language-link:hover,
 .portal-topbar__menu .portal-topbar__module-link:hover {
-    background: var(--surface-muted);
+    background: var(--portal-topbar-surface-muted);
 }
 
 .portal-topbar__admin-submenu {
@@ -267,7 +273,7 @@
     min-height: 38px;
     padding: 8px 10px;
     border-radius: 10px;
-    color: var(--text);
+    color: var(--portal-topbar-text);
     cursor: pointer;
     list-style: none;
     user-select: none;
@@ -280,13 +286,13 @@
 .portal-topbar__admin-submenu > summary::after {
     content: "▸";
     flex: 0 0 auto;
-    color: var(--text-muted);
+    color: var(--portal-topbar-text-muted);
     font-size: 0.82rem;
 }
 
 .portal-topbar__admin-submenu > summary:hover,
 .portal-topbar__admin-submenu[open] > summary {
-    background: var(--surface-muted);
+    background: var(--portal-topbar-surface-muted);
 }
 
 .portal-topbar__admin-submenu-menu {
@@ -296,16 +302,16 @@
     z-index: 1150;
     min-width: 220px;
     padding: 8px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--portal-topbar-border);
     border-radius: 14px;
-    background: var(--surface);
-    box-shadow: var(--shadow);
+    background: var(--portal-topbar-surface);
+    box-shadow: var(--portal-topbar-shadow);
 }
 
 .portal-topbar__admin-separator {
     height: 1px;
     margin: 2px 2px;
-    background: var(--border);
+    background: var(--portal-topbar-border);
 }
 
 .portal-topbar__language-link.is-current {
@@ -392,9 +398,9 @@
     width: 12px;
     height: 12px;
     border-radius: 999px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
+    background: var(--portal-topbar-surface);
+    border: 1px solid var(--portal-topbar-border);
+    color: var(--portal-topbar-text-muted);
     font-size: 0.55rem;
     font-weight: 700;
     line-height: 1;
@@ -404,15 +410,15 @@
     margin-bottom: 6px;
     padding: 8px 10px;
     border-radius: 10px;
-    background: var(--surface-muted);
-    color: var(--text-muted);
+    background: var(--portal-topbar-surface-muted);
+    color: var(--portal-topbar-text-muted);
 }
 
 .portal-topbar__language-note-title {
     margin-bottom: 2px;
     font-size: 0.72rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--portal-topbar-text);
 }
 
 .portal-topbar__language-note-body {
@@ -448,7 +454,7 @@
     border: 0;
     border-radius: 10px;
     background: transparent;
-    color: var(--text);
+    color: var(--portal-topbar-text);
     cursor: pointer;
     font: inherit;
     text-align: left;
@@ -463,7 +469,7 @@
 
 .portal-topbar__profile-copy-name:hover,
 .portal-topbar__profile-copy-name:focus-visible {
-    background: var(--surface-muted);
+    background: var(--portal-topbar-surface-muted);
     outline: none;
 }
 
@@ -477,7 +483,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
-    color: var(--text);
+    color: var(--portal-topbar-text);
     font-size: 0.92rem;
     font-weight: 600;
 }
@@ -510,7 +516,7 @@
 .portal-topbar__profile-copy-name:focus-visible .portal-topbar__profile-copy-inline-icon {
     opacity: 1;
     transform: translateX(0);
-    color: var(--text);
+    color: var(--portal-topbar-text);
 }
 
 .portal-topbar__profile-action-button {
@@ -533,8 +539,8 @@
 
 .portal-topbar__profile-action-button:hover,
 .portal-topbar__profile-action-button:focus-visible {
-    color: var(--text);
-    background: var(--surface-muted);
+    color: var(--portal-topbar-text);
+    background: var(--portal-topbar-surface-muted);
     outline: none;
 }
 
@@ -547,7 +553,7 @@
     margin-top: 8px;
     padding: 8px 10px;
     border-radius: 10px;
-    color: var(--text);
+    color: var(--portal-topbar-text);
     font-size: 0.88rem;
     text-decoration: none;
     white-space: nowrap;
@@ -555,8 +561,8 @@
 
 .portal-topbar__profile-settings-link:hover,
 .portal-topbar__profile-settings-link:focus-visible {
-    background: var(--surface-muted);
-    color: var(--text);
+    background: var(--portal-topbar-surface-muted);
+    color: var(--portal-topbar-text);
     outline: none;
 }
 
@@ -574,7 +580,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
-    color: var(--text);
+    color: var(--portal-topbar-text);
     font-size: 0.92rem;
     font-weight: 600;
 }
@@ -582,7 +588,7 @@
 .portal-topbar__profile-section {
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--portal-topbar-border);
 }
 
 .portal-topbar__profile-label {
@@ -598,7 +604,7 @@
     display: block;
     padding: 8px 10px;
     border-radius: 10px;
-    color: var(--text);
+    color: var(--portal-topbar-text);
 }
 
 .portal-topbar__profile-muted {
@@ -612,10 +618,10 @@
 .portal-topbar__role-select {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--portal-topbar-border);
     border-radius: 10px;
-    background: var(--surface);
-    color: var(--text);
+    background: var(--portal-topbar-surface);
+    color: var(--portal-topbar-text);
 }
 
 
@@ -654,8 +660,8 @@
 
 .portal-topbar__profile-switch-button:hover,
 .portal-topbar__profile-switch[open] .portal-topbar__profile-switch-button {
-    color: var(--text);
-    background: var(--surface-muted);
+    color: var(--portal-topbar-text);
+    background: var(--portal-topbar-surface-muted);
 }
 
 .portal-topbar__profile-switch-button span[aria-hidden="true"] {
@@ -671,22 +677,22 @@
     min-width: 220px;
     max-width: min(calc(100vw - 32px), 280px);
     padding: 8px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--portal-topbar-border);
     border-radius: 14px;
-    background: var(--surface);
-    box-shadow: var(--shadow);
+    background: var(--portal-topbar-surface);
+    box-shadow: var(--portal-topbar-shadow);
 }
 
 .portal-topbar__profile-role-link {
     display: block;
     padding: 8px 10px;
     border-radius: 10px;
-    color: var(--text);
+    color: var(--portal-topbar-text);
     text-decoration: none;
 }
 
 .portal-topbar__profile-role-link:hover {
-    background: var(--surface-muted);
+    background: var(--portal-topbar-surface-muted);
 }
 
 .portal-topbar__profile-role-link.is-current {
