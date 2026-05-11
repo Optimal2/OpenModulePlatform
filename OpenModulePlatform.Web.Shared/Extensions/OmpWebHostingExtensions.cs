@@ -159,6 +159,7 @@ public static class OmpWebHostingExtensions
 
         app.UseRequestLocalization(localizationOptions);
         app.UseStaticFiles();
+        app.MapStaticAssets().ShortCircuit();
         app.UseStatusCodePagesWithReExecute("/status/{0}");
 
         if (!mapRazorPages)
