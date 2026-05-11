@@ -1,21 +1,20 @@
-// File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Admin/Preview.cshtml.cs
+// File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Page.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using OpenModulePlatform.Web.ContentWebAppModule.Options;
-using OpenModulePlatform.Web.ContentWebAppModule.Pages;
 using OpenModulePlatform.Web.ContentWebAppModule.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 
-namespace OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin;
+namespace OpenModulePlatform.Web.ContentWebAppModule.Pages;
 
-public sealed class PreviewModel : ContentWebAppModulePageModel
+public sealed class PageModel : ContentWebAppModulePageModel
 {
     private readonly ContentPageRepository _repo;
     private readonly ContentRenderer _renderer;
 
-    public PreviewModel(
+    public PageModel(
         IOptions<WebAppOptions> options,
         IOptions<ContentWebAppModuleOptions> contentOptions,
         RbacService rbac,
@@ -27,10 +26,10 @@ public sealed class PreviewModel : ContentWebAppModulePageModel
         _renderer = renderer;
     }
 
-    public ContentPageEditRow? PageContent { get; private set; }
+    public ContentPageRenderRow? PageContent { get; private set; }
     public string RenderedHtml { get; private set; } = string.Empty;
 
-    public async Task<IActionResult> OnGet(Guid contentId, CancellationToken ct)
+    public async Task<IActionResult> OnGet(string? slug, CancellationToken ct)
     {
         var appInstanceGuard = ValidateAppInstanceConfigured();
         if (appInstanceGuard is not null)
@@ -38,24 +37,29 @@ public sealed class PreviewModel : ContentWebAppModulePageModel
             return appInstanceGuard;
         }
 
+        var normalizedSlug = ContentSlugNormalizer.Normalize(slug);
+        if (string.IsNullOrWhiteSpace(normalizedSlug))
+        {
+            return RedirectToPage("/Index");
+        }
+
         var roleContext = await GetContentRoleContextAsync(ct);
         var canManageAll = CanManageAllContent(roleContext);
 
-        PageContent = await _repo.GetPageForEditAsync(
+        PageContent = await _repo.GetReadablePageBySlugAsync(
             AppInstanceId,
-            contentId,
+            normalizedSlug,
             roleContext.ActiveRoleId,
             canManageAll,
             ct);
 
         if (PageContent is null)
         {
-            return await _repo.ContentExistsAsync(AppInstanceId, contentId, ct)
-                ? Forbid()
-                : NotFound();
+            await SetContentTitlesAsync("Page not found", ct);
+            return NotFound();
         }
 
-        await SetContentTitlesAsync("Preview", ct);
+        await SetContentTitlesAsync(PageContent.Title, ct);
         RenderedHtml = _renderer.RenderToHtml(PageContent.Body, PageContent.ContentType);
         return Page();
     }

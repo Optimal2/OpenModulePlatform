@@ -1,18 +1,22 @@
 @* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Admin/Edit.cshtml *@
-@page "{pageId:guid?}"
+@page "{contentId:guid?}"
 @model OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin.EditModel
+
+@section Styles {
+    <link rel="stylesheet" href="https://uicdn.toast.com/editor/3.2.2/toastui-editor.min.css" />
+}
 
 <div class="page-header">
     <div>
         <div class="eyebrow">@L["Content"]</div>
         <h1>@(Model.IsCreate ? L["New page"] : L["Edit page"])</h1>
-        <p class="lede">@L["Use Markdown for simple pages. Rendered output is sanitized before it is shown to users."]</p>
+        <p class="lede">@L["Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization."]</p>
     </div>
     <div class="toolbar">
         <a class="button" href="~/admin">@L["Back to pages"]</a>
         @if (!Model.IsCreate)
         {
-            <a class="button" href="~/admin/preview?pageId=@Model.Input.PageId">@L["Preview"]</a>
+            <a class="button" href="~/admin/preview?contentId=@Model.Input.ContentId">@L["Preview"]</a>
         }
     </div>
 </div>
@@ -22,10 +26,13 @@
     <div class="card status-banner">@Model.StatusMessage</div>
 }
 
-<form method="post" class="card form-grid">
-    <input type="hidden" asp-for="Input.PageId" />
-    <input type="hidden" asp-for="Input.IsPublished" />
-    <input type="hidden" asp-for="Input.PublishedAtUtc" />
+<form method="post" class="card form-grid" id="content-edit-form">
+    <input type="hidden" asp-for="Input.ContentId" />
+    <input type="hidden" asp-for="Input.IsEnabled" />
+    <input type="hidden" asp-for="Input.CreatedAtUtc" />
+    <input type="hidden" asp-for="Input.CreatedBy" />
+    <input type="hidden" asp-for="Input.UpdatedAtUtc" />
+    <input type="hidden" asp-for="Input.UpdatedBy" />
 
     <div asp-validation-summary="ModelOnly" class="field-validation-error"></div>
 
@@ -38,15 +45,15 @@
         <div class="form-field">
             <label asp-for="Input.Slug"></label>
             <input asp-for="Input.Slug" placeholder="help/faq" />
-            <span class="field-hint">@L["Leave empty for the root page. Slugs are normalized when saved."]</span>
+            <span class="field-hint">@L["Slugs are normalized when saved."]</span>
             <span asp-validation-for="Input.Slug" class="field-validation-error"></span>
         </div>
     </div>
 
     <div class="form-row">
         <div class="form-field">
-            <label asp-for="Input.ContentFormat"></label>
-            <select asp-for="Input.ContentFormat">
+            <label asp-for="Input.ContentType"></label>
+            <select asp-for="Input.ContentType">
                 <option value="markdown">markdown</option>
                 <option value="html">html</option>
             </select>
@@ -57,85 +64,128 @@
         </div>
     </div>
 
-    <div class="form-field">
-        <label asp-for="Input.Summary"></label>
-        <input asp-for="Input.Summary" />
-        <span asp-validation-for="Input.Summary" class="field-validation-error"></span>
+    <div class="form-field content-editor-field">
+        <label asp-for="Input.Body"></label>
+        <div id="content-editor" class="content-editor" hidden></div>
+        <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
+        <span asp-validation-for="Input.Body" class="field-validation-error"></span>
     </div>
 
-    <div class="form-row">
-        <div class="form-field">
-            <label asp-for="Input.MetaTitle"></label>
-            <input asp-for="Input.MetaTitle" />
-            <span asp-validation-for="Input.MetaTitle" class="field-validation-error"></span>
-        </div>
-        <div class="form-field">
-            <label asp-for="Input.MetaDescription"></label>
-            <input asp-for="Input.MetaDescription" />
-            <span asp-validation-for="Input.MetaDescription" class="field-validation-error"></span>
-        </div>
-    </div>
-
-    <div class="form-field">
-        <label asp-for="Input.Content"></label>
-        <textarea asp-for="Input.Content" rows="18"></textarea>
-        <span asp-validation-for="Input.Content" class="field-validation-error"></span>
-    </div>
-
-    <div class="form-field">
-        <label asp-for="Input.ChangeNote"></label>
-        <input asp-for="Input.ChangeNote" />
-        <span asp-validation-for="Input.ChangeNote" class="field-validation-error"></span>
-    </div>
-
-    <div class="toolbar">
-        <button type="submit" asp-page-handler="Save">@L["Save draft"]</button>
-        @if (!Model.IsCreate)
-        {
-            @if (Model.Input.IsPublished)
+    @if (Model.CanManageAll)
+    {
+        <section class="access-panel">
+            <div>
+                <h2>@L["Role access"]</h2>
+                <p class="muted">@L["Roles with read access can view the page. Roles with write access can edit it."]</p>
+            </div>
+            @if (Model.Input.RoleAccesses.Count == 0)
             {
-                <button type="submit" asp-page-handler="Unpublish" class="button--secondary" formnovalidate>@L["Unpublish"]</button>
+                <div class="empty-state">@L["No roles are configured."]</div>
             }
             else
             {
-                <button type="submit" asp-page-handler="Publish" class="button--primary" formnovalidate>@L["Publish"]</button>
+                <table class="grid access-grid">
+                    <thead>
+                        <tr>
+                            <th>@L["Role"]</th>
+                            <th>@L["Read"]</th>
+                            <th>@L["Write"]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @for (var i = 0; i < Model.Input.RoleAccesses.Count; i++)
+                    {
+                        <tr>
+                            <td>
+                                <input type="hidden" asp-for="Input.RoleAccesses[i].RoleId" />
+                                <input type="hidden" asp-for="Input.RoleAccesses[i].RoleName" />
+                                @Model.Input.RoleAccesses[i].RoleName
+                            </td>
+                            <td>
+                                <input asp-for="Input.RoleAccesses[i].CanRead" type="checkbox" />
+                            </td>
+                            <td>
+                                <input asp-for="Input.RoleAccesses[i].CanWrite" type="checkbox" />
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
             }
-            <button type="submit" asp-page-handler="Delete" class="button--danger" formnovalidate>@L["Delete"]</button>
+        </section>
+    }
+    else
+    {
+        @for (var i = 0; i < Model.Input.RoleAccesses.Count; i++)
+        {
+            <input type="hidden" asp-for="Input.RoleAccesses[i].RoleId" />
+            <input type="hidden" asp-for="Input.RoleAccesses[i].RoleName" />
+            <input type="hidden" asp-for="Input.RoleAccesses[i].CanRead" />
+            <input type="hidden" asp-for="Input.RoleAccesses[i].CanWrite" />
+        }
+    }
+
+    <div class="toolbar">
+        <button type="submit" asp-page-handler="Save" class="button--primary">@L["Save page"]</button>
+        @if (!Model.IsCreate && Model.CanManageAll)
+        {
+            @if (Model.Input.IsEnabled)
+            {
+                <button type="submit" asp-page-handler="Disable" class="button--danger" formnovalidate>@L["Disable"]</button>
+            }
+            else
+            {
+                <button type="submit" asp-page-handler="Enable" class="button--secondary" formnovalidate>@L["Enable"]</button>
+            }
         }
     </div>
 </form>
 
-@if (Model.Revisions.Count > 0)
+@if (!Model.IsCreate)
 {
-    <section class="card revisions">
-        <h2>@L["Revisions"]</h2>
-        <table class="grid">
-            <thead>
-                <tr>
-                    <th>@L["Version"]</th>
-                    <th>@L["Title"]</th>
-                    <th>@L["Slug"]</th>
-                    <th>@L["Created"]</th>
-                    <th>@L["Note"]</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var revision in Model.Revisions)
-            {
-                <tr>
-                    <td>@revision.RevisionNumber</td>
-                    <td>@revision.Title</td>
-                    <td><code>@(string.IsNullOrEmpty(revision.Slug) ? "/" : revision.Slug)</code></td>
-                    <td>
-                        <div>@revision.CreatedAtUtc.ToString("u")</div>
-                        <div class="muted">@revision.CreatedBy</div>
-                    </td>
-                    <td>@revision.ChangeNote</td>
-                </tr>
-            }
-            </tbody>
-        </table>
+    <section class="card content-metadata">
+        <h2>@L["Metadata"]</h2>
+        <dl>
+            <dt>@L["Content ID"]</dt>
+            <dd><code>@Model.Input.ContentId</code></dd>
+            <dt>@L["Created"]</dt>
+            <dd>@Model.Input.CreatedAtUtc?.ToString("u") <span class="muted">@Model.Input.CreatedBy</span></dd>
+            <dt>@L["Updated"]</dt>
+            <dd>@Model.Input.UpdatedAtUtc?.ToString("u") <span class="muted">@Model.Input.UpdatedBy</span></dd>
+        </dl>
     </section>
 }
 
-<partial name="_ValidationScriptsPartial" />
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="https://uicdn.toast.com/editor/3.2.2/toastui-editor-all.min.js"></script>
+    <script>
+        (() => {
+            const source = document.getElementById('Input_Body');
+            const host = document.getElementById('content-editor');
+            const form = document.getElementById('content-edit-form');
+            const contentType = document.getElementById('Input_ContentType');
+
+            if (!source || !host || !form || !contentType || !window.toastui?.Editor) {
+                return;
+            }
+
+            const editor = new toastui.Editor({
+                el: host,
+                height: '520px',
+                initialEditType: 'wysiwyg',
+                previewStyle: 'vertical',
+                initialValue: source.value || ''
+            });
+
+            host.hidden = false;
+            source.classList.add('is-enhanced');
+
+            form.addEventListener('submit', () => {
+                source.value = contentType.value === 'html'
+                    ? editor.getHTML()
+                    : editor.getMarkdown();
+            });
+        })();
+    </script>
+}

@@ -6,6 +6,7 @@ This helper publishes the currently publishable OMP projects and skips the share
 
 - OpenModulePlatform.Portal
 - OpenModulePlatform.Service.ExampleServiceAppModule
+- OpenModulePlatform.Web.ContentWebAppModule
 - OpenModulePlatform.Web.ExampleServiceAppModule
 - OpenModulePlatform.Web.ExampleWebAppBlazorModule
 - OpenModulePlatform.Web.ExampleWebAppModule

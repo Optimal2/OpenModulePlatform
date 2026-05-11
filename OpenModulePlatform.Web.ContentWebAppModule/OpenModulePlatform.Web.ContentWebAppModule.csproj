@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HtmlSanitizer" />
     <PackageReference Include="Markdig" />
   </ItemGroup>
 

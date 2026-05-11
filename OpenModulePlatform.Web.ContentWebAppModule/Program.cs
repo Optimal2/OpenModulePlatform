@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Web.ContentWebAppModule/Program.cs
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using OpenModulePlatform.Web.ContentWebAppModule.Localization;
 using OpenModulePlatform.Web.ContentWebAppModule.Options;
 using OpenModulePlatform.Web.ContentWebAppModule.Services;
@@ -9,6 +10,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddOmpWebDefaults<ContentWebAppModuleResource>(optionsSectionName: "Portal");
 builder.Services.Configure<ContentWebAppModuleOptions>(
     builder.Configuration.GetSection(ContentWebAppModuleOptions.SectionName));
+builder.Services.Configure<RazorPagesOptions>(options =>
+{
+    options.Conventions.AddPageRoute("/Admin/Edit", "/admin/create");
+});
 builder.Services.AddScoped<ContentPageRepository>();
 builder.Services.AddScoped<ContentRenderer>();
 

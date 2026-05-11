@@ -13,6 +13,7 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Pages;
 public abstract class ContentWebAppModulePageModel : OmpSecurePageModel<ContentWebAppModuleResource>
 {
     private readonly IOptions<ContentWebAppModuleOptions> _contentOptions;
+    private readonly RbacService _rbac;
 
     protected ContentWebAppModulePageModel(
         IOptions<WebAppOptions> options,
@@ -21,26 +22,27 @@ public abstract class ContentWebAppModulePageModel : OmpSecurePageModel<ContentW
         : base(options, rbac)
     {
         _contentOptions = contentOptions;
+        _rbac = rbac;
     }
 
     protected ContentWebAppModuleOptions ContentOptions => _contentOptions.Value;
 
     protected Guid AppInstanceId => ContentOptions.AppInstanceId;
 
-    protected Task<IActionResult?> RequireViewAsync(CancellationToken ct)
-        => RequireAnyAsync(
-            ct,
-            ContentWebAppModulePermissions.View,
-            ContentWebAppModulePermissions.Manage);
-
     protected Task<IActionResult?> RequireManageAsync(CancellationToken ct)
         => RequireAnyAsync(ct, ContentWebAppModulePermissions.Manage);
+
+    protected Task<UserRoleContext> GetContentRoleContextAsync(CancellationToken ct)
+        => _rbac.GetUserRoleContextAsync(User, ct);
+
+    protected static bool CanManageAllContent(UserRoleContext roleContext)
+        => roleContext.EffectivePermissions.Contains(ContentWebAppModulePermissions.Manage);
 
     protected async Task SetContentTitlesAsync(string? pageTitle, CancellationToken ct)
     {
         SetTitles(pageTitle);
-        var permissions = await GetUserPermissionsAsync(ct);
-        ViewData["CanManageContent"] = permissions.Contains(ContentWebAppModulePermissions.Manage);
+        var roleContext = await GetContentRoleContextAsync(ct);
+        ViewData["CanManageContent"] = CanManageAllContent(roleContext);
     }
 
     protected IActionResult? ValidateAppInstanceConfigured()

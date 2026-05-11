@@ -9,6 +9,7 @@
   <data name="Content navigation" xml:space="preserve"><value>Innehållsnavigering</value></data>
   <data name="Manage pages" xml:space="preserve"><value>Hantera sidor</value></data>
   <data name="Create, edit, publish and unpublish simple content pages for this app instance." xml:space="preserve"><value>Skapa, redigera, publicera och avpublicera enkla informationssidor för den här appinstansen.</value></data>
+  <data name="Create and edit content pages for this app instance." xml:space="preserve"><value>Skapa och redigera innehållssidor för den här appinstansen.</value></data>
   <data name="New page" xml:space="preserve"><value>Ny sida</value></data>
   <data name="No content pages were found." xml:space="preserve"><value>Inga innehållssidor hittades.</value></data>
   <data name="Title" xml:space="preserve"><value>Titel</value></data>
@@ -23,14 +24,18 @@
   <data name="Open" xml:space="preserve"><value>Öppna</value></data>
   <data name="Edit page" xml:space="preserve"><value>Redigera sida</value></data>
   <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Använd Markdown för enkla sidor. Renderat innehåll saneras innan det visas för användare.</value></data>
+  <data name="Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization." xml:space="preserve"><value>Betrodda redaktörer kan använda Markdown eller rå HTML. HTML renderas utan sanering.</value></data>
   <data name="Back to pages" xml:space="preserve"><value>Tillbaka till sidor</value></data>
   <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Lämna tomt för rotsidan. Sökvägar normaliseras när sidan sparas.</value></data>
+  <data name="Slugs are normalized when saved." xml:space="preserve"><value>Sökvägar normaliseras när sidan sparas.</value></data>
   <data name="Content format" xml:space="preserve"><value>Innehållsformat</value></data>
+  <data name="Content type" xml:space="preserve"><value>Innehållstyp</value></data>
   <data name="Summary" xml:space="preserve"><value>Sammanfattning</value></data>
   <data name="Meta title" xml:space="preserve"><value>Metatitel</value></data>
   <data name="Meta description" xml:space="preserve"><value>Metabeskrivning</value></data>
   <data name="Change note" xml:space="preserve"><value>Ändringsnotering</value></data>
   <data name="Save draft" xml:space="preserve"><value>Spara utkast</value></data>
+  <data name="Save page" xml:space="preserve"><value>Spara sida</value></data>
   <data name="Publish" xml:space="preserve"><value>Publicera</value></data>
   <data name="Unpublish" xml:space="preserve"><value>Avpublicera</value></data>
   <data name="Delete" xml:space="preserve"><value>Ta bort</value></data>
@@ -41,10 +46,36 @@
   <data name="Page saved." xml:space="preserve"><value>Sidan sparades.</value></data>
   <data name="Page published." xml:space="preserve"><value>Sidan publicerades.</value></data>
   <data name="Page unpublished." xml:space="preserve"><value>Sidan avpublicerades.</value></data>
+  <data name="Page enabled." xml:space="preserve"><value>Sidan aktiverades.</value></data>
+  <data name="Page disabled." xml:space="preserve"><value>Sidan inaktiverades.</value></data>
   <data name="A content page with the same slug already exists for this app instance." xml:space="preserve"><value>Det finns redan en innehållssida med samma sökväg för den här appinstansen.</value></data>
   <data name="This page is published." xml:space="preserve"><value>Den här sidan är publicerad.</value></data>
   <data name="This page is not published and is only visible to managers." xml:space="preserve"><value>Den här sidan är inte publicerad och visas bara för administratörer.</value></data>
+  <data name="This page is enabled." xml:space="preserve"><value>Den här sidan är aktiverad.</value></data>
+  <data name="This page is disabled and is only visible in content administration." xml:space="preserve"><value>Den här sidan är inaktiverad och visas bara i innehållsadministrationen.</value></data>
   <data name="Page not found" xml:space="preserve"><value>Sidan hittades inte</value></data>
   <data name="The requested content page is not published or does not exist." xml:space="preserve"><value>Den begärda innehållssidan är inte publicerad eller finns inte.</value></data>
+  <data name="The requested content page is disabled, missing, or not available for your active role." xml:space="preserve"><value>Den begärda innehållssidan är inaktiverad, saknas eller är inte tillgänglig för din aktiva roll.</value></data>
+  <data name="Pages" xml:space="preserve"><value>Sidor</value></data>
+  <data name="Browse content pages available for your active role." xml:space="preserve"><value>Bläddra bland innehållssidor som är tillgängliga för din aktiva roll.</value></data>
+  <data name="No readable content pages were found." xml:space="preserve"><value>Inga läsbara innehållssidor hittades.</value></data>
+  <data name="Open page" xml:space="preserve"><value>Öppna sida</value></data>
+  <data name="Enabled" xml:space="preserve"><value>Aktiverad</value></data>
+  <data name="Disabled" xml:space="preserve"><value>Inaktiverad</value></data>
+  <data name="Access" xml:space="preserve"><value>Åtkomst</value></data>
+  <data name="No role access" xml:space="preserve"><value>Ingen rollåtkomst</value></data>
+  <data name="Role access" xml:space="preserve"><value>Rollåtkomst</value></data>
+  <data name="Roles with read access can view the page. Roles with write access can edit it." xml:space="preserve"><value>Roller med läsrättighet kan visa sidan. Roller med skrivrättighet kan redigera den.</value></data>
+  <data name="No roles are configured." xml:space="preserve"><value>Inga roller är konfigurerade.</value></data>
+  <data name="Role" xml:space="preserve"><value>Roll</value></data>
+  <data name="Read" xml:space="preserve"><value>Läs</value></data>
+  <data name="Write" xml:space="preserve"><value>Skriv</value></data>
+  <data name="Disable" xml:space="preserve"><value>Inaktivera</value></data>
+  <data name="Enable" xml:space="preserve"><value>Aktivera</value></data>
+  <data name="Metadata" xml:space="preserve"><value>Metadata</value></data>
+  <data name="Content ID" xml:space="preserve"><value>Innehålls-ID</value></data>
+  <data name="Slug is required." xml:space="preserve"><value>Sökväg krävs.</value></data>
+  <data name="The Title field is required." xml:space="preserve"><value>Titel krävs.</value></data>
+  <data name="The Content field is required." xml:space="preserve"><value>Innehåll krävs.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId är inte konfigurerad.</value></data>
 </root>
