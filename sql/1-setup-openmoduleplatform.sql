@@ -8,8 +8,8 @@ objects under the omp schema.
 
 Run 2-initialize-openmoduleplatform.sql after this script to seed the default
 OMP instance, bootstrap RBAC placeholders, and baseline structural rows.
-Portal, iframe, and example modules are installed separately from their own
-module sql folders.
+Portal, content, iframe, and example modules are installed separately from their
+own module sql folders.
 */
 USE [OpenModulePlatform];
 GO

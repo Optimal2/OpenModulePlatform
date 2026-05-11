@@ -216,7 +216,7 @@ BEGIN
     UPDATE omp.Apps
     SET DisplayName = N'iFrame Web App',
         AppType = N'WebApp',
-        Description = N'Web app definition for the iFrame proof-of-concept wrapper module',
+        Description = N'Web app definition for the first-party iFrame wrapper module',
         IsEnabled = 1,
         SortOrder = 320,
         UpdatedUtc = SYSUTCDATETIME()
@@ -237,7 +237,7 @@ BEGIN
         N'iframe_webapp_webapp',
         N'iFrame Web App',
         N'WebApp',
-        N'Web app definition for the iFrame proof-of-concept wrapper module',
+        N'Web app definition for the first-party iFrame wrapper module',
         1,
         320);
 END
@@ -286,7 +286,7 @@ BEGIN
         @IFrameModuleId,
         N'iframe_webapp',
         N'iFrame Web App',
-        N'Proof-of-concept iframe wrapper app instance',
+        N'First-party iframe wrapper app instance',
         1,
         320);
 END
@@ -297,7 +297,7 @@ BEGIN
         ModuleId = @IFrameModuleId,
         ModuleInstanceKey = N'iframe_webapp',
         DisplayName = N'iFrame Web App',
-        Description = N'Proof-of-concept iframe wrapper app instance',
+        Description = N'First-party iframe wrapper app instance',
         IsEnabled = 1,
         SortOrder = 320,
         UpdatedUtc = SYSUTCDATETIME()
@@ -324,7 +324,7 @@ BEGIN
         @IFrameModuleId,
         N'iframe_webapp',
         N'iFrame Web App',
-        N'Proof-of-concept iframe wrapper app instance in the default template',
+        N'First-party iframe wrapper app instance in the default template',
         320);
 END
 
@@ -356,7 +356,7 @@ BEGIN
         @IFrameAppId,
         N'iframe_webapp_webapp',
         N'iFrame Web App',
-        N'Primary web app instance for the iFrame proof-of-concept module',
+        N'Primary web app instance for the first-party iFrame module',
         N'iFrameWebAppModule',
         N'iframe-webapp',
         1,
@@ -372,7 +372,7 @@ BEGIN
         AppId = @IFrameAppId,
         AppInstanceKey = N'iframe_webapp_webapp',
         DisplayName = N'iFrame Web App',
-        Description = N'Primary web app instance for the iFrame proof-of-concept module',
+        Description = N'Primary web app instance for the first-party iFrame module',
         RoutePath = N'iFrameWebAppModule',
         InstallationName = N'iframe-webapp',
         IsEnabled = 1,
@@ -408,7 +408,7 @@ BEGIN
         @IFrameAppId,
         N'iframe_webapp_webapp',
         N'iFrame Web App',
-        N'Primary web app instance for the iFrame proof-of-concept module',
+        N'Primary web app instance for the first-party iFrame module',
         N'iFrameWebAppModule',
         N'iframe-webapp',
         1,

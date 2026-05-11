@@ -356,7 +356,7 @@ function Publish-OpenModulePlatform {
         }
 
         if (-not $SkipPublish) {
-            Write-Step 'Publishing OpenModulePlatform web examples'
+            Write-Step 'Publishing OpenModulePlatform web apps and modules'
             & (Join-Path $RepositoryRoot 'publish-all.ps1') `
                 -Configuration Release `
                 -OutputRoot $script:publishRoot `
@@ -710,7 +710,7 @@ function Write-ExampleRuntimeConfig {
 function Run-ExampleSql {
     if ($SkipSql) { return }
 
-    Write-Step 'Running example SQL scripts'
+    Write-Step 'Running module and example SQL scripts'
 
     $sqlFiles = @(
         'examples\WebAppModule\Sql\1-setup-example-webapp.sql',
@@ -1221,7 +1221,7 @@ function Ensure-IisExamples {
         throw 'IIS installation requires an elevated PowerShell session. Re-run as Administrator or use -SkipIis.'
     }
 
-    Write-Step 'Ensuring IIS site and example applications'
+    Write-Step 'Ensuring IIS site, module applications, and example applications'
     Require-AppCmd
 
     New-Item -ItemType Directory -Path $script:portalPath -Force | Out-Null
@@ -1312,7 +1312,7 @@ try {
     Ensure-ExampleWindowsService
 
     Write-Host ''
-    Write-Host 'Local OMP examples are installed.' -ForegroundColor Green
+    Write-Host 'Local OMP modules and examples are installed.' -ForegroundColor Green
     Write-Host "Portal: http://localhost:$IisPort/"
     Write-Host "OMP Auth: http://localhost:$IisPort/auth/login"
     Write-Host "OpenDocViewer: http://localhost:$IisPort/$OpenDocViewerAppPath/"
