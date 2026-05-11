@@ -43,14 +43,13 @@ public sealed class PageModel : ContentWebAppModulePageModel
             return RedirectToPage("/Index");
         }
 
-        var roleContext = await GetContentRoleContextAsync(ct);
-        var canManageAll = CanManageAllContent(roleContext);
+        var accessContext = await GetContentAccessContextAsync(ct);
 
         PageContent = await _repo.GetReadablePageBySlugAsync(
             AppInstanceId,
             normalizedSlug,
-            roleContext.ActiveRoleId,
-            canManageAll,
+            accessContext.RoleIds,
+            accessContext.CanManageAll,
             ct);
 
         if (PageContent is null)

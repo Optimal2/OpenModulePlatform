@@ -56,12 +56,12 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return Page();
         }
 
-        var roleContext = await GetContentRoleContextAsync(ct);
+        var accessContext = await GetContentAccessContextAsync(ct);
         var row = await _repo.GetPageForEditAsync(
             AppInstanceId,
             contentId.Value,
-            roleContext.ActiveRoleId,
-            CanManageAll,
+            accessContext.RoleIds,
+            accessContext.CanManageAll,
             ct);
 
         if (row is null)
@@ -98,11 +98,11 @@ public sealed class EditModel : ContentWebAppModulePageModel
 
         if (Input.ContentId != Guid.Empty && !CanManageAll)
         {
-            var roleContext = await GetContentRoleContextAsync(ct);
+            var accessContext = await GetContentAccessContextAsync(ct);
             var editableRow = await _repo.GetPageForEditAsync(
                 AppInstanceId,
                 Input.ContentId,
-                roleContext.ActiveRoleId,
+                accessContext.RoleIds,
                 canManageAll: false,
                 ct);
 
@@ -172,8 +172,8 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return appInstanceGuard;
         }
 
-        var roleContext = await GetContentRoleContextAsync(ct);
-        CanManageAll = CanManageAllContent(roleContext);
+        var accessContext = await GetContentAccessContextAsync(ct);
+        CanManageAll = accessContext.CanManageAll;
 
         await SetContentTitlesAsync(title, ct);
         return null;

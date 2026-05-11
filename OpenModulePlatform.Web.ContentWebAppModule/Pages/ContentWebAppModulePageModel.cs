@@ -32,8 +32,30 @@ public abstract class ContentWebAppModulePageModel : OmpSecurePageModel<ContentW
     protected Task<IActionResult?> RequireManageAsync(CancellationToken ct)
         => RequireAnyAsync(ct, ContentWebAppModulePermissions.Manage);
 
-    protected Task<UserRoleContext> GetContentRoleContextAsync(CancellationToken ct)
-        => _rbac.GetUserRoleContextAsync(User, ct);
+    protected async Task<ContentAccessContext> GetContentAccessContextAsync(CancellationToken ct)
+    {
+        var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
+        var roleIds = roleContext.AvailableRoles
+            .Select(role => role.RoleId)
+            .Distinct()
+            .ToArray();
+
+        var canManageAll = CanManageAllContent(roleContext);
+        if (!canManageAll)
+        {
+            foreach (var roleId in roleIds)
+            {
+                var permissions = await _rbac.GetPermissionsForRoleAsync(User, roleId, ct);
+                if (permissions.Contains(ContentWebAppModulePermissions.Manage))
+                {
+                    canManageAll = true;
+                    break;
+                }
+            }
+        }
+
+        return new ContentAccessContext(roleIds, canManageAll);
+    }
 
     protected static bool CanManageAllContent(UserRoleContext roleContext)
         => roleContext.EffectivePermissions.Contains(ContentWebAppModulePermissions.Manage);
@@ -41,8 +63,8 @@ public abstract class ContentWebAppModulePageModel : OmpSecurePageModel<ContentW
     protected async Task SetContentTitlesAsync(string? pageTitle, CancellationToken ct)
     {
         SetTitles(pageTitle);
-        var roleContext = await GetContentRoleContextAsync(ct);
-        ViewData["CanManageContent"] = CanManageAllContent(roleContext);
+        var accessContext = await GetContentAccessContextAsync(ct);
+        ViewData["CanManageContent"] = accessContext.CanManageAll;
     }
 
     protected IActionResult? ValidateAppInstanceConfigured()
@@ -61,4 +83,6 @@ public abstract class ContentWebAppModulePageModel : OmpSecurePageModel<ContentW
         => User?.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(User.Identity.Name)
             ? User.Identity.Name!
             : "unknown";
+
+    protected sealed record ContentAccessContext(IReadOnlyList<int> RoleIds, bool CanManageAll);
 }
