@@ -6,9 +6,12 @@
     <div>
         <div class="eyebrow">@L["Content"]</div>
         <h1>@L["Manage pages"]</h1>
-        <p class="lede">@L["Create, edit, publish and unpublish simple content pages for this app instance."]</p>
+        <p class="lede">@L["Create and edit content pages for this app instance."]</p>
     </div>
-    <a class="button button--primary" href="~/admin/edit">@L["New page"]</a>
+    @if (Model.CanCreatePages)
+    {
+        <a class="button button--primary" href="~/admin/create">@L["New page"]</a>
+    }
 </div>
 
 @if (Model.Rows.Count == 0)
@@ -23,6 +26,7 @@ else
                 <th>@L["Title"]</th>
                 <th>@L["Slug"]</th>
                 <th>@L["State"]</th>
+                <th>@L["Access"]</th>
                 <th>@L["Updated"]</th>
                 <th></th>
             </tr>
@@ -34,27 +38,34 @@ else
             <tr>
                 <td>
                     <strong>@row.Title</strong>
-                    <div class="muted">@L["Sort order"]: @row.SortOrder</div>
+                    <div class="muted">
+                        @row.ContentType
+                        @if (row.SortOrder is not null)
+                        {
+                            <span>@L["Sort order"]: @row.SortOrder</span>
+                        }
+                    </div>
                 </td>
                 <td><code>@(string.IsNullOrEmpty(row.Slug) ? "/" : row.Slug)</code></td>
                 <td>
-                    @if (row.IsPublished)
+                    @if (row.IsEnabled)
                     {
-                        <span class="pill pill--ok">@L["Published"]</span>
+                        <span class="pill pill--ok">@L["Enabled"]</span>
                     }
                     else
                     {
-                        <span class="pill">@L["Draft"]</span>
+                        <span class="pill">@L["Disabled"]</span>
                     }
                 </td>
+                <td>@(string.IsNullOrWhiteSpace(row.AccessSummary) ? L["No role access"].Value : row.AccessSummary)</td>
                 <td>
                     <div>@row.UpdatedAtUtc.ToString("u")</div>
                     <div class="muted">@row.UpdatedBy</div>
                 </td>
                 <td class="grid-actions">
-                    <a class="action-link" href="~/admin/edit/@row.PageId">@L["Edit"]</a>
-                    <a class="action-link" href="~/admin/preview?pageId=@row.PageId">@L["Preview"]</a>
-                    @if (row.IsPublished)
+                    <a class="action-link" href="~/admin/edit/@row.ContentId">@L["Edit"]</a>
+                    <a class="action-link" href="~/admin/preview?contentId=@row.ContentId">@L["Preview"]</a>
+                    @if (row.IsEnabled)
                     {
                         <a class="action-link" href="@publicHref">@L["Open"]</a>
                     }

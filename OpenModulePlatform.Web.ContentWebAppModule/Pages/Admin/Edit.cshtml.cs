@@ -28,11 +28,11 @@ public sealed class EditModel : ContentWebAppModulePageModel
     [BindProperty]
     public EditInput Input { get; set; } = new();
 
-    public IReadOnlyList<ContentPageRevisionRow> Revisions { get; private set; } = [];
     public string? StatusMessage { get; private set; }
-    public bool IsCreate => Input.PageId == Guid.Empty;
+    public bool IsCreate => Input.ContentId == Guid.Empty;
+    public bool CanManageAll { get; private set; }
 
-    public async Task<IActionResult> OnGet(Guid? pageId, string? saved, CancellationToken ct)
+    public async Task<IActionResult> OnGet(Guid? contentId, string? saved, CancellationToken ct)
     {
         var guard = await PrepareAsync("Edit page", ct);
         if (guard is not null)
@@ -40,31 +40,44 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return guard;
         }
 
-        if (pageId is null || pageId.Value == Guid.Empty)
+        if (contentId is null || contentId.Value == Guid.Empty)
         {
-            Input = new EditInput();
-            StatusMessage = saved switch
+            if (!CanManageAll)
             {
-                "published" => T("Page published."),
-                "unpublished" => T("Page unpublished."),
-                _ => null
+                return Forbid();
+            }
+
+            Input = new EditInput
+            {
+                IsEnabled = true,
+                RoleAccesses = await LoadRoleAccessInputsAsync(Guid.Empty, ct)
             };
+
             return Page();
         }
 
-        var row = await _repo.GetPageForEditAsync(AppInstanceId, pageId.Value, ct);
+        var roleContext = await GetContentRoleContextAsync(ct);
+        var row = await _repo.GetPageForEditAsync(
+            AppInstanceId,
+            contentId.Value,
+            roleContext.ActiveRoleId,
+            CanManageAll,
+            ct);
+
         if (row is null)
         {
-            return NotFound();
+            return await _repo.ContentExistsAsync(AppInstanceId, contentId.Value, ct)
+                ? Forbid()
+                : NotFound();
         }
 
         Input = FromRow(row);
-        Revisions = await _repo.ListRevisionsAsync(row.PageId, ct);
+        Input.RoleAccesses = await LoadRoleAccessInputsAsync(row.ContentId, ct);
         StatusMessage = saved switch
         {
             "1" => T("Page saved."),
-            "published" => T("Page published."),
-            "unpublished" => T("Page unpublished."),
+            "enabled" => T("Page enabled."),
+            "disabled" => T("Page disabled."),
             _ => null
         };
         return Page();
@@ -78,81 +91,95 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return guard;
         }
 
+        if (Input.ContentId == Guid.Empty && !CanManageAll)
+        {
+            return Forbid();
+        }
+
+        if (Input.ContentId != Guid.Empty && !CanManageAll)
+        {
+            var roleContext = await GetContentRoleContextAsync(ct);
+            var editableRow = await _repo.GetPageForEditAsync(
+                AppInstanceId,
+                Input.ContentId,
+                roleContext.ActiveRoleId,
+                canManageAll: false,
+                ct);
+
+            if (editableRow is null)
+            {
+                return Forbid();
+            }
+
+            Input.IsEnabled = editableRow.IsEnabled;
+            Input.RoleAccesses = ToRoleAccessInputs(await _repo.ListRoleAccessAsync(Input.ContentId, ct));
+        }
+
         NormalizeInput();
+        ValidateInput();
+
         if (!ModelState.IsValid)
         {
-            await LoadRevisionsAsync(ct);
+            if (CanManageAll && Input.RoleAccesses.Count == 0)
+            {
+                Input.RoleAccesses = await LoadRoleAccessInputsAsync(Input.ContentId, ct);
+            }
+
             return Page();
         }
 
         try
         {
-            var pageId = await _repo.SavePageAsync(AppInstanceId, ToSaveRequest(), CurrentUserName(), ct);
-            return RedirectToPage("/Admin/Edit", new { pageId, saved = "1" });
+            var contentId = await _repo.SavePageAsync(AppInstanceId, ToSaveRequest(), CurrentUserName(), ct);
+            return RedirectToPage("/Admin/Edit", new { contentId, saved = "1" });
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(nameof(Input.Slug), T(ex.Message));
-            await LoadRevisionsAsync(ct);
+            ModelState.AddModelError("Input.Slug", T(ex.Message));
             return Page();
         }
     }
 
-    public async Task<IActionResult> OnPostPublish(CancellationToken ct)
+    public async Task<IActionResult> OnPostEnable(CancellationToken ct)
     {
-        var guard = await PrepareMutationAsync(ct);
+        var guard = await PrepareStateMutationAsync(ct);
         if (guard is not null)
         {
             return guard;
         }
 
-        await _repo.PublishPageAsync(AppInstanceId, Input.PageId, CurrentUserName(), ct);
-        return RedirectToPage("/Admin/Edit", new { pageId = Input.PageId, saved = "published" });
+        await _repo.SetEnabledAsync(AppInstanceId, Input.ContentId, isEnabled: true, CurrentUserName(), ct);
+        return RedirectToPage("/Admin/Edit", new { contentId = Input.ContentId, saved = "enabled" });
     }
 
-    public async Task<IActionResult> OnPostUnpublish(CancellationToken ct)
+    public async Task<IActionResult> OnPostDisable(CancellationToken ct)
     {
-        var guard = await PrepareMutationAsync(ct);
+        var guard = await PrepareStateMutationAsync(ct);
         if (guard is not null)
         {
             return guard;
         }
 
-        await _repo.UnpublishPageAsync(AppInstanceId, Input.PageId, CurrentUserName(), ct);
-        return RedirectToPage("/Admin/Edit", new { pageId = Input.PageId, saved = "unpublished" });
-    }
-
-    public async Task<IActionResult> OnPostDelete(CancellationToken ct)
-    {
-        var guard = await PrepareMutationAsync(ct);
-        if (guard is not null)
-        {
-            return guard;
-        }
-
-        await _repo.SoftDeletePageAsync(AppInstanceId, Input.PageId, CurrentUserName(), ct);
-        return RedirectToPage("/Admin/Index");
+        await _repo.SetEnabledAsync(AppInstanceId, Input.ContentId, isEnabled: false, CurrentUserName(), ct);
+        return RedirectToPage("/Admin/Edit", new { contentId = Input.ContentId, saved = "disabled" });
     }
 
     private async Task<IActionResult?> PrepareAsync(string title, CancellationToken ct)
     {
-        var guard = await RequireManageAsync(ct);
-        if (guard is not null)
-        {
-            return guard;
-        }
-
         var appInstanceGuard = ValidateAppInstanceConfigured();
         if (appInstanceGuard is not null)
         {
             return appInstanceGuard;
         }
 
+        var roleContext = await GetContentRoleContextAsync(ct);
+        CanManageAll = CanManageAllContent(roleContext);
+
         await SetContentTitlesAsync(title, ct);
         return null;
     }
 
-    private async Task<IActionResult?> PrepareMutationAsync(CancellationToken ct)
+    private async Task<IActionResult?> PrepareStateMutationAsync(CancellationToken ct)
     {
         var guard = await PrepareAsync("Edit page", ct);
         if (guard is not null)
@@ -160,7 +187,12 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return guard;
         }
 
-        if (Input.PageId == Guid.Empty)
+        if (!CanManageAll)
+        {
+            return Forbid();
+        }
+
+        if (Input.ContentId == Guid.Empty)
         {
             return BadRequest();
         }
@@ -168,33 +200,75 @@ public sealed class EditModel : ContentWebAppModulePageModel
         return null;
     }
 
-    private async Task LoadRevisionsAsync(CancellationToken ct)
+    private async Task<List<RoleAccessInput>> LoadRoleAccessInputsAsync(Guid contentId, CancellationToken ct)
     {
-        Revisions = Input.PageId == Guid.Empty
-            ? []
-            : await _repo.ListRevisionsAsync(Input.PageId, ct);
+        if (contentId == Guid.Empty)
+        {
+            return ToRoleAccessInputs(await _repo.ListEmptyRoleAccessAsync(ct));
+        }
+
+        return ToRoleAccessInputs(await _repo.ListRoleAccessAsync(contentId, ct));
+    }
+
+    private static List<RoleAccessInput> ToRoleAccessInputs(IReadOnlyList<ContentRoleAccessRow> rows)
+    {
+        return rows
+            .Select(row => new RoleAccessInput
+            {
+                RoleId = row.RoleId,
+                RoleName = row.RoleName,
+                CanRead = row.CanRead || row.CanWrite,
+                CanWrite = row.CanWrite
+            })
+            .ToList();
     }
 
     private void NormalizeInput()
     {
         Input.Slug = ContentSlugNormalizer.Normalize(Input.Slug);
-        Input.ContentFormat = ContentFormats.Normalize(Input.ContentFormat);
+        Input.Title = Input.Title?.Trim() ?? string.Empty;
+        Input.ContentType = ContentTypes.Normalize(Input.ContentType);
+        Input.Body ??= string.Empty;
+    }
+
+    private void ValidateInput()
+    {
+        if (string.IsNullOrWhiteSpace(Input.Slug))
+        {
+            ModelState.AddModelError("Input.Slug", T("Slug is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(Input.Title))
+        {
+            ModelState.AddModelError("Input.Title", T("The Title field is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(Input.Body))
+        {
+            ModelState.AddModelError("Input.Body", T("The Content field is required."));
+        }
     }
 
     private ContentPageSaveRequest ToSaveRequest()
     {
         return new ContentPageSaveRequest
         {
-            PageId = Input.PageId,
+            ContentId = Input.ContentId,
             Slug = Input.Slug,
             Title = Input.Title,
-            Summary = Input.Summary,
-            MetaTitle = Input.MetaTitle,
-            MetaDescription = Input.MetaDescription,
-            ContentFormat = Input.ContentFormat,
-            Content = Input.Content,
+            ContentType = Input.ContentType,
+            Body = Input.Body,
+            IsEnabled = Input.IsEnabled,
             SortOrder = Input.SortOrder,
-            ChangeNote = Input.ChangeNote
+            RoleAccesses = Input.RoleAccesses
+                .Select(x => new ContentRoleAccessSaveRow
+                {
+                    RoleId = x.RoleId,
+                    CanRead = x.CanRead || x.CanWrite,
+                    CanWrite = x.CanWrite
+                })
+                .ToArray(),
+            SaveRoleAccess = CanManageAll
         };
     }
 
@@ -202,24 +276,25 @@ public sealed class EditModel : ContentWebAppModulePageModel
     {
         return new EditInput
         {
-            PageId = row.PageId,
+            ContentId = row.ContentId,
             Slug = row.Slug,
             Title = row.Title,
-            Summary = row.Summary,
-            MetaTitle = row.MetaTitle,
-            MetaDescription = row.MetaDescription,
-            ContentFormat = row.ContentFormat,
-            Content = row.Content,
-            IsPublished = row.IsPublished,
-            PublishedAtUtc = row.PublishedAtUtc,
-            SortOrder = row.SortOrder
+            ContentType = row.ContentType,
+            Body = row.Body,
+            IsEnabled = row.IsEnabled,
+            SortOrder = row.SortOrder,
+            CreatedAtUtc = row.CreatedAtUtc,
+            CreatedBy = row.CreatedBy,
+            UpdatedAtUtc = row.UpdatedAtUtc,
+            UpdatedBy = row.UpdatedBy
         };
     }
 
     public sealed class EditInput
     {
-        public Guid PageId { get; set; }
+        public Guid ContentId { get; set; }
 
+        [Required]
         [Display(Name = "Slug")]
         [StringLength(256)]
         public string Slug { get; set; } = string.Empty;
@@ -229,34 +304,39 @@ public sealed class EditModel : ContentWebAppModulePageModel
         [StringLength(200)]
         public string Title { get; set; } = string.Empty;
 
-        [Display(Name = "Summary")]
-        [StringLength(500)]
-        public string? Summary { get; set; }
-
-        [Display(Name = "Meta title")]
-        [StringLength(200)]
-        public string? MetaTitle { get; set; }
-
-        [Display(Name = "Meta description")]
-        [StringLength(500)]
-        public string? MetaDescription { get; set; }
-
         [Required]
-        [Display(Name = "Content format")]
-        public string ContentFormat { get; set; } = ContentFormats.Markdown;
+        [Display(Name = "Content type")]
+        public string ContentType { get; set; } = ContentTypes.Markdown;
 
         [Required]
         [Display(Name = "Content")]
-        public string Content { get; set; } = string.Empty;
+        public string Body { get; set; } = string.Empty;
+
+        [Display(Name = "Enabled")]
+        public bool IsEnabled { get; set; } = true;
 
         [Display(Name = "Sort order")]
-        public int SortOrder { get; set; }
+        public int? SortOrder { get; set; }
 
-        [Display(Name = "Change note")]
-        [StringLength(500)]
-        public string? ChangeNote { get; set; }
+        public DateTime? CreatedAtUtc { get; set; }
 
-        public bool IsPublished { get; set; }
-        public DateTime? PublishedAtUtc { get; set; }
+        public string? CreatedBy { get; set; }
+
+        public DateTime? UpdatedAtUtc { get; set; }
+
+        public string? UpdatedBy { get; set; }
+
+        public List<RoleAccessInput> RoleAccesses { get; set; } = [];
+    }
+
+    public sealed class RoleAccessInput
+    {
+        public int RoleId { get; set; }
+
+        public string RoleName { get; set; } = string.Empty;
+
+        public bool CanRead { get; set; }
+
+        public bool CanWrite { get; set; }
     }
 }

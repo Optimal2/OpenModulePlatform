@@ -1,5 +1,4 @@
 // File: OpenModulePlatform.Web.ContentWebAppModule/Services/ContentRenderer.cs
-using Ganss.Xss;
 using Markdig;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 
@@ -11,23 +10,11 @@ public sealed class ContentRenderer
         .UseAdvancedExtensions()
         .Build();
 
-    private readonly HtmlSanitizer _sanitizer = CreateSanitizer();
-
-    public string RenderToSafeHtml(string content, string? contentFormat)
+    public string RenderToHtml(string content, string? contentType)
     {
-        var format = ContentFormats.Normalize(contentFormat);
-        var html = format == ContentFormats.Html
+        var format = ContentTypes.Normalize(contentType);
+        return format == ContentTypes.Html
             ? content
             : Markdown.ToHtml(content ?? string.Empty, MarkdownPipeline);
-
-        return _sanitizer.Sanitize(html);
-    }
-
-    private static HtmlSanitizer CreateSanitizer()
-    {
-        var sanitizer = new HtmlSanitizer();
-        sanitizer.AllowedSchemes.Add("mailto");
-        sanitizer.AllowedSchemes.Add("tel");
-        return sanitizer;
     }
 }

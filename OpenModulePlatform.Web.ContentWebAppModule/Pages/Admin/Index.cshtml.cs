@@ -25,23 +25,28 @@ public sealed class IndexModel : ContentWebAppModulePageModel
     }
 
     public IReadOnlyList<ContentPageListRow> Rows { get; private set; } = [];
+    public bool CanCreatePages { get; private set; }
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
-        var guard = await RequireManageAsync(ct);
-        if (guard is not null)
-        {
-            return guard;
-        }
-
         var appInstanceGuard = ValidateAppInstanceConfigured();
         if (appInstanceGuard is not null)
         {
             return appInstanceGuard;
         }
 
+        var roleContext = await GetContentRoleContextAsync(ct);
+        var canManageAll = CanManageAllContent(roleContext);
+
         await SetContentTitlesAsync("Manage pages", ct);
-        Rows = await _repo.ListPagesAsync(AppInstanceId, ct);
+        Rows = await _repo.ListEditablePagesAsync(AppInstanceId, roleContext.ActiveRoleId, canManageAll, ct);
+        CanCreatePages = canManageAll;
+
+        if (!canManageAll && Rows.Count == 0)
+        {
+            return Forbid();
+        }
+
         return Page();
     }
 }
