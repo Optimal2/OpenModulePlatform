@@ -98,7 +98,15 @@ All OMP web apps that share authentication must use the same
 `DataProtectionKeyPath`. In a load-balanced environment this must be a shared
 folder reachable by every IIS node; otherwise cookies and antiforgery tokens
 created by one node may fail with HTTP 400 when a later request reaches another
-node.
+node. The IIS app-pool account on every node must be able to read and write this
+folder.
+
+When the portal or web modules are hosted behind a reverse proxy or load
+balancer, set `Portal.UseForwardedHeaders = $true` and configure
+`Portal.ForwardedHeadersKnownProxies` or
+`Portal.ForwardedHeadersKnownNetworks` for the trusted proxy addresses. Use
+`Portal.ForwardedHeadersTrustAllProxies = $true` only in an isolated deployment
+where all requests are guaranteed to pass through the trusted proxy.
 
 ## Uninstall
 
