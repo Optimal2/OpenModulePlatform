@@ -53,6 +53,12 @@
         SupportedCultures = @('sv-SE', 'en-US')
         AllowAnonymous = $false
         UseForwardedHeaders = $false
+        # When UseForwardedHeaders is true behind a load balancer, prefer listing
+        # the trusted proxy IPs or CIDR networks. TrustAll is only for isolated
+        # deployments where all traffic is guaranteed to pass through the proxy.
+        ForwardedHeadersTrustAllProxies = $false
+        ForwardedHeadersKnownProxies = @()
+        ForwardedHeadersKnownNetworks = @()
         PermissionMode = 'Any'
         # Leave empty to use PublicBaseUrl, or set '/' for a root-relative portal.
         PortalBaseUrl = '/'

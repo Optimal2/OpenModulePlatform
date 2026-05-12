@@ -587,6 +587,10 @@ function Write-RuntimeConfiguration {
         if ([bool]$folder.IncludePortalTopBar) {
             $settings.Portal = [ordered]@{
                 PortalTopBar = $portalTopBar
+                UseForwardedHeaders = $script:PortalUseForwardedHeaders
+                ForwardedHeadersTrustAllProxies = $script:PortalForwardedHeadersTrustAllProxies
+                ForwardedHeadersKnownProxies = $script:PortalForwardedHeadersKnownProxies
+                ForwardedHeadersKnownNetworks = $script:PortalForwardedHeadersKnownNetworks
             }
         }
 
@@ -595,7 +599,6 @@ function Write-RuntimeConfiguration {
             $settings.Portal['DefaultCulture'] = $script:DefaultCulture
             $settings.Portal['SupportedCultures'] = $script:SupportedCultures
             $settings.Portal['AllowAnonymous'] = $script:PortalAllowAnonymous
-            $settings.Portal['UseForwardedHeaders'] = $script:PortalUseForwardedHeaders
             $settings.Portal['PermissionMode'] = $script:PortalPermissionMode
         }
 
@@ -1243,6 +1246,9 @@ $script:DefaultCulture = [string](Get-NestedConfigValue -Config $config -Section
 $script:SupportedCultures = @((Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'SupportedCultures' -DefaultValue @('sv-SE', 'en-US')))
 $script:PortalAllowAnonymous = [bool](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'AllowAnonymous' -DefaultValue $false)
 $script:PortalUseForwardedHeaders = [bool](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'UseForwardedHeaders' -DefaultValue $false)
+$script:PortalForwardedHeadersTrustAllProxies = [bool](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'ForwardedHeadersTrustAllProxies' -DefaultValue $false)
+$script:PortalForwardedHeadersKnownProxies = @((Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'ForwardedHeadersKnownProxies' -DefaultValue @()))
+$script:PortalForwardedHeadersKnownNetworks = @((Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'ForwardedHeadersKnownNetworks' -DefaultValue @()))
 $script:PortalPermissionMode = [string](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'PermissionMode' -DefaultValue 'Any')
 $script:PortalBaseUrl = [string](Get-NestedConfigValue -Config $config -Section 'Portal' -Name 'PortalBaseUrl' -DefaultValue '')
 if ([string]::IsNullOrWhiteSpace($script:PortalBaseUrl)) {
