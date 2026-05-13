@@ -310,11 +310,10 @@ public static class OmpWebHostingExtensions
             });
         }).RequireAuthorization();
 
-        if (!options.AllowAnonymous)
-        {
-            app.UseAuthentication();
-            app.UseAuthorization();
-        }
+        // Anonymous apps still read the OMP cookie so shared UI can show the current user,
+        // roles, favorites, and module navigation without requiring sign-in.
+        app.UseAuthentication();
+        app.UseAuthorization();
 
         if (mapRazorPages)
         {
