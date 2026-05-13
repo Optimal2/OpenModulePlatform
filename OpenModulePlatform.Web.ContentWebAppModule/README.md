@@ -2,6 +2,8 @@
 
 `OpenModulePlatform.Web.ContentWebAppModule` is a small first-party OMP web module for database-backed informational pages.
 
+See `USAGE.md` for operator-facing instructions about content pages, server-side JSON reports, shortcodes, report file locations, and allowed report databases.
+
 The first CMS iteration intentionally keeps the surface narrow:
 
 - `/content` lists enabled pages the active role can read.
@@ -14,7 +16,9 @@ Content is stored in `omp_content.contents` as `markdown`, `html`, or `server_re
 
 Server reports are JSON definitions stored in the whitelisted server directory configured by `ContentWebAppModule:ServerReportsPath`, defaulting to `App_Data/ContentReports` under the web app content root. A content page stores only `server_report_key`, for example `module-status`, which maps to `module-status.json`. The admin UI can select an existing report key but cannot edit SQL or browse arbitrary file paths.
 
-Server report JSON may contain one or more read-like SQL queries. A report can optionally set a top-level `database` property to run against another database on the same SQL Server, but only database names listed in `ContentWebAppModule:AllowedServerReportDatabases` are accepted. The first version renders each query as a simple HTML table, blocks obvious data-changing SQL commands and `USE`, enforces a query timeout, and limits rendered rows with `maxRows` plus the configured defaults. Report files can be changed on the IIS server without rebuilding the module.
+Server report JSON may contain one or more read-like SQL queries. A report can optionally set a top-level `database` property, or a query-level `database` property, to run against another database on the same SQL Server. Query-level `database` wins over the report-level value. Only database names listed in `ContentWebAppModule:AllowedServerReportDatabases` are accepted. The first version renders each query as a simple HTML table, blocks obvious data-changing SQL commands and `USE`, enforces a query timeout, and limits rendered rows with `maxRows` plus the configured defaults. Report files can be changed on the IIS server without rebuilding the module.
+
+Markdown and HTML content can embed a server report with the shortcode `[DB_JSON="module-status"]`. The key uses the same whitelist and file mapping as server report content pages.
 
 The web application must be configured with `ContentWebAppModule:AppInstanceId`. The default setup script seeds a standard app instance at route path `content`.
 

@@ -28,27 +28,10 @@ public sealed partial class ServerReportQueryRunner
 
     public async Task<ServerReportResult> ExecuteAsync(ServerReportDefinition definition, CancellationToken ct)
     {
-        var database = ResolveDatabase(definition.Database);
-        if (database.ErrorMessage is not null)
-        {
-            return new ServerReportResult
-            {
-                Title = definition.Title,
-                Queries =
-                [
-                    new ServerReportQueryResult
-                    {
-                        Title = "Server report",
-                        ErrorMessage = database.ErrorMessage
-                    }
-                ]
-            };
-        }
-
         var results = new List<ServerReportQueryResult>();
         foreach (var query in definition.Queries)
         {
-            results.Add(await ExecuteQueryAsync(query, database.DatabaseName, ct));
+            results.Add(await ExecuteQueryAsync(query, query.Database ?? definition.Database, ct));
         }
 
         return new ServerReportResult
@@ -60,7 +43,7 @@ public sealed partial class ServerReportQueryRunner
 
     private async Task<ServerReportQueryResult> ExecuteQueryAsync(
         ServerReportQueryDefinition query,
-        string? databaseName,
+        string? requestedDatabase,
         CancellationToken ct)
     {
         var maxRows = GetMaxRows(query.MaxRows);
@@ -78,11 +61,18 @@ public sealed partial class ServerReportQueryRunner
             return result;
         }
 
+        var database = ResolveDatabase(requestedDatabase);
+        if (database.ErrorMessage is not null)
+        {
+            result.ErrorMessage = database.ErrorMessage;
+            return result;
+        }
+
         try
         {
-            await using var conn = string.IsNullOrWhiteSpace(databaseName)
+            await using var conn = string.IsNullOrWhiteSpace(database.DatabaseName)
                 ? _db.Create()
-                : _db.CreateForDatabase(databaseName);
+                : _db.CreateForDatabase(database.DatabaseName);
             await conn.OpenAsync(ct);
 
             await using var cmd = new SqlCommand(query.Sql.Trim(), conn)
