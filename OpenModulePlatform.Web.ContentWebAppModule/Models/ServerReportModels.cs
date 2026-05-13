@@ -16,6 +16,8 @@ public sealed class ServerReportQueryDefinition
 
     public string Title { get; set; } = string.Empty;
 
+    public string? Database { get; set; }
+
     public string Sql { get; set; } = string.Empty;
 
     public string Renderer { get; set; } = "table";
