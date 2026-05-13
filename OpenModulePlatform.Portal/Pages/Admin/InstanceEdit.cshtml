@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.InstanceEditModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Manual core"]</div>
         <h2>@(Model.IsCreate ? L["Create instance"] : L["Edit instance"])</h2>
-        <p class="lede">@L["Instances are the top-level OMP environments. Templates are optional for manual administration and mainly belong to future automation."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Instances are the top-level OMP environments. Templates are optional for manual administration and mainly belong to future automation."].Value)</p>
     </div>
 </section>
 

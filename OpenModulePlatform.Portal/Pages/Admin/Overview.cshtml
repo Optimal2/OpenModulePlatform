@@ -1,10 +1,13 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.OverviewModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Administration"]</div>
-        <h2>@L["OMP admin overview"]</h2>
+        <h2>@ompBranding.ApplyPlatformName(L["OMP admin overview"].Value)</h2>
         <p class="lede">
             @L["The admin area is split between manual core administration and advanced automation. For manual setup, focus on instances, hosts, modules, apps, app instances and artifacts. Template- and deployment-driven rollout lives under Automation."]
         </p>
@@ -16,7 +19,7 @@
     <section class="card section-card">
         <h3>@L["Manual core administration"]</h3>
         <p class="muted">
-            @L["These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation."]
+            @ompBranding.ApplyPlatformName(L["These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation."].Value)
         </p>
         <div class="toolbar">
             <a class="action-link" href="~/admin/instances">@L["Instances"]</a>

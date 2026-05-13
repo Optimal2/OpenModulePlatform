@@ -1,5 +1,8 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.Rbac.RoleModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
@@ -252,7 +255,7 @@
         <section class="card section-card">
             <div class="eyebrow">@L["Principals"]</div>
             <h3>@L["Assigned principals"]</h3>
-            <p class="muted">@L["Bind OMP users or AD users to the role. AD group assignment is not available yet."]</p>
+            <p class="muted">@ompBranding.ApplyPlatformName(L["Bind OMP users or AD users to the role. AD group assignment is not available yet."].Value)</p>
 
             @if (Model.Principals.Count == 0)
             {
@@ -296,7 +299,7 @@
                     <select id="principalType" name="principalType">
                         @foreach (var option in Model.PrincipalTypeOptions)
                         {
-                            <option value="@option.Value" disabled="@option.Disabled">@option.Label</option>
+                            <option value="@option.Value" disabled="@option.Disabled">@ompBranding.ApplyPlatformName(option.Label)</option>
                         }
                     </select>
                 </div>
@@ -306,7 +309,7 @@
                     <input id="principal" name="principal" value="@Model.NewPrincipal" list="principal-suggestions" autocomplete="off" />
                     <datalist id="principal-suggestions"></datalist>
                     <div class="field-help">
-                        @L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, start typing an existing AD user principal or enter DOMAIN\\User."]
+                        @ompBranding.ApplyPlatformName(L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, start typing an existing AD user principal or enter DOMAIN\\User."].Value)
                     </div>
                 </div>
 

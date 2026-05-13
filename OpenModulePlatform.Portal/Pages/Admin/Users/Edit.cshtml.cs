@@ -240,7 +240,7 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             case MigrateAdUserRoleAssignmentsStatus.Migrated:
                 StatusMessage = string.Format(
                     CultureInfo.CurrentCulture,
-                    T("Moved {0} direct AD-user role assignments to this OMP user. Created {1} OMP-user role assignments."),
+                    await TWithBrandingAsync("Moved {0} direct AD-user role assignments to this OMP user. Created {1} OMP-user role assignments.", ct),
                     result.RemovedAdUserAssignmentCount.ToString(CultureInfo.InvariantCulture),
                     result.CreatedOmpUserAssignmentCount.ToString(CultureInfo.InvariantCulture));
                 return RedirectToPage("/Admin/Users/Edit", new { userId });
@@ -250,7 +250,7 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
                 return RedirectToPage("/Admin/Users/Edit", new { userId });
 
             case MigrateAdUserRoleAssignmentsStatus.NoAdLinks:
-                StatusMessage = T("This OMP user has no AD links.");
+                StatusMessage = await TWithBrandingAsync("This OMP user has no AD links.", ct);
                 return RedirectToPage("/Admin/Users/Edit", new { userId });
 
             case MigrateAdUserRoleAssignmentsStatus.UserMissing:

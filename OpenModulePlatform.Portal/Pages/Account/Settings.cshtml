@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Account.SettingsModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Settings"]</div>
         <h2>@L["Settings"]</h2>
-        <p class="lede">@L["Manage your OMP user profile and portal defaults."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Manage your OMP user profile and portal defaults."].Value)</p>
     </div>
 </section>
 
@@ -27,7 +30,7 @@
     {
         <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.PortalTab) ? " is-active" : string.Empty)"
            asp-page="/Account/Settings"
-           asp-route-tab="@SettingsModel.PortalTab">@L["Portal"]</a>
+           asp-route-tab="@SettingsModel.PortalTab">@ompBranding.PortalName</a>
     }
 </nav>
 
@@ -36,9 +39,9 @@
     @if (Model.CanCreateOmpUser)
     {
         <form method="post" asp-page-handler="CreateAccount" class="card form-grid settings-panel">
-            <h3>@L["Create your OMP account"]</h3>
-            <p class="lede">@L["You are signed in with Windows/AD, but this sign-in is not linked to an OMP user account yet."]</p>
-            <p>@L["Create an OMP account to save profile settings and link this AD sign-in to your account."]</p>
+            <h3>@ompBranding.ApplyPlatformName(L["Create your OMP account"].Value)</h3>
+            <p class="lede">@ompBranding.ApplyPlatformName(L["You are signed in with Windows/AD, but this sign-in is not linked to an OMP user account yet."].Value)</p>
+            <p>@ompBranding.ApplyPlatformName(L["Create an OMP account to save profile settings and link this AD sign-in to your account."].Value)</p>
 
             <div class="form-field">
                 <label asp-for="UserInput.DisplayName">@L["Display name"]</label>
@@ -47,7 +50,7 @@
             </div>
 
             <div class="toolbar">
-                <button type="submit">@L["Create OMP account"]</button>
+                <button type="submit">@ompBranding.ApplyPlatformName(L["Create OMP account"].Value)</button>
             </div>
         </form>
     }

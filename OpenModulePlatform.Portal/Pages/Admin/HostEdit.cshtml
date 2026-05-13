@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.HostEditModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Manual core"]</div>
         <h2>@(Model.IsCreate ? L["Create host"] : L["Edit host"])</h2>
-        <p class="lede">@L["Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Hosts represent real deployment targets inside an OMP instance. For manual setup this is one of the most important core pages."].Value)</p>
     </div>
 </section>
 
@@ -32,14 +35,14 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">@L["Every host belongs to exactly one OMP instance."]</div>
+            <div class="field-help">@ompBranding.ApplyPlatformName(L["Every host belongs to exactly one OMP instance."].Value)</div>
             <span asp-validation-for="Input.InstanceId" class="field-validation-error"></span>
         </div>
 
         <div class="form-field">
             <label asp-for="Input.HostKey"></label>
             <input asp-for="Input.HostKey" />
-            <div class="field-help">@L["Logical host identity used by OMP. Keep it short and stable."]</div>
+            <div class="field-help">@ompBranding.ApplyPlatformName(L["Logical host identity used by OMP. Keep it short and stable."].Value)</div>
             <span asp-validation-for="Input.HostKey" class="field-validation-error"></span>
         </div>
     </div>

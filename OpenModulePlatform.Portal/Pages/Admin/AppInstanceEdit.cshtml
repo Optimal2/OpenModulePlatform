@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.AppInstanceEditModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Manual core"]</div>
         <h2>@(Model.IsCreate ? L["Create app instance"] : L["Edit app instance"])</h2>
-        <p class="lede">@L["App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance."].Value)</p>
     </div>
 </section>
 

@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.HostsModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Manual core"]</div>
         <h2>@L["Hosts"]</h2>
-        <p class="lede">@L["Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation."].Value)</p>
     </div>
 </section>
 

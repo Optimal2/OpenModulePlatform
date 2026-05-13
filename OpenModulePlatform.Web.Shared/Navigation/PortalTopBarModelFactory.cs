@@ -1,6 +1,7 @@
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
+using OpenModulePlatform.Web.Shared.Services;
 using System.Globalization;
 
 namespace OpenModulePlatform.Web.Shared.Navigation;
@@ -25,7 +26,7 @@ public static class PortalTopBarModelFactory
         }
 
         var cultureSelection = new CultureSelectionService().ResolveFromCurrentCulture(options);
-        var portalLink = new PortalTopBarLink("Portal", CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
+        var portalLink = new PortalTopBarLink(OmpBranding.Default.PortalDisplayName, CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         return new PortalTopBarModel
         {

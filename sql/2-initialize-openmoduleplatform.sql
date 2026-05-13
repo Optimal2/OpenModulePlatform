@@ -24,6 +24,14 @@ their own module sql folders.
 USE [OpenModulePlatform];
 GO
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+
 -------------------------------------------------------------------------------
 -- Seed baseline instance, templates, host, and structural placeholders
 -------------------------------------------------------------------------------
@@ -191,6 +199,25 @@ IF NOT EXISTS (SELECT 1 FROM omp.auth_providers WHERE display_name = N'AD')
 IF NOT EXISTS (SELECT 1 FROM omp.auth_providers WHERE display_name = N'lpwd')
     INSERT INTO omp.auth_providers(display_name, is_enabled)
     VALUES(N'lpwd', 1);
+
+-------------------------------------------------------------------------------
+-- Seed baseline instance branding settings
+-------------------------------------------------------------------------------
+MERGE omp.config_settings AS target
+USING
+(
+    VALUES
+        (N'branding', N'platformName', N'OMP', 0),
+        (N'branding', N'portalName', N'Portal', 0)
+) AS source(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
+ON target.ConfigCategory = source.ConfigCategory
+   AND target.ConfigSetting = source.ConfigSetting
+   AND target.ConfigUsr IS NULL
+   AND target.ConfigPermission IS NULL
+   AND target.ConfigRole IS NULL
+WHEN NOT MATCHED THEN
+    INSERT(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
+    VALUES(source.ConfigCategory, source.ConfigSetting, source.ConfigValue, source.ConfigPriority);
 
 /*
 Bootstrap administrative principal rows.

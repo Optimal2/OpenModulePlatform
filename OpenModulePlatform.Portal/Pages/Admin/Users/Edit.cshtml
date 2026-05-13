@@ -1,11 +1,14 @@
 @page "{userId:int}"
 @model OpenModulePlatform.Portal.Pages.Admin.Users.EditModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Security and access"]</div>
         <h2>@L["Edit user"]</h2>
-        <p class="lede">@L["Update the OMP user record and link AD identities that Windows sign-in can resolve."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Update the OMP user record and link AD identities that Windows sign-in can resolve."].Value)</p>
     </div>
 </section>
 
@@ -79,11 +82,11 @@
     <section class="card section-card bottom-gap">
         <div class="eyebrow">@L["Authentication"]</div>
         <h3>@L["Auth links"]</h3>
-        <p class="muted">@L["These provider identities are linked to this OMP user. They are shown read-only in this version."]</p>
+        <p class="muted">@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. They are shown read-only in this version."].Value)</p>
 
         @if (Model.UserRow.AuthLinks.Count == 0)
         {
-            <div class="empty-state top-gap">@L["This OMP user has no auth links."]</div>
+            <div class="empty-state top-gap">@ompBranding.ApplyPlatformName(L["This OMP user has no auth links."].Value)</div>
         }
         else
         {
@@ -120,11 +123,11 @@
                     <p class="muted">
                         @string.Format(
                             System.Globalization.CultureInfo.CurrentCulture,
-                            L["There are {0} direct AD-user role assignments that can be moved to this OMP user."].Value,
+                            ompBranding.ApplyPlatformName(L["There are {0} direct AD-user role assignments that can be moved to this OMP user."].Value),
                             Model.UserRow.MigratableAdUserRoleAssignmentCount)
                     </p>
                     <form method="post" asp-page-handler="MigrateAdRights" class="inline-form">
-                        <button type="submit">@L["Move AD rights to OMP user"]</button>
+                        <button type="submit">@ompBranding.ApplyPlatformName(L["Move AD rights to OMP user"].Value)</button>
                     </form>
                 }
                 else
@@ -148,7 +151,7 @@
         }
         else
         {
-            <p class="muted">@L["Add a local password login linked to this OMP user."]</p>
+            <p class="muted">@ompBranding.ApplyPlatformName(L["Add a local password login linked to this OMP user."].Value)</p>
 
             <form method="post" asp-page-handler="AddLocalLogin" class="form-grid">
                 <div class="field-grid field-grid--3">

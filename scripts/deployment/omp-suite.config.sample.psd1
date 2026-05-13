@@ -30,6 +30,20 @@
     BootstrapPortalAdminPrincipals = @('DOMAIN\UserOrGroup')
     BootstrapPortalAdminPrincipalType = 'ADUser' # ADUser or ADGroup. Legacy User is normalized to ADUser.
 
+    # Instance-wide config settings stored in omp.config_settings after SQL setup.
+    ConfigSettings = @(
+        @{
+            Category = 'branding'
+            Setting = 'platformName'
+            Value = 'OMP'
+        },
+        @{
+            Category = 'branding'
+            Setting = 'portalName'
+            Value = 'Portal'
+        }
+    )
+
     RunAsUser = ''
     RunAsPassword = ''
 

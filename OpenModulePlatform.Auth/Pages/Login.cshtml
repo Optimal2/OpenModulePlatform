@@ -1,6 +1,8 @@
 @page "/login"
 @model LoginModel
+@inject OpenModulePlatform.Web.Shared.Services.OmpBrandingService OmpBrandingService
 @{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
     ViewData["Title"] = "Sign in";
 }
 <!doctype html>
@@ -8,7 +10,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sign in - OMP</title>
+    <title>Sign in - @ompBranding.PlatformName</title>
     <style>
         :root { color-scheme: light dark; }
         body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f5f7fa; color: #16202a; }
@@ -37,8 +39,8 @@
     <section class="panel">
         <div class="stack">
             <div>
-                <h1>Sign in to OMP</h1>
-                <p class="muted">Choose an authentication provider for this OMP instance.</p>
+                <h1>Sign in to @ompBranding.PlatformName</h1>
+                <p class="muted">Choose an authentication provider for this @ompBranding.PlatformName instance.</p>
             </div>
 
             @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))

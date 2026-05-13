@@ -122,9 +122,12 @@ public static class OmpWebHostingExtensions
             });
 
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddMemoryCache();
         builder.Services.AddTransient<IClaimsTransformation, ActiveRoleClaimsTransformation>();
         builder.Services.AddSingleton<CultureSelectionService>();
         builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.AddScoped<OmpConfigurationService>();
+        builder.Services.AddScoped<OmpBrandingService>();
         builder.Services.AddScoped<RbacService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
 
@@ -164,11 +167,13 @@ public static class OmpWebHostingExtensions
 
         if (!mapRazorPages)
         {
-            app.MapGet("/status/{statusCode:int}", (
+            app.MapGet("/status/{statusCode:int}", async (
                 HttpContext context,
                 int statusCode,
-                IStringLocalizer<SharedResource> localizer) =>
+                IStringLocalizer<SharedResource> localizer,
+                OmpBrandingService brandingService) =>
             {
+                var branding = await brandingService.GetBrandingAsync(context.RequestAborted);
                 var feature = context.Features.Get<IStatusCodeReExecuteFeature>();
                 var requestedUrl = feature is null
                     ? context.Request.Path.ToString()
@@ -184,7 +189,7 @@ public static class OmpWebHostingExtensions
                     showBackButton: true);
 
                 return Results.Content(
-                    BuildFallbackStatusPageHtml(model),
+                    BuildFallbackStatusPageHtml(model, branding),
                     contentType: "text/html; charset=utf-8",
                     contentEncoding: System.Text.Encoding.UTF8,
                     statusCode: statusCode);
@@ -436,7 +441,7 @@ public static class OmpWebHostingExtensions
         }
     }
 
-    private static string BuildFallbackStatusPageHtml(OmpErrorDisplayModel model)
+    private static string BuildFallbackStatusPageHtml(OmpErrorDisplayModel model, OmpBranding branding)
     {
         var safeTitle = WebUtility.HtmlEncode(model.Title);
         var safeMessage = WebUtility.HtmlEncode(model.Message);
@@ -460,6 +465,7 @@ public static class OmpWebHostingExtensions
             ? string.Empty
             : $"<a class='omp-error-view__button omp-error-view__button--primary' href='{safePortalHref}'>{safePortalText}</a>";
         var safeCulture = WebUtility.HtmlEncode(CultureInfo.CurrentUICulture.Name);
+        var safePlatformName = WebUtility.HtmlEncode(branding.PlatformName);
 
         return $$"""
 <!doctype html>
@@ -467,7 +473,7 @@ public static class OmpWebHostingExtensions
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{safeTitle}} - OMP</title>
+  <title>{{safeTitle}} - {{safePlatformName}}</title>
   <!--
     NOTE: These fallback styles intentionally mirror omp-error-view.css so this page remains fully styled
     even if static assets are unavailable during error handling. Keep this block and omp-error-view.css

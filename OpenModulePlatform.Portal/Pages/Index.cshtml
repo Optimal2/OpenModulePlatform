@@ -1,10 +1,13 @@
 @page
 @using OpenModulePlatform.Portal.Services
 @model OpenModulePlatform.Portal.Pages.IndexModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
-<h2>@L["OMP Portal"]</h2>
+<h2>@ompBranding.PortalDisplayName</h2>
 
-<p class="muted">@L["This portal is the shared entry point for an OMP instance."]</p>
+<p class="muted">@ompBranding.ApplyPlatformName(L["This portal is the shared entry point for an OMP instance."].Value)</p>
 
 <div class="card">
     <div><b>@L["Current user"]</b>: @User?.Identity?.Name</div>
@@ -70,7 +73,7 @@
 }
 
 <div class="card top-gap">
-    <h3>@L["Available OMP web app instances"]</h3>
+    <h3>@ompBranding.ApplyPlatformName(L["Available OMP web app instances"].Value)</h3>
     @if (Model.Apps.Count == 0)
     {
         <div class="muted">@L["No accessible web app instances are currently registered."]</div>

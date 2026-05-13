@@ -153,7 +153,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         {
             case CreateSelfServiceAdAccountStatus.Created when result.UserId is int userId:
                 await RefreshAccountClaimsAsync(UserInput.DisplayName, userId);
-                StatusMessage = T("OMP user account created.");
+                StatusMessage = await TWithBrandingAsync("OMP user account created.", ct);
                 return RedirectToSettings(UserTab);
 
             case CreateSelfServiceAdAccountStatus.ProviderUnavailable:
@@ -165,11 +165,11 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
                 return Page();
 
             case CreateSelfServiceAdAccountStatus.AlreadyLinkedToAnotherUser:
-                ModelState.AddModelError(string.Empty, T("This AD account is already linked to an OMP user. Sign out and sign in again."));
+                ModelState.AddModelError(string.Empty, await TWithBrandingAsync("This AD account is already linked to an OMP user. Sign out and sign in again.", ct));
                 return Page();
 
             default:
-                ModelState.AddModelError(string.Empty, T("The OMP user account could not be created."));
+                ModelState.AddModelError(string.Empty, await TWithBrandingAsync("The OMP user account could not be created.", ct));
                 return Page();
         }
     }

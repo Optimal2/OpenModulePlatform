@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using OpenModulePlatform.Auth.Models;
 using OpenModulePlatform.Auth.Services;
 using OpenModulePlatform.Web.Shared.Security;
+using OpenModulePlatform.Web.Shared.Services;
 
 namespace OpenModulePlatform.Auth.Pages;
 
@@ -13,13 +14,16 @@ namespace OpenModulePlatform.Auth.Pages;
 public sealed class LoginModel : PageModel
 {
     private readonly OmpAuthRepository _repository;
+    private readonly OmpBrandingService _brandingService;
     private readonly WindowsPasswordAuthenticator _windowsPasswordAuthenticator;
 
     public LoginModel(
         OmpAuthRepository repository,
+        OmpBrandingService brandingService,
         WindowsPasswordAuthenticator windowsPasswordAuthenticator)
     {
         _repository = repository;
+        _brandingService = brandingService;
         _windowsPasswordAuthenticator = windowsPasswordAuthenticator;
     }
 
@@ -75,7 +79,8 @@ public sealed class LoginModel : PageModel
         var result = await _repository.ResolveLocalPasswordAsync(UserName, Password, ct);
         if (result.User is null)
         {
-            ErrorMessage = result.Error ?? "The user name or password is incorrect.";
+            var branding = await _brandingService.GetBrandingAsync(ct);
+            ErrorMessage = branding.ApplyPlatformName(result.Error ?? "The user name or password is incorrect.");
             BuildProviderUrls();
             return Page();
         }
