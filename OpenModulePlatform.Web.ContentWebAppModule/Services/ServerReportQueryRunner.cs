@@ -28,10 +28,27 @@ public sealed partial class ServerReportQueryRunner
 
     public async Task<ServerReportResult> ExecuteAsync(ServerReportDefinition definition, CancellationToken ct)
     {
+        var database = ResolveDatabase(definition.Database);
+        if (database.ErrorMessage is not null)
+        {
+            return new ServerReportResult
+            {
+                Title = definition.Title,
+                Queries =
+                [
+                    new ServerReportQueryResult
+                    {
+                        Title = "Server report",
+                        ErrorMessage = database.ErrorMessage
+                    }
+                ]
+            };
+        }
+
         var results = new List<ServerReportQueryResult>();
         foreach (var query in definition.Queries)
         {
-            results.Add(await ExecuteQueryAsync(query, ct));
+            results.Add(await ExecuteQueryAsync(query, database.DatabaseName, ct));
         }
 
         return new ServerReportResult
@@ -41,7 +58,10 @@ public sealed partial class ServerReportQueryRunner
         };
     }
 
-    private async Task<ServerReportQueryResult> ExecuteQueryAsync(ServerReportQueryDefinition query, CancellationToken ct)
+    private async Task<ServerReportQueryResult> ExecuteQueryAsync(
+        ServerReportQueryDefinition query,
+        string? databaseName,
+        CancellationToken ct)
     {
         var maxRows = GetMaxRows(query.MaxRows);
         var result = new ServerReportQueryResult
@@ -60,7 +80,9 @@ public sealed partial class ServerReportQueryRunner
 
         try
         {
-            await using var conn = _db.Create();
+            await using var conn = string.IsNullOrWhiteSpace(databaseName)
+                ? _db.Create()
+                : _db.CreateForDatabase(databaseName);
             await conn.OpenAsync(ct);
 
             await using var cmd = new SqlCommand(query.Sql.Trim(), conn)
@@ -104,6 +126,29 @@ public sealed partial class ServerReportQueryRunner
             result.ErrorMessage = "The report query failed.";
             return result;
         }
+    }
+
+    private DatabaseResolution ResolveDatabase(string? requestedDatabase)
+    {
+        if (string.IsNullOrWhiteSpace(requestedDatabase))
+        {
+            return new DatabaseResolution(null, null);
+        }
+
+        var database = requestedDatabase.Trim();
+        if (database.Length > 128 || database.Any(char.IsControl))
+        {
+            return new DatabaseResolution(null, "The report database is not allowed.");
+        }
+
+        var match = (_options.Value.AllowedServerReportDatabases ?? [])
+            .Where(static x => !string.IsNullOrWhiteSpace(x))
+            .Select(static x => x.Trim())
+            .FirstOrDefault(x => string.Equals(x, database, StringComparison.OrdinalIgnoreCase));
+
+        return match is null
+            ? new DatabaseResolution(null, "The report database is not allowed.")
+            : new DatabaseResolution(match, null);
     }
 
     private int GetMaxRows(int? requestedMaxRows)
@@ -157,6 +202,8 @@ public sealed partial class ServerReportQueryRunner
     [GeneratedRegex(@"^\s*(select|with)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AllowedStartRegex();
 
-    [GeneratedRegex(@"\b(insert|update|delete|drop|alter|truncate|exec|execute|merge|create|into)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(insert|update|delete|drop|alter|truncate|exec|execute|merge|create|into|use)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BlockedSqlRegex();
+
+    private readonly record struct DatabaseResolution(string? DatabaseName, string? ErrorMessage);
 }

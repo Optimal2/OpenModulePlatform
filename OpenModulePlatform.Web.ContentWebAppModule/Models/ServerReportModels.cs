@@ -5,6 +5,8 @@ public sealed class ServerReportDefinition
 {
     public string Title { get; set; } = string.Empty;
 
+    public string? Database { get; set; }
+
     public List<ServerReportQueryDefinition> Queries { get; set; } = [];
 }
 

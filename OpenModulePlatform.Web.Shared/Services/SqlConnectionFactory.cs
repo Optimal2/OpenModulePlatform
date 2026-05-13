@@ -22,6 +22,26 @@ public sealed class SqlConnectionFactory
 
     public SqlConnection Create()
     {
+        return new SqlConnection(GetConnectionString());
+    }
+
+    public SqlConnection CreateForDatabase(string databaseName)
+    {
+        if (string.IsNullOrWhiteSpace(databaseName))
+        {
+            return Create();
+        }
+
+        var builder = new SqlConnectionStringBuilder(GetConnectionString())
+        {
+            InitialCatalog = databaseName.Trim()
+        };
+
+        return new SqlConnection(builder.ConnectionString);
+    }
+
+    private string GetConnectionString()
+    {
         var connectionString = _configuration.GetConnectionString("OmpDb");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
@@ -29,6 +49,6 @@ public sealed class SqlConnectionFactory
                 "Missing connection string: ConnectionStrings:OmpDb");
         }
 
-        return new SqlConnection(connectionString);
+        return connectionString;
     }
 }

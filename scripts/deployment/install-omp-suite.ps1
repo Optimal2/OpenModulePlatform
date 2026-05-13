@@ -614,6 +614,7 @@ function Write-RuntimeConfiguration {
                 AppInstanceId = $script:ContentWebAppAppInstanceId
                 HomeSlug = $script:ContentWebAppHomeSlug
                 ServerReportsPath = $script:ContentWebAppServerReportsPath
+                AllowedServerReportDatabases = $script:ContentWebAppAllowedServerReportDatabases
                 ServerReportDefaultMaxRows = $script:ContentWebAppServerReportDefaultMaxRows
                 ServerReportMaxRowsLimit = $script:ContentWebAppServerReportMaxRowsLimit
                 ServerReportQueryTimeoutSeconds = $script:ContentWebAppServerReportQueryTimeoutSeconds
@@ -1262,6 +1263,9 @@ if ([string]::IsNullOrWhiteSpace($script:PortalBaseUrl)) {
 $script:ContentWebAppAppInstanceId = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'AppInstanceId' -DefaultValue '11111111-1111-1111-1111-111111111232')
 $script:ContentWebAppHomeSlug = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HomeSlug' -DefaultValue 'home')
 $script:ContentWebAppServerReportsPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportsPath' -DefaultValue 'App_Data/ContentReports')
+$script:ContentWebAppAllowedServerReportDatabases = @(
+    Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'AllowedServerReportDatabases' -DefaultValue @($script:Database)
+)
 $script:ContentWebAppServerReportDefaultMaxRows = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportDefaultMaxRows' -DefaultValue 100)
 $script:ContentWebAppServerReportMaxRowsLimit = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportMaxRowsLimit' -DefaultValue 1000)
 $script:ContentWebAppServerReportQueryTimeoutSeconds = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportQueryTimeoutSeconds' -DefaultValue 30)
