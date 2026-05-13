@@ -1,0 +1,4 @@
+@page
+@model OpenModulePlatform.Web.ExampleWebAppModule.Pages.ErrorModel
+
+@await Component.InvokeAsync("OmpError", new { model = Model.Error })
