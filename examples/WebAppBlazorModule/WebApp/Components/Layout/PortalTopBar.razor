@@ -17,7 +17,7 @@
 {
     <div class="portal-topbar" data-portal-topbar-root>
         <nav class="portal-topbar__nav" aria-label="@_portalTopBar.PortalLink.TextKey" data-portal-topbar>
-            <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@_portalTopBar.PortalLink.TextKey</a>
+            <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href" data-enhance-nav="false">@_portalTopBar.PortalLink.TextKey</a>
 
             @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminSections.Count > 0)
             {
@@ -40,7 +40,7 @@
                                         {
                                             <div class="portal-topbar__admin-separator" role="separator" aria-hidden="true"></div>
                                         }
-                                        <a class="portal-topbar__admin-link" href="@item.Href">@L[item.TextKey]</a>
+                                        <a class="portal-topbar__admin-link" href="@item.Href" data-enhance-nav="false">@L[item.TextKey]</a>
                                     }
                                 </div>
                             </details>
@@ -49,34 +49,103 @@
                 </details>
             }
 
-            @if (_portalTopBar.ModuleLinks.Count > 0)
+            @if (_portalTopBar.NavigationGroups.Count > 0)
             {
                 <span class="portal-topbar__pipe" aria-hidden="true">|</span>
 
-                <div class="portal-topbar__modules" data-portal-topbar-modules>
-                    @for (var i = 0; i < _portalTopBar.ModuleLinks.Count; i++)
-                    {
-                        var link = _portalTopBar.ModuleLinks[i];
-                        <a class="portal-topbar__module-link" href="@link.Href" data-portal-topbar-item data-index="@i">@link.TextKey</a>
-                    }
-                </div>
-
-                <details class="portal-topbar__collapsed" data-portal-topbar-overlay>
-                    <summary title="@L[_portalTopBar.CollapsedToggleTextKey]" aria-label="@L[_portalTopBar.CollapsedToggleTextKey]">
-                        @L[_portalTopBar.CollapsedToggleTextKey]
+                <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                    <summary title="@L[_portalTopBar.AllModulesToggleTextKey]" aria-label="@L[_portalTopBar.AllModulesToggleTextKey]">
+                        @L[_portalTopBar.AllModulesToggleTextKey]
                     </summary>
-                    <div class="portal-topbar__collapsed-menu">
-                        @foreach (var link in _portalTopBar.ModuleLinks)
+                    <div class="portal-topbar__nav-menu" data-portal-topbar-entry-menu>
+                        <input class="portal-topbar__nav-filter"
+                               type="search"
+                               placeholder="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
+                               aria-label="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
+                               data-portal-topbar-entry-filter />
+                        @foreach (var group in _portalTopBar.NavigationGroups)
                         {
-                            <a class="portal-topbar__collapsed-link" href="@link.Href">@link.TextKey</a>
+                            <details class="portal-topbar__nav-group" data-portal-topbar-entry-group open>
+                                <summary class="portal-topbar__nav-group-title">@group.Title</summary>
+                                @foreach (var entry in group.Entries)
+                                {
+                                    var favoriteLabel = L[entry.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];
+                                    var entryText = EntryText(entry);
+                                    var entryFavoriteLabel = EntryFavoriteLabel(entry);
+                                    <div class="portal-topbar__nav-entry-row"
+                                         data-portal-topbar-entry-row
+                                         data-entry-key="@entry.EntryKey"
+                                         data-app-instance-id="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)"
+                                         data-favorite-label="@entryFavoriteLabel"
+                                         data-favorite-group-title="@entry.GroupTitle"
+                                         data-favorite-entry-title="@entryText"
+                                         data-favorite-href="@entry.Href"
+                                         data-search="@EntrySearchText(group, entry)">
+                                        <a class="portal-topbar__nav-entry-link" href="@entry.Href" data-enhance-nav="false">@entryText</a>
+                                        @if (_portalTopBar.CanUsePersistentFavorites && entry.IsFavoritable)
+                                        {
+                                            <form method="post" action="@_portalTopBar.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
+                                                <input type="hidden" name="entryKey" value="@entry.EntryKey" />
+                                                <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
+                                                <button type="submit"
+                                                        class="portal-topbar__favorite-toggle@(entry.IsFavorite ? " is-favorite" : string.Empty)"
+                                                        title="@favoriteLabel"
+                                                        aria-label="@favoriteLabel"
+                                                        data-portal-topbar-favorite-button>
+                                                    <span aria-hidden="true">@(entry.IsFavorite ? "★" : "☆")</span>
+                                                </button>
+                                            </form>
+                                        }
+                                    </div>
+                                }
+                            </details>
                         }
                     </div>
                 </details>
 
-                <details class="portal-topbar__overflow" data-portal-topbar-overflow data-portal-topbar-overlay hidden>
-                    <summary>@L[_portalTopBar.OverflowToggleTextKey]</summary>
-                    <div class="portal-topbar__menu" data-portal-topbar-menu></div>
-                </details>
+                @if (_portalTopBar.CanUsePersistentFavorites)
+                {
+                    <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                        <summary title="@L[_portalTopBar.FavoritesToggleTextKey]" aria-label="@L[_portalTopBar.FavoritesToggleTextKey]">
+                            @L[_portalTopBar.FavoritesToggleTextKey]
+                        </summary>
+                        <div class="portal-topbar__favorites-menu">
+                            <div class="portal-topbar__favorites-list" data-portal-topbar-favorites-list>
+                                @foreach (var entry in _portalTopBar.FavoriteEntries)
+                                {
+                                    var removeFavoriteLabel = L[_portalTopBar.RemoveFavoriteTextKey];
+                                    <div class="portal-topbar__favorite-row"
+                                         data-portal-topbar-favorite-row
+                                         data-favorite-entry-key="@entry.EntryKey"
+                                         data-favorite-app-instance-id="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)">
+                                        <a class="portal-topbar__favorite-link" href="@entry.Href" data-enhance-nav="false">
+                                            @if (!string.IsNullOrWhiteSpace(entry.GroupTitle))
+                                            {
+                                                <span class="portal-topbar__favorite-module">@entry.GroupTitle</span>
+                                                <span> / </span>
+                                            }
+                                            <span>@EntryText(entry)</span>
+                                        </a>
+                                        <form method="post" action="@_portalTopBar.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
+                                            <input type="hidden" name="entryKey" value="@entry.EntryKey" />
+                                            <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
+                                            <button type="submit"
+                                                    class="portal-topbar__favorite-toggle is-favorite"
+                                                    title="@removeFavoriteLabel"
+                                                    aria-label="@removeFavoriteLabel"
+                                                    data-portal-topbar-favorite-button>
+                                                <span aria-hidden="true">★</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                }
+                            </div>
+                            <div class="portal-topbar__favorites-empty" data-portal-topbar-favorites-empty hidden="@(_portalTopBar.FavoriteEntries.Count > 0)">
+                                @L[_portalTopBar.NoFavoritesTextKey]
+                            </div>
+                        </div>
+                    </details>
+                }
             }
         </nav>
 
@@ -296,6 +365,20 @@
 
     private string CultureText(string? text)
         => string.IsNullOrWhiteSpace(text) ? string.Empty : L[text];
+
+    private string EntryText(PortalTopBarNavigationEntry entry)
+        => L[entry.TextKey].Value;
+
+    private string EntryFavoriteLabel(PortalTopBarNavigationEntry entry)
+        => string.IsNullOrWhiteSpace(entry.GroupTitle)
+            ? EntryText(entry)
+            : $"{entry.GroupTitle} / {EntryText(entry)}";
+
+    private string EntrySearchText(PortalTopBarNavigationGroup group, PortalTopBarNavigationEntry entry)
+    {
+        var text = EntryText(entry);
+        return $"{entry.SearchText} {group.Title} {text} {group.Title}/{text} {group.GroupKey}/{text} {entry.Href.Trim('/')}";
+    }
 
     private static string DisplayUserName(string? value)
     {
