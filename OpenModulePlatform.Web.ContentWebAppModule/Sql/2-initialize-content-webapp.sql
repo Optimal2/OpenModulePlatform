@@ -21,6 +21,7 @@ DECLARE @ContentTemplateModuleInstanceId int;
 DECLARE @ContentAppId int;
 DECLARE @ContentAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111232';
 DECLARE @SeedHomeContentId uniqueidentifier = '11111111-1111-1111-1111-111111111233';
+DECLARE @SeedModuleStatusContentId uniqueidentifier = '11111111-1111-1111-1111-111111111234';
 DECLARE @HomeContentId uniqueidentifier;
 DECLARE @ContentViewPermissionId int;
 DECLARE @ContentManagePermissionId int;
@@ -62,7 +63,7 @@ BEGIN
     SET DisplayName = N'Content Web App',
         ModuleType = N'WebAppModule',
         SchemaName = N'omp_content',
-        Description = N'First-party OMP module for database-backed HTML and Markdown content pages',
+        Description = N'First-party OMP module for database-backed HTML, Markdown, and server report content pages',
         IsEnabled = 1,
         SortOrder = 330,
         UpdatedUtc = SYSUTCDATETIME()
@@ -83,7 +84,7 @@ BEGIN
         N'Content Web App',
         N'WebAppModule',
         N'omp_content',
-        N'First-party OMP module for database-backed HTML and Markdown content pages',
+        N'First-party OMP module for database-backed HTML, Markdown, and server report content pages',
         1,
         330);
 END
@@ -368,6 +369,40 @@ BEGIN
         N'install-script');
 
     SET @HomeContentId = @SeedHomeContentId;
+END
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp_content.contents
+    WHERE app_instance_id = @ContentAppInstanceId
+      AND slug = N'module-status'
+)
+BEGIN
+    INSERT INTO omp_content.contents(
+        content_id,
+        app_instance_id,
+        slug,
+        title,
+        content_type,
+        body,
+        server_report_key,
+        is_enabled,
+        sort_order,
+        created_by,
+        updated_by)
+    VALUES(
+        @SeedModuleStatusContentId,
+        @ContentAppInstanceId,
+        N'module-status',
+        N'Module status',
+        N'server_report',
+        N'',
+        N'module-status',
+        1,
+        20,
+        N'install-script',
+        N'install-script');
 END
 
 IF @PortalAdminsRoleId IS NOT NULL

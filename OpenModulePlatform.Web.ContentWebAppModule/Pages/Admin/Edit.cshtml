@@ -54,8 +54,9 @@
         <div class="form-field">
             <label asp-for="Input.ContentType"></label>
             <select asp-for="Input.ContentType">
-                <option value="markdown">markdown</option>
-                <option value="html">html</option>
+                <option value="markdown">@L["Markdown"]</option>
+                <option value="html">@L["HTML"]</option>
+                <option value="server_report">@L["Server report"]</option>
             </select>
         </div>
         <div class="form-field">
@@ -64,7 +65,30 @@
         </div>
     </div>
 
-    <div class="form-field content-editor-field">
+    @{
+        var currentServerReportKey = Model.Input.ServerReportKey;
+        var currentReportKeyMissing = !string.IsNullOrWhiteSpace(currentServerReportKey)
+            && !Model.AvailableServerReportKeys.Contains(currentServerReportKey, StringComparer.OrdinalIgnoreCase);
+    }
+
+    <div class="form-field" data-server-report-field hidden="@(Model.Input.ContentType != "server_report")">
+        <label asp-for="Input.ServerReportKey"></label>
+        <select asp-for="Input.ServerReportKey">
+            <option value="">@L["Choose a server report"]</option>
+            @foreach (var reportKey in Model.AvailableServerReportKeys)
+            {
+                <option value="@reportKey">@reportKey</option>
+            }
+            @if (currentReportKeyMissing)
+            {
+                <option value="@currentServerReportKey">@currentServerReportKey (@L["missing"])</option>
+            }
+        </select>
+        <span class="field-hint">@L["Server reports are JSON files in the server report directory. SQL is not edited here."]</span>
+        <span asp-validation-for="Input.ServerReportKey" class="field-validation-error"></span>
+    </div>
+
+    <div class="form-field content-editor-field" data-content-editor-field hidden="@(Model.Input.ContentType == "server_report")">
         <label asp-for="Input.Body"></label>
         <div id="content-editor" class="content-editor" hidden></div>
         <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
@@ -165,6 +189,22 @@
             const host = document.getElementById('content-editor');
             const form = document.getElementById('content-edit-form');
             const contentType = document.getElementById('Input_ContentType');
+            const editorField = document.querySelector('[data-content-editor-field]');
+            const reportField = document.querySelector('[data-server-report-field]');
+
+            const syncContentType = () => {
+                const isServerReport = contentType?.value === 'server_report';
+                if (editorField) {
+                    editorField.hidden = isServerReport;
+                }
+
+                if (reportField) {
+                    reportField.hidden = !isServerReport;
+                }
+            };
+
+            contentType?.addEventListener('change', syncContentType);
+            syncContentType();
 
             if (!source || !host || !form || !contentType || !window.toastui?.Editor) {
                 return;
@@ -182,6 +222,11 @@
             source.classList.add('is-enhanced');
 
             form.addEventListener('submit', () => {
+                if (contentType.value === 'server_report') {
+                    source.value = '';
+                    return;
+                }
+
                 source.value = contentType.value === 'html'
                     ? editor.getHTML()
                     : editor.getMarkdown();

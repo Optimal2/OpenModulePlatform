@@ -10,11 +10,25 @@ public sealed class ContentRenderer
         .UseAdvancedExtensions()
         .Build();
 
-    public string RenderToHtml(string content, string? contentType)
+    private readonly ServerReportRenderer _serverReportRenderer;
+
+    public ContentRenderer(ServerReportRenderer serverReportRenderer)
+    {
+        _serverReportRenderer = serverReportRenderer;
+    }
+
+    public async Task<string> RenderToHtmlAsync(
+        string content,
+        string? contentType,
+        string? serverReportKey,
+        CancellationToken ct)
     {
         var format = ContentTypes.Normalize(contentType);
-        return format == ContentTypes.Html
-            ? content
-            : Markdown.ToHtml(content ?? string.Empty, MarkdownPipeline);
+        return format switch
+        {
+            ContentTypes.Html => content,
+            ContentTypes.ServerReport => await _serverReportRenderer.RenderAsync(serverReportKey, ct),
+            _ => Markdown.ToHtml(content ?? string.Empty, MarkdownPipeline)
+        };
     }
 }

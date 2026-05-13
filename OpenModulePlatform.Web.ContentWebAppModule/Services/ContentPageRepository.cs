@@ -38,6 +38,7 @@ SELECT c.content_id,
        c.slug,
        c.title,
        c.content_type,
+       c.server_report_key,
        c.is_enabled,
        c.sort_order,
        c.created_at,
@@ -105,6 +106,7 @@ SELECT c.content_id,
        c.slug,
        c.title,
        c.content_type,
+       c.server_report_key,
        c.is_enabled,
        c.sort_order,
        c.created_at,
@@ -173,6 +175,7 @@ SELECT c.content_id,
        c.title,
        c.content_type,
        c.body,
+       c.server_report_key,
        c.updated_at
 FROM omp_content.contents c
 WHERE c.app_instance_id = @AppInstanceId
@@ -219,6 +222,7 @@ SELECT c.content_id,
        c.title,
        c.content_type,
        c.body,
+       c.server_report_key,
        c.is_enabled,
        c.sort_order,
        c.created_at,
@@ -354,6 +358,7 @@ INSERT INTO omp_content.contents(
     title,
     content_type,
     body,
+    server_report_key,
     is_enabled,
     sort_order,
     created_by,
@@ -365,6 +370,7 @@ VALUES(
     @Title,
     @ContentType,
     @Body,
+    @ServerReportKey,
     @IsEnabled,
     @SortOrder,
     @Actor,
@@ -382,6 +388,7 @@ SET slug = @Slug,
     title = @Title,
     content_type = @ContentType,
     body = @Body,
+    server_report_key = @ServerReportKey,
     is_enabled = @IsEnabled,
     sort_order = @SortOrder,
     updated_at = SYSUTCDATETIME(),
@@ -503,6 +510,7 @@ WHERE app_instance_id = @AppInstanceId
         Add(cmd, "@Title", input.Title.Trim());
         Add(cmd, "@ContentType", contentType);
         Add(cmd, "@Body", input.Body);
+        Add(cmd, "@ServerReportKey", NormalizeServerReportKey(input.ServerReportKey));
         Add(cmd, "@IsEnabled", input.IsEnabled);
         Add(cmd, "@SortOrder", input.SortOrder);
         Add(cmd, "@Actor", actor);
@@ -516,12 +524,13 @@ WHERE app_instance_id = @AppInstanceId
             Slug = rdr.GetString(1),
             Title = rdr.GetString(2),
             ContentType = rdr.GetString(3),
-            IsEnabled = rdr.GetBoolean(4),
-            SortOrder = rdr.IsDBNull(5) ? null : rdr.GetInt32(5),
-            CreatedAtUtc = rdr.GetDateTime(6),
-            UpdatedAtUtc = rdr.GetDateTime(7),
-            UpdatedBy = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-            AccessSummary = rdr.IsDBNull(9) ? null : rdr.GetString(9)
+            ServerReportKey = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            IsEnabled = rdr.GetBoolean(5),
+            SortOrder = rdr.IsDBNull(6) ? null : rdr.GetInt32(6),
+            CreatedAtUtc = rdr.GetDateTime(7),
+            UpdatedAtUtc = rdr.GetDateTime(8),
+            UpdatedBy = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+            AccessSummary = rdr.IsDBNull(10) ? null : rdr.GetString(10)
         };
     }
 
@@ -534,7 +543,8 @@ WHERE app_instance_id = @AppInstanceId
             Title = rdr.GetString(2),
             ContentType = rdr.GetString(3),
             Body = rdr.GetString(4),
-            UpdatedAtUtc = rdr.GetDateTime(5)
+            ServerReportKey = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            UpdatedAtUtc = rdr.GetDateTime(6)
         };
     }
 
@@ -548,14 +558,18 @@ WHERE app_instance_id = @AppInstanceId
             Title = rdr.GetString(3),
             ContentType = rdr.GetString(4),
             Body = rdr.GetString(5),
-            IsEnabled = rdr.GetBoolean(6),
-            SortOrder = rdr.IsDBNull(7) ? null : rdr.GetInt32(7),
-            CreatedAtUtc = rdr.GetDateTime(8),
-            CreatedBy = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-            UpdatedAtUtc = rdr.GetDateTime(10),
-            UpdatedBy = rdr.IsDBNull(11) ? null : rdr.GetString(11)
+            ServerReportKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            IsEnabled = rdr.GetBoolean(7),
+            SortOrder = rdr.IsDBNull(8) ? null : rdr.GetInt32(8),
+            CreatedAtUtc = rdr.GetDateTime(9),
+            CreatedBy = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+            UpdatedAtUtc = rdr.GetDateTime(11),
+            UpdatedBy = rdr.IsDBNull(12) ? null : rdr.GetString(12)
         };
     }
+
+    private static string? NormalizeServerReportKey(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static void Add(SqlCommand cmd, string name, object? value)
     {

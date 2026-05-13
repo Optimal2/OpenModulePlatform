@@ -77,5 +77,14 @@
   <data name="Slug is required." xml:space="preserve"><value>Sökväg krävs.</value></data>
   <data name="The Title field is required." xml:space="preserve"><value>Titel krävs.</value></data>
   <data name="The Content field is required." xml:space="preserve"><value>Innehåll krävs.</value></data>
+  <data name="Markdown" xml:space="preserve"><value>Markdown</value></data>
+  <data name="HTML" xml:space="preserve"><value>HTML</value></data>
+  <data name="Server report" xml:space="preserve"><value>Serverrapport</value></data>
+  <data name="Choose a server report" xml:space="preserve"><value>Välj en serverrapport</value></data>
+  <data name="missing" xml:space="preserve"><value>saknas</value></data>
+  <data name="Server reports are JSON files in the server report directory. SQL is not edited here." xml:space="preserve"><value>Serverrapporter är JSON-filer i serverns rapportkatalog. SQL redigeras inte här.</value></data>
+  <data name="Server report key is required." xml:space="preserve"><value>Serverrapportnyckel krävs.</value></data>
+  <data name="Server report key may only contain letters, numbers, underscores, and hyphens." xml:space="preserve"><value>Serverrapportnyckeln får bara innehålla bokstäver, siffror, understreck och bindestreck.</value></data>
+  <data name="Server report definition was not found." xml:space="preserve"><value>Serverrapportdefinitionen hittades inte.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId är inte konfigurerad.</value></data>
 </root>

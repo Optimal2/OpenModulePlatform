@@ -40,6 +40,10 @@ else
                     <strong>@row.Title</strong>
                     <div class="muted">
                         @row.ContentType
+                        @if (!string.IsNullOrWhiteSpace(row.ServerReportKey))
+                        {
+                            <span>@L["Server report"]: @row.ServerReportKey</span>
+                        }
                         @if (row.SortOrder is not null)
                         {
                             <span>@L["Sort order"]: @row.SortOrder</span>
