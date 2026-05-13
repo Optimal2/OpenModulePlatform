@@ -68,14 +68,17 @@ public static class OmpWebHostingExtensions
 
         ConfigureOmpAuthentication(builder.Services, builder.Configuration);
 
-        builder.Services.AddAuthorization(options =>
-        {
-            options.FallbackPolicy = options.DefaultPolicy;
-        });
-
         var webAppOptions = builder.Configuration
             .GetSection(optionsSectionName)
             .Get<WebAppOptions>() ?? new WebAppOptions();
+
+        builder.Services.AddAuthorization(options =>
+        {
+            if (!webAppOptions.AllowAnonymous)
+            {
+                options.FallbackPolicy = options.DefaultPolicy;
+            }
+        });
 
         builder.Services.Configure<RequestLocalizationOptions>(options =>
         {
