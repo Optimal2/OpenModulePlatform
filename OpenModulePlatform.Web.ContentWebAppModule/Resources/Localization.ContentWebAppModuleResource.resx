@@ -77,5 +77,14 @@
   <data name="Slug is required." xml:space="preserve"><value>Slug is required.</value></data>
   <data name="The Title field is required." xml:space="preserve"><value>The Title field is required.</value></data>
   <data name="The Content field is required." xml:space="preserve"><value>The Content field is required.</value></data>
+  <data name="Markdown" xml:space="preserve"><value>Markdown</value></data>
+  <data name="HTML" xml:space="preserve"><value>HTML</value></data>
+  <data name="Server report" xml:space="preserve"><value>Server report</value></data>
+  <data name="Choose a server report" xml:space="preserve"><value>Choose a server report</value></data>
+  <data name="missing" xml:space="preserve"><value>missing</value></data>
+  <data name="Server reports are JSON files in the server report directory. SQL is not edited here." xml:space="preserve"><value>Server reports are JSON files in the server report directory. SQL is not edited here.</value></data>
+  <data name="Server report key is required." xml:space="preserve"><value>Server report key is required.</value></data>
+  <data name="Server report key may only contain letters, numbers, underscores, and hyphens." xml:space="preserve"><value>Server report key may only contain letters, numbers, underscores, and hyphens.</value></data>
+  <data name="Server report definition was not found." xml:space="preserve"><value>Server report definition was not found.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId is not configured.</value></data>
 </root>

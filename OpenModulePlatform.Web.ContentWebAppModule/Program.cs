@@ -17,6 +17,9 @@ builder.Services.Configure<RazorPagesOptions>(options =>
 });
 builder.Services.AddScoped<ContentPageRepository>();
 builder.Services.AddScoped<ContentRenderer>();
+builder.Services.AddScoped<ServerReportDefinitionLoader>();
+builder.Services.AddScoped<ServerReportQueryRunner>();
+builder.Services.AddScoped<ServerReportRenderer>();
 
 var app = builder.Build();
 
