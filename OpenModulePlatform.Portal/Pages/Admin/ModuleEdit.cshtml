@@ -1,5 +1,8 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ModuleEditModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
@@ -43,7 +46,7 @@
             <select asp-for="Input.ModuleType" class="module-type-select" data-contain-wheel-scroll>
                 @foreach (var option in Model.ModuleTypeOptions)
                 {
-                    <option value="@option.Value">@option.Label</option>
+                    <option value="@option.Value">@ompBranding.ApplyTerms(option.Label)</option>
                 }
             </select>
             <div class="field-help">@L["Pick the closest platform role. This is a definition-level classification."]</div>

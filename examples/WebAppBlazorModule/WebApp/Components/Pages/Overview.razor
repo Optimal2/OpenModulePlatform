@@ -19,7 +19,7 @@ else
             <div class="eyebrow">@L["Example module"]</div>
             <h1>@L["Example Web App Blazor Module"]</h1>
             <p class="lede">
-                @L["Neutral reference module for web flows in OMP. The page shows a module overview and links onward to the module's configurations."]
+                @Branding.ApplyTerms(L["Neutral reference module for web flows in OMP. The page shows a module overview and links onward to the module's configurations."].Value)
             </p>
         </div>
     </div>
@@ -51,6 +51,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadBrandingAsync(CancellationToken.None);
         SetPageTitle(L["Overview"]);
 
         if (await EnsureAnyPermissionAsync(

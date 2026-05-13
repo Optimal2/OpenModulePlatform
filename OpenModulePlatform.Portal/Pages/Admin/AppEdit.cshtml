@@ -1,5 +1,8 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.AppEditModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
@@ -40,7 +43,7 @@
             <select asp-for="Input.AppType">
                 @foreach (var option in Model.AppTypeOptions)
                 {
-                    <option value="@option.Value">@option.Label</option>
+                    <option value="@option.Value">@ompBranding.ApplyTerms(option.Label)</option>
                 }
             </select>
             <div class="field-help">@L["Choose how the platform should think about this definition."]</div>

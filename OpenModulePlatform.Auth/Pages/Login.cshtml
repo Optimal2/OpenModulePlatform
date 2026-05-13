@@ -1,16 +1,20 @@
 @page "/login"
+@using System.Globalization
 @model LoginModel
 @inject OpenModulePlatform.Web.Shared.Services.OmpBrandingService OmpBrandingService
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
-    ViewData["Title"] = "Sign in";
+    var signInLabel = L["Sign in"].Value;
+    var signInTitle = string.Format(L["Sign in to {0}"].Value, ompBranding.PlatformName);
+    var signInLead = string.Format(L["Choose an authentication provider for this {0} instance."].Value, ompBranding.PlatformName);
+    ViewData["Title"] = signInLabel;
 }
 <!doctype html>
-<html lang="en">
+<html lang="@CultureInfo.CurrentUICulture.Name">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sign in - @ompBranding.PlatformName</title>
+    <title>@signInLabel - @ompBranding.PlatformName</title>
     <style>
         :root { color-scheme: light dark; }
         body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f5f7fa; color: #16202a; }
@@ -20,6 +24,9 @@
         .muted { color: #586173; line-height: 1.5; }
         .stack { display: grid; gap: 1rem; }
         .windows-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: stretch; }
+        details.other-signin-options > summary { cursor: pointer; font-weight: 700; }
+        details.other-signin-options > summary::marker { color: #586173; }
+        details.other-signin-options[open] > summary { margin-bottom: .75rem; }
         label { display: block; margin-bottom: .3rem; font-weight: 700; }
         input { box-sizing: border-box; width: 100%; min-height: 2.5rem; padding: .5rem .65rem; border: 1px solid #c8d1dc; border-radius: 6px; font: inherit; }
         button, .button { display: inline-flex; justify-content: center; align-items: center; min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid #2f5fb3; border-radius: 6px; background: #2f5fb3; color: #fff; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
@@ -39,8 +46,8 @@
     <section class="panel">
         <div class="stack">
             <div>
-                <h1>Sign in to @ompBranding.PlatformName</h1>
-                <p class="muted">Choose an authentication provider for this @ompBranding.PlatformName instance.</p>
+                <h1>@signInTitle</h1>
+                <p class="muted">@signInLead</p>
             </div>
 
             @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
@@ -49,47 +56,58 @@
             }
 
             <div class="windows-actions">
-                <a class="button" href="@Model.WindowsLoginUrl">Sign in with Windows / AD</a>
-                <button
-                    type="button"
-                    class="button secondary compact"
-                    id="alternate-windows-button"
-                    title="Sign in with another Windows / AD account">
-                    Other account
-                </button>
+                <a class="button" href="@Model.WindowsLoginUrl">@L["Sign in with Windows / AD"]</a>
             </div>
 
-            <form method="post" asp-page-handler="Local" class="stack divider">
-                <input type="hidden" asp-for="ReturnUrl" />
-                <div>
-                    <label asp-for="UserName">User name</label>
-                    <input asp-for="UserName" autocomplete="username" />
+            <details class="divider other-signin-options" open="@Model.ShowOtherSignInOptions">
+                <summary>@L["Other sign-in options"]</summary>
+                <div class="stack">
+                    <p class="muted">@L["Use other credentials only when normal Windows / AD sign-in cannot be used."]</p>
+
+                    <div>
+                        <button
+                            type="button"
+                            class="button secondary compact"
+                            id="alternate-windows-button"
+                            title="@L["Sign in with another Windows / AD account"]">
+                            @L["Other Windows / AD account"]
+                        </button>
+                    </div>
+
+                    <form method="post" asp-page-handler="Local" class="stack">
+                        <input type="hidden" asp-for="ReturnUrl" />
+                        <h2 style="margin: 0; font-size: 1.1rem;">@L["Local password"]</h2>
+                        <div>
+                            <label asp-for="UserName">@L["User name"]</label>
+                            <input asp-for="UserName" autocomplete="username" />
+                        </div>
+                        <div>
+                            <label asp-for="Password">@L["Password"]</label>
+                            <input asp-for="Password" type="password" autocomplete="current-password" />
+                        </div>
+                        <button type="submit">@L["Sign in with local password"]</button>
+                    </form>
                 </div>
-                <div>
-                    <label asp-for="Password">Password</label>
-                    <input asp-for="Password" type="password" autocomplete="current-password" />
-                </div>
-                <button type="submit">Sign in with local password</button>
-            </form>
+            </details>
 
             <dialog id="alternate-windows-dialog" open="@Model.ShowAlternateWindowsPrompt">
                 <form method="post" asp-page-handler="AlternateWindows" class="stack dialog-body">
                     <input type="hidden" asp-for="ReturnUrl" />
                     <div>
-                        <h2 style="margin: 0 0 .35rem; font-size: 1.25rem;">Other Windows / AD account</h2>
-                        <p class="muted" style="margin: 0;">Use DOMAIN\user, .\user, user@@domain, or a local account name.</p>
+                        <h2 style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Other Windows / AD account"]</h2>
+                        <p class="muted" style="margin: 0;">@L["Use DOMAIN\\user, .\\user, user@domain, or a local account name."]</p>
                     </div>
                     <div>
-                        <label asp-for="AlternateWindowsUserName">Windows account</label>
+                        <label asp-for="AlternateWindowsUserName">@L["Windows account"]</label>
                         <input asp-for="AlternateWindowsUserName" autocomplete="username" />
                     </div>
                     <div>
-                        <label asp-for="AlternateWindowsPassword">Password</label>
+                        <label asp-for="AlternateWindowsPassword">@L["Password"]</label>
                         <input asp-for="AlternateWindowsPassword" type="password" value="" autocomplete="current-password" />
                     </div>
                     <div class="dialog-actions">
-                        <button type="button" class="button secondary" id="alternate-windows-cancel">Cancel</button>
-                        <button type="submit">Sign in</button>
+                        <button type="button" class="button secondary" id="alternate-windows-cancel">@L["Cancel"]</button>
+                        <button type="submit">@L["Sign in"]</button>
                     </div>
                 </form>
             </dialog>

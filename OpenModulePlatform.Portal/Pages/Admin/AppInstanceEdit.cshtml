@@ -114,7 +114,7 @@
             <label asp-for="Input.RoutePath"></label>
             <input asp-for="Input.RoutePath" />
             <div class="field-help">
-                @L["Use either an absolute URL such as https://www.google.com/ or a host-root-relative path such as app01, /app01, app01/ or /app01/. Relative values are resolved directly from the selected host root without any extra portal prefix."]
+                @ompBranding.ApplyTerms(L["Use either an absolute URL such as https://www.google.com/ or a host-root-relative path such as app01, /app01, app01/ or /app01/. Relative values are resolved directly from the selected host root without any extra portal prefix."].Value)
             </div>
             <span asp-validation-for="Input.RoutePath" class="field-validation-error"></span>
         </div>

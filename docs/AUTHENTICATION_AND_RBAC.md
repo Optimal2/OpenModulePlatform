@@ -26,6 +26,11 @@ The shared cookie uses:
 
 Unauthenticated users are redirected to `/auth/login?returnUrl=<local-path>`. Return URLs must be local absolute paths such as `/`, `/Admin/Rbac`, or `/SomeModule/`. Absolute URLs, protocol-relative URLs, and backslash paths are rejected.
 
+The login page is localized for Swedish and English. Windows/AD sign-in is the
+only primary visible option. Alternate Windows credentials and local password
+sign-in are hidden behind the "Other sign-in options" disclosure and should be
+used only when the normal AD flow cannot be used.
+
 Logout is posted to `/auth/logout`. It clears the shared OMP session cookie and the active role cookie, then redirects the user to `/auth/login`. For Windows Authentication, logout does not sign the user out of Windows, the browser, or the operating system. A subsequent Windows sign-in may therefore authenticate silently again.
 
 ## Built-In Providers
