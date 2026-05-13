@@ -5,6 +5,16 @@
     string BuildLanguageHref(string culture) => $"{Context.Request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     string BuildRoleHref(int? roleId) => $"{Context.Request.PathBase}/security/set-active-role?roleId={(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
     string CultureText(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : L[value];
+    string EntryText(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarNavigationEntry entry) => L[entry.TextKey].Value;
+    string EntryFavoriteLabel(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarNavigationEntry entry)
+        => string.IsNullOrWhiteSpace(entry.GroupTitle)
+            ? EntryText(entry)
+            : $"{entry.GroupTitle} / {EntryText(entry)}";
+    string EntrySearchText(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarNavigationGroup group, OpenModulePlatform.Web.Shared.Navigation.PortalTopBarNavigationEntry entry)
+    {
+        var text = EntryText(entry);
+        return $"{entry.SearchText} {group.Title} {text} {group.Title}/{text} {group.GroupKey}/{text} {entry.Href.Trim('/')}";
+    }
     string DisplayUserName(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -25,6 +35,7 @@
 {
     <div class="portal-topbar"
          data-portal-topbar-root
+         data-favorite-toggle-url="@Model.FavoriteToggleUrl"
          data-add-favorite-text="@L[Model.AddFavoriteTextKey]"
          data-remove-favorite-text="@L[Model.RemoveFavoriteTextKey]">
         <nav class="portal-topbar__nav" aria-label="@Model.PortalLink.TextKey" data-portal-topbar>
@@ -34,7 +45,8 @@
             {
                 <details class="portal-topbar__admin" data-portal-topbar-overlay data-portal-topbar-hover-menu>
                     <summary title="@L[Model.PortalAdminToggleTextKey]" aria-label="@L[Model.PortalAdminToggleTextKey]">
-                        @L[Model.PortalAdminToggleTextKey]
+                        <span aria-hidden="true">&#9881;</span>
+                        <span class="visually-hidden">@L[Model.PortalAdminToggleTextKey]</span>
                     </summary>
                     <div class="portal-topbar__admin-menu" data-portal-topbar-admin-menu>
                         @foreach (var section in Model.PortalAdminSections)
@@ -75,19 +87,23 @@
                                data-portal-topbar-entry-filter />
                         @foreach (var group in Model.NavigationGroups)
                         {
-                            <section class="portal-topbar__nav-group" data-portal-topbar-entry-group>
-                                <div class="portal-topbar__nav-group-title">@group.Title</div>
+                            <details class="portal-topbar__nav-group" data-portal-topbar-entry-group open>
+                                <summary class="portal-topbar__nav-group-title">@group.Title</summary>
                                 @foreach (var entry in group.Entries)
                                 {
                                     var favoriteLabel = L[entry.IsFavorite ? Model.RemoveFavoriteTextKey : Model.AddFavoriteTextKey];
+                                    var entryText = EntryText(entry);
+                                    var entryFavoriteLabel = EntryFavoriteLabel(entry);
                                     <div class="portal-topbar__nav-entry-row"
                                          data-portal-topbar-entry-row
                                          data-entry-key="@entry.EntryKey"
                                          data-app-instance-id="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)"
-                                         data-favorite-label="@entry.FavoriteLabel"
+                                         data-favorite-label="@entryFavoriteLabel"
+                                         data-favorite-group-title="@entry.GroupTitle"
+                                         data-favorite-entry-title="@entryText"
                                          data-favorite-href="@entry.Href"
-                                         data-search="@entry.SearchText">
-                                        <a class="portal-topbar__nav-entry-link" href="@entry.Href">@L[entry.TextKey]</a>
+                                         data-search="@EntrySearchText(group, entry)">
+                                        <a class="portal-topbar__nav-entry-link" href="@entry.Href">@entryText</a>
                                         @if (Model.CanUsePersistentFavorites && entry.IsFavoritable)
                                         {
                                             <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form>
@@ -104,7 +120,7 @@
                                         }
                                     </div>
                                 }
-                            </section>
+                            </details>
                         }
                     </div>
                 </details>
@@ -119,10 +135,31 @@
                             <div class="portal-topbar__favorites-list" data-portal-topbar-favorites-list>
                                 @foreach (var entry in Model.FavoriteEntries)
                                 {
-                                    <a class="portal-topbar__favorite-link"
-                                       href="@entry.Href"
-                                       data-favorite-entry-key="@entry.EntryKey"
-                                       data-favorite-app-instance-id="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)">@entry.FavoriteLabel</a>
+                                    var removeFavoriteLabel = L[Model.RemoveFavoriteTextKey];
+                                    <div class="portal-topbar__favorite-row"
+                                         data-portal-topbar-favorite-row
+                                         data-favorite-entry-key="@entry.EntryKey"
+                                         data-favorite-app-instance-id="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)">
+                                        <a class="portal-topbar__favorite-link" href="@entry.Href">
+                                            @if (!string.IsNullOrWhiteSpace(entry.GroupTitle))
+                                            {
+                                                <span class="portal-topbar__favorite-module">@entry.GroupTitle</span>
+                                                <span> / </span>
+                                            }
+                                            <span>@EntryText(entry)</span>
+                                        </a>
+                                        <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form>
+                                            <input type="hidden" name="entryKey" value="@entry.EntryKey" />
+                                            <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
+                                            <button type="submit"
+                                                    class="portal-topbar__favorite-toggle is-favorite"
+                                                    title="@removeFavoriteLabel"
+                                                    aria-label="@removeFavoriteLabel"
+                                                    data-portal-topbar-favorite-button>
+                                                <span aria-hidden="true">★</span>
+                                            </button>
+                                        </form>
+                                    </div>
                                 }
                             </div>
                             <div class="portal-topbar__favorites-empty" data-portal-topbar-favorites-empty hidden="@(Model.FavoriteEntries.Count > 0)">
