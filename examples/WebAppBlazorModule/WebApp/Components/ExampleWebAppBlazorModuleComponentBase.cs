@@ -34,16 +34,20 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
     [Inject]
     protected IStringLocalizer<SharedResource> SharedL { get; set; } = default!;
 
+    [Inject]
+    protected OmpBrandingService OmpBrandingService { get; set; } = default!;
+
     protected ClaimsPrincipal CurrentUser { get; private set; } = new(new ClaimsIdentity());
     protected HashSet<string> CurrentPermissions { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     protected bool AuthorizationResolved { get; private set; }
     protected bool IsAuthorized { get; private set; }
     protected string? AccessDeniedMessage { get; private set; }
     protected OmpErrorDisplayModel? PageError { get; private set; }
-    protected string PageTitle { get; private set; } = "OpenModulePlatform";
+    protected OmpBranding Branding { get; private set; } = OmpBranding.Default;
+    protected string PageTitle { get; private set; } = OmpBranding.Default.PlatformName;
 
     protected string WebAppTitle => string.IsNullOrWhiteSpace(Options.Value.Title)
-        ? "OpenModulePlatform"
+        ? Branding.PlatformName
         : Options.Value.Title;
 
     protected string CurrentUserName => CurrentUser.Identity?.Name ?? L["Unknown user"];
@@ -54,6 +58,9 @@ public abstract class ExampleWebAppBlazorModuleComponentBase : ComponentBase
             ? WebAppTitle
             : $"{WebAppTitle} - {pageTitle}";
     }
+
+    protected async Task LoadBrandingAsync(CancellationToken ct)
+        => Branding = await OmpBrandingService.GetBrandingAsync(ct);
 
     protected string AppHref(string relativePath = "")
         => string.IsNullOrWhiteSpace(relativePath)

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Localization;
+using OpenModulePlatform.Auth.Localization;
 using OpenModulePlatform.Auth.Models;
 using OpenModulePlatform.Auth.Services;
 using OpenModulePlatform.Web.Shared.Security;
@@ -16,15 +18,18 @@ public sealed class LoginModel : PageModel
     private readonly OmpAuthRepository _repository;
     private readonly OmpBrandingService _brandingService;
     private readonly WindowsPasswordAuthenticator _windowsPasswordAuthenticator;
+    private readonly IStringLocalizer<AuthResource> _localizer;
 
     public LoginModel(
         OmpAuthRepository repository,
         OmpBrandingService brandingService,
-        WindowsPasswordAuthenticator windowsPasswordAuthenticator)
+        WindowsPasswordAuthenticator windowsPasswordAuthenticator,
+        IStringLocalizer<AuthResource> localizer)
     {
         _repository = repository;
         _brandingService = brandingService;
         _windowsPasswordAuthenticator = windowsPasswordAuthenticator;
+        _localizer = localizer;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -48,6 +53,8 @@ public sealed class LoginModel : PageModel
 
     public bool ShowAlternateWindowsPrompt { get; private set; }
 
+    public bool ShowOtherSignInOptions { get; private set; }
+
     public IActionResult OnGet(string? error)
     {
         if (User.Identity?.IsAuthenticated == true &&
@@ -58,10 +65,11 @@ public sealed class LoginModel : PageModel
 
         ErrorMessage = error switch
         {
-            "windows" => "Windows sign-in could not be resolved.",
-            "windowsAlternateUnavailable" => "Alternate Windows sign-in is not available on this host.",
+            "windows" => T("Windows sign-in could not be resolved."),
+            "windowsAlternateUnavailable" => T("Alternate Windows sign-in is not available on this host."),
             _ => null
         };
+        ShowOtherSignInOptions = error == "windowsAlternateUnavailable";
 
         BuildProviderUrls();
         return Page();
@@ -71,7 +79,8 @@ public sealed class LoginModel : PageModel
     {
         if (string.IsNullOrWhiteSpace(UserName) || string.IsNullOrEmpty(Password))
         {
-            ErrorMessage = "Enter a user name and password.";
+            ErrorMessage = T("Enter a user name and password.");
+            ShowOtherSignInOptions = true;
             BuildProviderUrls();
             return Page();
         }
@@ -79,8 +88,8 @@ public sealed class LoginModel : PageModel
         var result = await _repository.ResolveLocalPasswordAsync(UserName, Password, ct);
         if (result.User is null)
         {
-            var branding = await _brandingService.GetBrandingAsync(ct);
-            ErrorMessage = branding.ApplyPlatformName(result.Error ?? "The user name or password is incorrect.");
+            ErrorMessage = await TWithBrandingAsync(result.Error ?? "The user name or password is incorrect.", ct);
+            ShowOtherSignInOptions = true;
             BuildProviderUrls();
             return Page();
         }
@@ -92,11 +101,12 @@ public sealed class LoginModel : PageModel
     public async Task<IActionResult> OnPostAlternateWindowsAsync(CancellationToken ct)
     {
         ShowAlternateWindowsPrompt = true;
+        ShowOtherSignInOptions = true;
         AlternateWindowsUserName = AlternateWindowsUserName?.Trim() ?? string.Empty;
 
         if (!OperatingSystem.IsWindows())
         {
-            ErrorMessage = "Alternate Windows sign-in is not available on this host.";
+            ErrorMessage = T("Alternate Windows sign-in is not available on this host.");
             BuildProviderUrls();
             return Page();
         }
@@ -104,7 +114,7 @@ public sealed class LoginModel : PageModel
         if (string.IsNullOrWhiteSpace(AlternateWindowsUserName) ||
             string.IsNullOrEmpty(AlternateWindowsPassword))
         {
-            ErrorMessage = "Enter a Windows account name and password.";
+            ErrorMessage = T("Enter a Windows account name and password.");
             BuildProviderUrls();
             return Page();
         }
@@ -115,7 +125,7 @@ public sealed class LoginModel : PageModel
 
         if (!result.Succeeded || result.Principal is null)
         {
-            ErrorMessage = "Windows credentials could not be validated.";
+            ErrorMessage = T("Windows credentials could not be validated.");
             BuildProviderUrls();
             return Page();
         }
@@ -123,7 +133,7 @@ public sealed class LoginModel : PageModel
         var user = await _repository.ResolveWindowsAsync(result.Principal, ct);
         if (user is null)
         {
-            ErrorMessage = "Windows sign-in could not be resolved.";
+            ErrorMessage = T("Windows sign-in could not be resolved.");
             BuildProviderUrls();
             return Page();
         }
@@ -162,5 +172,14 @@ public sealed class LoginModel : PageModel
     {
         var returnUrl = string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl;
         WindowsLoginUrl = Url.Content("~/ad") + "?returnUrl=" + Uri.EscapeDataString(returnUrl);
+    }
+
+    private string T(string key)
+        => _localizer[key].Value;
+
+    private async Task<string> TWithBrandingAsync(string key, CancellationToken ct)
+    {
+        var branding = await _brandingService.GetBrandingAsync(ct);
+        return branding.ApplyTerms(T(key));
     }
 }

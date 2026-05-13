@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Sign in" xml:space="preserve"><value>Logga in</value></data>
+  <data name="Sign in to {0}" xml:space="preserve"><value>Logga in i {0}</value></data>
+  <data name="Choose an authentication provider for this {0} instance." xml:space="preserve"><value>Välj inloggningssätt för den här {0}-instansen.</value></data>
+  <data name="Sign in with Windows / AD" xml:space="preserve"><value>Logga in med Windows / AD</value></data>
+  <data name="Other sign-in options" xml:space="preserve"><value>Andra inloggningsalternativ</value></data>
+  <data name="Use other credentials only when normal Windows / AD sign-in cannot be used." xml:space="preserve"><value>Använd andra uppgifter bara när vanlig Windows / AD-inloggning inte kan användas.</value></data>
+  <data name="Other Windows / AD account" xml:space="preserve"><value>Annat Windows / AD-konto</value></data>
+  <data name="Sign in with another Windows / AD account" xml:space="preserve"><value>Logga in med ett annat Windows / AD-konto</value></data>
+  <data name="Use DOMAIN\user, .\user, user@domain, or a local account name." xml:space="preserve"><value>Använd DOMAIN\användare, .\användare, användare@domän eller ett lokalt kontonamn.</value></data>
+  <data name="Windows account" xml:space="preserve"><value>Windows-konto</value></data>
+  <data name="Local password" xml:space="preserve"><value>Lokalt lösenord</value></data>
+  <data name="User name" xml:space="preserve"><value>Användarnamn</value></data>
+  <data name="Password" xml:space="preserve"><value>Lösenord</value></data>
+  <data name="Sign in with local password" xml:space="preserve"><value>Logga in med lokalt lösenord</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Avbryt</value></data>
+  <data name="Windows sign-in could not be resolved." xml:space="preserve"><value>Windows-inloggningen kunde inte kopplas till en behörig användare.</value></data>
+  <data name="Alternate Windows sign-in is not available on this host." xml:space="preserve"><value>Alternativ Windows-inloggning är inte tillgänglig på den här servern.</value></data>
+  <data name="Enter a user name and password." xml:space="preserve"><value>Ange användarnamn och lösenord.</value></data>
+  <data name="The user name or password is incorrect." xml:space="preserve"><value>Användarnamnet eller lösenordet är fel.</value></data>
+  <data name="Enter a Windows account name and password." xml:space="preserve"><value>Ange Windows-konto och lösenord.</value></data>
+  <data name="Windows credentials could not be validated." xml:space="preserve"><value>Windows-uppgifterna kunde inte verifieras.</value></data>
+  <data name="The local password account is not linked to an OMP user." xml:space="preserve"><value>Det lokala lösenordskontot är inte kopplat till en OMP-användare.</value></data>
+  <data name="The linked OMP user is disabled." xml:space="preserve"><value>Den kopplade OMP-användaren är inaktiverad.</value></data>
+</root>

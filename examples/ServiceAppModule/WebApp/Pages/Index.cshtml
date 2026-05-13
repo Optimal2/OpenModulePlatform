@@ -1,12 +1,15 @@
 @page
 @model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.IndexModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <div class="page-header">
     <div>
         <div class="eyebrow">@L["Example module"]</div>
         <h1>@L["Example Service App Module"]</h1>
         <p class="lede">
-            @L["Reference module for combined web and service app flows in OMP. The page shows module configuration, instances, and job queue status at a glance."]
+            @ompBranding.ApplyTerms(L["Reference module for combined web and service app flows in OMP. The page shows module configuration, instances, and job queue status at a glance."].Value)
         </p>
     </div>
 </div>

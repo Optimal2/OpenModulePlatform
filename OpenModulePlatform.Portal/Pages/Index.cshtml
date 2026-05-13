@@ -11,7 +11,7 @@
 
 <div class="card">
     <div><b>@L["Current user"]</b>: @User?.Identity?.Name</div>
-    <div><b>@L["Portal admin"]</b>: @(Model.IsPortalAdmin ? L["Yes"] : L["No"])</div>
+    <div><b>@ompBranding.ApplyTerms(L["Portal admin"].Value)</b>: @(Model.IsPortalAdmin ? L["Yes"] : L["No"])</div>
 </div>
 
 @if (Model.IsPortalAdmin)
@@ -123,7 +123,7 @@
                             else if (!string.IsNullOrWhiteSpace(configuredAddress))
                             {
                                 <code>@configuredAddress</code>
-                                <div class="muted">@L["Set Host base URL to make this route clickable from the Portal."]</div>
+                                <div class="muted">@ompBranding.ApplyTerms(L["Set Host base URL to make this route clickable from the Portal."].Value)</div>
                             }
                         </td>
                         <td>@app.Description</td>
