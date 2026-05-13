@@ -6,6 +6,8 @@ Use these scripts for the neutral OMP core installation flow:
 
 1. `1-setup-openmoduleplatform.sql`
    - Creates the neutral `omp` schema and core platform tables.
+   - Creates and migrates `omp.config_settings`, the core configuration table
+     for global, user, permission, and role scoped settings.
 
 2. `2-initialize-openmoduleplatform.sql`
    - Seeds the default OMP instance, host/template baseline, RBAC baseline, and bootstrap administrator principal.
@@ -44,3 +46,31 @@ its SQL in `OpenModulePlatform.Portal/sql`.
 - `omp_content` is the first-party content module schema.
 - `omp_iframe` is the first-party iframe module schema.
 - `omp_example_*` schemas belong to optional example modules.
+
+## Core configuration settings
+
+`omp.config_settings` stores platform configuration values as text so a setting
+can hold simple scalars such as `true` or `10`, or serialized JSON/XML when a
+module needs a richer value.
+
+The logical setting identity is:
+
+- `ConfigCategory`
+- `ConfigSetting`
+- optional `ConfigUsr`
+- optional `ConfigPermission`
+- optional `ConfigRole`
+
+The table enforces uniqueness for that full combination. `NULL` scope columns
+mean that the row is the global/default value.
+
+Consumers should resolve competing rows in this order:
+
+1. user scoped rows
+2. permission scoped rows
+3. role scoped rows
+4. global rows
+
+`ConfigScopeRank` is a persisted computed column for that order. Higher
+`ConfigPriority` wins when more than one matching permission or role row exists
+for the same setting. `ConfigId` is the deterministic final tie-breaker.
