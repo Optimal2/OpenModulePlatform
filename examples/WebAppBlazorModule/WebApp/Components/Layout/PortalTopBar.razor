@@ -16,8 +16,8 @@
 @if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
 {
     <div class="portal-topbar" data-portal-topbar-root>
-        <nav class="portal-topbar__nav" aria-label="@L["Portal"]" data-portal-topbar>
-            <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@L[_portalTopBar.PortalLink.TextKey]</a>
+        <nav class="portal-topbar__nav" aria-label="@_portalTopBar.PortalLink.TextKey" data-portal-topbar>
+            <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@_portalTopBar.PortalLink.TextKey</a>
 
             @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminSections.Count > 0)
             {

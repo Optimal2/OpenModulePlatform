@@ -39,7 +39,7 @@
         <div class="form-field">
             <label asp-for="Input.DisplayName"></label>
             <input asp-for="Input.DisplayName" />
-            <div class="field-help">@L["Human-readable name shown in Portal."]</div>
+            <div class="field-help">@ompBranding.ApplyTerms(L["Human-readable name shown in Portal."].Value)</div>
             <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
         </div>
     </div>

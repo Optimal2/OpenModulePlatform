@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.Rbac.IndexModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Security and access"]</div>
         <h2>@L["Security"]</h2>
-        <p class="lede">@L["Manage roles, permissions and principal assignments from Portal instead of editing the database directly."]</p>
+        <p class="lede">@ompBranding.ApplyTerms(L["Manage roles, permissions and principal assignments from Portal instead of editing the database directly."].Value)</p>
     </div>
 </section>
 
@@ -22,7 +25,7 @@
         <div class="metric">@Model.PermissionCount</div>
         <div>@L["Permissions"]</div>
         <div class="muted small-text top-gap">
-            @L["Low-level capabilities granted to apps and portal areas."]
+            @ompBranding.ApplyTerms(L["Low-level capabilities granted to apps and portal areas."].Value)
         </div>
     </div>
 </div>

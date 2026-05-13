@@ -64,7 +64,7 @@
         <label asp-for="Input.BaseUrl"></label>
         <input asp-for="Input.BaseUrl" placeholder="http://localhost" />
         <div class="field-help">
-            @L["Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath. Enter only protocol, host and optional port."]
+            @ompBranding.ApplyTerms(L["Optional absolute base URL for this host. The Portal uses it when an app instance has a relative RoutePath. Enter only protocol, host and optional port."].Value)
         </div>
         <span asp-validation-for="Input.BaseUrl" class="field-validation-error"></span>
     </div>

@@ -1,7 +1,9 @@
 @inherits LayoutComponentBase
 @using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization
+@using OpenModulePlatform.Web.Shared.Services
 @inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> Options
 @inject Microsoft.Extensions.Localization.IStringLocalizer<ExampleWebAppBlazorModuleResource> L
+@inject OmpBrandingService OmpBrandingService
 
 <div class="page-shell">
     <header class="app-header">
@@ -25,7 +27,12 @@
 </div>
 
 @code {
+    private OmpBranding _branding = OmpBranding.Default;
+
     private string PortalTitle => string.IsNullOrWhiteSpace(Options.Value.Title)
-        ? "OpenModulePlatform"
+        ? _branding.PlatformName
         : Options.Value.Title;
+
+    protected override async Task OnInitializedAsync()
+        => _branding = await OmpBrandingService.GetBrandingAsync(CancellationToken.None);
 }

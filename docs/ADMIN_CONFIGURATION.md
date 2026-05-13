@@ -41,6 +41,19 @@ The built-in auth app is mounted at `/auth`. AD sign-in goes through `/auth/ad`,
 
 For the full authentication and RBAC model, see [`AUTHENTICATION_AND_RBAC.md`](AUTHENTICATION_AND_RBAC.md).
 
+### Instance display names
+
+The visible platform and portal names are installation settings, not literals in
+the UI. The shared web layer reads these rows from `omp.config_settings`:
+
+- `branding/platformName` defaults to `OMP`
+- `branding/portalName` defaults to `Portal`
+
+Deployment configs can seed or update them through `ConfigSettings`. VGR uses
+`EMP` as the platform name, while the local developer install can use `LOMP` to
+make branding substitutions easy to verify. Technical identifiers, permission
+names, schemas, cookies, and assembly names keep their stable OMP names.
+
 ### 2. Create or adjust the instance
 
 An `Instance` is the highest manual scope in OMP.

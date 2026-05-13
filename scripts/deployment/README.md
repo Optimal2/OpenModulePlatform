@@ -6,8 +6,8 @@ for the public OpenModulePlatform components:
 - OMP Portal and Auth
 - OMP HostAgent, WorkerManager, and WorkerProcessHost
 - OpenDocViewer static web app
-- OMP Content Web App standard module
-- OMP example web, service, worker, Blazor, and iframe modules
+- OMP Content Web App and iFrame Web App standard modules
+- OMP example web, service, worker, and Blazor modules
 
 Environment-specific values are intentionally kept out of Git. Copy
 `omp-suite.config.sample.psd1` to `omp-suite.local.psd1` and adjust the local file
@@ -93,6 +93,12 @@ and applies that host's certificate settings.
 `PublicBaseUrl` should contain the externally visible root URL. When a module
 does not provide its own base URL, portal topbar links are generated from the
 portal base URL because that is the normal OMP hosting layout.
+
+Use `ConfigSettings` for installation-scoped settings that should be inserted or
+updated during SQL installation. The built-in branding settings are
+`branding/platformName` and `branding/portalName`; they control visible UI text
+only and do not rename technical identifiers, schemas, permissions, cookies, or
+assemblies.
 
 All OMP web apps that share authentication must use the same
 `DataProtectionKeyPath`. In a load-balanced environment this must be a shared
