@@ -228,10 +228,14 @@ function New-BootstrapPatchedSqlFile {
     $bootstrapPrincipalToken = '__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
     $sqlcmdVariableToken = '$(BootstrapPortalAdminPrincipal)'
     if ($content.Contains($bootstrapPrincipalToken)) {
-        $content = $content.Replace($bootstrapPrincipalToken, $escapedPrincipal)
+        $pattern = "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'$bootstrapPrincipalToken';"
+        $replacement = "DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$escapedPrincipal';"
+        $content = [System.Text.RegularExpressions.Regex]::Replace($content, $pattern, $replacement, 1)
     }
     elseif ($content.Contains($sqlcmdVariableToken)) {
-        $content = $content.Replace($sqlcmdVariableToken, $escapedPrincipal)
+        $pattern = "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'\$\(BootstrapPortalAdminPrincipal\)';"
+        $replacement = "DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'$escapedPrincipal';"
+        $content = [System.Text.RegularExpressions.Regex]::Replace($content, $pattern, $replacement, 1)
     }
     else {
         $pattern = "DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(256\)\s*=\s*N'REPLACE_ME\\UserOrGroup';"
@@ -239,7 +243,7 @@ function New-BootstrapPatchedSqlFile {
         $content = [System.Text.RegularExpressions.Regex]::Replace($content, $pattern, $replacement)
     }
 
-    if ($content -like '*REPLACE_ME\UserOrGroup*' -or $content.Contains($bootstrapPrincipalToken) -or $content.Contains($sqlcmdVariableToken)) {
+    if ($content -like '*REPLACE_ME\UserOrGroup*' -or $content.Contains($sqlcmdVariableToken)) {
         throw "Failed to patch bootstrap principal in SQL file: $Path"
     }
 
@@ -591,14 +595,14 @@ function Set-IisAuthentication {
 
     $windowsValue = ([bool]$WindowsEnabled).ToString().ToLowerInvariant()
 
-    Invoke-AppCmdOptional set config $Location `
+    Invoke-AppCmdOptional -IgnoredExitCodes @(0) set config $Location `
         '/section:system.webServer/security/authentication/anonymousAuthentication' `
         "/enabled:$anonymousValue" `
         '/userName:' `
         '/password:' `
         '/commit:apphost'
 
-    Invoke-AppCmdOptional set config $Location `
+    Invoke-AppCmdOptional -IgnoredExitCodes @(0) set config $Location `
         '/section:system.webServer/security/authentication/windowsAuthentication' `
         "/enabled:$windowsValue" `
         '/commit:apphost'
