@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ModuleInstancesModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Manual core"]</div>
         <h2>@L["Module instances"]</h2>
-        <p class="lede">@L["Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Module instances bind module definitions into a specific OMP instance. This is the operational layer above definitions and below app instances."].Value)</p>
     </div>
 </section>
 

@@ -209,7 +209,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         {
             await LoadDetailsAsync(ct);
             SetTitles("Edit role");
-            ModelState.AddModelError(string.Empty, T(normalizedPrincipal.ErrorMessage));
+            ModelState.AddModelError(string.Empty, await ApplyBrandingAsync(T(normalizedPrincipal.ErrorMessage), ct));
             NewPrincipal = principal;
             return Page();
         }

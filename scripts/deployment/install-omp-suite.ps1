@@ -207,6 +207,36 @@ function ConvertTo-SqlUnicodeLiteral {
     return "N'$($Value.Replace("'", "''"))'"
 }
 
+function ConvertTo-SqlNullableUnicodeLiteral {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return 'NULL'
+    }
+
+    $text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return 'NULL'
+    }
+
+    return ConvertTo-SqlUnicodeLiteral -Value $text
+}
+
+function ConvertTo-SqlNullableIntLiteral {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return 'NULL'
+    }
+
+    $text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return 'NULL'
+    }
+
+    return ([int]$text).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+}
+
 function ConvertTo-NormalizedCertificateText {
     param([string]$Value)
 
@@ -463,6 +493,115 @@ WHERE @PortalAdminsRoleId IS NOT NULL
       WHERE existing.RoleId = @PortalAdminsRoleId
         AND existing.PrincipalType = p.PrincipalType
         AND existing.Principal = p.Principal);
+"@
+}
+
+function Ensure-ConfiguredConfigSettings {
+    $settings = @($script:ConfigSettings)
+    if ($settings.Count -eq 0) {
+        return
+    }
+
+    Write-Step 'Ensuring OMP config settings'
+    $values = @()
+    foreach ($settingEntry in $settings) {
+        $category = [string](Get-ConfigEntryValue -Entry $settingEntry -Name 'ConfigCategory' -DefaultValue (Get-ConfigEntryValue -Entry $settingEntry -Name 'Category' -DefaultValue ''))
+        $setting = [string](Get-ConfigEntryValue -Entry $settingEntry -Name 'ConfigSetting' -DefaultValue (Get-ConfigEntryValue -Entry $settingEntry -Name 'Setting' -DefaultValue ''))
+        if ([string]::IsNullOrWhiteSpace($category) -or [string]::IsNullOrWhiteSpace($setting)) {
+            throw 'Every ConfigSettings entry must include ConfigCategory/Category and ConfigSetting/Setting.'
+        }
+
+        $configValue = Get-ConfigEntryValue -Entry $settingEntry -Name 'ConfigValue' -DefaultValue (Get-ConfigEntryValue -Entry $settingEntry -Name 'Value' -DefaultValue $null)
+        $configUsr = Get-ConfigEntryValue -Entry $settingEntry -Name 'ConfigUsr' -DefaultValue (Get-ConfigEntryValue -Entry $settingEntry -Name 'UserId' -DefaultValue $null)
+        $permissionName = Get-ConfigEntryValue -Entry $settingEntry -Name 'PermissionName' -DefaultValue (Get-ConfigEntryValue -Entry $settingEntry -Name 'Permission' -DefaultValue $null)
+        $roleName = Get-ConfigEntryValue -Entry $settingEntry -Name 'RoleName' -DefaultValue (Get-ConfigEntryValue -Entry $settingEntry -Name 'Role' -DefaultValue $null)
+        $priority = Get-ConfigEntryValue -Entry $settingEntry -Name 'ConfigPriority' -DefaultValue (Get-ConfigEntryValue -Entry $settingEntry -Name 'Priority' -DefaultValue 0)
+
+        $values += '(' +
+            (ConvertTo-SqlUnicodeLiteral -Value $category.Trim()) + ', ' +
+            (ConvertTo-SqlUnicodeLiteral -Value $setting.Trim()) + ', ' +
+            (ConvertTo-SqlNullableUnicodeLiteral -Value $configValue) + ', ' +
+            (ConvertTo-SqlNullableIntLiteral -Value $configUsr) + ', ' +
+            (ConvertTo-SqlNullableUnicodeLiteral -Value $permissionName) + ', ' +
+            (ConvertTo-SqlNullableUnicodeLiteral -Value $roleName) + ', ' +
+            (ConvertTo-SqlNullableIntLiteral -Value $priority) +
+            ')'
+    }
+
+    Invoke-SqlText -Query @"
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+
+DECLARE @Settings table
+(
+    ConfigCategory nvarchar(100) NOT NULL,
+    ConfigSetting nvarchar(200) NOT NULL,
+    ConfigValue nvarchar(max) NULL,
+    ConfigUsr int NULL,
+    PermissionName nvarchar(200) NULL,
+    RoleName nvarchar(200) NULL,
+    ConfigPriority int NOT NULL
+);
+
+INSERT INTO @Settings(ConfigCategory, ConfigSetting, ConfigValue, ConfigUsr, PermissionName, RoleName, ConfigPriority)
+VALUES
+$(($values -join ",`r`n"));
+
+IF EXISTS
+(
+    SELECT 1
+    FROM @Settings s
+    LEFT JOIN omp.Permissions p ON p.Name = s.PermissionName
+    WHERE s.PermissionName IS NOT NULL
+      AND p.PermissionId IS NULL
+)
+BEGIN
+    THROW 51010, 'ConfigSettings references a PermissionName that does not exist.', 1;
+END
+
+IF EXISTS
+(
+    SELECT 1
+    FROM @Settings s
+    LEFT JOIN omp.Roles r ON r.Name = s.RoleName
+    WHERE s.RoleName IS NOT NULL
+      AND r.RoleId IS NULL
+)
+BEGIN
+    THROW 51011, 'ConfigSettings references a RoleName that does not exist.', 1;
+END
+
+;WITH ResolvedSettings AS
+(
+    SELECT s.ConfigCategory,
+           s.ConfigSetting,
+           s.ConfigValue,
+           s.ConfigUsr,
+           p.PermissionId AS ConfigPermission,
+           r.RoleId AS ConfigRole,
+           s.ConfigPriority
+    FROM @Settings s
+    LEFT JOIN omp.Permissions p ON p.Name = s.PermissionName
+    LEFT JOIN omp.Roles r ON r.Name = s.RoleName
+)
+MERGE omp.config_settings AS target
+USING ResolvedSettings AS source
+ON target.ConfigCategory = source.ConfigCategory
+   AND target.ConfigSetting = source.ConfigSetting
+   AND ISNULL(target.ConfigUsr, -2147483648) = ISNULL(source.ConfigUsr, -2147483648)
+   AND ISNULL(target.ConfigPermission, -2147483648) = ISNULL(source.ConfigPermission, -2147483648)
+   AND ISNULL(target.ConfigRole, -2147483648) = ISNULL(source.ConfigRole, -2147483648)
+WHEN MATCHED THEN
+    UPDATE SET ConfigValue = source.ConfigValue,
+               ConfigPriority = source.ConfigPriority
+WHEN NOT MATCHED THEN
+    INSERT(ConfigCategory, ConfigSetting, ConfigValue, ConfigUsr, ConfigPermission, ConfigRole, ConfigPriority)
+    VALUES(source.ConfigCategory, source.ConfigSetting, source.ConfigValue, source.ConfigUsr, source.ConfigPermission, source.ConfigRole, source.ConfigPriority);
 "@
 }
 
@@ -794,6 +933,7 @@ function Run-InstallSql {
         }
     }
 
+    Ensure-ConfiguredConfigSettings
     Ensure-RunAsDatabaseAccess
 }
 
@@ -1210,6 +1350,7 @@ $script:SqlUser = [string](Get-ConfigValue -Config $config -Name 'SqlUser' -Defa
 $script:SqlPassword = [string](Get-ConfigValue -Config $config -Name 'SqlPassword' -DefaultValue '')
 $script:BootstrapPortalAdminPrincipals = @((Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipals' -DefaultValue @("$env:USERDOMAIN\$env:USERNAME")))
 $script:BootstrapPortalAdminPrincipalType = [string](Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipalType' -DefaultValue 'ADUser')
+$script:ConfigSettings = @((Get-ConfigValue -Config $config -Name 'ConfigSettings' -DefaultValue @()))
 if ($script:BootstrapPortalAdminPrincipalType -ieq 'User') {
     $script:BootstrapPortalAdminPrincipalType = 'ADUser'
 }

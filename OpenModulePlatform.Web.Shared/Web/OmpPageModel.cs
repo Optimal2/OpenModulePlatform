@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Web.Shared/Web/OmpPageModel.cs
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
@@ -26,6 +27,24 @@ public abstract class OmpPageModel<TResource> : PageModel where TResource : clas
         HttpContext.RequestServices.GetRequiredService<IStringLocalizer<TResource>>();
 
     protected string T(string key) => Localizer[key];
+
+    protected async Task<string> TWithBrandingAsync(string key, CancellationToken ct)
+    {
+        var branding = await HttpContext.RequestServices
+            .GetRequiredService<OmpBrandingService>()
+            .GetBrandingAsync(ct);
+
+        return branding.ApplyPlatformName(T(key));
+    }
+
+    protected async Task<string> ApplyBrandingAsync(string text, CancellationToken ct)
+    {
+        var branding = await HttpContext.RequestServices
+            .GetRequiredService<OmpBrandingService>()
+            .GetBrandingAsync(ct);
+
+        return branding.ApplyPlatformName(text);
+    }
 
     public string WebAppTitle => string.IsNullOrWhiteSpace(WebAppOptions.Title)
         ? "OpenModulePlatform"
