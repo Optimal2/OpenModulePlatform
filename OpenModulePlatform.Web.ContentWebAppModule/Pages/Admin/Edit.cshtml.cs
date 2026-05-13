@@ -14,15 +14,18 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin;
 public sealed class EditModel : ContentWebAppModulePageModel
 {
     private readonly ContentPageRepository _repo;
+    private readonly ServerReportDefinitionLoader _serverReportLoader;
 
     public EditModel(
         IOptions<WebAppOptions> options,
         IOptions<ContentWebAppModuleOptions> contentOptions,
         RbacService rbac,
-        ContentPageRepository repo)
+        ContentPageRepository repo,
+        ServerReportDefinitionLoader serverReportLoader)
         : base(options, contentOptions, rbac)
     {
         _repo = repo;
+        _serverReportLoader = serverReportLoader;
     }
 
     [BindProperty]
@@ -31,6 +34,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
     public string? StatusMessage { get; private set; }
     public bool IsCreate => Input.ContentId == Guid.Empty;
     public bool CanManageAll { get; private set; }
+    public IReadOnlyList<string> AvailableServerReportKeys { get; private set; } = [];
 
     public async Task<IActionResult> OnGet(Guid? contentId, string? saved, CancellationToken ct)
     {
@@ -174,6 +178,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
 
         var accessContext = await GetContentAccessContextAsync(ct);
         CanManageAll = accessContext.CanManageAll;
+        AvailableServerReportKeys = _serverReportLoader.ListReportKeys();
 
         await SetContentTitlesAsync(title, ct);
         return null;
@@ -229,6 +234,18 @@ public sealed class EditModel : ContentWebAppModulePageModel
         Input.Title = Input.Title?.Trim() ?? string.Empty;
         Input.ContentType = ContentTypes.Normalize(Input.ContentType);
         Input.Body ??= string.Empty;
+        Input.ServerReportKey = string.IsNullOrWhiteSpace(Input.ServerReportKey)
+            ? null
+            : Input.ServerReportKey.Trim();
+
+        if (Input.ContentType == ContentTypes.ServerReport)
+        {
+            Input.Body = string.Empty;
+        }
+        else
+        {
+            Input.ServerReportKey = null;
+        }
     }
 
     private void ValidateInput()
@@ -243,7 +260,22 @@ public sealed class EditModel : ContentWebAppModulePageModel
             ModelState.AddModelError("Input.Title", T("The Title field is required."));
         }
 
-        if (string.IsNullOrWhiteSpace(Input.Body))
+        if (Input.ContentType == ContentTypes.ServerReport)
+        {
+            if (string.IsNullOrWhiteSpace(Input.ServerReportKey))
+            {
+                ModelState.AddModelError("Input.ServerReportKey", T("Server report key is required."));
+            }
+            else if (!_serverReportLoader.IsValidReportKey(Input.ServerReportKey))
+            {
+                ModelState.AddModelError("Input.ServerReportKey", T("Server report key may only contain letters, numbers, underscores, and hyphens."));
+            }
+            else if (!_serverReportLoader.ReportExists(Input.ServerReportKey))
+            {
+                ModelState.AddModelError("Input.ServerReportKey", T("Server report definition was not found."));
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(Input.Body))
         {
             ModelState.AddModelError("Input.Body", T("The Content field is required."));
         }
@@ -257,7 +289,8 @@ public sealed class EditModel : ContentWebAppModulePageModel
             Slug = Input.Slug,
             Title = Input.Title,
             ContentType = Input.ContentType,
-            Body = Input.Body,
+            Body = Input.Body ?? string.Empty,
+            ServerReportKey = Input.ServerReportKey,
             IsEnabled = Input.IsEnabled,
             SortOrder = Input.SortOrder,
             RoleAccesses = Input.RoleAccesses
@@ -281,6 +314,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
             Title = row.Title,
             ContentType = row.ContentType,
             Body = row.Body,
+            ServerReportKey = row.ServerReportKey,
             IsEnabled = row.IsEnabled,
             SortOrder = row.SortOrder,
             CreatedAtUtc = row.CreatedAtUtc,
@@ -308,9 +342,12 @@ public sealed class EditModel : ContentWebAppModulePageModel
         [Display(Name = "Content type")]
         public string ContentType { get; set; } = ContentTypes.Markdown;
 
-        [Required]
         [Display(Name = "Content")]
-        public string Body { get; set; } = string.Empty;
+        public string? Body { get; set; } = string.Empty;
+
+        [Display(Name = "Server report")]
+        [StringLength(128)]
+        public string? ServerReportKey { get; set; }
 
         [Display(Name = "Enabled")]
         public bool IsEnabled { get; set; } = true;

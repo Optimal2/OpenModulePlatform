@@ -59,7 +59,11 @@ public sealed class PageModel : ContentWebAppModulePageModel
         }
 
         await SetContentTitlesAsync(PageContent.Title, ct);
-        RenderedHtml = _renderer.RenderToHtml(PageContent.Body, PageContent.ContentType);
+        RenderedHtml = await _renderer.RenderToHtmlAsync(
+            PageContent.Body,
+            PageContent.ContentType,
+            PageContent.ServerReportKey,
+            ct);
         return Page();
     }
 }

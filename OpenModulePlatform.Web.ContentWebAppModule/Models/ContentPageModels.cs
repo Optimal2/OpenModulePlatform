@@ -11,6 +11,8 @@ public sealed class ContentPageListRow
 
     public string ContentType { get; set; } = ContentTypes.Markdown;
 
+    public string? ServerReportKey { get; set; }
+
     public bool IsEnabled { get; set; }
 
     public int? SortOrder { get; set; }
@@ -38,6 +40,8 @@ public sealed class ContentPageEditRow
 
     public string Body { get; set; } = string.Empty;
 
+    public string? ServerReportKey { get; set; }
+
     public bool IsEnabled { get; set; }
 
     public int? SortOrder { get; set; }
@@ -62,6 +66,8 @@ public sealed class ContentPageRenderRow
     public string ContentType { get; set; } = ContentTypes.Markdown;
 
     public string Body { get; set; } = string.Empty;
+
+    public string? ServerReportKey { get; set; }
 
     public DateTime UpdatedAtUtc { get; set; }
 }
@@ -98,6 +104,8 @@ public sealed class ContentPageSaveRequest
 
     public string Body { get; set; } = string.Empty;
 
+    public string? ServerReportKey { get; set; }
+
     public bool IsEnabled { get; set; }
 
     public int? SortOrder { get; set; }
@@ -111,6 +119,7 @@ public static class ContentTypes
 {
     public const string Markdown = "markdown";
     public const string Html = "html";
+    public const string ServerReport = "server_report";
 
     public static string Normalize(string? value)
     {
@@ -118,6 +127,11 @@ public static class ContentTypes
             ? Markdown
             : value.Trim().ToLowerInvariant();
 
-        return normalized == Html ? Html : Markdown;
+        return normalized switch
+        {
+            Html => Html,
+            ServerReport => ServerReport,
+            _ => Markdown
+        };
     }
 }

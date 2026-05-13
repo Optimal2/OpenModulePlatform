@@ -22,6 +22,7 @@ BEGIN
         title nvarchar(200) NOT NULL,
         content_type nvarchar(20) NOT NULL CONSTRAINT DF_omp_content_contents_content_type DEFAULT(N'markdown'),
         body nvarchar(max) NOT NULL,
+        server_report_key nvarchar(128) NULL,
         is_enabled bit NOT NULL CONSTRAINT DF_omp_content_contents_is_enabled DEFAULT(1),
         sort_order int NULL,
         created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_content_contents_created_at DEFAULT SYSUTCDATETIME(),
@@ -32,8 +33,47 @@ BEGIN
         CONSTRAINT PK_omp_content_contents PRIMARY KEY(content_id),
         CONSTRAINT FK_omp_content_contents_app_instance FOREIGN KEY(app_instance_id)
             REFERENCES omp.AppInstances(AppInstanceId),
-        CONSTRAINT CK_omp_content_contents_content_type CHECK(content_type IN (N'markdown', N'html'))
+        CONSTRAINT CK_omp_content_contents_content_type CHECK(content_type IN (N'markdown', N'html', N'server_report'))
     );
+END
+GO
+
+IF COL_LENGTH(N'omp_content.contents', N'server_report_key') IS NULL
+BEGIN
+    ALTER TABLE omp_content.contents
+        ADD server_report_key nvarchar(128) NULL;
+END
+GO
+
+DECLARE @ContentTypeConstraint sysname;
+SELECT @ContentTypeConstraint = name
+FROM sys.check_constraints
+WHERE parent_object_id = OBJECT_ID(N'omp_content.contents')
+  AND name = N'CK_omp_content_contents_content_type';
+
+IF @ContentTypeConstraint IS NOT NULL
+BEGIN
+    DECLARE @DropContentTypeConstraintSql nvarchar(max) =
+        N'ALTER TABLE omp_content.contents DROP CONSTRAINT ' + QUOTENAME(@ContentTypeConstraint);
+    EXEC sys.sp_executesql @DropContentTypeConstraintSql;
+END
+
+ALTER TABLE omp_content.contents
+    ADD CONSTRAINT CK_omp_content_contents_content_type
+        CHECK(content_type IN (N'markdown', N'html', N'server_report'));
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID(N'omp_content.contents')
+      AND name = N'CK_omp_content_contents_server_report_key'
+)
+BEGIN
+    ALTER TABLE omp_content.contents
+        ADD CONSTRAINT CK_omp_content_contents_server_report_key
+            CHECK(server_report_key IS NULL OR (LEN(server_report_key) BETWEEN 1 AND 128 AND server_report_key NOT LIKE N'%[^A-Za-z0-9_-]%'));
 END
 GO
 

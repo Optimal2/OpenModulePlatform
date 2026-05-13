@@ -613,6 +613,10 @@ function Write-RuntimeConfiguration {
             $settings.ContentWebAppModule = [ordered]@{
                 AppInstanceId = $script:ContentWebAppAppInstanceId
                 HomeSlug = $script:ContentWebAppHomeSlug
+                ServerReportsPath = $script:ContentWebAppServerReportsPath
+                ServerReportDefaultMaxRows = $script:ContentWebAppServerReportDefaultMaxRows
+                ServerReportMaxRowsLimit = $script:ContentWebAppServerReportMaxRowsLimit
+                ServerReportQueryTimeoutSeconds = $script:ContentWebAppServerReportQueryTimeoutSeconds
             }
         }
 
@@ -752,6 +756,7 @@ function Run-InstallSql {
     if ($script:InstallContentWebApp) {
         $contentSqlFiles = @(
             'sql\OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql',
+            'sql\OpenModulePlatform.Web.ContentWebAppModule\3-add-server-report-support.sql',
             'sql\OpenModulePlatform.Web.ContentWebAppModule\2-initialize-content-webapp.sql'
         )
 
@@ -1256,6 +1261,10 @@ if ([string]::IsNullOrWhiteSpace($script:PortalBaseUrl)) {
 }
 $script:ContentWebAppAppInstanceId = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'AppInstanceId' -DefaultValue '11111111-1111-1111-1111-111111111232')
 $script:ContentWebAppHomeSlug = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HomeSlug' -DefaultValue 'home')
+$script:ContentWebAppServerReportsPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportsPath' -DefaultValue 'App_Data/ContentReports')
+$script:ContentWebAppServerReportDefaultMaxRows = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportDefaultMaxRows' -DefaultValue 100)
+$script:ContentWebAppServerReportMaxRowsLimit = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportMaxRowsLimit' -DefaultValue 1000)
+$script:ContentWebAppServerReportQueryTimeoutSeconds = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportQueryTimeoutSeconds' -DefaultValue 30)
 
 $defaultAppPools = @{
     Portal = 'OMP_Portal'

@@ -55,7 +55,11 @@ public sealed class PreviewModel : ContentWebAppModulePageModel
         }
 
         await SetContentTitlesAsync("Preview", ct);
-        RenderedHtml = _renderer.RenderToHtml(PageContent.Body, PageContent.ContentType);
+        RenderedHtml = await _renderer.RenderToHtmlAsync(
+            PageContent.Body,
+            PageContent.ContentType,
+            PageContent.ServerReportKey,
+            ct);
         return Page();
     }
 }
