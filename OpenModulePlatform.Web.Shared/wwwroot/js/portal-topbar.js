@@ -215,6 +215,10 @@
             var visibleRows = Array.from(group.querySelectorAll('[data-portal-topbar-entry-row]'))
                 .some(function (row) { return !row.hidden; });
             group.hidden = !visibleRows;
+
+            if (term.length > 0 && visibleRows) {
+                group.open = true;
+            }
         });
     }
 
@@ -249,15 +253,78 @@
         button.setAttribute('aria-label', label);
     }
 
-    function findFavoriteListLink(root, entryKey, appInstanceId) {
+    function findNavigationRow(root, entryKey, appInstanceId) {
         if (!root) {
             return null;
         }
 
-        return Array.from(root.querySelectorAll('[data-favorite-entry-key]')).find(function (link) {
-            return link.getAttribute('data-favorite-entry-key') === entryKey
-                && (link.getAttribute('data-favorite-app-instance-id') || '') === (appInstanceId || '');
+        return Array.from(root.querySelectorAll('[data-portal-topbar-entry-row]')).find(function (row) {
+            return row.getAttribute('data-entry-key') === entryKey
+                && (row.getAttribute('data-app-instance-id') || '') === (appInstanceId || '');
         }) || null;
+    }
+
+    function findFavoriteListRow(root, entryKey, appInstanceId) {
+        if (!root) {
+            return null;
+        }
+
+        return Array.from(root.querySelectorAll('[data-portal-topbar-favorite-row]')).find(function (row) {
+            return row.getAttribute('data-favorite-entry-key') === entryKey
+                && (row.getAttribute('data-favorite-app-instance-id') || '') === (appInstanceId || '');
+        }) || null;
+    }
+
+    function createHiddenInput(name, value) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value || '';
+        return input;
+    }
+
+    function createFavoriteForm(root, payload) {
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = root.getAttribute('data-favorite-toggle-url') || '';
+        form.className = 'portal-topbar__favorite-form';
+        form.setAttribute('data-portal-topbar-favorite-form', '');
+        form.appendChild(createHiddenInput('entryKey', payload.entryKey));
+        form.appendChild(createHiddenInput('appInstanceId', payload.appInstanceId || ''));
+
+        var button = document.createElement('button');
+        button.type = 'submit';
+        button.className = 'portal-topbar__favorite-toggle is-favorite';
+        button.setAttribute('data-portal-topbar-favorite-button', '');
+
+        var icon = document.createElement('span');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = '★';
+        button.appendChild(icon);
+        form.appendChild(button);
+
+        setFavoriteButton(button, true, root);
+        initFavoriteForm(form);
+        return form;
+    }
+
+    function renderFavoriteLinkText(link, groupTitle, entryTitle, fallbackLabel) {
+        if (!link) {
+            return;
+        }
+
+        link.replaceChildren();
+        if (groupTitle) {
+            var module = document.createElement('span');
+            module.className = 'portal-topbar__favorite-module';
+            module.textContent = groupTitle;
+            link.appendChild(module);
+            link.appendChild(document.createTextNode(' / '));
+        }
+
+        var entry = document.createElement('span');
+        entry.textContent = entryTitle || fallbackLabel || '';
+        link.appendChild(entry);
     }
 
     function updateFavoritesMenu(root, payload) {
@@ -272,18 +339,38 @@
         }
 
         var appInstanceId = payload.appInstanceId || '';
-        var existing = findFavoriteListLink(root, payload.entryKey, appInstanceId);
+        var existing = findFavoriteListRow(root, payload.entryKey, appInstanceId);
         if (payload.isFavorite) {
+            var navigationRow = findNavigationRow(root, payload.entryKey, appInstanceId);
+            var label = navigationRow
+                ? navigationRow.getAttribute('data-favorite-label')
+                : null;
+            var groupTitle = navigationRow
+                ? navigationRow.getAttribute('data-favorite-group-title')
+                : null;
+            var entryTitle = navigationRow
+                ? navigationRow.getAttribute('data-favorite-entry-title')
+                : null;
+
             if (!existing) {
-                existing = document.createElement('a');
-                existing.className = 'portal-topbar__favorite-link';
+                existing = document.createElement('div');
+                existing.className = 'portal-topbar__favorite-row';
+                existing.setAttribute('data-portal-topbar-favorite-row', '');
                 existing.setAttribute('data-favorite-entry-key', payload.entryKey);
                 existing.setAttribute('data-favorite-app-instance-id', appInstanceId);
+
+                var link = document.createElement('a');
+                link.className = 'portal-topbar__favorite-link';
+                existing.appendChild(link);
+                existing.appendChild(createFavoriteForm(root, payload));
                 list.appendChild(existing);
             }
 
-            existing.href = payload.href || '#';
-            existing.textContent = payload.label || payload.entryKey;
+            var existingLink = existing.querySelector('.portal-topbar__favorite-link');
+            if (existingLink) {
+                existingLink.href = payload.href || '#';
+                renderFavoriteLinkText(existingLink, groupTitle, entryTitle, label || payload.label || payload.entryKey);
+            }
         } else if (existing) {
             existing.remove();
         }
@@ -298,9 +385,10 @@
             return;
         }
 
-        root.querySelectorAll('[data-portal-topbar-entry-row]').forEach(function (row) {
-            if (row.getAttribute('data-entry-key') !== entryKey
-                || (row.getAttribute('data-app-instance-id') || '') !== (appInstanceId || '')) {
+        root.querySelectorAll('[data-portal-topbar-entry-row], [data-portal-topbar-favorite-row]').forEach(function (row) {
+            var rowEntryKey = row.getAttribute('data-entry-key') || row.getAttribute('data-favorite-entry-key');
+            var rowAppInstanceId = row.getAttribute('data-app-instance-id') || row.getAttribute('data-favorite-app-instance-id') || '';
+            if (rowEntryKey !== entryKey || rowAppInstanceId !== (appInstanceId || '')) {
                 return;
             }
 
