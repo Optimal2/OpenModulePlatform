@@ -23,7 +23,10 @@
 
 @if (Model.IsVisible && Model.PortalLink is not null)
 {
-    <div class="portal-topbar" data-portal-topbar-root>
+    <div class="portal-topbar"
+         data-portal-topbar-root
+         data-add-favorite-text="@L[Model.AddFavoriteTextKey]"
+         data-remove-favorite-text="@L[Model.RemoveFavoriteTextKey]">
         <nav class="portal-topbar__nav" aria-label="@Model.PortalLink.TextKey" data-portal-topbar>
             <a class="portal-topbar__portal-link" href="@Model.PortalLink.Href">@Model.PortalLink.TextKey</a>
 
@@ -31,8 +34,7 @@
             {
                 <details class="portal-topbar__admin" data-portal-topbar-overlay data-portal-topbar-hover-menu>
                     <summary title="@L[Model.PortalAdminToggleTextKey]" aria-label="@L[Model.PortalAdminToggleTextKey]">
-                        <span aria-hidden="true">&#9881;</span>
-                        <span class="visually-hidden">@L[Model.PortalAdminToggleTextKey]</span>
+                        @L[Model.PortalAdminToggleTextKey]
                     </summary>
                     <div class="portal-topbar__admin-menu" data-portal-topbar-admin-menu>
                         @foreach (var section in Model.PortalAdminSections)
@@ -57,34 +59,78 @@
                 </details>
             }
 
-            @if (Model.ModuleLinks.Count > 0)
+            @if (Model.NavigationGroups.Count > 0)
             {
                 <span class="portal-topbar__pipe" aria-hidden="true">|</span>
 
-                <div class="portal-topbar__modules" data-portal-topbar-modules>
-                    @for (var i = 0; i < Model.ModuleLinks.Count; i++)
-                    {
-                        var link = Model.ModuleLinks[i];
-                        <a class="portal-topbar__module-link" href="@link.Href" data-portal-topbar-item data-index="@i">@link.TextKey</a>
-                    }
-                </div>
-
-                <details class="portal-topbar__collapsed" data-portal-topbar-overlay>
-                    <summary title="@L[Model.CollapsedToggleTextKey]" aria-label="@L[Model.CollapsedToggleTextKey]">
-                        @L[Model.CollapsedToggleTextKey]
+                <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                    <summary title="@L[Model.AllModulesToggleTextKey]" aria-label="@L[Model.AllModulesToggleTextKey]">
+                        @L[Model.AllModulesToggleTextKey]
                     </summary>
-                    <div class="portal-topbar__collapsed-menu">
-                        @foreach (var link in Model.ModuleLinks)
+                    <div class="portal-topbar__nav-menu" data-portal-topbar-entry-menu>
+                        <input class="portal-topbar__nav-filter"
+                               type="search"
+                               placeholder="@L[Model.NavigationFilterPlaceholderTextKey]"
+                               aria-label="@L[Model.NavigationFilterPlaceholderTextKey]"
+                               data-portal-topbar-entry-filter />
+                        @foreach (var group in Model.NavigationGroups)
                         {
-                            <a class="portal-topbar__collapsed-link" href="@link.Href">@link.TextKey</a>
+                            <section class="portal-topbar__nav-group" data-portal-topbar-entry-group>
+                                <div class="portal-topbar__nav-group-title">@group.Title</div>
+                                @foreach (var entry in group.Entries)
+                                {
+                                    var favoriteLabel = L[entry.IsFavorite ? Model.RemoveFavoriteTextKey : Model.AddFavoriteTextKey];
+                                    <div class="portal-topbar__nav-entry-row"
+                                         data-portal-topbar-entry-row
+                                         data-entry-key="@entry.EntryKey"
+                                         data-app-instance-id="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)"
+                                         data-favorite-label="@entry.FavoriteLabel"
+                                         data-favorite-href="@entry.Href"
+                                         data-search="@entry.SearchText">
+                                        <a class="portal-topbar__nav-entry-link" href="@entry.Href">@L[entry.TextKey]</a>
+                                        @if (Model.CanUsePersistentFavorites && entry.IsFavoritable)
+                                        {
+                                            <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form>
+                                                <input type="hidden" name="entryKey" value="@entry.EntryKey" />
+                                                <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
+                                                <button type="submit"
+                                                        class="portal-topbar__favorite-toggle@(entry.IsFavorite ? " is-favorite" : string.Empty)"
+                                                        title="@favoriteLabel"
+                                                        aria-label="@favoriteLabel"
+                                                        data-portal-topbar-favorite-button>
+                                                    <span aria-hidden="true">@(entry.IsFavorite ? "★" : "☆")</span>
+                                                </button>
+                                            </form>
+                                        }
+                                    </div>
+                                }
+                            </section>
                         }
                     </div>
                 </details>
 
-                <details class="portal-topbar__overflow" data-portal-topbar-overflow data-portal-topbar-overlay hidden>
-                    <summary>@L[Model.OverflowToggleTextKey]</summary>
-                    <div class="portal-topbar__menu" data-portal-topbar-menu></div>
-                </details>
+                @if (Model.CanUsePersistentFavorites)
+                {
+                    <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                        <summary title="@L[Model.FavoritesToggleTextKey]" aria-label="@L[Model.FavoritesToggleTextKey]">
+                            @L[Model.FavoritesToggleTextKey]
+                        </summary>
+                        <div class="portal-topbar__favorites-menu">
+                            <div class="portal-topbar__favorites-list" data-portal-topbar-favorites-list>
+                                @foreach (var entry in Model.FavoriteEntries)
+                                {
+                                    <a class="portal-topbar__favorite-link"
+                                       href="@entry.Href"
+                                       data-favorite-entry-key="@entry.EntryKey"
+                                       data-favorite-app-instance-id="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)">@entry.FavoriteLabel</a>
+                                }
+                            </div>
+                            <div class="portal-topbar__favorites-empty" data-portal-topbar-favorites-empty hidden="@(Model.FavoriteEntries.Count > 0)">
+                                @L[Model.NoFavoritesTextKey]
+                            </div>
+                        </div>
+                    </details>
+                }
             }
         </nav>
 

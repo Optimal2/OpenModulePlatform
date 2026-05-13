@@ -235,6 +235,45 @@ public static class OmpWebHostingExtensions
             CancellationToken ct) =>
             HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct));
 
+        app.MapPost(PortalTopBarService.ToggleFavoritePath, async (
+            HttpContext context,
+            PortalTopBarService portalTopBarService,
+            CancellationToken ct) =>
+        {
+            if (!context.Request.HasFormContentType)
+            {
+                return Results.BadRequest();
+            }
+
+            var form = await context.Request.ReadFormAsync(ct);
+            var entryKey = form["entryKey"].ToString();
+            Guid? appInstanceId = Guid.TryParse(form["appInstanceId"].ToString(), out var parsedAppInstanceId)
+                ? parsedAppInstanceId
+                : null;
+
+            var result = await portalTopBarService.ToggleFavoriteAsync(
+                options,
+                context.Request,
+                context.User,
+                entryKey,
+                appInstanceId,
+                ct);
+
+            if (!result.Success || result.Entry is null)
+            {
+                return Results.Forbid();
+            }
+
+            return Results.Json(new
+            {
+                isFavorite = result.IsFavorite,
+                entryKey = result.Entry.EntryKey,
+                appInstanceId = result.Entry.AppInstanceId?.ToString("D", CultureInfo.InvariantCulture) ?? string.Empty,
+                href = result.Entry.Href,
+                label = result.Entry.FavoriteLabel
+            });
+        }).RequireAuthorization();
+
         if (!options.AllowAnonymous)
         {
             app.UseAuthentication();

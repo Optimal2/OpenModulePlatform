@@ -34,6 +34,8 @@ public static class PortalTopBarModelFactory
             Links = [portalLink],
             PortalLink = portalLink,
             ModuleLinks = Array.Empty<PortalTopBarLink>(),
+            NavigationGroups = Array.Empty<PortalTopBarNavigationGroup>(),
+            FavoriteEntries = Array.Empty<PortalTopBarNavigationEntry>(),
             LanguageOptions = (options.SupportedCultures ?? Array.Empty<string>())
                 .Where(c => !string.IsNullOrWhiteSpace(c))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -51,6 +53,12 @@ public static class PortalTopBarModelFactory
             AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>(),
             OverflowToggleTextKey = "More",
             CollapsedToggleTextKey = "Modules",
+            AllModulesToggleTextKey = "All modules",
+            FavoritesToggleTextKey = "Favorites",
+            NavigationFilterPlaceholderTextKey = "Search modules",
+            NoFavoritesTextKey = "No favorites",
+            AddFavoriteTextKey = "Add favorite",
+            RemoveFavoriteTextKey = "Remove favorite",
             LanguageToggleTextKey = "Language",
             LogoutUrl = OmpAuthDefaults.LogoutPath,
             SettingsUrl = CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath)
