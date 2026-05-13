@@ -23,6 +23,7 @@ public sealed class PortalTopBarService
     private readonly RbacService _rbac;
     private readonly CultureSelectionService _cultureSelectionService;
     private readonly IOptions<OmpAuthOptions> _authOptions;
+    private readonly OmpBrandingService _brandingService;
     private readonly ILogger<PortalTopBarService> _log;
 
     public PortalTopBarService(
@@ -30,12 +31,14 @@ public sealed class PortalTopBarService
         RbacService rbac,
         CultureSelectionService cultureSelectionService,
         IOptions<OmpAuthOptions> authOptions,
+        OmpBrandingService brandingService,
         ILogger<PortalTopBarService> log)
     {
         _db = db;
         _rbac = rbac;
         _cultureSelectionService = cultureSelectionService;
         _authOptions = authOptions;
+        _brandingService = brandingService;
         _log = log;
     }
 
@@ -51,8 +54,9 @@ public sealed class PortalTopBarService
             return PortalTopBarModel.Hidden;
         }
 
+        var branding = await _brandingService.GetBrandingAsync(ct);
         var portalLink = new PortalTopBarLink(
-            "Portal",
+            branding.PortalDisplayName,
             PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         var cultureSelection = _cultureSelectionService.Resolve(options, request);
@@ -156,8 +160,9 @@ public sealed class PortalTopBarService
             return PortalTopBarModel.Hidden;
         }
 
+        var branding = await _brandingService.GetBrandingAsync(ct);
         var portalLink = new PortalTopBarLink(
-            "Portal",
+            branding.PortalDisplayName,
             PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         var cultureSelection = _cultureSelectionService.ResolveFromCurrentCulture(options);

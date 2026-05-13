@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.Users.IndexModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Security and access"]</div>
         <h2>@L["Users"]</h2>
-        <p class="lede">@L["Manage OMP users and their authentication links. Users can exist before they are linked to an AD account."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Manage OMP users and their authentication links. Users can exist before they are linked to an AD account."].Value)</p>
     </div>
     <div class="toolbar">
         <a class="action-link" href="~/admin/users/create">@L["Create user"]</a>
@@ -14,7 +17,7 @@
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="card empty-state">@L["No OMP users have been created yet."]</div>
+    <div class="card empty-state">@ompBranding.ApplyPlatformName(L["No OMP users have been created yet."].Value)</div>
 }
 else
 {

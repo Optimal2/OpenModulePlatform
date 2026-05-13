@@ -1,11 +1,26 @@
 @using OpenModulePlatform.Web.Shared.Navigation
 @* File: OpenModulePlatform.Portal/Pages/Shared/_Layout.cshtml *@
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(Context.RequestAborted);
+    var configuredPortalTitle = ViewData["PortalTitle"]?.ToString();
+    var documentTitle = ViewData["Title"]?.ToString();
+
+    if (string.IsNullOrWhiteSpace(documentTitle))
+    {
+        documentTitle = ompBranding.PortalDisplayName;
+    }
+    else if (!string.IsNullOrWhiteSpace(configuredPortalTitle)
+        && documentTitle.StartsWith(configuredPortalTitle, System.StringComparison.Ordinal))
+    {
+        documentTitle = ompBranding.PortalDisplayName + documentTitle[configuredPortalTitle.Length..];
+    }
+}
 <!doctype html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>@ViewData["Title"]</title>
+    <title>@documentTitle</title>
     <link rel="stylesheet" href="~/css/site.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
@@ -19,8 +34,8 @@
         @await Component.InvokeAsync("PortalTopBar")
         <div class="topbar">
         <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Home"]">
-            <div class="brand">@ViewData["PortalTitle"]</div>
-            <div class="brand-subtitle">@L["Portal"]</div>
+            <div class="brand">@ompBranding.PortalDisplayName</div>
+            <div class="brand-subtitle">@ompBranding.PortalName</div>
         </a>
         <nav class="nav nav--primary">
             <a href="~/">@L["Home"]</a>

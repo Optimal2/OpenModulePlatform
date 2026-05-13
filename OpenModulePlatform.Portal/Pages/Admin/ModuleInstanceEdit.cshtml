@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ModuleInstanceEditModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Manual core"]</div>
         <h2>@(Model.IsCreate ? L["Create module instance"] : L["Edit module instance"])</h2>
-        <p class="lede">@L["Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Module instances bind a module definition to a concrete OMP instance. This is where definitions start becoming operational."].Value)</p>
     </div>
 </section>
 

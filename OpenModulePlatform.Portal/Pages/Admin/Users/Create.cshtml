@@ -1,11 +1,14 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.Users.CreateModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
 
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Security and access"]</div>
         <h2>@L["Create user"]</h2>
-        <p class="lede">@L["Create the OMP user first. AD authentication links can be added from the edit page."]</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Create the OMP user first. AD authentication links can be added from the edit page."].Value)</p>
     </div>
 </section>
 
