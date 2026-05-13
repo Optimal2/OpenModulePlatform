@@ -106,7 +106,7 @@
                                         <a class="portal-topbar__nav-entry-link" href="@entry.Href">@entryText</a>
                                         @if (Model.CanUsePersistentFavorites && entry.IsFavoritable)
                                         {
-                                            <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form>
+                                            <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
                                                 <input type="hidden" name="entryKey" value="@entry.EntryKey" />
                                                 <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
                                                 <button type="submit"
@@ -148,7 +148,7 @@
                                             }
                                             <span>@EntryText(entry)</span>
                                         </a>
-                                        <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form>
+                                        <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
                                             <input type="hidden" name="entryKey" value="@entry.EntryKey" />
                                             <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
                                             <button type="submit"
@@ -206,7 +206,7 @@
                         }
                         @foreach (var language in Model.LanguageOptions)
                         {
-                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)">@CultureText(language.DisplayText)</a>
+                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)" data-enhance-nav="false">@CultureText(language.DisplayText)</a>
                         }
                     </div>
                 </details>
@@ -251,7 +251,7 @@
                                         <span class="portal-topbar__profile-current-user">@currentUserDisplayName</span>
                                     </span>
                                 }
-                                <form method="post" action="@Model.LogoutUrl" class="portal-topbar__logout-form">
+                                <form method="post" action="@Model.LogoutUrl" class="portal-topbar__logout-form" data-enhance="false">
                                     <button type="submit"
                                             class="portal-topbar__profile-action-button"
                                             title="@L["Log out"]"
@@ -266,7 +266,7 @@
                                     </button>
                                 </form>
                             </div>
-                            <a class="portal-topbar__profile-settings-link" href="@Model.SettingsUrl">@L["Settings"]</a>
+                            <a class="portal-topbar__profile-settings-link" href="@Model.SettingsUrl" data-enhance-nav="false">@L["Settings"]</a>
                         </div>
                         <div class="portal-topbar__profile-section">
                             <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>

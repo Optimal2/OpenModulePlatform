@@ -424,7 +424,7 @@
             })
                 .then(function (response) {
                     if (!response.ok) {
-                        throw new Error('Favorite toggle failed.');
+                        throw new Error('Favorite toggle failed with status ' + response.status + '.');
                     }
 
                     return response.json();
@@ -433,8 +433,10 @@
                     updateFavoriteButtons(root, payload.entryKey, payload.appInstanceId || '', !!payload.isFavorite);
                     updateFavoritesMenu(root, payload);
                 })
-                .catch(function () {
-                    return null;
+                .catch(function (error) {
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn('OMP topbar favorite toggle failed.', error);
+                    }
                 })
                 .finally(function () {
                     if (button) {

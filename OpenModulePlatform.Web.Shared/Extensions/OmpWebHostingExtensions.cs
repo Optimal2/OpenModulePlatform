@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
@@ -159,6 +160,15 @@ public static class OmpWebHostingExtensions
             app.UseForwardedHeaders();
         }
 
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseDeveloperExceptionPage();
+        }
+        else
+        {
+            app.UseExceptionHandler("/Error");
+        }
+
         var localizationOptions = app.Services
             .GetRequiredService<IOptions<RequestLocalizationOptions>>()
             .Value;
@@ -170,6 +180,32 @@ public static class OmpWebHostingExtensions
 
         if (!mapRazorPages)
         {
+            app.MapGet("/error", async (
+                HttpContext context,
+                IStringLocalizer<SharedResource> localizer,
+                OmpBrandingService brandingService) =>
+            {
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+
+                var branding = await brandingService.GetBrandingAsync(context.RequestAborted);
+                var feature = context.Features.Get<IExceptionHandlerPathFeature>();
+                var portalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
+                var appHomeHref = OmpUrlPathHelper.BuildAppHomeHref(context.Request.PathBase);
+                var model = OmpErrorDisplayModelFactory.CreateForStatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    feature?.Path,
+                    portalHref,
+                    appHomeHref,
+                    localizer,
+                    showBackButton: true);
+
+                return Results.Content(
+                    BuildFallbackStatusPageHtml(model, branding),
+                    contentType: "text/html; charset=utf-8",
+                    contentEncoding: System.Text.Encoding.UTF8,
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }).AllowAnonymous();
+
             app.MapGet("/status/{statusCode:int}", async (
                 HttpContext context,
                 int statusCode,
