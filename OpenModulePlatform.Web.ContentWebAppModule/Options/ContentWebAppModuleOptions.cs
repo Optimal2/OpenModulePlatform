@@ -21,6 +21,12 @@ public sealed class ContentWebAppModuleOptions
     /// </summary>
     public string ServerReportsPath { get; set; } = "App_Data/ContentReports";
 
+    /// <summary>
+    /// Database names that server report JSON definitions may select.
+    /// An omitted report database always uses the default OmpDb database.
+    /// </summary>
+    public string[] AllowedServerReportDatabases { get; set; } = [];
+
     public int ServerReportDefaultMaxRows { get; set; } = 100;
 
     public int ServerReportMaxRowsLimit { get; set; } = 1000;
