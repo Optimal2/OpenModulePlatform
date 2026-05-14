@@ -14,6 +14,7 @@ builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddScoped<OmpAdminRepository>();
 builder.Services.AddScoped<OmpConfigSettingsAdminRepository>();
 builder.Services.AddScoped<OmpUserAdminRepository>();
+builder.Services.AddScoped<PortalEntryService>();
 builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<RbacAdminRepository>();
 
