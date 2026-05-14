@@ -1325,6 +1325,10 @@
   <data name="Back to users" xml:space="preserve"><value>Tillbaka till användare</value></data>
   <data name="User created." xml:space="preserve"><value>Användaren har skapats.</value></data>
   <data name="User created with local login." xml:space="preserve"><value>Användaren har skapats med lokal inloggning.</value></data>
+  <data name="Create an OMP user and optionally add AD or local password authentication immediately." xml:space="preserve"><value>Skapa en OMP-användare och lägg eventuellt till AD- eller lokal lösenordsautentisering direkt.</value></data>
+  <data name="Optional AD link" xml:space="preserve"><value>Valfri AD-länk</value></data>
+  <data name="User created with AD link." xml:space="preserve"><value>Användaren har skapats med AD-länk.</value></data>
+  <data name="User created with AD link and local login." xml:space="preserve"><value>Användaren har skapats med AD-länk och lokal inloggning.</value></data>
   <data name="Optional local login" xml:space="preserve"><value>Valfri lokal inloggning</value></data>
   <data name="Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user." xml:space="preserve"><value>Skapa en lokal lösenordsinloggning nu genom att ange användarnamn och lösenord. Lämna fälten tomma för att bara skapa OMP-användaren.</value></data>
   <data name="Edit user" xml:space="preserve"><value>Redigera användare</value></data>
@@ -1334,6 +1338,7 @@
   <data name="User updated." xml:space="preserve"><value>Användaren har uppdaterats.</value></data>
   <data name="Authentication" xml:space="preserve"><value>Autentisering</value></data>
   <data name="These provider identities are linked to this OMP user. They are shown read-only in this version." xml:space="preserve"><value>Dessa provideridentiteter är länkade till OMP-användaren. De visas skrivskyddade i den här versionen.</value></data>
+  <data name="These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added." xml:space="preserve"><value>Dessa provideridentiteter är länkade till OMP-användaren. Om alla länkar tas bort kan användaren inte logga in förrän en ny länk läggs till.</value></data>
   <data name="This OMP user has no auth links." xml:space="preserve"><value>Den här OMP-användaren saknar autentiseringslänkar.</value></data>
   <data name="Provider" xml:space="preserve"><value>Provider</value></data>
   <data name="Provider user key" xml:space="preserve"><value>Provider user key</value></data>
@@ -1368,6 +1373,18 @@
   <data name="The OMP user account could not be created." xml:space="preserve"><value>OMP-användarkontot kunde inte skapas.</value></data>
   <data name="Local login" xml:space="preserve"><value>Lokal inloggning</value></data>
   <data name="Add local login" xml:space="preserve"><value>Lägg till lokal inloggning</value></data>
+  <data name="Remove link" xml:space="preserve"><value>Ta bort länk</value></data>
+  <data name="Reset local password" xml:space="preserve"><value>Sätt om lokalt lösenord</value></data>
+  <data name="New password" xml:space="preserve"><value>Nytt lösenord</value></data>
+  <data name="Confirm new password" xml:space="preserve"><value>Bekräfta nytt lösenord</value></data>
+  <data name="Local password reset." xml:space="preserve"><value>Lokalt lösenord har satts om.</value></data>
+  <data name="Local login is missing." xml:space="preserve"><value>Lokal inloggning saknas.</value></data>
+  <data name="The local password could not be reset." xml:space="preserve"><value>Det lokala lösenordet kunde inte sättas om.</value></data>
+  <data name="AD link removed." xml:space="preserve"><value>AD-länken har tagits bort.</value></data>
+  <data name="Local login removed." xml:space="preserve"><value>Lokal inloggning har tagits bort.</value></data>
+  <data name="Auth link removed." xml:space="preserve"><value>Autentiseringslänken har tagits bort.</value></data>
+  <data name="Auth link not found." xml:space="preserve"><value>Autentiseringslänken hittades inte.</value></data>
+  <data name="The auth link could not be removed." xml:space="preserve"><value>Autentiseringslänken kunde inte tas bort.</value></data>
   <data name="Add a local password login linked to this OMP user." xml:space="preserve"><value>Lägg till en lokal lösenordsinloggning kopplad till den här OMP-användaren.</value></data>
   <data name="User name" xml:space="preserve"><value>Användarnamn</value></data>
   <data name="Password" xml:space="preserve"><value>Lösenord</value></data>

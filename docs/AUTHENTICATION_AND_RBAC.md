@@ -72,8 +72,10 @@ Raw passwords must never be stored. The current hash format is `PBKDF2-SHA256$<i
 LPWD login records are always authentication links to first-class OMP users.
 They cannot exist as standalone platform users. Portal administrators can add a
 local login while creating a user from `/admin/users/create`, or later from
-`/admin/users/edit/{userId}`. Both flows write `omp.auth_provider_lpwd` and the
-matching `omp.user_auth` row in one transaction.
+`/admin/users/edit/{userId}`. Both add flows write `omp.auth_provider_lpwd` and
+the matching `omp.user_auth` row in one transaction. The edit page can also
+reset the local password hash or remove the local login; removal deletes both
+the `omp.user_auth` link and the `omp.auth_provider_lpwd` row.
 
 ## User Tables
 
@@ -88,10 +90,10 @@ An OMP user row is required when the identity needs local password sign-in or du
 
 Portal administrators can manage first-class OMP users at `/admin/users`. The
 admin UI can list, create and edit `omp.users` rows, optionally create an
-initial local password login, and add AD provider links in `omp.user_auth`. AD
-links use the same provider display name (`AD`) and provider user key formats
-that `/auth/ad` resolves, such as `DOMAIN\User`, `name:DOMAIN\User`, or
-`sid:S-1-5-21-...`.
+initial AD link or local password login, add and remove authentication links,
+and reset local passwords. AD links use the same provider display name (`AD`)
+and provider user key formats that `/auth/ad` resolves, such as `DOMAIN\User`,
+`name:DOMAIN\User`, or `sid:S-1-5-21-...`.
 
 If a Windows identity matches an `omp.user_auth` AD link to a disabled OMP user,
 the auth app blocks sign-in instead of falling back to direct AD user/group role
@@ -164,7 +166,9 @@ left disabled until group selection has a dedicated workflow.
 
 For local password users, create the OMP user and local login together from
 `/admin/users/create` when possible. For an existing OMP user, link the `lpwd`
-provider identity through `omp.user_auth` from the edit page.
+provider identity through `omp.user_auth` from the edit page. Removing all
+authentication links from a user is allowed, but that user cannot sign in again
+until an administrator adds a new AD link or local login.
 
 Keep provider-specific secrets and environment-specific bootstrap values out of public repositories.
 

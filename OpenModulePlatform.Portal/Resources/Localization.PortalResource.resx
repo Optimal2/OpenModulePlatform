@@ -1326,6 +1326,10 @@
   <data name="Back to users" xml:space="preserve"><value>Back to users</value></data>
   <data name="User created." xml:space="preserve"><value>User created.</value></data>
   <data name="User created with local login." xml:space="preserve"><value>User created with local login.</value></data>
+  <data name="Create an OMP user and optionally add AD or local password authentication immediately." xml:space="preserve"><value>Create an OMP user and optionally add AD or local password authentication immediately.</value></data>
+  <data name="Optional AD link" xml:space="preserve"><value>Optional AD link</value></data>
+  <data name="User created with AD link." xml:space="preserve"><value>User created with AD link.</value></data>
+  <data name="User created with AD link and local login." xml:space="preserve"><value>User created with AD link and local login.</value></data>
   <data name="Optional local login" xml:space="preserve"><value>Optional local login</value></data>
   <data name="Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user." xml:space="preserve"><value>Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user.</value></data>
   <data name="Edit user" xml:space="preserve"><value>Edit user</value></data>
@@ -1335,6 +1339,7 @@
   <data name="User updated." xml:space="preserve"><value>User updated.</value></data>
   <data name="Authentication" xml:space="preserve"><value>Authentication</value></data>
   <data name="These provider identities are linked to this OMP user. They are shown read-only in this version." xml:space="preserve"><value>These provider identities are linked to this OMP user. They are shown read-only in this version.</value></data>
+  <data name="These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added." xml:space="preserve"><value>These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added.</value></data>
   <data name="This OMP user has no auth links." xml:space="preserve"><value>This OMP user has no auth links.</value></data>
   <data name="Provider" xml:space="preserve"><value>Provider</value></data>
   <data name="Provider user key" xml:space="preserve"><value>Provider user key</value></data>
@@ -1369,6 +1374,18 @@
   <data name="The OMP user account could not be created." xml:space="preserve"><value>The OMP user account could not be created.</value></data>
   <data name="Local login" xml:space="preserve"><value>Local login</value></data>
   <data name="Add local login" xml:space="preserve"><value>Add local login</value></data>
+  <data name="Remove link" xml:space="preserve"><value>Remove link</value></data>
+  <data name="Reset local password" xml:space="preserve"><value>Reset local password</value></data>
+  <data name="New password" xml:space="preserve"><value>New password</value></data>
+  <data name="Confirm new password" xml:space="preserve"><value>Confirm new password</value></data>
+  <data name="Local password reset." xml:space="preserve"><value>Local password reset.</value></data>
+  <data name="Local login is missing." xml:space="preserve"><value>Local login is missing.</value></data>
+  <data name="The local password could not be reset." xml:space="preserve"><value>The local password could not be reset.</value></data>
+  <data name="AD link removed." xml:space="preserve"><value>AD link removed.</value></data>
+  <data name="Local login removed." xml:space="preserve"><value>Local login removed.</value></data>
+  <data name="Auth link removed." xml:space="preserve"><value>Auth link removed.</value></data>
+  <data name="Auth link not found." xml:space="preserve"><value>Auth link not found.</value></data>
+  <data name="The auth link could not be removed." xml:space="preserve"><value>The auth link could not be removed.</value></data>
   <data name="Add a local password login linked to this OMP user." xml:space="preserve"><value>Add a local password login linked to this OMP user.</value></data>
   <data name="User name" xml:space="preserve"><value>User name</value></data>
   <data name="Password" xml:space="preserve"><value>Password</value></data>

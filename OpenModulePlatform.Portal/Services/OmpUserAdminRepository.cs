@@ -131,12 +131,17 @@ WHERE user_id = @user_id;";
         return await InsertUserAsync(conn, tx: null, input, ct);
     }
 
-    public async Task<CreateUserResult> CreateUserWithOptionalLocalLoginAsync(
+    public async Task<CreateUserResult> CreateUserWithOptionalAuthLinksAsync(
         OmpUserEditData input,
+        string? adProviderUserKey,
         string? localUserName,
         string? localPassword,
         CancellationToken ct)
     {
+        var shouldCreateAdLink = !string.IsNullOrWhiteSpace(adProviderUserKey);
+        var normalizedAdProviderUserKey = shouldCreateAdLink
+            ? adProviderUserKey!.Trim()
+            : null;
         var shouldCreateLocalLogin = !string.IsNullOrWhiteSpace(localUserName);
         var normalizedUserName = shouldCreateLocalLogin
             ? LocalPasswordIdentity.NormalizeUserName(localUserName!)
@@ -149,9 +154,35 @@ WHERE user_id = @user_id;";
         await conn.OpenAsync(ct);
 
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        int? adProviderId = null;
+        int? localProviderId = null;
         try
         {
-            int? localProviderId = null;
+            if (shouldCreateAdLink)
+            {
+                adProviderId = await GetAuthProviderIdAsync(conn, tx, AdProviderDisplayName, ct);
+                if (adProviderId is null)
+                {
+                    await tx.RollbackAsync(ct);
+                    return new CreateUserResult(CreateUserStatus.AdProviderMissing);
+                }
+
+                var existingAdLink = await GetExistingAuthLinkAsync(
+                    conn,
+                    tx,
+                    adProviderId.Value,
+                    normalizedAdProviderUserKey!,
+                    ct);
+
+                if (existingAdLink is not null)
+                {
+                    await tx.RollbackAsync(ct);
+                    return new CreateUserResult(
+                        CreateUserStatus.AdProviderUserKeyAlreadyInUse,
+                        ExistingUserId: existingAdLink.Value.UserId);
+                }
+            }
+
             if (shouldCreateLocalLogin)
             {
                 localProviderId = await GetEnabledAuthProviderIdAsync(
@@ -175,6 +206,11 @@ WHERE user_id = @user_id;";
             }
 
             var userId = await InsertUserAsync(conn, tx, input, ct);
+            if (shouldCreateAdLink)
+            {
+                await InsertAuthLinkAsync(conn, tx, userId, adProviderId!.Value, normalizedAdProviderUserKey!, ct);
+            }
+
             if (shouldCreateLocalLogin)
             {
                 await InsertLocalPasswordUserAsync(conn, tx, normalizedUserName!, passwordHash!, ct);
@@ -184,10 +220,122 @@ WHERE user_id = @user_id;";
             await tx.CommitAsync(ct);
             return new CreateUserResult(CreateUserStatus.Created, userId, normalizedUserName);
         }
-        catch (SqlException ex) when (shouldCreateLocalLogin && ex.Number is 2601 or 2627)
+        catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
             await tx.RollbackAsync(ct);
-            return new CreateUserResult(CreateUserStatus.LocalUserNameAlreadyInUse, NormalizedUserName: normalizedUserName);
+            if (shouldCreateAdLink && adProviderId is not null)
+            {
+                var existingAdLink = await GetExistingAuthLinkAsync(
+                    conn,
+                    adProviderId.Value,
+                    normalizedAdProviderUserKey!,
+                    ct);
+
+                if (existingAdLink is not null)
+                {
+                    return new CreateUserResult(
+                        CreateUserStatus.AdProviderUserKeyAlreadyInUse,
+                        ExistingUserId: existingAdLink.Value.UserId);
+                }
+            }
+
+            if (shouldCreateLocalLogin)
+            {
+                return new CreateUserResult(CreateUserStatus.LocalUserNameAlreadyInUse, NormalizedUserName: normalizedUserName);
+            }
+
+            if (shouldCreateAdLink)
+            {
+                return new CreateUserResult(CreateUserStatus.AdProviderUserKeyAlreadyInUse);
+            }
+
+            throw;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<ResetLocalPasswordResult> ResetLocalPasswordAsync(
+        int userId,
+        string password,
+        CancellationToken ct)
+    {
+        var passwordHash = _passwordHasher.Hash(password);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            var providerId = await GetEnabledAuthProviderIdAsync(
+                conn,
+                tx,
+                LocalPasswordIdentity.ProviderDisplayName,
+                ct);
+
+            if (providerId is null)
+            {
+                await tx.RollbackAsync(ct);
+                return ResetLocalPasswordResult.ProviderMissing;
+            }
+
+            var providerUserKey = await GetFirstProviderUserKeyAsync(conn, tx, userId, providerId.Value, ct);
+            if (providerUserKey is null)
+            {
+                await tx.RollbackAsync(ct);
+                return ResetLocalPasswordResult.LocalLoginMissing;
+            }
+
+            var updated = await UpdateLocalPasswordHashAsync(conn, tx, providerUserKey, passwordHash, ct);
+            if (!updated)
+            {
+                await tx.RollbackAsync(ct);
+                return ResetLocalPasswordResult.LocalLoginMissing;
+            }
+
+            await tx.CommitAsync(ct);
+            return ResetLocalPasswordResult.Reset;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<RemoveAuthLinkResult> RemoveAuthLinkAsync(
+        int userId,
+        int userAuthId,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            var link = await GetAuthLinkAsync(conn, tx, userId, userAuthId, ct);
+            if (link is null)
+            {
+                await tx.RollbackAsync(ct);
+                return new RemoveAuthLinkResult(RemoveAuthLinkStatus.AuthLinkMissing);
+            }
+
+            await DeleteAuthLinkAsync(conn, tx, userAuthId, ct);
+            if (string.Equals(link.Value.ProviderDisplayName, LocalPasswordIdentity.ProviderDisplayName, StringComparison.OrdinalIgnoreCase))
+            {
+                await DeleteLocalPasswordUserAsync(conn, tx, link.Value.ProviderUserKey, ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return new RemoveAuthLinkResult(
+                RemoveAuthLinkStatus.Removed,
+                link.Value.ProviderDisplayName,
+                link.Value.ProviderUserKey);
         }
         catch
         {
@@ -538,6 +686,24 @@ WHERE display_name = @display_name;";
         return result is null or DBNull ? null : Convert.ToInt32(result);
     }
 
+    private static async Task<int?> GetAuthProviderIdAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string displayName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT provider_id
+FROM omp.auth_providers
+WHERE display_name = @display_name;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@display_name", displayName);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : Convert.ToInt32(result);
+    }
+
     private static async Task<int?> GetEnabledAuthProviderIdAsync(
         SqlConnection conn,
         SqlTransaction tx,
@@ -628,6 +794,60 @@ ORDER BY user_auth_id;";
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
     }
 
+    private static async Task<AuthLinkRow?> GetAuthLinkAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        int userAuthId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ua.user_auth_id,
+       ap.display_name,
+       ua.provider_user_key
+FROM omp.user_auth ua
+INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+WHERE ua.user_auth_id = @user_auth_id
+  AND ua.user_id = @user_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_auth_id", userAuthId);
+        Add(cmd, "@user_id", userId);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new AuthLinkRow(
+            rdr.GetInt32(0),
+            rdr.GetString(1),
+            rdr.GetString(2));
+    }
+
+    private static async Task<string?> GetFirstProviderUserKeyAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        int providerId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1) provider_user_key
+FROM omp.user_auth
+WHERE user_id = @user_id
+  AND provider_id = @provider_id
+ORDER BY user_auth_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+        Add(cmd, "@provider_id", providerId);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : Convert.ToString(result);
+    }
+
     private static async Task<int> InsertUserAsync(
         SqlConnection conn,
         SqlTransaction? tx,
@@ -703,6 +923,24 @@ VALUES(@user_name, @password_hash);";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    private static async Task<bool> UpdateLocalPasswordHashAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string userName,
+        string passwordHash,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.auth_provider_lpwd
+SET password_hash = @password_hash
+WHERE user_name = @user_name;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_name", userName);
+        Add(cmd, "@password_hash", passwordHash);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
+    }
+
     private static async Task InsertAuthLinkAsync(
         SqlConnection conn,
         SqlTransaction tx,
@@ -722,12 +960,40 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    private static async Task DeleteAuthLinkAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userAuthId,
+        CancellationToken ct)
+    {
+        const string sql = "DELETE FROM omp.user_auth WHERE user_auth_id = @user_auth_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_auth_id", userAuthId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task DeleteLocalPasswordUserAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string userName,
+        CancellationToken ct)
+    {
+        const string sql = "DELETE FROM omp.auth_provider_lpwd WHERE user_name = @user_name;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_name", userName);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static void Add(SqlCommand cmd, string name, object? value)
     {
         cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
     }
 
     private readonly record struct ExistingAuthLink(int UserAuthId, int UserId);
+
+    private readonly record struct AuthLinkRow(int UserAuthId, string ProviderDisplayName, string ProviderUserKey);
 }
 
 public sealed class OmpUserListRow
@@ -795,11 +1061,14 @@ public sealed record AddAuthLinkResult(AddAuthLinkStatus Status, int? ExistingUs
 public sealed record CreateUserResult(
     CreateUserStatus Status,
     int? UserId = null,
-    string? NormalizedUserName = null);
+    string? NormalizedUserName = null,
+    int? ExistingUserId = null);
 
 public enum CreateUserStatus
 {
     Created,
+    AdProviderMissing,
+    AdProviderUserKeyAlreadyInUse,
     LocalPasswordProviderMissing,
     LocalUserNameAlreadyInUse
 }
@@ -821,6 +1090,24 @@ public enum AddLocalPasswordLoginStatus
     ProviderMissing,
     UserAlreadyHasLocalLogin,
     UserNameAlreadyInUse
+}
+
+public enum ResetLocalPasswordResult
+{
+    Reset,
+    ProviderMissing,
+    LocalLoginMissing
+}
+
+public sealed record RemoveAuthLinkResult(
+    RemoveAuthLinkStatus Status,
+    string? ProviderDisplayName = null,
+    string? ProviderUserKey = null);
+
+public enum RemoveAuthLinkStatus
+{
+    Removed,
+    AuthLinkMissing
 }
 
 public sealed record MigrateAdUserRoleAssignmentsResult(
