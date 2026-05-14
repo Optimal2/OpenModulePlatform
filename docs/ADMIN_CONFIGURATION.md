@@ -32,6 +32,12 @@ role principal. Direct `ADUser` assignments for linked AD keys can be moved to
 the OMP user from `/admin/users/edit/{userId}`. The migration only handles
 direct `ADUser` assignments; `ADGroup` assignments are intentionally left as-is.
 
+OMP users can be created from `/admin/users/create` before the person has ever
+signed in with AD. The create page can also create an initial local password
+login in the same transaction, which is the preferred path for users who should
+sign in through the built-in `lpwd` provider. Existing OMP users can still get a
+local login later from `/admin/users/edit/{userId}`.
+
 The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
 principal types. Existing `ADGroup` assignments still resolve, but adding new AD
 group assignments is disabled in the editor until group selection has its own

@@ -31,10 +31,13 @@
   <data name="Deleted/reserved" xml:space="preserve"><value>Deleted/reserved</value></data>
   <data name="Unknown" xml:space="preserve"><value>Unknown</value></data>
   <data name="Never" xml:space="preserve"><value>Never</value></data>
-  <data name="Create the OMP user first. AD authentication links can be added from the edit page." xml:space="preserve"><value>Create the OMP user first. AD authentication links can be added from the edit page.</value></data>
+  <data name="Create an OMP user and optionally add a local password login immediately. AD authentication links can still be added from the edit page." xml:space="preserve"><value>Create an OMP user and optionally add a local password login immediately. AD authentication links can still be added from the edit page.</value></data>
   <data name="Save user" xml:space="preserve"><value>Save user</value></data>
   <data name="Back to users" xml:space="preserve"><value>Back to users</value></data>
   <data name="User created." xml:space="preserve"><value>User created.</value></data>
+  <data name="User created with local login." xml:space="preserve"><value>User created with local login.</value></data>
+  <data name="Optional local login" xml:space="preserve"><value>Optional local login</value></data>
+  <data name="Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user." xml:space="preserve"><value>Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user.</value></data>
   <data name="Edit user" xml:space="preserve"><value>Edit user</value></data>
   <data name="Update the OMP user record and link AD identities that Windows sign-in can resolve." xml:space="preserve"><value>Update the OMP user record and link AD identities that Windows sign-in can resolve.</value></data>
   <data name="Updated UTC" xml:space="preserve"><value>Updated UTC</value></data>

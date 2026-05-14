@@ -8,7 +8,7 @@
     <div>
         <div class="eyebrow">@L["Security and access"]</div>
         <h2>@L["Create user"]</h2>
-        <p class="lede">@ompBranding.ApplyPlatformName(L["Create the OMP user first. AD authentication links can be added from the edit page."].Value)</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Create an OMP user and optionally add a local password login immediately. AD authentication links can still be added from the edit page."].Value)</p>
     </div>
 </section>
 
@@ -34,6 +34,32 @@
                 }
             </select>
             <span asp-validation-for="Input.AccountStatus" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <div class="eyebrow">@L["Authentication"]</div>
+        <h3>@L["Optional local login"]</h3>
+        <p class="muted">@ompBranding.ApplyPlatformName(L["Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user."].Value)</p>
+
+        <div class="field-grid field-grid--3">
+            <div class="form-field">
+                <label asp-for="LocalLogin.UserName"></label>
+                <input asp-for="LocalLogin.UserName" autocomplete="off" />
+                <span asp-validation-for="LocalLogin.UserName" class="field-validation-error"></span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="LocalLogin.Password"></label>
+                <input asp-for="LocalLogin.Password" type="password" value="" autocomplete="new-password" />
+                <span asp-validation-for="LocalLogin.Password" class="field-validation-error"></span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="LocalLogin.ConfirmPassword"></label>
+                <input asp-for="LocalLogin.ConfirmPassword" type="password" value="" autocomplete="new-password" />
+                <span asp-validation-for="LocalLogin.ConfirmPassword" class="field-validation-error"></span>
+            </div>
         </div>
     </div>
 

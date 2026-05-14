@@ -545,12 +545,18 @@ button[aria-disabled=true]:hover,
     gap: 6px;
 }
 
+.form-section {
+    display: grid;
+    gap: 10px;
+}
+
 label {
     font-weight: 600;
 }
 
 input[type=text],
 input[type=number],
+input[type=password],
 input[type=url],
 textarea,
 select {

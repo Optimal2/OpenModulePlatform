@@ -71,9 +71,9 @@ Raw passwords must never be stored. The current hash format is `PBKDF2-SHA256$<i
 
 LPWD login records are always authentication links to first-class OMP users.
 They cannot exist as standalone platform users. Portal administrators can add a
-local login from `/admin/users/edit/{userId}`, which writes
-`omp.auth_provider_lpwd` and the matching `omp.user_auth` row in one
-transaction.
+local login while creating a user from `/admin/users/create`, or later from
+`/admin/users/edit/{userId}`. Both flows write `omp.auth_provider_lpwd` and the
+matching `omp.user_auth` row in one transaction.
 
 ## User Tables
 
@@ -87,10 +87,11 @@ The core user tables are:
 An OMP user row is required when the identity needs local password sign-in or durable OMP-owned user state. It is optional for AD identities that are only authorized through direct AD user or AD group role principals.
 
 Portal administrators can manage first-class OMP users at `/admin/users`. The
-minimal admin UI can list, create and edit `omp.users` rows and add AD provider
-links in `omp.user_auth`. AD links use the same provider display name (`AD`) and
-provider user key formats that `/auth/ad` resolves, such as `DOMAIN\User`,
-`name:DOMAIN\User`, or `sid:S-1-5-21-...`.
+admin UI can list, create and edit `omp.users` rows, optionally create an
+initial local password login, and add AD provider links in `omp.user_auth`. AD
+links use the same provider display name (`AD`) and provider user key formats
+that `/auth/ad` resolves, such as `DOMAIN\User`, `name:DOMAIN\User`, or
+`sid:S-1-5-21-...`.
 
 If a Windows identity matches an `omp.user_auth` AD link to a disabled OMP user,
 the auth app blocks sign-in instead of falling back to direct AD user/group role
@@ -161,7 +162,9 @@ principals directly. `OmpUser` suggestions come from active `omp.users` rows;
 assignments continue to resolve, but direct AD group assignment in the editor is
 left disabled until group selection has a dedicated workflow.
 
-For local password users, create the OMP user first, then link the `lpwd` provider identity through `omp.user_auth`.
+For local password users, create the OMP user and local login together from
+`/admin/users/create` when possible. For an existing OMP user, link the `lpwd`
+provider identity through `omp.user_auth` from the edit page.
 
 Keep provider-specific secrets and environment-specific bootstrap values out of public repositories.
 

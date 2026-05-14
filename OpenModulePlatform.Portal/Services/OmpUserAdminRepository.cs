@@ -125,20 +125,75 @@ WHERE user_id = @user_id;";
 
     public async Task<int> CreateUserAsync(OmpUserEditData input, CancellationToken ct)
     {
-        const string sql = @"
-INSERT INTO omp.users(display_name, account_status, created_at, updated_at)
-VALUES(@display_name, @account_status, SYSUTCDATETIME(), SYSUTCDATETIME());
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
 
-SELECT CAST(SCOPE_IDENTITY() AS int);";
+        return await InsertUserAsync(conn, tx: null, input, ct);
+    }
+
+    public async Task<CreateUserResult> CreateUserWithOptionalLocalLoginAsync(
+        OmpUserEditData input,
+        string? localUserName,
+        string? localPassword,
+        CancellationToken ct)
+    {
+        var shouldCreateLocalLogin = !string.IsNullOrWhiteSpace(localUserName);
+        var normalizedUserName = shouldCreateLocalLogin
+            ? LocalPasswordIdentity.NormalizeUserName(localUserName!)
+            : null;
+        var passwordHash = shouldCreateLocalLogin
+            ? _passwordHasher.Hash(localPassword ?? string.Empty)
+            : null;
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
-        await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@display_name", input.DisplayName);
-        Add(cmd, "@account_status", input.AccountStatus);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            int? localProviderId = null;
+            if (shouldCreateLocalLogin)
+            {
+                localProviderId = await GetEnabledAuthProviderIdAsync(
+                    conn,
+                    tx,
+                    LocalPasswordIdentity.ProviderDisplayName,
+                    ct);
 
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+                if (localProviderId is null)
+                {
+                    await tx.RollbackAsync(ct);
+                    return new CreateUserResult(CreateUserStatus.LocalPasswordProviderMissing);
+                }
+
+                if (await LocalPasswordUserExistsAsync(conn, tx, normalizedUserName!, ct) ||
+                    await GetExistingAuthLinkAsync(conn, tx, localProviderId.Value, normalizedUserName!, ct) is not null)
+                {
+                    await tx.RollbackAsync(ct);
+                    return new CreateUserResult(CreateUserStatus.LocalUserNameAlreadyInUse, NormalizedUserName: normalizedUserName);
+                }
+            }
+
+            var userId = await InsertUserAsync(conn, tx, input, ct);
+            if (shouldCreateLocalLogin)
+            {
+                await InsertLocalPasswordUserAsync(conn, tx, normalizedUserName!, passwordHash!, ct);
+                await InsertAuthLinkAsync(conn, tx, userId, localProviderId!.Value, normalizedUserName!, ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return new CreateUserResult(CreateUserStatus.Created, userId, normalizedUserName);
+        }
+        catch (SqlException ex) when (shouldCreateLocalLogin && ex.Number is 2601 or 2627)
+        {
+            await tx.RollbackAsync(ct);
+            return new CreateUserResult(CreateUserStatus.LocalUserNameAlreadyInUse, NormalizedUserName: normalizedUserName);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<bool> UpdateUserAsync(OmpUserEditData input, CancellationToken ct)
@@ -573,6 +628,27 @@ ORDER BY user_auth_id;";
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
     }
 
+    private static async Task<int> InsertUserAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        OmpUserEditData input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.users(display_name, account_status, created_at, updated_at)
+VALUES(@display_name, @account_status, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+        await using var cmd = tx is null
+            ? new SqlCommand(sql, conn)
+            : new SqlCommand(sql, conn, tx);
+        Add(cmd, "@display_name", input.DisplayName);
+        Add(cmd, "@account_status", input.AccountStatus);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
     private static async Task<bool> UserHasProviderLinkAsync(
         SqlConnection conn,
         SqlTransaction tx,
@@ -715,6 +791,18 @@ public sealed class OmpUserEditData
 }
 
 public sealed record AddAuthLinkResult(AddAuthLinkStatus Status, int? ExistingUserId = null);
+
+public sealed record CreateUserResult(
+    CreateUserStatus Status,
+    int? UserId = null,
+    string? NormalizedUserName = null);
+
+public enum CreateUserStatus
+{
+    Created,
+    LocalPasswordProviderMissing,
+    LocalUserNameAlreadyInUse
+}
 
 public enum AddAuthLinkStatus
 {
