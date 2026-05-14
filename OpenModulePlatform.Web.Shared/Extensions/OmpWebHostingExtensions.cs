@@ -283,9 +283,7 @@ public static class OmpWebHostingExtensions
 
             var form = await context.Request.ReadFormAsync(ct);
             var entryKey = form["entryKey"].ToString();
-            Guid? appInstanceId = Guid.TryParse(form["appInstanceId"].ToString(), out var parsedAppInstanceId)
-                ? parsedAppInstanceId
-                : null;
+            var appInstanceId = TryParseGuid(form["appInstanceId"].ToString());
 
             var result = await portalTopBarService.ToggleFavoriteAsync(
                 options,
@@ -348,7 +346,7 @@ public static class OmpWebHostingExtensions
                 {
                     Expires = DateTimeOffset.UtcNow.AddYears(1),
                     IsEssential = true,
-                    HttpOnly = false,
+                    HttpOnly = true,
                     SameSite = SameSiteMode.Lax,
                     Secure = true,
                     Path = "/"
@@ -443,11 +441,30 @@ public static class OmpWebHostingExtensions
     }
 
     private static bool IsSafeLocalReturnUrl(string? returnUrl)
-        => !string.IsNullOrWhiteSpace(returnUrl)
-            && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
-            && returnUrl.StartsWith("/", StringComparison.Ordinal)
-            && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-            && !returnUrl.Contains('\\', StringComparison.Ordinal);
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl)
+            || !Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
+            || !returnUrl.StartsWith("/", StringComparison.Ordinal)
+            || returnUrl.StartsWith("//", StringComparison.Ordinal)
+            || returnUrl.Contains('\\', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var unescaped = Uri.UnescapeDataString(returnUrl);
+            return !unescaped.StartsWith("//", StringComparison.Ordinal)
+                && !unescaped.Contains('\\', StringComparison.Ordinal);
+        }
+        catch (UriFormatException)
+        {
+            return false;
+        }
+    }
+
+    private static Guid? TryParseGuid(string? value)
+        => Guid.TryParse(value, out var parsed) ? parsed : null;
 
     /// <summary>
     /// Applies the forwarded-header trust model defined in configuration.

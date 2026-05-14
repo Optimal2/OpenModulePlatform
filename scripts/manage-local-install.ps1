@@ -75,7 +75,7 @@ function Assert-LocalInstallPrivileges {
         return
     }
 
-    throw "Local reinstall requires an elevated PowerShell when IIS or Windows services are enabled. Re-run as Administrator, or pass -SkipIis and -SkipServices for a non-IIS/service pass."
+    throw "This operation requires an elevated PowerShell when IIS or Windows services are enabled. Re-run as Administrator, or pass -SkipIis and -SkipServices for a non-IIS/service pass."
 }
 
 function Invoke-NativeChecked {
@@ -419,7 +419,8 @@ BEGIN
 END
 IF IS_ROLEMEMBER(N'db_owner', @principal) <> 1
 BEGIN
-    EXEC sys.sp_addrolemember N'db_owner', @principal;
+    SET @sql = N'ALTER ROLE [db_owner] ADD MEMBER ' + QUOTENAME(@principal) + N';';
+    EXEC sys.sp_executesql @sql;
 END
 "@
     }
