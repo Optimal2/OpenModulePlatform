@@ -17,16 +17,22 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     private const string LocalLoginConfirmPasswordField = "LocalLogin.ConfirmPassword";
     private const string LocalPasswordResetPasswordField = "LocalPasswordReset.Password";
     private const string LocalPasswordResetConfirmPasswordField = "LocalPasswordReset.ConfirmPassword";
+    private const string PortalSettingDefinitionField = "PortalSettingInput.UserSettingDefinitionId";
+    private const string PortalSettingValueField = "PortalSettingInput.SettingValue";
+    private const int ValuePreviewLength = 120;
 
     private readonly OmpUserAdminRepository _repo;
+    private readonly PortalUserSettingsAdminRepository _portalSettings;
 
     public EditModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        OmpUserAdminRepository repo)
+        OmpUserAdminRepository repo,
+        PortalUserSettingsAdminRepository portalSettings)
         : base(options, rbac)
     {
         _repo = repo;
+        _portalSettings = portalSettings;
     }
 
     [BindProperty]
@@ -42,10 +48,19 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     [BindProperty]
     public LocalPasswordResetInputModel LocalPasswordReset { get; set; } = new();
 
+    [BindProperty]
+    public PortalSettingInputModel PortalSettingInput { get; set; } = new();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
     public OmpUserDetail? UserRow { get; private set; }
+
+    public IReadOnlyList<PortalUserSettingDefinitionRow> PortalSettingDefinitions { get; private set; } = [];
+
+    public IReadOnlyList<PortalUserSettingValueRow> PortalSettingRows { get; private set; } = [];
+
+    public IReadOnlyList<OptionItem> PortalSettingOptions { get; private set; } = [];
 
     public IReadOnlyList<OptionItem> AccountStatusOptions =>
     [
@@ -62,7 +77,12 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     public string? LocalPasswordUserName =>
         UserRow?.AuthLinks.FirstOrDefault(link => string.Equals(link.ProviderDisplayName, "lpwd", StringComparison.OrdinalIgnoreCase))?.ProviderUserKey;
 
-    public async Task<IActionResult> OnGet(int userId, CancellationToken ct)
+    public bool IsPortalSettingEdit => PortalSettingInput.OriginalUserSettingDefinitionId > 0;
+
+    public PortalUserSettingDefinitionRow? SelectedPortalSettingDefinition =>
+        PortalSettingDefinitions.FirstOrDefault(definition => definition.UserSettingDefinitionId == PortalSettingInput.UserSettingDefinitionId);
+
+    public async Task<IActionResult> OnGet(int userId, int? portalSettingDefinitionId, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
@@ -76,6 +96,17 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         }
 
         PopulateInputFromLoadedUser();
+
+        if (portalSettingDefinitionId.HasValue)
+        {
+            var row = PortalSettingRows.FirstOrDefault(value => value.UserSettingDefinitionId == portalSettingDefinitionId.Value);
+            if (row is null)
+            {
+                return NotFound();
+            }
+
+            PortalSettingInput = ToPortalSettingInput(row);
+        }
 
         SetTitles("Edit user");
         return Page();
@@ -282,6 +313,62 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         return Page();
     }
 
+    public async Task<IActionResult> OnPostSavePortalSetting(int userId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Edit user");
+        if (!await LoadAsync(userId, ct))
+        {
+            return NotFound();
+        }
+
+        PopulateInputFromLoadedUser();
+        ModelState.Clear();
+
+        var definition = ValidatePortalSettingInput();
+        if (definition is null)
+        {
+            return Page();
+        }
+
+        var editData = ToPortalSettingEditData(definition);
+        var saved = await _portalSettings.SaveValueAsync(userId, editData, ct);
+        if (!saved)
+        {
+            ModelState.AddModelError(PortalSettingDefinitionField, T("This portal setting is not available."));
+            return Page();
+        }
+
+        StatusMessage = IsPortalSettingEdit
+            ? T("Portal setting updated.")
+            : T("Portal setting added.");
+        return RedirectToPage("/Admin/Users/Edit", new { userId });
+    }
+
+    public async Task<IActionResult> OnPostDeletePortalSetting(int userId, int userSettingDefinitionId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        if (!await LoadAsync(userId, ct))
+        {
+            return NotFound();
+        }
+
+        await _portalSettings.DeleteValueAsync(userId, userSettingDefinitionId, ct);
+
+        StatusMessage = T("Portal setting deleted.");
+        return RedirectToPage("/Admin/Users/Edit", new { userId });
+    }
+
     public async Task<IActionResult> OnPostRemoveAuthLink(int userId, int userAuthId, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -351,10 +438,50 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             ? value.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
             : T("Never");
 
+    public string PortalSettingValueKindText(byte valueKind)
+        => valueKind switch
+        {
+            PortalUserSettingsAdminRepository.IntValueKind => T("Integer"),
+            PortalUserSettingsAdminRepository.StringValueKind => T("String"),
+            _ => T("Unknown")
+        };
+
+    public string PortalSettingValueText(PortalUserSettingValueRow row)
+        => row.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
+            ? row.IntValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
+            : ValuePreview(row.StringValue);
+
+    public string PortalSettingDefaultText(PortalUserSettingDefinitionRow definition)
+        => definition.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
+            ? definition.DefaultIntValue?.ToString(CultureInfo.InvariantCulture) ?? T("None")
+            : ValuePreview(definition.DefaultStringValue);
+
+    public string PortalSettingDefaultText(PortalUserSettingValueRow row)
+        => row.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
+            ? row.DefaultIntValue?.ToString(CultureInfo.InvariantCulture) ?? T("None")
+            : ValuePreview(row.DefaultStringValue);
+
     private async Task<bool> LoadAsync(int userId, CancellationToken ct)
     {
         UserRow = await _repo.GetUserAsync(userId, ct);
-        return UserRow is not null;
+        if (UserRow is null)
+        {
+            return false;
+        }
+
+        PortalSettingDefinitions = await _portalSettings.GetDefinitionsAsync(ct);
+        PortalSettingRows = await _portalSettings.GetValuesForUserAsync(userId, ct);
+        PortalSettingOptions = PortalSettingDefinitions
+            .Select(definition => new OptionItem
+            {
+                Value = definition.UserSettingDefinitionId.ToString(CultureInfo.InvariantCulture),
+                Label = definition.IsEnabled
+                    ? $"{definition.Key} ({PortalSettingValueKindText(definition.ValueKind)})"
+                    : $"{definition.Key} ({PortalSettingValueKindText(definition.ValueKind)}, {T("disabled")})"
+            })
+            .ToArray();
+
+        return true;
     }
 
     private void PopulateInputFromLoadedUser()
@@ -455,6 +582,82 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         }
     }
 
+    private PortalUserSettingDefinitionRow? ValidatePortalSettingInput()
+    {
+        var definitionId = IsPortalSettingEdit
+            ? PortalSettingInput.OriginalUserSettingDefinitionId
+            : PortalSettingInput.UserSettingDefinitionId;
+
+        if (definitionId <= 0)
+        {
+            ModelState.AddModelError(PortalSettingDefinitionField, T("Select a portal setting."));
+            return null;
+        }
+
+        var definition = PortalSettingDefinitions.FirstOrDefault(row => row.UserSettingDefinitionId == definitionId);
+        if (definition is null)
+        {
+            ModelState.AddModelError(PortalSettingDefinitionField, T("This portal setting is not available."));
+            return null;
+        }
+
+        if (!IsPortalSettingEdit && PortalSettingRows.Any(row => row.UserSettingDefinitionId == definition.UserSettingDefinitionId))
+        {
+            ModelState.AddModelError(PortalSettingDefinitionField, T("A value for this portal setting already exists for this user."));
+            return null;
+        }
+
+        PortalSettingInput.UserSettingDefinitionId = definition.UserSettingDefinitionId;
+        PortalSettingInput.ValueKind = definition.ValueKind;
+
+        if (definition.ValueKind == PortalUserSettingsAdminRepository.IntValueKind)
+        {
+            if (!int.TryParse(PortalSettingInput.SettingValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
+            {
+                ModelState.AddModelError(PortalSettingValueField, T("Enter a valid integer value."));
+                return null;
+            }
+
+            PortalSettingInput.IntValue = intValue;
+            PortalSettingInput.StringValue = null;
+            return definition;
+        }
+
+        if (definition.ValueKind == PortalUserSettingsAdminRepository.StringValueKind)
+        {
+            PortalSettingInput.StringValue = PortalSettingInput.SettingValue ?? string.Empty;
+            PortalSettingInput.IntValue = null;
+            return definition;
+        }
+
+        ModelState.AddModelError(PortalSettingDefinitionField, T("This portal setting uses an unsupported value type."));
+        return null;
+    }
+
+    private PortalSettingInputModel ToPortalSettingInput(PortalUserSettingValueRow row)
+    {
+        var value = row.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
+            ? row.IntValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
+            : row.StringValue ?? string.Empty;
+
+        return new PortalSettingInputModel
+        {
+            UserSettingDefinitionId = row.UserSettingDefinitionId,
+            OriginalUserSettingDefinitionId = row.UserSettingDefinitionId,
+            ValueKind = row.ValueKind,
+            SettingValue = value,
+            IntValue = row.IntValue,
+            StringValue = row.StringValue
+        };
+    }
+
+    private PortalUserSettingValueEditData ToPortalSettingEditData(PortalUserSettingDefinitionRow definition)
+        => new(
+            definition.UserSettingDefinitionId,
+            definition.ValueKind,
+            PortalSettingInput.IntValue,
+            PortalSettingInput.StringValue);
+
     private void ClearLocalPasswordFields()
     {
         LocalLogin.Password = string.Empty;
@@ -486,6 +689,19 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             3 => "Deleted/reserved",
             _ => "Unknown"
         };
+
+    private static string ValuePreview(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = value.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
+        return normalized.Length <= ValuePreviewLength
+            ? normalized
+            : normalized[..ValuePreviewLength] + "...";
+    }
 
     public sealed class InputModel
     {
@@ -523,5 +739,22 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         [DataType(DataType.Password)]
         [Display(Name = "Confirm new password")]
         public string ConfirmPassword { get; set; } = string.Empty;
+    }
+
+    public sealed class PortalSettingInputModel
+    {
+        [Display(Name = "Portal setting")]
+        public int UserSettingDefinitionId { get; set; }
+
+        public int OriginalUserSettingDefinitionId { get; set; }
+
+        public byte ValueKind { get; set; }
+
+        [Display(Name = "Setting value")]
+        public string? SettingValue { get; set; }
+
+        public int? IntValue { get; set; }
+
+        public string? StringValue { get; set; }
     }
 }

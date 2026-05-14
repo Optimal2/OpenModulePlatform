@@ -126,6 +126,12 @@ value row falls back to the definition default (`0`), so default/false values do
 not need to be stored for every user. Clicks on the panel do not auto-save in
 this iteration.
 
+Portal administrators can add, edit, and delete per-user Portal setting values
+from `/admin/users/edit/{userId}`. The edit page only manages value rows for a
+specific user; the allowed setting list is still controlled by
+`omp_portal.user_setting_definitions` and should be changed through Portal SQL
+upgrades.
+
 ## RBAC Tables
 
 RBAC is stored in:

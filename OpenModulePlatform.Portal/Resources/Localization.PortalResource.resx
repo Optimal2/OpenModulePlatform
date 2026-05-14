@@ -1480,4 +1480,28 @@
   <data name="Save portal entry" xml:space="preserve"><value>Save portal entry</value></data>
   <data name="Back to portal entries" xml:space="preserve"><value>Back to portal entries</value></data>
   <data name="Portal entry updated." xml:space="preserve"><value>Portal entry updated.</value></data>
+  <data name="Portal settings" xml:space="preserve"><value>Portal settings</value></data>
+  <data name="Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user." xml:space="preserve"><value>Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user.</value></data>
+  <data name="Portal setting" xml:space="preserve"><value>Portal setting</value></data>
+  <data name="Select portal setting" xml:space="preserve"><value>Select portal setting</value></data>
+  <data name="Default value" xml:space="preserve"><value>Default value</value></data>
+  <data name="Setting value" xml:space="preserve"><value>Setting value</value></data>
+  <data name="Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override." xml:space="preserve"><value>Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override.</value></data>
+  <data name="Configured portal setting values" xml:space="preserve"><value>Configured portal setting values</value></data>
+  <data name="No portal setting values have been configured for this user." xml:space="preserve"><value>No portal setting values have been configured for this user.</value></data>
+  <data name="User value" xml:space="preserve"><value>User value</value></data>
+  <data name="Add portal setting" xml:space="preserve"><value>Add portal setting</value></data>
+  <data name="Save portal setting" xml:space="preserve"><value>Save portal setting</value></data>
+  <data name="Delete this portal setting value?" xml:space="preserve"><value>Delete this portal setting value?</value></data>
+  <data name="Portal setting added." xml:space="preserve"><value>Portal setting added.</value></data>
+  <data name="Portal setting updated." xml:space="preserve"><value>Portal setting updated.</value></data>
+  <data name="Portal setting deleted." xml:space="preserve"><value>Portal setting deleted.</value></data>
+  <data name="Select a portal setting." xml:space="preserve"><value>Select a portal setting.</value></data>
+  <data name="This portal setting is not available." xml:space="preserve"><value>This portal setting is not available.</value></data>
+  <data name="This portal setting uses an unsupported value type." xml:space="preserve"><value>This portal setting uses an unsupported value type.</value></data>
+  <data name="A value for this portal setting already exists for this user." xml:space="preserve"><value>A value for this portal setting already exists for this user.</value></data>
+  <data name="Enter a valid integer value." xml:space="preserve"><value>Enter a valid integer value.</value></data>
+  <data name="Integer" xml:space="preserve"><value>Integer</value></data>
+  <data name="String" xml:space="preserve"><value>String</value></data>
+  <data name="None" xml:space="preserve"><value>None</value></data>
 </root>

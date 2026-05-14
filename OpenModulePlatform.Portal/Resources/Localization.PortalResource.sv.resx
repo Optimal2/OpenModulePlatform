@@ -1479,4 +1479,28 @@
   <data name="Save portal entry" xml:space="preserve"><value>Spara portal entry</value></data>
   <data name="Back to portal entries" xml:space="preserve"><value>Tillbaka till portal entries</value></data>
   <data name="Portal entry updated." xml:space="preserve"><value>Portal entry har uppdaterats.</value></data>
+  <data name="Portal settings" xml:space="preserve"><value>Portalinställningar</value></data>
+  <data name="Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user." xml:space="preserve"><value>Portalens inställningsdefinitioner installeras av Portal. Den här sidan sparar bara värden som åsidosätter standardvärden för den här användaren.</value></data>
+  <data name="Portal setting" xml:space="preserve"><value>Portalinställning</value></data>
+  <data name="Select portal setting" xml:space="preserve"><value>Välj portalinställning</value></data>
+  <data name="Default value" xml:space="preserve"><value>Standardvärde</value></data>
+  <data name="Setting value" xml:space="preserve"><value>Inställningsvärde</value></data>
+  <data name="Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override." xml:space="preserve"><value>Använd heltal för int-baserade inställningar. Använd text för strängbaserade inställningar. Om du sparar standardvärdet tas användarens override bort.</value></data>
+  <data name="Configured portal setting values" xml:space="preserve"><value>Konfigurerade portalinställningsvärden</value></data>
+  <data name="No portal setting values have been configured for this user." xml:space="preserve"><value>Inga portalinställningsvärden har konfigurerats för den här användaren.</value></data>
+  <data name="User value" xml:space="preserve"><value>Användarvärde</value></data>
+  <data name="Add portal setting" xml:space="preserve"><value>Lägg till portalinställning</value></data>
+  <data name="Save portal setting" xml:space="preserve"><value>Spara portalinställning</value></data>
+  <data name="Delete this portal setting value?" xml:space="preserve"><value>Ta bort det här portalinställningsvärdet?</value></data>
+  <data name="Portal setting added." xml:space="preserve"><value>Portalinställningen har lagts till.</value></data>
+  <data name="Portal setting updated." xml:space="preserve"><value>Portalinställningen har uppdaterats.</value></data>
+  <data name="Portal setting deleted." xml:space="preserve"><value>Portalinställningen har tagits bort.</value></data>
+  <data name="Select a portal setting." xml:space="preserve"><value>Välj en portalinställning.</value></data>
+  <data name="This portal setting is not available." xml:space="preserve"><value>Den här portalinställningen är inte tillgänglig.</value></data>
+  <data name="This portal setting uses an unsupported value type." xml:space="preserve"><value>Den här portalinställningen använder en värdetyp som inte stöds.</value></data>
+  <data name="A value for this portal setting already exists for this user." xml:space="preserve"><value>Det finns redan ett värde för den här portalinställningen för användaren.</value></data>
+  <data name="Enter a valid integer value." xml:space="preserve"><value>Ange ett giltigt heltalsvärde.</value></data>
+  <data name="Integer" xml:space="preserve"><value>Heltal</value></data>
+  <data name="String" xml:space="preserve"><value>Sträng</value></data>
+  <data name="None" xml:space="preserve"><value>Inget</value></data>
 </root>
