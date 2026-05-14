@@ -81,6 +81,41 @@ BEGIN
     THROW 51003, 'Set @BootstrapPortalAdminPrincipalType to N''ADUser'' for a Windows user or N''ADGroup'' for a Windows group.', 1;
 END
 
+-- Keep this validation intentionally Windows-principal oriented. The bootstrap
+-- principal is seeded into AD-backed RBAC and should be either DOMAIN\Name or
+-- UPN form; customer-specific installers patch this literal before execution.
+IF @BootstrapPortalAdminPrincipal <> LTRIM(RTRIM(@BootstrapPortalAdminPrincipal))
+BEGIN
+    THROW 51004, 'Bootstrap principal must not contain leading or trailing whitespace.', 1;
+END
+
+IF @BootstrapPortalAdminPrincipal LIKE N'%["<>|?*;]%'
+    OR CHARINDEX(CHAR(10), @BootstrapPortalAdminPrincipal) > 0
+    OR CHARINDEX(CHAR(13), @BootstrapPortalAdminPrincipal) > 0
+BEGIN
+    THROW 51004, 'Bootstrap principal contains characters that are not valid for AD bootstrap values.', 1;
+END
+
+DECLARE @BootstrapPrincipalSlash int = CHARINDEX(N'\', @BootstrapPortalAdminPrincipal);
+DECLARE @BootstrapPrincipalAt int = CHARINDEX(N'@', @BootstrapPortalAdminPrincipal);
+
+IF @BootstrapPrincipalSlash = 0 AND @BootstrapPrincipalAt = 0
+BEGIN
+    THROW 51004, 'Bootstrap principal must use DOMAIN\Name or user@domain form.', 1;
+END
+
+IF @BootstrapPrincipalSlash > 0
+    AND (@BootstrapPrincipalSlash = 1 OR @BootstrapPrincipalSlash = LEN(@BootstrapPortalAdminPrincipal))
+BEGIN
+    THROW 51004, 'Bootstrap principal DOMAIN\Name form is incomplete.', 1;
+END
+
+IF @BootstrapPrincipalAt > 0
+    AND (@BootstrapPrincipalAt = 1 OR @BootstrapPrincipalAt = LEN(@BootstrapPortalAdminPrincipal))
+BEGIN
+    THROW 51004, 'Bootstrap principal UPN form is incomplete.', 1;
+END
+
 
 IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplates WHERE TemplateKey = N'default')
 BEGIN
