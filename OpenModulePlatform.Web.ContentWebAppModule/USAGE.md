@@ -18,6 +18,24 @@ The module supports three content types:
 
 Markdown and HTML content is stored in the database. Server reports are stored as JSON files on the server and referenced by key.
 
+## Permissions And Roles
+
+Content visibility and editing rights use the shared OMP RBAC model. The
+current user's active role is resolved from the shared authentication cookie and
+role selector, and the module then checks the permissions configured for the
+current app instance.
+
+The built-in routes normally map to these permission intents:
+
+- `/content`: read published content pages.
+- `/content/admin`: edit and administer content pages.
+- `server_report`: read access to the content page still controls whether the
+  report can be rendered.
+
+Roles, role membership, and app-instance permissions are managed in the Portal
+admin UI and seeded by the OMP SQL/install scripts. See
+`../docs/AUTHENTICATION_AND_RBAC.md` for the shared authentication and RBAC model.
+
 ## Server Report Files
 
 Server report files are JSON files in the configured report directory.
@@ -54,6 +72,8 @@ alfons-test   -> alfons-test.json
 ```
 
 Keys may only contain letters, numbers, underscores, and hyphens.
+Examples of invalid keys are `my report.json`, `report@123`, `../report`, and
+`folder/report`.
 
 ## Adding A Report File
 
@@ -113,6 +133,11 @@ Supported query fields:
 - `maxRows`: maximum rendered rows for this query.
 
 If neither report-level nor query-level `database` is set, the module uses the default `ConnectionStrings:OmpDb` database.
+This connection string is configured in the app's `appsettings*.json` files at
+runtime. For suite installs, it is written from
+`scripts/deployment/omp-suite.local.psd1` into the deployed
+`appsettings.Production.json`; verify the deployed file or the generated IIS
+runtime folder when troubleshooting environment-specific database access.
 
 ## Allowed Databases
 
@@ -190,6 +215,8 @@ Blocked commands include:
 - `use`
 
 Only one SQL statement is allowed. A final terminal semicolon is allowed, but multiple statements are blocked.
+When this rule is violated, the rendered report shows
+`Multiple SQL statements are not allowed.`.
 
 If a database, schema, or table name contains special characters, quote it correctly for SQL Server. For example, a table with a hyphen must use brackets:
 
@@ -301,9 +328,13 @@ When changing only a runtime JSON query:
 - Quote names with special characters, for example `dbo.[example-table]`.
 - Confirm the IIS app pool identity can access the target database.
 
+`Multiple SQL statements are not allowed.`
+
+- Keep the report query to one `SELECT` or `WITH` statement.
+- Remove intermediate semicolons. A single final semicolon is allowed.
+
 The shortcode is visible as text instead of a table.
 
 - Confirm the shortcode key only contains letters, numbers, underscores, and hyphens.
 - Use `[DB_JSON="report-key"]` or `[DB\_JSON="report-key"]`.
 - Confirm the matching JSON file exists in the server report directory.
-

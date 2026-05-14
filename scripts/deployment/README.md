@@ -94,6 +94,12 @@ and applies that host's certificate settings.
 does not provide its own base URL, portal topbar links are generated from the
 portal base URL because that is the normal OMP hosting layout.
 
+When releasing a new suite version, update the version in the package config
+used for the release. Keep the fallback defaults in `package-omp-suite.ps1`,
+`install-omp-suite.ps1`, and `omp-suite.config.sample.psd1` aligned so source
+installs, packaged installs, and the sample config report the same suite
+version.
+
 Use `ConfigSettings` for installation-scoped settings that should be inserted or
 updated during SQL installation. The built-in branding settings are
 `branding/platformName` and `branding/portalName`; they control visible UI text

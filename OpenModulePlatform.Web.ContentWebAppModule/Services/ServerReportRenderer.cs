@@ -34,6 +34,10 @@ public sealed class ServerReportRenderer
             _logger.LogWarning(ex, "Server report definition could not be rendered for key {ReportKey}", reportKey);
             return RenderError(ex.Message);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected server report rendering failure for key {ReportKey}", reportKey);
