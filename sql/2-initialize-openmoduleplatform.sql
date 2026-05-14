@@ -38,6 +38,9 @@ SET NUMERIC_ROUNDABORT OFF;
 -------------------------------------------------------------------------------
 DECLARE @DefaultInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111111';
 DECLARE @DefaultHostId uniqueidentifier = '11111111-1111-1111-1111-111111111121';
+-- The seeded host is a development/template placeholder for current Windows IIS
+-- deployments. Real hosts can override Architecture during environment setup.
+DECLARE @DefaultHostArchitecture nvarchar(20) = N'x64';
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
@@ -90,8 +93,10 @@ BEGIN
 END
 
 -- Disallow characters that are invalid in Windows/AD account names or risky in
--- deployment logs/scripts. Bootstrap accepts only DOMAIN\Name or user@domain.
-DECLARE @BootstrapPrincipalInvalidCharacters TABLE (Value nchar(1) NOT NULL);
+-- deployment logs/scripts. Newlines are handled here instead of the trim check
+-- above because LTRIM/RTRIM are kept for compatibility-style edge trimming.
+-- Bootstrap accepts only DOMAIN\Name or user@domain.
+DECLARE @BootstrapPrincipalInvalidCharacters TABLE (Value nvarchar(1) NOT NULL);
 INSERT INTO @BootstrapPrincipalInvalidCharacters(Value)
 VALUES(N''''), (N'"'), (N'<'), (N'>'), (N'|'), (N'?'), (N'*'), (N';'), (NCHAR(10)), (NCHAR(13));
 
@@ -229,7 +234,7 @@ END
 IF NOT EXISTS (SELECT 1 FROM omp.Hosts WHERE HostId = @DefaultHostId)
 BEGIN
     INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture)
-    VALUES(@DefaultHostId, @DefaultInstanceId, N'sample-host', N'Sample Host', NULL, N'Development', N'Windows', N'x64');
+    VALUES(@DefaultHostId, @DefaultInstanceId, N'sample-host', N'Sample Host', NULL, N'Development', N'Windows', @DefaultHostArchitecture);
 END
 ELSE
 BEGIN
@@ -240,7 +245,7 @@ BEGIN
         BaseUrl = NULL,
         Environment = N'Development',
         OsFamily = N'Windows',
-        Architecture = N'x64',
+        Architecture = @DefaultHostArchitecture,
         IsEnabled = 1,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE HostId = @DefaultHostId;
