@@ -761,72 +761,82 @@ GO
 -------------------------------------------------------------------------------
 -- OMP configuration settings
 -------------------------------------------------------------------------------
-IF OBJECT_ID(N'omp.config_settings', N'U') IS NOT NULL
+IF OBJECT_ID(N'omp.config_setting_definitions', N'U') IS NULL
 BEGIN
-    IF EXISTS
+    CREATE TABLE omp.config_setting_definitions
     (
-        SELECT 1
-        FROM sys.key_constraints
-        WHERE name = N'UQ_omp_config_settings_scope'
-          AND parent_object_id = OBJECT_ID(N'omp.config_settings')
-    )
-    AND NOT EXISTS
-    (
-        SELECT 1
-        FROM sys.key_constraints kc
-        INNER JOIN sys.index_columns ic
-            ON ic.object_id = kc.parent_object_id
-           AND ic.index_id = kc.unique_index_id
-        INNER JOIN sys.columns c
-            ON c.object_id = ic.object_id
-           AND c.column_id = ic.column_id
-        WHERE kc.name = N'UQ_omp_config_settings_scope'
-          AND kc.parent_object_id = OBJECT_ID(N'omp.config_settings')
-          AND c.name = N'ConfigPermission'
-    )
-    BEGIN
-        ALTER TABLE omp.config_settings DROP CONSTRAINT UQ_omp_config_settings_scope;
-    END
+        ConfigSettingId int IDENTITY(1,1) NOT NULL,
+        ConfigCategory nvarchar(100) NOT NULL,
+        ConfigSetting nvarchar(200) NOT NULL,
+        Description nvarchar(1000) NULL,
+        SortOrder int NOT NULL CONSTRAINT DF_omp_config_setting_definitions_SortOrder DEFAULT(0),
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_config_setting_definitions_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_config_setting_definitions_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_config_setting_definitions_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+
+        CONSTRAINT PK_omp_config_setting_definitions PRIMARY KEY(ConfigSettingId),
+        CONSTRAINT UQ_omp_config_setting_definitions_key UNIQUE(ConfigCategory, ConfigSetting)
+    );
 END
 GO
 
-IF OBJECT_ID(N'omp.config_settings', N'U') IS NULL
+IF COL_LENGTH(N'omp.config_setting_definitions', N'Description') IS NULL
 BEGIN
-    CREATE TABLE omp.config_settings
-    (
-        ConfigId int IDENTITY(1,1) NOT NULL,
+    ALTER TABLE omp.config_setting_definitions ADD Description nvarchar(1000) NULL;
+END
+GO
 
-        -- Logical settings category, for example: general, authentication,
-        -- security, portal-defaults.
-        ConfigCategory nvarchar(100) NOT NULL,
+IF COL_LENGTH(N'omp.config_setting_definitions', N'SortOrder') IS NULL
+BEGIN
+    ALTER TABLE omp.config_setting_definitions
+        ADD SortOrder int NOT NULL CONSTRAINT DF_omp_config_setting_definitions_SortOrder DEFAULT(0) WITH VALUES;
+END
+GO
 
-        -- Setting key within the category, for example: allow_password_login.
-        ConfigSetting nvarchar(200) NOT NULL,
+IF COL_LENGTH(N'omp.config_setting_definitions', N'IsEnabled') IS NULL
+BEGIN
+    ALTER TABLE omp.config_setting_definitions
+        ADD IsEnabled bit NOT NULL CONSTRAINT DF_omp_config_setting_definitions_IsEnabled DEFAULT(1) WITH VALUES;
+END
+GO
 
-        -- Stored as text to allow simple scalar values such as true/false,
-        -- numbers, names, JSON, XML, or serialized values when required by
-        -- future settings.
-        ConfigValue nvarchar(max) NULL,
+IF COL_LENGTH(N'omp.config_setting_definitions', N'CreatedUtc') IS NULL
+BEGIN
+    ALTER TABLE omp.config_setting_definitions
+        ADD CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_config_setting_definitions_CreatedUtc DEFAULT SYSUTCDATETIME() WITH VALUES;
+END
+GO
 
-        -- Optional scope. NULL means instance-wide/default setting. Matching
-        -- consumers should resolve by scope rank, then priority:
-        -- user > permission > role > global; higher ConfigPriority wins within
-        -- the same scope class, and ConfigId is the deterministic final tie
-        -- breaker.
-        ConfigUsr int NULL,
-        ConfigPermission int NULL,
-        ConfigRole int NULL,
-        ConfigPriority int NOT NULL CONSTRAINT DF_omp_config_settings_ConfigPriority DEFAULT(0),
-        ConfigScopeRank AS CONVERT(tinyint,
-            CASE
-                WHEN ConfigUsr IS NOT NULL THEN 3
-                WHEN ConfigPermission IS NOT NULL THEN 2
-                WHEN ConfigRole IS NOT NULL THEN 1
-                ELSE 0
-            END) PERSISTED,
+IF COL_LENGTH(N'omp.config_setting_definitions', N'UpdatedUtc') IS NULL
+BEGIN
+    ALTER TABLE omp.config_setting_definitions
+        ADD UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_config_setting_definitions_UpdatedUtc DEFAULT SYSUTCDATETIME() WITH VALUES;
+END
+GO
 
-        CONSTRAINT PK_omp_config_settings PRIMARY KEY(ConfigId)
-    );
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.key_constraints
+    WHERE [type] = N'PK'
+      AND parent_object_id = OBJECT_ID(N'omp.config_setting_definitions')
+)
+BEGIN
+    ALTER TABLE omp.config_setting_definitions
+        ADD CONSTRAINT PK_omp_config_setting_definitions PRIMARY KEY(ConfigSettingId);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.key_constraints
+    WHERE name = N'UQ_omp_config_setting_definitions_key'
+      AND parent_object_id = OBJECT_ID(N'omp.config_setting_definitions')
+)
+BEGIN
+    ALTER TABLE omp.config_setting_definitions
+        ADD CONSTRAINT UQ_omp_config_setting_definitions_key UNIQUE(ConfigCategory, ConfigSetting);
 END
 GO
 
@@ -872,9 +882,142 @@ BEGIN
 END
 GO
 
-IF COL_LENGTH(N'omp.config_settings', N'ConfigPermission') IS NULL
+IF OBJECT_ID(N'omp.config_settings', N'U') IS NOT NULL
 BEGIN
-    ALTER TABLE omp.config_settings ADD ConfigPermission int NULL;
+    IF EXISTS
+    (
+        SELECT 1
+        FROM sys.key_constraints
+        WHERE name = N'UQ_omp_config_settings_scope'
+          AND parent_object_id = OBJECT_ID(N'omp.config_settings')
+    )
+    BEGIN
+        ALTER TABLE omp.config_settings DROP CONSTRAINT UQ_omp_config_settings_scope;
+    END
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_config_settings_resolve'
+      AND object_id = OBJECT_ID(N'omp.config_settings')
+)
+BEGIN
+    DROP INDEX IX_omp_config_settings_resolve ON omp.config_settings;
+END
+GO
+
+IF OBJECT_ID(N'omp.config_settings', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.config_settings
+    (
+        ConfigId int IDENTITY(1,1) NOT NULL,
+        ConfigSettingId int NOT NULL,
+
+        -- Stored as text to allow simple scalar values such as true/false,
+        -- numbers, names, JSON, XML, or serialized values when required by
+        -- future settings.
+        ConfigValue nvarchar(max) NULL,
+
+        -- Optional scope. NULL means instance-wide/default setting. Matching
+        -- consumers should resolve by scope rank, then priority:
+        -- user > permission > role > global; higher ConfigPriority wins within
+        -- the same scope class, and ConfigId is the deterministic final tie
+        -- breaker.
+        ConfigUsr int NULL,
+        ConfigPermission int NULL,
+        ConfigRole int NULL,
+        ConfigPriority int NOT NULL CONSTRAINT DF_omp_config_settings_ConfigPriority DEFAULT(0),
+        ConfigScopeRank AS CONVERT(tinyint,
+            CASE
+                WHEN ConfigUsr IS NOT NULL THEN 3
+                WHEN ConfigPermission IS NOT NULL THEN 2
+                WHEN ConfigRole IS NOT NULL THEN 1
+                ELSE 0
+            END) PERSISTED,
+
+        CONSTRAINT PK_omp_config_settings PRIMARY KEY(ConfigId)
+    );
+END
+GO
+
+IF COL_LENGTH(N'omp.config_settings', N'ConfigSettingId') IS NULL
+BEGIN
+    ALTER TABLE omp.config_settings ADD ConfigSettingId int NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL
+   AND COL_LENGTH(N'omp.config_settings', N'ConfigSetting') IS NOT NULL
+BEGIN
+    INSERT INTO omp.config_setting_definitions(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+    SELECT DISTINCT cs.ConfigCategory,
+           cs.ConfigSetting,
+           NULL,
+           1000,
+           1
+    FROM omp.config_settings cs
+    WHERE cs.ConfigSettingId IS NULL
+      AND LTRIM(RTRIM(cs.ConfigCategory)) <> N''
+      AND LTRIM(RTRIM(cs.ConfigSetting)) <> N''
+      AND NOT EXISTS
+      (
+          SELECT 1
+          FROM omp.config_setting_definitions existing
+          WHERE existing.ConfigCategory = cs.ConfigCategory
+            AND existing.ConfigSetting = cs.ConfigSetting
+      );
+END
+GO
+
+IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL
+   AND COL_LENGTH(N'omp.config_settings', N'ConfigSetting') IS NOT NULL
+BEGIN
+    UPDATE cs
+       SET ConfigSettingId = def.ConfigSettingId
+    FROM omp.config_settings cs
+    INNER JOIN omp.config_setting_definitions def
+        ON def.ConfigCategory = cs.ConfigCategory
+       AND def.ConfigSetting = cs.ConfigSetting
+    WHERE cs.ConfigSettingId IS NULL;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM omp.config_settings
+    WHERE ConfigSettingId IS NULL
+)
+BEGIN
+    THROW 51020, 'omp.config_settings contains rows that could not be mapped to omp.config_setting_definitions.', 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'omp.config_settings')
+      AND name = N'ConfigSettingId'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE omp.config_settings ALTER COLUMN ConfigSettingId int NOT NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL
+BEGIN
+    ALTER TABLE omp.config_settings DROP COLUMN ConfigCategory;
+END
+GO
+
+IF COL_LENGTH(N'omp.config_settings', N'ConfigSetting') IS NOT NULL
+BEGIN
+    ALTER TABLE omp.config_settings DROP COLUMN ConfigSetting;
 END
 GO
 
@@ -882,6 +1025,12 @@ IF COL_LENGTH(N'omp.config_settings', N'ConfigPriority') IS NULL
 BEGIN
     ALTER TABLE omp.config_settings
         ADD ConfigPriority int NOT NULL CONSTRAINT DF_omp_config_settings_ConfigPriority DEFAULT(0) WITH VALUES;
+END
+GO
+
+IF COL_LENGTH(N'omp.config_settings', N'ConfigPermission') IS NULL
+BEGIN
+    ALTER TABLE omp.config_settings ADD ConfigPermission int NULL;
 END
 GO
 
@@ -895,6 +1044,20 @@ BEGIN
                 WHEN ConfigRole IS NOT NULL THEN 1
                 ELSE 0
             END) PERSISTED;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = N'FK_omp_config_settings_definition'
+      AND parent_object_id = OBJECT_ID(N'omp.config_settings')
+)
+BEGIN
+    ALTER TABLE omp.config_settings
+        ADD CONSTRAINT FK_omp_config_settings_definition
+        FOREIGN KEY(ConfigSettingId) REFERENCES omp.config_setting_definitions(ConfigSettingId);
 END
 GO
 
@@ -963,7 +1126,7 @@ IF NOT EXISTS
 BEGIN
     ALTER TABLE omp.config_settings
         ADD CONSTRAINT UQ_omp_config_settings_scope
-        UNIQUE(ConfigCategory, ConfigSetting, ConfigUsr, ConfigPermission, ConfigRole);
+        UNIQUE(ConfigSettingId, ConfigUsr, ConfigPermission, ConfigRole);
 END
 GO
 
@@ -976,7 +1139,7 @@ IF NOT EXISTS
 )
 BEGIN
     CREATE INDEX IX_omp_config_settings_resolve
-        ON omp.config_settings(ConfigCategory, ConfigSetting, ConfigScopeRank DESC, ConfigPriority DESC, ConfigId DESC)
+        ON omp.config_settings(ConfigSettingId, ConfigScopeRank DESC, ConfigPriority DESC, ConfigId DESC)
         INCLUDE(ConfigUsr, ConfigPermission, ConfigRole);
 END
 GO
