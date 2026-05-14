@@ -89,6 +89,8 @@ BEGIN
     THROW 51004, 'Bootstrap principal must not contain leading or trailing whitespace.', 1;
 END
 
+-- Disallow characters that are invalid in Windows/AD account names or risky in
+-- deployment logs/scripts. Bootstrap accepts only DOMAIN\Name or user@domain.
 DECLARE @BootstrapPrincipalInvalidCharacters TABLE (Value nchar(1) NOT NULL);
 INSERT INTO @BootstrapPrincipalInvalidCharacters(Value)
 VALUES(N'"'), (N'<'), (N'>'), (N'|'), (N'?'), (N'*'), (N';'), (NCHAR(10)), (NCHAR(13));
@@ -105,6 +107,11 @@ END
 
 DECLARE @BootstrapPrincipalSlash int = CHARINDEX(N'\', @BootstrapPortalAdminPrincipal);
 DECLARE @BootstrapPrincipalAt int = CHARINDEX(N'@', @BootstrapPortalAdminPrincipal);
+
+IF @BootstrapPrincipalSlash > 0 AND @BootstrapPrincipalAt > 0
+BEGIN
+    THROW 51009, 'Bootstrap principal must use either DOMAIN\Name or user@domain form, not both.', 1;
+END
 
 IF @BootstrapPrincipalSlash = 0 AND @BootstrapPrincipalAt = 0
 BEGIN
