@@ -61,9 +61,9 @@ BEGIN
     THROW 51000, 'Bootstrap portal admin principal was not replaced.', 1;
 END
 
--- The setup script also adds CK_omp_RolePrincipals_NoBootstrapPlaceholders so
--- this sentinel cannot be persisted if a different deployment path bypasses
--- the initialization guard above.
+-- The setup script also adds database constraint
+-- CK_omp_RolePrincipals_NoBootstrapPlaceholders so this sentinel cannot be
+-- persisted if a different deployment path bypasses the initialization guard.
 
 -- Keep bootstrap principal type normalization here even though the setup script
 -- also migrates stored legacy values. This script is often patched and executed
@@ -260,6 +260,9 @@ END
 -------------------------------------------------------------------------------
 -- Seed baseline instance branding settings
 -------------------------------------------------------------------------------
+-- Insert defaults only. Environment/customer installers may intentionally
+-- override these rows (for example VGR uses EMP), so rerunning the generic core
+-- initialization must not reset an existing branding choice.
 MERGE omp.config_settings AS target
 USING
 (
@@ -295,9 +298,10 @@ be safely validated inside this script after substitution. Use the PowerShell
 installer for automated local runs, or manually escape single quotes in the
 literal above.
 */
--- Repeat the legacy User -> ADUser migration here so rerunning only the
--- initialization script after an older deployment still leaves RBAC principals
--- in the current provider-aware format.
+-- Repeat the legacy User -> ADUser migration here instead of relying on a shared
+-- stored procedure. The setup script may be run before programmable objects
+-- exist, and installers sometimes rerun only this initialization script after an
+-- older deployment.
 DELETE legacy
 FROM omp.RolePrincipals legacy
 WHERE legacy.PrincipalType = N'User'
