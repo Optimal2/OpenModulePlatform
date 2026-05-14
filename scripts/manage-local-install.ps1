@@ -29,6 +29,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Stop dependents first and start providers first. WorkerManager relies on
+# HostAgent runtime services, so the order is intentionally reversed.
 $script:serviceNames = @('OpenModulePlatform.WorkerManager', 'OpenModulePlatform.HostAgent')
 $script:startServiceNames = @('OpenModulePlatform.HostAgent', 'OpenModulePlatform.WorkerManager')
 $script:appPools = @('OMP_Portal', 'OMP_Auth')
@@ -209,6 +211,15 @@ function Invoke-SqlFile {
     Invoke-NativeChecked sqlcmd '-S' $SqlServer '-d' $TargetDatabase '-E' '-b' '-i' $Path
 }
 
+function Assert-BootstrapPortalAdminPrincipals {
+    param([Parameter(Mandatory = $true)][string[]]$Principals)
+
+    $placeholderPrincipals = @($Principals | Where-Object { $_ -like 'REPLACE_ME*' })
+    if ($Principals.Count -eq 0 -or $placeholderPrincipals.Count -gt 0) {
+        throw 'BootstrapPortalAdminPrincipal must contain at least one actual Windows user or group, not REPLACE_ME.'
+    }
+}
+
 function New-BootstrapPatchedSqlFile {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -218,10 +229,6 @@ function New-BootstrapPatchedSqlFile {
 
     $bootstrapPrincipals = @(Get-BootstrapPortalAdminPrincipals)
     $primaryBootstrapPrincipal = $bootstrapPrincipals[0]
-
-    if ([string]::IsNullOrWhiteSpace($primaryBootstrapPrincipal) -or $primaryBootstrapPrincipal -like 'REPLACE_ME*') {
-        throw 'BootstrapPortalAdminPrincipal must contain at least one actual Windows user or group, not REPLACE_ME.'
-    }
 
     $escapedPrincipal = $primaryBootstrapPrincipal.Replace("'", "''")
     $content = Get-Content -LiteralPath $Path -Raw
@@ -257,9 +264,7 @@ function Get-BootstrapPortalAdminPrincipals {
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         Select-Object -Unique)
 
-    if ($principals.Count -eq 0 -or ($principals | Where-Object { $_ -like 'REPLACE_ME*' })) {
-        throw 'BootstrapPortalAdminPrincipal must contain at least one actual Windows user or group, not REPLACE_ME.'
-    }
+    Assert-BootstrapPortalAdminPrincipals -Principals $principals
 
     return $principals
 }
@@ -325,7 +330,12 @@ function Stop-LocalRuntime {
         }
         Write-Host "Stopping service: $serviceName"
         Stop-Service -Name $serviceName -Force -ErrorAction Continue
-        try { (Get-Service -Name $serviceName).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) } catch { }
+        try {
+            (Get-Service -Name $serviceName).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        }
+        catch {
+            Write-Warning "Service '$serviceName' did not report Stopped within 30 seconds. Continuing; later steps will fail if files remain locked. $($_.Exception.Message)"
+        }
     }
 
     if (-not $SkipIis) {

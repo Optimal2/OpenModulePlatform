@@ -110,6 +110,32 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.RolePrincipals', N'U') IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM sys.check_constraints
+       WHERE name = N'CK_omp_RolePrincipals_NoBootstrapPlaceholders'
+         AND parent_object_id = OBJECT_ID(N'omp.RolePrincipals')
+   )
+BEGIN
+    -- Defense in depth for deployment mistakes. The bootstrap scripts should
+    -- replace these source-controlled placeholders before execution, and this
+    -- constraint prevents them from being persisted if another path bypasses
+    -- script validation.
+    ALTER TABLE omp.RolePrincipals WITH CHECK
+    ADD CONSTRAINT CK_omp_RolePrincipals_NoBootstrapPlaceholders
+    CHECK
+    (
+        Principal NOT IN
+        (
+            N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__',
+            N'REPLACE_ME\UserOrGroup'
+        )
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp.AuditLog', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.AuditLog

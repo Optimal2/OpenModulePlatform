@@ -55,6 +55,10 @@ BEGIN
     THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. This SQL variable inserts one principal; use repeated executions or the PowerShell installer to add multiple principals.', 1;
 END
 
+-- The setup script also adds CK_omp_RolePrincipals_NoBootstrapPlaceholders so
+-- this sentinel cannot be persisted if a different deployment path bypasses
+-- the initialization guard above.
+
 -- Keep bootstrap principal type normalization here even though the setup script
 -- also migrates stored legacy values. This script is often patched and executed
 -- independently by installers, so it must validate its own input.
