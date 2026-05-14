@@ -15,6 +15,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# Keep this fallback aligned with omp-suite.config.sample.psd1 and
+# install-omp-suite.ps1. Environment/package config remains the release source
+# of truth; this value only supports ad hoc packaging without a config version.
 $DefaultSuiteVersion = '0.3.3'
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $ConfigPath = Join-Path $PSScriptRoot 'omp-suite.local.psd1'
