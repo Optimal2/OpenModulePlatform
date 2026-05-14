@@ -31,6 +31,7 @@
     BootstrapPortalAdminPrincipalType = 'ADUser' # ADUser or ADGroup. Legacy User is normalized to ADUser.
 
     # Instance-wide config settings stored in omp.config_settings after SQL setup.
+    # Category/Setting must exist in omp.config_setting_definitions.
     ConfigSettings = @(
         @{
             Category = 'branding'

@@ -33,9 +33,7 @@ public sealed class OmpConfigurationService
             return null;
         }
 
-        var cacheKey = string.Create(
-            CultureInfo.InvariantCulture,
-            $"omp-config:global:{category.Trim().ToLowerInvariant()}:{setting.Trim().ToLowerInvariant()}");
+        var cacheKey = CreateGlobalCacheKey(category, setting);
 
         if (_cache.TryGetValue<string?>(cacheKey, out var cachedValue))
         {
@@ -68,22 +66,39 @@ public sealed class OmpConfigurationService
         return value;
     }
 
+    public void ClearGlobalString(string category, string setting)
+    {
+        if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(setting))
+        {
+            return;
+        }
+
+        _cache.Remove(CreateGlobalCacheKey(category, setting));
+    }
+
+    private static string CreateGlobalCacheKey(string category, string setting)
+        => string.Create(
+            CultureInfo.InvariantCulture,
+            $"omp-config:global:{category.Trim().ToLowerInvariant()}:{setting.Trim().ToLowerInvariant()}");
+
     private async Task<string?> QueryGlobalStringAsync(
         string category,
         string setting,
         CancellationToken ct)
     {
         const string sql = """
-SELECT TOP (1) ConfigValue
-FROM omp.config_settings
-WHERE ConfigCategory = @category
-  AND ConfigSetting = @setting
-  AND ConfigUsr IS NULL
-  AND ConfigPermission IS NULL
-  AND ConfigRole IS NULL
-ORDER BY ConfigScopeRank DESC,
-         ConfigPriority DESC,
-         ConfigId DESC;
+SELECT TOP (1) cs.ConfigValue
+FROM omp.config_settings cs
+INNER JOIN omp.config_setting_definitions def
+    ON def.ConfigSettingId = cs.ConfigSettingId
+WHERE def.ConfigCategory = @category
+  AND def.ConfigSetting = @setting
+  AND cs.ConfigUsr IS NULL
+  AND cs.ConfigPermission IS NULL
+  AND cs.ConfigRole IS NULL
+ORDER BY cs.ConfigScopeRank DESC,
+         cs.ConfigPriority DESC,
+         cs.ConfigId DESC;
 """;
 
         await using var conn = _db.Create();

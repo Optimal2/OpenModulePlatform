@@ -291,24 +291,50 @@ END
 -------------------------------------------------------------------------------
 -- Seed baseline instance branding settings
 -------------------------------------------------------------------------------
+MERGE omp.config_setting_definitions AS target
+USING
+(
+    VALUES
+        (N'branding', N'platformName', N'Display name for the installed OpenModulePlatform instance.', 10, CONVERT(bit, 1)),
+        (N'branding', N'portalName', N'Display name for the portal concept in this installation.', 20, CONVERT(bit, 1))
+) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+ON target.ConfigCategory = source.ConfigCategory
+   AND target.ConfigSetting = source.ConfigSetting
+WHEN MATCHED THEN
+    UPDATE SET Description = source.Description,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+    VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.SortOrder, source.IsEnabled);
+
 -- Insert defaults only. Environment/customer installers may intentionally
 -- override these rows (for example VGR uses EMP), so rerunning the generic core
 -- initialization must not reset an existing branding choice.
 MERGE omp.config_settings AS target
 USING
 (
-    VALUES
-        (N'branding', N'platformName', N'OMP', 0),
-        (N'branding', N'portalName', N'Portal', 0)
-) AS source(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
-ON target.ConfigCategory = source.ConfigCategory
-   AND target.ConfigSetting = source.ConfigSetting
+    SELECT def.ConfigSettingId,
+           seed.ConfigValue,
+           seed.ConfigPriority
+    FROM
+    (
+        VALUES
+            (N'branding', N'platformName', N'OMP', 0),
+            (N'branding', N'portalName', N'Portal', 0)
+    ) AS seed(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
+    INNER JOIN omp.config_setting_definitions def
+        ON def.ConfigCategory = seed.ConfigCategory
+       AND def.ConfigSetting = seed.ConfigSetting
+) AS source(ConfigSettingId, ConfigValue, ConfigPriority)
+ON target.ConfigSettingId = source.ConfigSettingId
    AND target.ConfigUsr IS NULL
    AND target.ConfigPermission IS NULL
    AND target.ConfigRole IS NULL
 WHEN NOT MATCHED THEN
-    INSERT(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
-    VALUES(source.ConfigCategory, source.ConfigSetting, source.ConfigValue, source.ConfigPriority);
+    INSERT(ConfigSettingId, ConfigValue, ConfigPriority)
+    VALUES(source.ConfigSettingId, source.ConfigValue, source.ConfigPriority);
 
 /*
 Bootstrap administrative principal rows.

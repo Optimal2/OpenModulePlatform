@@ -1389,4 +1389,36 @@
   <data name="AD group assignment is not available yet." xml:space="preserve"><value>AD group assignment is not available yet.</value></data>
   <data name="Select an OMP user from the suggestions or enter a valid user ID." xml:space="preserve"><value>Select an OMP user from the suggestions or enter a valid user ID.</value></data>
   <data name="This AD account is already linked to an OMP user. Assign the role to the OMP user instead." xml:space="preserve"><value>This AD account is already linked to an OMP user. Assign the role to the OMP user instead.</value></data>
+  <data name="Config settings" xml:space="preserve"><value>Config settings</value></data>
+  <data name="Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here." xml:space="preserve"><value>Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here.</value></data>
+  <data name="Edit config setting value" xml:space="preserve"><value>Edit config setting value</value></data>
+  <data name="Add config setting value" xml:space="preserve"><value>Add config setting value</value></data>
+  <data name="Select setting" xml:space="preserve"><value>Select setting</value></data>
+  <data name="Definitions are seeded by OMP. Add or remove definitions through SQL upgrades, not this page." xml:space="preserve"><value>Definitions are seeded by OMP. Add or remove definitions through SQL upgrades, not this page.</value></data>
+  <data name="Higher priority wins within permission or role scoped rows." xml:space="preserve"><value>Higher priority wins within permission or role scoped rows.</value></data>
+  <data name="Global rows apply to everyone. User scope wins over permission, permission wins over role." xml:space="preserve"><value>Global rows apply to everyone. User scope wins over permission, permission wins over role.</value></data>
+  <data name="Select user" xml:space="preserve"><value>Select user</value></data>
+  <data name="Select role" xml:space="preserve"><value>Select role</value></data>
+  <data name="Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data." xml:space="preserve"><value>Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data.</value></data>
+  <data name="Save config setting" xml:space="preserve"><value>Save config setting</value></data>
+  <data name="Cancel edit" xml:space="preserve"><value>Cancel edit</value></data>
+  <data name="Configured values" xml:space="preserve"><value>Configured values</value></data>
+  <data name="No config setting values have been configured yet." xml:space="preserve"><value>No config setting values have been configured yet.</value></data>
+  <data name="Setting" xml:space="preserve"><value>Setting</value></data>
+  <data name="Scope" xml:space="preserve"><value>Scope</value></data>
+  <data name="Priority" xml:space="preserve"><value>Priority</value></data>
+  <data name="Value" xml:space="preserve"><value>Value</value></data>
+  <data name="Definition disabled" xml:space="preserve"><value>Definition disabled</value></data>
+  <data name="Delete this config setting value?" xml:space="preserve"><value>Delete this config setting value?</value></data>
+  <data name="Config setting added." xml:space="preserve"><value>Config setting added.</value></data>
+  <data name="Config setting updated." xml:space="preserve"><value>Config setting updated.</value></data>
+  <data name="Config setting deleted." xml:space="preserve"><value>Config setting deleted.</value></data>
+  <data name="Select a registered config setting." xml:space="preserve"><value>Select a registered config setting.</value></data>
+  <data name="A value for the same setting and scope already exists." xml:space="preserve"><value>A value for the same setting and scope already exists.</value></data>
+  <data name="Select a user." xml:space="preserve"><value>Select a user.</value></data>
+  <data name="Select a permission." xml:space="preserve"><value>Select a permission.</value></data>
+  <data name="Select a role." xml:space="preserve"><value>Select a role.</value></data>
+  <data name="Select a valid scope." xml:space="preserve"><value>Select a valid scope.</value></data>
+  <data name="All users" xml:space="preserve"><value>All users</value></data>
+  <data name="NULL" xml:space="preserve"><value>NULL</value></data>
 </root>

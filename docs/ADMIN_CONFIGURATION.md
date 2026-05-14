@@ -44,7 +44,9 @@ For the full authentication and RBAC model, see [`AUTHENTICATION_AND_RBAC.md`](A
 ### Instance display names
 
 The visible platform and portal names are installation settings, not literals in
-the UI. The shared web layer reads these rows from `omp.config_settings`:
+the UI. The shared web layer reads the allowed setting keys from
+`omp.config_setting_definitions` and the installation-specific values from
+`omp.config_settings`:
 
 - `branding/platformName` defaults to `OMP`
 - `branding/portalName` defaults to `Portal`
@@ -53,6 +55,11 @@ Deployment configs can seed or update them through `ConfigSettings`. VGR uses
 `EMP` as the platform name, while the local developer install can use `LOMP` to
 make branding substitutions easy to verify. Technical identifiers, permission
 names, schemas, cookies, and assembly names keep their stable OMP names.
+
+Portal administrators can maintain the concrete values from
+`/admin/configsettings`. The page intentionally does not allow editing the list
+of available category/setting combinations; that list belongs to OMP SQL
+upgrades so the UI only exposes settings that the runtime code understands.
 
 ### 2. Create or adjust the instance
 

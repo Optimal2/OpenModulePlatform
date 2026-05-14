@@ -556,6 +556,19 @@ IF EXISTS
 (
     SELECT 1
     FROM @Settings s
+    LEFT JOIN omp.config_setting_definitions def
+        ON def.ConfigCategory = s.ConfigCategory
+       AND def.ConfigSetting = s.ConfigSetting
+    WHERE def.ConfigSettingId IS NULL
+)
+BEGIN
+    THROW 51009, 'ConfigSettings references a config definition that is not registered by OMP.', 1;
+END
+
+IF EXISTS
+(
+    SELECT 1
+    FROM @Settings s
     LEFT JOIN omp.Permissions p ON p.Name = s.PermissionName
     WHERE s.PermissionName IS NOT NULL
       AND p.PermissionId IS NULL
@@ -578,21 +591,22 @@ END
 
 ;WITH ResolvedSettings AS
 (
-    SELECT s.ConfigCategory,
-           s.ConfigSetting,
+    SELECT def.ConfigSettingId,
            s.ConfigValue,
            s.ConfigUsr,
            p.PermissionId AS ConfigPermission,
            r.RoleId AS ConfigRole,
            s.ConfigPriority
     FROM @Settings s
+    INNER JOIN omp.config_setting_definitions def
+        ON def.ConfigCategory = s.ConfigCategory
+       AND def.ConfigSetting = s.ConfigSetting
     LEFT JOIN omp.Permissions p ON p.Name = s.PermissionName
     LEFT JOIN omp.Roles r ON r.Name = s.RoleName
 )
 MERGE omp.config_settings AS target
 USING ResolvedSettings AS source
-ON target.ConfigCategory = source.ConfigCategory
-   AND target.ConfigSetting = source.ConfigSetting
+ON target.ConfigSettingId = source.ConfigSettingId
    AND ISNULL(target.ConfigUsr, -2147483648) = ISNULL(source.ConfigUsr, -2147483648)
    AND ISNULL(target.ConfigPermission, -2147483648) = ISNULL(source.ConfigPermission, -2147483648)
    AND ISNULL(target.ConfigRole, -2147483648) = ISNULL(source.ConfigRole, -2147483648)
@@ -600,8 +614,8 @@ WHEN MATCHED THEN
     UPDATE SET ConfigValue = source.ConfigValue,
                ConfigPriority = source.ConfigPriority
 WHEN NOT MATCHED THEN
-    INSERT(ConfigCategory, ConfigSetting, ConfigValue, ConfigUsr, ConfigPermission, ConfigRole, ConfigPriority)
-    VALUES(source.ConfigCategory, source.ConfigSetting, source.ConfigValue, source.ConfigUsr, source.ConfigPermission, source.ConfigRole, source.ConfigPriority);
+    INSERT(ConfigSettingId, ConfigValue, ConfigUsr, ConfigPermission, ConfigRole, ConfigPriority)
+    VALUES(source.ConfigSettingId, source.ConfigValue, source.ConfigUsr, source.ConfigPermission, source.ConfigRole, source.ConfigPriority);
 "@
 }
 

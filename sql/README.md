@@ -6,8 +6,9 @@ Use these scripts for the neutral OMP core installation flow:
 
 1. `1-setup-openmoduleplatform.sql`
    - Creates the neutral `omp` schema and core platform tables.
-   - Creates and migrates `omp.config_settings`, the core configuration table
-     for global, user, permission, and role scoped settings.
+   - Creates and migrates `omp.config_setting_definitions` and
+     `omp.config_settings`, the core configuration tables for global, user,
+     permission, and role scoped settings.
 
 2. `2-initialize-openmoduleplatform.sql`
    - Seeds the default OMP instance, host/template baseline, RBAC baseline, and bootstrap administrator principal.
@@ -49,14 +50,17 @@ its SQL in `OpenModulePlatform.Portal/sql`.
 
 ## Core configuration settings
 
-`omp.config_settings` stores platform configuration values as text so a setting
-can hold simple scalars such as `true` or `10`, or serialized JSON/XML when a
-module needs a richer value.
+`omp.config_setting_definitions` stores the allowed setting keys. OMP upgrades
+seed this table; it is not meant to be edited from the Portal admin UI.
+
+`omp.config_settings` stores installation-specific configuration values as text
+so a setting can hold simple scalars such as `true` or `10`, or serialized
+JSON/XML when a module needs a richer value.
 
 The logical setting identity is:
 
-- `ConfigCategory`
-- `ConfigSetting`
+- `ConfigSettingId`, which points to an allowed
+  `omp.config_setting_definitions` row
 - optional `ConfigUsr`
 - optional `ConfigPermission`
 - optional `ConfigRole`
