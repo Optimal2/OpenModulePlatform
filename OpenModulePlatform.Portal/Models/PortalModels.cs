@@ -32,6 +32,121 @@ public sealed class PortalAppEntry
 }
 
 /// <summary>
+/// Visual entry rendered on the Portal start page.
+/// </summary>
+public sealed class PortalEntry
+{
+    public int PortalEntryId { get; set; }
+
+    public string EntryKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? LogoUrl { get; set; }
+
+    public string? IconKey { get; set; }
+
+    public string TargetHref { get; set; } = string.Empty;
+
+    public string? TargetEntryKey { get; set; }
+
+    public bool IsPinned { get; set; }
+
+    public bool IsHidden { get; set; }
+
+    public int? UserSortOrder { get; set; }
+
+    public int DefaultSortOrder { get; set; }
+
+    public string LogoFallbackText
+    {
+        get
+        {
+            var trimmed = DisplayName.Trim();
+            return string.IsNullOrWhiteSpace(trimmed)
+                ? "?"
+                : trimmed[..1].ToUpperInvariant();
+        }
+    }
+}
+
+/// <summary>
+/// Admin list row for Portal Entries.
+/// </summary>
+public sealed class PortalEntryAdminRow
+{
+    public int PortalEntryId { get; set; }
+
+    public string EntryKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? LogoUrl { get; set; }
+
+    public string? IconKey { get; set; }
+
+    public string? TargetUrl { get; set; }
+
+    public string? TargetEntryKey { get; set; }
+
+    public Guid? SourceAppInstanceId { get; set; }
+
+    public bool IsEnabled { get; set; }
+
+    public int DefaultSortOrder { get; set; }
+}
+
+/// <summary>
+/// Editable fields for creating a Portal Entry from the admin UI.
+/// </summary>
+public sealed class PortalEntryCreateData
+{
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? LogoUrl { get; set; }
+
+    public string? IconKey { get; set; }
+
+    public string? TargetUrl { get; set; }
+
+    public string? TargetEntryKey { get; set; }
+
+    public bool IsEnabled { get; set; }
+
+    public int DefaultSortOrder { get; set; }
+}
+
+/// <summary>
+/// Editable fields for updating a Portal Entry from the admin UI.
+/// </summary>
+public sealed class PortalEntryEditData
+{
+    public int PortalEntryId { get; set; }
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? LogoUrl { get; set; }
+
+    public string? IconKey { get; set; }
+
+    public string? TargetUrl { get; set; }
+
+    public string? TargetEntryKey { get; set; }
+
+    public bool IsEnabled { get; set; }
+
+    public int DefaultSortOrder { get; set; }
+}
+
+/// <summary>
 /// Portal overview counts for the main admin landing page.
 /// </summary>
 public sealed class OverviewMetrics

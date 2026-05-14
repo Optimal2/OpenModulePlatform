@@ -1424,4 +1424,43 @@
   <data name="Select a valid scope." xml:space="preserve"><value>Select a valid scope.</value></data>
   <data name="All users" xml:space="preserve"><value>All users</value></data>
   <data name="NULL" xml:space="preserve"><value>NULL</value></data>
+  <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
+  <data name="Portal entries are curated start points for the destinations you can access." xml:space="preserve"><value>Portal entries are curated start points for the destinations you can access.</value></data>
+  <data name="Pinned" xml:space="preserve"><value>Pinned</value></data>
+  <data name="All entries" xml:space="preserve"><value>All entries</value></data>
+  <data name="Show full list" xml:space="preserve"><value>Show full list</value></data>
+  <data name="Show normal list" xml:space="preserve"><value>Show normal list</value></data>
+  <data name="Manage list" xml:space="preserve"><value>Manage list</value></data>
+  <data name="Done" xml:space="preserve"><value>Done</value></data>
+  <data name="Pin" xml:space="preserve"><value>Pin</value></data>
+  <data name="Unpin" xml:space="preserve"><value>Unpin</value></data>
+  <data name="Hide" xml:space="preserve"><value>Hide</value></data>
+  <data name="Undo" xml:space="preserve"><value>Undo</value></data>
+  <data name="Options" xml:space="preserve"><value>Options</value></data>
+  <data name="Hidden" xml:space="preserve"><value>Hidden</value></data>
+  <data name="Drag to sort" xml:space="preserve"><value>Drag to sort</value></data>
+  <data name="No pinned entries" xml:space="preserve"><value>No pinned entries</value></data>
+  <data name="No entries to show" xml:space="preserve"><value>No entries to show</value></data>
+  <data name="Administer portal entries" xml:space="preserve"><value>Administer portal entries</value></data>
+  <data name="Create global Portal Entries that appear on the Portal start page for users with access to the target." xml:space="preserve"><value>Create global Portal Entries that appear on the Portal start page for users with access to the target.</value></data>
+  <data name="Create portal entry" xml:space="preserve"><value>Create portal entry</value></data>
+  <data name="Existing portal entries" xml:space="preserve"><value>Existing portal entries</value></data>
+  <data name="Entry key" xml:space="preserve"><value>Entry key</value></data>
+  <data name="Logo URL" xml:space="preserve"><value>Logo URL</value></data>
+  <data name="Icon key" xml:space="preserve"><value>Icon key</value></data>
+  <data name="Target URL" xml:space="preserve"><value>Target URL</value></data>
+  <data name="Target entry key" xml:space="preserve"><value>Target entry key</value></data>
+  <data name="Default sort order" xml:space="preserve"><value>Default sort order</value></data>
+  <data name="Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL." xml:space="preserve"><value>Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL.</value></data>
+  <data name="Optional stable navigation entry key. Leave empty when target URL is enough." xml:space="preserve"><value>Optional stable navigation entry key. Leave empty when target URL is enough.</value></data>
+  <data name="Portal entry created." xml:space="preserve"><value>Portal entry created.</value></data>
+  <data name="Enter a target URL or target entry key." xml:space="preserve"><value>Enter a target URL or target entry key.</value></data>
+  <data name="Use an absolute http/https URL, a local path starting with /, or a relative path." xml:space="preserve"><value>Use an absolute http/https URL, a local path starting with /, or a relative path.</value></data>
+  <data name="Back to portal" xml:space="preserve"><value>Back to portal</value></data>
+  <data name="Edit portal entry" xml:space="preserve"><value>Edit portal entry</value></data>
+  <data name="Update the Portal Entry shown on the Portal start page." xml:space="preserve"><value>Update the Portal Entry shown on the Portal start page.</value></data>
+  <data name="This entry is seeded from an app instance. The app target is resolved before custom target fields." xml:space="preserve"><value>This entry is seeded from an app instance. The app target is resolved before custom target fields.</value></data>
+  <data name="Save portal entry" xml:space="preserve"><value>Save portal entry</value></data>
+  <data name="Back to portal entries" xml:space="preserve"><value>Back to portal entries</value></data>
+  <data name="Portal entry updated." xml:space="preserve"><value>Portal entry updated.</value></data>
 </root>

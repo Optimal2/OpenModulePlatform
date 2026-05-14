@@ -72,65 +72,213 @@
     </section>
 }
 
-<div class="card top-gap">
-    <h3>@ompBranding.ApplyPlatformName(L["Available OMP web app instances"].Value)</h3>
-    @if (Model.Apps.Count == 0)
-    {
-        <div class="muted">@L["No accessible web app instances are currently registered."]</div>
-    }
-    else
-    {
-        <div class="table-scroll">
-            <table class="grid portal-apps-grid">
-                <thead>
-                    <tr>
-                        <th>@L["Display name"]</th>
-                        <th>@L["App instance key"]</th>
-                        <th>@L["App key"]</th>
-                        <th>@L["Route"]</th>
-                        <th>@L["Description"]</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach (var app in Model.Apps)
-                {
-                    string? href = null;
-                    string? configuredAddress = null;
-                    string? displayAddress = null;
-                    var showResolvedHref = false;
-
-                    href = AppLinkBuilder.ResolveHref(Request, app);
-                    configuredAddress = AppLinkBuilder.ResolveDisplayAddress(Request, app);
-                    displayAddress = configuredAddress ?? href;
-                    showResolvedHref = !string.IsNullOrWhiteSpace(href)
-                        && !string.IsNullOrWhiteSpace(configuredAddress)
-                        && !string.Equals(configuredAddress, href, System.StringComparison.OrdinalIgnoreCase);
-
-                    <tr>
-                        <td>@app.DisplayName</td>
-                        <td><code>@app.AppInstanceKey</code></td>
-                        <td><code>@app.AppKey</code></td>
-                        <td>
-                            @if (!string.IsNullOrWhiteSpace(href))
-                            {
-                                <a href="@href">@displayAddress</a>
-
-                                @if (showResolvedHref)
-                                {
-                                    <div class="muted"><code>@href</code></div>
-                                }
-                            }
-                            else if (!string.IsNullOrWhiteSpace(configuredAddress))
-                            {
-                                <code>@configuredAddress</code>
-                                <div class="muted">@ompBranding.ApplyTerms(L["Set Host base URL to make this route clickable from the Portal."].Value)</div>
-                            }
-                        </td>
-                        <td>@app.Description</td>
-                    </tr>
-                }
-                </tbody>
-            </table>
+<section class="portal-entries portal-entries--framed top-gap" data-portal-entries-root data-manage-mode="@Model.ManageList.ToString().ToLowerInvariant()">
+    <div class="portal-entries__toolbar">
+        <div>
+            <h3>@L["Portal entries"]</h3>
+            <p class="muted">@L["Portal entries are curated start points for the destinations you can access."]</p>
         </div>
+        @if (Model.CanPersonalizeEntries || Model.IsPortalAdmin)
+        {
+            <div class="portal-entries__toolbar-actions">
+                @if (Model.CanPersonalizeEntries && Model.ManageList)
+                {
+                    <a class="button secondary" href="@Url.Page("/Index", new { fullList = Model.ShowFullList })">@L["Done"]</a>
+                }
+                else if (Model.CanPersonalizeEntries)
+                {
+                    <a class="button secondary" href="@Url.Page("/Index", new { manage = true, fullList = Model.ShowFullList })">@L["Manage list"]</a>
+                }
+
+                @if (Model.CanPersonalizeEntries && Model.ShowFullList)
+                {
+                    <a class="button secondary" href="@Url.Page("/Index", new { manage = Model.ManageList })">@L["Show normal list"]</a>
+                }
+                else if (Model.CanPersonalizeEntries)
+                {
+                    <a class="button secondary" href="@Url.Page("/Index", new { manage = Model.ManageList, fullList = true })">@L["Show full list"]</a>
+                }
+
+                @if (Model.IsPortalAdmin)
+                {
+                    <a class="button secondary" href="~/admin/portalentries">@L["Administer portal entries"]</a>
+                }
+            </div>
+        }
+    </div>
+
+    @if (Model.CanPersonalizeEntries && Model.ManageList && Model.PinnedEntries.Count > 1)
+    {
+        <form class="visually-hidden" method="post" asp-page-handler="SortPinned" data-portal-entry-sort-form>
+            @Html.AntiForgeryToken()
+        </form>
     }
-</div>
+
+    <div class="portal-entry-section">
+        <div class="portal-entry-section__label">
+            <span>@L["Pinned"]</span>
+        </div>
+        @if (Model.PinnedEntries.Count == 0)
+        {
+            <div class="empty-state">@L["No pinned entries"]</div>
+        }
+        else
+        {
+            <div class="portal-entry-list portal-entry-list--pinned" data-portal-pinned-list>
+                @foreach (var entry in Model.PinnedEntries)
+                {
+                    <article class="portal-entry-card"
+                             data-portal-entry-card
+                             data-portal-entry-id="@entry.PortalEntryId"
+                             draggable="@(Model.CanPersonalizeEntries && Model.ManageList ? "true" : "false")">
+                        @if (Model.CanPersonalizeEntries && Model.ManageList)
+                        {
+                            <span class="portal-entry-card__drag-handle" title="@L["Drag to sort"]" aria-hidden="true">⋮⋮</span>
+                        }
+                        <a class="portal-entry-card__main" href="@entry.TargetHref">
+                            <span class="portal-entry-card__logo">
+                                @if (!string.IsNullOrWhiteSpace(entry.LogoUrl))
+                                {
+                                    <img src="@entry.LogoUrl" alt="" />
+                                }
+                                else
+                                {
+                                    <span>@entry.LogoFallbackText</span>
+                                }
+                            </span>
+                            <span class="portal-entry-card__text">
+                                <span class="portal-entry-card__title">@entry.DisplayName</span>
+                                @if (!string.IsNullOrWhiteSpace(entry.Description))
+                                {
+                                    <span class="portal-entry-card__description">@entry.Description</span>
+                                }
+                            </span>
+                        </a>
+                        @if (Model.CanPersonalizeEntries || Model.IsPortalAdmin)
+                        {
+                            <div class="portal-entry-card__actions">
+                                @if (Model.CanPersonalizeEntries)
+                                {
+                                    <form method="post" asp-page-handler="Unpin" class="inline-form">
+                                        <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
+                                        <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
+                                        <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
+                                        <button type="submit" class="icon-button is-active" title="@L["Unpin"]" aria-label="@L["Unpin"]">★</button>
+                                    </form>
+                                }
+                                <details class="portal-entry-options">
+                                    <summary class="icon-button" title="@L["Options"]" aria-label="@L["Options"]">⋯</summary>
+                                    <div class="portal-entry-options__menu">
+                                        @if (Model.IsPortalAdmin)
+                                        {
+                                            <a href="@Url.Page("/Admin/PortalEntryEdit", new { portalEntryId = entry.PortalEntryId })">@L["Edit"]</a>
+                                        }
+                                        @if (Model.CanPersonalizeEntries)
+                                        {
+                                            <form method="post" asp-page-handler="Hide">
+                                                <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
+                                                <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
+                                                <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
+                                                <button type="submit">@L["Hide"]</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </details>
+                            </div>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="portal-entry-section">
+        <div class="portal-entry-section__label">
+            <span>@L["All entries"]</span>
+        </div>
+        @if (Model.AllEntries.Count == 0)
+        {
+            <div class="empty-state">@L["No entries to show"]</div>
+        }
+        else
+        {
+            <div class="portal-entry-list">
+                @foreach (var entry in Model.AllEntries)
+                {
+                    <article class="portal-entry-card@(entry.IsHidden ? " is-hidden" : string.Empty)" data-portal-entry-card data-portal-entry-id="@entry.PortalEntryId">
+                        <a class="portal-entry-card__main" href="@entry.TargetHref" aria-disabled="@(entry.IsHidden ? "true" : "false")">
+                            <span class="portal-entry-card__logo">
+                                @if (!string.IsNullOrWhiteSpace(entry.LogoUrl))
+                                {
+                                    <img src="@entry.LogoUrl" alt="" />
+                                }
+                                else
+                                {
+                                    <span>@entry.LogoFallbackText</span>
+                                }
+                            </span>
+                            <span class="portal-entry-card__text">
+                                <span class="portal-entry-card__title">
+                                    @entry.DisplayName
+                                    @if (entry.IsHidden)
+                                    {
+                                        <span class="portal-entry-card__badge">@L["Hidden"]</span>
+                                    }
+                                </span>
+                                @if (!string.IsNullOrWhiteSpace(entry.Description))
+                                {
+                                    <span class="portal-entry-card__description">@entry.Description</span>
+                                }
+                            </span>
+                        </a>
+                        @if (Model.CanPersonalizeEntries || Model.IsPortalAdmin)
+                        {
+                            <div class="portal-entry-card__actions">
+                                @if (Model.CanPersonalizeEntries && entry.IsHidden)
+                                {
+                                    <form method="post" asp-page-handler="Unhide" class="inline-form">
+                                        <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
+                                        <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
+                                        <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
+                                        <button type="submit" class="button secondary">@L["Undo"]</button>
+                                    </form>
+                                }
+                                else if (Model.CanPersonalizeEntries)
+                                {
+                                    <form method="post" asp-page-handler="Pin" class="inline-form">
+                                        <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
+                                        <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
+                                        <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
+                                        <button type="submit" class="icon-button" title="@L["Pin"]" aria-label="@L["Pin"]">☆</button>
+                                    </form>
+                                }
+
+                                @if (Model.IsPortalAdmin || (Model.CanPersonalizeEntries && !entry.IsHidden))
+                                {
+                                    <details class="portal-entry-options">
+                                        <summary class="icon-button" title="@L["Options"]" aria-label="@L["Options"]">⋯</summary>
+                                        <div class="portal-entry-options__menu">
+                                            @if (Model.IsPortalAdmin)
+                                            {
+                                                <a href="@Url.Page("/Admin/PortalEntryEdit", new { portalEntryId = entry.PortalEntryId })">@L["Edit"]</a>
+                                            }
+                                            @if (Model.CanPersonalizeEntries && !entry.IsHidden)
+                                            {
+                                                <form method="post" asp-page-handler="Hide">
+                                                    <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
+                                                    <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
+                                                    <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
+                                                    <button type="submit">@L["Hide"]</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    </details>
+                                }
+                            </div>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </div>
+</section>
