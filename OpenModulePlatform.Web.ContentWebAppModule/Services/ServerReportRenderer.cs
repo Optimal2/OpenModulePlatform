@@ -7,6 +7,8 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
 
 public sealed class ServerReportRenderer
 {
+    private static readonly HtmlEncoder DefaultHtmlEncoder = HtmlEncoder.Default;
+
     private readonly ServerReportDefinitionLoader _definitionLoader;
     private readonly ServerReportQueryRunner _queryRunner;
     private readonly ILogger<ServerReportRenderer> _logger;
@@ -24,6 +26,10 @@ public sealed class ServerReportRenderer
     public async Task<string> RenderAsync(string? reportKey, CancellationToken ct)
     {
         var renderTask = RenderCoreAsync(reportKey, ct);
+
+        // Inspect the task result instead of using catch(Exception). That keeps
+        // unexpected report failures logged and sanitized without reintroducing
+        // a broad catch clause in this user-facing rendering boundary.
         await Task.WhenAny(renderTask).ConfigureAwait(false);
 
         if (renderTask.IsCompletedSuccessfully)
@@ -175,5 +181,5 @@ public sealed class ServerReportRenderer
     }
 
     private static void AppendEncoded(StringBuilder html, string value)
-        => html.Append(HtmlEncoder.Default.Encode(value));
+        => html.Append(DefaultHtmlEncoder.Encode(value));
 }
