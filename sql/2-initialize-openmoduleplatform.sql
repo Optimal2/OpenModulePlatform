@@ -45,6 +45,9 @@ DECLARE @PortalAdminsRoleId int;
 -- scripts. It must never be executed in production unchanged. Deployment
 -- automation should patch it from a protected environment-specific value; the
 -- THROW check below is a fail-safe, not the primary control.
+-- The bootstrap stays as a literal replacement instead of a stored procedure
+-- parameter so the same script can initialize a clean database with sqlcmd or
+-- the local installer before any application-side deployment helpers exist.
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
 DECLARE @BootstrapPortalAdminPrincipalType nvarchar(50) = N'ADUser';
 DECLARE @InsertedInstanceTemplateIds TABLE (InstanceTemplateId int NOT NULL);
@@ -52,7 +55,10 @@ DECLARE @InsertedHostTemplateIds TABLE (HostTemplateId int NOT NULL);
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
 BEGIN
-    THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. This SQL variable inserts one principal; use repeated executions or the PowerShell installer to add multiple principals.', 1;
+    -- Set @BootstrapPortalAdminPrincipal manually or use
+    -- scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User".
+    -- This script inserts one bootstrap principal per execution.
+    THROW 51000, 'Bootstrap portal admin principal was not replaced.', 1;
 END
 
 -- The setup script also adds CK_omp_RolePrincipals_NoBootstrapPlaceholders so

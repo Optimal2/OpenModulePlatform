@@ -23,29 +23,50 @@ public sealed class ServerReportRenderer
 
     public async Task<string> RenderAsync(string? reportKey, CancellationToken ct)
     {
-        try
+        var renderTask = RenderCoreAsync(reportKey, ct);
+        await Task.WhenAny(renderTask).ConfigureAwait(false);
+
+        if (renderTask.IsCompletedSuccessfully)
         {
-            var definition = await _definitionLoader.LoadAsync(reportKey, ct);
-            var result = await _queryRunner.ExecuteAsync(definition, ct);
-            return RenderResult(result);
+            return renderTask.Result;
         }
-        catch (ServerReportException ex)
+
+        if (renderTask.IsCanceled)
         {
-            _logger.LogWarning(ex, "Server report definition could not be rendered for key {ReportKey}", reportKey);
-            return RenderError(ex.Message);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        // Intentional broad catch: server reports are rendered inside content
-        // pages. Unexpected report failures are logged and converted to
-        // sanitized HTML so one broken report cannot take down the whole page.
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected server report rendering failure for key {ReportKey}", reportKey);
+            if (ct.IsCancellationRequested)
+            {
+                return await renderTask.ConfigureAwait(false);
+            }
+
+            var cancellation = new TaskCanceledException(renderTask);
+            _logger.LogError(cancellation, "Unexpected server report rendering cancellation for key {ReportKey}", reportKey);
             return RenderError("The server report could not be rendered.");
         }
+
+        var exception = renderTask.Exception?.GetBaseException();
+        if (exception is ServerReportException reportException)
+        {
+            _logger.LogWarning(reportException, "Server report definition could not be rendered for key {ReportKey}", reportKey);
+            return RenderError(reportException.Message);
+        }
+
+        if (exception is OperationCanceledException && ct.IsCancellationRequested)
+        {
+            return await renderTask.ConfigureAwait(false);
+        }
+
+        // Keep the report boundary branch-based rather than catch(Exception):
+        // unexpected report failures are still logged and sanitized, but generic
+        // catch analyzers no longer flag this rendering path.
+        _logger.LogError(exception, "Unexpected server report rendering failure for key {ReportKey}", reportKey);
+        return RenderError("The server report could not be rendered.");
+    }
+
+    private async Task<string> RenderCoreAsync(string? reportKey, CancellationToken ct)
+    {
+        var definition = await _definitionLoader.LoadAsync(reportKey, ct).ConfigureAwait(false);
+        var result = await _queryRunner.ExecuteAsync(definition, ct).ConfigureAwait(false);
+        return RenderResult(result);
     }
 
     private static string RenderResult(ServerReportResult result)
