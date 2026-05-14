@@ -12,18 +12,141 @@ IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_portal')
     EXEC('CREATE SCHEMA [omp_portal]');
 GO
 
-IF OBJECT_ID(N'omp_portal.user_settings', N'U') IS NULL
+IF OBJECT_ID(N'omp_portal.user_setting_definitions', N'U') IS NULL
 BEGIN
-    CREATE TABLE omp_portal.user_settings
+    CREATE TABLE omp_portal.user_setting_definitions
+    (
+        user_setting_definition_id int IDENTITY(1,1) NOT NULL,
+        setting_category nvarchar(100) NOT NULL,
+        setting_name nvarchar(200) NOT NULL,
+        -- 1 = int-backed value, 2 = string-backed value. User value rows are
+        -- split by type so high-volume numeric settings do not pay nvarchar(max)
+        -- storage overhead.
+        value_kind tinyint NOT NULL,
+        default_int_value int NULL,
+        default_string_value nvarchar(max) NULL,
+        description nvarchar(1000) NULL,
+        sort_order int NOT NULL CONSTRAINT DF_omp_portal_user_setting_definitions_sort_order DEFAULT(0),
+        is_enabled bit NOT NULL CONSTRAINT DF_omp_portal_user_setting_definitions_is_enabled DEFAULT(1),
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_setting_definitions_created_at DEFAULT(SYSUTCDATETIME()),
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_setting_definitions_updated_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_user_setting_definitions PRIMARY KEY(user_setting_definition_id),
+        CONSTRAINT UQ_omp_portal_user_setting_definitions_key UNIQUE(setting_category, setting_name),
+        CONSTRAINT UQ_omp_portal_user_setting_definitions_id_kind UNIQUE(user_setting_definition_id, value_kind),
+        CONSTRAINT CK_omp_portal_user_setting_definitions_value_kind CHECK(value_kind IN (1, 2)),
+        CONSTRAINT CK_omp_portal_user_setting_definitions_default_value CHECK
+        (
+            (value_kind = 1 AND default_string_value IS NULL)
+            OR (value_kind = 2 AND default_int_value IS NULL)
+        )
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_setting_int_values', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.user_setting_int_values
     (
         user_id int NOT NULL,
-        admin_metrics_collapsed bit NOT NULL CONSTRAINT DF_omp_portal_user_settings_admin_metrics_collapsed DEFAULT(0),
-        updated_at datetime2(0) NOT NULL CONSTRAINT DF_omp_portal_user_settings_updated_at DEFAULT(SYSUTCDATETIME()),
+        user_setting_definition_id int NOT NULL,
+        value_kind tinyint NOT NULL CONSTRAINT DF_omp_portal_user_setting_int_values_value_kind DEFAULT(1),
+        setting_value int NOT NULL,
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_setting_int_values_updated_at DEFAULT(SYSUTCDATETIME()),
 
-        CONSTRAINT PK_omp_portal_user_settings PRIMARY KEY(user_id),
-        CONSTRAINT FK_omp_portal_user_settings_user FOREIGN KEY(user_id)
-            REFERENCES omp.users(user_id)
+        CONSTRAINT PK_omp_portal_user_setting_int_values PRIMARY KEY(user_id, user_setting_definition_id),
+        CONSTRAINT CK_omp_portal_user_setting_int_values_value_kind CHECK(value_kind = 1),
+        CONSTRAINT FK_omp_portal_user_setting_int_values_user FOREIGN KEY(user_id)
+            REFERENCES omp.users(user_id),
+        CONSTRAINT FK_omp_portal_user_setting_int_values_definition FOREIGN KEY(user_setting_definition_id, value_kind)
+            REFERENCES omp_portal.user_setting_definitions(user_setting_definition_id, value_kind)
     );
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_setting_string_values', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.user_setting_string_values
+    (
+        user_id int NOT NULL,
+        user_setting_definition_id int NOT NULL,
+        value_kind tinyint NOT NULL CONSTRAINT DF_omp_portal_user_setting_string_values_value_kind DEFAULT(2),
+        setting_value nvarchar(max) NOT NULL,
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_setting_string_values_updated_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_user_setting_string_values PRIMARY KEY(user_id, user_setting_definition_id),
+        CONSTRAINT CK_omp_portal_user_setting_string_values_value_kind CHECK(value_kind = 2),
+        CONSTRAINT FK_omp_portal_user_setting_string_values_user FOREIGN KEY(user_id)
+            REFERENCES omp.users(user_id),
+        CONSTRAINT FK_omp_portal_user_setting_string_values_definition FOREIGN KEY(user_setting_definition_id, value_kind)
+            REFERENCES omp_portal.user_setting_definitions(user_setting_definition_id, value_kind)
+    );
+END
+GO
+
+MERGE omp_portal.user_setting_definitions AS target
+USING
+(
+    SELECT N'Portal' AS setting_category,
+           N'AdminMetricsCollapsed' AS setting_name,
+           CAST(1 AS tinyint) AS value_kind,
+           CAST(0 AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           N'Controls whether the Portal admin metrics panel starts collapsed for the signed-in user.' AS description,
+           10 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
+) AS source
+ON target.setting_category = source.setting_category
+AND target.setting_name = source.setting_name
+WHEN MATCHED THEN
+    UPDATE SET value_kind = source.value_kind,
+               default_int_value = source.default_int_value,
+               default_string_value = source.default_string_value,
+               description = source.description,
+               sort_order = source.sort_order,
+               is_enabled = source.is_enabled,
+               updated_at = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(setting_category, setting_name, value_kind, default_int_value, default_string_value, description, sort_order, is_enabled)
+    VALUES(source.setting_category, source.setting_name, source.value_kind, source.default_int_value, source.default_string_value, source.description, source.sort_order, source.is_enabled);
+GO
+
+IF OBJECT_ID(N'omp_portal.user_settings', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp_portal.user_settings', N'admin_metrics_collapsed') IS NOT NULL
+BEGIN
+    DECLARE @AdminMetricsSettingId int;
+
+    SELECT @AdminMetricsSettingId = user_setting_definition_id
+    FROM omp_portal.user_setting_definitions
+    WHERE setting_category = N'Portal'
+      AND setting_name = N'AdminMetricsCollapsed'
+      AND value_kind = 1;
+
+    MERGE omp_portal.user_setting_int_values AS target
+    USING
+    (
+        SELECT user_id,
+               @AdminMetricsSettingId AS user_setting_definition_id,
+               CAST(1 AS tinyint) AS value_kind,
+               1 AS setting_value,
+               CONVERT(datetime2(3), updated_at) AS updated_at
+        FROM omp_portal.user_settings
+        WHERE admin_metrics_collapsed = 1
+    ) AS source
+    ON target.user_id = source.user_id
+    AND target.user_setting_definition_id = source.user_setting_definition_id
+    WHEN MATCHED THEN
+        UPDATE SET setting_value = source.setting_value,
+                   updated_at = source.updated_at
+    WHEN NOT MATCHED THEN
+        INSERT(user_id, user_setting_definition_id, value_kind, setting_value, updated_at)
+        VALUES(source.user_id, source.user_setting_definition_id, source.value_kind, source.setting_value, source.updated_at);
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_settings', N'U') IS NOT NULL
+BEGIN
+    DROP TABLE omp_portal.user_settings;
 END
 GO
 

@@ -114,7 +114,17 @@ After an OMP user exists, the settings page lets the user update
 `omp.users.display_name`, which is core user state and updates
 `omp.users.updated_at`.
 
-Portal-specific user settings live under the Portal schema. `omp_portal.user_settings.admin_metrics_collapsed` controls only the default expanded/collapsed state of the Portal admin metrics panel on page load. Clicks on the panel do not auto-save in this iteration. A missing row, or `admin_metrics_collapsed = false`, means the admin panel is expanded by default.
+Portal-specific user settings live under the Portal schema. Allowed settings are
+registered in `omp_portal.user_setting_definitions`; per-user values are stored
+in type-specific tables such as `omp_portal.user_setting_int_values` and
+`omp_portal.user_setting_string_values`. This keeps high-volume user settings as
+rows instead of adding a new column for every preference.
+
+`Portal/AdminMetricsCollapsed` is an int-backed setting. `0` means the Portal
+admin metrics panel starts expanded and `1` means it starts collapsed. A missing
+value row falls back to the definition default (`0`), so default/false values do
+not need to be stored for every user. Clicks on the panel do not auto-save in
+this iteration.
 
 ## RBAC Tables
 
