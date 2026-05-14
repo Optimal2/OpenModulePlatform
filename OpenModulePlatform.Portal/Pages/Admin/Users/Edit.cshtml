@@ -80,6 +80,115 @@
     </form>
 
     <section class="card section-card bottom-gap">
+        <div class="eyebrow">@ompBranding.PortalName</div>
+        <h3>@ompBranding.ApplyTerms(L["Portal settings"].Value)</h3>
+        <p class="muted">@ompBranding.ApplyTerms(L["Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user."].Value)</p>
+
+        @{
+            var selectedPortalSetting = Model.SelectedPortalSettingDefinition;
+        }
+
+        <form method="post" asp-page-handler="SavePortalSetting" class="form-grid">
+            <input type="hidden" asp-for="PortalSettingInput.OriginalUserSettingDefinitionId" />
+            <input type="hidden" asp-for="PortalSettingInput.ValueKind" />
+
+            <div class="field-grid field-grid--2">
+                @if (Model.IsPortalSettingEdit)
+                {
+                    <input type="hidden" asp-for="PortalSettingInput.UserSettingDefinitionId" />
+                    <div class="form-field">
+                        <label>@ompBranding.ApplyTerms(L["Portal setting"].Value)</label>
+                        <input value="@(selectedPortalSetting?.Key ?? string.Empty)" readonly />
+                    </div>
+                }
+                else
+                {
+                    <div class="form-field">
+                        <label asp-for="PortalSettingInput.UserSettingDefinitionId">@ompBranding.ApplyTerms(L["Portal setting"].Value)</label>
+                        <select asp-for="PortalSettingInput.UserSettingDefinitionId">
+                            <option value="">@L["Select portal setting"]</option>
+                            @foreach (var option in Model.PortalSettingOptions)
+                            {
+                                <option value="@option.Value">@option.Label</option>
+                            }
+                        </select>
+                        <span asp-validation-for="PortalSettingInput.UserSettingDefinitionId" class="field-validation-error"></span>
+                    </div>
+                }
+
+                <div class="form-field">
+                    <label>@L["Default value"]</label>
+                    <input value="@(selectedPortalSetting is null ? string.Empty : Model.PortalSettingDefaultText(selectedPortalSetting))" readonly />
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="PortalSettingInput.SettingValue"></label>
+                <textarea asp-for="PortalSettingInput.SettingValue" rows="3"></textarea>
+                <span asp-validation-for="PortalSettingInput.SettingValue" class="field-validation-error"></span>
+                <small>@L["Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override."]</small>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@(Model.IsPortalSettingEdit ? L["Save portal setting"] : L["Add portal setting"])</button>
+                @if (Model.IsPortalSettingEdit)
+                {
+                    <a class="action-link" href="~/admin/users/edit/@Model.UserRow.UserId">@L["Cancel edit"]</a>
+                }
+            </div>
+        </form>
+
+        <h4 class="top-gap">@L["Configured portal setting values"]</h4>
+
+        @if (Model.PortalSettingRows.Count == 0)
+        {
+            <div class="empty-state top-gap">@L["No portal setting values have been configured for this user."]</div>
+        }
+        else
+        {
+            <table class="grid compact-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Setting"]</th>
+                        <th>@L["Type"]</th>
+                        <th>@L["Default value"]</th>
+                        <th>@L["User value"]</th>
+                        <th>@L["Updated UTC"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var setting in Model.PortalSettingRows)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@setting.Key</strong>
+                                @if (!string.IsNullOrWhiteSpace(setting.Description))
+                                {
+                                    <br />
+                                    <span class="muted">@setting.Description</span>
+                                }
+                            </td>
+                            <td>@Model.PortalSettingValueKindText(setting.ValueKind)</td>
+                            <td>@Model.PortalSettingDefaultText(setting)</td>
+                            <td><code>@Model.PortalSettingValueText(setting)</code></td>
+                            <td>@Model.FormatUtc(setting.UpdatedAt)</td>
+                            <td>
+                                <div class="toolbar compact-toolbar">
+                                    <a class="action-link" href="~/admin/users/edit/@Model.UserRow.UserId?portalSettingDefinitionId=@setting.UserSettingDefinitionId">@L["Edit"]</a>
+                                    <form method="post" asp-page-handler="DeletePortalSetting" asp-route-userSettingDefinitionId="@setting.UserSettingDefinitionId" class="inline-form">
+                                        <button type="submit" class="btn-danger-subtle" onclick="return confirm('@L["Delete this portal setting value?"]');">@L["Delete"]</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="card section-card bottom-gap">
         <div class="eyebrow">@L["Authentication"]</div>
         <h3>@L["Auth links"]</h3>
         <p class="muted">@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added."].Value)</p>
