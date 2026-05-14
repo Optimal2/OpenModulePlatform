@@ -952,36 +952,38 @@ GO
 IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL
    AND COL_LENGTH(N'omp.config_settings', N'ConfigSetting') IS NOT NULL
 BEGIN
-    INSERT INTO omp.config_setting_definitions(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
-    SELECT DISTINCT cs.ConfigCategory,
-           cs.ConfigSetting,
-           NULL,
-           1000,
-           1
-    FROM omp.config_settings cs
-    WHERE cs.ConfigSettingId IS NULL
-      AND LTRIM(RTRIM(cs.ConfigCategory)) <> N''
-      AND LTRIM(RTRIM(cs.ConfigSetting)) <> N''
-      AND NOT EXISTS
-      (
-          SELECT 1
-          FROM omp.config_setting_definitions existing
-          WHERE existing.ConfigCategory = cs.ConfigCategory
-            AND existing.ConfigSetting = cs.ConfigSetting
-      );
+    EXEC sp_executesql N'
+INSERT INTO omp.config_setting_definitions(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+SELECT DISTINCT cs.ConfigCategory,
+       cs.ConfigSetting,
+       NULL,
+       1000,
+       1
+FROM omp.config_settings cs
+WHERE cs.ConfigSettingId IS NULL
+  AND LTRIM(RTRIM(cs.ConfigCategory)) <> N''''
+  AND LTRIM(RTRIM(cs.ConfigSetting)) <> N''''
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.config_setting_definitions existing
+      WHERE existing.ConfigCategory = cs.ConfigCategory
+        AND existing.ConfigSetting = cs.ConfigSetting
+  );';
 END
 GO
 
 IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL
    AND COL_LENGTH(N'omp.config_settings', N'ConfigSetting') IS NOT NULL
 BEGIN
-    UPDATE cs
-       SET ConfigSettingId = def.ConfigSettingId
-    FROM omp.config_settings cs
-    INNER JOIN omp.config_setting_definitions def
-        ON def.ConfigCategory = cs.ConfigCategory
-       AND def.ConfigSetting = cs.ConfigSetting
-    WHERE cs.ConfigSettingId IS NULL;
+    EXEC sp_executesql N'
+UPDATE cs
+   SET ConfigSettingId = def.ConfigSettingId
+FROM omp.config_settings cs
+INNER JOIN omp.config_setting_definitions def
+    ON def.ConfigCategory = cs.ConfigCategory
+   AND def.ConfigSetting = cs.ConfigSetting
+WHERE cs.ConfigSettingId IS NULL;';
 END
 GO
 
