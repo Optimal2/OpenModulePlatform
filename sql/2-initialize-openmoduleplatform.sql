@@ -89,7 +89,13 @@ BEGIN
     THROW 51004, 'Bootstrap principal must not contain leading or trailing whitespace.', 1;
 END
 
-IF @BootstrapPortalAdminPrincipal LIKE N'%["<>|?*;]%'
+IF CHARINDEX(N'"', @BootstrapPortalAdminPrincipal) > 0
+    OR CHARINDEX(N'<', @BootstrapPortalAdminPrincipal) > 0
+    OR CHARINDEX(N'>', @BootstrapPortalAdminPrincipal) > 0
+    OR CHARINDEX(N'|', @BootstrapPortalAdminPrincipal) > 0
+    OR CHARINDEX(N'?', @BootstrapPortalAdminPrincipal) > 0
+    OR CHARINDEX(N'*', @BootstrapPortalAdminPrincipal) > 0
+    OR CHARINDEX(N';', @BootstrapPortalAdminPrincipal) > 0
     OR CHARINDEX(CHAR(10), @BootstrapPortalAdminPrincipal) > 0
     OR CHARINDEX(CHAR(13), @BootstrapPortalAdminPrincipal) > 0
 BEGIN
@@ -230,7 +236,9 @@ END
 -- Seed baseline administrative placeholder role
 -------------------------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM omp.Roles WHERE Name = N'PortalAdmins')
+BEGIN
     INSERT INTO omp.Roles(Name, Description) VALUES(N'PortalAdmins', N'Administrative bootstrap role for OMP modules and portal');
+END
 
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 
@@ -238,12 +246,16 @@ SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 -- Seed built-in authentication providers
 -------------------------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM omp.auth_providers WHERE display_name = N'AD')
+BEGIN
     INSERT INTO omp.auth_providers(display_name, is_enabled)
     VALUES(N'AD', 1);
+END
 
 IF NOT EXISTS (SELECT 1 FROM omp.auth_providers WHERE display_name = N'lpwd')
+BEGIN
     INSERT INTO omp.auth_providers(display_name, is_enabled)
     VALUES(N'lpwd', 1);
+END
 
 -------------------------------------------------------------------------------
 -- Seed baseline instance branding settings
