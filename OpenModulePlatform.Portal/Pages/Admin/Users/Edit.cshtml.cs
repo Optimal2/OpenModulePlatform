@@ -12,6 +12,12 @@ namespace OpenModulePlatform.Portal.Pages.Admin.Users;
 
 public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 {
+    private const string LocalLoginUserNameField = "LocalLogin.UserName";
+    private const string LocalLoginPasswordField = "LocalLogin.Password";
+    private const string LocalLoginConfirmPasswordField = "LocalLogin.ConfirmPassword";
+    private const string LocalPasswordResetPasswordField = "LocalPasswordReset.Password";
+    private const string LocalPasswordResetConfirmPasswordField = "LocalPasswordReset.ConfirmPassword";
+
     private readonly OmpUserAdminRepository _repo;
 
     public EditModel(
@@ -32,6 +38,9 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
     [BindProperty]
     public LocalLoginInputModel LocalLogin { get; set; } = new();
+
+    [BindProperty]
+    public LocalPasswordResetInputModel LocalPasswordReset { get; set; } = new();
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -203,27 +212,99 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
                 return RedirectToPage("/Admin/Users/Edit", new { userId });
 
             case AddLocalPasswordLoginStatus.UserAlreadyHasLocalLogin:
-                ModelState.AddModelError(nameof(LocalLogin.UserName), T("Local login already exists."));
+                ModelState.AddModelError(LocalLoginUserNameField, T("Local login already exists."));
                 break;
 
             case AddLocalPasswordLoginStatus.UserNameAlreadyInUse:
-                ModelState.AddModelError(nameof(LocalLogin.UserName), T("User name is already in use."));
+                ModelState.AddModelError(LocalLoginUserNameField, T("User name is already in use."));
                 break;
 
             case AddLocalPasswordLoginStatus.ProviderMissing:
-                ModelState.AddModelError(nameof(LocalLogin.UserName), T("The local password authentication provider is missing or disabled."));
+                ModelState.AddModelError(LocalLoginUserNameField, T("The local password authentication provider is missing or disabled."));
                 break;
 
             case AddLocalPasswordLoginStatus.UserMissing:
                 return NotFound();
 
             default:
-                ModelState.AddModelError(nameof(LocalLogin.UserName), T("The local login could not be added."));
+                ModelState.AddModelError(LocalLoginUserNameField, T("The local login could not be added."));
                 break;
         }
 
         ClearLocalPasswordFields();
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostResetLocalPassword(int userId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Edit user");
+        if (!await LoadAsync(userId, ct))
+        {
+            return NotFound();
+        }
+
+        PopulateInputFromLoadedUser();
+        ModelState.Clear();
+        ValidateLocalPasswordReset();
+        if (!ModelState.IsValid)
+        {
+            ClearLocalPasswordFields();
+            return Page();
+        }
+
+        var result = await _repo.ResetLocalPasswordAsync(userId, LocalPasswordReset.Password, ct);
+        switch (result)
+        {
+            case ResetLocalPasswordResult.Reset:
+                StatusMessage = T("Local password reset.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
+            case ResetLocalPasswordResult.ProviderMissing:
+                ModelState.AddModelError(LocalPasswordResetPasswordField, T("The local password authentication provider is missing or disabled."));
+                break;
+
+            case ResetLocalPasswordResult.LocalLoginMissing:
+                ModelState.AddModelError(LocalPasswordResetPasswordField, T("Local login is missing."));
+                break;
+
+            default:
+                ModelState.AddModelError(LocalPasswordResetPasswordField, T("The local password could not be reset."));
+                break;
+        }
+
+        ClearLocalPasswordFields();
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostRemoveAuthLink(int userId, int userAuthId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var result = await _repo.RemoveAuthLinkAsync(userId, userAuthId, ct);
+        switch (result.Status)
+        {
+            case RemoveAuthLinkStatus.Removed:
+                StatusMessage = AuthLinkRemovedMessage(result.ProviderDisplayName);
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
+            case RemoveAuthLinkStatus.AuthLinkMissing:
+                StatusMessage = T("Auth link not found.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
+            default:
+                StatusMessage = T("The auth link could not be removed.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+        }
     }
 
     public async Task<IActionResult> OnPostMigrateAdRights(int userId, CancellationToken ct)
@@ -322,32 +403,55 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
         if (HasLocalPasswordLogin)
         {
-            ModelState.AddModelError(nameof(LocalLogin.UserName), T("Local login already exists."));
+            ModelState.AddModelError(LocalLoginUserNameField, T("Local login already exists."));
             return;
         }
 
         if (string.IsNullOrWhiteSpace(LocalLogin.UserName))
         {
-            ModelState.AddModelError(nameof(LocalLogin.UserName), T("User name is required."));
+            ModelState.AddModelError(LocalLoginUserNameField, T("User name is required."));
         }
 
         if (LocalLogin.UserName.Length > 256)
         {
-            ModelState.AddModelError(nameof(LocalLogin.UserName), T("User name must be 256 characters or fewer."));
+            ModelState.AddModelError(LocalLoginUserNameField, T("User name must be 256 characters or fewer."));
         }
 
         if (string.IsNullOrEmpty(LocalLogin.Password))
         {
-            ModelState.AddModelError(nameof(LocalLogin.Password), T("Password is required."));
+            ModelState.AddModelError(LocalLoginPasswordField, T("Password is required."));
         }
         else if (LocalLogin.Password.Length < 8)
         {
-            ModelState.AddModelError(nameof(LocalLogin.Password), T("Password must be at least 8 characters."));
+            ModelState.AddModelError(LocalLoginPasswordField, T("Password must be at least 8 characters."));
         }
 
         if (!string.Equals(LocalLogin.Password, LocalLogin.ConfirmPassword, StringComparison.Ordinal))
         {
-            ModelState.AddModelError(nameof(LocalLogin.ConfirmPassword), T("Password and confirmation password do not match."));
+            ModelState.AddModelError(LocalLoginConfirmPasswordField, T("Password and confirmation password do not match."));
+        }
+    }
+
+    private void ValidateLocalPasswordReset()
+    {
+        if (!HasLocalPasswordLogin)
+        {
+            ModelState.AddModelError(LocalPasswordResetPasswordField, T("Local login is missing."));
+            return;
+        }
+
+        if (string.IsNullOrEmpty(LocalPasswordReset.Password))
+        {
+            ModelState.AddModelError(LocalPasswordResetPasswordField, T("Password is required."));
+        }
+        else if (LocalPasswordReset.Password.Length < 8)
+        {
+            ModelState.AddModelError(LocalPasswordResetPasswordField, T("Password must be at least 8 characters."));
+        }
+
+        if (!string.Equals(LocalPasswordReset.Password, LocalPasswordReset.ConfirmPassword, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError(LocalPasswordResetConfirmPasswordField, T("Password and confirmation password do not match."));
         }
     }
 
@@ -355,6 +459,23 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     {
         LocalLogin.Password = string.Empty;
         LocalLogin.ConfirmPassword = string.Empty;
+        LocalPasswordReset.Password = string.Empty;
+        LocalPasswordReset.ConfirmPassword = string.Empty;
+    }
+
+    private string AuthLinkRemovedMessage(string? providerDisplayName)
+    {
+        if (string.Equals(providerDisplayName, "AD", StringComparison.OrdinalIgnoreCase))
+        {
+            return T("AD link removed.");
+        }
+
+        if (string.Equals(providerDisplayName, "lpwd", StringComparison.OrdinalIgnoreCase))
+        {
+            return T("Local login removed.");
+        }
+
+        return T("Auth link removed.");
     }
 
     private static string AccountStatusLabelKey(int status)
@@ -390,6 +511,17 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
         [DataType(DataType.Password)]
         [Display(Name = "Confirm password")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+
+    public sealed class LocalPasswordResetInputModel
+    {
+        [DataType(DataType.Password)]
+        [Display(Name = "New password")]
+        public string Password { get; set; } = string.Empty;
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Confirm new password")]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

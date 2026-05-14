@@ -82,7 +82,7 @@
     <section class="card section-card bottom-gap">
         <div class="eyebrow">@L["Authentication"]</div>
         <h3>@L["Auth links"]</h3>
-        <p class="muted">@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. They are shown read-only in this version."].Value)</p>
+        <p class="muted">@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added."].Value)</p>
 
         @if (Model.UserRow.AuthLinks.Count == 0)
         {
@@ -97,6 +97,7 @@
                         <th>@L["Provider user key"]</th>
                         <th>@L["Created UTC"]</th>
                         <th>@L["Last used UTC"]</th>
+                        <th>@L["Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -107,6 +108,12 @@
                             <td>@link.ProviderUserKey</td>
                             <td>@Model.FormatUtc(link.CreatedAt)</td>
                             <td>@Model.FormatUtc(link.LastUsedAt)</td>
+                            <td>
+                                <form method="post" asp-page-handler="RemoveAuthLink" class="inline-form">
+                                    <input type="hidden" name="userAuthId" value="@link.UserAuthId" />
+                                    <button type="submit" class="btn-danger-subtle">@L["Remove link"]</button>
+                                </form>
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -148,6 +155,26 @@
                 @L["Local login"]:
                 <span class="example-token">@Model.LocalPasswordUserName</span>
             </p>
+
+            <form method="post" asp-page-handler="ResetLocalPassword" class="form-grid">
+                <div class="field-grid field-grid--2">
+                    <div class="form-field">
+                        <label asp-for="LocalPasswordReset.Password"></label>
+                        <input asp-for="LocalPasswordReset.Password" type="password" value="" autocomplete="new-password" />
+                        <span asp-validation-for="LocalPasswordReset.Password" class="field-validation-error"></span>
+                    </div>
+
+                    <div class="form-field">
+                        <label asp-for="LocalPasswordReset.ConfirmPassword"></label>
+                        <input asp-for="LocalPasswordReset.ConfirmPassword" type="password" value="" autocomplete="new-password" />
+                        <span asp-validation-for="LocalPasswordReset.ConfirmPassword" class="field-validation-error"></span>
+                    </div>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Reset local password"]</button>
+                </div>
+            </form>
         }
         else
         {

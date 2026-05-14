@@ -33,10 +33,14 @@ the OMP user from `/admin/users/edit/{userId}`. The migration only handles
 direct `ADUser` assignments; `ADGroup` assignments are intentionally left as-is.
 
 OMP users can be created from `/admin/users/create` before the person has ever
-signed in with AD. The create page can also create an initial local password
-login in the same transaction, which is the preferred path for users who should
-sign in through the built-in `lpwd` provider. Existing OMP users can still get a
-local login later from `/admin/users/edit/{userId}`.
+signed in with AD. The create page can also create an initial AD link, an
+initial local password login, or both in the same transaction. Use this path for
+users who should sign in through a known AD identity or through the built-in
+`lpwd` provider. Existing OMP users can still get additional AD links or a local
+login later from `/admin/users/edit/{userId}`. The edit page can remove AD links
+and local logins, and it can reset the password for an existing local login.
+Removing all authentication links is allowed, but the user cannot sign in again
+until another link is added.
 
 The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
 principal types. Existing `ADGroup` assignments still resolve, but adding new AD

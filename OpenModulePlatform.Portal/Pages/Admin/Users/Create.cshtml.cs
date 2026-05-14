@@ -6,6 +6,7 @@ using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin.Users;
 
@@ -31,6 +32,10 @@ public sealed class CreateModel : Pages.Admin.OmpPortalPageModel
 
     [BindProperty]
     public LocalLoginInputModel LocalLogin { get; set; } = new();
+
+    [BindProperty]
+    [StringLength(1000)]
+    public string? NewAdProviderUserKey { get; set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -64,6 +69,7 @@ public sealed class CreateModel : Pages.Admin.OmpPortalPageModel
 
         SetTitles("Create user");
         ValidateInput();
+        ValidateAdLinkIfRequested();
         ValidateLocalLoginIfRequested();
         if (!ModelState.IsValid)
         {
@@ -72,12 +78,14 @@ public sealed class CreateModel : Pages.Admin.OmpPortalPageModel
         }
 
         var createLocalLogin = LocalLogin.HasAnyInput();
-        var result = await _repo.CreateUserWithOptionalLocalLoginAsync(
+        var createAdLink = !string.IsNullOrWhiteSpace(NewAdProviderUserKey);
+        var result = await _repo.CreateUserWithOptionalAuthLinksAsync(
             new OmpUserEditData
             {
                 DisplayName = Input.DisplayName.Trim(),
                 AccountStatus = Input.AccountStatus
             },
+            createAdLink ? NewAdProviderUserKey?.Trim() : null,
             createLocalLogin ? LocalLogin.UserName.Trim() : null,
             createLocalLogin ? LocalLogin.Password : null,
             ct);
@@ -85,10 +93,27 @@ public sealed class CreateModel : Pages.Admin.OmpPortalPageModel
         switch (result.Status)
         {
             case CreateUserStatus.Created:
-                StatusMessage = createLocalLogin
-                    ? T("User created with local login.")
-                    : T("User created.");
+                StatusMessage = (createAdLink, createLocalLogin) switch
+                {
+                    (true, true) => T("User created with AD link and local login."),
+                    (true, false) => T("User created with AD link."),
+                    (false, true) => T("User created with local login."),
+                    _ => T("User created.")
+                };
                 return RedirectToPage("/Admin/Users/Edit", new { userId = result.UserId });
+
+            case CreateUserStatus.AdProviderMissing:
+                ModelState.AddModelError(nameof(NewAdProviderUserKey), T("The AD authentication provider is missing."));
+                break;
+
+            case CreateUserStatus.AdProviderUserKeyAlreadyInUse:
+                ModelState.AddModelError(
+                    nameof(NewAdProviderUserKey),
+                    string.Format(
+                        CultureInfo.CurrentCulture,
+                        T("This AD account is already linked to user {0}."),
+                        result.ExistingUserId?.ToString(CultureInfo.InvariantCulture) ?? "?"));
+                break;
 
             case CreateUserStatus.LocalUserNameAlreadyInUse:
                 ModelState.AddModelError(LocalLoginUserNameField, T("User name is already in use."));
@@ -124,6 +149,20 @@ public sealed class CreateModel : Pages.Admin.OmpPortalPageModel
         if (Input.AccountStatus is not (1 or 2))
         {
             ModelState.AddModelError(nameof(Input.AccountStatus), T("Select an account status."));
+        }
+    }
+
+    private void ValidateAdLinkIfRequested()
+    {
+        NewAdProviderUserKey = NewAdProviderUserKey?.Trim();
+        if (string.IsNullOrWhiteSpace(NewAdProviderUserKey))
+        {
+            return;
+        }
+
+        if (NewAdProviderUserKey.Length > 1000)
+        {
+            ModelState.AddModelError(nameof(NewAdProviderUserKey), T("AD provider user key must be 1000 characters or fewer."));
         }
     }
 
