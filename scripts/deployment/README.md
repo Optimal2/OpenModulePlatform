@@ -101,7 +101,8 @@ installs, packaged installs, and the sample config report the same suite
 version.
 
 Use `ConfigSettings` for installation-scoped settings that should be inserted or
-updated during SQL installation. The built-in branding settings are
+updated during SQL installation. Entries must reference config definitions
+registered by OMP SQL upgrades. The built-in branding settings are
 `branding/platformName` and `branding/portalName`; they control visible UI text
 only and do not rename technical identifiers, schemas, permissions, cookies, or
 assemblies.

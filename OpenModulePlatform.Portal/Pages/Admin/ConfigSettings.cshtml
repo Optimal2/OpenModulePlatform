@@ -1,0 +1,195 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ConfigSettingsModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["System"]</div>
+        <h2>@L["Config settings"]</h2>
+        <p class="lede">
+            @L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."]
+        </p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" class="card form-grid" data-config-settings-form>
+    <input type="hidden" asp-for="Input.ConfigId" />
+
+    <h3>@(Model.IsEdit ? L["Edit config setting value"] : L["Add config setting value"])</h3>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.ConfigSettingId"></label>
+            <select asp-for="Input.ConfigSettingId">
+                <option value="">@L["Select setting"]</option>
+                @foreach (var option in Model.SettingOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["Definitions are seeded by OMP. Add or remove definitions through SQL upgrades, not this page."]</div>
+        </div>
+
+        <div class="form-field form-field--compact">
+            <label asp-for="Input.ConfigPriority"></label>
+            <input asp-for="Input.ConfigPriority" type="number" />
+            <div class="field-help">@L["Higher priority wins within permission or role scoped rows."]</div>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.ScopeType"></label>
+            <select asp-for="Input.ScopeType" data-scope-select>
+                @foreach (var option in Model.ScopeOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["Global rows apply to everyone. User scope wins over permission, permission wins over role."]</div>
+        </div>
+
+        <div class="form-field" data-scope-field="User">
+            <label asp-for="Input.ConfigUsr"></label>
+            <select asp-for="Input.ConfigUsr">
+                <option value="">@L["Select user"]</option>
+                @foreach (var option in Model.UserOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field" data-scope-field="Permission">
+            <label asp-for="Input.ConfigPermission"></label>
+            <select asp-for="Input.ConfigPermission">
+                <option value="">@L["Select permission"]</option>
+                @foreach (var option in Model.PermissionOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field" data-scope-field="Role">
+            <label asp-for="Input.ConfigRole"></label>
+            <select asp-for="Input.ConfigRole">
+                <option value="">@L["Select role"]</option>
+                @foreach (var option in Model.RoleOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.ConfigValue"></label>
+        <textarea asp-for="Input.ConfigValue" rows="5"></textarea>
+        <div class="field-help">@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]</div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save config setting"]</button>
+        @if (Model.IsEdit)
+        {
+            <a class="action-link" href="~/admin/configsettings">@L["Cancel edit"]</a>
+        }
+    </div>
+</form>
+
+<section class="top-gap">
+    <h3>@L["Configured values"]</h3>
+
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="card empty-state">@L["No config setting values have been configured yet."]</div>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>@L["Setting"]</th>
+                    <th>@L["Scope"]</th>
+                    <th>@L["Priority"]</th>
+                    <th>@L["Value"]</th>
+                    <th>@L["Actions"]</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>
+                            <code>@row.Key</code>
+                            @if (!row.IsDefinitionEnabled)
+                            {
+                                <div class="muted">@L["Definition disabled"]</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(row.Description))
+                            {
+                                <div class="muted">@row.Description</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="pill">@Model.ScopeText(row)</span>
+                            <div class="muted">@Model.ScopeTargetText(row)</div>
+                        </td>
+                        <td>@row.ConfigPriority</td>
+                        <td><code>@Model.ValuePreview(row.ConfigValue)</code></td>
+                        <td>
+                            <div class="toolbar">
+                                <a class="action-link" href="~/admin/configsettings?configId=@row.ConfigId">@L["Edit"]</a>
+                                <form
+                                    method="post"
+                                    asp-page-handler="Delete"
+                                    asp-route-configId="@row.ConfigId"
+                                    onsubmit="return confirm('@L["Delete this config setting value?"]');">
+                                    <button type="submit" class="btn btn-danger">@L["Delete"]</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const form = document.querySelector('[data-config-settings-form]');
+            if (!form) {
+                return;
+            }
+
+            const scopeSelect = form.querySelector('[data-scope-select]');
+            const fields = Array.from(form.querySelectorAll('[data-scope-field]'));
+
+            const syncScopeFields = () => {
+                const active = scopeSelect.value;
+                fields.forEach((field) => {
+                    const visible = field.dataset.scopeField === active;
+                    field.hidden = !visible;
+                    field.querySelectorAll('select, input, textarea').forEach((input) => {
+                        input.disabled = !visible;
+                    });
+                });
+            };
+
+            scopeSelect.addEventListener('change', syncScopeFields);
+            syncScopeFields();
+        })();
+    </script>
+}
