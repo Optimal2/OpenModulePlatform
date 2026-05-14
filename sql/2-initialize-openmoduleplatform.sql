@@ -93,7 +93,7 @@ END
 -- deployment logs/scripts. Bootstrap accepts only DOMAIN\Name or user@domain.
 DECLARE @BootstrapPrincipalInvalidCharacters TABLE (Value nchar(1) NOT NULL);
 INSERT INTO @BootstrapPrincipalInvalidCharacters(Value)
-VALUES(N'"'), (N'<'), (N'>'), (N'|'), (N'?'), (N'*'), (N';'), (NCHAR(10)), (NCHAR(13));
+VALUES(N''''), (N'"'), (N'<'), (N'>'), (N'|'), (N'?'), (N'*'), (N';'), (NCHAR(10)), (NCHAR(13));
 
 IF EXISTS
 (
@@ -107,10 +107,32 @@ END
 
 DECLARE @BootstrapPrincipalSlashPosition int = CHARINDEX(N'\', @BootstrapPortalAdminPrincipal);
 DECLARE @BootstrapPrincipalAtPosition int = CHARINDEX(N'@', @BootstrapPortalAdminPrincipal);
+DECLARE @BootstrapPrincipalSecondSlashPosition int = 0;
+DECLARE @BootstrapPrincipalSecondAtPosition int = 0;
+
+IF @BootstrapPrincipalSlashPosition > 0
+BEGIN
+    SET @BootstrapPrincipalSecondSlashPosition = CHARINDEX(N'\', @BootstrapPortalAdminPrincipal, @BootstrapPrincipalSlashPosition + 1);
+END
+
+IF @BootstrapPrincipalAtPosition > 0
+BEGIN
+    SET @BootstrapPrincipalSecondAtPosition = CHARINDEX(N'@', @BootstrapPortalAdminPrincipal, @BootstrapPrincipalAtPosition + 1);
+END
 
 IF @BootstrapPrincipalSlashPosition > 0 AND @BootstrapPrincipalAtPosition > 0
 BEGIN
     THROW 51009, 'Bootstrap principal must use either DOMAIN\Name or user@domain form, not both.', 1;
+END
+
+IF @BootstrapPrincipalSecondSlashPosition > 0
+BEGIN
+    THROW 51010, 'Bootstrap principal DOMAIN\Name form must contain exactly one backslash.', 1;
+END
+
+IF @BootstrapPrincipalSecondAtPosition > 0
+BEGIN
+    THROW 51011, 'Bootstrap principal UPN form must contain exactly one at sign.', 1;
 END
 
 IF @BootstrapPrincipalSlashPosition = 0 AND @BootstrapPrincipalAtPosition = 0
