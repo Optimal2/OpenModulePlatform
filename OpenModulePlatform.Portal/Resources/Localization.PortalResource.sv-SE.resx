@@ -1320,10 +1320,13 @@
   <data name="Deleted/reserved" xml:space="preserve"><value>Raderad/reserverad</value></data>
   <data name="Unknown" xml:space="preserve"><value>Okänd</value></data>
   <data name="Never" xml:space="preserve"><value>Aldrig</value></data>
-  <data name="Create the OMP user first. AD authentication links can be added from the edit page." xml:space="preserve"><value>Skapa OMP-användaren först. AD-autentiseringslänkar kan läggas till från redigeringssidan.</value></data>
+  <data name="Create an OMP user and optionally add a local password login immediately. AD authentication links can still be added from the edit page." xml:space="preserve"><value>Skapa en OMP-användare och lägg eventuellt till lokal lösenordsinloggning direkt. AD-autentiseringslänkar kan fortfarande läggas till från redigeringssidan.</value></data>
   <data name="Save user" xml:space="preserve"><value>Spara användare</value></data>
   <data name="Back to users" xml:space="preserve"><value>Tillbaka till användare</value></data>
   <data name="User created." xml:space="preserve"><value>Användaren har skapats.</value></data>
+  <data name="User created with local login." xml:space="preserve"><value>Användaren har skapats med lokal inloggning.</value></data>
+  <data name="Optional local login" xml:space="preserve"><value>Valfri lokal inloggning</value></data>
+  <data name="Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user." xml:space="preserve"><value>Skapa en lokal lösenordsinloggning nu genom att ange användarnamn och lösenord. Lämna fälten tomma för att bara skapa OMP-användaren.</value></data>
   <data name="Edit user" xml:space="preserve"><value>Redigera användare</value></data>
   <data name="Update the OMP user record and link AD identities that Windows sign-in can resolve." xml:space="preserve"><value>Uppdatera OMP-användaren och länka AD-identiteter som Windows-inloggning kan slå upp.</value></data>
   <data name="Updated UTC" xml:space="preserve"><value>Uppdaterad UTC</value></data>
