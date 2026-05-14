@@ -91,7 +91,8 @@ public sealed partial class ServerReportDefinitionLoader
     private string ResolveReportPath(string reportKey)
     {
         var directory = GetReportsDirectory();
-        var fullPath = Path.GetFullPath(Path.Combine(directory, reportKey + ".json"));
+        var fileName = $"{reportKey}.json";
+        var fullPath = Path.GetFullPath(Path.Join(directory, fileName));
         var directoryPrefix = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
 
@@ -111,9 +112,12 @@ public sealed partial class ServerReportDefinitionLoader
             configuredPath = "App_Data/ContentReports";
         }
 
-        return Path.GetFullPath(Path.IsPathRooted(configuredPath)
-            ? configuredPath
-            : Path.Combine(_environment.ContentRootPath, configuredPath));
+        if (Path.IsPathRooted(configuredPath))
+        {
+            return Path.GetFullPath(configuredPath);
+        }
+
+        return Path.GetFullPath(Path.Join(_environment.ContentRootPath, configuredPath));
     }
 
     private static void ValidateDefinition(ServerReportDefinition definition)

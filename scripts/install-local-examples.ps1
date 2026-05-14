@@ -754,7 +754,8 @@ END
 
 IF IS_ROLEMEMBER(N'db_owner', @principal) <> 1
 BEGIN
-    EXEC sys.sp_addrolemember N'db_owner', @principal;
+    SET @sql = N'ALTER ROLE [db_owner] ADD MEMBER ' + QUOTENAME(@principal) + N';';
+    EXEC sys.sp_executesql @sql;
 END
 "@
 }
