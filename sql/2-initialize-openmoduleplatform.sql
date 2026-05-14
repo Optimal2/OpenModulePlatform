@@ -39,7 +39,6 @@ DECLARE @DefaultInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111
 DECLARE @DefaultHostId uniqueidentifier = '11111111-1111-1111-1111-111111111121';
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultHostTemplateId int;
-DECLARE @DefaultTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
@@ -221,10 +220,6 @@ BEGIN
     INSERT INTO omp.InstanceTemplateHosts(InstanceTemplateId, HostTemplateId, HostKey, DisplayName, Environment, SortOrder)
     VALUES(@DefaultInstanceTemplateId, @DefaultHostTemplateId, N'sample-host', N'Sample Host', N'Development', 100);
 END
-
-SELECT @DefaultTemplateHostId = InstanceTemplateHostId
-FROM omp.InstanceTemplateHosts
-WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = N'sample-host';
 
 IF NOT EXISTS (SELECT 1 FROM omp.HostDeploymentAssignments WHERE HostId = @DefaultHostId AND HostTemplateId = @DefaultHostTemplateId)
 BEGIN
