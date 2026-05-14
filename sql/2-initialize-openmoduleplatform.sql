@@ -105,27 +105,27 @@ BEGIN
     THROW 51005, 'Bootstrap principal contains characters that are not valid for AD bootstrap values.', 1;
 END
 
-DECLARE @BootstrapPrincipalSlash int = CHARINDEX(N'\', @BootstrapPortalAdminPrincipal);
-DECLARE @BootstrapPrincipalAt int = CHARINDEX(N'@', @BootstrapPortalAdminPrincipal);
+DECLARE @BootstrapPrincipalSlashPosition int = CHARINDEX(N'\', @BootstrapPortalAdminPrincipal);
+DECLARE @BootstrapPrincipalAtPosition int = CHARINDEX(N'@', @BootstrapPortalAdminPrincipal);
 
-IF @BootstrapPrincipalSlash > 0 AND @BootstrapPrincipalAt > 0
+IF @BootstrapPrincipalSlashPosition > 0 AND @BootstrapPrincipalAtPosition > 0
 BEGIN
     THROW 51009, 'Bootstrap principal must use either DOMAIN\Name or user@domain form, not both.', 1;
 END
 
-IF @BootstrapPrincipalSlash = 0 AND @BootstrapPrincipalAt = 0
+IF @BootstrapPrincipalSlashPosition = 0 AND @BootstrapPrincipalAtPosition = 0
 BEGIN
     THROW 51006, 'Bootstrap principal must use DOMAIN\Name or user@domain form.', 1;
 END
 
-IF @BootstrapPrincipalSlash > 0
-    AND (@BootstrapPrincipalSlash = 1 OR @BootstrapPrincipalSlash = LEN(@BootstrapPortalAdminPrincipal))
+IF @BootstrapPrincipalSlashPosition > 0
+    AND (@BootstrapPrincipalSlashPosition = 1 OR @BootstrapPrincipalSlashPosition = LEN(@BootstrapPortalAdminPrincipal))
 BEGIN
     THROW 51007, 'Bootstrap principal DOMAIN\Name form is incomplete.', 1;
 END
 
-IF @BootstrapPrincipalAt > 0
-    AND (@BootstrapPrincipalAt = 1 OR @BootstrapPrincipalAt = LEN(@BootstrapPortalAdminPrincipal))
+IF @BootstrapPrincipalAtPosition > 0
+    AND (@BootstrapPrincipalAtPosition = 1 OR @BootstrapPrincipalAtPosition = LEN(@BootstrapPortalAdminPrincipal))
 BEGIN
     THROW 51008, 'Bootstrap principal UPN form is incomplete.', 1;
 END
