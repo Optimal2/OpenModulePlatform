@@ -78,3 +78,15 @@ Consumers should resolve competing rows in this order:
 `ConfigScopeRank` is a persisted computed column for that order. Higher
 `ConfigPriority` wins when more than one matching permission or role row exists
 for the same setting. `ConfigId` is the deterministic final tie-breaker.
+
+## Portal user settings
+
+Portal user preferences are intentionally row-based. The Portal schema uses:
+
+- `omp_portal.user_setting_definitions` for allowed setting keys and defaults
+- `omp_portal.user_setting_int_values` for high-volume numeric/boolean values
+- `omp_portal.user_setting_string_values` for string values
+
+Default values should normally live on the definition row. User value tables
+should store only values that differ from the default, so common defaults do not
+create unnecessary rows for every OMP user.

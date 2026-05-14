@@ -10,6 +10,9 @@ public sealed class PortalUserSettingsService
     private const int ActiveAccountStatus = 1;
     private const int ProviderUserKeyMaxLength = 1000;
     private const string AdProviderDisplayName = "AD";
+    private const string PortalSettingCategory = "Portal";
+    private const string AdminMetricsCollapsedSetting = "AdminMetricsCollapsed";
+    private const byte IntValueKind = 1;
 
     private readonly SqlConnectionFactory _db;
 
@@ -22,9 +25,16 @@ public sealed class PortalUserSettingsService
     {
         const string sql = @"
 SELECT u.display_name,
-       CAST(ISNULL(s.admin_metrics_collapsed, 0) AS bit)
+       CAST(COALESCE(v.setting_value, d.default_int_value, 0) AS bit)
 FROM omp.users u
-LEFT JOIN omp_portal.user_settings s ON s.user_id = u.user_id
+LEFT JOIN omp_portal.user_setting_definitions d
+    ON d.setting_category = @setting_category
+   AND d.setting_name = @setting_name
+   AND d.value_kind = @value_kind
+   AND d.is_enabled = 1
+LEFT JOIN omp_portal.user_setting_int_values v
+    ON v.user_id = u.user_id
+   AND v.user_setting_definition_id = d.user_setting_definition_id
 WHERE u.user_id = @user_id
   AND u.account_status = 1;";
 
@@ -32,6 +42,7 @@ WHERE u.user_id = @user_id
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         AddUserId(cmd, userId);
+        AddAdminMetricsSettingParameters(cmd);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -47,14 +58,21 @@ WHERE u.user_id = @user_id
     public async Task<PortalUserSettings> GetForUserAsync(int userId, CancellationToken ct)
     {
         const string sql = @"
-SELECT admin_metrics_collapsed
-FROM omp_portal.user_settings
-WHERE user_id = @user_id;";
+SELECT CAST(COALESCE(v.setting_value, d.default_int_value, 0) AS bit)
+FROM omp_portal.user_setting_definitions d
+LEFT JOIN omp_portal.user_setting_int_values v
+    ON v.user_setting_definition_id = d.user_setting_definition_id
+   AND v.user_id = @user_id
+WHERE d.setting_category = @setting_category
+  AND d.setting_name = @setting_name
+  AND d.value_kind = @value_kind
+  AND d.is_enabled = 1;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         AddUserId(cmd, userId);
+        AddAdminMetricsSettingParameters(cmd);
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return new PortalUserSettings(result is bool collapsed && collapsed);
@@ -138,15 +156,42 @@ WHERE user_id = @user_id
     public async Task UpsertAdminMetricsCollapsedAsync(int userId, bool value, CancellationToken ct)
     {
         const string sql = @"
-UPDATE omp_portal.user_settings
-SET admin_metrics_collapsed = @admin_metrics_collapsed,
-    updated_at = SYSUTCDATETIME()
-WHERE user_id = @user_id;
+DECLARE @definition_id int;
+DECLARE @default_value int;
+DECLARE @setting_value int = CASE WHEN @admin_metrics_collapsed = 1 THEN 1 ELSE 0 END;
 
-IF @@ROWCOUNT = 0
+SELECT @definition_id = user_setting_definition_id,
+       @default_value = ISNULL(default_int_value, 0)
+FROM omp_portal.user_setting_definitions
+WHERE setting_category = @setting_category
+  AND setting_name = @setting_name
+  AND value_kind = @value_kind
+  AND is_enabled = 1;
+
+IF @definition_id IS NULL
 BEGIN
-    INSERT INTO omp_portal.user_settings(user_id, admin_metrics_collapsed)
-    VALUES(@user_id, @admin_metrics_collapsed);
+    THROW 52010, 'Portal user setting definition is missing: Portal/AdminMetricsCollapsed.', 1;
+END
+
+IF @setting_value = @default_value
+BEGIN
+    DELETE FROM omp_portal.user_setting_int_values
+    WHERE user_id = @user_id
+      AND user_setting_definition_id = @definition_id;
+END
+ELSE
+BEGIN
+    UPDATE omp_portal.user_setting_int_values
+    SET setting_value = @setting_value,
+        updated_at = SYSUTCDATETIME()
+    WHERE user_id = @user_id
+      AND user_setting_definition_id = @definition_id;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        INSERT INTO omp_portal.user_setting_int_values(user_id, user_setting_definition_id, setting_value)
+        VALUES(@user_id, @definition_id, @setting_value);
+    END
 END;";
 
         await using var conn = _db.Create();
@@ -154,12 +199,20 @@ END;";
         await using var cmd = new SqlCommand(sql, conn);
         AddUserId(cmd, userId);
         cmd.Parameters.Add("@admin_metrics_collapsed", SqlDbType.Bit).Value = value;
+        AddAdminMetricsSettingParameters(cmd);
 
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static void AddUserId(SqlCommand cmd, int userId)
         => cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+
+    private static void AddAdminMetricsSettingParameters(SqlCommand cmd)
+    {
+        cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
+        cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = AdminMetricsCollapsedSetting;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+    }
 
     private static async Task<int?> GetAuthProviderIdAsync(
         SqlConnection conn,
