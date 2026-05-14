@@ -1,0 +1,138 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.PortalEntriesModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Portal"]</div>
+        <h2>@L["Portal entries"]</h2>
+        <p class="lede">@L["Create global Portal Entries that appear on the Portal start page for users with access to the target."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" asp-page-handler="Create" class="card form-grid top-gap">
+    <h3>@L["Create portal entry"]</h3>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.DisplayName"></label>
+            <input asp-for="Input.DisplayName" />
+            <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.DefaultSortOrder"></label>
+            <input asp-for="Input.DefaultSortOrder" type="number" />
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.Description"></label>
+        <textarea asp-for="Input.Description"></textarea>
+        <span asp-validation-for="Input.Description" class="field-validation-error"></span>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.TargetUrl"></label>
+            <input asp-for="Input.TargetUrl" placeholder="/content/ex2" />
+            <div class="field-help">@L["Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL."]</div>
+            <span asp-validation-for="Input.TargetUrl" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.TargetEntryKey"></label>
+            <input asp-for="Input.TargetEntryKey" />
+            <div class="field-help">@L["Optional stable navigation entry key. Leave empty when target URL is enough."]</div>
+            <span asp-validation-for="Input.TargetEntryKey" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.LogoUrl"></label>
+            <input asp-for="Input.LogoUrl" />
+            <span asp-validation-for="Input.LogoUrl" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.IconKey"></label>
+            <input asp-for="Input.IconKey" />
+            <span asp-validation-for="Input.IconKey" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.IsEnabled" type="checkbox" />
+            <label asp-for="Input.IsEnabled"></label>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit" class="btn btn-primary">@L["Create portal entry"]</button>
+        <a class="action-link" href="~/">@L["Back to portal"]</a>
+    </div>
+</form>
+
+<section class="top-gap">
+    <h3>@L["Existing portal entries"]</h3>
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty-state">@L["No entries to show"]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid portal-entries-admin-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Display name"]</th>
+                        <th>@L["Entry key"]</th>
+                        <th>@L["Target"]</th>
+                        <th>@L["Enabled"]</th>
+                        <th>@L["Sort order"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>
+                            <strong>@row.DisplayName</strong>
+                            @if (!string.IsNullOrWhiteSpace(row.Description))
+                            {
+                                <div class="muted small-text">@row.Description</div>
+                            }
+                        </td>
+                        <td><code>@row.EntryKey</code></td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.TargetUrl))
+                            {
+                                <code>@row.TargetUrl</code>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(row.TargetEntryKey))
+                            {
+                                <code>@row.TargetEntryKey</code>
+                            }
+                        </td>
+                        <td><span class="pill">@(row.IsEnabled ? L["Yes"] : L["No"])</span></td>
+                        <td>@row.DefaultSortOrder</td>
+                        <td>
+                            <a class="action-link" asp-page="/Admin/PortalEntryEdit" asp-route-portalEntryId="@row.PortalEntryId">@L["Edit"]</a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

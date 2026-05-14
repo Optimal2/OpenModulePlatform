@@ -1423,4 +1423,43 @@
   <data name="Select a valid scope." xml:space="preserve"><value>Välj ett giltigt scope.</value></data>
   <data name="All users" xml:space="preserve"><value>Alla användare</value></data>
   <data name="NULL" xml:space="preserve"><value>NULL</value></data>
+  <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
+  <data name="Portal entries are curated start points for the destinations you can access." xml:space="preserve"><value>Portal entries är kurerade startpunkter för destinationer du har åtkomst till.</value></data>
+  <data name="Pinned" xml:space="preserve"><value>Fästa</value></data>
+  <data name="All entries" xml:space="preserve"><value>Övriga</value></data>
+  <data name="Show full list" xml:space="preserve"><value>Visa full lista</value></data>
+  <data name="Show normal list" xml:space="preserve"><value>Visa normal lista</value></data>
+  <data name="Manage list" xml:space="preserve"><value>Hantera lista</value></data>
+  <data name="Done" xml:space="preserve"><value>Klar</value></data>
+  <data name="Pin" xml:space="preserve"><value>Fäst</value></data>
+  <data name="Unpin" xml:space="preserve"><value>Ta bort fästning</value></data>
+  <data name="Hide" xml:space="preserve"><value>Dölj</value></data>
+  <data name="Undo" xml:space="preserve"><value>Ångra</value></data>
+  <data name="Options" xml:space="preserve"><value>Alternativ</value></data>
+  <data name="Hidden" xml:space="preserve"><value>Dold</value></data>
+  <data name="Drag to sort" xml:space="preserve"><value>Dra för att sortera</value></data>
+  <data name="No pinned entries" xml:space="preserve"><value>Inga fästa entries</value></data>
+  <data name="No entries to show" xml:space="preserve"><value>Inga entries att visa</value></data>
+  <data name="Administer portal entries" xml:space="preserve"><value>Administrera portal entries</value></data>
+  <data name="Create global Portal Entries that appear on the Portal start page for users with access to the target." xml:space="preserve"><value>Skapa globala Portal Entries som visas på portalens startsida för användare med åtkomst till målet.</value></data>
+  <data name="Create portal entry" xml:space="preserve"><value>Skapa portal entry</value></data>
+  <data name="Existing portal entries" xml:space="preserve"><value>Befintliga portal entries</value></data>
+  <data name="Entry key" xml:space="preserve"><value>Entry key</value></data>
+  <data name="Logo URL" xml:space="preserve"><value>Logotyp-URL</value></data>
+  <data name="Icon key" xml:space="preserve"><value>Ikonnyckel</value></data>
+  <data name="Target URL" xml:space="preserve"><value>Mål-URL</value></data>
+  <data name="Target entry key" xml:space="preserve"><value>Mål-entry key</value></data>
+  <data name="Default sort order" xml:space="preserve"><value>Standardsortering</value></data>
+  <data name="Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL." xml:space="preserve"><value>Använd en lokal path som /content/ex2, en relativ path som content/ex2 eller en absolut http/https-URL.</value></data>
+  <data name="Optional stable navigation entry key. Leave empty when target URL is enough." xml:space="preserve"><value>Valfri stabil navigation entry key. Lämna tom när mål-URL räcker.</value></data>
+  <data name="Portal entry created." xml:space="preserve"><value>Portal entry har skapats.</value></data>
+  <data name="Enter a target URL or target entry key." xml:space="preserve"><value>Ange mål-URL eller mål-entry key.</value></data>
+  <data name="Use an absolute http/https URL, a local path starting with /, or a relative path." xml:space="preserve"><value>Använd en absolut http/https-URL, en lokal path som börjar med / eller en relativ path.</value></data>
+  <data name="Back to portal" xml:space="preserve"><value>Tillbaka till portalen</value></data>
+  <data name="Edit portal entry" xml:space="preserve"><value>Redigera portal entry</value></data>
+  <data name="Update the Portal Entry shown on the Portal start page." xml:space="preserve"><value>Uppdatera den Portal Entry som visas på portalens startsida.</value></data>
+  <data name="This entry is seeded from an app instance. The app target is resolved before custom target fields." xml:space="preserve"><value>Denna entry kommer från en appinstans. Appmålet används före anpassade målfält.</value></data>
+  <data name="Save portal entry" xml:space="preserve"><value>Spara portal entry</value></data>
+  <data name="Back to portal entries" xml:space="preserve"><value>Tillbaka till portal entries</value></data>
+  <data name="Portal entry updated." xml:space="preserve"><value>Portal entry har uppdaterats.</value></data>
 </root>

@@ -1,0 +1,97 @@
+@page "/admin/portalentries/edit/{portalEntryId:int}"
+@model OpenModulePlatform.Portal.Pages.Admin.PortalEntryEditModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Portal"]</div>
+        <h2>@L["Edit portal entry"]</h2>
+        <p class="lede">@L["Update the Portal Entry shown on the Portal start page."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="Input.PortalEntryId" />
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label>@L["Entry key"]</label>
+            <input value="@Model.Input.EntryKey" readonly />
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.DefaultSortOrder"></label>
+            <input asp-for="Input.DefaultSortOrder" type="number" />
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.DisplayName"></label>
+            <input asp-for="Input.DisplayName" />
+            <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.IsEnabled" type="checkbox" />
+            <label asp-for="Input.IsEnabled"></label>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.Description"></label>
+        <textarea asp-for="Input.Description"></textarea>
+        <span asp-validation-for="Input.Description" class="field-validation-error"></span>
+    </div>
+
+    @if (Model.Input.SourceAppInstanceId.HasValue)
+    {
+        <div class="field-help">
+            @L["This entry is seeded from an app instance. The app target is resolved before custom target fields."]
+        </div>
+    }
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.TargetUrl"></label>
+            <input asp-for="Input.TargetUrl" placeholder="/content/ex2" />
+            <div class="field-help">@L["Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL."]</div>
+            <span asp-validation-for="Input.TargetUrl" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.TargetEntryKey"></label>
+            <input asp-for="Input.TargetEntryKey" />
+            <div class="field-help">@L["Optional stable navigation entry key. Leave empty when target URL is enough."]</div>
+            <span asp-validation-for="Input.TargetEntryKey" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.LogoUrl"></label>
+            <input asp-for="Input.LogoUrl" />
+            <span asp-validation-for="Input.LogoUrl" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.IconKey"></label>
+            <input asp-for="Input.IconKey" />
+            <span asp-validation-for="Input.IconKey" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save portal entry"]</button>
+        <a class="action-link" href="~/admin/portalentries">@L["Back to portal entries"]</a>
+    </div>
+</form>
