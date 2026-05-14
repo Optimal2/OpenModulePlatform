@@ -15,8 +15,9 @@ Prerequisites:
   receive the initial PortalAdmins role.
 - Set @BootstrapPortalAdminPrincipalType to N'ADUser' for a Windows user or
   N'ADGroup' for a Windows group. Legacy N'User' values are normalized to
-  N'ADUser'. Prefer scripts/manage-local-install.ps1 for local user installs
-  because it escapes the value before running sqlcmd.
+  N'ADUser'. The source default is N'ADUser' because local bootstrap installs
+  normally grant the current Windows user. Prefer scripts/manage-local-install.ps1
+  for local user installs because it escapes the value before running sqlcmd.
 
 Portal, content, iframe, and example modules are initialized separately from
 their own module sql folders.
@@ -88,17 +89,18 @@ BEGIN
     THROW 51004, 'Bootstrap principal must not contain leading or trailing whitespace.', 1;
 END
 
-IF CHARINDEX(N'"', @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(N'<', @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(N'>', @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(N'|', @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(N'?', @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(N'*', @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(N';', @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(CHAR(10), @BootstrapPortalAdminPrincipal) > 0
-    OR CHARINDEX(CHAR(13), @BootstrapPortalAdminPrincipal) > 0
+DECLARE @BootstrapPrincipalInvalidCharacters TABLE (Value nchar(1) NOT NULL);
+INSERT INTO @BootstrapPrincipalInvalidCharacters(Value)
+VALUES(N'"'), (N'<'), (N'>'), (N'|'), (N'?'), (N'*'), (N';'), (NCHAR(10)), (NCHAR(13));
+
+IF EXISTS
+(
+    SELECT 1
+    FROM @BootstrapPrincipalInvalidCharacters invalid
+    WHERE CHARINDEX(invalid.Value, @BootstrapPortalAdminPrincipal) > 0
+)
 BEGIN
-    THROW 51004, 'Bootstrap principal contains characters that are not valid for AD bootstrap values.', 1;
+    THROW 51005, 'Bootstrap principal contains characters that are not valid for AD bootstrap values.', 1;
 END
 
 DECLARE @BootstrapPrincipalSlash int = CHARINDEX(N'\', @BootstrapPortalAdminPrincipal);
@@ -106,19 +108,19 @@ DECLARE @BootstrapPrincipalAt int = CHARINDEX(N'@', @BootstrapPortalAdminPrincip
 
 IF @BootstrapPrincipalSlash = 0 AND @BootstrapPrincipalAt = 0
 BEGIN
-    THROW 51004, 'Bootstrap principal must use DOMAIN\Name or user@domain form.', 1;
+    THROW 51006, 'Bootstrap principal must use DOMAIN\Name or user@domain form.', 1;
 END
 
 IF @BootstrapPrincipalSlash > 0
     AND (@BootstrapPrincipalSlash = 1 OR @BootstrapPrincipalSlash = LEN(@BootstrapPortalAdminPrincipal))
 BEGIN
-    THROW 51004, 'Bootstrap principal DOMAIN\Name form is incomplete.', 1;
+    THROW 51007, 'Bootstrap principal DOMAIN\Name form is incomplete.', 1;
 END
 
 IF @BootstrapPrincipalAt > 0
     AND (@BootstrapPrincipalAt = 1 OR @BootstrapPrincipalAt = LEN(@BootstrapPortalAdminPrincipal))
 BEGIN
-    THROW 51004, 'Bootstrap principal UPN form is incomplete.', 1;
+    THROW 51008, 'Bootstrap principal UPN form is incomplete.', 1;
 END
 
 
