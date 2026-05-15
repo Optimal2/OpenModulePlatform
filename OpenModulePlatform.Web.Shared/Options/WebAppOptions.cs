@@ -32,6 +32,15 @@ public sealed class PortalTopBarLinkOptions
     public string Href { get; set; } = "";
 }
 
+public sealed class TopbarShortcutsOptions
+{
+    public bool Enabled { get; set; } = true;
+
+    public string AllModules { get; set; } = "m";
+
+    public string Favorites { get; set; } = "f";
+}
+
 public sealed class WebAppOptions
 {
     public const string DefaultSectionName = "WebApp";
@@ -40,6 +49,7 @@ public sealed class WebAppOptions
     public string DefaultCulture { get; set; } = "sv-SE";
     public string[] SupportedCultures { get; set; } = ["sv-SE", "en-US"];
     public PortalTopBarOptions PortalTopBar { get; set; } = new();
+    public TopbarShortcutsOptions TopbarShortcuts { get; set; } = new();
     public bool AllowAnonymous { get; set; }
     public bool UseForwardedHeaders { get; set; }
     public PermissionMode PermissionMode { get; set; } = PermissionMode.Any;

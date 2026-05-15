@@ -14,4 +14,6 @@
   <data name="Remove favorite" xml:space="preserve"><value>Ta bort favorit</value></data>
   <data name="No favorites" xml:space="preserve"><value>Inga favoriter</value></data>
   <data name="Config settings" xml:space="preserve"><value>Konfiguration</value></data>
+  <data name="Expand" xml:space="preserve"><value>Expandera</value></data>
+  <data name="Collapse" xml:space="preserve"><value>Fäll ihop</value></data>
 </root>

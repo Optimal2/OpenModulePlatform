@@ -1502,5 +1502,24 @@
   <data name="Enter a valid integer value." xml:space="preserve"><value>Ange ett giltigt heltalsvärde.</value></data>
   <data name="Integer" xml:space="preserve"><value>Heltal</value></data>
   <data name="String" xml:space="preserve"><value>Sträng</value></data>
+  <data name="Topbar layout" xml:space="preserve"><value>Topbarlayout</value></data>
+  <data name="Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Välj vilka Portal Entries som är synliga i topbaren och justera parent/child-layouten. Släpp en leaf-entry på en toppnivå-entry för att göra den till en underlänk.</value></data>
+  <data name="Visible" xml:space="preserve"><value>Synlig</value></data>
+  <data name="Child of" xml:space="preserve"><value>Underlänk till</value></data>
+  <data name="Top-level entry" xml:space="preserve"><value>Toppnivå-entry</value></data>
+  <data name="Make top-level" xml:space="preserve"><value>Gör till toppnivå</value></data>
+  <data name="Remove this Portal Entry?" xml:space="preserve"><value>Ta bort denna Portal Entry?</value></data>
+  <data name="Save topbar layout" xml:space="preserve"><value>Spara topbarlayout</value></data>
+  <data name="Topbar layout saved." xml:space="preserve"><value>Topbarlayouten har sparats.</value></data>
+  <data name="Portal entry removed." xml:space="preserve"><value>Portal entry har tagits bort.</value></data>
+  <data name="Portal entry was not found." xml:space="preserve"><value>Portal entry hittades inte.</value></data>
+  <data name="No portal entries were submitted." xml:space="preserve"><value>Inga portal entries skickades.</value></data>
+  <data name="Layout parent entry was not found." xml:space="preserve"><value>Layoutens parent entry hittades inte.</value></data>
+  <data name="A Portal Entry cannot be its own parent." xml:space="preserve"><value>En Portal Entry kan inte vara sin egen parent.</value></data>
+  <data name="The layout update would create a Portal Entry cycle." xml:space="preserve"><value>Layoutändringen skulle skapa en cirkel bland Portal Entries.</value></data>
   <data name="None" xml:space="preserve"><value>Inget</value></data>
+  <data name="Parent entry" xml:space="preserve"><value>Parent entry</value></data>
+  <data name="Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar." xml:space="preserve"><value>Lämna tomt för en toppnivå-entry. Välj en parent för att skapa en underlänk i topbaren.</value></data>
+  <data name="Select a valid parent entry." xml:space="preserve"><value>Välj en giltig parent entry.</value></data>
+  <data name="The selected parent would create a Portal Entry cycle." xml:space="preserve"><value>Vald parent skulle skapa en cirkel bland Portal Entries.</value></data>
 </root>

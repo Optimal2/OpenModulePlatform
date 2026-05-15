@@ -106,4 +106,10 @@ public sealed class PortalTopBarModel
     public string LogoutUrl { get; init; } = OmpAuthDefaults.LogoutPath;
 
     public string SettingsUrl { get; init; } = DefaultSettingsPath;
+
+    public bool ShortcutsEnabled { get; init; }
+
+    public string AllModulesShortcut { get; init; } = "m";
+
+    public string FavoritesShortcut { get; init; } = "f";
 }
