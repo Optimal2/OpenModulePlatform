@@ -1409,7 +1409,7 @@
   <data name="AD group assignment is not available yet." xml:space="preserve"><value>AD group assignment is not available yet.</value></data>
   <data name="Select an OMP user from the suggestions or enter a valid user ID." xml:space="preserve"><value>Select an OMP user from the suggestions or enter a valid user ID.</value></data>
   <data name="This AD account is already linked to an OMP user. Assign the role to the OMP user instead." xml:space="preserve"><value>This AD account is already linked to an OMP user. Assign the role to the OMP user instead.</value></data>
-  <data name="Config settings" xml:space="preserve"><value>Config settings</value></data>
+  <data name="Config settings" xml:space="preserve"><value>Configuration</value></data>
   <data name="Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here." xml:space="preserve"><value>Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here.</value></data>
   <data name="Edit config setting value" xml:space="preserve"><value>Edit config setting value</value></data>
   <data name="Add config setting value" xml:space="preserve"><value>Add config setting value</value></data>

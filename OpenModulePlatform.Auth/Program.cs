@@ -20,6 +20,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SqlConnectionFactory>();
 builder.Services.AddScoped<OmpConfigurationService>();
+builder.Services.AddScoped<RbacService>();
 builder.Services.AddScoped<OmpBrandingService>();
 builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddSingleton<WindowsPrincipalReader>();
