@@ -66,6 +66,60 @@ public sealed class OmpConfigurationService
         return value;
     }
 
+    public async Task<string?> GetEffectiveStringAsync(
+        string category,
+        string setting,
+        int? userId,
+        int? activeRoleId,
+        IReadOnlyCollection<string> effectivePermissions,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(setting))
+        {
+            return null;
+        }
+
+        var permissionNames = effectivePermissions
+            .Where(permission => !string.IsNullOrWhiteSpace(permission))
+            .Select(permission => permission.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (!userId.HasValue && !activeRoleId.HasValue && permissionNames.Length == 0)
+        {
+            return await GetGlobalStringAsync(category, setting, ct);
+        }
+
+        try
+        {
+            return await QueryEffectiveStringAsync(
+                category.Trim(),
+                setting.Trim(),
+                userId,
+                activeRoleId,
+                permissionNames,
+                ct);
+        }
+        catch (SqlException ex)
+        {
+            _log.LogWarning(
+                ex,
+                "Failed to read effective OMP config setting {ConfigCategory}/{ConfigSetting}; using runtime defaults.",
+                category,
+                setting);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogWarning(
+                ex,
+                "Failed to read effective OMP config setting {ConfigCategory}/{ConfigSetting}; using runtime defaults.",
+                category,
+                setting);
+        }
+
+        return null;
+    }
+
     public void ClearGlobalString(string category, string setting)
     {
         if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(setting))
@@ -107,6 +161,69 @@ ORDER BY cs.ConfigScopeRank DESC,
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@category", category);
         cmd.Parameters.AddWithValue("@setting", setting);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : Convert.ToString(result, CultureInfo.InvariantCulture);
+    }
+
+    private async Task<string?> QueryEffectiveStringAsync(
+        string category,
+        string setting,
+        int? userId,
+        int? activeRoleId,
+        IReadOnlyList<string> effectivePermissions,
+        CancellationToken ct)
+    {
+        var permissionClause = "0 = 1";
+        if (effectivePermissions.Count > 0)
+        {
+            var permissionParameters = string.Join(
+                ", ",
+                Enumerable.Range(0, effectivePermissions.Count).Select(i => $"@permission{i}"));
+
+            permissionClause = $"""
+EXISTS
+(
+    SELECT 1
+    FROM omp.Permissions p
+    WHERE p.PermissionId = cs.ConfigPermission
+      AND p.Name IN ({permissionParameters})
+)
+""";
+        }
+
+        var sql = $"""
+SELECT TOP (1) cs.ConfigValue
+FROM omp.config_settings cs
+INNER JOIN omp.config_setting_definitions def
+    ON def.ConfigSettingId = cs.ConfigSettingId
+WHERE def.ConfigCategory = @category
+  AND def.ConfigSetting = @setting
+  AND
+  (
+      (cs.ConfigUsr IS NULL AND cs.ConfigPermission IS NULL AND cs.ConfigRole IS NULL)
+      OR (@userId IS NOT NULL AND cs.ConfigUsr = @userId)
+      OR (cs.ConfigUsr IS NULL AND cs.ConfigPermission IS NOT NULL AND {permissionClause})
+      OR (cs.ConfigUsr IS NULL AND cs.ConfigPermission IS NULL AND @activeRoleId IS NOT NULL AND cs.ConfigRole = @activeRoleId)
+  )
+ORDER BY cs.ConfigScopeRank DESC,
+         cs.ConfigPriority DESC,
+         cs.ConfigId DESC;
+""";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@category", category);
+        cmd.Parameters.AddWithValue("@setting", setting);
+        cmd.Parameters.AddWithValue("@userId", userId.HasValue ? userId.Value : DBNull.Value);
+        cmd.Parameters.AddWithValue("@activeRoleId", activeRoleId.HasValue ? activeRoleId.Value : DBNull.Value);
+
+        for (var i = 0; i < effectivePermissions.Count; i++)
+        {
+            cmd.Parameters.AddWithValue($"@permission{i}", effectivePermissions[i]);
+        }
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is null or DBNull ? null : Convert.ToString(result, CultureInfo.InvariantCulture);

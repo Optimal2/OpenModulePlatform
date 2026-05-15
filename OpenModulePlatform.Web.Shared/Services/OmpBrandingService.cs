@@ -1,3 +1,8 @@
+using Microsoft.AspNetCore.Http;
+using OpenModulePlatform.Web.Shared.Security;
+using System.Globalization;
+using System.Security.Claims;
+
 namespace OpenModulePlatform.Web.Shared.Services;
 
 public sealed class OmpBrandingService
@@ -7,20 +12,54 @@ public sealed class OmpBrandingService
     public const string PortalNameSetting = "portalName";
 
     private readonly OmpConfigurationService _configuration;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly RbacService _rbac;
 
-    public OmpBrandingService(OmpConfigurationService configuration)
+    public OmpBrandingService(
+        OmpConfigurationService configuration,
+        IHttpContextAccessor httpContextAccessor,
+        RbacService rbac)
     {
         _configuration = configuration;
+        _httpContextAccessor = httpContextAccessor;
+        _rbac = rbac;
     }
 
     public async Task<OmpBranding> GetBrandingAsync(CancellationToken ct)
     {
-        var platformName = await _configuration.GetGlobalStringAsync(Category, PlatformNameSetting, ct);
-        var portalName = await _configuration.GetGlobalStringAsync(Category, PortalNameSetting, ct);
+        var user = _httpContextAccessor.HttpContext?.User;
+        var userId = TryGetOmpUserId(user);
+        var roleContext = user?.Identity?.IsAuthenticated == true
+            ? await _rbac.GetUserRoleContextAsync(user, ct)
+            : UserRoleContext.Empty;
+
+        var platformName = await _configuration.GetEffectiveStringAsync(
+            Category,
+            PlatformNameSetting,
+            userId,
+            roleContext.ActiveRoleId,
+            roleContext.EffectivePermissions,
+            ct);
+
+        var portalName = await _configuration.GetEffectiveStringAsync(
+            Category,
+            PortalNameSetting,
+            userId,
+            roleContext.ActiveRoleId,
+            roleContext.EffectivePermissions,
+            ct);
 
         return new OmpBranding(
             Normalize(platformName, OmpBranding.Default.PlatformName),
             Normalize(portalName, OmpBranding.Default.PortalName));
+    }
+
+    private static int? TryGetOmpUserId(ClaimsPrincipal? user)
+    {
+        var claimValue = user?.FindFirstValue(OmpAuthDefaults.UserIdClaimType);
+        return int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var userId)
+            ? userId
+            : null;
     }
 
     private static string Normalize(string? value, string fallback)

@@ -3,7 +3,7 @@
   <data name="Module instances" xml:space="preserve">
     <value>Modulinstanser</value>
   </data>
-<data name="Security" xml:space="preserve"><value>Säkerhet</value></data><data name="Workers" xml:space="preserve"><value>Workers</value></data><data name="Copy full user name" xml:space="preserve"><value>Kopiera fullständigt användarnamn</value></data><data name="Definitions" xml:space="preserve"><value>Definitioner</value></data><data name="System" xml:space="preserve"><value>System</value></data><data name="Log out" xml:space="preserve"><value>Logga ut</value></data><data name="Settings" xml:space="preserve"><value>Inställningar</value></data>  <data name="Users" xml:space="preserve"><value>Användare</value></data>
+<data name="Security" xml:space="preserve"><value>Säkerhet</value></data><data name="Workers" xml:space="preserve"><value>Arbetare</value></data><data name="Copy full user name" xml:space="preserve"><value>Kopiera fullständigt användarnamn</value></data><data name="Definitions" xml:space="preserve"><value>Definitioner</value></data><data name="System" xml:space="preserve"><value>System</value></data><data name="Log out" xml:space="preserve"><value>Logga ut</value></data><data name="Settings" xml:space="preserve"><value>Inställningar</value></data>  <data name="Users" xml:space="preserve"><value>Användare</value></data>
   <data name="Home" xml:space="preserve"><value>Hem</value></data>
   <data name="Pages" xml:space="preserve"><value>Sidor</value></data>
   <data name="Create page" xml:space="preserve"><value>Skapa sida</value></data>
@@ -13,5 +13,5 @@
   <data name="Add favorite" xml:space="preserve"><value>Lägg till favorit</value></data>
   <data name="Remove favorite" xml:space="preserve"><value>Ta bort favorit</value></data>
   <data name="No favorites" xml:space="preserve"><value>Inga favoriter</value></data>
-  <data name="Config settings" xml:space="preserve"><value>Konfigurationsinställningar</value></data>
+  <data name="Config settings" xml:space="preserve"><value>Konfiguration</value></data>
 </root>
