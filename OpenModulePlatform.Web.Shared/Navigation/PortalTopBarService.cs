@@ -20,6 +20,8 @@ public sealed class PortalTopBarService
 {
     private const string PortalAdminPermission = "OMP.Portal.Admin";
     private const string ContentManagePermission = "ContentWebAppModule.Manage";
+    private const string AppEntryPrefix = "app:";
+    private const string AppEntrySuffix = ":home";
     public const string ToggleFavoritePath = "/navigation/favorites/toggle";
 
     private readonly SqlConnectionFactory _db;
@@ -71,23 +73,26 @@ public sealed class PortalTopBarService
             var apps = await GetEnabledWebAppsAsync(ct);
             var accessibleApps = apps
                 .Where(app => HasAccess(app, permissions))
-                .ToArray();
+                .ToDictionary(app => app.AppInstanceId);
+            var portalEntries = await GetPortalEntryRowsAsync(ct);
             var isPortalAdmin = permissions.Contains(PortalAdminPermission);
             var currentUserName = user.Identity?.IsAuthenticated == true
                 ? user.Identity?.Name
                 : null;
 
-            var moduleLinks = accessibleApps
-                .Select(app => new PortalTopBarLink(app.DisplayName, ResolveHref(request, app)!))
-                .Where(link => !string.IsNullOrWhiteSpace(link.Href))
-                .ToArray();
-
-            var navigationEntries = BuildNavigationEntries(accessibleApps, permissions, app => ResolveHref(request, app));
+            var navigationGroups = BuildPortalEntryNavigationGroups(
+                portalEntries,
+                apps,
+                accessibleApps,
+                permissions,
+                GetPortalBasePath(options),
+                row => ResolvePortalEntryHref(request, row, accessibleApps));
             var userId = TryGetOmpUserId(user);
             var favorites = userId is int resolvedUserId
                 ? await GetFavoriteRefsAsync(resolvedUserId, ct)
                 : [];
-            ApplyFavorites(navigationEntries, favorites);
+            ApplyFavorites(navigationGroups, favorites);
+            var navigationEntries = FlattenNavigationGroups(navigationGroups);
 
             return CreateModel(
                 topBarOptions,
@@ -96,8 +101,8 @@ public sealed class PortalTopBarService
                 currentUserName,
                 roleContext,
                 isPortalAdmin,
-                moduleLinks,
-                BuildNavigationGroups(navigationEntries),
+                moduleLinks: Array.Empty<PortalTopBarLink>(),
+                navigationGroups,
                 BuildFavoriteEntries(navigationEntries),
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildRequestEndpointHref(request, ToggleFavoritePath),
@@ -191,8 +196,16 @@ public sealed class PortalTopBarService
         var apps = await GetEnabledWebAppsAsync(ct);
         var accessibleApps = apps
             .Where(app => HasAccess(app, roleContext.EffectivePermissions))
-            .ToArray();
-        var entries = BuildNavigationEntries(accessibleApps, roleContext.EffectivePermissions, app => ResolveHref(request, app));
+            .ToDictionary(app => app.AppInstanceId);
+        var portalEntries = await GetPortalEntryRowsAsync(ct);
+        var groups = BuildPortalEntryNavigationGroups(
+            portalEntries,
+            apps,
+            accessibleApps,
+            roleContext.EffectivePermissions,
+            GetPortalBasePath(options),
+            row => ResolvePortalEntryHref(request, row, accessibleApps));
+        var entries = FlattenNavigationGroups(groups);
         var entry = entries.FirstOrDefault(candidate =>
             string.Equals(candidate.EntryKey, entryKey.Trim(), StringComparison.Ordinal)
             && (!appInstanceId.HasValue || candidate.AppInstanceId == appInstanceId));
@@ -233,23 +246,26 @@ public sealed class PortalTopBarService
             var apps = await GetEnabledWebAppsAsync(ct);
             var accessibleApps = apps
                 .Where(app => HasAccess(app, permissions))
-                .ToArray();
+                .ToDictionary(app => app.AppInstanceId);
+            var portalEntries = await GetPortalEntryRowsAsync(ct);
             var isPortalAdmin = permissions.Contains(PortalAdminPermission);
             var currentUserName = user.Identity?.IsAuthenticated == true
                 ? user.Identity?.Name
                 : null;
 
-            var moduleLinks = accessibleApps
-                .Select(app => new PortalTopBarLink(app.DisplayName, ResolveHref(currentUri, app)!))
-                .Where(link => !string.IsNullOrWhiteSpace(link.Href))
-                .ToArray();
-
-            var navigationEntries = BuildNavigationEntries(accessibleApps, permissions, app => ResolveHref(currentUri, app));
+            var navigationGroups = BuildPortalEntryNavigationGroups(
+                portalEntries,
+                apps,
+                accessibleApps,
+                permissions,
+                GetPortalBasePath(options),
+                row => ResolvePortalEntryHref(currentUri, row, accessibleApps));
             var userId = TryGetOmpUserId(user);
             var favorites = userId is int resolvedUserId
                 ? await GetFavoriteRefsAsync(resolvedUserId, ct)
                 : [];
-            ApplyFavorites(navigationEntries, favorites);
+            ApplyFavorites(navigationGroups, favorites);
+            var navigationEntries = FlattenNavigationGroups(navigationGroups);
 
             return CreateModel(
                 topBarOptions,
@@ -258,8 +274,8 @@ public sealed class PortalTopBarService
                 currentUserName,
                 roleContext,
                 isPortalAdmin,
-                moduleLinks,
-                BuildNavigationGroups(navigationEntries),
+                moduleLinks: Array.Empty<PortalTopBarLink>(),
+                navigationGroups,
                 BuildFavoriteEntries(navigationEntries),
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildUriEndpointHref(currentUri, ToggleFavoritePath),
@@ -362,8 +378,258 @@ public sealed class PortalTopBarService
             PortalAdminToggleTextKey = "Admin",
             LanguageToggleTextKey = "Language",
             LogoutUrl = logoutUrl,
-            SettingsUrl = PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath)
+            SettingsUrl = PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath),
+            ShortcutsEnabled = options.TopbarShortcuts?.Enabled == true,
+            AllModulesShortcut = options.TopbarShortcuts?.AllModules ?? "m",
+            FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f"
         };
+    }
+
+    private static IReadOnlyList<PortalTopBarNavigationGroup> BuildPortalEntryNavigationGroups(
+        IReadOnlyList<TopBarPortalEntryRow> rows,
+        IReadOnlyList<TopBarAppEntry> apps,
+        IReadOnlyDictionary<Guid, TopBarAppEntry> accessibleApps,
+        IReadOnlySet<string> permissions,
+        string portalBasePath,
+        Func<TopBarPortalEntryRow, string?> resolveHref)
+    {
+        var nodes = rows
+            .Where(row => row.IsEnabled)
+            .Select(row =>
+            {
+                var href = resolveHref(row);
+                var canAccess = CanAccessPortalEntry(row, href, apps, accessibleApps, permissions, portalBasePath);
+                return new TopBarPortalEntryNode(row, canAccess ? href : null, canAccess);
+            })
+            .ToArray();
+
+        var enabledEntryIds = nodes.Select(node => node.Row.PortalEntryId).ToHashSet();
+        var rowsById = rows.ToDictionary(row => row.PortalEntryId);
+        var disabledAncestorIds = new HashSet<int>(
+            rows
+                .Where(row => !row.IsEnabled)
+                .Select(row => row.PortalEntryId));
+        nodes = nodes
+            .Where(node => !HasDisabledAncestor(node.Row, rowsById, disabledAncestorIds))
+            .ToArray();
+
+        var childrenByParentId = nodes
+            .Where(node => node.Row.ParentEntryId.HasValue && enabledEntryIds.Contains(node.Row.ParentEntryId.Value))
+            .GroupBy(node => node.Row.ParentEntryId!.Value)
+            .ToDictionary(group => group.Key, group => group.OrderBy(node => node.Row.DefaultSortOrder).ThenBy(node => node.Row.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray());
+
+        var groups = new List<PortalTopBarNavigationGroup>();
+        foreach (var node in nodes
+            .Where(node => !node.Row.ParentEntryId.HasValue || !enabledEntryIds.Contains(node.Row.ParentEntryId.Value))
+            .OrderBy(node => node.Row.DefaultSortOrder)
+            .ThenBy(node => node.Row.DisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            var childNodes = childrenByParentId.TryGetValue(node.Row.PortalEntryId, out var children)
+                ? children.Where(child => child.CanAccess).ToArray()
+                : [];
+
+            if (!node.CanAccess && childNodes.Length == 0)
+            {
+                continue;
+            }
+
+            groups.Add(new PortalTopBarNavigationGroup
+            {
+                GroupKey = node.Row.EntryKey,
+                Title = node.Row.DisplayName,
+                EntryKey = node.Row.EntryKey,
+                AppInstanceId = GetPortalEntryAppInstanceId(node.Row),
+                Href = node.Href ?? string.Empty,
+                SortOrder = node.Row.DefaultSortOrder,
+                IsFavoritable = node.CanAccess && !string.IsNullOrWhiteSpace(node.Href),
+                SearchText = BuildPortalEntrySearchText(node.Row, node.Href),
+                Entries = childNodes
+                    .Select(child => ToNavigationEntry(child, node.Row))
+                    .ToArray()
+            });
+        }
+
+        return groups;
+    }
+
+    private static bool HasDisabledAncestor(
+        TopBarPortalEntryRow row,
+        IReadOnlyDictionary<int, TopBarPortalEntryRow> rowsById,
+        IReadOnlySet<int> disabledEntryIds)
+    {
+        var visited = new HashSet<int> { row.PortalEntryId };
+        var parentId = row.ParentEntryId;
+        while (parentId.HasValue)
+        {
+            if (disabledEntryIds.Contains(parentId.Value))
+            {
+                return true;
+            }
+
+            if (!visited.Add(parentId.Value) || !rowsById.TryGetValue(parentId.Value, out var parent))
+            {
+                return false;
+            }
+
+            parentId = parent.ParentEntryId;
+        }
+
+        return false;
+    }
+
+    private static IReadOnlyList<PortalTopBarNavigationEntry> FlattenNavigationGroups(
+        IReadOnlyList<PortalTopBarNavigationGroup> groups)
+    {
+        var entries = new List<PortalTopBarNavigationEntry>();
+        foreach (var group in groups)
+        {
+            if (group.IsFavoritable && !string.IsNullOrWhiteSpace(group.EntryKey))
+            {
+                entries.Add(new PortalTopBarNavigationEntry
+                {
+                    EntryKey = group.EntryKey,
+                    AppInstanceId = group.AppInstanceId,
+                    GroupKey = group.GroupKey,
+                    GroupTitle = string.Empty,
+                    TextKey = group.Title,
+                    Href = group.Href,
+                    SortOrder = group.SortOrder,
+                    IsFavoritable = group.IsFavoritable,
+                    IsFavorite = group.IsFavorite,
+                    SearchText = group.SearchText
+                });
+            }
+
+            entries.AddRange(group.Entries);
+        }
+
+        return entries;
+    }
+
+    private static PortalTopBarNavigationEntry ToNavigationEntry(
+        TopBarPortalEntryNode node,
+        TopBarPortalEntryRow parent)
+        => new()
+        {
+            EntryKey = node.Row.EntryKey,
+            AppInstanceId = GetPortalEntryAppInstanceId(node.Row),
+            GroupKey = parent.EntryKey,
+            GroupTitle = parent.DisplayName,
+            TextKey = node.Row.DisplayName,
+            Href = node.Href ?? string.Empty,
+            SortOrder = node.Row.DefaultSortOrder,
+            IsFavoritable = node.CanAccess && !string.IsNullOrWhiteSpace(node.Href),
+            SearchText = BuildPortalEntrySearchText(node.Row, node.Href)
+        };
+
+    private static bool CanAccessPortalEntry(
+        TopBarPortalEntryRow row,
+        string? href,
+        IReadOnlyList<TopBarAppEntry> apps,
+        IReadOnlyDictionary<Guid, TopBarAppEntry> accessibleApps,
+        IReadOnlySet<string> permissions,
+        string portalBasePath)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            return false;
+        }
+
+        if (row.SourceAppInstanceId.HasValue)
+        {
+            return accessibleApps.ContainsKey(row.SourceAppInstanceId.Value);
+        }
+
+        if (TryParseAppInstanceId(row.TargetEntryKey, out var targetAppInstanceId))
+        {
+            return accessibleApps.ContainsKey(targetAppInstanceId);
+        }
+
+        return CanAccessTargetHref(href, apps, accessibleApps, permissions, portalBasePath);
+    }
+
+    private static bool CanAccessTargetHref(
+        string href,
+        IReadOnlyList<TopBarAppEntry> apps,
+        IReadOnlyDictionary<Guid, TopBarAppEntry> accessibleApps,
+        IReadOnlySet<string> permissions,
+        string portalBasePath)
+    {
+        var path = href;
+        if (Uri.TryCreate(href, UriKind.Absolute, out var absoluteUri))
+        {
+            path = absoluteUri.AbsolutePath;
+        }
+
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith("/", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var normalizedPath = NormalizeAbsolutePath(path);
+        if (IsPortalAdminPath(normalizedPath, portalBasePath))
+        {
+            return permissions.Contains(PortalAdminPermission);
+        }
+
+        var app = FindBestMatchingApp(apps, normalizedPath);
+        if (app is not null)
+        {
+            if (!accessibleApps.ContainsKey(app.AppInstanceId))
+            {
+                return false;
+            }
+
+            var appRelativePath = GetAppRelativePath(normalizedPath, app);
+            return !RequiresElevatedAccess(appRelativePath)
+                || HasInferredAdminAccess(app, permissions);
+        }
+
+        return IsPortalRootPath(normalizedPath, portalBasePath)
+            || !string.Equals(portalBasePath, "/", StringComparison.OrdinalIgnoreCase)
+            && IsPathMatch(normalizedPath, portalBasePath);
+    }
+
+    private static Guid? GetPortalEntryAppInstanceId(TopBarPortalEntryRow row)
+    {
+        if (row.SourceAppInstanceId.HasValue)
+        {
+            return row.SourceAppInstanceId.Value;
+        }
+
+        return TryParseAppInstanceId(row.TargetEntryKey, out var targetAppInstanceId)
+            ? targetAppInstanceId
+            : null;
+    }
+
+    private static string BuildPortalEntrySearchText(TopBarPortalEntryRow row, string? href)
+        => $"{row.DisplayName} {row.Description} {href} {row.EntryKey} {row.TargetEntryKey}".Trim();
+
+    private static IReadOnlyList<PortalTopBarNavigationEntry> BuildFavoriteEntries(
+        IReadOnlyList<PortalTopBarNavigationGroup> groups)
+        => FlattenNavigationGroups(groups)
+            .Where(entry => entry.IsFavorite)
+            .OrderBy(entry => entry.GroupTitle, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.TextKey, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static void ApplyFavorites(
+        IReadOnlyList<PortalTopBarNavigationGroup> groups,
+        IReadOnlyList<FavoriteRef> favorites)
+    {
+        foreach (var group in groups)
+        {
+            group.IsFavorite = favorites.Any(favorite =>
+                string.Equals(favorite.EntryKey, group.EntryKey, StringComparison.Ordinal)
+                && (!favorite.AppInstanceId.HasValue || favorite.AppInstanceId == group.AppInstanceId));
+
+            foreach (var entry in group.Entries)
+            {
+                entry.IsFavorite = favorites.Any(favorite =>
+                    string.Equals(favorite.EntryKey, entry.EntryKey, StringComparison.Ordinal)
+                    && (!favorite.AppInstanceId.HasValue || favorite.AppInstanceId == entry.AppInstanceId));
+            }
+        }
     }
 
     private static List<PortalTopBarNavigationEntry> BuildNavigationEntries(
@@ -576,6 +842,7 @@ public sealed class PortalTopBarService
         }
 
         return appRelativePath.Contains("/edit", StringComparison.OrdinalIgnoreCase)
+            || appRelativePath.Contains("/admin", StringComparison.OrdinalIgnoreCase)
             || appRelativePath.Contains("/create", StringComparison.OrdinalIgnoreCase)
             || appRelativePath.Contains("/new", StringComparison.OrdinalIgnoreCase)
             || appRelativePath.Contains("/delete", StringComparison.OrdinalIgnoreCase);
@@ -598,6 +865,11 @@ public sealed class PortalTopBarService
         if (!string.IsNullOrWhiteSpace(app.AppInstanceKey))
         {
             candidatePermissions.Add($"{app.AppInstanceKey}.Admin");
+        }
+
+        if (IsContentWebApp(app))
+        {
+            candidatePermissions.Add(ContentManagePermission);
         }
 
         return candidatePermissions.Count == 0 || candidatePermissions.Any(permissions.Contains);
@@ -708,6 +980,69 @@ public sealed class PortalTopBarService
         {
             return culture;
         }
+    }
+
+    private async Task<IReadOnlyList<TopBarPortalEntryRow>> GetPortalEntryRowsAsync(CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        const string sql = @"
+IF OBJECT_ID(N'omp_portal.portal_entries', N'U') IS NULL
+BEGIN
+    SELECT CAST(NULL AS int) AS portal_entry_id,
+           CAST(NULL AS int) AS parent_entry_id,
+           CAST(NULL AS nvarchar(200)) AS entry_key,
+           CAST(NULL AS nvarchar(200)) AS display_name,
+           CAST(NULL AS nvarchar(1000)) AS description,
+           CAST(NULL AS nvarchar(600)) AS target_url,
+           CAST(NULL AS nvarchar(200)) AS target_entry_key,
+           CAST(NULL AS uniqueidentifier) AS source_app_instance_id,
+           CAST(NULL AS bit) AS is_enabled,
+           CAST(NULL AS int) AS default_sort_order
+    WHERE 1 = 0;
+END
+ELSE
+BEGIN
+    SELECT portal_entry_id,
+           parent_entry_id,
+           entry_key,
+           display_name,
+           description,
+           target_url,
+           target_entry_key,
+           source_app_instance_id,
+           is_enabled,
+           default_sort_order
+    FROM omp_portal.portal_entries
+    ORDER BY COALESCE(parent_entry_id, portal_entry_id),
+             CASE WHEN parent_entry_id IS NULL THEN 0 ELSE 1 END,
+             default_sort_order,
+             display_name;
+END";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        var rows = new List<TopBarPortalEntryRow>();
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new TopBarPortalEntryRow
+            {
+                PortalEntryId = rdr.GetInt32(0),
+                ParentEntryId = rdr.IsDBNull(1) ? null : rdr.GetInt32(1),
+                EntryKey = rdr.GetString(2),
+                DisplayName = rdr.GetString(3),
+                Description = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                TargetUrl = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                TargetEntryKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                SourceAppInstanceId = rdr.IsDBNull(7) ? null : rdr.GetGuid(7),
+                IsEnabled = rdr.GetBoolean(8),
+                DefaultSortOrder = rdr.GetInt32(9)
+            });
+        }
+
+        return rows;
     }
 
     private async Task<IReadOnlyList<FavoriteRef>> GetFavoriteRefsAsync(int userId, CancellationToken ct)
@@ -830,6 +1165,72 @@ END";
         return null;
     }
 
+    private static string? ResolvePortalEntryHref(
+        HttpRequest request,
+        TopBarPortalEntryRow row,
+        IReadOnlyDictionary<Guid, TopBarAppEntry> accessibleApps)
+    {
+        if (row.SourceAppInstanceId is Guid sourceAppInstanceId
+            && accessibleApps.TryGetValue(sourceAppInstanceId, out var sourceApp))
+        {
+            return ResolveHref(request, sourceApp);
+        }
+
+        if (TryParseAppInstanceId(row.TargetEntryKey, out var targetAppInstanceId)
+            && accessibleApps.TryGetValue(targetAppInstanceId, out var targetApp))
+        {
+            return ResolveHref(request, targetApp);
+        }
+
+        return ResolveTargetUrl(request, row.TargetUrl);
+    }
+
+    private static string? ResolvePortalEntryHref(
+        Uri currentUri,
+        TopBarPortalEntryRow row,
+        IReadOnlyDictionary<Guid, TopBarAppEntry> accessibleApps)
+    {
+        if (row.SourceAppInstanceId is Guid sourceAppInstanceId
+            && accessibleApps.TryGetValue(sourceAppInstanceId, out var sourceApp))
+        {
+            return ResolveHref(currentUri, sourceApp);
+        }
+
+        if (TryParseAppInstanceId(row.TargetEntryKey, out var targetAppInstanceId)
+            && accessibleApps.TryGetValue(targetAppInstanceId, out var targetApp))
+        {
+            return ResolveHref(currentUri, targetApp);
+        }
+
+        return ResolveTargetUrl(currentUri, row.TargetUrl);
+    }
+
+    private static string? ResolveTargetUrl(HttpRequest request, string? targetUrl)
+    {
+        if (string.IsNullOrWhiteSpace(targetUrl))
+        {
+            return null;
+        }
+
+        var trimmed = targetUrl.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
+        {
+            return absoluteUri.ToString();
+        }
+
+        if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.Contains('\\', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        return $"{request.GetPublicBaseUrl().TrimEnd('/')}/{trimmed.TrimStart('/')}";
+    }
+
     private static string BuildRequestEndpointHref(HttpRequest request, string endpointPath)
     {
         var pathBase = request.PathBase.HasValue
@@ -873,6 +1274,32 @@ END";
         }
 
         return null;
+    }
+
+    private static string? ResolveTargetUrl(Uri currentUri, string? targetUrl)
+    {
+        if (string.IsNullOrWhiteSpace(targetUrl))
+        {
+            return null;
+        }
+
+        var trimmed = targetUrl.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
+        {
+            return absoluteUri.ToString();
+        }
+
+        if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.Contains('\\', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        return $"{currentUri.GetLeftPart(UriPartial.Authority).TrimEnd('/')}/{trimmed.TrimStart('/')}";
     }
 
     private static string BuildUriEndpointHref(Uri currentUri, string endpointPath)
@@ -1026,6 +1453,48 @@ ORDER BY ai.SortOrder,
 
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool TryParseAppInstanceId(string? targetEntryKey, out Guid appInstanceId)
+    {
+        appInstanceId = default;
+        if (string.IsNullOrWhiteSpace(targetEntryKey)
+            || !targetEntryKey.StartsWith(AppEntryPrefix, StringComparison.OrdinalIgnoreCase)
+            || !targetEntryKey.EndsWith(AppEntrySuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var idText = targetEntryKey[AppEntryPrefix.Length..^AppEntrySuffix.Length];
+        return Guid.TryParseExact(idText, "N", out appInstanceId);
+    }
+
+    private sealed class TopBarPortalEntryRow
+    {
+        public int PortalEntryId { get; init; }
+
+        public int? ParentEntryId { get; init; }
+
+        public string EntryKey { get; init; } = string.Empty;
+
+        public string DisplayName { get; init; } = string.Empty;
+
+        public string? Description { get; init; }
+
+        public string? TargetUrl { get; init; }
+
+        public string? TargetEntryKey { get; init; }
+
+        public Guid? SourceAppInstanceId { get; init; }
+
+        public bool IsEnabled { get; init; }
+
+        public int DefaultSortOrder { get; init; }
+    }
+
+    private sealed record TopBarPortalEntryNode(
+        TopBarPortalEntryRow Row,
+        string? Href,
+        bool CanAccess);
 
     private sealed class TopBarAppEntry
     {

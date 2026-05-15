@@ -14,4 +14,6 @@
   <data name="Remove favorite" xml:space="preserve"><value>Remove favorite</value></data>
   <data name="No favorites" xml:space="preserve"><value>No favorites</value></data>
   <data name="Config settings" xml:space="preserve"><value>Configuration</value></data>
+  <data name="Expand" xml:space="preserve"><value>Expand</value></data>
+  <data name="Collapse" xml:space="preserve"><value>Collapse</value></data>
 </root>

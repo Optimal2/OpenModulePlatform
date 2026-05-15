@@ -19,6 +19,14 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
+<nav class="settings-tabs" aria-label="@L["Portal entries"]">
+    <a class="settings-tabs__link@(Model.IsCreateTab ? " is-active" : string.Empty)" asp-page="/Admin/PortalEntries" asp-route-tab="create">@L["Create portal entry"]</a>
+    <a class="settings-tabs__link@(Model.IsLayoutTab ? " is-active" : string.Empty)" asp-page="/Admin/PortalEntries" asp-route-tab="layout">@L["Topbar layout"]</a>
+    <a class="settings-tabs__link@(Model.IsEntriesTab ? " is-active" : string.Empty)" asp-page="/Admin/PortalEntries" asp-route-tab="entries">@L["Existing portal entries"]</a>
+</nav>
+
+@if (Model.IsCreateTab)
+{
 <form method="post" asp-page-handler="Create" class="card form-grid top-gap">
     <h3>@L["Create portal entry"]</h3>
 
@@ -33,6 +41,19 @@
             <label asp-for="Input.DefaultSortOrder"></label>
             <input asp-for="Input.DefaultSortOrder" type="number" />
         </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.ParentEntryId"></label>
+        <select asp-for="Input.ParentEntryId">
+            <option value="">@L["None"]</option>
+            @foreach (var option in Model.ParentOptions)
+            {
+                <option value="@option.Value">@option.Label</option>
+            }
+        </select>
+        <div class="field-help">@L["Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar."]</div>
+        <span asp-validation-for="Input.ParentEntryId" class="field-validation-error"></span>
     </div>
 
     <div class="form-field">
@@ -81,7 +102,104 @@
         <a class="action-link" href="~/">@L["Back to portal"]</a>
     </div>
 </form>
+}
 
+@if (Model.IsLayoutTab)
+{
+<section class="card top-gap portal-entry-layout-admin">
+    <div class="section-header">
+        <div>
+            <h3>@L["Topbar layout"]</h3>
+            <p class="muted">
+                @L["Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child."]
+            </p>
+        </div>
+    </div>
+
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty-state">@L["No entries to show"]</div>
+    }
+    else
+    {
+        var layoutIndex = 0;
+        <form method="post" asp-page-handler="Layout" data-portal-entry-layout-form>
+            <div class="portal-entry-layout-list" data-portal-entry-layout-list>
+                @foreach (var row in Model.Rows)
+                {
+                    var layoutEntry = Model.LayoutEntries.FirstOrDefault(entry => entry.PortalEntryId == row.PortalEntryId);
+                    var parentEntryId = layoutEntry?.ParentEntryId ?? row.ParentEntryId;
+                    var isEnabled = layoutEntry?.IsEnabled ?? row.IsEnabled;
+                    var sortOrder = layoutEntry?.SortOrder ?? row.DefaultSortOrder;
+                    var depth = Model.GetDepth(row);
+                    var hasChildren = Model.Rows.Any(entry => entry.ParentEntryId == row.PortalEntryId);
+                    <div class="portal-entry-layout-row"
+                         draggable="true"
+                         style="--portal-entry-depth: @depth"
+                         data-portal-entry-layout-row
+                         data-entry-id="@row.PortalEntryId"
+                         data-parent-id="@(parentEntryId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)"
+                         data-has-children="@hasChildren.ToString().ToLowerInvariant()">
+                        <input type="hidden" name="LayoutEntries[@layoutIndex].PortalEntryId" value="@row.PortalEntryId" />
+                        <input type="hidden" name="LayoutEntries[@layoutIndex].ParentEntryId" value="@(parentEntryId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)" data-portal-entry-parent-input />
+                        <input type="hidden" name="LayoutEntries[@layoutIndex].SortOrder" value="@sortOrder" data-portal-entry-sort-input />
+                        <span class="portal-entry-layout-row__handle" aria-hidden="true">⋮⋮</span>
+                        <label class="portal-entry-layout-row__visible">
+                            <input type="checkbox" name="LayoutEntries[@layoutIndex].IsEnabled" value="true" checked="@isEnabled" />
+                            <input type="hidden" name="LayoutEntries[@layoutIndex].IsEnabled" value="false" />
+                            <span>@L["Visible"]</span>
+                        </label>
+                        <div class="portal-entry-layout-row__main">
+                            <strong>@row.DisplayName</strong>
+                            <div class="muted small-text">
+                                @if (!string.IsNullOrWhiteSpace(row.ParentDisplayName))
+                                {
+                                    <span>@L["Child of"] @row.ParentDisplayName</span>
+                                }
+                                else
+                                {
+                                    <span>@L["Top-level entry"]</span>
+                                }
+                                <span> · </span>
+                                <code>@row.EntryKey</code>
+                            </div>
+                        </div>
+                        <div class="portal-entry-layout-row__target">
+                            @if (!string.IsNullOrWhiteSpace(row.TargetUrl))
+                            {
+                                <code>@row.TargetUrl</code>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(row.TargetEntryKey))
+                            {
+                                <code>@row.TargetEntryKey</code>
+                            }
+                        </div>
+                        <div class="portal-entry-layout-row__actions">
+                            <button type="button" class="button secondary" data-portal-entry-clear-parent>@L["Make top-level"]</button>
+                            <a class="action-link" asp-page="/Admin/PortalEntryEdit" asp-route-portalEntryId="@row.PortalEntryId">@L["Edit"]</a>
+                            <button type="submit"
+                                    class="btn-danger-subtle"
+                                    asp-page-handler="Delete"
+                                    asp-route-portalEntryId="@row.PortalEntryId"
+                                    data-confirm="@L["Remove this Portal Entry?"]">
+                                @L["Remove"]
+                            </button>
+                        </div>
+                    </div>
+                    layoutIndex++;
+                }
+            </div>
+
+            <div class="toolbar">
+                <button type="submit" class="btn btn-primary">@L["Save topbar layout"]</button>
+            </div>
+        </form>
+    }
+</section>
+}
+
+@if (Model.IsEntriesTab)
+{
 <section class="top-gap">
     <h3>@L["Existing portal entries"]</h3>
     @if (Model.Rows.Count == 0)
@@ -95,6 +213,7 @@
                 <thead>
                     <tr>
                         <th>@L["Display name"]</th>
+                        <th>@L["Parent entry"]</th>
                         <th>@L["Entry key"]</th>
                         <th>@L["Target"]</th>
                         <th>@L["Enabled"]</th>
@@ -111,6 +230,16 @@
                             @if (!string.IsNullOrWhiteSpace(row.Description))
                             {
                                 <div class="muted small-text">@row.Description</div>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.ParentDisplayName))
+                            {
+                                @row.ParentDisplayName
+                            }
+                            else
+                            {
+                                <span class="muted">@L["None"]</span>
                             }
                         </td>
                         <td><code>@row.EntryKey</code></td>
@@ -136,3 +265,115 @@
         </div>
     }
 </section>
+}
+
+@section Scripts {
+    <script>
+        (() => {
+            const list = document.querySelector("[data-portal-entry-layout-list]");
+            if (!list) {
+                return;
+            }
+
+            let draggedRow = null;
+
+            const rows = () => Array.from(list.querySelectorAll("[data-portal-entry-layout-row]"));
+            const syncRows = () => {
+                rows().forEach((row, index) => {
+                    const parentInput = row.querySelector("[data-portal-entry-parent-input]");
+                    const sortInput = row.querySelector("[data-portal-entry-sort-input]");
+                    const parentId = parentInput?.value ?? "";
+                    row.dataset.parentId = parentId;
+                    row.style.setProperty("--portal-entry-depth", parentId ? "1" : "0");
+                    if (sortInput) {
+                        sortInput.value = String((index + 1) * 10);
+                    }
+                });
+            };
+
+            const clearDropState = () => {
+                rows().forEach(row => row.classList.remove("is-drop-target", "is-dragging"));
+            };
+
+            list.addEventListener("dragstart", event => {
+                const row = event.target.closest("[data-portal-entry-layout-row]");
+                if (!row) {
+                    return;
+                }
+
+                draggedRow = row;
+                row.classList.add("is-dragging");
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", row.dataset.entryId ?? "");
+            });
+
+            list.addEventListener("dragover", event => {
+                const targetRow = event.target.closest("[data-portal-entry-layout-row]");
+                if (!draggedRow || !targetRow || targetRow === draggedRow) {
+                    return;
+                }
+
+                if (targetRow.dataset.parentId || draggedRow.dataset.hasChildren === "true") {
+                    event.dataTransfer.dropEffect = "none";
+                    return;
+                }
+
+                event.preventDefault();
+                clearDropState();
+                targetRow.classList.add("is-drop-target");
+                event.dataTransfer.dropEffect = "move";
+            });
+
+            list.addEventListener("drop", event => {
+                const targetRow = event.target.closest("[data-portal-entry-layout-row]");
+                if (!draggedRow || !targetRow || targetRow === draggedRow) {
+                    return;
+                }
+
+                if (targetRow.dataset.parentId || draggedRow.dataset.hasChildren === "true") {
+                    clearDropState();
+                    draggedRow = null;
+                    return;
+                }
+
+                event.preventDefault();
+                const parentInput = draggedRow.querySelector("[data-portal-entry-parent-input]");
+                if (parentInput) {
+                    parentInput.value = targetRow.dataset.entryId ?? "";
+                }
+
+                targetRow.after(draggedRow);
+                syncRows();
+                clearDropState();
+                draggedRow = null;
+            });
+
+            list.addEventListener("dragend", () => {
+                clearDropState();
+                draggedRow = null;
+            });
+
+            list.addEventListener("click", event => {
+                const confirmTarget = event.target.closest("[data-confirm]");
+                if (confirmTarget && !window.confirm(confirmTarget.dataset.confirm)) {
+                    event.preventDefault();
+                    return;
+                }
+
+                const clearButton = event.target.closest("[data-portal-entry-clear-parent]");
+                if (!clearButton) {
+                    return;
+                }
+
+                const row = clearButton.closest("[data-portal-entry-layout-row]");
+                const parentInput = row?.querySelector("[data-portal-entry-parent-input]");
+                if (parentInput) {
+                    parentInput.value = "";
+                    syncRows();
+                }
+            });
+
+            syncRows();
+        })();
+    </script>
+}

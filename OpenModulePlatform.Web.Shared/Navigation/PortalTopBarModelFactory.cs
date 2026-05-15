@@ -61,7 +61,10 @@ public static class PortalTopBarModelFactory
             RemoveFavoriteTextKey = "Remove favorite",
             LanguageToggleTextKey = "Language",
             LogoutUrl = OmpAuthDefaults.LogoutPath,
-            SettingsUrl = CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath)
+            SettingsUrl = CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath),
+            ShortcutsEnabled = options.TopbarShortcuts?.Enabled == true,
+            AllModulesShortcut = options.TopbarShortcuts?.AllModules ?? "m",
+            FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f"
         };
     }
 
