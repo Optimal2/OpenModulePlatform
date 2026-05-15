@@ -199,6 +199,43 @@
         return true;
     }
 
+    function setEntryGroupExpanded(group, expanded, temporary) {
+        if (!group) {
+            return;
+        }
+
+        var entries = group.querySelector('[data-portal-topbar-entry-group-entries]');
+        var toggle = group.querySelector('[data-portal-topbar-entry-group-toggle]');
+        var root = group.closest('[data-portal-topbar-root]');
+        var expandText = root ? (root.getAttribute('data-expand-text') || 'Expand') : 'Expand';
+        var collapseText = root ? (root.getAttribute('data-collapse-text') || 'Collapse') : 'Collapse';
+
+        group.classList.toggle('is-open', !!expanded);
+        group.dataset.temporaryExpanded = temporary ? 'true' : 'false';
+
+        if (entries) {
+            entries.hidden = !expanded;
+        }
+
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            toggle.setAttribute('title', expanded ? collapseText : expandText);
+            toggle.setAttribute('aria-label', expanded ? collapseText : expandText);
+            var icon = toggle.querySelector('span[aria-hidden="true"]');
+            if (icon) {
+                icon.textContent = expanded ? '▾' : '▸';
+            }
+        }
+    }
+
+    function resetEntryGroup(group) {
+        setEntryGroupExpanded(group, group.getAttribute('data-default-open') === 'true', false);
+        group.querySelectorAll('[data-portal-topbar-entry-row]').forEach(function (row) {
+            row.hidden = false;
+        });
+        group.hidden = false;
+    }
+
     function applyEntryFilter(menu) {
         if (!menu) {
             return;
@@ -206,19 +243,33 @@
 
         var input = menu.querySelector('[data-portal-topbar-entry-filter]');
         var term = input ? (input.value || '').trim().toLowerCase() : '';
-        menu.querySelectorAll('[data-portal-topbar-entry-row]').forEach(function (row) {
-            var haystack = (row.getAttribute('data-search') || '').toLowerCase();
-            row.hidden = term.length > 0 && haystack.indexOf(term) < 0;
-        });
 
         menu.querySelectorAll('[data-portal-topbar-entry-group]').forEach(function (group) {
-            var visibleRows = Array.from(group.querySelectorAll('[data-portal-topbar-entry-row]'))
-                .some(function (row) { return !row.hidden; });
-            group.hidden = !visibleRows;
-
-            if (term.length > 0 && visibleRows) {
-                group.open = true;
+            if (term.length === 0) {
+                resetEntryGroup(group);
+                return;
             }
+
+            var header = group.querySelector(':scope > [data-portal-topbar-entry-row]');
+            var childRows = Array.from(group.querySelectorAll('[data-portal-topbar-entry-group-entries] [data-portal-topbar-entry-row]'));
+            var headerMatches = header
+                ? (header.getAttribute('data-search') || '').toLowerCase().indexOf(term) >= 0
+                : false;
+            var childMatches = false;
+
+            if (header) {
+                header.hidden = false;
+            }
+
+            childRows.forEach(function (row) {
+                var haystack = (row.getAttribute('data-search') || '').toLowerCase();
+                var matches = haystack.indexOf(term) >= 0;
+                row.hidden = !matches;
+                childMatches = childMatches || matches;
+            });
+
+            group.hidden = !headerMatches && !childMatches;
+            setEntryGroupExpanded(group, headerMatches || childMatches, true);
         });
     }
 
@@ -230,6 +281,29 @@
         input.dataset.portalTopbarEntryFilterInitialized = 'true';
         input.addEventListener('input', function () {
             applyEntryFilter(input.closest('[data-portal-topbar-entry-menu]'));
+        });
+    }
+
+    function initEntryGroupToggle(button) {
+        if (!button || button.dataset.portalTopbarEntryGroupToggleInitialized === 'true') {
+            return;
+        }
+
+        button.dataset.portalTopbarEntryGroupToggleInitialized = 'true';
+        var group = button.closest('[data-portal-topbar-entry-group]');
+        setEntryGroupExpanded(group, group && group.getAttribute('data-default-open') === 'true', false);
+
+        button.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var currentGroup = button.closest('[data-portal-topbar-entry-group]');
+            if (!currentGroup) {
+                return;
+            }
+
+            var isExpanded = currentGroup.classList.contains('is-open');
+            setEntryGroupExpanded(currentGroup, !isExpanded, false);
         });
     }
 
@@ -608,6 +682,83 @@
         });
     }
 
+    function isEditableShortcutTarget(element) {
+        if (!element) {
+            return false;
+        }
+
+        if (element.isContentEditable) {
+            return true;
+        }
+
+        return !!element.closest('input, textarea, select, button, a, [contenteditable], .toastui-editor-defaultUI, .toastui-editor, [role="dialog"], [aria-modal="true"]');
+    }
+
+    function normalizeShortcut(value) {
+        return (value || '').trim().toLowerCase();
+    }
+
+    function findShortcutRoot() {
+        return document.querySelector('[data-portal-topbar-root][data-shortcuts-enabled="true"]');
+    }
+
+    function handleTopbarShortcut(event) {
+        if (!event || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) {
+            return false;
+        }
+
+        if (isEditableShortcutTarget(document.activeElement)) {
+            return false;
+        }
+
+        var root = findShortcutRoot();
+        if (!root) {
+            return false;
+        }
+
+        var key = normalizeShortcut(event.key);
+        if (!key || event.shiftKey) {
+            return false;
+        }
+
+        var allModulesShortcut = normalizeShortcut(root.getAttribute('data-shortcut-all-modules'));
+        var favoritesShortcut = normalizeShortcut(root.getAttribute('data-shortcut-favorites'));
+
+        if (allModulesShortcut && key === allModulesShortcut) {
+            var allModules = root.querySelector('[data-portal-topbar-all-modules]');
+            if (!allModules) {
+                return false;
+            }
+
+            event.preventDefault();
+            openHoverMenu(allModules, true);
+            var input = allModules.querySelector('[data-portal-topbar-entry-filter]');
+            if (input) {
+                window.setTimeout(function () {
+                    input.focus();
+                }, 0);
+            }
+            return true;
+        }
+
+        if (favoritesShortcut && key === favoritesShortcut) {
+            var favorites = root.querySelector('[data-portal-topbar-favorites]');
+            if (!favorites) {
+                return false;
+            }
+
+            event.preventDefault();
+            if (favorites.open && isPinned(favorites)) {
+                closeHoverMenu(favorites);
+            } else {
+                openHoverMenu(favorites, true);
+            }
+            return true;
+        }
+
+        return false;
+    }
+
     function closeOverlaysOnOutsideClick(event) {
         document.querySelectorAll('[data-portal-topbar-admin-submenu][open]').forEach(function (submenu) {
             if (!submenu.contains(event.target)) {
@@ -646,6 +797,10 @@
             closeOverlaysOnOutsideClick(event);
         });
         document.addEventListener('keydown', function (event) {
+            if (handleTopbarShortcut(event)) {
+                return;
+            }
+
             if (event.key !== 'Escape') {
                 return;
             }
@@ -674,6 +829,7 @@
             topbar.querySelectorAll('[data-portal-topbar-hover-menu]').forEach(initHoverMenu);
             topbar.querySelectorAll('[data-portal-topbar-admin-submenu]').forEach(initAdminSubmenu);
             topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
+            topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
             topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
             scheduleRebalance(topbar);
             return;
@@ -684,6 +840,7 @@
         topbar.querySelectorAll('[data-portal-topbar-hover-menu]').forEach(initHoverMenu);
         topbar.querySelectorAll('[data-portal-topbar-admin-submenu]').forEach(initAdminSubmenu);
         topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
+        topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
 
         topbar.querySelectorAll('[data-portal-topbar-admin-menu]').forEach(function (menu) {

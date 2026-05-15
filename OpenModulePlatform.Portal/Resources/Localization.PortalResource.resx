@@ -1503,5 +1503,24 @@
   <data name="Enter a valid integer value." xml:space="preserve"><value>Enter a valid integer value.</value></data>
   <data name="Integer" xml:space="preserve"><value>Integer</value></data>
   <data name="String" xml:space="preserve"><value>String</value></data>
+  <data name="Topbar layout" xml:space="preserve"><value>Topbar layout</value></data>
+  <data name="Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child.</value></data>
+  <data name="Visible" xml:space="preserve"><value>Visible</value></data>
+  <data name="Child of" xml:space="preserve"><value>Child of</value></data>
+  <data name="Top-level entry" xml:space="preserve"><value>Top-level entry</value></data>
+  <data name="Make top-level" xml:space="preserve"><value>Make top-level</value></data>
+  <data name="Remove this Portal Entry?" xml:space="preserve"><value>Remove this Portal Entry?</value></data>
+  <data name="Save topbar layout" xml:space="preserve"><value>Save topbar layout</value></data>
+  <data name="Topbar layout saved." xml:space="preserve"><value>Topbar layout saved.</value></data>
+  <data name="Portal entry removed." xml:space="preserve"><value>Portal entry removed.</value></data>
+  <data name="Portal entry was not found." xml:space="preserve"><value>Portal entry was not found.</value></data>
+  <data name="No portal entries were submitted." xml:space="preserve"><value>No portal entries were submitted.</value></data>
+  <data name="Layout parent entry was not found." xml:space="preserve"><value>Layout parent entry was not found.</value></data>
+  <data name="A Portal Entry cannot be its own parent." xml:space="preserve"><value>A Portal Entry cannot be its own parent.</value></data>
+  <data name="The layout update would create a Portal Entry cycle." xml:space="preserve"><value>The layout update would create a Portal Entry cycle.</value></data>
   <data name="None" xml:space="preserve"><value>None</value></data>
+  <data name="Parent entry" xml:space="preserve"><value>Parent entry</value></data>
+  <data name="Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar." xml:space="preserve"><value>Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar.</value></data>
+  <data name="Select a valid parent entry." xml:space="preserve"><value>Select a valid parent entry.</value></data>
+  <data name="The selected parent would create a Portal Entry cycle." xml:space="preserve"><value>The selected parent would create a Portal Entry cycle.</value></data>
 </root>

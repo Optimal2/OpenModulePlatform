@@ -1074,6 +1074,96 @@ button {
     color: #7a1111;
 }
 
+.portal-entry-layout-admin {
+    display: grid;
+    gap: 14px;
+}
+
+.portal-entry-layout-list {
+    display: grid;
+    gap: 6px;
+}
+
+.portal-entry-layout-row {
+    display: grid;
+    grid-template-columns: 28px minmax(84px, auto) minmax(180px, 1fr) minmax(160px, 0.8fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 54px;
+    padding: 8px 10px 8px calc(10px + (var(--portal-entry-depth, 0) * 28px));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    transition: border-color 120ms ease, background-color 120ms ease, opacity 120ms ease;
+}
+
+.portal-entry-layout-row.is-dragging {
+    opacity: 0.62;
+}
+
+.portal-entry-layout-row.is-drop-target {
+    border-color: var(--link);
+    background: var(--accent);
+}
+
+.portal-entry-layout-row__handle {
+    color: var(--text-muted);
+    cursor: grab;
+    font-weight: 700;
+    letter-spacing: -0.12em;
+    user-select: none;
+}
+
+.portal-entry-layout-row__visible {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.portal-entry-layout-row__main,
+.portal-entry-layout-row__target {
+    min-width: 0;
+}
+
+.portal-entry-layout-row__target code,
+.portal-entry-layout-row__main code {
+    overflow-wrap: anywhere;
+}
+
+.portal-entry-layout-row__actions {
+    display: inline-flex;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+}
+
+.portal-entry-layout-row__actions .button,
+.portal-entry-layout-row__actions .action-link,
+.portal-entry-layout-row__actions button {
+    min-height: 32px;
+    padding: 6px 9px;
+    border-radius: 9px;
+    white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+    .portal-entry-layout-row {
+        grid-template-columns: 28px minmax(84px, auto) minmax(180px, 1fr);
+    }
+
+    .portal-entry-layout-row__target,
+    .portal-entry-layout-row__actions {
+        grid-column: 3;
+    }
+
+    .portal-entry-layout-row__actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+}
+
 .form-grid-inline {
     display: grid;
     grid-template-columns: minmax(240px, 1fr) auto;

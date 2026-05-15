@@ -38,6 +38,8 @@ public sealed class PortalEntry
 {
     public int PortalEntryId { get; set; }
 
+    public int? ParentEntryId { get; set; }
+
     public string EntryKey { get; set; } = string.Empty;
 
     public string DisplayName { get; set; } = string.Empty;
@@ -79,6 +81,10 @@ public sealed class PortalEntryAdminRow
 {
     public int PortalEntryId { get; set; }
 
+    public int? ParentEntryId { get; set; }
+
+    public string? ParentDisplayName { get; set; }
+
     public string EntryKey { get; set; } = string.Empty;
 
     public string DisplayName { get; set; } = string.Empty;
@@ -105,6 +111,8 @@ public sealed class PortalEntryAdminRow
 /// </summary>
 public sealed class PortalEntryCreateData
 {
+    public int? ParentEntryId { get; set; }
+
     public string DisplayName { get; set; } = string.Empty;
 
     public string? Description { get; set; }
@@ -129,6 +137,8 @@ public sealed class PortalEntryEditData
 {
     public int PortalEntryId { get; set; }
 
+    public int? ParentEntryId { get; set; }
+
     public string DisplayName { get; set; } = string.Empty;
 
     public string? Description { get; set; }
@@ -144,6 +154,20 @@ public sealed class PortalEntryEditData
     public bool IsEnabled { get; set; }
 
     public int DefaultSortOrder { get; set; }
+}
+
+/// <summary>
+/// Minimal layout update for the topbar Portal Entry tree.
+/// </summary>
+public sealed class PortalEntryLayoutUpdate
+{
+    public int PortalEntryId { get; set; }
+
+    public int? ParentEntryId { get; set; }
+
+    public bool IsEnabled { get; set; }
+
+    public int SortOrder { get; set; }
 }
 
 /// <summary>

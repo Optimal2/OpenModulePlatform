@@ -28,6 +28,8 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
     [TempData]
     public string? StatusMessage { get; set; }
 
+    public IReadOnlyList<OptionItem> ParentOptions { get; private set; } = [];
+
     public async Task<IActionResult> OnGet(int portalEntryId, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -37,6 +39,7 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
         }
 
         SetTitles("Edit portal entry");
+        await LoadAsync(portalEntryId, ct);
         var row = await _portalEntries.GetAdminRowAsync(portalEntryId, ct);
         if (row is null)
         {
@@ -57,6 +60,7 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
 
         SetTitles("Edit portal entry");
         var entryId = Input.PortalEntryId > 0 ? Input.PortalEntryId : portalEntryId;
+        await LoadAsync(entryId, ct);
         var existing = await _portalEntries.GetAdminRowAsync(entryId, ct);
         if (existing is null)
         {
@@ -67,6 +71,10 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
         Input.EntryKey = existing.EntryKey;
         Input.SourceAppInstanceId = existing.SourceAppInstanceId;
         ValidateInput(existing);
+        if (await _portalEntries.WouldCreateCycleAsync(Input.PortalEntryId, Input.ParentEntryId, ct))
+        {
+            ModelState.AddModelError(nameof(Input.ParentEntryId), T("The selected parent would create a Portal Entry cycle."));
+        }
 
         if (!ModelState.IsValid)
         {
@@ -77,6 +85,7 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
             new PortalEntryEditData
             {
                 PortalEntryId = Input.PortalEntryId,
+                ParentEntryId = Input.ParentEntryId,
                 DisplayName = Input.DisplayName.Trim(),
                 Description = Clean(Input.Description),
                 LogoUrl = Clean(Input.LogoUrl),
@@ -112,12 +121,22 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(nameof(Input.TargetUrl), T("Use an absolute http/https URL, a local path starting with /, or a relative path."));
         }
+
+        if (Input.ParentEntryId.HasValue
+            && !ParentOptions.Any(option => string.Equals(option.Value, Input.ParentEntryId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)))
+        {
+            ModelState.AddModelError(nameof(Input.ParentEntryId), T("Select a valid parent entry."));
+        }
     }
+
+    private async Task LoadAsync(int portalEntryId, CancellationToken ct)
+        => ParentOptions = await _portalEntries.GetParentOptionsAsync(portalEntryId, ct);
 
     private static InputModel ToInput(PortalEntryAdminRow row)
         => new()
         {
             PortalEntryId = row.PortalEntryId,
+            ParentEntryId = row.ParentEntryId,
             EntryKey = row.EntryKey,
             DisplayName = row.DisplayName,
             Description = row.Description,
@@ -152,6 +171,9 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
     public sealed class InputModel
     {
         public int PortalEntryId { get; set; }
+
+        [Display(Name = "Parent entry")]
+        public int? ParentEntryId { get; set; }
 
         public string EntryKey { get; set; } = string.Empty;
 

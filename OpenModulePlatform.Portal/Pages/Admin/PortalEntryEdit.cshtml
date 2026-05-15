@@ -34,6 +34,19 @@
         </div>
     </div>
 
+    <div class="form-field">
+        <label asp-for="Input.ParentEntryId"></label>
+        <select asp-for="Input.ParentEntryId">
+            <option value="">@L["None"]</option>
+            @foreach (var option in Model.ParentOptions)
+            {
+                <option value="@option.Value">@option.Label</option>
+            }
+        </select>
+        <div class="field-help">@L["Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar."]</div>
+        <span asp-validation-for="Input.ParentEntryId" class="field-validation-error"></span>
+    </div>
+
     <div class="field-grid field-grid--2">
         <div class="form-field">
             <label asp-for="Input.DisplayName"></label>

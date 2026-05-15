@@ -19,7 +19,12 @@
          data-portal-topbar-root
          data-favorite-toggle-url="@_portalTopBar.FavoriteToggleUrl"
          data-add-favorite-text="@L[_portalTopBar.AddFavoriteTextKey]"
-         data-remove-favorite-text="@L[_portalTopBar.RemoveFavoriteTextKey]">
+         data-remove-favorite-text="@L[_portalTopBar.RemoveFavoriteTextKey]"
+         data-expand-text="@L["Expand"]"
+         data-collapse-text="@L["Collapse"]"
+         data-shortcuts-enabled="@_portalTopBar.ShortcutsEnabled.ToString().ToLowerInvariant()"
+         data-shortcut-all-modules="@_portalTopBar.AllModulesShortcut"
+         data-shortcut-favorites="@_portalTopBar.FavoritesShortcut">
         <nav class="portal-topbar__nav" aria-label="@_portalTopBar.PortalLink.TextKey" data-portal-topbar>
             <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@_portalTopBar.PortalLink.TextKey</a>
 
@@ -57,7 +62,7 @@
             {
                 <span class="portal-topbar__pipe" aria-hidden="true">|</span>
 
-                <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu data-portal-topbar-all-modules>
                     <summary title="@L[_portalTopBar.AllModulesToggleTextKey]" aria-label="@L[_portalTopBar.AllModulesToggleTextKey]">
                         @L[_portalTopBar.AllModulesToggleTextKey]
                     </summary>
@@ -69,8 +74,54 @@
                                data-portal-topbar-entry-filter />
                         @foreach (var group in _portalTopBar.NavigationGroups)
                         {
-                            <details class="portal-topbar__nav-group" data-portal-topbar-entry-group open>
-                                <summary class="portal-topbar__nav-group-title">@group.Title</summary>
+                            var groupFavoriteLabel = L[group.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];
+                            <div class="portal-topbar__nav-group" data-portal-topbar-entry-group>
+                                <div class="portal-topbar__nav-group-header"
+                                     data-portal-topbar-entry-row
+                                     data-entry-key="@group.EntryKey"
+                                     data-app-instance-id="@(group.AppInstanceId?.ToString("D") ?? string.Empty)"
+                                     data-favorite-label="@group.Title"
+                                     data-favorite-group-title=""
+                                     data-favorite-entry-title="@group.Title"
+                                     data-favorite-href="@group.Href"
+                                     data-search="@GroupSearchText(group)">
+                                    @if (group.HasLink)
+                                    {
+                                        <a class="portal-topbar__nav-group-link" href="@group.Href">@group.Title</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="portal-topbar__nav-group-link" aria-disabled="true">@group.Title</span>
+                                    }
+                                    <span class="portal-topbar__nav-group-actions">
+                                        @if (group.Entries.Count > 0)
+                                        {
+                                            <button type="button"
+                                                    class="portal-topbar__nav-group-toggle"
+                                                    title="@L["Expand"]"
+                                                    aria-label="@L["Expand"]"
+                                                    aria-expanded="false"
+                                                    data-portal-topbar-entry-group-toggle>
+                                                <span aria-hidden="true">▸</span>
+                                            </button>
+                                        }
+                                        @if (_portalTopBar.CanUsePersistentFavorites && group.IsFavoritable)
+                                        {
+                                            <form method="post" action="@_portalTopBar.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
+                                                <input type="hidden" name="entryKey" value="@group.EntryKey" />
+                                                <input type="hidden" name="appInstanceId" value="@(group.AppInstanceId?.ToString("D") ?? string.Empty)" />
+                                                <button type="submit"
+                                                        class="portal-topbar__favorite-toggle@(group.IsFavorite ? " is-favorite" : string.Empty)"
+                                                        title="@groupFavoriteLabel"
+                                                        aria-label="@groupFavoriteLabel"
+                                                        data-portal-topbar-favorite-button>
+                                                    <span aria-hidden="true">@(group.IsFavorite ? "★" : "☆")</span>
+                                                </button>
+                                            </form>
+                                        }
+                                    </span>
+                                </div>
+                                <div class="portal-topbar__nav-group-entries" data-portal-topbar-entry-group-entries hidden>
                                 @foreach (var entry in group.Entries)
                                 {
                                     var favoriteLabel = L[entry.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];
@@ -102,14 +153,15 @@
                                         }
                                     </div>
                                 }
-                            </details>
+                                </div>
+                            </div>
                         }
                     </div>
                 </details>
 
                 @if (_portalTopBar.CanUsePersistentFavorites)
                 {
-                    <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                    <details class="portal-topbar__nav-dropdown" data-portal-topbar-overlay data-portal-topbar-hover-menu data-portal-topbar-favorites>
                         <summary title="@L[_portalTopBar.FavoritesToggleTextKey]" aria-label="@L[_portalTopBar.FavoritesToggleTextKey]">
                             @L[_portalTopBar.FavoritesToggleTextKey]
                         </summary>
@@ -385,6 +437,9 @@
         var text = EntryText(entry);
         return $"{entry.SearchText} {group.Title} {text} {group.Title}/{text} {group.GroupKey}/{text} {entry.Href.Trim('/')}";
     }
+
+    private static string GroupSearchText(PortalTopBarNavigationGroup group)
+        => $"{group.SearchText} {group.Title} {group.Href.Trim('/')}";
 
     private static string DisplayUserName(string? value)
     {
