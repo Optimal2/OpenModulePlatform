@@ -11,7 +11,7 @@ Use these scripts for the neutral OMP core installation flow:
      permission, and role scoped settings.
 
 2. `2-initialize-openmoduleplatform.sql`
-   - Seeds the default OMP instance, host/template baseline, RBAC baseline, and bootstrap administrator principal.
+   - Seeds the default OMP instance, host/template baseline, RBAC baseline, built-in baseline roles, and bootstrap administrator principal.
 
 `2-initialize-openmoduleplatform.sql` requires a bootstrap administrator principal. Prefer the local installer because it writes a temporary SQL file with the principal escaped safely:
 
@@ -25,6 +25,10 @@ Use these scripts for the neutral OMP core installation flow:
 The `-BootstrapPortalAdminPrincipal` parameter accepts an array, so pass more than one value when a development machine can authenticate the same operator under multiple Windows principal strings.
 
 For direct SQL execution, manually replace `__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__` inside the initialization script with a single-quote-escaped Windows user or group. Do not pass the principal through `sqlcmd -v`; SQLCMD variables are textual substitution before T-SQL parsing and cannot be safely validated by the script after substitution.
+
+Core initialization also creates the built-in `Everyone` and
+`AuthenticatedUsers` roles. They are bound through `OMPSystem` principals and
+are used by the shared RBAC runtime as ambient baseline roles.
 
 ## Module-owned SQL
 

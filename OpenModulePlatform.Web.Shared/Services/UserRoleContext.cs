@@ -9,6 +9,8 @@ public sealed class UserRoleContext
 
     public IReadOnlyList<UserRoleOption> AvailableRoles { get; init; } = Array.Empty<UserRoleOption>();
 
+    public IReadOnlyList<int> EffectiveRoleIds { get; init; } = Array.Empty<int>();
+
     public int? ActiveRoleId { get; init; }
 
     public string? ActiveRoleName { get; init; }
