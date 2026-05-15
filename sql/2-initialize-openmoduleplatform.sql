@@ -44,6 +44,8 @@ DECLARE @DefaultHostArchitecture nvarchar(20) = N'x64';
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
+DECLARE @EveryoneRoleId int;
+DECLARE @AuthenticatedUsersRoleId int;
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
 -- automation should patch it from a protected environment-specific value; the
@@ -271,7 +273,63 @@ BEGIN
     INSERT INTO omp.Roles(Name, Description) VALUES(N'PortalAdmins', N'Administrative bootstrap role for OMP modules and portal');
 END
 
+IF NOT EXISTS (SELECT 1 FROM omp.Roles WHERE Name = N'Everyone')
+BEGIN
+    INSERT INTO omp.Roles(Name, Description)
+    VALUES(N'Everyone', N'Built-in baseline role for permissions available to every signed-in OMP principal.');
+END
+ELSE
+BEGIN
+    UPDATE omp.Roles
+    SET Description = N'Built-in baseline role for permissions available to every signed-in OMP principal.'
+    WHERE Name = N'Everyone'
+      AND ISNULL(Description, N'') = N'';
+END
+
+IF NOT EXISTS (SELECT 1 FROM omp.Roles WHERE Name = N'AuthenticatedUsers')
+BEGIN
+    INSERT INTO omp.Roles(Name, Description)
+    VALUES(N'AuthenticatedUsers', N'Built-in baseline role for permissions available to authenticated OMP users.');
+END
+ELSE
+BEGIN
+    UPDATE omp.Roles
+    SET Description = N'Built-in baseline role for permissions available to authenticated OMP users.'
+    WHERE Name = N'AuthenticatedUsers'
+      AND ISNULL(Description, N'') = N'';
+END
+
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
+SELECT @EveryoneRoleId = RoleId FROM omp.Roles WHERE Name = N'Everyone';
+SELECT @AuthenticatedUsersRoleId = RoleId FROM omp.Roles WHERE Name = N'AuthenticatedUsers';
+
+IF @EveryoneRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePrincipals
+       WHERE RoleId = @EveryoneRoleId
+         AND PrincipalType = N'OMPSystem'
+         AND Principal = N'Everyone'
+   )
+BEGIN
+    INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
+    VALUES(@EveryoneRoleId, N'OMPSystem', N'Everyone');
+END
+
+IF @AuthenticatedUsersRoleId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.RolePrincipals
+       WHERE RoleId = @AuthenticatedUsersRoleId
+         AND PrincipalType = N'OMPSystem'
+         AND Principal = N'AuthenticatedUsers'
+   )
+BEGIN
+    INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
+    VALUES(@AuthenticatedUsersRoleId, N'OMPSystem', N'AuthenticatedUsers');
+END
 
 -------------------------------------------------------------------------------
 -- Seed built-in authentication providers
@@ -296,7 +354,8 @@ USING
 (
     VALUES
         (N'branding', N'platformName', N'Display name for the installed OpenModulePlatform instance.', 10, CONVERT(bit, 1)),
-        (N'branding', N'portalName', N'Display name for the portal concept in this installation.', 20, CONVERT(bit, 1))
+        (N'branding', N'portalName', N'Display name for the portal concept in this installation.', 20, CONVERT(bit, 1)),
+        (N'rbac', N'authenticatedUsersWindowsDomains', N'Comma- or semicolon-separated Windows account domain/workgroup/computer prefixes that may receive the built-in AuthenticatedUsers principal. Empty or * accepts any authenticated principal.', 100, CONVERT(bit, 1))
 ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
 ON target.ConfigCategory = source.ConfigCategory
    AND target.ConfigSetting = source.ConfigSetting
@@ -322,7 +381,8 @@ USING
     (
         VALUES
             (N'branding', N'platformName', N'OMP', 0),
-            (N'branding', N'portalName', N'Portal', 0)
+            (N'branding', N'portalName', N'Portal', 0),
+            (N'rbac', N'authenticatedUsersWindowsDomains', N'', 0)
     ) AS seed(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
     INNER JOIN omp.config_setting_definitions def
         ON def.ConfigCategory = seed.ConfigCategory

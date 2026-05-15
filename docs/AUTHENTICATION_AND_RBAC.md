@@ -143,6 +143,7 @@ RBAC is stored in:
 
 `omp.RolePrincipals` binds a role to a principal key. Common principal types are:
 
+- `OMPSystem` - built-in platform principals such as `Everyone` and `AuthenticatedUsers`
 - `OmpUser` - an OMP user id from `omp.users`
 - `ADUser` - a Windows/AD account name or SID
 - `ADGroup` - a Windows/AD group name or SID
@@ -152,6 +153,27 @@ RBAC is stored in:
 Use `ADGroup` for large AD groups. OMP does not need to create `omp.users` rows for every AD group member.
 Legacy `User` role-principal rows are migrated to `ADUser` by the core setup and initialization scripts.
 
+Core initialization creates two built-in baseline roles:
+
+- `Everyone`, bound to `OMPSystem|Everyone`
+- `AuthenticatedUsers`, bound to `OMPSystem|AuthenticatedUsers`
+
+These roles are intended for common baseline access, not for modeling one role
+per application. For example, if an app should be visible to every authenticated
+user, assign the app's view permission to `AuthenticatedUsers` instead of
+creating a separate app-specific role.
+
+Built-in baseline roles are ambient in runtime authorization. Their permissions
+are added to the active role's permissions, but they do not replace the active
+user role or clutter the role switcher when the user has normal roles such as
+`PortalAdmins`.
+
+`AuthenticatedUsers` can be limited to specific Windows account prefixes with
+the core config setting `rbac/authenticatedUsersWindowsDomains`. The value is a
+comma- or semicolon-separated list of allowed domain, workgroup, or computer
+prefixes from `DOMAIN\User` style principals. Empty or `*` accepts any
+authenticated principal.
+
 ## Request Flow
 
 1. A user opens an OMP web app.
@@ -159,8 +181,9 @@ Legacy `User` role-principal rows are migrated to `ADUser` by the core setup and
 3. If no valid cookie exists, the web app redirects to `/auth/login`.
 4. The user selects AD or local password sign-in.
 5. `OpenModulePlatform.Auth` authenticates the provider identity and emits OMP role-principal claims.
-6. `RbacService` resolves those claims against `omp.RolePrincipals`, `omp.Roles`, and `omp.RolePermissions`.
-7. The active role and effective permissions control navigation and page access.
+6. `RbacService` adds the built-in system principals that apply to the request.
+7. `RbacService` resolves claims and system principals against `omp.RolePrincipals`, `omp.Roles`, and `omp.RolePermissions`.
+8. Ambient baseline permissions plus the active role permissions control navigation and page access.
 
 ## Administration Guidance
 
@@ -172,6 +195,10 @@ the OMP user from `/admin/users/edit/{userId}`. This migration does not move
 `ADGroup` assignments.
 
 For customer or enterprise AD groups, prefer `ADGroup` role principals. This keeps group membership in AD and avoids synchronizing large groups into OMP.
+
+For access that should apply broadly across applications, prefer the built-in
+`Everyone` or `AuthenticatedUsers` roles. Keep app-specific roles for cases
+where the role has a real business meaning beyond a single permission bundle.
 
 The Portal role editor currently supports adding `OmpUser` and `ADUser`
 principals directly. `OmpUser` suggestions come from active `omp.users` rows;
