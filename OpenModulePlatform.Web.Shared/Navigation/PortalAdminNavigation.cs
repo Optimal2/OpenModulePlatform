@@ -14,8 +14,8 @@ public static class PortalAdminNavigation
                 [
                     new PortalAdminMenuItem("Definitions", hrefFactory("/admin/instancetemplates")),
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/instances")),
-                    new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings")),
-                    new PortalAdminMenuItem("Security", hrefFactory("/admin/security"), SeparatorBefore: true),
+                    new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings"), SeparatorBefore: true),
+                    new PortalAdminMenuItem("Security", hrefFactory("/admin/security")),
                     new PortalAdminMenuItem("Users", hrefFactory("/admin/users")),
                     new PortalAdminMenuItem("Automation", hrefFactory("/admin/automation"))
                 ]),
@@ -28,8 +28,8 @@ public static class PortalAdminNavigation
             new(
                 "Modules",
                 [
-                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/moduleinstances")),
-                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/modules"))
+                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/modules")),
+                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/moduleinstances"))
                 ]),
             new(
                 "Apps",
