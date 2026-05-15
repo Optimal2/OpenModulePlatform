@@ -35,8 +35,7 @@ public abstract class ContentWebAppModulePageModel : OmpSecurePageModel<ContentW
     protected async Task<ContentAccessContext> GetContentAccessContextAsync(CancellationToken ct)
     {
         var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
-        var roleIds = roleContext.AvailableRoles
-            .Select(role => role.RoleId)
+        var roleIds = roleContext.EffectiveRoleIds
             .Distinct()
             .ToArray();
 

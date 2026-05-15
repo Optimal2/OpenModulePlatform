@@ -19,6 +19,7 @@ Important:
 
 `RolePrincipals` supports both first-class OMP users and external principals:
 
+- use `OMPSystem` only for the built-in `Everyone` and `AuthenticatedUsers` baseline roles created by OMP initialization
 - use `OmpUser` when the role should follow a row in `omp.users`
 - use `ADUser` for a direct Windows/AD user assignment
 - use `ADGroup` for large AD groups that should grant access without creating `omp.users` rows for every member
@@ -46,6 +47,18 @@ The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
 principal types. Existing `ADGroup` assignments still resolve, but adding new AD
 group assignments is disabled in the editor until group selection has its own
 workflow.
+
+For broad app access, prefer adding permissions to the built-in `Everyone` or
+`AuthenticatedUsers` roles instead of creating one role per app. These built-in
+roles behave like baseline permission buckets: their permissions are added to
+the user's active role at runtime, so a Portal admin can keep `PortalAdmins` as
+the active role and still inherit general app access from `AuthenticatedUsers`.
+
+`AuthenticatedUsers` defaults to any authenticated principal. To restrict it to
+specific Windows account prefixes, set the `rbac/authenticatedUsersWindowsDomains`
+configuration value from `/admin/configsettings`, for example `VGREGION` or
+`VGREGION;OTHERDOMAIN`. Empty or `*` means no domain/workgroup/computer prefix
+restriction.
 
 The built-in auth app is mounted at `/auth`. AD sign-in goes through `/auth/ad`, and local password sign-in goes through `/auth/login`.
 

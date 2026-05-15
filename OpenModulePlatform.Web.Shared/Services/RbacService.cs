@@ -15,8 +15,9 @@ namespace OpenModulePlatform.Web.Shared.Services;
 /// <remarks>
 /// <para>
 /// The service maps the current identity to rows in <c>omp.RolePrincipals</c> and then
-/// resolves a single active role for the current request. Effective permissions are taken
-/// only from that active role rather than the union of all assigned roles.
+/// resolves a single active user role for the current request. Built-in ambient roles
+/// such as Everyone and AuthenticatedUsers contribute baseline permissions in addition
+/// to the active role.
 /// </para>
 /// <para>
 /// The active role is stored in a shared cookie so the selected role follows the user
@@ -27,15 +28,18 @@ public sealed class RbacService
 {
     private readonly SqlConnectionFactory _db;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly OmpConfigurationService _configuration;
     private readonly ILogger<RbacService> _log;
 
     public RbacService(
         SqlConnectionFactory db,
         IHttpContextAccessor httpContextAccessor,
+        OmpConfigurationService configuration,
         ILogger<RbacService> log)
     {
         _db = db;
         _httpContextAccessor = httpContextAccessor;
+        _configuration = configuration;
         _log = log;
     }
 
@@ -72,7 +76,22 @@ public sealed class RbacService
         {
             await using var conn = _db.Create();
             await conn.OpenAsync(ct);
-            return await GetRolePermissionsAsync(conn, requestedRoleId, ct);
+
+            var rolePrincipals = await GetRolePrincipalsFromUserAsync(user, ct);
+            var roles = await GetAssignableRolesAsync(conn, rolePrincipals, ct);
+            if (!roles.Any(role => !role.IsAmbient && role.RoleId == requestedRoleId))
+            {
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ambientRole in roles.Where(role => role.IsAmbient))
+            {
+                permissions.UnionWith(await GetRolePermissionsAsync(conn, ambientRole.RoleId, ct));
+            }
+
+            permissions.UnionWith(await GetRolePermissionsAsync(conn, requestedRoleId, ct));
+            return permissions;
         }
         catch (SqlException ex)
         {
@@ -95,7 +114,7 @@ public sealed class RbacService
             return UserRoleContext.Empty;
         }
 
-        var rolePrincipals = GetRolePrincipalsFromUser(user);
+        var rolePrincipals = await GetRolePrincipalsFromUserAsync(user, ct);
         if (rolePrincipals.Count == 0)
         {
             return UserRoleContext.Empty;
@@ -112,17 +131,43 @@ public sealed class RbacService
                 return UserRoleContext.Empty;
             }
 
-            var activeRoleId = ResolveActiveRoleId(user, roles)
-                ?? roles[0].RoleId;
+            var ambientRoles = roles.Where(role => role.IsAmbient).ToArray();
+            var selectableRoles = roles.Where(role => !role.IsAmbient).ToArray();
 
-            var activeRole = roles.FirstOrDefault(x => x.RoleId == activeRoleId) ?? roles[0];
-            var permissions = await GetRolePermissionsAsync(conn, activeRole.RoleId, ct);
+            var activeRole = ResolveActiveRole(user, selectableRoles)
+                ?? selectableRoles.FirstOrDefault()
+                ?? ResolveAmbientDisplayRole(ambientRoles);
+
+            var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ambientRole in ambientRoles)
+            {
+                permissions.UnionWith(await GetRolePermissionsAsync(conn, ambientRole.RoleId, ct));
+            }
+
+            if (activeRole is not null && !activeRole.IsAmbient)
+            {
+                permissions.UnionWith(await GetRolePermissionsAsync(conn, activeRole.RoleId, ct));
+            }
+
+            var availableRoles = selectableRoles.Length > 0
+                ? selectableRoles
+                : activeRole is null
+                    ? Array.Empty<UserRoleOption>()
+                    : [activeRole];
+            var effectiveRoleIds = ambientRoles
+                .Select(role => role.RoleId)
+                .Concat(activeRole is not null && !activeRole.IsAmbient
+                    ? [activeRole.RoleId]
+                    : Array.Empty<int>())
+                .Distinct()
+                .ToArray();
 
             return new UserRoleContext
             {
-                AvailableRoles = roles,
-                ActiveRoleId = activeRole.RoleId,
-                ActiveRoleName = activeRole.Name,
+                AvailableRoles = availableRoles,
+                EffectiveRoleIds = effectiveRoleIds,
+                ActiveRoleId = activeRole?.RoleId,
+                ActiveRoleName = activeRole?.Name,
                 EffectivePermissions = permissions
             };
         }
@@ -138,12 +183,12 @@ public sealed class RbacService
         }
     }
 
-    private int? ResolveActiveRoleId(ClaimsPrincipal user, IReadOnlyList<UserRoleOption> roles)
+    private UserRoleOption? ResolveActiveRole(ClaimsPrincipal user, IReadOnlyList<UserRoleOption> roles)
     {
         var claimValue = user.FindFirstValue(ActiveRoleCookie.ClaimType);
         if (int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var claimRoleId) && roles.Any(x => x.RoleId == claimRoleId))
         {
-            return claimRoleId;
+            return roles.First(x => x.RoleId == claimRoleId);
         }
 
         var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
@@ -152,10 +197,13 @@ public sealed class RbacService
             return null;
         }
 
-        return roles.Any(x => x.RoleId == cookieRoleId)
-            ? cookieRoleId
-            : null;
+        return roles.FirstOrDefault(x => x.RoleId == cookieRoleId);
     }
+
+    private static UserRoleOption? ResolveAmbientDisplayRole(IReadOnlyList<UserRoleOption> ambientRoles)
+        => ambientRoles.FirstOrDefault(role =>
+                string.Equals(role.Name, OmpRbacDefaults.AuthenticatedUsersRoleName, StringComparison.OrdinalIgnoreCase))
+            ?? ambientRoles.FirstOrDefault();
 
     private static async Task<List<UserRoleOption>> GetAssignableRolesAsync(
         SqlConnection conn,
@@ -175,6 +223,9 @@ public sealed class RbacService
             cmd.Parameters.AddWithValue($"@pt{i}", rolePrincipals[i].PrincipalType);
             cmd.Parameters.AddWithValue($"@p{i}", rolePrincipals[i].Principal);
         }
+        cmd.Parameters.AddWithValue("@ambientPrincipalType", OmpRbacDefaults.SystemPrincipalType);
+        cmd.Parameters.AddWithValue("@everyonePrincipal", OmpRbacDefaults.EveryonePrincipal);
+        cmd.Parameters.AddWithValue("@authenticatedUsersPrincipal", OmpRbacDefaults.AuthenticatedUsersPrincipal);
 
         var roles = new List<UserRoleOption>();
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
@@ -183,7 +234,8 @@ public sealed class RbacService
             roles.Add(new UserRoleOption(
                 rdr.GetInt32(0),
                 rdr.GetString(1),
-                rdr.IsDBNull(2) ? null : rdr.GetString(2)));
+                rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                rdr.GetBoolean(3)));
         }
 
         return roles;
@@ -231,7 +283,19 @@ WITH RequestedPrincipals(PrincipalType, Principal) AS
 )
 SELECT DISTINCT r.RoleId,
        r.Name,
-       r.Description
+       r.Description,
+       CASE
+           WHEN EXISTS
+           (
+               SELECT 1
+               FROM omp.RolePrincipals ambient
+               WHERE ambient.RoleId = r.RoleId
+                 AND ambient.PrincipalType = @ambientPrincipalType
+                 AND ambient.Principal IN (@everyonePrincipal, @authenticatedUsersPrincipal)
+           )
+               THEN CAST(1 AS bit)
+           ELSE CAST(0 AS bit)
+       END AS IsAmbient
 FROM omp.RolePrincipals rp
 INNER JOIN omp.Roles r ON r.RoleId = rp.RoleId
 INNER JOIN RequestedPrincipals requested
@@ -240,9 +304,17 @@ INNER JOIN RequestedPrincipals requested
 ORDER BY r.Name, r.RoleId;";
     }
 
-    private List<RolePrincipalKey> GetRolePrincipalsFromUser(ClaimsPrincipal user)
+    private async Task<List<RolePrincipalKey>> GetRolePrincipalsFromUserAsync(
+        ClaimsPrincipal user,
+        CancellationToken ct)
     {
         var result = new HashSet<RolePrincipalKey>();
+
+        result.Add(new RolePrincipalKey(OmpRbacDefaults.SystemPrincipalType, OmpRbacDefaults.EveryonePrincipal));
+        if (await IsAuthenticatedUsersPrincipalAllowedAsync(user, ct))
+        {
+            result.Add(new RolePrincipalKey(OmpRbacDefaults.SystemPrincipalType, OmpRbacDefaults.AuthenticatedUsersPrincipal));
+        }
 
         var claimPrincipals = user.FindAll(OmpAuthDefaults.PrincipalClaimType)
             .Select(claim => TryParsePrincipalClaim(claim.Value, out var principal)
@@ -281,6 +353,65 @@ ORDER BY r.Name, r.RoleId;";
         }
 
         return result.ToList();
+    }
+
+    private async Task<bool> IsAuthenticatedUsersPrincipalAllowedAsync(
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        var allowedDomainsValue = await _configuration.GetGlobalStringAsync(
+            OmpRbacDefaults.ConfigurationCategory,
+            OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting,
+            ct);
+
+        var allowedDomains = SplitDomainList(allowedDomainsValue);
+        if (allowedDomains.Count == 0 || allowedDomains.Contains("*"))
+        {
+            return true;
+        }
+
+        return GetWindowsAccountDomains(user).Any(allowedDomains.Contains);
+    }
+
+    private static HashSet<string> SplitDomainList(string? value)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parts = (value ?? string.Empty).Split(
+            [',', ';', '\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var part in parts)
+        {
+            if (!string.IsNullOrWhiteSpace(part))
+            {
+                result.Add(part);
+            }
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<string> GetWindowsAccountDomains(ClaimsPrincipal user)
+    {
+        foreach (var claim in user.FindAll(OmpAuthDefaults.PrincipalClaimType))
+        {
+            if (!TryParsePrincipalClaim(claim.Value, out var principal))
+            {
+                continue;
+            }
+
+            if (!string.Equals(principal.PrincipalType, "User", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(principal.PrincipalType, "ADUser", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var slashIndex = principal.Principal.IndexOf('\\', StringComparison.Ordinal);
+            if (slashIndex > 0)
+            {
+                yield return principal.Principal[..slashIndex];
+            }
+        }
     }
 
     private static bool TryParsePrincipalClaim(string? value, out RolePrincipalKey principal)
