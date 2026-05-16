@@ -27,8 +27,10 @@ DECLARE @WebBlazorModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-1
 DECLARE @WebBlazorTemplateModuleInstanceId int;
 DECLARE @WebBlazorAppId int;
 DECLARE @WebBlazorAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111212';
+DECLARE @WebBlazorArtifactId int;
 DECLARE @WebBlazorViewPermissionId int;
 DECLARE @WebBlazorAdminPermissionId int;
+DECLARE @ArtifactVersion nvarchar(50) = N'1.0.0';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -124,6 +126,35 @@ BEGIN
 END
 
 SELECT @WebBlazorAppId = AppId FROM omp.Apps WHERE ModuleId = @WebBlazorModuleId AND AppKey = N'example_webapp_blazor_webapp';
+
+MERGE omp.Artifacts AS target
+USING
+(
+    SELECT @WebBlazorAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'web-app' AS PackageType,
+           N'example-webapp-blazor' AS TargetName,
+           N'example-webapp-blazor/web/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
+
+SELECT @WebBlazorArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @WebBlazorAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'web-app'
+  AND TargetName = N'example-webapp-blazor';
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @WebBlazorAppId AND PermissionId = @WebBlazorViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@WebBlazorAppId, @WebBlazorViewPermissionId, 0);
@@ -226,6 +257,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        ArtifactId,
         IsEnabled,
         IsAllowed,
         DesiredState,
@@ -240,6 +272,7 @@ BEGIN
         N'Primary web app instance for the Blazor example WebAppModule',
         N'ExampleWebAppBlazorModule',
         N'webapp',
+        @WebBlazorArtifactId,
         1,
         1,
         1,
@@ -256,6 +289,7 @@ BEGIN
         Description = N'Primary web app instance for the Blazor example WebAppModule',
         RoutePath = N'ExampleWebAppBlazorModule',
         InstallationName = N'webapp',
+        ArtifactId = @WebBlazorArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -281,6 +315,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        DesiredArtifactId,
         DesiredState,
         SortOrder)
     VALUES(
@@ -292,8 +327,14 @@ BEGIN
         N'Primary web app instance for the Blazor example WebAppModule',
         N'ExampleWebAppBlazorModule',
         N'webapp',
+        @WebBlazorArtifactId,
         1,
         310);
 END
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @WebBlazorArtifactId
+WHERE InstanceTemplateModuleInstanceId = @WebBlazorTemplateModuleInstanceId
+  AND AppInstanceKey = N'example_webapp_blazor_webapp';
 
 GO

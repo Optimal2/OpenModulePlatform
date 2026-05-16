@@ -525,6 +525,10 @@ function Build-And-Publish {
                 New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
                 Invoke-RobocopyChecked -Source $sourcePath -Destination $destinationPath
             }
+
+            $portalArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Portal'
+            $portalArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\omp-portal\web\0.3.3'
+            Invoke-RobocopyChecked -Source $portalArtifactSourcePath -Destination $portalArtifactDestinationPath
         }
     }
     finally {
