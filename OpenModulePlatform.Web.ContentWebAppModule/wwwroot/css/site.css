@@ -376,6 +376,11 @@ textarea {
     display: none;
 }
 
+.content-editor__source--html {
+    font-family: Consolas, "Courier New", monospace;
+    line-height: 1.45;
+}
+
 .access-panel {
     display: grid;
     gap: 0.75rem;
