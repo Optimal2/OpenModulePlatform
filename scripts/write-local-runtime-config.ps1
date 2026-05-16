@@ -88,6 +88,64 @@ $authConfig = [ordered]@{
     }
 }
 
+$contentWebAppConfig = [ordered]@{
+    Portal = [ordered]@{
+        Title = 'Content'
+        DefaultCulture = 'sv-SE'
+        SupportedCultures = @('sv-SE', 'en-US')
+        PortalTopBar = [ordered]@{
+            Enabled = $true
+            PortalBaseUrl = '/'
+        }
+        AllowAnonymous = $false
+        PermissionMode = 'Any'
+    }
+    ConnectionStrings = [ordered]@{
+        OmpDb = $connectionString
+    }
+    OmpAuth = $ompAuthConfig
+    ContentWebAppModule = [ordered]@{
+        AppInstanceId = '11111111-1111-1111-1111-111111111232'
+        HomeSlug = 'home'
+        ServerReportsPath = 'App_Data/ContentReports'
+        AllowedServerReportDatabases = @($Database)
+        ServerReportDefaultMaxRows = 100
+        ServerReportMaxRowsLimit = 1000
+        ServerReportQueryTimeoutSeconds = 30
+    }
+    Logging = [ordered]@{
+        LogLevel = [ordered]@{
+            Default = 'Information'
+            'Microsoft.AspNetCore' = 'Warning'
+        }
+    }
+}
+
+$iframeWebAppConfig = [ordered]@{
+    Portal = [ordered]@{
+        Title = 'iFrame Web App Module'
+        DefaultCulture = 'sv-SE'
+        SupportedCultures = @('sv-SE', 'en-US')
+        PortalTopBar = [ordered]@{
+            Enabled = $true
+            PortalBaseUrl = '/'
+        }
+        AllowAnonymous = $false
+        UseForwardedHeaders = $false
+        PermissionMode = 'Any'
+    }
+    ConnectionStrings = [ordered]@{
+        OmpDb = $connectionString
+    }
+    OmpAuth = $ompAuthConfig
+    Logging = [ordered]@{
+        LogLevel = [ordered]@{
+            Default = 'Information'
+            'Microsoft.AspNetCore' = 'Warning'
+        }
+    }
+}
+
 $hostAgentConfig = [ordered]@{
     ConnectionStrings = [ordered]@{
         OmpDb = $connectionString
@@ -152,5 +210,7 @@ $workerManagerConfig = [ordered]@{
 New-Item -ItemType Directory -Path $dataProtectionKeyPath -Force | Out-Null
 Write-JsonFile -Path (Join-Path $RuntimeRoot 'Sites\Portal\appsettings.json') -Object $portalConfig -Overwrite:$Overwrite
 Write-JsonFile -Path (Join-Path $RuntimeRoot 'WebApps\auth\appsettings.json') -Object $authConfig -Overwrite:$Overwrite
+Write-JsonFile -Path (Join-Path $RuntimeRoot 'WebApps\content\appsettings.json') -Object $contentWebAppConfig -Overwrite:$Overwrite
+Write-JsonFile -Path (Join-Path $RuntimeRoot 'WebApps\iFrameWebAppModule\appsettings.json') -Object $iframeWebAppConfig -Overwrite:$Overwrite
 Write-JsonFile -Path (Join-Path $RuntimeRoot 'Services\HostAgent\appsettings.json') -Object $hostAgentConfig -Overwrite:$Overwrite
 Write-JsonFile -Path (Join-Path $RuntimeRoot 'Services\WorkerManager\appsettings.json') -Object $workerManagerConfig -Overwrite:$Overwrite

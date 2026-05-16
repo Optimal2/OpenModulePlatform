@@ -33,7 +33,7 @@ Set-StrictMode -Version Latest
 # HostAgent runtime services, so the order is intentionally reversed.
 $script:serviceNames = @('OpenModulePlatform.WorkerManager', 'OpenModulePlatform.HostAgent')
 $script:startServiceNames = @('OpenModulePlatform.HostAgent', 'OpenModulePlatform.WorkerManager')
-$script:appPools = @('OMP_Portal', 'OMP_Auth')
+$script:appPools = @('OMP_Portal', 'OMP_Auth', 'OMP_ContentWebAppModule', 'OMP_iFrameWebAppModule')
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
 
@@ -514,6 +514,8 @@ function Build-And-Publish {
             $deployments = @(
                 @{ Source = 'OpenModulePlatform.Auth'; Destination = 'WebApps\auth' },
                 @{ Source = 'OpenModulePlatform.Portal'; Destination = 'Sites\Portal' },
+                @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule'; Destination = 'WebApps\content' },
+                @{ Source = 'OpenModulePlatform.Web.iFrameWebAppModule'; Destination = 'WebApps\iFrameWebAppModule' },
                 @{ Source = 'OpenModulePlatform.HostAgent.WindowsService'; Destination = 'Services\HostAgent' },
                 @{ Source = 'OpenModulePlatform.WorkerManager.WindowsService'; Destination = 'Services\WorkerManager' },
                 @{ Source = 'OpenModulePlatform.WorkerProcessHost'; Destination = 'Services\WorkerProcessHost' }
@@ -529,6 +531,14 @@ function Build-And-Publish {
             $portalArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Portal'
             $portalArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\omp-portal\web\0.3.3'
             Invoke-RobocopyChecked -Source $portalArtifactSourcePath -Destination $portalArtifactDestinationPath
+
+            $contentArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Web.ContentWebAppModule'
+            $contentArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\content-webapp\web\0.3.3'
+            Invoke-RobocopyChecked -Source $contentArtifactSourcePath -Destination $contentArtifactDestinationPath
+
+            $iframeArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Web.iFrameWebAppModule'
+            $iframeArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\iframe-webapp\web\0.3.3'
+            Invoke-RobocopyChecked -Source $iframeArtifactSourcePath -Destination $iframeArtifactDestinationPath
         }
     }
     finally {
@@ -544,6 +554,11 @@ function Run-SqlInstall {
     Invoke-SqlFileWithBootstrapPrincipal -Path (Join-Path $RepositoryRoot 'sql\2-initialize-openmoduleplatform.sql')
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql') -TargetDatabase $Database
     Invoke-SqlFileWithBootstrapPrincipal -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql')
+    Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.ContentWebAppModule\Sql\1-setup-content-webapp.sql') -TargetDatabase $Database
+    Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.ContentWebAppModule\Sql\3-add-server-report-support.sql') -TargetDatabase $Database
+    Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.ContentWebAppModule\Sql\2-initialize-content-webapp.sql') -TargetDatabase $Database
+    Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.iFrameWebAppModule\Sql\1-setup-iframe-webapp.sql') -TargetDatabase $Database
+    Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.iFrameWebAppModule\Sql\2-initialize-iframe-webapp.sql') -TargetDatabase $Database
     Ensure-BootstrapPortalAdminPrincipals
 }
 
@@ -563,22 +578,23 @@ function Ensure-IisPortal {
     Write-Step 'Ensuring IIS Portal site/app pool'
     $portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
     $authPath = Join-Path $RuntimeRoot 'WebApps\auth'
+    $contentPath = Join-Path $RuntimeRoot 'WebApps\content'
+    $iframePath = Join-Path $RuntimeRoot 'WebApps\iFrameWebAppModule'
     New-Item -ItemType Directory -Path $portalPath -Force | Out-Null
     New-Item -ItemType Directory -Path $authPath -Force | Out-Null
+    New-Item -ItemType Directory -Path $contentPath -Force | Out-Null
+    New-Item -ItemType Directory -Path $iframePath -Force | Out-Null
 
     if (-not (Test-AppCmdAvailable)) {
         return
     }
 
-    if (-not (Test-IisAppPool -Name 'OMP_Portal')) {
-        Invoke-AppCmdChecked add apppool '/name:OMP_Portal'
+    foreach ($poolName in $script:appPools) {
+        if (-not (Test-IisAppPool -Name $poolName)) {
+            Invoke-AppCmdChecked add apppool "/name:$poolName"
+        }
+        Invoke-AppCmdChecked set apppool "/apppool.name:$poolName" '/managedRuntimeVersion:'
     }
-    Invoke-AppCmdChecked set apppool '/apppool.name:OMP_Portal' '/managedRuntimeVersion:'
-
-    if (-not (Test-IisAppPool -Name 'OMP_Auth')) {
-        Invoke-AppCmdChecked add apppool '/name:OMP_Auth'
-    }
-    Invoke-AppCmdChecked set apppool '/apppool.name:OMP_Auth' '/managedRuntimeVersion:'
 
     if (-not (Test-IisSite -Name $IisSiteName)) {
         Invoke-AppCmdChecked add site "/name:$IisSiteName" ("/bindings:http/*:{0}:" -f $IisPort) "/physicalPath:$portalPath"
@@ -593,6 +609,14 @@ function Ensure-IisPortal {
     Invoke-AppCmdOptional -IgnoredExitCodes @(0, 50, 1168) delete app "$IisSiteName/auth"
     Invoke-AppCmdChecked add app "/site.name:$IisSiteName" '/path:/auth' "/physicalPath:$authPath" '/applicationPool:OMP_Auth'
     Set-IisAuthentication -Location "$IisSiteName/auth" -AnonymousEnabled $true -WindowsEnabled $true
+
+    Invoke-AppCmdOptional -IgnoredExitCodes @(0, 50, 1168) delete app "$IisSiteName/content"
+    Invoke-AppCmdChecked add app "/site.name:$IisSiteName" '/path:/content' "/physicalPath:$contentPath" '/applicationPool:OMP_ContentWebAppModule'
+    Set-IisAuthentication -Location "$IisSiteName/content" -AnonymousEnabled $true -WindowsEnabled $false
+
+    Invoke-AppCmdOptional -IgnoredExitCodes @(0, 50, 1168) delete app "$IisSiteName/iFrameWebAppModule"
+    Invoke-AppCmdChecked add app "/site.name:$IisSiteName" '/path:/iFrameWebAppModule' "/physicalPath:$iframePath" '/applicationPool:OMP_iFrameWebAppModule'
+    Set-IisAuthentication -Location "$IisSiteName/iFrameWebAppModule" -AnonymousEnabled $true -WindowsEnabled $false
 }
 
 function Set-IisAuthentication {
@@ -656,7 +680,18 @@ function Remove-RuntimeFiles {
     }
 
     Write-Step 'Removing runtime folders'
-    foreach ($relativePath in @('Sites\Portal', 'WebApps\auth', 'Services\HostAgent', 'Services\WorkerManager', 'Services\WorkerProcessHost', 'Publish\OMP')) {
+    foreach ($relativePath in @(
+        'Sites\Portal',
+        'WebApps\auth',
+        'WebApps\content',
+        'WebApps\iFrameWebAppModule',
+        'Services\HostAgent',
+        'Services\WorkerManager',
+        'Services\WorkerProcessHost',
+        'ArtifactStore\omp-portal',
+        'ArtifactStore\content-webapp',
+        'ArtifactStore\iframe-webapp',
+        'Publish\OMP')) {
         $path = Join-Path $RuntimeRoot $relativePath
         if (Test-Path -LiteralPath $path) {
             Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Continue
