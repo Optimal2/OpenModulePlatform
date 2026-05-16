@@ -29,6 +29,7 @@ WHERE HostKey = @hostKey;";
 
     public async Task<TemplateMaterializationResult> MaterializeTemplatesForHostAsync(
         string hostKey,
+        int? hostTemplateId,
         CancellationToken ct)
     {
         const string sql = @"
@@ -54,12 +55,14 @@ END;
 
 EXEC omp.MaterializeInstanceTemplate
     @HostKey = @hostKey,
+    @HostTemplateId = @hostTemplateId,
     @RequestedBy = N'HostAgent';";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@hostTemplateId", hostTemplateId.HasValue ? hostTemplateId.Value : DBNull.Value);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -70,6 +73,111 @@ EXEC omp.MaterializeInstanceTemplate
         return new TemplateMaterializationResult(
             rdr.GetInt32(0),
             rdr.GetInt32(1));
+    }
+
+    public async Task<HostDeploymentWorkItem?> TryClaimNextHostDeploymentAsync(
+        string hostKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS bigint) AS HostDeploymentId,
+        CAST(NULL AS int) AS HostTemplateId,
+        CAST(NULL AS nvarchar(100)) AS HostTemplateKey;
+    RETURN;
+END;
+
+DECLARE @claimed TABLE
+(
+    HostDeploymentId bigint NOT NULL,
+    HostTemplateId int NULL
+);
+
+;WITH NextDeployment AS
+(
+    SELECT TOP (1) HostDeploymentId
+    FROM omp.HostDeployments WITH (UPDLOCK, READPAST, ROWLOCK)
+    WHERE HostId = @hostId
+      AND Status = @pendingStatus
+    ORDER BY RequestedUtc, HostDeploymentId
+)
+UPDATE d
+SET Status = @runningStatus,
+    StartedUtc = COALESCE(d.StartedUtc, SYSUTCDATETIME()),
+    CompletedUtc = NULL,
+    OutcomeMessage = NULL,
+    UpdatedUtc = SYSUTCDATETIME()
+OUTPUT inserted.HostDeploymentId,
+       inserted.HostTemplateId
+INTO @claimed(HostDeploymentId, HostTemplateId)
+FROM omp.HostDeployments d
+INNER JOIN NextDeployment n ON n.HostDeploymentId = d.HostDeploymentId;
+
+SELECT c.HostDeploymentId,
+       c.HostTemplateId,
+       ht.TemplateKey
+FROM @claimed c
+LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = c.HostTemplateId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@pendingStatus", HostDeploymentStatuses.Pending);
+        cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new HostDeploymentWorkItem(
+            rdr.GetInt64(0),
+            rdr.IsDBNull(1) ? null : rdr.GetInt32(1),
+            rdr.IsDBNull(2) ? null : rdr.GetString(2));
+    }
+
+    public async Task CompleteHostDeploymentAsync(
+        long hostDeploymentId,
+        bool succeeded,
+        string outcomeMessage,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.HostDeployments
+SET Status = @status,
+    CompletedUtc = SYSUTCDATETIME(),
+    OutcomeMessage = @outcomeMessage,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostDeploymentId = @hostDeploymentId
+  AND Status = @runningStatus;";
+
+        var safeMessage = string.IsNullOrWhiteSpace(outcomeMessage)
+            ? null
+            : outcomeMessage.Trim();
+        if (safeMessage?.Length > 4000)
+        {
+            safeMessage = safeMessage[..4000];
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostDeploymentId", hostDeploymentId);
+        cmd.Parameters.AddWithValue("@status", succeeded ? HostDeploymentStatuses.Succeeded : HostDeploymentStatuses.Failed);
+        cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
+        cmd.Parameters.AddWithValue("@outcomeMessage", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<ArtifactDescriptor?> GetArtifactByIdAsync(

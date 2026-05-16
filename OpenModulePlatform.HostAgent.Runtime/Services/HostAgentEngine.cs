@@ -32,9 +32,14 @@ public sealed class HostAgentEngine
         var hostKey = settings.ResolveHostKey();
         await _repository.TouchHostHeartbeatAsync(hostKey, cancellationToken);
 
+        if (settings.ProcessHostDeployments)
+        {
+            await ProcessNextHostDeploymentAsync(hostKey, cancellationToken);
+        }
+
         if (settings.MaterializeTemplates)
         {
-            var materialization = await _repository.MaterializeTemplatesForHostAsync(hostKey, cancellationToken);
+            var materialization = await _repository.MaterializeTemplatesForHostAsync(hostKey, null, cancellationToken);
             if (materialization.ModuleInstanceChanges > 0 || materialization.AppInstanceChanges > 0)
             {
                 _logger.LogInformation(
@@ -85,6 +90,61 @@ public sealed class HostAgentEngine
         }
 
         return await EnsureAndPublishAsync(artifact, cancellationToken);
+    }
+
+    private async Task ProcessNextHostDeploymentAsync(
+        string hostKey,
+        CancellationToken cancellationToken)
+    {
+        var deployment = await _repository.TryClaimNextHostDeploymentAsync(hostKey, cancellationToken);
+        if (deployment is null)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Claimed host deployment. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}, HostTemplateKey={HostTemplateKey}",
+            hostKey,
+            deployment.HostDeploymentId,
+            deployment.HostTemplateKey);
+
+        try
+        {
+            var materialization = await _repository.MaterializeTemplatesForHostAsync(
+                hostKey,
+                deployment.HostTemplateId,
+                cancellationToken);
+
+            var message =
+                $"Template materialization completed. Module instance changes: {materialization.ModuleInstanceChanges}; app instance changes: {materialization.AppInstanceChanges}.";
+
+            await _repository.CompleteHostDeploymentAsync(
+                deployment.HostDeploymentId,
+                succeeded: true,
+                outcomeMessage: message,
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Completed host deployment. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}, ModuleInstanceChanges={ModuleInstanceChanges}, AppInstanceChanges={AppInstanceChanges}",
+                hostKey,
+                deployment.HostDeploymentId,
+                materialization.ModuleInstanceChanges,
+                materialization.AppInstanceChanges);
+        }
+        catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
+        {
+            _logger.LogError(
+                ex,
+                "Host deployment failed. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}",
+                hostKey,
+                deployment.HostDeploymentId);
+
+            await _repository.CompleteHostDeploymentAsync(
+                deployment.HostDeploymentId,
+                succeeded: false,
+                outcomeMessage: ex.Message,
+                cancellationToken);
+        }
     }
 
     private async Task<ArtifactProvisioningResult> EnsureAndPublishAsync(
@@ -149,4 +209,10 @@ public sealed class HostAgentEngine
             string.Empty,
             exception.Message);
     }
+
+    private static bool IsExpectedDeploymentFailure(Exception exception)
+        => exception is InvalidOperationException
+            or IOException
+            or DbException
+            or UnauthorizedAccessException;
 }

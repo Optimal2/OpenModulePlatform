@@ -7,6 +7,8 @@ Implemented in v1:
 - runs as a Windows Service
 - materializes enabled instance-template topology for the local host when
   `HostAgent:MaterializeTemplates` is enabled
+- claims and completes pending host deployment requests when
+  `HostAgent:ProcessHostDeployments` is enabled
 - reads desired artifacts from OMP SQL
 - provisions app-instance artifacts and explicit host artifact requirements
 - verifies SHA-256 when `omp.Artifacts.Sha256` is populated
