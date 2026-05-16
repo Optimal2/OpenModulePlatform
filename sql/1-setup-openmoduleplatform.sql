@@ -457,6 +457,31 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.HostAppDeploymentStates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostAppDeploymentStates
+    (
+        HostId uniqueidentifier NOT NULL,
+        AppInstanceId uniqueidentifier NOT NULL,
+        ArtifactId int NULL,
+        DeploymentState tinyint NOT NULL CONSTRAINT DF_omp_HostAppDeploymentStates_DeploymentState DEFAULT(0),
+        SourceLocalPath nvarchar(500) NULL,
+        TargetPath nvarchar(500) NULL,
+        RuntimeName nvarchar(200) NULL,
+        ContentSha256 nvarchar(128) NULL,
+        LastCheckedUtc datetime2(3) NULL,
+        LastAppliedUtc datetime2(3) NULL,
+        LastError nvarchar(4000) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAppDeploymentStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAppDeploymentStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_omp_HostAppDeploymentStates PRIMARY KEY(HostId, AppInstanceId),
+        CONSTRAINT FK_omp_HostAppDeploymentStates_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_HostAppDeploymentStates_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId),
+        CONSTRAINT FK_omp_HostAppDeploymentStates_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId)
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.WorkerInstances

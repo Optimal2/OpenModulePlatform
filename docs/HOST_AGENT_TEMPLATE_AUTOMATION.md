@@ -12,7 +12,7 @@ HostAgent-driven deployment automation.
 4. HostAgent materializes the matching template topology into concrete
    `omp.ModuleInstances` and `omp.AppInstances` rows for its host.
 5. HostAgent provisions the desired artifacts into the local artifact cache.
-6. Later automation stages use the cached artifacts to install or update IIS
+6. Package-type handlers use the cached artifacts to install or update IIS
    applications, Windows services, and worker plugins.
 
 ## Implemented Baseline
@@ -43,13 +43,19 @@ The stored procedure is intentionally conservative:
 This closes the first automation gap: HostAgent can now create the concrete
 `AppInstances` that its existing artifact provisioning query already consumes.
 
+HostAgent also has a first package-type handler for IIS web apps. When
+`HostAgent:DeployWebApps` is enabled, provisioned `web-app` artifacts are
+mirrored to the configured IIS runtime folders and the outcome is recorded in
+`omp.HostAppDeploymentStates`. Local runtime configuration, logs, and
+application data are excluded from the mirror by default.
+
 ## Remaining Steps
 
 1. Add Portal actions for previewing and enqueuing host deployments from the
    template/admin pages.
-2. Add package-type handlers in HostAgent for web apps, service apps, and worker
+2. Add package-type handlers in HostAgent for Windows service apps and worker
    plugins. Artifact provisioning should remain the cache step; installation
-   handlers should own IIS/service updates.
+   handlers should own service and process updates.
 3. Add drift detection for IIS apps, Windows services, artifact versions, and
    runtime paths so operators can see whether a host matches the desired
    template.
