@@ -30,10 +30,12 @@ DECLARE @WorkerWebAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-1111
 DECLARE @WorkerAppId int;
 DECLARE @WorkerAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111323';
 DECLARE @WorkerInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111324';
+DECLARE @WorkerWebArtifactId int;
 DECLARE @WorkerViewPermissionId int;
 DECLARE @WorkerAdminPermissionId int;
 DECLARE @InitialWorkerConfigId int;
 DECLARE @WorkerArtifactId int;
+DECLARE @ArtifactVersion nvarchar(50) = N'1.0.0';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -180,14 +182,14 @@ IF @PortalAdminsRoleId IS NOT NULL
 SELECT TOP (1) @WorkerArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WorkerAppId
-  AND Version = N'1.0.0'
+  AND Version = @ArtifactVersion
 ORDER BY CASE WHEN PackageType = N'worker' AND TargetName = N'example-workerapp' THEN 0 ELSE 1 END,
          ArtifactId;
 
 IF @WorkerArtifactId IS NULL
 BEGIN
     INSERT INTO omp.Artifacts(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(@WorkerAppId, N'1.0.0', N'worker', N'example-workerapp', N'example-workerapp/worker/1.0.0', 1);
+    VALUES(@WorkerAppId, @ArtifactVersion, N'worker', N'example-workerapp', N'example-workerapp/worker/' + @ArtifactVersion, 1);
 
     SELECT @WorkerArtifactId = CONVERT(int, SCOPE_IDENTITY());
 END
@@ -196,11 +198,40 @@ BEGIN
     UPDATE omp.Artifacts
     SET PackageType = N'worker',
         TargetName = N'example-workerapp',
-        RelativePath = N'example-workerapp/worker/1.0.0',
+        RelativePath = N'example-workerapp/worker/' + @ArtifactVersion,
         IsEnabled = 1,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE ArtifactId = @WorkerArtifactId;
 END
+
+MERGE omp.Artifacts AS target
+USING
+(
+    SELECT @WorkerWebAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'web-app' AS PackageType,
+           N'example-workerapp-web' AS TargetName,
+           N'example-workerapp/web/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
+
+SELECT @WorkerWebArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @WorkerWebAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'web-app'
+  AND TargetName = N'example-workerapp-web';
 
 IF EXISTS (SELECT 1 FROM omp.AppWorkerDefinitions WHERE AppId = @WorkerAppId)
 BEGIN
@@ -299,6 +330,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        ArtifactId,
         IsEnabled,
         IsAllowed,
         DesiredState,
@@ -313,6 +345,7 @@ BEGIN
         N'Primary web app instance for the example manager-driven worker module',
         N'ExampleWorkerAppModule',
         N'webapp',
+        @WorkerWebArtifactId,
         1,
         1,
         1,
@@ -329,6 +362,7 @@ BEGIN
         Description = N'Primary web app instance for the example manager-driven worker module',
         RoutePath = N'ExampleWorkerAppModule',
         InstallationName = N'webapp',
+        ArtifactId = @WorkerWebArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -354,6 +388,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        DesiredArtifactId,
         DesiredState,
         SortOrder)
     VALUES(
@@ -365,9 +400,15 @@ BEGIN
         N'Primary web app instance for the example manager-driven worker module',
         N'ExampleWorkerAppModule',
         N'webapp',
+        @WorkerWebArtifactId,
         1,
         410);
 END
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @WorkerWebArtifactId
+WHERE InstanceTemplateModuleInstanceId = @WorkerTemplateModuleInstanceId
+  AND AppInstanceKey = N'example_workerapp_webapp';
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @WorkerAppInstanceId)
 BEGIN
@@ -522,6 +563,11 @@ BEGIN
         1,
         411);
 END
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @WorkerArtifactId
+WHERE InstanceTemplateModuleInstanceId = @WorkerTemplateModuleInstanceId
+  AND AppInstanceKey = N'example_workerapp_worker';
 
 -------------------------------------------------------------------------------
 -- Seed sample jobs for the manager-driven worker example

@@ -434,6 +434,33 @@ function Deploy-PublishedOutputs {
         Invoke-RobocopyChecked -Source $sourcePath -Destination $destinationPath
     }
 
+    $webArtifactDeployments = @(
+        @{ Source = 'OpenModulePlatform.Portal'; Destination = 'ArtifactStore\omp-portal\web\0.3.3' },
+        @{ Source = 'OpenModulePlatform.Web.ExampleWebAppModule'; Destination = 'ArtifactStore\example-webapp\web\1.0.0' },
+        @{ Source = 'OpenModulePlatform.Web.ExampleWebAppBlazorModule'; Destination = 'ArtifactStore\example-webapp-blazor\web\1.0.0' },
+        @{ Source = 'OpenModulePlatform.Web.ExampleServiceAppModule'; Destination = 'ArtifactStore\example-serviceapp\web\1.0.0' },
+        @{ Source = 'OpenModulePlatform.Web.ExampleWorkerAppModule'; Destination = 'ArtifactStore\example-workerapp\web\1.0.0' },
+        @{ Source = 'OpenModulePlatform.Web.iFrameWebAppModule'; Destination = 'ArtifactStore\iframe-webapp\web\0.3.3' }
+    )
+
+    foreach ($deployment in $webArtifactDeployments) {
+        $sourcePath = Join-Path $script:publishRoot $deployment.Source
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw "Published artifact output was not found: $sourcePath"
+        }
+
+        $destinationPath = Join-Path $RuntimeRoot $deployment.Destination
+        Invoke-RobocopyChecked -Source $sourcePath -Destination $destinationPath
+    }
+
+    $serviceArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Service.ExampleServiceAppModule'
+    if (-not (Test-Path -LiteralPath $serviceArtifactSourcePath)) {
+        throw "Published example service artifact output was not found: $serviceArtifactSourcePath"
+    }
+
+    $serviceArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\example-serviceapp\service\1.0.0'
+    Invoke-RobocopyChecked -Source $serviceArtifactSourcePath -Destination $serviceArtifactDestinationPath
+
     $workerArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Worker.ExampleWorkerAppModule'
     if (-not (Test-Path -LiteralPath $workerArtifactSourcePath)) {
         throw "Published example worker artifact output was not found: $workerArtifactSourcePath"
