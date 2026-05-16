@@ -24,8 +24,8 @@ function Write-Step {
 function Confirm-DeploymentAction {
     param([string]$Message)
     if ($Yes) { return $true }
-    $answer = Read-Host "$Message [y/j/N]"
-    return $answer -imatch '^(y|yes|j|ja)$'
+    $answer = Read-Host "$Message [Y/N, default N]"
+    return $answer.Trim() -ieq 'Y'
 }
 
 function Import-RequiredDeploymentConfig {
