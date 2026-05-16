@@ -25,6 +25,10 @@
   <data name="Edit page" xml:space="preserve"><value>Redigera sida</value></data>
   <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Använd Markdown för enkla sidor. Renderat innehåll saneras innan det visas för användare.</value></data>
   <data name="Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization." xml:space="preserve"><value>Betrodda redaktörer kan använda Markdown eller rå HTML. HTML renderas utan sanering.</value></data>
+  <data name="Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor." xml:space="preserve"><value>Välj innehållstyp först. Markdown, HTML och serverrapporter har varsin editor.</value></data>
+  <data name="Write Markdown content. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Skriv Markdown-innehåll. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] stöds.</value></data>
+  <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Skriv betrodd HTML direkt. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] stöds.</value></data>
+  <data name="Changing content type changes the editor but does not convert existing content." xml:space="preserve"><value>Byte av innehållstyp byter editor men konverterar inte befintligt innehåll.</value></data>
   <data name="Back to pages" xml:space="preserve"><value>Tillbaka till sidor</value></data>
   <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Lämna tomt för rotsidan. Sökvägar normaliseras när sidan sparas.</value></data>
   <data name="Slugs are normalized when saved." xml:space="preserve"><value>Sökvägar normaliseras när sidan sparas.</value></data>

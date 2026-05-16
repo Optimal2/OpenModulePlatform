@@ -10,7 +10,7 @@
     <div>
         <div class="eyebrow">@L["Content"]</div>
         <h1>@(Model.IsCreate ? L["New page"] : L["Edit page"])</h1>
-        <p class="lede">@L["Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization."]</p>
+        <p class="lede">@L["Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor."]</p>
     </div>
     <div class="toolbar">
         <a class="button" href="~/admin">@L["Back to pages"]</a>
@@ -92,6 +92,9 @@
         <label asp-for="Input.Body"></label>
         <div id="content-editor" class="content-editor" hidden></div>
         <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
+        <span class="field-hint" data-editor-hint="markdown">@L["Write Markdown content. Server report shortcodes such as DB_JSON are supported."]</span>
+        <span class="field-hint" data-editor-hint="html" hidden>@L["Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported."]</span>
+        <span class="field-hint">@L["Changing content type changes the editor but does not convert existing content."]</span>
         <span asp-validation-for="Input.Body" class="field-validation-error"></span>
     </div>
 
@@ -191,9 +194,57 @@
             const contentType = document.getElementById('Input_ContentType');
             const editorField = document.querySelector('[data-content-editor-field]');
             const reportField = document.querySelector('[data-server-report-field]');
+            const markdownHint = document.querySelector('[data-editor-hint="markdown"]');
+            const htmlHint = document.querySelector('[data-editor-hint="html"]');
+            let markdownEditor = null;
+            let previousType = contentType?.value || 'markdown';
+
+            const pullMarkdownEditorValue = () => {
+                if (markdownEditor) {
+                    source.value = markdownEditor.getMarkdown();
+                }
+            };
+
+            const ensureMarkdownEditor = () => {
+                if (!source || !host || !window.toastui?.Editor) {
+                    return;
+                }
+
+                if (!markdownEditor) {
+                    markdownEditor = new toastui.Editor({
+                        el: host,
+                        height: '520px',
+                        initialEditType: 'markdown',
+                        previewStyle: 'vertical',
+                        initialValue: source.value || ''
+                    });
+                }
+                else if (previousType !== 'markdown') {
+                    markdownEditor.setMarkdown(source.value || '');
+                }
+
+                host.hidden = false;
+                source.classList.add('is-enhanced');
+            };
+
+            const showRawSourceEditor = () => {
+                if (!source || !host) {
+                    return;
+                }
+
+                if (previousType === 'markdown') {
+                    pullMarkdownEditorValue();
+                }
+
+                host.hidden = true;
+                source.classList.remove('is-enhanced');
+            };
 
             const syncContentType = () => {
-                const isServerReport = contentType?.value === 'server_report';
+                const type = contentType?.value || 'markdown';
+                const isServerReport = type === 'server_report';
+                const isHtml = type === 'html';
+
                 if (editorField) {
                     editorField.hidden = isServerReport;
                 }
@@ -201,25 +252,36 @@
                 if (reportField) {
                     reportField.hidden = !isServerReport;
                 }
+
+                if (markdownHint) {
+                    markdownHint.hidden = isServerReport || isHtml;
+                }
+
+                if (htmlHint) {
+                    htmlHint.hidden = isServerReport || !isHtml;
+                }
+
+                if (isServerReport) {
+                    showRawSourceEditor();
+                }
+                else if (isHtml) {
+                    showRawSourceEditor();
+                    source?.classList.add('content-editor__source--html');
+                }
+                else {
+                    source?.classList.remove('content-editor__source--html');
+                    ensureMarkdownEditor();
+                }
+
+                previousType = type;
             };
 
             contentType?.addEventListener('change', syncContentType);
             syncContentType();
 
-            if (!source || !host || !form || !contentType || !window.toastui?.Editor) {
+            if (!source || !form || !contentType) {
                 return;
             }
-
-            const editor = new toastui.Editor({
-                el: host,
-                height: '520px',
-                initialEditType: 'wysiwyg',
-                previewStyle: 'vertical',
-                initialValue: source.value || ''
-            });
-
-            host.hidden = false;
-            source.classList.add('is-enhanced');
 
             form.addEventListener('submit', () => {
                 if (contentType.value === 'server_report') {
@@ -227,9 +289,9 @@
                     return;
                 }
 
-                source.value = contentType.value === 'html'
-                    ? editor.getHTML()
-                    : editor.getMarkdown();
+                if (contentType.value === 'markdown') {
+                    pullMarkdownEditorValue();
+                }
             });
         })();
     </script>

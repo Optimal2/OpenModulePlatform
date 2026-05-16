@@ -18,6 +18,20 @@ The module supports three content types:
 
 Markdown and HTML content is stored in the database. Server reports are stored as JSON files on the server and referenced by key.
 
+## Content Type Editors
+
+Choose the page content type before editing the body:
+
+- `markdown` uses the Markdown editor. If the editor CDN cannot load, the raw
+  textarea remains available and the page still saves Markdown.
+- `html` uses a raw HTML source textarea. HTML is trusted editor content and is
+  rendered without sanitization.
+- `server_report` hides the body editor and shows only the report-key picker.
+
+Changing the content type changes the editor, but it does not convert existing
+body content. Treat Markdown-to-HTML or HTML-to-Markdown changes as manual
+content migrations.
+
 ## Permissions And Roles
 
 Content visibility and editing rights use the shared OMP RBAC model. The

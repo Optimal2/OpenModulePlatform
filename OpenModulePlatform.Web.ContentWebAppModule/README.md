@@ -28,6 +28,6 @@ Permissions:
 - Ordinary editors can edit existing pages through page-level `can_write`.
 - Ordinary readers can view enabled pages through page-level `can_read`.
 
-The editor page uses TOAST UI Editor 3.2.2 from the TOAST CDN for Markdown and HTML content. If the CDN asset cannot load, the raw textarea remains usable.
+The editor page chooses the editor from the page content type. Markdown uses TOAST UI Editor 3.2.2 from the TOAST CDN, HTML uses a raw source textarea, and `server_report` uses a report-key picker. If the CDN asset cannot load, Markdown falls back to the raw textarea.
 
 Not in scope for this iteration: SQL editing in the browser, arbitrary file browsing, JSON uploads, version history, publishing workflow, media library, uploads, block editing, comments, self-service, AD autocomplete, charts, or advanced HTML sanitization.
