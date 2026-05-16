@@ -6,6 +6,7 @@ Implemented in v1:
 
 - host heartbeat publishing
 - optional template topology materialization for the local host
+- optional processing of pending `omp.HostDeployments` queue entries
 - desired artifact discovery from OMP SQL
 - immutable local artifact cache
 - source-to-cache copy from a central artifact root

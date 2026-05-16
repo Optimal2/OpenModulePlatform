@@ -1139,6 +1139,7 @@ function Write-RuntimeConfiguration {
                 CentralArtifactRoot = $script:ArtifactStoreRoot
                 LocalArtifactCacheRoot = $script:ArtifactCacheRoot
                 MaterializeTemplates = $true
+                ProcessHostDeployments = $true
                 ProvisionAppInstanceArtifacts = $true
                 ProvisionExplicitRequirements = $true
                 MaxArtifactsPerCycle = 100
