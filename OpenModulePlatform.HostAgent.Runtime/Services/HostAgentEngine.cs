@@ -10,17 +10,20 @@ public sealed class HostAgentEngine
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ArtifactProvisioner _provisioner;
+    private readonly WebAppDeploymentService _webAppDeploymentService;
     private readonly ILogger<HostAgentEngine> _logger;
 
     public HostAgentEngine(
         IOptionsMonitor<HostAgentSettings> settings,
         OmpHostArtifactRepository repository,
         ArtifactProvisioner provisioner,
+        WebAppDeploymentService webAppDeploymentService,
         ILogger<HostAgentEngine> logger)
     {
         _settings = settings;
         _repository = repository;
         _provisioner = provisioner;
+        _webAppDeploymentService = webAppDeploymentService;
         _logger = logger;
     }
 
@@ -67,6 +70,8 @@ public sealed class HostAgentEngine
             cancellationToken.ThrowIfCancellationRequested();
             await EnsureAndPublishAsync(artifact, cancellationToken);
         }
+
+        await _webAppDeploymentService.DeployDesiredWebAppsAsync(hostKey, cancellationToken);
     }
 
     public async Task<ArtifactProvisioningResult> EnsureArtifactByIdAsync(

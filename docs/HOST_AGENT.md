@@ -15,6 +15,9 @@ HostAgent is host-local OMP/ODV infrastructure. It is intentionally generic and 
 - Central artifact root resolution via `HostAgent:CentralArtifactRoot`
 - File and directory SHA-256 verification
 - Provisioning state in `omp.HostArtifactStates`
+- IIS web app deployment for provisioned `web-app` artifacts when
+  `HostAgent:DeployWebApps` is enabled
+- Web app deployment state in `omp.HostAppDeploymentStates`
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
   - request fields: `artifactId`, optional `desiredLocalPath`
@@ -24,6 +27,7 @@ HostAgent is host-local OMP/ODV infrastructure. It is intentionally generic and 
 
 - `omp.HostArtifactRequirements`
 - `omp.HostArtifactStates`
+- `omp.HostAppDeploymentStates`
 - `omp.WorkerInstances`
 - `omp.WorkerInstanceRuntimeStates`
 
@@ -53,6 +57,40 @@ OpenModulePlatform.HostAgent.{HostKey}
 
 The manager still owns process lifecycle. HostAgent only provisions artifacts and reports host/artifact state.
 
+## IIS web app deployment
+
+HostAgent can deploy IIS-hosted web apps after their artifacts have been
+provisioned to the local artifact cache. This is enabled with:
+
+```json
+{
+  "HostAgent": {
+    "DeployWebApps": true,
+    "IisSiteName": "OpenModulePlatform",
+    "WebAppsRoot": "D:\\OMP\\WebApps",
+    "PortalPhysicalPath": "D:\\OMP\\Sites\\Portal"
+  }
+}
+```
+
+The deployment handler consumes enabled `omp.AppInstances` on the local host
+whose artifact has `PackageType = 'web-app'` and a successful
+`omp.HostArtifactStates` row. It resolves the target path from
+`AppInstances.InstallPath` when set, otherwise from the IIS route path under
+`HostAgent:WebAppsRoot`. The site-root portal app uses
+`HostAgent:PortalPhysicalPath`.
+
+Before copying files, HostAgent resolves the IIS application and its app pool
+with `appcmd.exe`. It can stop the app pool, mirror the provisioned artifact
+into the runtime folder, restart the app pool, and record the result in
+`omp.HostAppDeploymentStates`.
+
+Runtime-local files are preserved through
+`HostAgent:WebAppDeploymentExcludedEntries`. The default exclusions are
+`appsettings.json`, `appsettings.*.json`, `logs`, and `App_Data`, so deployment
+can update application binaries without overwriting local configuration or
+runtime data.
+
 ## Artifact layout
 
 Recommended central layout:
@@ -81,6 +119,7 @@ The named-pipe RPC response writer uses an `async Task` method and awaits `Strea
 - HTTP/S3/Azure Blob download sources
 - artifact retention/cleanup
 - signing/certificate verification
+- Windows service deployment handlers
 - remote HostAgent management API
 
 ## v2.2 stabilization note
