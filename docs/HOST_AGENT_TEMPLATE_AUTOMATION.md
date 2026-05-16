@@ -43,9 +43,12 @@ The stored procedure is intentionally conservative:
 This closes the first automation gap: HostAgent can now create the concrete
 `AppInstances` that its existing artifact provisioning query already consumes.
 
-HostAgent also has a first package-type handler for IIS web apps. When
-`HostAgent:DeployWebApps` is enabled, provisioned `web-app` artifacts are
-mirrored to the configured IIS runtime folders and the outcome is recorded in
+HostAgent also has package-type handlers for IIS web apps and Windows service
+apps. When `HostAgent:DeployWebApps` is enabled, provisioned `web-app`
+artifacts are mirrored to the configured IIS runtime folders. When
+`HostAgent:DeployServiceApps` is enabled, provisioned `service-app` artifacts
+are mirrored to service runtime folders and the Windows services are created or
+updated through `sc.exe`. Both handlers record outcomes in
 `omp.HostAppDeploymentStates`. Local runtime configuration, logs, and
 application data are excluded from the mirror by default.
 
@@ -53,16 +56,28 @@ application data are excluded from the mirror by default.
 
 1. Add Portal actions for previewing and enqueuing host deployments from the
    template/admin pages.
-2. Add package-type handlers in HostAgent for Windows service apps and worker
-   plugins. Artifact provisioning should remain the cache step; installation
-   handlers should own service and process updates.
+2. Add any missing package-type handlers for worker-plugin installation paths.
+   Worker plugins are already provisioned and consumed through WorkerManager,
+   but drift/status views should make that explicit.
 3. Add drift detection for IIS apps, Windows services, artifact versions, and
    runtime paths so operators can see whether a host matches the desired
    template.
 4. Add rollback and rollout policy metadata: desired artifact version, canary or
    per-host sequencing, maintenance windows, and restart behavior.
-5. Extend Portal admin pages with preview/apply actions for instance templates,
+5. Add a bootstrap/update story for HostAgent itself. A running HostAgent can
+   safely update normal web apps and service apps, but replacing the HostAgent
+   service requires an external bootstrapper, paired updater service, or
+   controlled maintenance script.
+6. Extend Portal admin pages with preview/apply actions for instance templates,
    host template assignments, and host deployments.
+
+## Script Boundary
+
+Once a host is bootstrapped, regular artifact version changes should flow
+through OMP metadata and HostAgent instead of repeated package installer runs.
+The PowerShell packages still have a role for first install, database schema
+changes, HostAgent installation or repair, IIS site creation, service account
+configuration, ACLs, and disaster recovery.
 
 ## Design Boundary
 

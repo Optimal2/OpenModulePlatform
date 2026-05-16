@@ -659,6 +659,21 @@ function Write-ExampleRuntimeConfig {
                     ProcessHostDeployments = $true
                     ProvisionAppInstanceArtifacts = $true
                     ProvisionExplicitRequirements = $true
+                    DeployWebApps = $true
+                    IisSiteName = 'OpenModulePlatform'
+                    WebAppsRoot = $script:webAppsRoot
+                    PortalPhysicalPath = $script:portalPath
+                    StopIisAppPoolForWebAppDeployment = $true
+                    StartIisAppPoolAfterWebAppDeployment = $true
+                    IisAppPoolStopTimeoutSeconds = 30
+                    WebAppDeploymentExcludedEntries = @('appsettings.json', 'appsettings.*.json', 'logs', 'App_Data')
+                    DeployServiceApps = $true
+                    ServicesRoot = $script:servicesRoot
+                    StopServiceForServiceAppDeployment = $true
+                    StartServiceAfterServiceAppDeployment = $true
+                    ServiceAppStopTimeoutSeconds = 30
+                    ServiceAppStartTimeoutSeconds = 30
+                    ServiceAppDeploymentExcludedEntries = @('appsettings.json', 'appsettings.*.json', 'logs', 'App_Data')
                     MaxArtifactsPerCycle = 100
                     EnableRpc = $true
                     RpcPipeName = ''
@@ -754,6 +769,22 @@ function Run-ExampleSql {
     foreach ($relativePath in $sqlFiles) {
         Invoke-SqlFile -Path (Join-Path $RepositoryRoot $relativePath)
     }
+
+    $exampleServicePath = (Join-Path $script:servicesRoot 'ExampleServiceAppModule').Replace("'", "''")
+    $exampleServiceName = $script:exampleServiceName.Replace("'", "''")
+    Invoke-SqlText -Query @"
+UPDATE omp.AppInstances
+SET InstallPath = N'$exampleServicePath',
+    InstallationName = N'$exampleServiceName',
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppInstanceKey = N'example_serviceapp_service';
+
+UPDATE omp.InstanceTemplateAppInstances
+SET InstallPath = N'$exampleServicePath',
+    InstallationName = N'$exampleServiceName',
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppInstanceKey = N'example_serviceapp_service';
+"@
 }
 
 function Ensure-RunAsDatabaseAccess {
