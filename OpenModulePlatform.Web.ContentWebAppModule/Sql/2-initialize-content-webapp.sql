@@ -12,8 +12,6 @@ GO
 
 DECLARE @InstanceId uniqueidentifier;
 DECLARE @InstanceTemplateId int;
-DECLARE @SampleHostId uniqueidentifier;
-DECLARE @SampleTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @ContentModuleId int;
 DECLARE @ContentModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111231';
@@ -36,11 +34,6 @@ IF @InstanceId IS NULL
     THROW 50000, 'Default OMP instance not found. Run the core SQL setup/init scripts first.', 1;
 
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
-SELECT @SampleHostId = HostId FROM omp.Hosts WHERE InstanceId = @InstanceId AND HostKey = N'sample-host';
-SELECT @SampleTemplateHostId = InstanceTemplateHostId
-FROM omp.InstanceTemplateHosts
-WHERE InstanceTemplateId = @InstanceTemplateId
-  AND HostKey = N'sample-host';
 
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'ContentWebAppModule.Manage')
     INSERT INTO omp.Permissions(Name, Description)
@@ -266,7 +259,7 @@ BEGIN
     VALUES(
         @ContentAppInstanceId,
         @ContentModuleInstanceId,
-        @SampleHostId,
+        NULL,
         @ContentAppId,
         N'content_webapp_webapp',
         N'Content',
@@ -283,7 +276,7 @@ ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @ContentModuleInstanceId,
-        HostId = @SampleHostId,
+        HostId = NULL,
         AppId = @ContentAppId,
         AppInstanceKey = N'content_webapp_webapp',
         DisplayName = N'Content',
@@ -321,7 +314,7 @@ BEGIN
         SortOrder)
     VALUES(
         @ContentTemplateModuleInstanceId,
-        @SampleTemplateHostId,
+        NULL,
         @ContentAppId,
         N'content_webapp_webapp',
         N'Content',
@@ -335,7 +328,7 @@ END
 ELSE
 BEGIN
     UPDATE omp.InstanceTemplateAppInstances
-    SET InstanceTemplateHostId = @SampleTemplateHostId,
+    SET InstanceTemplateHostId = NULL,
         AppId = @ContentAppId,
         DisplayName = N'Content',
         Description = N'Primary web app instance for database-backed OMP content pages',

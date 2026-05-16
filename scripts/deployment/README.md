@@ -97,6 +97,9 @@ During installation, OpenDocViewer is also copied to
 `ArtifactStoreRoot\opendocviewer\web\<version>` and registered in OMP as a
 host-neutral `web-app` app instance. HostAgent can then upgrade or downgrade the
 ODV IIS application by changing the app instance's desired artifact.
+Portal, Content, and iFrame use the same host-neutral web-app placement model.
+That is intentional for load-balanced IIS deployments: each node has its own
+HostAgent and local runtime folder, but users reach one shared public URL.
 
 For HTTPS deployments, set `Iis.Protocol = 'https'` and either
 `Iis.CertificateThumbprint` or `Iis.CertificateSerialNumber`. If different

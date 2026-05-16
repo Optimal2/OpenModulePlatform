@@ -138,8 +138,6 @@ VALUES
 -------------------------------------------------------------------------------
 DECLARE @InstanceId uniqueidentifier;
 DECLARE @InstanceTemplateId int;
-DECLARE @SampleHostId uniqueidentifier;
-DECLARE @SampleTemplateHostId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @IFrameModuleId int;
 DECLARE @IFrameModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111221';
@@ -159,11 +157,6 @@ IF @InstanceId IS NULL
     THROW 50000, 'Default OMP instance not found. Run SQL_Setup_OpenModulePlatform.sql and SQL_Initialize_OpenModulePlatform.sql first.', 1;
 
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
-SELECT @SampleHostId = HostId FROM omp.Hosts WHERE InstanceId = @InstanceId AND HostKey = N'sample-host';
-SELECT @SampleTemplateHostId = InstanceTemplateHostId
-FROM omp.InstanceTemplateHosts
-WHERE InstanceTemplateId = @InstanceTemplateId
-  AND HostKey = N'sample-host';
 
 -- iFrame Web App registration
 -------------------------------------------------------------------------------
@@ -384,7 +377,7 @@ BEGIN
     VALUES(
         @IFrameAppInstanceId,
         @IFrameModuleInstanceId,
-        @SampleHostId,
+        NULL,
         @IFrameAppId,
         N'iframe_webapp_webapp',
         N'iFrame Web App',
@@ -401,7 +394,7 @@ ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @IFrameModuleInstanceId,
-        HostId = @SampleHostId,
+        HostId = NULL,
         AppId = @IFrameAppId,
         AppInstanceKey = N'iframe_webapp_webapp',
         DisplayName = N'iFrame Web App',
@@ -439,7 +432,7 @@ BEGIN
         SortOrder)
     VALUES(
         @IFrameTemplateModuleInstanceId,
-        @SampleTemplateHostId,
+        NULL,
         @IFrameAppId,
         N'iframe_webapp_webapp',
         N'iFrame Web App',
@@ -452,7 +445,8 @@ BEGIN
 END
 
 UPDATE omp.InstanceTemplateAppInstances
-SET DesiredArtifactId = @IFrameArtifactId
+SET InstanceTemplateHostId = NULL,
+    DesiredArtifactId = @IFrameArtifactId
 WHERE InstanceTemplateModuleInstanceId = @IFrameTemplateModuleInstanceId
   AND AppInstanceKey = N'iframe_webapp_webapp';
 
