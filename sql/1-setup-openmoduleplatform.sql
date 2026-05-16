@@ -640,6 +640,268 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.MaterializeInstanceTemplate', N'P') IS NULL
+    EXEC(N'CREATE PROCEDURE omp.MaterializeInstanceTemplate AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER PROCEDURE omp.MaterializeInstanceTemplate
+    @InstanceKey nvarchar(100) = NULL,
+    @HostKey nvarchar(128) = NULL,
+    @RequestedBy nvarchar(256) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @InstanceKey = NULLIF(LTRIM(RTRIM(@InstanceKey)), N'');
+    SET @HostKey = NULLIF(LTRIM(RTRIM(@HostKey)), N'');
+    SET @RequestedBy = NULLIF(LTRIM(RTRIM(@RequestedBy)), N'');
+
+    DECLARE @ModuleActions TABLE(ActionName nvarchar(10) NOT NULL);
+    DECLARE @AppActions TABLE(ActionName nvarchar(10) NOT NULL);
+
+    IF @HostKey IS NOT NULL
+       AND NOT EXISTS
+       (
+           SELECT 1
+           FROM omp.Hosts h
+           INNER JOIN omp.Instances i ON i.InstanceId = h.InstanceId
+           WHERE h.HostKey = @HostKey
+             AND h.IsEnabled = 1
+             AND i.IsEnabled = 1
+             AND (@InstanceKey IS NULL OR i.InstanceKey = @InstanceKey)
+       )
+    BEGIN
+        THROW 51030, 'Template materialization host was not found or is disabled.', 1;
+    END;
+
+    ;WITH SourceModules AS
+    (
+        SELECT
+            i.InstanceId,
+            tmi.ModuleId,
+            tmi.ModuleInstanceKey,
+            tmi.DisplayName,
+            tmi.Description,
+            tmi.SortOrder
+        FROM omp.Instances i
+        INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
+        INNER JOIN omp.InstanceTemplateModuleInstances tmi ON tmi.InstanceTemplateId = it.InstanceTemplateId
+        INNER JOIN omp.Modules m ON m.ModuleId = tmi.ModuleId
+        WHERE i.IsEnabled = 1
+          AND it.IsEnabled = 1
+          AND tmi.IsEnabled = 1
+          AND m.IsEnabled = 1
+          AND (@InstanceKey IS NULL OR i.InstanceKey = @InstanceKey)
+          AND
+          (
+              @HostKey IS NULL
+              OR EXISTS
+              (
+                  SELECT 1
+                  FROM omp.Hosts h
+                  WHERE h.InstanceId = i.InstanceId
+                    AND h.HostKey = @HostKey
+                    AND h.IsEnabled = 1
+              )
+          )
+    )
+    MERGE omp.ModuleInstances AS target
+    USING SourceModules AS source
+    ON target.InstanceId = source.InstanceId
+    AND target.ModuleInstanceKey = source.ModuleInstanceKey
+    WHEN MATCHED AND
+    (
+        target.ModuleId <> source.ModuleId
+        OR target.DisplayName <> source.DisplayName
+        OR ISNULL(target.Description, N'') <> ISNULL(source.Description, N'')
+        OR target.IsEnabled <> CONVERT(bit, 1)
+        OR target.SortOrder <> source.SortOrder
+    ) THEN
+        UPDATE SET ModuleId = source.ModuleId,
+                   DisplayName = source.DisplayName,
+                   Description = source.Description,
+                   IsEnabled = 1,
+                   SortOrder = source.SortOrder,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
+        VALUES(NEWID(), source.InstanceId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, 1, source.SortOrder)
+    OUTPUT $action INTO @ModuleActions(ActionName);
+
+    ;WITH ConcreteModules AS
+    (
+        SELECT
+            i.InstanceId,
+            tmi.InstanceTemplateModuleInstanceId,
+            mi.ModuleInstanceId
+        FROM omp.Instances i
+        INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
+        INNER JOIN omp.InstanceTemplateModuleInstances tmi ON tmi.InstanceTemplateId = it.InstanceTemplateId
+        INNER JOIN omp.ModuleInstances mi
+            ON mi.InstanceId = i.InstanceId
+           AND mi.ModuleInstanceKey = tmi.ModuleInstanceKey
+        WHERE i.IsEnabled = 1
+          AND it.IsEnabled = 1
+          AND tmi.IsEnabled = 1
+          AND mi.IsEnabled = 1
+          AND (@InstanceKey IS NULL OR i.InstanceKey = @InstanceKey)
+    ),
+    HostMap AS
+    (
+        SELECT
+            i.InstanceId,
+            ith.InstanceTemplateHostId,
+            h.HostId
+        FROM omp.Instances i
+        INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
+        INNER JOIN omp.InstanceTemplateHosts ith ON ith.InstanceTemplateId = it.InstanceTemplateId
+        INNER JOIN omp.Hosts h
+            ON h.InstanceId = i.InstanceId
+           AND h.HostKey = ith.HostKey
+        INNER JOIN omp.HostDeploymentAssignments hda
+            ON hda.HostId = h.HostId
+           AND hda.HostTemplateId = ith.HostTemplateId
+           AND hda.IsActive = 1
+        WHERE i.IsEnabled = 1
+          AND it.IsEnabled = 1
+          AND ith.IsEnabled = 1
+          AND h.IsEnabled = 1
+          AND (@InstanceKey IS NULL OR i.InstanceKey = @InstanceKey)
+          AND (@HostKey IS NULL OR h.HostKey = @HostKey)
+    ),
+    SourceApps AS
+    (
+        SELECT
+            cm.ModuleInstanceId,
+            hm.HostId,
+            tai.AppId,
+            tai.AppInstanceKey,
+            tai.DisplayName,
+            tai.Description,
+            tai.RoutePath,
+            tai.PublicUrl,
+            tai.InstallPath,
+            tai.InstallationName,
+            tai.DesiredArtifactId AS ArtifactId,
+            tai.DesiredConfigId AS ConfigId,
+            tai.ExpectedLogin,
+            tai.ExpectedClientHostName,
+            tai.ExpectedClientIp,
+            tai.DesiredState,
+            tai.SortOrder,
+            tai.IsEnabled
+        FROM omp.InstanceTemplateAppInstances tai
+        INNER JOIN ConcreteModules cm
+            ON cm.InstanceTemplateModuleInstanceId = tai.InstanceTemplateModuleInstanceId
+        INNER JOIN omp.Apps a ON a.AppId = tai.AppId
+        LEFT JOIN HostMap hm
+            ON hm.InstanceId = cm.InstanceId
+           AND hm.InstanceTemplateHostId = tai.InstanceTemplateHostId
+        WHERE tai.IsEnabled = 1
+          AND a.IsEnabled = 1
+          AND
+          (
+              (@HostKey IS NULL AND (tai.InstanceTemplateHostId IS NULL OR hm.HostId IS NOT NULL))
+              OR (@HostKey IS NOT NULL AND hm.HostId IS NOT NULL)
+          )
+    )
+    MERGE omp.AppInstances AS target
+    USING SourceApps AS source
+    ON target.ModuleInstanceId = source.ModuleInstanceId
+    AND target.AppInstanceKey = source.AppInstanceKey
+    WHEN MATCHED AND
+    (
+        ISNULL(target.HostId, '00000000-0000-0000-0000-000000000000') <> ISNULL(source.HostId, '00000000-0000-0000-0000-000000000000')
+        OR target.AppId <> source.AppId
+        OR target.DisplayName <> source.DisplayName
+        OR ISNULL(target.Description, N'') <> ISNULL(source.Description, N'')
+        OR ISNULL(target.RoutePath, N'') <> ISNULL(source.RoutePath, N'')
+        OR ISNULL(target.PublicUrl, N'') <> ISNULL(source.PublicUrl, N'')
+        OR ISNULL(target.InstallPath, N'') <> ISNULL(source.InstallPath, N'')
+        OR ISNULL(target.InstallationName, N'') <> ISNULL(source.InstallationName, N'')
+        OR ISNULL(target.ArtifactId, -1) <> ISNULL(source.ArtifactId, -1)
+        OR ISNULL(target.ConfigId, -1) <> ISNULL(source.ConfigId, -1)
+        OR ISNULL(target.ExpectedLogin, N'') <> ISNULL(source.ExpectedLogin, N'')
+        OR ISNULL(target.ExpectedClientHostName, N'') <> ISNULL(source.ExpectedClientHostName, N'')
+        OR ISNULL(target.ExpectedClientIp, N'') <> ISNULL(source.ExpectedClientIp, N'')
+        OR target.IsEnabled <> source.IsEnabled
+        OR target.IsAllowed <> source.IsEnabled
+        OR target.DesiredState <> source.DesiredState
+        OR target.SortOrder <> source.SortOrder
+    ) THEN
+        UPDATE SET HostId = source.HostId,
+                   AppId = source.AppId,
+                   DisplayName = source.DisplayName,
+                   Description = source.Description,
+                   RoutePath = source.RoutePath,
+                   PublicUrl = source.PublicUrl,
+                   InstallPath = source.InstallPath,
+                   InstallationName = source.InstallationName,
+                   ArtifactId = source.ArtifactId,
+                   ConfigId = source.ConfigId,
+                   ExpectedLogin = source.ExpectedLogin,
+                   ExpectedClientHostName = source.ExpectedClientHostName,
+                   ExpectedClientIp = source.ExpectedClientIp,
+                   IsEnabled = source.IsEnabled,
+                   IsAllowed = source.IsEnabled,
+                   DesiredState = source.DesiredState,
+                   SortOrder = source.SortOrder,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(
+            AppInstanceId,
+            ModuleInstanceId,
+            HostId,
+            AppId,
+            AppInstanceKey,
+            DisplayName,
+            Description,
+            RoutePath,
+            PublicUrl,
+            InstallPath,
+            InstallationName,
+            ArtifactId,
+            ConfigId,
+            ExpectedLogin,
+            ExpectedClientHostName,
+            ExpectedClientIp,
+            IsEnabled,
+            IsAllowed,
+            DesiredState,
+            SortOrder)
+        VALUES(
+            NEWID(),
+            source.ModuleInstanceId,
+            source.HostId,
+            source.AppId,
+            source.AppInstanceKey,
+            source.DisplayName,
+            source.Description,
+            source.RoutePath,
+            source.PublicUrl,
+            source.InstallPath,
+            source.InstallationName,
+            source.ArtifactId,
+            source.ConfigId,
+            source.ExpectedLogin,
+            source.ExpectedClientHostName,
+            source.ExpectedClientIp,
+            source.IsEnabled,
+            source.IsEnabled,
+            source.DesiredState,
+            source.SortOrder)
+    OUTPUT $action INTO @AppActions(ActionName);
+
+    SELECT
+        CAST((SELECT COUNT(1) FROM @ModuleActions) AS int) AS ModuleInstanceChanges,
+        CAST((SELECT COUNT(1) FROM @AppActions) AS int) AS AppInstanceChanges,
+        @InstanceKey AS InstanceKey,
+        @HostKey AS HostKey,
+        @RequestedBy AS RequestedBy;
+END
+GO
+
 -------------------------------------------------------------------------------
 -- Accounts
 -------------------------------------------------------------------------------

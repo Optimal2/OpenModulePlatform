@@ -32,6 +32,19 @@ public sealed class HostAgentEngine
         var hostKey = settings.ResolveHostKey();
         await _repository.TouchHostHeartbeatAsync(hostKey, cancellationToken);
 
+        if (settings.MaterializeTemplates)
+        {
+            var materialization = await _repository.MaterializeTemplatesForHostAsync(hostKey, cancellationToken);
+            if (materialization.ModuleInstanceChanges > 0 || materialization.AppInstanceChanges > 0)
+            {
+                _logger.LogInformation(
+                    "Materialized template topology. HostKey={HostKey}, ModuleInstanceChanges={ModuleInstanceChanges}, AppInstanceChanges={AppInstanceChanges}",
+                    hostKey,
+                    materialization.ModuleInstanceChanges,
+                    materialization.AppInstanceChanges);
+            }
+        }
+
         var artifacts = await _repository.GetDesiredArtifactsAsync(
             hostKey,
             settings.ProvisionAppInstanceArtifacts,
@@ -137,4 +150,3 @@ public sealed class HostAgentEngine
             exception.Message);
     }
 }
-
