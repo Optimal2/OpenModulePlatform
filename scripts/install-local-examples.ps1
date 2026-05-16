@@ -30,9 +30,6 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-# Local confirmations accept English "y/yes" and Swedish "j/ja" because the script is often
-# run interactively on Swedish Windows developer machines. Prompts stay English otherwise so the
-# script remains neutral for shared repository use.
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:webAppsRoot = Join-Path $RuntimeRoot 'WebApps'
 $script:portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
@@ -79,8 +76,8 @@ function Test-IsUncPath {
 function Confirm-LocalAction {
     param([string]$Message)
     if ($Yes) { return $true }
-    $answer = Read-Host "$Message [y/j/N]"
-    return $answer -imatch '^(y|yes|j|ja)$'
+    $answer = Read-Host "$Message [Y/N, default N]"
+    return $answer.Trim() -ieq 'Y'
 }
 
 function Resolve-WindowsAccountName {
