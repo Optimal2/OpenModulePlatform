@@ -19,7 +19,6 @@ GO
 DECLARE @DefaultInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111111';
 DECLARE @DefaultPortalModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111112';
 DECLARE @DefaultPortalAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111113';
-DECLARE @DefaultHostId uniqueidentifier = '11111111-1111-1111-1111-111111111121';
 DECLARE @PortalModuleId int;
 DECLARE @PortalAppId int;
 DECLARE @PortalArtifactId int;
@@ -27,7 +26,6 @@ DECLARE @PortalViewPermissionId int;
 DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
-DECLARE @DefaultTemplateHostId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
 DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
@@ -43,11 +41,6 @@ WHERE InstanceId = @DefaultInstanceId;
 
 IF @DefaultInstanceTemplateId IS NULL
     THROW 50000, 'Default OMP instance not found. Run the core SQL setup/init scripts first.', 1;
-
-SELECT @DefaultTemplateHostId = InstanceTemplateHostId
-FROM omp.InstanceTemplateHosts
-WHERE InstanceTemplateId = @DefaultInstanceTemplateId
-  AND HostKey = N'sample-host';
 
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.View')
     INSERT INTO omp.Permissions(Name, Description) VALUES(N'OMP.Portal.View', N'Read access to the OMP Portal');
@@ -240,14 +233,14 @@ BEGIN
         AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description,
         RoutePath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)
     VALUES(
-        @DefaultPortalAppInstanceId, @DefaultPortalModuleInstanceId, @DefaultHostId, @PortalAppId, N'omp_portal', N'OMP Portal',
+        @DefaultPortalAppInstanceId, @DefaultPortalModuleInstanceId, NULL, @PortalAppId, N'omp_portal', N'OMP Portal',
         N'Primary OMP portal app instance for the default OMP instance', N'', N'portal', @PortalArtifactId, 1, 1, 1, 100);
 END
 ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @DefaultPortalModuleInstanceId,
-        HostId = @DefaultHostId,
+        HostId = NULL,
         AppId = @PortalAppId,
         AppInstanceKey = N'omp_portal',
         DisplayName = N'OMP Portal',
@@ -275,12 +268,13 @@ BEGIN
         InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description,
         RoutePath, InstallationName, DesiredArtifactId, DesiredState, SortOrder)
     VALUES(
-        @DefaultTemplatePortalModuleInstanceId, @DefaultTemplateHostId, @PortalAppId, N'omp_portal', N'OMP Portal',
+        @DefaultTemplatePortalModuleInstanceId, NULL, @PortalAppId, N'omp_portal', N'OMP Portal',
         N'Primary OMP portal app instance for the default template', N'', N'portal', @PortalArtifactId, 1, 100);
 END
 
 UPDATE omp.InstanceTemplateAppInstances
-SET DesiredArtifactId = @PortalArtifactId
+SET InstanceTemplateHostId = NULL,
+    DesiredArtifactId = @PortalArtifactId
 WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId
   AND AppInstanceKey = N'omp_portal';
 GO

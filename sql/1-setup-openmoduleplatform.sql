@@ -844,10 +844,12 @@ BEGIN
            AND hm.InstanceTemplateHostId = tai.InstanceTemplateHostId
         WHERE tai.IsEnabled = 1
           AND a.IsEnabled = 1
+          -- Host-neutral template apps must materialize even when a HostAgent
+          -- requests only the concrete host it is currently managing.
           AND
           (
               (@HostKey IS NULL AND (tai.InstanceTemplateHostId IS NULL OR hm.HostId IS NOT NULL))
-              OR (@HostKey IS NOT NULL AND hm.HostId IS NOT NULL)
+              OR (@HostKey IS NOT NULL AND (tai.InstanceTemplateHostId IS NULL OR hm.HostId IS NOT NULL))
           )
     )
     MERGE omp.AppInstances AS target

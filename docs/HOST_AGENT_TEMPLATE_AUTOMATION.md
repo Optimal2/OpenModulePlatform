@@ -52,10 +52,12 @@ updated through `sc.exe`. Both handlers record outcomes in
 `omp.HostAppDeploymentStates`. Local runtime configuration, logs, and
 application data are excluded from the mirror by default.
 
-OpenDocViewer is registered by the suite installers as a real OMP web
-application with a `web-app` artifact. Its concrete app instance is
-host-neutral (`HostId = NULL`) so each HostAgent can deploy it locally while the
-portal still presents one logical OpenDocViewer entry.
+OpenDocViewer, Portal, Content, and iFrame are registered as OMP web
+applications with `web-app` artifacts. Their concrete app instances are
+host-neutral (`HostId = NULL`) so each HostAgent can deploy them locally while
+the portal still presents one logical app entry. This supports both a single
+local development host and multi-node IIS deployments behind one load-balanced
+public URL.
 
 ## Remaining Steps
 
