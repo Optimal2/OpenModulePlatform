@@ -123,6 +123,11 @@ OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql
 OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql
 ```
 
+The local installer `scripts/manage-local-install.ps1` installs the Portal plus
+the first-party Content and iFrame modules, including their template metadata
+and web artifacts. Use `scripts/install-local-examples.ps1` only when you also
+want the optional example modules.
+
 Each example module owns its own SQL folder and follows the same two-file pattern:
 
 ```text
