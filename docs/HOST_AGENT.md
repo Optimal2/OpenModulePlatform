@@ -17,6 +17,8 @@ HostAgent is host-local OMP/ODV infrastructure. It is intentionally generic and 
 - Provisioning state in `omp.HostArtifactStates`
 - IIS web app deployment for provisioned `web-app` artifacts when
   `HostAgent:DeployWebApps` is enabled
+- Windows service deployment for provisioned `service-app` artifacts when
+  `HostAgent:DeployServiceApps` is enabled
 - Web app deployment state in `omp.HostAppDeploymentStates`
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
@@ -91,6 +93,47 @@ Runtime-local files are preserved through
 can update application binaries without overwriting local configuration or
 runtime data.
 
+## Windows service app deployment
+
+HostAgent can also deploy service-backed app instances after their artifacts
+have been provisioned. This is enabled with:
+
+```json
+{
+  "HostAgent": {
+    "DeployServiceApps": true,
+    "ServicesRoot": "D:\\OMP\\Services"
+  }
+}
+```
+
+The deployment handler consumes enabled `omp.AppInstances` whose artifact has
+`PackageType = 'service-app'` and a successful `omp.HostArtifactStates` row. It
+resolves the target folder from `AppInstances.InstallPath` when set. Relative
+install paths are resolved under `HostAgent:ServicesRoot`; empty install paths
+fall back to a folder derived from the resolved Windows service name.
+
+The Windows service name is resolved from `AppInstances.InstallationName` when
+that value is set to a specific service name. Generic values such as `default`
+are ignored, and HostAgent falls back to the single executable name in the
+artifact root. Service artifacts with multiple root executables must use a
+specific `InstallationName`.
+
+HostAgent can stop an existing service, mirror the provisioned artifact into
+the runtime folder, create or update the Windows service with `sc.exe`, start
+the service, and record the result in `omp.HostAppDeploymentStates`.
+
+Runtime-local files are preserved through
+`HostAgent:ServiceAppDeploymentExcludedEntries`. The default exclusions are the
+same as for web apps: `appsettings.json`, `appsettings.*.json`, `logs`, and
+`App_Data`.
+
+HostAgent does not currently rotate Windows service credentials. If a service
+already exists, its configured account is preserved. If HostAgent creates a new
+service, it uses the Windows default service account. Environment-specific
+service accounts should therefore be bootstrapped before HostAgent owns regular
+version updates, or added through a future local credential provider.
+
 ## Artifact layout
 
 Recommended central layout:
@@ -119,8 +162,9 @@ The named-pipe RPC response writer uses an `async Task` method and awaits `Strea
 - HTTP/S3/Azure Blob download sources
 - artifact retention/cleanup
 - signing/certificate verification
-- Windows service deployment handlers
 - remote HostAgent management API
+- service credential provisioning and rotation
+- HostAgent self-update orchestration
 
 ## v2.2 stabilization note
 

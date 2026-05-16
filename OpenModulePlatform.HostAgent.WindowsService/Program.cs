@@ -24,6 +24,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<OmpHostArtifactRepository>();
         services.AddSingleton<ArtifactProvisioner>();
         services.AddSingleton<WebAppDeploymentService>();
+        services.AddSingleton<ServiceAppDeploymentService>();
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
         services.AddHostedService<HostAgentRpcHostedService>();

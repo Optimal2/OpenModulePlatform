@@ -11,6 +11,7 @@ public sealed class HostAgentEngine
     private readonly OmpHostArtifactRepository _repository;
     private readonly ArtifactProvisioner _provisioner;
     private readonly WebAppDeploymentService _webAppDeploymentService;
+    private readonly ServiceAppDeploymentService _serviceAppDeploymentService;
     private readonly ILogger<HostAgentEngine> _logger;
 
     public HostAgentEngine(
@@ -18,12 +19,14 @@ public sealed class HostAgentEngine
         OmpHostArtifactRepository repository,
         ArtifactProvisioner provisioner,
         WebAppDeploymentService webAppDeploymentService,
+        ServiceAppDeploymentService serviceAppDeploymentService,
         ILogger<HostAgentEngine> logger)
     {
         _settings = settings;
         _repository = repository;
         _provisioner = provisioner;
         _webAppDeploymentService = webAppDeploymentService;
+        _serviceAppDeploymentService = serviceAppDeploymentService;
         _logger = logger;
     }
 
@@ -72,6 +75,7 @@ public sealed class HostAgentEngine
         }
 
         await _webAppDeploymentService.DeployDesiredWebAppsAsync(hostKey, cancellationToken);
+        await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(hostKey, cancellationToken);
     }
 
     public async Task<ArtifactProvisioningResult> EnsureArtifactByIdAsync(

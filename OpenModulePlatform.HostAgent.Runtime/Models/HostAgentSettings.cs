@@ -42,6 +42,26 @@ public sealed class HostAgentSettings
         "App_Data"
     ];
 
+    public bool DeployServiceApps { get; set; }
+
+    public string ServicesRoot { get; set; } = string.Empty;
+
+    public bool StopServiceForServiceAppDeployment { get; set; } = true;
+
+    public bool StartServiceAfterServiceAppDeployment { get; set; } = true;
+
+    public int ServiceAppStopTimeoutSeconds { get; set; } = 30;
+
+    public int ServiceAppStartTimeoutSeconds { get; set; } = 30;
+
+    public string[] ServiceAppDeploymentExcludedEntries { get; set; } =
+    [
+        "appsettings.json",
+        "appsettings.*.json",
+        "logs",
+        "App_Data"
+    ];
+
     public int MaxArtifactsPerCycle { get; set; } = 100;
 
     public bool EnableRpc { get; set; } = true;
@@ -109,6 +129,24 @@ public sealed class HostAgentSettings
             if (IisAppPoolStopTimeoutSeconds < 1)
             {
                 throw new InvalidOperationException("HostAgent:IisAppPoolStopTimeoutSeconds must be at least 1.");
+            }
+        }
+
+        if (DeployServiceApps)
+        {
+            if (string.IsNullOrWhiteSpace(ServicesRoot))
+            {
+                throw new InvalidOperationException("HostAgent:ServicesRoot must be configured when HostAgent:DeployServiceApps is enabled.");
+            }
+
+            if (ServiceAppStopTimeoutSeconds < 1)
+            {
+                throw new InvalidOperationException("HostAgent:ServiceAppStopTimeoutSeconds must be at least 1.");
+            }
+
+            if (ServiceAppStartTimeoutSeconds < 1)
+            {
+                throw new InvalidOperationException("HostAgent:ServiceAppStartTimeoutSeconds must be at least 1.");
             }
         }
 
