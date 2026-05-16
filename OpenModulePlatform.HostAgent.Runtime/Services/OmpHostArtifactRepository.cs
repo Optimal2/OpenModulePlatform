@@ -499,6 +499,116 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
         return result;
     }
 
+    public async Task<IReadOnlyList<ServiceAppDeploymentDescriptor>> GetDesiredServiceAppDeploymentsAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS uniqueidentifier) AS AppInstanceId,
+        CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
+        CAST(NULL AS nvarchar(200)) AS DisplayName,
+        CAST(NULL AS nvarchar(1000)) AS Description,
+        CAST(NULL AS nvarchar(500)) AS InstallPath,
+        CAST(NULL AS nvarchar(150)) AS InstallationName,
+        CAST(NULL AS int) AS ArtifactId,
+        CAST(NULL AS nvarchar(50)) AS Version,
+        CAST(NULL AS nvarchar(100)) AS TargetName,
+        CAST(NULL AS nvarchar(500)) AS SourceLocalPath,
+        CAST(NULL AS nvarchar(128)) AS ContentSha256,
+        CAST(NULL AS int) AS DeployedArtifactId,
+        CAST(NULL AS tinyint) AS DeploymentState,
+        CAST(NULL AS nvarchar(500)) AS DeployedSourceLocalPath,
+        CAST(NULL AS nvarchar(500)) AS DeployedTargetPath,
+        CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName;
+    RETURN;
+END;
+
+SELECT TOP (@maxDeployments)
+    @hostId AS HostId,
+    ai.AppInstanceId,
+    ai.AppInstanceKey,
+    ai.DisplayName,
+    ai.Description,
+    ai.InstallPath,
+    ai.InstallationName,
+    ar.ArtifactId,
+    ar.Version,
+    ar.TargetName,
+    has.LocalPath AS SourceLocalPath,
+    has.ContentSha256,
+    hds.ArtifactId AS DeployedArtifactId,
+    hds.DeploymentState,
+    hds.SourceLocalPath AS DeployedSourceLocalPath,
+    hds.TargetPath AS DeployedTargetPath,
+    hds.RuntimeName AS DeployedRuntimeName
+FROM omp.AppInstances ai
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+INNER JOIN omp.HostArtifactStates has
+    ON has.HostId = @hostId
+   AND has.ArtifactId = ar.ArtifactId
+LEFT JOIN omp.HostAppDeploymentStates hds
+    ON hds.HostId = @hostId
+   AND hds.AppInstanceId = ai.AppInstanceId
+WHERE ai.HostId = @hostId
+  AND ai.IsEnabled = 1
+  AND ai.IsAllowed = 1
+  AND ai.DesiredState = 1
+  AND ar.IsEnabled = 1
+  AND ar.PackageType = N'service-app'
+  AND has.ProvisioningState = @succeededState
+  AND has.LocalPath IS NOT NULL
+  AND LTRIM(RTRIM(has.LocalPath)) <> N''
+ORDER BY ai.SortOrder, ai.AppInstanceKey;";
+
+        var result = new List<ServiceAppDeploymentDescriptor>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@maxDeployments", maxDeployments);
+        cmd.Parameters.AddWithValue("@succeededState", ArtifactProvisioningState.Succeeded);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            result.Add(new ServiceAppDeploymentDescriptor
+            {
+                HostId = rdr.GetGuid(0),
+                AppInstanceId = rdr.GetGuid(1),
+                AppInstanceKey = rdr.GetString(2),
+                DisplayName = rdr.GetString(3),
+                Description = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                InstallPath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                InstallationName = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                ArtifactId = rdr.GetInt32(7),
+                Version = rdr.GetString(8),
+                TargetName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                SourceLocalPath = rdr.GetString(10),
+                ContentSha256 = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+                DeployedArtifactId = rdr.IsDBNull(12) ? null : rdr.GetInt32(12),
+                DeploymentState = rdr.IsDBNull(13) ? null : rdr.GetByte(13),
+                DeployedSourceLocalPath = rdr.IsDBNull(14) ? null : rdr.GetString(14),
+                DeployedTargetPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+                DeployedRuntimeName = rdr.IsDBNull(16) ? null : rdr.GetString(16)
+            });
+        }
+
+        return result;
+    }
+
     public async Task PublishResultAsync(
         ArtifactDescriptor artifact,
         ArtifactProvisioningResult result,
@@ -562,6 +672,36 @@ WHEN NOT MATCHED THEN
 
     public async Task PublishAppDeploymentResultAsync(
         WebAppDeploymentDescriptor deployment,
+        AppDeploymentResult result,
+        CancellationToken ct)
+        => await PublishAppDeploymentResultCoreAsync(
+            deployment.HostId,
+            deployment.AppInstanceId,
+            deployment.ArtifactId,
+            deployment.SourceLocalPath,
+            deployment.ContentSha256,
+            result,
+            ct);
+
+    public async Task PublishAppDeploymentResultAsync(
+        ServiceAppDeploymentDescriptor deployment,
+        AppDeploymentResult result,
+        CancellationToken ct)
+        => await PublishAppDeploymentResultCoreAsync(
+            deployment.HostId,
+            deployment.AppInstanceId,
+            deployment.ArtifactId,
+            deployment.SourceLocalPath,
+            deployment.ContentSha256,
+            result,
+            ct);
+
+    private async Task PublishAppDeploymentResultCoreAsync(
+        Guid hostId,
+        Guid appInstanceId,
+        int artifactId,
+        string sourceLocalPath,
+        string? contentSha256,
         AppDeploymentResult result,
         CancellationToken ct)
     {
@@ -629,14 +769,14 @@ WHEN NOT MATCHED THEN
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostId", deployment.HostId);
-        cmd.Parameters.AddWithValue("@appInstanceId", deployment.AppInstanceId);
-        cmd.Parameters.AddWithValue("@artifactId", deployment.ArtifactId);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
         cmd.Parameters.AddWithValue("@state", result.State);
-        cmd.Parameters.AddWithValue("@sourceLocalPath", deployment.SourceLocalPath);
+        cmd.Parameters.AddWithValue("@sourceLocalPath", sourceLocalPath);
         cmd.Parameters.AddWithValue("@targetPath", string.IsNullOrWhiteSpace(result.TargetPath) ? (object)DBNull.Value : result.TargetPath);
         cmd.Parameters.AddWithValue("@runtimeName", string.IsNullOrWhiteSpace(result.RuntimeName) ? (object)DBNull.Value : result.RuntimeName);
-        cmd.Parameters.AddWithValue("@contentSha256", string.IsNullOrWhiteSpace(deployment.ContentSha256) ? (object)DBNull.Value : deployment.ContentSha256);
+        cmd.Parameters.AddWithValue("@contentSha256", string.IsNullOrWhiteSpace(contentSha256) ? (object)DBNull.Value : contentSha256);
         cmd.Parameters.AddWithValue("@applied", result.Applied);
         cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
         await cmd.ExecuteNonQueryAsync(ct);

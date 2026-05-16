@@ -15,7 +15,9 @@ Implemented in v1:
 - writes provisioning state to `omp.HostArtifactStates`
 - deploys provisioned IIS `web-app` artifacts when `HostAgent:DeployWebApps`
   is enabled
-- writes IIS web app deployment state to `omp.HostAppDeploymentStates`
+- deploys provisioned Windows `service-app` artifacts when
+  `HostAgent:DeployServiceApps` is enabled
+- writes app deployment state to `omp.HostAppDeploymentStates`
 
 Expected first use:
 
@@ -26,7 +28,10 @@ Expected first use:
 5. If the artifact is a `web-app` package and `HostAgent:DeployWebApps` is
    enabled, HostAgent mirrors it to the IIS runtime folder while preserving
    local configuration and runtime data exclusions.
-6. Worker Manager can be configured to resolve app-instance artifacts from `omp.HostArtifactStates`.
+6. If the artifact is a `service-app` package and
+   `HostAgent:DeployServiceApps` is enabled, HostAgent mirrors it to the
+   service runtime folder and creates or updates the Windows service.
+7. Worker Manager can be configured to resolve app-instance artifacts from `omp.HostArtifactStates`.
 
 Not implemented in v1:
 
