@@ -292,7 +292,9 @@ WITH Desired AS
     FROM omp.AppInstances ai
     INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
     WHERE @includeAppInstanceArtifacts = 1
-      AND ai.HostId = @hostId
+      -- Host-neutral app instances are provisioned on every enabled host while
+      -- still remaining one logical app entry in the portal/topbar.
+      AND (ai.HostId = @hostId OR ai.HostId IS NULL)
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1
       AND ar.IsEnabled = 1
@@ -451,7 +453,9 @@ INNER JOIN omp.HostArtifactStates has
 LEFT JOIN omp.HostAppDeploymentStates hds
     ON hds.HostId = @hostId
    AND hds.AppInstanceId = ai.AppInstanceId
-WHERE ai.HostId = @hostId
+-- Host-neutral web apps are still applied per host through
+-- HostAppDeploymentStates(HostId, AppInstanceId).
+WHERE (ai.HostId = @hostId OR ai.HostId IS NULL)
   AND ai.IsEnabled = 1
   AND ai.IsAllowed = 1
   AND ai.DesiredState = 1

@@ -52,6 +52,11 @@ updated through `sc.exe`. Both handlers record outcomes in
 `omp.HostAppDeploymentStates`. Local runtime configuration, logs, and
 application data are excluded from the mirror by default.
 
+OpenDocViewer is registered by the suite installers as a real OMP web
+application with a `web-app` artifact. Its concrete app instance is
+host-neutral (`HostId = NULL`) so each HostAgent can deploy it locally while the
+portal still presents one logical OpenDocViewer entry.
+
 ## Remaining Steps
 
 1. Add Portal actions for previewing and enqueuing host deployments from the

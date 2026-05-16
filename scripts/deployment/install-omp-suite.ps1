@@ -237,6 +237,43 @@ function ConvertTo-SqlNullableIntLiteral {
     return ([int]$text).ToString([System.Globalization.CultureInfo]::InvariantCulture)
 }
 
+function Join-UrlPath {
+    param(
+        [string]$BaseUrl,
+        [string]$RelativePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+        return $null
+    }
+
+    $base = $BaseUrl.TrimEnd('/')
+    $relative = $RelativePath.Trim('/\')
+    if ([string]::IsNullOrWhiteSpace($relative)) {
+        return $base + '/'
+    }
+
+    return $base + '/' + $relative + '/'
+}
+
+function Resolve-OpenDocViewerPackageVersion {
+    if (-not [string]::IsNullOrWhiteSpace($script:OpenDocViewerVersion)) {
+        return $script:OpenDocViewerVersion.Trim()
+    }
+
+    $manifestPath = Join-Path $script:PackageRoot 'manifest.json'
+    if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $manifestVersion = [string](Get-ObjectPropertyValue -Entry $manifest -Name 'openDocViewerVersion' -DefaultValue '')
+        if (-not [string]::IsNullOrWhiteSpace($manifestVersion)) {
+            return $manifestVersion.Trim()
+        }
+    }
+
+    Write-Warning 'OpenDocViewer.Version was not configured and manifest.json did not contain openDocViewerVersion. Falling back to the OMP suite version for compatibility with older packages.'
+    return $script:Version
+}
+
 function ConvertTo-NormalizedCertificateText {
     param([string]$Value)
 
@@ -508,6 +545,151 @@ WHERE @PortalAdminsRoleId IS NOT NULL
 "@
 }
 
+function Ensure-ConfiguredHosts {
+    $hostRows = @()
+    $seenHostKeys = @{}
+    $defaultSortOrder = 10
+
+    foreach ($hostEntry in @($script:ConfiguredHosts)) {
+        $hostKey = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'HostKey' -DefaultValue '')
+        if ([string]::IsNullOrWhiteSpace($hostKey)) {
+            continue
+        }
+
+        $normalizedHostKey = $hostKey.Trim().ToLowerInvariant()
+        if ($seenHostKeys.ContainsKey($normalizedHostKey)) {
+            continue
+        }
+
+        $seenHostKeys[$normalizedHostKey] = $true
+        $displayName = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'DisplayName' -DefaultValue $hostKey)
+        $baseUrl = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'BaseUrl' -DefaultValue '')
+        $environment = [string](Get-ConfigEntryValue -Entry $hostEntry -Name 'Environment' -DefaultValue ([string](Get-ConfigValue -Config $config -Name 'EnvironmentName' -DefaultValue 'environment')))
+        $sortOrder = [int](Get-ConfigEntryValue -Entry $hostEntry -Name 'SortOrder' -DefaultValue $defaultSortOrder)
+        $defaultSortOrder += 10
+        $resolvedDisplayName = if ([string]::IsNullOrWhiteSpace($displayName)) { $hostKey.Trim() } else { $displayName.Trim() }
+        $resolvedBaseUrl = if ([string]::IsNullOrWhiteSpace($baseUrl)) { $null } else { $baseUrl.Trim() }
+        $resolvedEnvironment = if ([string]::IsNullOrWhiteSpace($environment)) { $null } else { $environment.Trim() }
+
+        $hostRows += [pscustomobject]@{
+            HostKey = $hostKey.Trim()
+            DisplayName = $resolvedDisplayName
+            BaseUrl = $resolvedBaseUrl
+            Environment = $resolvedEnvironment
+            SortOrder = $sortOrder
+        }
+    }
+
+    if ($hostRows.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($script:HostKey)) {
+        $displayName = if ([string]::IsNullOrWhiteSpace($script:HostName)) { $script:HostKey } else { $script:HostName }
+        $hostRows += [pscustomobject]@{
+            HostKey = $script:HostKey.Trim()
+            DisplayName = $displayName.Trim()
+            BaseUrl = $null
+            Environment = [string](Get-ConfigValue -Config $config -Name 'EnvironmentName' -DefaultValue 'environment')
+            SortOrder = 10
+        }
+    }
+
+    if ($hostRows.Count -eq 0) {
+        return
+    }
+
+    Write-Step 'Ensuring configured OMP hosts'
+    $values = @()
+    foreach ($hostRow in $hostRows) {
+        $values += '(' +
+            (ConvertTo-SqlUnicodeLiteral -Value $hostRow.HostKey) + ', ' +
+            (ConvertTo-SqlNullableUnicodeLiteral -Value $hostRow.DisplayName) + ', ' +
+            (ConvertTo-SqlNullableUnicodeLiteral -Value $hostRow.BaseUrl) + ', ' +
+            (ConvertTo-SqlNullableUnicodeLiteral -Value $hostRow.Environment) + ', ' +
+            ([int]$hostRow.SortOrder).ToString([System.Globalization.CultureInfo]::InvariantCulture) +
+            ')'
+    }
+
+    Invoke-SqlText -Query @"
+DECLARE @InstanceId uniqueidentifier;
+DECLARE @InstanceTemplateId int;
+DECLARE @DefaultHostTemplateId int;
+
+SELECT @InstanceId = InstanceId,
+       @InstanceTemplateId = InstanceTemplateId
+FROM omp.Instances
+WHERE InstanceKey = N'default';
+
+SELECT @DefaultHostTemplateId = HostTemplateId
+FROM omp.HostTemplates
+WHERE TemplateKey = N'default-host';
+
+IF @InstanceId IS NULL OR @InstanceTemplateId IS NULL OR @DefaultHostTemplateId IS NULL
+BEGIN
+    THROW 51012, 'Default OMP instance and host template must exist before configured hosts can be registered.', 1;
+END
+
+DECLARE @Hosts table
+(
+    HostKey nvarchar(128) NOT NULL PRIMARY KEY,
+    DisplayName nvarchar(200) NULL,
+    BaseUrl nvarchar(300) NULL,
+    Environment nvarchar(100) NULL,
+    SortOrder int NOT NULL
+);
+
+INSERT INTO @Hosts(HostKey, DisplayName, BaseUrl, Environment, SortOrder)
+VALUES
+$(($values -join ",`r`n"));
+
+MERGE omp.Hosts AS target
+USING @Hosts AS source
+ON target.InstanceId = @InstanceId
+AND target.HostKey = source.HostKey
+WHEN MATCHED THEN
+    UPDATE SET DisplayName = source.DisplayName,
+               BaseUrl = source.BaseUrl,
+               Environment = source.Environment,
+               OsFamily = COALESCE(target.OsFamily, N'Windows'),
+               Architecture = COALESCE(target.Architecture, N'x64'),
+               IsEnabled = 1,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture, IsEnabled)
+    VALUES(NEWID(), @InstanceId, source.HostKey, source.DisplayName, source.BaseUrl, source.Environment, N'Windows', N'x64', 1);
+
+MERGE omp.InstanceTemplateHosts AS target
+USING @Hosts AS source
+ON target.InstanceTemplateId = @InstanceTemplateId
+AND target.HostKey = source.HostKey
+WHEN MATCHED THEN
+    UPDATE SET HostTemplateId = @DefaultHostTemplateId,
+               DisplayName = source.DisplayName,
+               Environment = source.Environment,
+               SortOrder = source.SortOrder,
+               IsEnabled = 1,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(InstanceTemplateId, HostTemplateId, HostKey, DisplayName, Environment, SortOrder, IsEnabled)
+    VALUES(@InstanceTemplateId, @DefaultHostTemplateId, source.HostKey, source.DisplayName, source.Environment, source.SortOrder, 1);
+
+INSERT INTO omp.HostDeploymentAssignments(HostId, HostTemplateId, AssignedBy, IsActive)
+SELECT h.HostId,
+       @DefaultHostTemplateId,
+       N'install-script',
+       1
+FROM @Hosts source
+INNER JOIN omp.Hosts h
+    ON h.InstanceId = @InstanceId
+   AND h.HostKey = source.HostKey
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM omp.HostDeploymentAssignments existing
+    WHERE existing.HostId = h.HostId
+      AND existing.HostTemplateId = @DefaultHostTemplateId
+      AND existing.IsActive = 1
+);
+"@
+}
+
 function Ensure-ConfiguredConfigSettings {
     $settings = @($script:ConfigSettings)
     if ($settings.Count -eq 0) {
@@ -628,6 +810,277 @@ WHEN MATCHED THEN
 WHEN NOT MATCHED THEN
     INSERT(ConfigSettingId, ConfigValue, ConfigUsr, ConfigPermission, ConfigRole, ConfigPriority)
     VALUES(source.ConfigSettingId, source.ConfigValue, source.ConfigUsr, source.ConfigPermission, source.ConfigRole, source.ConfigPriority);
+"@
+}
+
+function Ensure-OpenDocViewerMetadata {
+    if (-not $script:InstallOpenDocViewer) {
+        return
+    }
+
+    Write-Step 'Ensuring OpenDocViewer OMP metadata'
+
+    $routePath = $script:OpenDocViewerAppPath.Trim('/\')
+    if ([string]::IsNullOrWhiteSpace($routePath)) {
+        throw 'Iis.OpenDocViewerAppPath must not be empty when Options.InstallOpenDocViewer is true.'
+    }
+
+    $installPath = Join-Path $script:WebAppsRoot $routePath
+    $publicUrl = Join-UrlPath -BaseUrl $script:PublicBaseUrl -RelativePath $routePath
+
+    $displayNameLiteral = ConvertTo-SqlUnicodeLiteral -Value $script:OpenDocViewerDisplayName
+    $versionLiteral = ConvertTo-SqlUnicodeLiteral -Value $script:OpenDocViewerVersion
+    $routePathLiteral = ConvertTo-SqlUnicodeLiteral -Value $routePath
+    $publicUrlLiteral = ConvertTo-SqlNullableUnicodeLiteral -Value $publicUrl
+    $installPathLiteral = ConvertTo-SqlUnicodeLiteral -Value $installPath
+
+    Invoke-SqlText -Query @"
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_opendocviewer')
+BEGIN
+    EXEC(N'CREATE SCHEMA [omp_opendocviewer]');
+END
+
+DECLARE @InstanceId uniqueidentifier;
+DECLARE @InstanceTemplateId int;
+DECLARE @OpenDocViewerModuleId int;
+DECLARE @OpenDocViewerAppId int;
+DECLARE @OpenDocViewerArtifactId int;
+DECLARE @SeedModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111241';
+DECLARE @SeedAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111242';
+DECLARE @OpenDocViewerModuleInstanceId uniqueidentifier;
+DECLARE @OpenDocViewerTemplateModuleInstanceId int;
+DECLARE @OpenDocViewerAppInstanceId uniqueidentifier;
+DECLARE @ArtifactVersion nvarchar(50) = $versionLiteral;
+
+SELECT @InstanceId = InstanceId,
+       @InstanceTemplateId = InstanceTemplateId
+FROM omp.Instances
+WHERE InstanceKey = N'default';
+
+IF @InstanceId IS NULL
+BEGIN
+    THROW 51013, 'Default OMP instance not found. Run the core SQL setup/init scripts first.', 1;
+END
+
+IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'opendocviewer')
+BEGIN
+    UPDATE omp.Modules
+    SET DisplayName = N'OpenDocViewer',
+        ModuleType = N'WebAppModule',
+        SchemaName = N'omp_opendocviewer',
+        Description = N'First-party OMP registration for the OpenDocViewer static web application',
+        IsEnabled = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleKey = N'opendocviewer';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Modules(ModuleKey, DisplayName, ModuleType, SchemaName, Description, IsEnabled, SortOrder)
+    VALUES(N'opendocviewer', N'OpenDocViewer', N'WebAppModule', N'omp_opendocviewer', N'First-party OMP registration for the OpenDocViewer static web application', 1, 310);
+END
+
+SELECT @OpenDocViewerModuleId = ModuleId
+FROM omp.Modules
+WHERE ModuleKey = N'opendocviewer';
+
+IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @OpenDocViewerModuleId AND AppKey = N'opendocviewer_webapp')
+BEGIN
+    UPDATE omp.Apps
+    SET DisplayName = $displayNameLiteral,
+        AppType = N'WebApp',
+        Description = N'Static web application definition for OpenDocViewer',
+        IsEnabled = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleId = @OpenDocViewerModuleId
+      AND AppKey = N'opendocviewer_webapp';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Apps(ModuleId, AppKey, DisplayName, AppType, Description, IsEnabled, SortOrder)
+    VALUES(@OpenDocViewerModuleId, N'opendocviewer_webapp', $displayNameLiteral, N'WebApp', N'Static web application definition for OpenDocViewer', 1, 310);
+END
+
+SELECT @OpenDocViewerAppId = AppId
+FROM omp.Apps
+WHERE ModuleId = @OpenDocViewerModuleId
+  AND AppKey = N'opendocviewer_webapp';
+
+MERGE omp.Artifacts AS target
+USING
+(
+    SELECT @OpenDocViewerAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'web-app' AS PackageType,
+           N'opendocviewer' AS TargetName,
+           N'opendocviewer/web/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
+
+SELECT @OpenDocViewerArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @OpenDocViewerAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'web-app'
+  AND TargetName = N'opendocviewer';
+
+MERGE omp.ModuleInstances AS target
+USING
+(
+    SELECT @SeedModuleInstanceId AS ModuleInstanceId,
+           @InstanceId AS InstanceId,
+           @OpenDocViewerModuleId AS ModuleId,
+           N'opendocviewer' AS ModuleInstanceKey,
+           N'OpenDocViewer' AS DisplayName,
+           N'OpenDocViewer module instance for the default OMP instance' AS Description,
+           CAST(1 AS bit) AS IsEnabled,
+           CAST(310 AS int) AS SortOrder
+) AS source
+ON target.ModuleInstanceId = source.ModuleInstanceId
+OR (target.InstanceId = source.InstanceId AND target.ModuleInstanceKey = source.ModuleInstanceKey)
+WHEN MATCHED THEN
+    UPDATE SET ModuleId = source.ModuleId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               IsEnabled = source.IsEnabled,
+               SortOrder = source.SortOrder,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
+    VALUES(source.ModuleInstanceId, source.InstanceId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, source.IsEnabled, source.SortOrder);
+
+SELECT @OpenDocViewerModuleInstanceId = ModuleInstanceId
+FROM omp.ModuleInstances
+WHERE InstanceId = @InstanceId
+  AND ModuleInstanceKey = N'opendocviewer';
+
+MERGE omp.InstanceTemplateModuleInstances AS target
+USING
+(
+    SELECT @InstanceTemplateId AS InstanceTemplateId,
+           @OpenDocViewerModuleId AS ModuleId,
+           N'opendocviewer' AS ModuleInstanceKey,
+           N'OpenDocViewer' AS DisplayName,
+           N'OpenDocViewer module instance in the default template' AS Description,
+           CAST(310 AS int) AS SortOrder,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.InstanceTemplateId = source.InstanceTemplateId
+AND target.ModuleInstanceKey = source.ModuleInstanceKey
+WHEN MATCHED THEN
+    UPDATE SET ModuleId = source.ModuleId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder, IsEnabled)
+    VALUES(source.InstanceTemplateId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, source.SortOrder, source.IsEnabled);
+
+SELECT @OpenDocViewerTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateId = @InstanceTemplateId
+  AND ModuleInstanceKey = N'opendocviewer';
+
+-- OpenDocViewer is a host-neutral app instance. Host Agent deploys it on each
+-- configured host while the portal/topbar still shows one logical app entry.
+MERGE omp.AppInstances AS target
+USING
+(
+    SELECT @SeedAppInstanceId AS AppInstanceId,
+           @OpenDocViewerModuleInstanceId AS ModuleInstanceId,
+           CAST(NULL AS uniqueidentifier) AS HostId,
+           @OpenDocViewerAppId AS AppId,
+           N'opendocviewer_webapp' AS AppInstanceKey,
+           $displayNameLiteral AS DisplayName,
+           N'OpenDocViewer static web app managed by OMP Host Agent' AS Description,
+           $routePathLiteral AS RoutePath,
+           $publicUrlLiteral AS PublicUrl,
+           $installPathLiteral AS InstallPath,
+           N'opendocviewer' AS InstallationName,
+           @OpenDocViewerArtifactId AS ArtifactId,
+           CAST(1 AS bit) AS IsEnabled,
+           CAST(1 AS bit) AS IsAllowed,
+           CAST(1 AS tinyint) AS DesiredState,
+           CAST(310 AS int) AS SortOrder
+) AS source
+ON target.AppInstanceId = source.AppInstanceId
+OR (target.ModuleInstanceId = source.ModuleInstanceId AND target.AppInstanceKey = source.AppInstanceKey)
+WHEN MATCHED THEN
+    UPDATE SET ModuleInstanceId = source.ModuleInstanceId,
+               HostId = source.HostId,
+               AppId = source.AppId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               RoutePath = source.RoutePath,
+               PublicUrl = source.PublicUrl,
+               InstallPath = source.InstallPath,
+               InstallationName = source.InstallationName,
+               ArtifactId = source.ArtifactId,
+               IsEnabled = source.IsEnabled,
+               IsAllowed = source.IsAllowed,
+               DesiredState = source.DesiredState,
+               SortOrder = source.SortOrder,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)
+    VALUES(source.AppInstanceId, source.ModuleInstanceId, source.HostId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.ArtifactId, source.IsEnabled, source.IsAllowed, source.DesiredState, source.SortOrder);
+
+SELECT @OpenDocViewerAppInstanceId = AppInstanceId
+FROM omp.AppInstances
+WHERE ModuleInstanceId = @OpenDocViewerModuleInstanceId
+  AND AppInstanceKey = N'opendocviewer_webapp';
+
+MERGE omp.InstanceTemplateAppInstances AS target
+USING
+(
+    SELECT @OpenDocViewerTemplateModuleInstanceId AS InstanceTemplateModuleInstanceId,
+           CAST(NULL AS int) AS InstanceTemplateHostId,
+           @OpenDocViewerAppId AS AppId,
+           N'opendocviewer_webapp' AS AppInstanceKey,
+           $displayNameLiteral AS DisplayName,
+           N'OpenDocViewer static web app managed by OMP Host Agent' AS Description,
+           $routePathLiteral AS RoutePath,
+           $publicUrlLiteral AS PublicUrl,
+           $installPathLiteral AS InstallPath,
+           N'opendocviewer' AS InstallationName,
+           @OpenDocViewerArtifactId AS DesiredArtifactId,
+           CAST(1 AS tinyint) AS DesiredState,
+           CAST(310 AS int) AS SortOrder,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
+AND target.AppInstanceKey = source.AppInstanceKey
+WHEN MATCHED THEN
+    UPDATE SET InstanceTemplateHostId = source.InstanceTemplateHostId,
+               AppId = source.AppId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               RoutePath = source.RoutePath,
+               PublicUrl = source.PublicUrl,
+               InstallPath = source.InstallPath,
+               InstallationName = source.InstallationName,
+               DesiredArtifactId = source.DesiredArtifactId,
+               DesiredState = source.DesiredState,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled)
+    VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.DesiredArtifactId, source.DesiredState, source.SortOrder, source.IsEnabled);
 "@
 }
 
@@ -1232,6 +1685,7 @@ function Deploy-Payloads {
 
     if ($script:InstallOpenDocViewer) {
         Expand-PayloadZip -ZipName 'OpenDocViewer.dist.zip' -Destination (Join-Path $script:WebAppsRoot $script:OpenDocViewerAppPath)
+        Expand-PayloadZip -ZipName 'OpenDocViewer.dist.zip' -Destination (Join-Path $script:ArtifactStoreRoot "opendocviewer\web\$($script:OpenDocViewerVersion)")
     }
 
     if ($script:InstallContentWebApp) {
@@ -1278,8 +1732,10 @@ function Run-InstallSql {
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform\1-setup-openmoduleplatform.sql')
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform\2-initialize-openmoduleplatform.sql') -PatchBootstrapPrincipal
     Ensure-AdditionalBootstrapPrincipals
+    Ensure-ConfiguredHosts
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\1-setup-omp-portal.sql')
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\2-initialize-omp-portal.sql') -PatchBootstrapPrincipal
+    Ensure-OpenDocViewerMetadata
 
     if ($script:InstallContentWebApp) {
         $contentSqlFiles = @(
@@ -1814,6 +2270,11 @@ $script:ContentWebAppAllowedServerReportDatabases = @(
 $script:ContentWebAppServerReportDefaultMaxRows = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportDefaultMaxRows' -DefaultValue 100)
 $script:ContentWebAppServerReportMaxRowsLimit = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportMaxRowsLimit' -DefaultValue 1000)
 $script:ContentWebAppServerReportQueryTimeoutSeconds = [int](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportQueryTimeoutSeconds' -DefaultValue 30)
+$script:OpenDocViewerDisplayName = [string](Get-NestedConfigValue -Config $config -Section 'OpenDocViewer' -Name 'DisplayName' -DefaultValue 'OpenDocViewer')
+$script:OpenDocViewerVersion = [string](Get-NestedConfigValue -Config $config -Section 'OpenDocViewer' -Name 'Version' -DefaultValue '')
+if ([string]::IsNullOrWhiteSpace($script:OpenDocViewerDisplayName)) {
+    $script:OpenDocViewerDisplayName = 'OpenDocViewer'
+}
 
 $defaultAppPools = @{
     Portal = 'OMP_Portal'
@@ -1883,6 +2344,8 @@ else {
 if (-not (Test-Path -LiteralPath (Join-Path $script:PackageRoot 'payload') -PathType Container)) {
     throw "Package payload folder was not found: $script:PackageRoot"
 }
+
+$script:OpenDocViewerVersion = Resolve-OpenDocViewerPackageVersion
 
 $contentWebAppSeedPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'SeedPath' -DefaultValue 'content-webapp-seed')
 if ([string]::IsNullOrWhiteSpace($contentWebAppSeedPath)) {
