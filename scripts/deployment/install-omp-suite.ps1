@@ -705,6 +705,342 @@ function Write-JsonFile {
     $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
+function Get-ObjectPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)][object]$Entry,
+        [Parameter(Mandatory = $true)][string]$Name,
+        $DefaultValue = $null
+    )
+
+    $property = $Entry.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return $DefaultValue
+    }
+
+    return $property.Value
+}
+
+function Resolve-ContentSeedFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$SeedRoot,
+        [Parameter(Mandatory = $true)][string]$RelativePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+        throw 'Content Web App seed file path must not be empty.'
+    }
+
+    if ([System.IO.Path]::IsPathRooted($RelativePath)) {
+        throw "Content Web App seed file path must be relative to the seed folder: $RelativePath"
+    }
+
+    $trimChars = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $seedRootFull = [System.IO.Path]::GetFullPath($SeedRoot).TrimEnd($trimChars)
+    $candidate = [System.IO.Path]::GetFullPath((Join-Path $seedRootFull $RelativePath))
+    $requiredPrefix = $seedRootFull + [System.IO.Path]::DirectorySeparatorChar
+
+    if (-not $candidate.StartsWith($requiredPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Content Web App seed file path escapes the seed folder: $RelativePath"
+    }
+
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        throw "Content Web App seed file was not found: $candidate"
+    }
+
+    return $candidate
+}
+
+function Resolve-ContentWebAppServerReportsPath {
+    $configuredPath = $script:ContentWebAppServerReportsPath
+    if ([string]::IsNullOrWhiteSpace($configuredPath)) {
+        $configuredPath = 'App_Data/ContentReports'
+    }
+
+    if ([System.IO.Path]::IsPathRooted($configuredPath)) {
+        return [System.IO.Path]::GetFullPath($configuredPath)
+    }
+
+    $contentRoot = Join-Path $script:WebAppsRoot $script:ContentWebAppPath
+    return [System.IO.Path]::GetFullPath((Join-Path $contentRoot $configuredPath))
+}
+
+function Add-SqlParameter {
+    param(
+        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlCommand]$Command,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][System.Data.SqlDbType]$Type,
+        [object]$Value = $null,
+        [int]$Size = 0
+    )
+
+    if ($Size -ne 0) {
+        $parameter = $Command.Parameters.Add($Name, $Type, $Size)
+    }
+    else {
+        $parameter = $Command.Parameters.Add($Name, $Type)
+    }
+
+    if ($null -eq $Value) {
+        $parameter.Value = [DBNull]::Value
+    }
+    else {
+        $parameter.Value = $Value
+    }
+}
+
+function Invoke-ContentSeedPageUpsert {
+    param(
+        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        [Parameter(Mandatory = $true)][string]$Slug,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$ContentType,
+        [Parameter(Mandatory = $true)][string]$Body,
+        [object]$ServerReportKey,
+        [bool]$IsEnabled,
+        [object]$SortOrder
+    )
+
+    $command = $Connection.CreateCommand()
+    $command.CommandTimeout = 3600
+    $command.CommandText = @"
+SET XACT_ABORT ON;
+
+DECLARE @ContentId uniqueidentifier;
+
+SELECT @ContentId = content_id
+FROM omp_content.contents
+WHERE app_instance_id = @AppInstanceId
+  AND slug = @Slug;
+
+IF @ContentId IS NULL
+BEGIN
+    SET @ContentId = NEWID();
+
+    INSERT INTO omp_content.contents(
+        content_id,
+        app_instance_id,
+        slug,
+        title,
+        content_type,
+        body,
+        server_report_key,
+        is_enabled,
+        sort_order,
+        created_by,
+        updated_by)
+    VALUES(
+        @ContentId,
+        @AppInstanceId,
+        @Slug,
+        @Title,
+        @ContentType,
+        @Body,
+        @ServerReportKey,
+        @IsEnabled,
+        @SortOrder,
+        N'install-script',
+        N'install-script');
+END
+ELSE
+BEGIN
+    UPDATE omp_content.contents
+    SET title = @Title,
+        content_type = @ContentType,
+        body = @Body,
+        server_report_key = @ServerReportKey,
+        is_enabled = @IsEnabled,
+        sort_order = @SortOrder,
+        updated_by = N'install-script',
+        updated_at = SYSUTCDATETIME()
+    WHERE content_id = @ContentId;
+END
+
+SELECT @ContentId;
+"@
+
+    Add-SqlParameter -Command $command -Name '@AppInstanceId' -Type ([System.Data.SqlDbType]::UniqueIdentifier) -Value ([Guid]$script:ContentWebAppAppInstanceId)
+    Add-SqlParameter -Command $command -Name '@Slug' -Type ([System.Data.SqlDbType]::NVarChar) -Size 256 -Value $Slug
+    Add-SqlParameter -Command $command -Name '@Title' -Type ([System.Data.SqlDbType]::NVarChar) -Size 200 -Value $Title
+    Add-SqlParameter -Command $command -Name '@ContentType' -Type ([System.Data.SqlDbType]::NVarChar) -Size 20 -Value $ContentType
+    Add-SqlParameter -Command $command -Name '@Body' -Type ([System.Data.SqlDbType]::NVarChar) -Size -1 -Value $Body
+    Add-SqlParameter -Command $command -Name '@ServerReportKey' -Type ([System.Data.SqlDbType]::NVarChar) -Size 128 -Value $ServerReportKey
+    Add-SqlParameter -Command $command -Name '@IsEnabled' -Type ([System.Data.SqlDbType]::Bit) -Value $IsEnabled
+    Add-SqlParameter -Command $command -Name '@SortOrder' -Type ([System.Data.SqlDbType]::Int) -Value $SortOrder
+
+    try {
+        return $command.ExecuteScalar()
+    }
+    finally {
+        $command.Dispose()
+    }
+}
+
+function Set-ContentSeedRoleAccess {
+    param(
+        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        [Parameter(Mandatory = $true)][Guid]$ContentId,
+        [Parameter(Mandatory = $true)][string]$RoleName,
+        [bool]$CanRead,
+        [bool]$CanWrite
+    )
+
+    $command = $Connection.CreateCommand()
+    $command.CommandTimeout = 3600
+    $command.CommandText = @"
+DECLARE @RoleId int;
+SELECT @RoleId = RoleId FROM omp.Roles WHERE Name = @RoleName;
+
+IF @RoleId IS NULL
+    THROW 53110, 'Content Web App seed role was not found.', 1;
+
+MERGE omp_content.content_role_access AS target
+USING
+(
+    SELECT @ContentId AS content_id,
+           @RoleId AS role_id,
+           @CanRead AS can_read,
+           @CanWrite AS can_write
+) AS source
+ON target.content_id = source.content_id
+AND target.role_id = source.role_id
+WHEN MATCHED THEN
+    UPDATE SET can_read = source.can_read,
+               can_write = source.can_write
+WHEN NOT MATCHED THEN
+    INSERT(content_id, role_id, can_read, can_write)
+    VALUES(source.content_id, source.role_id, source.can_read, source.can_write);
+"@
+
+    Add-SqlParameter -Command $command -Name '@ContentId' -Type ([System.Data.SqlDbType]::UniqueIdentifier) -Value $ContentId
+    Add-SqlParameter -Command $command -Name '@RoleName' -Type ([System.Data.SqlDbType]::NVarChar) -Size 200 -Value $RoleName
+    Add-SqlParameter -Command $command -Name '@CanRead' -Type ([System.Data.SqlDbType]::Bit) -Value ($CanRead -or $CanWrite)
+    Add-SqlParameter -Command $command -Name '@CanWrite' -Type ([System.Data.SqlDbType]::Bit) -Value $CanWrite
+
+    try {
+        [void]$command.ExecuteNonQuery()
+    }
+    catch {
+        throw "Failed to apply Content Web App seed role access for role '$RoleName'. $($_.Exception.Message)"
+    }
+    finally {
+        $command.Dispose()
+    }
+}
+
+function Copy-ContentWebAppSeedReports {
+    param([Parameter(Mandatory = $true)][string]$SeedRoot)
+
+    $reportsRoot = Join-Path $SeedRoot 'reports'
+    if (-not (Test-Path -LiteralPath $reportsRoot -PathType Container)) {
+        return
+    }
+
+    $reportFiles = @(Get-ChildItem -LiteralPath $reportsRoot -Filter '*.json' -File)
+    if ($reportFiles.Count -eq 0) {
+        return
+    }
+
+    $targetRoot = Resolve-ContentWebAppServerReportsPath
+    New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+
+    foreach ($reportFile in $reportFiles) {
+        Copy-Item -LiteralPath $reportFile.FullName -Destination (Join-Path $targetRoot $reportFile.Name) -Force
+    }
+
+    Write-Host "Copied $($reportFiles.Count) Content Web App server report definition(s) to: $targetRoot"
+}
+
+function Import-ContentWebAppSeedPages {
+    param([Parameter(Mandatory = $true)][string]$SeedRoot)
+
+    $manifestPath = Join-Path $SeedRoot 'content-seed.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        return
+    }
+
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $pages = @((Get-ObjectPropertyValue -Entry $manifest -Name 'pages' -DefaultValue @()))
+    if ($pages.Count -eq 0) {
+        return
+    }
+
+    $connection = New-Object System.Data.SqlClient.SqlConnection (Get-SqlConnectionString -TargetDatabase $script:Database)
+    $connection.Open()
+    try {
+        foreach ($page in $pages) {
+            $slug = [string](Get-ObjectPropertyValue -Entry $page -Name 'slug' -DefaultValue '')
+            $title = [string](Get-ObjectPropertyValue -Entry $page -Name 'title' -DefaultValue $slug)
+            $contentType = ([string](Get-ObjectPropertyValue -Entry $page -Name 'contentType' -DefaultValue 'html')).ToLowerInvariant()
+            $bodyFile = [string](Get-ObjectPropertyValue -Entry $page -Name 'bodyFile' -DefaultValue '')
+            $serverReportKey = Get-ObjectPropertyValue -Entry $page -Name 'serverReportKey' -DefaultValue $null
+            $isEnabled = [bool](Get-ObjectPropertyValue -Entry $page -Name 'isEnabled' -DefaultValue $true)
+            $sortOrder = Get-ObjectPropertyValue -Entry $page -Name 'sortOrder' -DefaultValue $null
+
+            if ([string]::IsNullOrWhiteSpace($slug)) {
+                throw "Content Web App seed page in '$manifestPath' is missing slug."
+            }
+
+            if ($contentType -notin @('markdown', 'html', 'server_report')) {
+                throw "Content Web App seed page '$slug' has unsupported content type '$contentType'."
+            }
+
+            $body = ''
+            if (-not [string]::IsNullOrWhiteSpace($bodyFile)) {
+                $bodyPath = Resolve-ContentSeedFile -SeedRoot $SeedRoot -RelativePath $bodyFile
+                $body = Get-Content -LiteralPath $bodyPath -Raw -Encoding UTF8
+            }
+
+            $contentId = [Guid](Invoke-ContentSeedPageUpsert `
+                -Connection $connection `
+                -Slug $slug `
+                -Title $title `
+                -ContentType $contentType `
+                -Body $body `
+                -ServerReportKey $serverReportKey `
+                -IsEnabled $isEnabled `
+                -SortOrder $sortOrder)
+
+            $roleAccesses = @((Get-ObjectPropertyValue -Entry $page -Name 'roleAccesses' -DefaultValue @()))
+            foreach ($roleAccess in $roleAccesses) {
+                $roleName = [string](Get-ObjectPropertyValue -Entry $roleAccess -Name 'roleName' -DefaultValue '')
+                if ([string]::IsNullOrWhiteSpace($roleName)) {
+                    throw "Content Web App seed page '$slug' has a role access entry without roleName."
+                }
+
+                $canWrite = [bool](Get-ObjectPropertyValue -Entry $roleAccess -Name 'canWrite' -DefaultValue $false)
+                $canRead = [bool](Get-ObjectPropertyValue -Entry $roleAccess -Name 'canRead' -DefaultValue $true)
+                Set-ContentSeedRoleAccess -Connection $connection -ContentId $contentId -RoleName $roleName -CanRead $canRead -CanWrite $canWrite
+            }
+
+            Write-Host "Imported Content Web App seed page: $slug"
+        }
+    }
+    finally {
+        $connection.Dispose()
+    }
+}
+
+function Install-ContentWebAppSeed {
+    if (-not $script:InstallContentWebApp) {
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($script:ContentWebAppSeedPath) -or
+        -not (Test-Path -LiteralPath $script:ContentWebAppSeedPath -PathType Container)) {
+        return
+    }
+
+    Write-Step 'Installing Content Web App seed'
+    Copy-ContentWebAppSeedReports -SeedRoot $script:ContentWebAppSeedPath
+
+    if ($script:RunSql) {
+        Import-ContentWebAppSeedPages -SeedRoot $script:ContentWebAppSeedPath
+    }
+    else {
+        Write-Warning 'Skipping Content Web App seed page import because Options.RunSql is false.'
+    }
+}
+
 function Write-RuntimeConfiguration {
     Write-Step 'Writing runtime configuration'
     $connectionString = Get-OmpConnectionString
@@ -1515,6 +1851,14 @@ if (-not (Test-Path -LiteralPath (Join-Path $script:PackageRoot 'payload') -Path
     throw "Package payload folder was not found: $script:PackageRoot"
 }
 
+$contentWebAppSeedPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'SeedPath' -DefaultValue 'content-webapp-seed')
+if ([string]::IsNullOrWhiteSpace($contentWebAppSeedPath)) {
+    $script:ContentWebAppSeedPath = ''
+}
+else {
+    $script:ContentWebAppSeedPath = Resolve-DeploymentPath -Path $contentWebAppSeedPath -BasePath $script:PackageRoot
+}
+
 Write-Host ''
 Write-Host "Installing OpenModulePlatform suite for '$([string](Get-ConfigValue -Config $config -Name 'EnvironmentName' -DefaultValue 'environment'))' from: $script:PackageRoot" -ForegroundColor Yellow
 if (-not (Confirm-DeploymentAction 'Continue with installation')) {
@@ -1527,6 +1871,7 @@ Deploy-Payloads
 Grant-RunAsFolderAccess
 Write-RuntimeConfiguration
 Run-InstallSql
+Install-ContentWebAppSeed
 Ensure-Iis
 Start-ConfiguredAppPools
 Ensure-Services

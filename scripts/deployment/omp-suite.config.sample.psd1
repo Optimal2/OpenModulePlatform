@@ -87,6 +87,10 @@
         ServerReportDefaultMaxRows = 100
         ServerReportMaxRowsLimit = 1000
         ServerReportQueryTimeoutSeconds = 30
+        # Optional package-relative folder for installer-seeded Content pages
+        # and server report JSON definitions. Leave the default value to import
+        # content-webapp-seed when that folder is included in a package.
+        SeedPath = 'content-webapp-seed'
     }
 
     Iis = @{
