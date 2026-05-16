@@ -47,6 +47,9 @@ The configured database is expected to already exist unless
 installer. Services are still installed with Automatic startup. In
 load-balanced/customer environments it is usually safer to keep this set to
 `$false`, validate all nodes, and then start HostAgent/WorkerManager manually.
+HostAgent is configured with `MaterializeTemplates = true` by default so each
+host can upsert its concrete app-instance rows from the assigned OMP templates
+before artifact provisioning runs.
 
 ## Typical Test/Production Flow
 

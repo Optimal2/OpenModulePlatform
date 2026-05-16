@@ -1138,6 +1138,7 @@ function Write-RuntimeConfiguration {
                 RefreshSeconds = 30
                 CentralArtifactRoot = $script:ArtifactStoreRoot
                 LocalArtifactCacheRoot = $script:ArtifactCacheRoot
+                MaterializeTemplates = $true
                 ProvisionAppInstanceArtifacts = $true
                 ProvisionExplicitRequirements = $true
                 MaxArtifactsPerCycle = 100

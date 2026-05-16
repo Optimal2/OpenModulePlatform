@@ -12,6 +12,8 @@ public sealed class HostAgentSettings
 
     public string LocalArtifactCacheRoot { get; set; } = string.Empty;
 
+    public bool MaterializeTemplates { get; set; } = true;
+
     public bool ProvisionAppInstanceArtifacts { get; set; } = true;
 
     public bool ProvisionExplicitRequirements { get; set; } = true;

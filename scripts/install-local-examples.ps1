@@ -655,6 +655,7 @@ function Write-ExampleRuntimeConfig {
                     RefreshSeconds = 30
                     CentralArtifactRoot = (Join-Path $RuntimeRoot 'ArtifactStore')
                     LocalArtifactCacheRoot = (Join-Path $RuntimeRoot 'ArtifactCache')
+                    MaterializeTemplates = $true
                     ProvisionAppInstanceArtifacts = $true
                     ProvisionExplicitRequirements = $true
                     MaxArtifactsPerCycle = 100

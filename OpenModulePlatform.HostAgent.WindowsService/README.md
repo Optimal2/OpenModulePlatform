@@ -5,6 +5,8 @@ HostAgent v1 is the host-local OMP service responsible for provisioning immutabl
 Implemented in v1:
 
 - runs as a Windows Service
+- materializes enabled instance-template topology for the local host when
+  `HostAgent:MaterializeTemplates` is enabled
 - reads desired artifacts from OMP SQL
 - provisions app-instance artifacts and explicit host artifact requirements
 - verifies SHA-256 when `omp.Artifacts.Sha256` is populated
@@ -20,7 +22,9 @@ Expected first use:
 
 Not implemented in v1:
 
-- service API for synchronous artifact provisioning
 - remote HTTP download
 - package extraction
 - retention/cleanup policy
+
+See `../docs/HOST_AGENT_TEMPLATE_AUTOMATION.md` for the roadmap from template
+metadata to full HostAgent-driven deployment automation.
