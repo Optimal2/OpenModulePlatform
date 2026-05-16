@@ -85,8 +85,9 @@ whose artifact has `PackageType = 'web-app'` and a successful
 An app instance with `HostId = NULL` is treated as host-neutral. HostAgent
 deploys that same logical app instance on every enabled host that runs the
 agent, while `omp.HostAppDeploymentStates` still tracks one deployment state per
-host. OpenDocViewer uses this model so the portal menu contains one ODV entry
-even in multi-node IIS environments.
+host. First-party load-balanced IIS apps use this model so the portal menu
+contains one logical app entry even when two or more web servers serve the same
+public URL.
 
 Before copying files, HostAgent resolves the IIS application and its app pool
 with `appcmd.exe`. It can stop the app pool, mirror the provisioned artifact
