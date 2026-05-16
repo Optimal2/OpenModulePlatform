@@ -25,6 +25,10 @@
   <data name="Edit page" xml:space="preserve"><value>Edit page</value></data>
   <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Use Markdown for simple pages. Rendered output is sanitized before it is shown to users.</value></data>
   <data name="Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization." xml:space="preserve"><value>Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization.</value></data>
+  <data name="Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor." xml:space="preserve"><value>Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor.</value></data>
+  <data name="Write Markdown content. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Write Markdown content. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] are supported.</value></data>
+  <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Write trusted HTML directly. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] are supported.</value></data>
+  <data name="Changing content type changes the editor but does not convert existing content." xml:space="preserve"><value>Changing content type changes the editor but does not convert existing content.</value></data>
   <data name="Back to pages" xml:space="preserve"><value>Back to pages</value></data>
   <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Leave empty for the root page. Slugs are normalized when saved.</value></data>
   <data name="Slugs are normalized when saved." xml:space="preserve"><value>Slugs are normalized when saved.</value></data>
