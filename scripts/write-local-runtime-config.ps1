@@ -99,6 +99,7 @@ $hostAgentConfig = [ordered]@{
         CentralArtifactRoot = (Join-Path $RuntimeRoot 'ArtifactStore')
         LocalArtifactCacheRoot = (Join-Path $RuntimeRoot 'ArtifactCache')
         MaterializeTemplates = $true
+        ProcessHostDeployments = $true
         ProvisionAppInstanceArtifacts = $true
         ProvisionExplicitRequirements = $true
         MaxArtifactsPerCycle = 100

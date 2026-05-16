@@ -49,7 +49,9 @@ load-balanced/customer environments it is usually safer to keep this set to
 `$false`, validate all nodes, and then start HostAgent/WorkerManager manually.
 HostAgent is configured with `MaterializeTemplates = true` by default so each
 host can upsert its concrete app-instance rows from the assigned OMP templates
-before artifact provisioning runs.
+before artifact provisioning runs. It is also configured with
+`ProcessHostDeployments = true`, which lets it claim pending
+`omp.HostDeployments` rows for the local host and record completion status.
 
 ## Typical Test/Production Flow
 

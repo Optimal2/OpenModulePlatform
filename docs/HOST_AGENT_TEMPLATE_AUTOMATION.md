@@ -17,9 +17,16 @@ HostAgent-driven deployment automation.
 
 ## Implemented Baseline
 
-HostAgent now has a `HostAgent:MaterializeTemplates` setting, enabled by
-default. At the start of each cycle it calls
-`omp.MaterializeInstanceTemplate` for its configured `HostKey`.
+HostAgent now has `HostAgent:MaterializeTemplates` and
+`HostAgent:ProcessHostDeployments` settings, both enabled by default. At the
+start of each cycle it can claim one pending `omp.HostDeployments` row for its
+configured `HostKey`, materialize that requested host/template combination, and
+mark the deployment as succeeded or failed. It then calls
+`omp.MaterializeInstanceTemplate` for its configured `HostKey` so normal
+template drift is also corrected before artifact provisioning.
+
+Portal or scripts can enqueue a deployment by calling
+`omp.RequestHostDeployment`.
 
 The stored procedure is intentionally conservative:
 
@@ -38,9 +45,8 @@ This closes the first automation gap: HostAgent can now create the concrete
 
 ## Remaining Steps
 
-1. Add a deployment queue contract around `omp.HostDeployments` so Portal can
-   request a host/template rollout and HostAgent can claim, run, and complete it
-   with clear status and errors.
+1. Add Portal actions for previewing and enqueuing host deployments from the
+   template/admin pages.
 2. Add package-type handlers in HostAgent for web apps, service apps, and worker
    plugins. Artifact provisioning should remain the cache step; installation
    handlers should own IIS/service updates.

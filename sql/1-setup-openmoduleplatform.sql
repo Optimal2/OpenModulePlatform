@@ -647,6 +647,7 @@ GO
 ALTER PROCEDURE omp.MaterializeInstanceTemplate
     @InstanceKey nvarchar(100) = NULL,
     @HostKey nvarchar(128) = NULL,
+    @HostTemplateId int = NULL,
     @RequestedBy nvarchar(256) = NULL
 AS
 BEGIN
@@ -673,6 +674,23 @@ BEGIN
        )
     BEGIN
         THROW 51030, 'Template materialization host was not found or is disabled.', 1;
+    END;
+
+    IF @HostKey IS NOT NULL
+       AND @HostTemplateId IS NOT NULL
+       AND NOT EXISTS
+       (
+           SELECT 1
+           FROM omp.Hosts h
+           INNER JOIN omp.HostDeploymentAssignments hda
+               ON hda.HostId = h.HostId
+              AND hda.HostTemplateId = @HostTemplateId
+              AND hda.IsActive = 1
+           WHERE h.HostKey = @HostKey
+             AND h.IsEnabled = 1
+       )
+    BEGIN
+        THROW 51031, 'Template materialization host does not have the requested active host template assignment.', 1;
     END;
 
     ;WITH SourceModules AS
@@ -769,6 +787,7 @@ BEGIN
           AND h.IsEnabled = 1
           AND (@InstanceKey IS NULL OR i.InstanceKey = @InstanceKey)
           AND (@HostKey IS NULL OR h.HostKey = @HostKey)
+          AND (@HostTemplateId IS NULL OR ith.HostTemplateId = @HostTemplateId)
     ),
     SourceApps AS
     (
@@ -899,6 +918,70 @@ BEGIN
         @InstanceKey AS InstanceKey,
         @HostKey AS HostKey,
         @RequestedBy AS RequestedBy;
+END
+GO
+
+IF OBJECT_ID(N'omp.RequestHostDeployment', N'P') IS NULL
+    EXEC(N'CREATE PROCEDURE omp.RequestHostDeployment AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER PROCEDURE omp.RequestHostDeployment
+    @HostKey nvarchar(128),
+    @HostTemplateKey nvarchar(100) = NULL,
+    @RequestedBy nvarchar(256) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @HostKey = NULLIF(LTRIM(RTRIM(@HostKey)), N'');
+    SET @HostTemplateKey = NULLIF(LTRIM(RTRIM(@HostTemplateKey)), N'');
+    SET @RequestedBy = NULLIF(LTRIM(RTRIM(@RequestedBy)), N'');
+
+    DECLARE @HostId uniqueidentifier;
+    DECLARE @HostTemplateId int;
+
+    IF @HostKey IS NULL
+        THROW 51040, 'Host deployment request requires HostKey.', 1;
+
+    SELECT @HostId = HostId
+    FROM omp.Hosts
+    WHERE HostKey = @HostKey
+      AND IsEnabled = 1;
+
+    IF @HostId IS NULL
+        THROW 51041, 'Host deployment request host was not found or is disabled.', 1;
+
+    IF @HostTemplateKey IS NOT NULL
+    BEGIN
+        SELECT @HostTemplateId = HostTemplateId
+        FROM omp.HostTemplates
+        WHERE TemplateKey = @HostTemplateKey
+          AND IsEnabled = 1;
+
+        IF @HostTemplateId IS NULL
+            THROW 51042, 'Host deployment request host template was not found or is disabled.', 1;
+
+        IF NOT EXISTS
+        (
+            SELECT 1
+            FROM omp.HostDeploymentAssignments
+            WHERE HostId = @HostId
+              AND HostTemplateId = @HostTemplateId
+              AND IsActive = 1
+        )
+        BEGIN
+            THROW 51043, 'Host deployment request host template is not actively assigned to the host.', 1;
+        END;
+    END;
+
+    INSERT INTO omp.HostDeployments(HostId, HostTemplateId, RequestedBy, Status)
+    VALUES(@HostId, @HostTemplateId, @RequestedBy, 0);
+
+    SELECT
+        CONVERT(bigint, SCOPE_IDENTITY()) AS HostDeploymentId,
+        @HostId AS HostId,
+        @HostTemplateId AS HostTemplateId;
 END
 GO
 

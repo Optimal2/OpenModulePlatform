@@ -14,6 +14,8 @@ public sealed class HostAgentSettings
 
     public bool MaterializeTemplates { get; set; } = true;
 
+    public bool ProcessHostDeployments { get; set; } = true;
+
     public bool ProvisionAppInstanceArtifacts { get; set; } = true;
 
     public bool ProvisionExplicitRequirements { get; set; } = true;
