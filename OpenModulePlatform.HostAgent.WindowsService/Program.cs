@@ -23,6 +23,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<SqlConnectionFactory>();
         services.AddSingleton<OmpHostArtifactRepository>();
         services.AddSingleton<ArtifactProvisioner>();
+        services.AddSingleton<WebAppDeploymentService>();
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
         services.AddHostedService<HostAgentRpcHostedService>();

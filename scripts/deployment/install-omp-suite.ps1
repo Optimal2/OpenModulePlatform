@@ -1142,6 +1142,14 @@ function Write-RuntimeConfiguration {
                 ProcessHostDeployments = $true
                 ProvisionAppInstanceArtifacts = $true
                 ProvisionExplicitRequirements = $true
+                DeployWebApps = $true
+                IisSiteName = $script:IisSiteName
+                WebAppsRoot = $script:WebAppsRoot
+                PortalPhysicalPath = $script:PortalPath
+                StopIisAppPoolForWebAppDeployment = $true
+                StartIisAppPoolAfterWebAppDeployment = $true
+                IisAppPoolStopTimeoutSeconds = 30
+                WebAppDeploymentExcludedEntries = @('appsettings.json', 'appsettings.*.json', 'logs', 'App_Data')
                 MaxArtifactsPerCycle = 100
                 EnableRpc = $true
                 RpcPipeName = ''

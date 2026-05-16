@@ -20,6 +20,28 @@ public sealed class HostAgentSettings
 
     public bool ProvisionExplicitRequirements { get; set; } = true;
 
+    public bool DeployWebApps { get; set; }
+
+    public string IisSiteName { get; set; } = string.Empty;
+
+    public string WebAppsRoot { get; set; } = string.Empty;
+
+    public string PortalPhysicalPath { get; set; } = string.Empty;
+
+    public bool StopIisAppPoolForWebAppDeployment { get; set; } = true;
+
+    public bool StartIisAppPoolAfterWebAppDeployment { get; set; } = true;
+
+    public int IisAppPoolStopTimeoutSeconds { get; set; } = 30;
+
+    public string[] WebAppDeploymentExcludedEntries { get; set; } =
+    [
+        "appsettings.json",
+        "appsettings.*.json",
+        "logs",
+        "App_Data"
+    ];
+
     public int MaxArtifactsPerCycle { get; set; } = 100;
 
     public bool EnableRpc { get; set; } = true;
@@ -70,6 +92,24 @@ public sealed class HostAgentSettings
         if (MaxArtifactsPerCycle < 1)
         {
             throw new InvalidOperationException("HostAgent:MaxArtifactsPerCycle must be at least 1.");
+        }
+
+        if (DeployWebApps)
+        {
+            if (string.IsNullOrWhiteSpace(IisSiteName))
+            {
+                throw new InvalidOperationException("HostAgent:IisSiteName must be configured when HostAgent:DeployWebApps is enabled.");
+            }
+
+            if (string.IsNullOrWhiteSpace(WebAppsRoot) && string.IsNullOrWhiteSpace(PortalPhysicalPath))
+            {
+                throw new InvalidOperationException("HostAgent:WebAppsRoot or HostAgent:PortalPhysicalPath must be configured when HostAgent:DeployWebApps is enabled.");
+            }
+
+            if (IisAppPoolStopTimeoutSeconds < 1)
+            {
+                throw new InvalidOperationException("HostAgent:IisAppPoolStopTimeoutSeconds must be at least 1.");
+            }
         }
 
         if (RpcRequestTimeoutSeconds < 1)
