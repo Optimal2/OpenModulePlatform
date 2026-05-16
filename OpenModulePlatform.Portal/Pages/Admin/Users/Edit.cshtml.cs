@@ -97,9 +97,9 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
         PopulateInputFromLoadedUser();
 
-        if (portalSettingDefinitionId.HasValue)
+        if (portalSettingDefinitionId is int selectedPortalSettingDefinitionId)
         {
-            var row = PortalSettingRows.FirstOrDefault(value => value.UserSettingDefinitionId == portalSettingDefinitionId.Value);
+            var row = PortalSettingRows.FirstOrDefault(value => value.UserSettingDefinitionId == selectedPortalSettingDefinitionId);
             if (row is null)
             {
                 return NotFound();

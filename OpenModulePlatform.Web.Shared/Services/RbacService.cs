@@ -380,12 +380,9 @@ ORDER BY r.Name, r.RoleId;";
             [',', ';', '\r', '\n'],
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        foreach (var part in parts)
+        foreach (var part in parts.Where(part => !string.IsNullOrWhiteSpace(part)))
         {
-            if (!string.IsNullOrWhiteSpace(part))
-            {
-                result.Add(part);
-            }
+            result.Add(part);
         }
 
         return result;

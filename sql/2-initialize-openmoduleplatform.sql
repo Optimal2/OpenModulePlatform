@@ -355,7 +355,7 @@ USING
     VALUES
         (N'branding', N'platformName', N'Display name for the installed OpenModulePlatform instance.', 10, CONVERT(bit, 1)),
         (N'branding', N'portalName', N'Display name for the portal concept in this installation.', 20, CONVERT(bit, 1)),
-        (N'rbac', N'authenticatedUsersWindowsDomains', N'Comma- or semicolon-separated Windows account domain/workgroup/computer prefixes that may receive the built-in AuthenticatedUsers principal. Empty or * accepts any authenticated principal.', 100, CONVERT(bit, 1))
+        (N'rbac', N'authenticatedUsersWindowsDomains', N'Comma-, semicolon-, or newline-separated Windows account domain/workgroup/computer prefixes that may receive the built-in AuthenticatedUsers principal. Empty or * accepts any authenticated principal.', 100, CONVERT(bit, 1))
 ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
 ON target.ConfigCategory = source.ConfigCategory
    AND target.ConfigSetting = source.ConfigSetting
