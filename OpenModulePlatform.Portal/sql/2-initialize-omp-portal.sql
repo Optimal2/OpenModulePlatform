@@ -22,12 +22,14 @@ DECLARE @DefaultPortalAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-
 DECLARE @DefaultHostId uniqueidentifier = '11111111-1111-1111-1111-111111111121';
 DECLARE @PortalModuleId int;
 DECLARE @PortalAppId int;
+DECLARE @PortalArtifactId int;
 DECLARE @PortalViewPermissionId int;
 DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplateHostId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
+DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
@@ -136,6 +138,35 @@ END
 
 SELECT @PortalAppId = AppId FROM omp.Apps WHERE ModuleId = @PortalModuleId AND AppKey = N'omp_portal';
 
+MERGE omp.Artifacts AS target
+USING
+(
+    SELECT @PortalAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'web-app' AS PackageType,
+           N'omp-portal' AS TargetName,
+           N'omp-portal/web/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
+
+SELECT @PortalArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @PortalAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'web-app'
+  AND TargetName = N'omp-portal';
+
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @PortalAppId AND PermissionId = @PortalViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@PortalAppId, @PortalViewPermissionId, 0);
 
@@ -207,10 +238,10 @@ IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @DefaultPort
 BEGIN
     INSERT INTO omp.AppInstances(
         AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description,
-        RoutePath, InstallationName, IsEnabled, IsAllowed, DesiredState, SortOrder)
+        RoutePath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)
     VALUES(
         @DefaultPortalAppInstanceId, @DefaultPortalModuleInstanceId, @DefaultHostId, @PortalAppId, N'omp_portal', N'OMP Portal',
-        N'Primary OMP portal app instance for the default OMP instance', N'', N'portal', 1, 1, 1, 100);
+        N'Primary OMP portal app instance for the default OMP instance', N'', N'portal', @PortalArtifactId, 1, 1, 1, 100);
 END
 ELSE
 BEGIN
@@ -223,6 +254,7 @@ BEGIN
         Description = N'Primary OMP portal app instance for the default OMP instance',
         RoutePath = N'',
         InstallationName = N'portal',
+        ArtifactId = @PortalArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -241,9 +273,14 @@ IF NOT EXISTS
 BEGIN
     INSERT INTO omp.InstanceTemplateAppInstances(
         InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description,
-        RoutePath, InstallationName, DesiredState, SortOrder)
+        RoutePath, InstallationName, DesiredArtifactId, DesiredState, SortOrder)
     VALUES(
         @DefaultTemplatePortalModuleInstanceId, @DefaultTemplateHostId, @PortalAppId, N'omp_portal', N'OMP Portal',
-        N'Primary OMP portal app instance for the default template', N'', N'portal', 1, 100);
+        N'Primary OMP portal app instance for the default template', N'', N'portal', @PortalArtifactId, 1, 100);
 END
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @PortalArtifactId
+WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId
+  AND AppInstanceKey = N'omp_portal';
 GO

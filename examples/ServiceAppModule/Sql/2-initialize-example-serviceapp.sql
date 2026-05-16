@@ -35,10 +35,12 @@ DECLARE @ServiceWebAppId int;
 DECLARE @ServiceWebAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111302';
 DECLARE @ServiceAppId int;
 DECLARE @ServiceAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111303';
+DECLARE @ServiceWebArtifactId int;
 DECLARE @ServiceViewPermissionId int;
 DECLARE @ServiceAdminPermissionId int;
 DECLARE @InitialServiceConfigId int;
 DECLARE @ServiceArtifactId int;
+DECLARE @ArtifactVersion nvarchar(50) = N'1.0.0';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -182,28 +184,48 @@ IF @PortalAdminsRoleId IS NOT NULL
     INSERT INTO omp.RolePermissions(RoleId, PermissionId)
     VALUES(@PortalAdminsRoleId, @ServiceAdminPermissionId);
 
-IF NOT EXISTS
+MERGE omp.Artifacts AS target
+USING
 (
-    SELECT 1
-    FROM omp.Artifacts
-    WHERE AppId = @ServiceAppId
-      AND Version = N'1.0.0'
-      AND PackageType = N'folder'
-      AND TargetName = N'win-x64'
-)
-    INSERT INTO omp.Artifacts(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(@ServiceAppId, N'1.0.0', N'folder', N'win-x64', N'publish/ExampleServiceAppModule', 1);
+    SELECT @ServiceWebAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'web-app' AS PackageType,
+           N'example-serviceapp-web' AS TargetName,
+           N'example-serviceapp/web/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+    UNION ALL
+    SELECT @ServiceAppId,
+           @ArtifactVersion,
+           N'service-app',
+           N'example-serviceapp-service',
+           N'example-serviceapp/service/' + @ArtifactVersion,
+           CAST(1 AS bit)
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
-/*
-Resolve the artifact explicitly instead of assuming that the highest ArtifactId is the correct sample artifact.
-The example install script seeds a canonical win-x64 folder artifact for version 1.0.0 and should keep resolving that exact row on repeated installs.
-*/
+SELECT @ServiceWebArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @ServiceWebAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'web-app'
+  AND TargetName = N'example-serviceapp-web';
+
 SELECT @ServiceArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @ServiceAppId
-  AND Version = N'1.0.0'
-  AND PackageType = N'folder'
-  AND TargetName = N'win-x64';
+  AND Version = @ArtifactVersion
+  AND PackageType = N'service-app'
+  AND TargetName = N'example-serviceapp-service';
 
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @ServiceModuleInstanceId)
 BEGIN
@@ -281,6 +303,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        ArtifactId,
         IsEnabled,
         IsAllowed,
         DesiredState,
@@ -295,6 +318,7 @@ BEGIN
         N'Primary web app instance for the example HostAppModule',
         N'ExampleServiceAppModule',
         N'webapp',
+        @ServiceWebArtifactId,
         1,
         1,
         1,
@@ -311,6 +335,7 @@ BEGIN
         Description = N'Primary web app instance for the example HostAppModule',
         RoutePath = N'ExampleServiceAppModule',
         InstallationName = N'webapp',
+        ArtifactId = @ServiceWebArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -336,6 +361,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        DesiredArtifactId,
         DesiredState,
         SortOrder)
     VALUES(
@@ -347,9 +373,15 @@ BEGIN
         N'Primary web app instance for the example HostAppModule',
         N'ExampleServiceAppModule',
         N'webapp',
+        @ServiceWebArtifactId,
         1,
         400);
 END
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @ServiceWebArtifactId
+WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
+  AND AppInstanceKey = N'example_serviceapp_webapp';
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @ServiceAppInstanceId)
 BEGIN
@@ -461,6 +493,11 @@ BEGIN
         1,
         401);
 END
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @ServiceArtifactId
+WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
+  AND AppInstanceKey = N'example_serviceapp_service';
 
 
 -------------------------------------------------------------------------------

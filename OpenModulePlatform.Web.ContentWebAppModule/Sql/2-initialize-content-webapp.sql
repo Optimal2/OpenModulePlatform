@@ -20,11 +20,13 @@ DECLARE @ContentModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111
 DECLARE @ContentTemplateModuleInstanceId int;
 DECLARE @ContentAppId int;
 DECLARE @ContentAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111232';
+DECLARE @ContentArtifactId int;
 DECLARE @SeedHomeContentId uniqueidentifier = '11111111-1111-1111-1111-111111111233';
 DECLARE @SeedModuleStatusContentId uniqueidentifier = '11111111-1111-1111-1111-111111111234';
 DECLARE @HomeContentId uniqueidentifier;
 DECLARE @ContentViewPermissionId int;
 DECLARE @ContentManagePermissionId int;
+DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -123,6 +125,35 @@ BEGIN
 END
 
 SELECT @ContentAppId = AppId FROM omp.Apps WHERE ModuleId = @ContentModuleId AND AppKey = N'content_webapp_webapp';
+
+MERGE omp.Artifacts AS target
+USING
+(
+    SELECT @ContentAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'web-app' AS PackageType,
+           N'content-webapp' AS TargetName,
+           N'content-webapp/web/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
+
+SELECT @ContentArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @ContentAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'web-app'
+  AND TargetName = N'content-webapp';
 
 DELETE ap
 FROM omp.AppPermissions ap
@@ -227,6 +258,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        ArtifactId,
         IsEnabled,
         IsAllowed,
         DesiredState,
@@ -241,6 +273,7 @@ BEGIN
         N'Primary web app instance for database-backed OMP content pages',
         N'content',
         N'content-webapp',
+        @ContentArtifactId,
         1,
         1,
         1,
@@ -257,6 +290,7 @@ BEGIN
         Description = N'Primary web app instance for database-backed OMP content pages',
         RoutePath = N'content',
         InstallationName = N'content-webapp',
+        ArtifactId = @ContentArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -282,6 +316,7 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
+        DesiredArtifactId,
         DesiredState,
         SortOrder)
     VALUES(
@@ -293,6 +328,7 @@ BEGIN
         N'Primary web app instance for database-backed OMP content pages',
         N'content',
         N'content-webapp',
+        @ContentArtifactId,
         1,
         330);
 END
@@ -305,6 +341,7 @@ BEGIN
         Description = N'Primary web app instance for database-backed OMP content pages',
         RoutePath = N'content',
         InstallationName = N'content-webapp',
+        DesiredArtifactId = @ContentArtifactId,
         DesiredState = 1,
         SortOrder = 330
     WHERE InstanceTemplateModuleInstanceId = @ContentTemplateModuleInstanceId
