@@ -27,6 +27,51 @@ WHERE HostKey = @hostKey;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<TemplateMaterializationResult> MaterializeTemplatesForHostAsync(
+        string hostKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.MaterializeInstanceTemplate', N'P') IS NULL
+BEGIN
+    SELECT CAST(0 AS int) AS ModuleInstanceChanges,
+           CAST(0 AS int) AS AppInstanceChanges;
+    RETURN;
+END;
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.Hosts
+    WHERE HostKey = @hostKey
+      AND IsEnabled = 1
+)
+BEGIN
+    SELECT CAST(0 AS int) AS ModuleInstanceChanges,
+           CAST(0 AS int) AS AppInstanceChanges;
+    RETURN;
+END;
+
+EXEC omp.MaterializeInstanceTemplate
+    @HostKey = @hostKey,
+    @RequestedBy = N'HostAgent';";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return new TemplateMaterializationResult(0, 0);
+        }
+
+        return new TemplateMaterializationResult(
+            rdr.GetInt32(0),
+            rdr.GetInt32(1));
+    }
+
     public async Task<ArtifactDescriptor?> GetArtifactByIdAsync(
         string hostKey,
         int artifactId,
