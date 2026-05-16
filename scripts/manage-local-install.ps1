@@ -45,9 +45,8 @@ function Write-Step {
 function Confirm-LocalAction {
     param([string]$Message)
     if ($Yes) { return $true }
-    $answer = Read-Host "$Message [y/N]"
-    # Accept Swedish j/ja as well as English y/yes for local developer prompts.
-    return $answer -match '^(y|yes|j|ja)$'
+    $answer = Read-Host "$Message [Y/N, default N]"
+    return $answer.Trim() -ieq 'Y'
 }
 
 function Require-Command {
