@@ -262,14 +262,9 @@ WHERE portal_entry_id = @portal_entry_id;";
             cmd.Parameters.Add("@portal_entry_id", SqlDbType.Int).Value = currentParentId.Value;
             var result = await cmd.ExecuteScalarAsync(ct);
 
-            if (result is null || result == DBNull.Value)
-            {
-                currentParentId = null;
-            }
-            else
-            {
-                currentParentId = Convert.ToInt32(result, CultureInfo.InvariantCulture);
-            }
+            currentParentId = result is null or DBNull
+                ? null
+                : Convert.ToInt32(result, CultureInfo.InvariantCulture);
         }
 
         return false;
@@ -409,12 +404,9 @@ WHERE portal_entry_id = @portal_entry_id;";
     private static void ApplyParentVisibility(IReadOnlyList<PortalEntryLayoutUpdate> updates)
     {
         var updatesById = updates.ToDictionary(update => update.PortalEntryId);
-        foreach (var update in updates)
+        foreach (var update in updates.Where(update => HasHiddenAncestor(update, updatesById)))
         {
-            if (HasHiddenAncestor(update, updatesById))
-            {
-                update.IsEnabled = false;
-            }
+            update.IsEnabled = false;
         }
     }
 

@@ -8,6 +8,7 @@ namespace OpenModulePlatform.Web.Shared.Services;
 public sealed class OmpConfigurationService
 {
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(2);
+    private const string FalseSqlCondition = "0 = 1";
 
     private readonly SqlConnectionFactory _db;
     private readonly IMemoryCache _cache;
@@ -45,21 +46,9 @@ public sealed class OmpConfigurationService
         {
             value = await QueryGlobalStringAsync(category.Trim(), setting.Trim(), ct);
         }
-        catch (SqlException ex)
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            _log.LogWarning(
-                ex,
-                "Failed to read OMP config setting {ConfigCategory}/{ConfigSetting}; using runtime defaults.",
-                category,
-                setting);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _log.LogWarning(
-                ex,
-                "Failed to read OMP config setting {ConfigCategory}/{ConfigSetting}; using runtime defaults.",
-                category,
-                setting);
+            LogConfigReadFailure(ex, category, setting, effective: false);
         }
 
         _cache.Set(cacheKey, value, CacheLifetime);
@@ -100,21 +89,9 @@ public sealed class OmpConfigurationService
                 permissionNames,
                 ct);
         }
-        catch (SqlException ex)
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            _log.LogWarning(
-                ex,
-                "Failed to read effective OMP config setting {ConfigCategory}/{ConfigSetting}; using runtime defaults.",
-                category,
-                setting);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _log.LogWarning(
-                ex,
-                "Failed to read effective OMP config setting {ConfigCategory}/{ConfigSetting}; using runtime defaults.",
-                category,
-                setting);
+            LogConfigReadFailure(ex, category, setting, effective: true);
         }
 
         return null;
@@ -134,6 +111,17 @@ public sealed class OmpConfigurationService
         => string.Create(
             CultureInfo.InvariantCulture,
             $"omp-config:global:{category.Trim().ToLowerInvariant()}:{setting.Trim().ToLowerInvariant()}");
+
+    private void LogConfigReadFailure(Exception ex, string category, string setting, bool effective)
+    {
+        var scope = effective ? "effective OMP config setting" : "OMP config setting";
+        _log.LogWarning(
+            ex,
+            "Failed to read {ConfigSettingScope} {ConfigCategory}/{ConfigSetting}; using runtime defaults.",
+            scope,
+            category,
+            setting);
+    }
 
     private async Task<string?> QueryGlobalStringAsync(
         string category,
@@ -174,7 +162,7 @@ ORDER BY cs.ConfigScopeRank DESC,
         IReadOnlyList<string> effectivePermissions,
         CancellationToken ct)
     {
-        var permissionClause = "0 = 1";
+        var permissionClause = FalseSqlCondition;
         if (effectivePermissions.Count > 0)
         {
             var permissionParameters = string.Join(
@@ -192,6 +180,8 @@ EXISTS
 """;
         }
 
+        // permissionClause is assembled only from FalseSqlCondition or generated
+        // parameter names. Permission values are always passed as SQL parameters.
         var sql = $"""
 SELECT TOP (1) cs.ConfigValue
 FROM omp.config_settings cs

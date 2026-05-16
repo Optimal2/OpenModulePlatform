@@ -6,6 +6,7 @@ using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -122,8 +123,8 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
             ModelState.AddModelError(nameof(Input.TargetUrl), T("Use an absolute http/https URL, a local path starting with /, or a relative path."));
         }
 
-        if (Input.ParentEntryId.HasValue
-            && !ParentOptions.Any(option => string.Equals(option.Value, Input.ParentEntryId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)))
+        if (Input.ParentEntryId is int parentEntryId
+            && !ParentOptions.Any(option => string.Equals(option.Value, parentEntryId.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)))
         {
             ModelState.AddModelError(nameof(Input.ParentEntryId), T("Select a valid parent entry."));
         }
