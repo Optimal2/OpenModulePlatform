@@ -232,8 +232,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             ModelState.AddModelError(nameof(Input.TargetUrl), T("Use an absolute http/https URL, a local path starting with /, or a relative path."));
         }
 
-        if (Input.ParentEntryId.HasValue
-            && !ParentOptions.Any(option => string.Equals(option.Value, Input.ParentEntryId.Value.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)))
+        if (Input.ParentEntryId is int parentEntryId
+            && !ParentOptions.Any(option => string.Equals(option.Value, parentEntryId.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)))
         {
             ModelState.AddModelError(nameof(Input.ParentEntryId), T("Select a valid parent entry."));
         }

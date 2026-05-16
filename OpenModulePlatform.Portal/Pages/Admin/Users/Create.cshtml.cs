@@ -78,14 +78,15 @@ public sealed class CreateModel : Pages.Admin.OmpPortalPageModel
         }
 
         var createLocalLogin = LocalLogin.HasAnyInput();
-        var createAdLink = !string.IsNullOrWhiteSpace(NewAdProviderUserKey);
+        var adProviderUserKey = NewAdProviderUserKey?.Trim();
+        var createAdLink = !string.IsNullOrWhiteSpace(adProviderUserKey);
         var result = await _repo.CreateUserWithOptionalAuthLinksAsync(
             new OmpUserEditData
             {
                 DisplayName = Input.DisplayName.Trim(),
                 AccountStatus = Input.AccountStatus
             },
-            createAdLink ? NewAdProviderUserKey?.Trim() : null,
+            createAdLink ? adProviderUserKey : null,
             createLocalLogin ? LocalLogin.UserName.Trim() : null,
             createLocalLogin ? LocalLogin.Password : null,
             ct);

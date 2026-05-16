@@ -72,7 +72,9 @@
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
             }
-        }).catch(() => null);
+        }).catch((error) => {
+            console.warn('Unable to save portal entry order.', error);
+        });
     }
 
     function initAll() {
