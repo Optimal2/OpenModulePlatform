@@ -93,6 +93,26 @@ function Resolve-DeploymentPath {
     return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
 }
 
+function Get-NodePackageVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageRoot,
+        [Parameter(Mandatory = $true)][string]$DisplayName
+    )
+
+    $packageJsonPath = Join-Path $PackageRoot 'package.json'
+    if (-not (Test-Path -LiteralPath $packageJsonPath -PathType Leaf)) {
+        throw "$DisplayName package.json was not found in: $PackageRoot"
+    }
+
+    $packageJson = Get-Content -LiteralPath $packageJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $versionProperty = $packageJson.PSObject.Properties['version']
+    if ($null -eq $versionProperty -or [string]::IsNullOrWhiteSpace([string]$versionProperty.Value)) {
+        throw "$DisplayName package.json does not contain a version."
+    }
+
+    return ([string]$versionProperty.Value).Trim()
+}
+
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -221,6 +241,10 @@ if ([string]::IsNullOrWhiteSpace($installConfigFileName)) {
     $installConfigFileName = 'omp-suite.local.psd1'
 }
 $openDocViewerPackageZip = [string](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'OpenDocViewerPackageZip' -DefaultValue '')
+$openDocViewerVersion = [string](Get-NestedConfigValue -Config $config -Section 'OpenDocViewer' -Name 'Version' -DefaultValue '')
+if ([string]::IsNullOrWhiteSpace($openDocViewerVersion)) {
+    $openDocViewerVersion = Get-NodePackageVersion -PackageRoot $OpenDocViewerRoot -DisplayName 'OpenDocViewer'
+}
 
 $OutputRoot = Resolve-DeploymentPath -Path $OutputRoot -BasePath $RepositoryRoot
 $openDocViewerPackageZip = Resolve-DeploymentPath -Path $openDocViewerPackageZip -BasePath $configDirectory
@@ -278,6 +302,7 @@ Write-Step 'Publishing OpenDocViewer'
 if (-not (Test-Path -LiteralPath $OpenDocViewerRoot -PathType Container)) {
     throw "OpenDocViewer repository root was not found: $OpenDocViewerRoot"
 }
+Write-Host "OpenDocViewer version: $openDocViewerVersion"
 
 if (-not [string]::IsNullOrWhiteSpace($openDocViewerPackageZip)) {
     Copy-RequiredFile -Source $openDocViewerPackageZip -Destination (Join-Path $payloadRoot 'OpenDocViewer.dist.zip')
@@ -339,6 +364,7 @@ $manifest = [ordered]@{
     schema = 'OpenModulePlatform.SuiteReleaseManifest.v1'
     createdUtc = [DateTime]::UtcNow.ToString('o')
     version = $Version
+    openDocViewerVersion = $openDocViewerVersion
     payloads = [ordered]@{}
 }
 

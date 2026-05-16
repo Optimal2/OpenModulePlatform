@@ -93,6 +93,14 @@
         SeedPath = 'content-webapp-seed'
     }
 
+    OpenDocViewer = @{
+        DisplayName = 'OpenDocViewer'
+        # Leave empty to read OpenDocViewer\package.json during packaging or
+        # manifest.json during package installation. Set explicitly only when a
+        # prebuilt ODV payload should be registered with a known external version.
+        Version = ''
+    }
+
     Iis = @{
         SiteName = 'OpenModulePlatform'
         Protocol = 'http'
@@ -164,6 +172,7 @@
     }
 
     DatabaseSchemas = @(
+        'omp_opendocviewer',
         'omp_content',
         'omp_iframe',
         'omp_example_workerapp',
@@ -188,6 +197,7 @@
         'Services\WorkerManager',
         'Services\WorkerProcessHost',
         'Services\ExampleServiceAppModule',
+        'ArtifactStore\opendocviewer',
         'ArtifactStore\example-workerapp',
         'ArtifactCache',
         'DataProtectionKeys'

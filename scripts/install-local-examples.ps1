@@ -60,6 +60,7 @@ $script:legacyVirtualAppPoolPrincipals = $script:deploymentStartAppPoolNames | F
 $script:resolvedRunAsUser = ''
 $script:resolvedRunAsPasswordSecure = $null
 $script:resolvedRunAsCredential = $null
+$script:openDocViewerVersion = ''
 
 function Write-Step {
     param([string]$Message)
@@ -269,6 +270,45 @@ function Get-OmpConnectionString {
     return "Server=$SqlServer;Database=$Database;Integrated Security=true;TrustServerCertificate=true;"
 }
 
+function ConvertTo-SqlUnicodeLiteral {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    return "N'$($Value.Replace("'", "''"))'"
+}
+
+function ConvertTo-SqlNullableUnicodeLiteral {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return 'NULL'
+    }
+
+    $text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return 'NULL'
+    }
+
+    return ConvertTo-SqlUnicodeLiteral -Value $text
+}
+
+function Join-UrlPath {
+    param(
+        [string]$BaseUrl,
+        [string]$RelativePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+        return $null
+    }
+
+    $base = $BaseUrl.TrimEnd('/')
+    $relative = $RelativePath.Trim('/\')
+    if ([string]::IsNullOrWhiteSpace($relative)) {
+        return $base + '/'
+    }
+
+    return $base + '/' + $relative + '/'
+}
+
 function Invoke-SqlFile {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -381,6 +421,13 @@ function Publish-OpenDocViewer {
     if (-not (Test-Path -LiteralPath (Join-Path $OpenDocViewerRoot 'package.json'))) {
         throw "OpenDocViewer package.json was not found in: $OpenDocViewerRoot"
     }
+
+    $packageJson = Get-Content -LiteralPath (Join-Path $OpenDocViewerRoot 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $versionProperty = $packageJson.PSObject.Properties['version']
+    if ($null -eq $versionProperty -or [string]::IsNullOrWhiteSpace([string]$versionProperty.Value)) {
+        throw "OpenDocViewer package.json does not contain a version."
+    }
+    $script:openDocViewerVersion = ([string]$versionProperty.Value).Trim()
 
     if (-not $SkipOpenDocViewerBuild) {
         Write-Step 'Building OpenDocViewer'
@@ -505,6 +552,13 @@ function Deploy-PublishedOutputs {
     if (-not [string]::IsNullOrWhiteSpace($OpenDocViewerDistPath)) {
         $odvDestination = Join-Path $script:webAppsRoot $OpenDocViewerAppPath
         Invoke-RobocopyChecked -Source $OpenDocViewerDistPath -Destination $odvDestination
+
+        if ([string]::IsNullOrWhiteSpace($script:openDocViewerVersion)) {
+            throw 'OpenDocViewer version was not resolved from package.json.'
+        }
+
+        $odvArtifactDestination = Join-Path $RuntimeRoot "ArtifactStore\opendocviewer\web\$($script:openDocViewerVersion)"
+        Invoke-RobocopyChecked -Source $OpenDocViewerDistPath -Destination $odvArtifactDestination
     }
 }
 
@@ -748,6 +802,268 @@ function Write-ExampleRuntimeConfig {
     }
 }
 
+function Ensure-OpenDocViewerMetadata {
+    if ($SkipSql -or $SkipOpenDocViewer -or [string]::IsNullOrWhiteSpace($script:openDocViewerVersion)) {
+        return
+    }
+
+    Write-Step 'Ensuring OpenDocViewer OMP metadata'
+
+    $routePath = $OpenDocViewerAppPath.Trim('/\')
+    if ([string]::IsNullOrWhiteSpace($routePath)) {
+        throw 'OpenDocViewerAppPath must not be empty when OpenDocViewer is installed.'
+    }
+
+    $installPath = Join-Path $script:webAppsRoot $routePath
+    $publicUrl = Join-UrlPath -BaseUrl "http://localhost:$IisPort/" -RelativePath $routePath
+
+    $versionLiteral = ConvertTo-SqlUnicodeLiteral -Value $script:openDocViewerVersion
+    $routePathLiteral = ConvertTo-SqlUnicodeLiteral -Value $routePath
+    $publicUrlLiteral = ConvertTo-SqlNullableUnicodeLiteral -Value $publicUrl
+    $installPathLiteral = ConvertTo-SqlUnicodeLiteral -Value $installPath
+
+    Invoke-SqlText -Query @"
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_opendocviewer')
+BEGIN
+    EXEC(N'CREATE SCHEMA [omp_opendocviewer]');
+END
+
+DECLARE @InstanceId uniqueidentifier;
+DECLARE @InstanceTemplateId int;
+DECLARE @OpenDocViewerModuleId int;
+DECLARE @OpenDocViewerAppId int;
+DECLARE @OpenDocViewerArtifactId int;
+DECLARE @SeedModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111241';
+DECLARE @SeedAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111242';
+DECLARE @OpenDocViewerModuleInstanceId uniqueidentifier;
+DECLARE @OpenDocViewerTemplateModuleInstanceId int;
+DECLARE @ArtifactVersion nvarchar(50) = $versionLiteral;
+
+SELECT @InstanceId = InstanceId,
+       @InstanceTemplateId = InstanceTemplateId
+FROM omp.Instances
+WHERE InstanceKey = N'default';
+
+IF @InstanceId IS NULL
+BEGIN
+    THROW 51013, 'Default OMP instance not found. Run the core SQL setup/init scripts first.', 1;
+END
+
+IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'opendocviewer')
+BEGIN
+    UPDATE omp.Modules
+    SET DisplayName = N'OpenDocViewer',
+        ModuleType = N'WebAppModule',
+        SchemaName = N'omp_opendocviewer',
+        Description = N'First-party OMP registration for the OpenDocViewer static web application',
+        IsEnabled = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleKey = N'opendocviewer';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Modules(ModuleKey, DisplayName, ModuleType, SchemaName, Description, IsEnabled, SortOrder)
+    VALUES(N'opendocviewer', N'OpenDocViewer', N'WebAppModule', N'omp_opendocviewer', N'First-party OMP registration for the OpenDocViewer static web application', 1, 310);
+END
+
+SELECT @OpenDocViewerModuleId = ModuleId
+FROM omp.Modules
+WHERE ModuleKey = N'opendocviewer';
+
+IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @OpenDocViewerModuleId AND AppKey = N'opendocviewer_webapp')
+BEGIN
+    UPDATE omp.Apps
+    SET DisplayName = N'OpenDocViewer',
+        AppType = N'WebApp',
+        Description = N'Static web application definition for OpenDocViewer',
+        IsEnabled = 1,
+        SortOrder = 310,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleId = @OpenDocViewerModuleId
+      AND AppKey = N'opendocviewer_webapp';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Apps(ModuleId, AppKey, DisplayName, AppType, Description, IsEnabled, SortOrder)
+    VALUES(@OpenDocViewerModuleId, N'opendocviewer_webapp', N'OpenDocViewer', N'WebApp', N'Static web application definition for OpenDocViewer', 1, 310);
+END
+
+SELECT @OpenDocViewerAppId = AppId
+FROM omp.Apps
+WHERE ModuleId = @OpenDocViewerModuleId
+  AND AppKey = N'opendocviewer_webapp';
+
+MERGE omp.Artifacts AS target
+USING
+(
+    SELECT @OpenDocViewerAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'web-app' AS PackageType,
+           N'opendocviewer' AS TargetName,
+           N'opendocviewer/web/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
+
+SELECT @OpenDocViewerArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @OpenDocViewerAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'web-app'
+  AND TargetName = N'opendocviewer';
+
+MERGE omp.ModuleInstances AS target
+USING
+(
+    SELECT @SeedModuleInstanceId AS ModuleInstanceId,
+           @InstanceId AS InstanceId,
+           @OpenDocViewerModuleId AS ModuleId,
+           N'opendocviewer' AS ModuleInstanceKey,
+           N'OpenDocViewer' AS DisplayName,
+           N'OpenDocViewer module instance for the default OMP instance' AS Description,
+           CAST(1 AS bit) AS IsEnabled,
+           CAST(310 AS int) AS SortOrder
+) AS source
+ON target.ModuleInstanceId = source.ModuleInstanceId
+OR (target.InstanceId = source.InstanceId AND target.ModuleInstanceKey = source.ModuleInstanceKey)
+WHEN MATCHED THEN
+    UPDATE SET ModuleId = source.ModuleId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               IsEnabled = source.IsEnabled,
+               SortOrder = source.SortOrder,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
+    VALUES(source.ModuleInstanceId, source.InstanceId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, source.IsEnabled, source.SortOrder);
+
+SELECT @OpenDocViewerModuleInstanceId = ModuleInstanceId
+FROM omp.ModuleInstances
+WHERE InstanceId = @InstanceId
+  AND ModuleInstanceKey = N'opendocviewer';
+
+MERGE omp.InstanceTemplateModuleInstances AS target
+USING
+(
+    SELECT @InstanceTemplateId AS InstanceTemplateId,
+           @OpenDocViewerModuleId AS ModuleId,
+           N'opendocviewer' AS ModuleInstanceKey,
+           N'OpenDocViewer' AS DisplayName,
+           N'OpenDocViewer module instance in the default template' AS Description,
+           CAST(310 AS int) AS SortOrder,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.InstanceTemplateId = source.InstanceTemplateId
+AND target.ModuleInstanceKey = source.ModuleInstanceKey
+WHEN MATCHED THEN
+    UPDATE SET ModuleId = source.ModuleId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder, IsEnabled)
+    VALUES(source.InstanceTemplateId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, source.SortOrder, source.IsEnabled);
+
+SELECT @OpenDocViewerTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateId = @InstanceTemplateId
+  AND ModuleInstanceKey = N'opendocviewer';
+
+MERGE omp.AppInstances AS target
+USING
+(
+    SELECT @SeedAppInstanceId AS AppInstanceId,
+           @OpenDocViewerModuleInstanceId AS ModuleInstanceId,
+           CAST(NULL AS uniqueidentifier) AS HostId,
+           @OpenDocViewerAppId AS AppId,
+           N'opendocviewer_webapp' AS AppInstanceKey,
+           N'OpenDocViewer' AS DisplayName,
+           N'OpenDocViewer static web app managed by OMP Host Agent' AS Description,
+           $routePathLiteral AS RoutePath,
+           $publicUrlLiteral AS PublicUrl,
+           $installPathLiteral AS InstallPath,
+           N'opendocviewer' AS InstallationName,
+           @OpenDocViewerArtifactId AS ArtifactId,
+           CAST(1 AS bit) AS IsEnabled,
+           CAST(1 AS bit) AS IsAllowed,
+           CAST(1 AS tinyint) AS DesiredState,
+           CAST(310 AS int) AS SortOrder
+) AS source
+ON target.AppInstanceId = source.AppInstanceId
+OR (target.ModuleInstanceId = source.ModuleInstanceId AND target.AppInstanceKey = source.AppInstanceKey)
+WHEN MATCHED THEN
+    UPDATE SET ModuleInstanceId = source.ModuleInstanceId,
+               HostId = source.HostId,
+               AppId = source.AppId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               RoutePath = source.RoutePath,
+               PublicUrl = source.PublicUrl,
+               InstallPath = source.InstallPath,
+               InstallationName = source.InstallationName,
+               ArtifactId = source.ArtifactId,
+               IsEnabled = source.IsEnabled,
+               IsAllowed = source.IsAllowed,
+               DesiredState = source.DesiredState,
+               SortOrder = source.SortOrder,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)
+    VALUES(source.AppInstanceId, source.ModuleInstanceId, source.HostId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.ArtifactId, source.IsEnabled, source.IsAllowed, source.DesiredState, source.SortOrder);
+
+MERGE omp.InstanceTemplateAppInstances AS target
+USING
+(
+    SELECT @OpenDocViewerTemplateModuleInstanceId AS InstanceTemplateModuleInstanceId,
+           CAST(NULL AS int) AS InstanceTemplateHostId,
+           @OpenDocViewerAppId AS AppId,
+           N'opendocviewer_webapp' AS AppInstanceKey,
+           N'OpenDocViewer' AS DisplayName,
+           N'OpenDocViewer static web app managed by OMP Host Agent' AS Description,
+           $routePathLiteral AS RoutePath,
+           $publicUrlLiteral AS PublicUrl,
+           $installPathLiteral AS InstallPath,
+           N'opendocviewer' AS InstallationName,
+           @OpenDocViewerArtifactId AS DesiredArtifactId,
+           CAST(1 AS tinyint) AS DesiredState,
+           CAST(310 AS int) AS SortOrder,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
+AND target.AppInstanceKey = source.AppInstanceKey
+WHEN MATCHED THEN
+    UPDATE SET InstanceTemplateHostId = source.InstanceTemplateHostId,
+               AppId = source.AppId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               RoutePath = source.RoutePath,
+               PublicUrl = source.PublicUrl,
+               InstallPath = source.InstallPath,
+               InstallationName = source.InstallationName,
+               DesiredArtifactId = source.DesiredArtifactId,
+               DesiredState = source.DesiredState,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled)
+    VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.DesiredArtifactId, source.DesiredState, source.SortOrder, source.IsEnabled);
+"@
+}
+
 function Run-ExampleSql {
     if ($SkipSql) { return }
 
@@ -785,6 +1101,8 @@ SET InstallPath = N'$exampleServicePath',
     UpdatedUtc = SYSUTCDATETIME()
 WHERE AppInstanceKey = N'example_serviceapp_service';
 "@
+
+    Ensure-OpenDocViewerMetadata
 }
 
 function Ensure-RunAsDatabaseAccess {
