@@ -88,6 +88,15 @@ If OpenDocViewer needs customer-specific runtime files, set
 script then uses that zip as `payload\OpenDocViewer.dist.zip` instead of
 zipping `OpenDocViewer\dist` directly. This is useful when the ODV package must
 include a site-local `odv.site.config.js` and `help\site` manual content.
+The package manifest records `openDocViewerVersion`, normally read from
+`OpenDocViewer\package.json`. Set `OpenDocViewer.Version` in the deployment
+config only when a prebuilt ODV payload should be registered with a known
+external version.
+
+During installation, OpenDocViewer is also copied to
+`ArtifactStoreRoot\opendocviewer\web\<version>` and registered in OMP as a
+host-neutral `web-app` app instance. HostAgent can then upgrade or downgrade the
+ODV IIS application by changing the app instance's desired artifact.
 
 For HTTPS deployments, set `Iis.Protocol = 'https'` and either
 `Iis.CertificateThumbprint` or `Iis.CertificateSerialNumber`. If different
