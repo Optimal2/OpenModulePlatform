@@ -500,7 +500,7 @@ ORDER BY ith.SortOrder, ith.HostKey;";
                 InstanceTemplateHostId = rdr.GetInt32(0),
                 HostKey = rdr.GetString(1),
                 HostTemplateKey = rdr.GetString(2),
-                DisplayName = rdr.GetString(3),
+                DisplayName = rdr.IsDBNull(3) ? rdr.GetString(1) : rdr.GetString(3),
                 Environment = rdr.IsDBNull(4) ? null : rdr.GetString(4),
                 SortOrder = rdr.GetInt32(5),
                 IsEnabled = rdr.GetBoolean(6)

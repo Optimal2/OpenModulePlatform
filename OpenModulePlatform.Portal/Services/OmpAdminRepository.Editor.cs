@@ -65,9 +65,9 @@ ORDER BY i.InstanceKey, h.HostKey;",
         => GetOptionsAsync(
             @"
 SELECT CAST(HostTemplateId AS nvarchar(50)),
-       TemplateKey + N' - ' + DisplayName
+       TemplateKey + N' - ' + COALESCE(NULLIF(DisplayName, N''), TemplateKey)
 FROM omp.HostTemplates
-ORDER BY SortOrder, TemplateKey;",
+ORDER BY TemplateKey;",
             ct);
 
     public Task<IReadOnlyList<OptionItem>> GetAppOptionsAsync(CancellationToken ct)
