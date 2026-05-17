@@ -171,9 +171,9 @@ public sealed class WebAppDeploymentService
         }
         finally
         {
-            if (!string.IsNullOrWhiteSpace(appOfflinePath) && File.Exists(appOfflinePath))
+            if (!string.IsNullOrWhiteSpace(appOfflinePath))
             {
-                File.Delete(appOfflinePath);
+                ArtifactDirectoryMirror.DeleteFileIfExistsWithRetry(appOfflinePath, cancellationToken);
             }
         }
     }
