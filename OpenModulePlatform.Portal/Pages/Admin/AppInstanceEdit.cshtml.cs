@@ -41,7 +41,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AppOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> ArtifactOptions { get; private set; } = [];
+    public IReadOnlyList<ArtifactSelectionOption> ArtifactOptions { get; private set; } = [];
 
     public IReadOnlyList<OptionItem> DesiredStateOptions =>
     [
@@ -161,6 +161,11 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
                 string.Empty,
                 T(ToFriendlySqlMessage(ex, "The app instance could not be saved.")));
 
+            return Page();
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, T(ex.Message));
             return Page();
         }
     }

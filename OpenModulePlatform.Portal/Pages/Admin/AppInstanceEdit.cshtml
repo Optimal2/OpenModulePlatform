@@ -94,6 +94,7 @@
             <div class="field-help">
                 @L["If set, the host must belong to the same instance as the selected module instance."]
             </div>
+            <span asp-validation-for="Input.HostId" class="field-validation-error"></span>
         </div>
 
         <div class="form-field">
@@ -102,10 +103,18 @@
                 <option value="">@L["No artifact selected"]</option>
                 @foreach (var option in Model.ArtifactOptions)
                 {
-                    <option value="@option.Value">@option.Label</option>
+                    var isCurrentAppArtifact = Model.Input.AppId > 0 && option.AppId == Model.Input.AppId;
+                    <option
+                        value="@option.Value"
+                        data-app-id="@option.AppId"
+                        disabled="@(!isCurrentAppArtifact)"
+                        hidden="@(!isCurrentAppArtifact)">
+                        @option.Label
+                    </option>
                 }
             </select>
             <div class="field-help">@L["If set, the artifact must belong to the selected app definition."]</div>
+            <span asp-validation-for="Input.ArtifactId" class="field-validation-error"></span>
         </div>
     </div>
 
@@ -193,6 +202,44 @@
         <a class="action-link" href="~/admin/appinstances">@L["Back to app instances"]</a>
     </div>
 </form>
+
+<script>
+(() => {
+    const appSelect = document.getElementById('Input_AppId');
+    const artifactSelect = document.getElementById('Input_ArtifactId');
+    if (!appSelect || !artifactSelect) {
+        return;
+    }
+
+    const applyArtifactFilter = () => {
+        const appId = appSelect.value || '';
+        let selectedStillVisible = false;
+
+        for (const option of artifactSelect.options) {
+            if (!option.value) {
+                option.hidden = false;
+                option.disabled = false;
+                continue;
+            }
+
+            const visible = appId && option.dataset.appId === appId;
+            option.hidden = !visible;
+            option.disabled = !visible;
+
+            if (visible && option.selected) {
+                selectedStillVisible = true;
+            }
+        }
+
+        if (!selectedStillVisible) {
+            artifactSelect.value = '';
+        }
+    };
+
+    appSelect.addEventListener('change', applyArtifactFilter);
+    applyArtifactFilter();
+})();
+</script>
 
 @if (!Model.IsCreate)
 {
