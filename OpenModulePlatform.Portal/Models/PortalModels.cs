@@ -590,3 +590,57 @@ public sealed class HostDeploymentRow
 
     public string? OutcomeMessage { get; set; }
 }
+
+/// <summary>
+/// Latest HostAgent app deployment state for a materialized app on a host.
+/// </summary>
+public sealed class HostAppDeploymentStateRow
+{
+    public string HostKey { get; set; } = string.Empty;
+
+    public string AppInstanceKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string ArtifactVersion { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public byte DeploymentState { get; set; }
+
+    public string? TargetPath { get; set; }
+
+    public string? RuntimeName { get; set; }
+
+    public DateTime? LastCheckedUtc { get; set; }
+
+    public DateTime? LastAppliedUtc { get; set; }
+
+    public string? LastError { get; set; }
+}
+
+/// <summary>
+/// Latest HostAgent artifact provisioning state for a host-local artifact cache entry.
+/// </summary>
+public sealed class HostArtifactStateRow
+{
+    public string HostKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string ArtifactVersion { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public byte ProvisioningState { get; set; }
+
+    public string? LocalPath { get; set; }
+
+    public DateTime? LastCheckedUtc { get; set; }
+
+    public DateTime? LastProvisionedUtc { get; set; }
+
+    public string? LastError { get; set; }
+}

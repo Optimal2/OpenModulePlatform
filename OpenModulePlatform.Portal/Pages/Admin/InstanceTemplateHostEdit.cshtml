@@ -1,0 +1,110 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.InstanceTemplateHostEditModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Desired topology"]</div>
+        <h2>@(Model.IsCreate ? L["Add template host"] : L["Edit template host"])</h2>
+        <p class="lede">@L["Template hosts define the host keys that HostAgent materializes for instances using this template."]</p>
+    </div>
+</section>
+
+@if (Model.Template is not null)
+{
+    <section class="card section-card section-card--wide">
+        <div class="detail-grid">
+            <div>
+                <div class="muted">@L["Instance template"]</div>
+                <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Template.InstanceTemplateId">@Model.Template.DisplayName</a>
+            </div>
+            <div>
+                <div class="muted">@L["Template key"]</div>
+                <code>@Model.Template.TemplateKey</code>
+            </div>
+        </div>
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="Input.InstanceTemplateHostId" />
+    <input type="hidden" asp-for="Input.InstanceTemplateId" />
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.HostTemplateId"></label>
+            <select asp-for="Input.HostTemplateId">
+                <option value="">@L["Select host template"]</option>
+                @foreach (var option in Model.HostTemplateOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <span asp-validation-for="Input.HostTemplateId" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.HostKey"></label>
+            <input asp-for="Input.HostKey" />
+            <span asp-validation-for="Input.HostKey" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.DisplayName"></label>
+            <input asp-for="Input.DisplayName" />
+            <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.Environment"></label>
+            <select asp-for="Input.Environment">
+                <option value="">@L["Not set"]</option>
+                @foreach (var option in Model.EnvironmentOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.SortOrder"></label>
+            <input asp-for="Input.SortOrder" type="number" />
+        </div>
+    </div>
+
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.IsEnabled" type="checkbox" />
+        <label asp-for="Input.IsEnabled"></label>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save template host"]</button>
+        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to template"]</a>
+    </div>
+</form>
+
+@if (!Model.IsCreate)
+{
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('@L["Remove this template host? Desired app rows using it must be moved or removed first."]');">
+        <input type="hidden" asp-for="Input.InstanceTemplateHostId" />
+        <input type="hidden" asp-for="Input.InstanceTemplateId" />
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Removing a template host does not delete existing runtime hosts. Move or remove desired app rows that are pinned to this host first."]</p>
+        <button type="submit" class="btn btn-danger">@L["Remove template host"]</button>
+    </form>
+}
