@@ -13,9 +13,13 @@ public static class PortalAdminNavigation
                 "System",
                 [
                     new PortalAdminMenuItem("Installation", hrefFactory("/admin/instancetemplateedit?id=1")),
-                    new PortalAdminMenuItem("Hosts", hrefFactory("/admin/hosts")),
                     new PortalAdminMenuItem("Deployment log", hrefFactory("/admin/hostdeployments")),
-                    new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings"), SeparatorBefore: true),
+                    new PortalAdminMenuItem("Artifacts", hrefFactory("/admin/artifacts"))
+                ]),
+            new(
+                "Administration",
+                [
+                    new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings")),
                     new PortalAdminMenuItem("Security", hrefFactory("/admin/security")),
                     new PortalAdminMenuItem("Users", hrefFactory("/admin/users"))
                 ]),
@@ -30,8 +34,6 @@ public static class PortalAdminNavigation
                 [
                     new PortalAdminMenuItem("Definitions", hrefFactory("/admin/apps")),
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/appinstances")),
-                    new PortalAdminMenuItem("Artifacts", hrefFactory("/admin/artifacts"), SeparatorBefore: true),
-                    new PortalAdminMenuItem("Upload artifact", hrefFactory("/admin/artifactupload")),
                     new PortalAdminMenuItem("Workers", hrefFactory("/admin/workers"))
                 ])
         ];
