@@ -71,6 +71,39 @@ INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
 ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;",
             ct);
 
+    public async Task<IReadOnlyList<ArtifactAppOption>> GetArtifactAppOptionsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT a.AppId,
+       m.ModuleKey,
+       a.AppKey,
+       m.ModuleKey + N' / ' + a.AppKey + N' - ' + a.DisplayName
+FROM omp.Apps a
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;";
+
+        var rows = new List<ArtifactAppOption>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(
+                new ArtifactAppOption
+                {
+                    AppId = rdr.GetInt32(0),
+                    ModuleKey = rdr.GetString(1),
+                    AppKey = rdr.GetString(2),
+                    Label = rdr.GetString(3)
+                });
+        }
+
+        return rows;
+    }
+
     // -------------------------------------------------------------------------
     // App worker-definition editing
     // -------------------------------------------------------------------------
@@ -814,6 +847,41 @@ WHERE ArtifactId = @ArtifactId;";
 
     public Task DeleteArtifactAsync(int artifactId, CancellationToken ct)
         => DeleteAsync("DELETE FROM omp.Artifacts WHERE ArtifactId = @Id;", artifactId, ct);
+
+    public async Task<ArtifactDuplicateInfo?> FindArtifactBySha256Async(string sha256, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       ar.ArtifactId,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+WHERE ar.Sha256 = @Sha256
+ORDER BY ar.ArtifactId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@Sha256", sha256);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactDuplicateInfo
+        {
+            ArtifactId = rdr.GetInt32(0),
+            AppKey = rdr.GetString(1),
+            Version = rdr.GetString(2),
+            PackageType = rdr.GetString(3),
+            TargetName = rdr.IsDBNull(4) ? null : rdr.GetString(4)
+        };
+    }
 
     // -------------------------------------------------------------------------
     // App-instance editing

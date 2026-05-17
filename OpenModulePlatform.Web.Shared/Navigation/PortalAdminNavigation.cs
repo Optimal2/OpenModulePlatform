@@ -37,6 +37,7 @@ public static class PortalAdminNavigation
                     new PortalAdminMenuItem("Definitions", hrefFactory("/admin/apps")),
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/appinstances")),
                     new PortalAdminMenuItem("Artifacts", hrefFactory("/admin/artifacts"), SeparatorBefore: true),
+                    new PortalAdminMenuItem("Upload artifact", hrefFactory("/admin/artifactupload")),
                     new PortalAdminMenuItem("Workers", hrefFactory("/admin/workers"))
                 ])
         ];

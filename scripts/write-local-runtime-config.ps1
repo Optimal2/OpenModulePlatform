@@ -52,6 +52,7 @@ function Get-OmpConnectionString {
 
 $connectionString = Get-OmpConnectionString
 $dataProtectionKeyPath = Join-Path $RuntimeRoot 'DataProtectionKeys'
+$artifactStoreRoot = Join-Path $RuntimeRoot 'ArtifactStore'
 
 $ompAuthConfig = [ordered]@{
     CookieName = '.OpenModulePlatform.Auth'
@@ -79,6 +80,10 @@ $portalConfig = [ordered]@{
         OmpDb = $connectionString
     }
     OmpAuth = $ompAuthConfig
+    ArtifactUpload = [ordered]@{
+        ArtifactStoreRoot = $artifactStoreRoot
+        MaxUploadBytes = 536870912
+    }
     Logging = [ordered]@{
         LogLevel = [ordered]@{
             Default = 'Information'
@@ -166,7 +171,7 @@ $hostAgentConfig = [ordered]@{
         HostKey = $HostKey
         HostName = $env:COMPUTERNAME
         RefreshSeconds = 30
-        CentralArtifactRoot = (Join-Path $RuntimeRoot 'ArtifactStore')
+        CentralArtifactRoot = $artifactStoreRoot
         LocalArtifactCacheRoot = (Join-Path $RuntimeRoot 'ArtifactCache')
         MaterializeTemplates = $true
         ProcessHostDeployments = $true

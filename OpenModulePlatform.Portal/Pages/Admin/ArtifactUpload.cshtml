@@ -1,0 +1,169 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ArtifactUploadModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Artifacts"]</div>
+        <h2>@L["Upload artifact"]</h2>
+        <p class="lede">@L["Upload one immutable artifact zip, unpack it into the central artifact store, and register it for HostAgent deployment."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" enctype="multipart/form-data" class="card form-grid">
+    <div class="form-field">
+        <label asp-for="Input.ZipFile"></label>
+        <input asp-for="Input.ZipFile" type="file" accept=".zip,application/zip" />
+        <div class="field-help">@L["Recognized filename format:"] <code>@Model.MetadataFilenameFormat</code></div>
+        <span asp-validation-for="Input.ZipFile" class="field-validation-error"></span>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.AppId"></label>
+            <select asp-for="Input.AppId">
+                <option value="">@L["Select app"]</option>
+                @foreach (var option in Model.AppOptions)
+                {
+                    <option
+                        value="@option.AppId"
+                        data-module-key="@option.ModuleKey"
+                        data-app-key="@option.AppKey">
+                        @option.Label
+                    </option>
+                }
+            </select>
+            <span asp-validation-for="Input.AppId" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.PackageType"></label>
+            <select asp-for="Input.PackageType">
+                <option value="">@L["Select package type"]</option>
+                @foreach (var option in Model.PackageTypeOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <span asp-validation-for="Input.PackageType" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.TargetName"></label>
+            <input asp-for="Input.TargetName" />
+            <span asp-validation-for="Input.TargetName" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.Version"></label>
+            <input asp-for="Input.Version" />
+            <span asp-validation-for="Input.Version" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.RelativePath"></label>
+            <input asp-for="Input.RelativePath" />
+            <span asp-validation-for="Input.RelativePath" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Upload artifact"]</button>
+        <a class="action-link" href="~/admin/artifacts">@L["Back to artifacts"]</a>
+    </div>
+</form>
+
+<script>
+(() => {
+    const fileInput = document.getElementById('Input_ZipFile');
+    const appSelect = document.getElementById('Input_AppId');
+    const packageType = document.getElementById('Input_PackageType');
+    const targetName = document.getElementById('Input_TargetName');
+    const version = document.getElementById('Input_Version');
+    const relativePath = document.getElementById('Input_RelativePath');
+    const tokenPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+
+    const fillBlank = (element, value) => {
+        if (element && !element.value && value) {
+            element.value = value;
+        }
+    };
+
+    const pathSegment = value =>
+        value.trim().replace(/\s+/g, '-').replace(/[^A-Za-z0-9._+-]/g, '-');
+
+    const packagePathSegment = value => {
+        switch (value.trim().toLowerCase()) {
+            case 'web-app':
+                return 'web';
+            case 'service-app':
+                return 'service';
+            case 'worker':
+            case 'worker-plugin':
+                return 'worker';
+            default:
+                return pathSegment(value);
+        }
+    };
+
+    const parseMetadata = name => {
+        if (!name || !name.toLowerCase().endsWith('.zip')) {
+            return null;
+        }
+
+        const baseName = name.slice(0, -4);
+        const parts = baseName.split('__');
+        if (parts.length !== 5 || parts.some(part => !tokenPattern.test(part))) {
+            return null;
+        }
+
+        return {
+            moduleKey: parts[0],
+            appKey: parts[1],
+            packageType: parts[2],
+            targetName: parts[3],
+            version: parts[4]
+        };
+    };
+
+    const selectApp = metadata => {
+        if (!appSelect || appSelect.value) {
+            return;
+        }
+
+        for (const option of appSelect.options) {
+            if ((option.dataset.moduleKey || '').toLowerCase() === metadata.moduleKey.toLowerCase()
+                && (option.dataset.appKey || '').toLowerCase() === metadata.appKey.toLowerCase()) {
+                appSelect.value = option.value;
+                return;
+            }
+        }
+    };
+
+    fileInput?.addEventListener('change', () => {
+        const metadata = parseMetadata(fileInput.files?.[0]?.name || '');
+        if (!metadata) {
+            return;
+        }
+
+        selectApp(metadata);
+        fillBlank(packageType, metadata.packageType);
+        fillBlank(targetName, metadata.targetName);
+        fillBlank(version, metadata.version);
+        fillBlank(
+            relativePath,
+            `${pathSegment(metadata.targetName)}/${packagePathSegment(metadata.packageType)}/${pathSegment(metadata.version)}`);
+    });
+})();
+</script>

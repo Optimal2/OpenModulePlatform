@@ -37,12 +37,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AppOptions { get; private set; } = [];
 
-    public IReadOnlyList<OptionItem> PackageTypeOptions =>
-    [
-        Opt("folder", T("Folder")),
-        Opt("zip", T("Zip")),
-        Opt("nupkg", T("NuGet package"))
-    ];
+    public IReadOnlyList<OptionItem> PackageTypeOptions => ArtifactPackageTypes.CreateOptions(T);
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -62,7 +57,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
         if (!id.HasValue)
         {
-            Input.PackageType = "folder";
+            Input.PackageType = "web-app";
             Input.IsEnabled = true;
             return Page();
         }
@@ -183,9 +178,6 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
                 nameof(Input.Sha256), T("SHA-256 must be 64 hexadecimal characters."));
         }
     }
-
-    private static OptionItem Opt(string value, string label)
-        => new() { Value = value, Label = label };
 
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

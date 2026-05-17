@@ -111,6 +111,54 @@ This is the definition level of the model.
 - `Apps` describe app definitions
 - `Artifacts` describe deployable build outputs
 
+#### Uploading one artifact zip
+
+Portal admins can upload a new artifact from `/admin/artifactupload`.
+The page is intentionally scoped to one immutable artifact at a time. It
+unpacks the zip into the configured central artifact store and creates the
+matching `omp.Artifacts` row with the same directory-content SHA-256 that
+HostAgent later verifies.
+
+Configure the Portal with:
+
+```json
+"ArtifactUpload": {
+  "ArtifactStoreRoot": "E:\\OMP\\ArtifactStore",
+  "MaxUploadBytes": 536870912
+}
+```
+
+`ArtifactUpload:ArtifactStoreRoot` should normally match
+`HostAgent:CentralArtifactRoot`. The Portal refuses uploads when this root is
+missing. The Portal runtime identity needs write access to this root; HostAgent
+needs read access to the same files.
+
+The supported filename metadata format is:
+
+```text
+moduleKey__appKey__packageType__targetName__version.zip
+```
+
+The separator is a double underscore because OMP keys commonly use single
+underscores. If the uploaded filename matches this format, the form uses it to
+pre-fill the app, package type, target, version, and default relative path. If
+the filename does not match, the admin must fill the same fields manually.
+Filename metadata is only a convenience; the form values are the values that
+are saved.
+
+The first upload version expects a deployment-ready zip with files at the zip
+root. Subdirectories are allowed, but paths must stay relative to the zip root:
+
+- no rooted paths
+- no `..` path segments
+- no empty zip packages
+- no wrapper-folder stripping
+
+The upload page blocks duplicate artifact content by comparing the extracted
+directory-content SHA-256 with existing artifact rows. Zip metadata such as
+timestamps and compression settings is intentionally ignored; two zip files
+with the same deployable files count as the same artifact content.
+
 ### 5. Create module instances
 
 This is where a module definition is placed into a concrete OMP instance.
