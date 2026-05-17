@@ -53,12 +53,20 @@
     <div class="form-row">
         <div class="form-field">
             <label asp-for="Input.ContentType"></label>
-            <select asp-for="Input.ContentType">
+            @if (!Model.IsCreate)
+            {
+                <input type="hidden" name="Input.ContentType" value="@Model.Input.ContentType" />
+            }
+            <select asp-for="Input.ContentType" disabled="@(!Model.IsCreate)">
                 <option value="markdown">@L["Markdown"]</option>
                 <option value="html">@L["HTML"]</option>
                 <option value="html_file">@L["HTML file"]</option>
                 <option value="server_report">@L["Server report"]</option>
             </select>
+            @if (!Model.IsCreate)
+            {
+                <span class="field-hint">@L["Content type is locked after the page has been created."]</span>
+            }
         </div>
         <div class="form-field">
             <label asp-for="Input.SortOrder"></label>
@@ -111,7 +119,12 @@
 
     <div class="form-field content-editor-field" data-content-editor-field hidden="@(Model.Input.ContentType == "server_report" || Model.Input.ContentType == "html_file")">
         <label asp-for="Input.Body"></label>
+        <div class="editor-tabs" data-html-editor-tabs hidden>
+            <button type="button" class="editor-tab" data-html-editor-mode="visual" aria-selected="true">@L["Visual"]</button>
+            <button type="button" class="editor-tab" data-html-editor-mode="source" aria-selected="false">@L["HTML source"]</button>
+        </div>
         <div id="content-editor" class="content-editor" hidden></div>
+        <div id="html-visual-editor" class="html-visual-editor" contenteditable="true" hidden></div>
         <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
         <span class="field-hint" data-editor-hint="markdown">@L["Write Markdown content. Server report shortcodes such as DB_JSON are supported."]</span>
         <span class="field-hint" data-editor-hint="html" hidden>@L["Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported."]</span>
@@ -189,6 +202,20 @@
     </div>
 </form>
 
+@if (!Model.IsCreate && Model.CanManageAll)
+{
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('@L["Delete this page permanently?"]');">
+        <input type="hidden" asp-for="Input.ContentId" />
+        <h2>@L["Delete page"]</h2>
+        <p class="muted">@L["Delete removes the page and its role access rows. It cannot be undone."]</p>
+        <button type="submit" class="button--danger">@L["Delete permanently"]</button>
+    </form>
+}
+
 @if (!Model.IsCreate)
 {
     <section class="card content-metadata">
@@ -211,6 +238,9 @@
         (() => {
             const source = document.getElementById('Input_Body');
             const host = document.getElementById('content-editor');
+            const htmlVisual = document.getElementById('html-visual-editor');
+            const htmlTabs = document.querySelector('[data-html-editor-tabs]');
+            const htmlTabButtons = Array.from(document.querySelectorAll('[data-html-editor-mode]'));
             const form = document.getElementById('content-edit-form');
             const contentType = document.getElementById('Input_ContentType');
             const editorField = document.querySelector('[data-content-editor-field]');
@@ -219,11 +249,18 @@
             const markdownHint = document.querySelector('[data-editor-hint="markdown"]');
             const htmlHint = document.querySelector('[data-editor-hint="html"]');
             let markdownEditor = null;
-            let previousType = contentType?.value || 'markdown';
+            let htmlMode = 'visual';
+            let previousType = null;
 
             const pullMarkdownEditorValue = () => {
                 if (markdownEditor) {
                     source.value = markdownEditor.getMarkdown();
+                }
+            };
+
+            const pullHtmlVisualValue = () => {
+                if (source && htmlVisual && htmlMode === 'visual') {
+                    source.value = htmlVisual.innerHTML;
                 }
             };
 
@@ -249,17 +286,53 @@
                 source.classList.add('is-enhanced');
             };
 
-            const showRawSourceEditor = () => {
-                if (!source || !host) {
+            const setHtmlMode = (mode) => {
+                if (!source || !htmlVisual) {
                     return;
                 }
 
+                const nextMode = mode === 'source' ? 'source' : 'visual';
+                if (htmlMode === 'visual' && nextMode === 'source') {
+                    source.value = htmlVisual.innerHTML;
+                }
+                else if (htmlMode === 'source' && nextMode === 'visual') {
+                    htmlVisual.innerHTML = source.value || '';
+                }
+
+                htmlMode = nextMode;
+                htmlVisual.hidden = htmlMode !== 'visual';
+                source.classList.toggle('is-enhanced', htmlMode === 'visual');
+
+                for (const button of htmlTabButtons) {
+                    button.setAttribute('aria-selected', button.dataset.htmlEditorMode === htmlMode ? 'true' : 'false');
+                }
+            };
+
+            for (const button of htmlTabButtons) {
+                button.addEventListener('click', () => setHtmlMode(button.dataset.htmlEditorMode));
+            }
+
+            const hideEnhancedEditors = () => {
                 if (previousType === 'markdown') {
                     pullMarkdownEditorValue();
                 }
+                else if (previousType === 'html') {
+                    pullHtmlVisualValue();
+                }
 
-                host.hidden = true;
-                source.classList.remove('is-enhanced');
+                if (host) {
+                    host.hidden = true;
+                }
+
+                if (htmlVisual) {
+                    htmlVisual.hidden = true;
+                }
+
+                if (htmlTabs) {
+                    htmlTabs.hidden = true;
+                }
+
+                source?.classList.remove('is-enhanced');
             };
 
             const syncContentType = () => {
@@ -289,13 +362,43 @@
                 }
 
                 if (isServerReport || isHtmlFile) {
-                    showRawSourceEditor();
+                    hideEnhancedEditors();
+                    source?.classList.remove('content-editor__source--html');
                 }
                 else if (isHtml) {
-                    showRawSourceEditor();
+                    if (previousType === 'markdown') {
+                        pullMarkdownEditorValue();
+                    }
+
+                    if (host) {
+                        host.hidden = true;
+                    }
+
+                    if (htmlTabs) {
+                        htmlTabs.hidden = false;
+                    }
+
+                    if (htmlVisual && previousType !== 'html') {
+                        htmlVisual.innerHTML = source?.value || '';
+                        htmlMode = 'visual';
+                    }
+
                     source?.classList.add('content-editor__source--html');
+                    setHtmlMode(htmlMode);
                 }
                 else {
+                    if (previousType === 'html') {
+                        pullHtmlVisualValue();
+                    }
+
+                    if (htmlTabs) {
+                        htmlTabs.hidden = true;
+                    }
+
+                    if (htmlVisual) {
+                        htmlVisual.hidden = true;
+                    }
+
                     source?.classList.remove('content-editor__source--html');
                     ensureMarkdownEditor();
                 }
@@ -318,6 +421,9 @@
 
                 if (contentType.value === 'markdown') {
                     pullMarkdownEditorValue();
+                }
+                else if (contentType.value === 'html') {
+                    pullHtmlVisualValue();
                 }
             });
         })();

@@ -1622,7 +1622,16 @@ WHERE AppInstanceId = @AppInstanceId;";
         return input.AppInstanceId;
     }
 
-    public async Task DeleteAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
+    public Task DeleteAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
+        => DeleteAppInstanceCoreAsync(appInstanceId, blockTemplateManagedRows: true, ct);
+
+    public Task DeleteRuntimeAppInstanceRowAsync(Guid appInstanceId, CancellationToken ct)
+        => DeleteAppInstanceCoreAsync(appInstanceId, blockTemplateManagedRows: false, ct);
+
+    private async Task DeleteAppInstanceCoreAsync(
+        Guid appInstanceId,
+        bool blockTemplateManagedRows,
+        CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -1633,7 +1642,7 @@ WHERE AppInstanceId = @AppInstanceId;";
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
         var templateAppInstanceId = await GetTemplateAppInstanceIdAsync(conn, tx, appInstanceId, ct);
-        if (templateAppInstanceId.HasValue)
+        if (blockTemplateManagedRows && templateAppInstanceId.HasValue)
         {
             throw new InvalidOperationException(
                 "This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.");
