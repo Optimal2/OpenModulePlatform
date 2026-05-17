@@ -338,6 +338,7 @@ ORDER BY r.Name,
         var contentId = input.ContentId == Guid.Empty ? Guid.NewGuid() : input.ContentId;
         var slug = ContentSlugNormalizer.Normalize(input.Slug);
         var contentType = ContentTypes.Normalize(input.ContentType);
+        var storageContentType = GetStorageContentType(contentType);
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -377,7 +378,7 @@ VALUES(
     @Actor);";
 
             await using var insert = new SqlCommand(insertSql, conn, tx);
-            AddPageParameters(insert, appInstanceId, contentId, slug, input, contentType, actor);
+            AddPageParameters(insert, appInstanceId, contentId, slug, input, contentType, storageContentType, actor);
             await insert.ExecuteNonQueryAsync(ct);
         }
         else
@@ -397,7 +398,7 @@ WHERE content_id = @ContentId
   AND app_instance_id = @AppInstanceId;";
 
             await using var update = new SqlCommand(updateSql, conn, tx);
-            AddPageParameters(update, appInstanceId, contentId, slug, input, contentType, actor);
+            AddPageParameters(update, appInstanceId, contentId, slug, input, contentType, storageContentType, actor);
             var affected = await update.ExecuteNonQueryAsync(ct);
             if (affected == 0)
             {
@@ -502,15 +503,16 @@ WHERE app_instance_id = @AppInstanceId
         string slug,
         ContentPageSaveRequest input,
         string contentType,
+        string storageContentType,
         string actor)
     {
         Add(cmd, "@AppInstanceId", appInstanceId);
         Add(cmd, "@ContentId", contentId);
         Add(cmd, "@Slug", slug);
         Add(cmd, "@Title", input.Title.Trim());
-        Add(cmd, "@ContentType", contentType);
+        Add(cmd, "@ContentType", storageContentType);
         Add(cmd, "@Body", input.Body);
-        Add(cmd, "@ServerReportKey", NormalizeServerReportKey(input.ServerReportKey));
+        Add(cmd, "@ServerReportKey", NormalizeContentKey(contentType, input));
         Add(cmd, "@IsEnabled", input.IsEnabled);
         Add(cmd, "@SortOrder", input.SortOrder);
         Add(cmd, "@Actor", actor);
@@ -518,13 +520,16 @@ WHERE app_instance_id = @AppInstanceId
 
     private static ContentPageListRow ReadListRow(SqlDataReader rdr)
     {
+        var contentType = rdr.GetString(3);
+        var contentKey = rdr.IsDBNull(4) ? null : rdr.GetString(4);
+
         return new ContentPageListRow
         {
             ContentId = rdr.GetGuid(0),
             Slug = rdr.GetString(1),
             Title = rdr.GetString(2),
-            ContentType = rdr.GetString(3),
-            ServerReportKey = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            ContentType = GetDisplayContentType(contentType, null, contentKey),
+            ServerReportKey = contentKey,
             IsEnabled = rdr.GetBoolean(5),
             SortOrder = rdr.IsDBNull(6) ? null : rdr.GetInt32(6),
             CreatedAtUtc = rdr.GetDateTime(7),
@@ -536,29 +541,37 @@ WHERE app_instance_id = @AppInstanceId
 
     private static ContentPageRenderRow ReadRenderRow(SqlDataReader rdr)
     {
+        var contentType = rdr.GetString(3);
+        var body = rdr.GetString(4);
+        var contentKey = rdr.IsDBNull(5) ? null : rdr.GetString(5);
+
         return new ContentPageRenderRow
         {
             ContentId = rdr.GetGuid(0),
             Slug = rdr.GetString(1),
             Title = rdr.GetString(2),
-            ContentType = rdr.GetString(3),
-            Body = rdr.GetString(4),
-            ServerReportKey = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            ContentType = GetDisplayContentType(contentType, body, contentKey),
+            Body = body,
+            ServerReportKey = contentKey,
             UpdatedAtUtc = rdr.GetDateTime(6)
         };
     }
 
     private static ContentPageEditRow ReadEditRow(SqlDataReader rdr)
     {
+        var contentType = rdr.GetString(4);
+        var body = rdr.GetString(5);
+        var contentKey = rdr.IsDBNull(6) ? null : rdr.GetString(6);
+
         return new ContentPageEditRow
         {
             ContentId = rdr.GetGuid(0),
             AppInstanceId = rdr.GetGuid(1),
             Slug = rdr.GetString(2),
             Title = rdr.GetString(3),
-            ContentType = rdr.GetString(4),
-            Body = rdr.GetString(5),
-            ServerReportKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            ContentType = GetDisplayContentType(contentType, body, contentKey),
+            Body = body,
+            ServerReportKey = contentKey,
             IsEnabled = rdr.GetBoolean(7),
             SortOrder = rdr.IsDBNull(8) ? null : rdr.GetInt32(8),
             CreatedAtUtc = rdr.GetDateTime(9),
@@ -568,8 +581,36 @@ WHERE app_instance_id = @AppInstanceId
         };
     }
 
-    private static string? NormalizeServerReportKey(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? NormalizeContentKey(string contentType, ContentPageSaveRequest input)
+    {
+        var value = contentType switch
+        {
+            ContentTypes.ServerReport => input.ServerReportKey,
+            ContentTypes.HtmlFile => input.HtmlFileKey,
+            _ => null
+        };
+
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string GetStorageContentType(string contentType)
+        => contentType == ContentTypes.HtmlFile ? ContentTypes.Html : contentType;
+
+    private static string GetDisplayContentType(string contentType, string? body, string? contentKey)
+    {
+        var normalized = ContentTypes.Normalize(contentType);
+
+        // File-backed HTML pages are stored as ordinary HTML rows with an empty body
+        // so existing installations do not need a schema migration for this UI mode.
+        if (normalized == ContentTypes.Html
+            && string.IsNullOrWhiteSpace(body)
+            && !string.IsNullOrWhiteSpace(contentKey))
+        {
+            return ContentTypes.HtmlFile;
+        }
+
+        return normalized;
+    }
 
     private static void Add(SqlCommand cmd, string name, object? value)
     {

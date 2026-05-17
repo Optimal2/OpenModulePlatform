@@ -1573,6 +1573,7 @@ function Write-RuntimeConfiguration {
                 AppInstanceId = $script:ContentWebAppAppInstanceId
                 HomeSlug = $script:ContentWebAppHomeSlug
                 ServerReportsPath = $script:ContentWebAppServerReportsPath
+                HtmlFilesPath = $script:ContentWebAppHtmlFilesPath
                 AllowedServerReportDatabases = $script:ContentWebAppAllowedServerReportDatabases
                 ServerReportDefaultMaxRows = $script:ContentWebAppServerReportDefaultMaxRows
                 ServerReportMaxRowsLimit = $script:ContentWebAppServerReportMaxRowsLimit
@@ -2270,6 +2271,7 @@ if ([string]::IsNullOrWhiteSpace($script:PortalBaseUrl)) {
 $script:ContentWebAppAppInstanceId = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'AppInstanceId' -DefaultValue '11111111-1111-1111-1111-111111111232')
 $script:ContentWebAppHomeSlug = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HomeSlug' -DefaultValue 'home')
 $script:ContentWebAppServerReportsPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportsPath' -DefaultValue 'App_Data/ContentReports')
+$script:ContentWebAppHtmlFilesPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HtmlFilesPath' -DefaultValue 'App_Data/ContentPages')
 $script:ContentWebAppAllowedServerReportDatabases = @(
     Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'AllowedServerReportDatabases' -DefaultValue @($script:Database)
 )

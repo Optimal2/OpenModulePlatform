@@ -2,6 +2,7 @@
 using Markdig;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
 
 namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
@@ -12,10 +13,16 @@ public sealed partial class ContentRenderer
         .UseAdvancedExtensions()
         .Build();
 
+    private static readonly HtmlEncoder DefaultHtmlEncoder = HtmlEncoder.Default;
+
+    private readonly HtmlContentFileLoader _htmlFileLoader;
     private readonly ServerReportRenderer _serverReportRenderer;
 
-    public ContentRenderer(ServerReportRenderer serverReportRenderer)
+    public ContentRenderer(
+        HtmlContentFileLoader htmlFileLoader,
+        ServerReportRenderer serverReportRenderer)
     {
+        _htmlFileLoader = htmlFileLoader;
         _serverReportRenderer = serverReportRenderer;
     }
 
@@ -31,12 +38,32 @@ public sealed partial class ContentRenderer
             return await _serverReportRenderer.RenderAsync(serverReportKey, ct);
         }
 
+        if (format == ContentTypes.HtmlFile)
+        {
+            return await RenderHtmlFileAsync(serverReportKey, ct);
+        }
+
         var expandedContent = await ExpandServerReportShortcodesAsync(content ?? string.Empty, ct);
         return format switch
         {
             ContentTypes.Html => expandedContent,
             _ => Markdown.ToHtml(expandedContent, MarkdownPipeline)
         };
+    }
+
+    private async Task<string> RenderHtmlFileAsync(string? htmlFileKey, CancellationToken ct)
+    {
+        try
+        {
+            var content = await _htmlFileLoader.LoadAsync(htmlFileKey, ct).ConfigureAwait(false);
+            return await ExpandServerReportShortcodesAsync(content, ct).ConfigureAwait(false);
+        }
+        catch (HtmlContentFileException ex)
+        {
+            return "<section class=\"server-report server-report--error\"><h2>HTML content file unavailable</h2><p>"
+                + DefaultHtmlEncoder.Encode(ex.Message)
+                + "</p></section>";
+        }
     }
 
     private async Task<string> ExpandServerReportShortcodesAsync(string content, CancellationToken ct)

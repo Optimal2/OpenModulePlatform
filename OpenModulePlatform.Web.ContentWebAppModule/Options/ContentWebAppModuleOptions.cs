@@ -22,6 +22,12 @@ public sealed class ContentWebAppModuleOptions
     public string ServerReportsPath { get; set; } = "App_Data/ContentReports";
 
     /// <summary>
+    /// Whitelisted server-side directory for trusted HTML content files.
+    /// Relative paths are resolved from the web app content root.
+    /// </summary>
+    public string HtmlFilesPath { get; set; } = "App_Data/ContentPages";
+
+    /// <summary>
     /// Database names that server report JSON definitions may select.
     /// An omitted report database always uses the default OmpDb database.
     /// </summary>

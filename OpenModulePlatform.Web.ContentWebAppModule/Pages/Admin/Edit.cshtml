@@ -10,7 +10,7 @@
     <div>
         <div class="eyebrow">@L["Content"]</div>
         <h1>@(Model.IsCreate ? L["New page"] : L["Edit page"])</h1>
-        <p class="lede">@L["Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor."]</p>
+        <p class="lede">@L["Choose a content type first. Markdown, HTML, HTML files, and server reports each use a dedicated editor."]</p>
     </div>
     <div class="toolbar">
         <a class="button" href="~/admin">@L["Back to pages"]</a>
@@ -56,6 +56,7 @@
             <select asp-for="Input.ContentType">
                 <option value="markdown">@L["Markdown"]</option>
                 <option value="html">@L["HTML"]</option>
+                <option value="html_file">@L["HTML file"]</option>
                 <option value="server_report">@L["Server report"]</option>
             </select>
         </div>
@@ -69,6 +70,9 @@
         var currentServerReportKey = Model.Input.ServerReportKey;
         var currentReportKeyMissing = !string.IsNullOrWhiteSpace(currentServerReportKey)
             && !Model.AvailableServerReportKeys.Contains(currentServerReportKey, StringComparer.OrdinalIgnoreCase);
+        var currentHtmlFileKey = Model.Input.HtmlFileKey;
+        var currentHtmlFileKeyMissing = !string.IsNullOrWhiteSpace(currentHtmlFileKey)
+            && !Model.AvailableHtmlFileKeys.Contains(currentHtmlFileKey, StringComparer.OrdinalIgnoreCase);
     }
 
     <div class="form-field" data-server-report-field hidden="@(Model.Input.ContentType != "server_report")">
@@ -88,7 +92,24 @@
         <span asp-validation-for="Input.ServerReportKey" class="field-validation-error"></span>
     </div>
 
-    <div class="form-field content-editor-field" data-content-editor-field hidden="@(Model.Input.ContentType == "server_report")">
+    <div class="form-field" data-html-file-field hidden="@(Model.Input.ContentType != "html_file")">
+        <label asp-for="Input.HtmlFileKey"></label>
+        <select asp-for="Input.HtmlFileKey">
+            <option value="">@L["Choose an HTML file"]</option>
+            @foreach (var htmlFileKey in Model.AvailableHtmlFileKeys)
+            {
+                <option value="@htmlFileKey">@htmlFileKey</option>
+            }
+            @if (currentHtmlFileKeyMissing)
+            {
+                <option value="@currentHtmlFileKey">@currentHtmlFileKey (@L["missing"])</option>
+            }
+        </select>
+        <span class="field-hint">@L["HTML files are read from the configured HTML file directory or packaged ContentPages folder. Server report shortcodes are supported."]</span>
+        <span asp-validation-for="Input.HtmlFileKey" class="field-validation-error"></span>
+    </div>
+
+    <div class="form-field content-editor-field" data-content-editor-field hidden="@(Model.Input.ContentType == "server_report" || Model.Input.ContentType == "html_file")">
         <label asp-for="Input.Body"></label>
         <div id="content-editor" class="content-editor" hidden></div>
         <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
@@ -193,6 +214,7 @@
             const form = document.getElementById('content-edit-form');
             const contentType = document.getElementById('Input_ContentType');
             const editorField = document.querySelector('[data-content-editor-field]');
+            const htmlFileField = document.querySelector('[data-html-file-field]');
             const reportField = document.querySelector('[data-server-report-field]');
             const markdownHint = document.querySelector('[data-editor-hint="markdown"]');
             const htmlHint = document.querySelector('[data-editor-hint="html"]');
@@ -243,10 +265,15 @@
             const syncContentType = () => {
                 const type = contentType?.value || 'markdown';
                 const isServerReport = type === 'server_report';
+                const isHtmlFile = type === 'html_file';
                 const isHtml = type === 'html';
 
                 if (editorField) {
-                    editorField.hidden = isServerReport;
+                    editorField.hidden = isServerReport || isHtmlFile;
+                }
+
+                if (htmlFileField) {
+                    htmlFileField.hidden = !isHtmlFile;
                 }
 
                 if (reportField) {
@@ -254,14 +281,14 @@
                 }
 
                 if (markdownHint) {
-                    markdownHint.hidden = isServerReport || isHtml;
+                    markdownHint.hidden = isServerReport || isHtmlFile || isHtml;
                 }
 
                 if (htmlHint) {
-                    htmlHint.hidden = isServerReport || !isHtml;
+                    htmlHint.hidden = isServerReport || isHtmlFile || !isHtml;
                 }
 
-                if (isServerReport) {
+                if (isServerReport || isHtmlFile) {
                     showRawSourceEditor();
                 }
                 else if (isHtml) {
@@ -284,7 +311,7 @@
             }
 
             form.addEventListener('submit', () => {
-                if (contentType.value === 'server_report') {
+                if (contentType.value === 'server_report' || contentType.value === 'html_file') {
                     source.value = '';
                     return;
                 }

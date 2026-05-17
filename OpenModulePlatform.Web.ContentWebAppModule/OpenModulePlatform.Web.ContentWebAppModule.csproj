@@ -17,5 +17,7 @@
   <ItemGroup>
     <Content Remove="wwwroot\css\portal-topbar.css;wwwroot\js\portal-topbar.js" />
     <Content Update="App_Data\ContentReports\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="ContentReports\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="ContentPages\*.htm;ContentPages\*.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

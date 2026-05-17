@@ -208,6 +208,18 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
 
             return Page();
         }
+        catch (InvalidOperationException ex)
+        {
+            await LoadAsync(ct);
+            SetTitles("Edit app instance");
+            if (Input.AppInstanceId != Guid.Empty)
+            {
+                TemplateControl = await _repo.GetTemplateManagedAppInstanceInfoAsync(Input.AppInstanceId, ct);
+            }
+
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            return Page();
+        }
     }
 
     private async Task LoadAsync(CancellationToken ct)

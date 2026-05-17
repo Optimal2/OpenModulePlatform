@@ -14,6 +14,7 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin;
 public sealed class EditModel : ContentWebAppModulePageModel
 {
     private readonly ContentPageRepository _repo;
+    private readonly HtmlContentFileLoader _htmlFileLoader;
     private readonly ServerReportDefinitionLoader _serverReportLoader;
 
     public EditModel(
@@ -21,10 +22,12 @@ public sealed class EditModel : ContentWebAppModulePageModel
         IOptions<ContentWebAppModuleOptions> contentOptions,
         RbacService rbac,
         ContentPageRepository repo,
+        HtmlContentFileLoader htmlFileLoader,
         ServerReportDefinitionLoader serverReportLoader)
         : base(options, contentOptions, rbac)
     {
         _repo = repo;
+        _htmlFileLoader = htmlFileLoader;
         _serverReportLoader = serverReportLoader;
     }
 
@@ -34,6 +37,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
     public string? StatusMessage { get; private set; }
     public bool IsCreate => Input.ContentId == Guid.Empty;
     public bool CanManageAll { get; private set; }
+    public IReadOnlyList<string> AvailableHtmlFileKeys { get; private set; } = [];
     public IReadOnlyList<string> AvailableServerReportKeys { get; private set; } = [];
 
     public async Task<IActionResult> OnGet(Guid? contentId, string? saved, CancellationToken ct)
@@ -178,6 +182,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
 
         var accessContext = await GetContentAccessContextAsync(ct);
         CanManageAll = accessContext.CanManageAll;
+        AvailableHtmlFileKeys = _htmlFileLoader.ListHtmlFileKeys();
         AvailableServerReportKeys = _serverReportLoader.ListReportKeys();
 
         await SetContentTitlesAsync(title, ct);
@@ -234,6 +239,9 @@ public sealed class EditModel : ContentWebAppModulePageModel
         Input.Title = Input.Title?.Trim() ?? string.Empty;
         Input.ContentType = ContentTypes.Normalize(Input.ContentType);
         Input.Body ??= string.Empty;
+        Input.HtmlFileKey = string.IsNullOrWhiteSpace(Input.HtmlFileKey)
+            ? null
+            : Input.HtmlFileKey.Trim();
         Input.ServerReportKey = string.IsNullOrWhiteSpace(Input.ServerReportKey)
             ? null
             : Input.ServerReportKey.Trim();
@@ -241,9 +249,16 @@ public sealed class EditModel : ContentWebAppModulePageModel
         if (Input.ContentType == ContentTypes.ServerReport)
         {
             Input.Body = string.Empty;
+            Input.HtmlFileKey = null;
+        }
+        else if (Input.ContentType == ContentTypes.HtmlFile)
+        {
+            Input.Body = string.Empty;
+            Input.ServerReportKey = null;
         }
         else
         {
+            Input.HtmlFileKey = null;
             Input.ServerReportKey = null;
         }
     }
@@ -275,6 +290,21 @@ public sealed class EditModel : ContentWebAppModulePageModel
                 ModelState.AddModelError("Input.ServerReportKey", T("Server report definition was not found."));
             }
         }
+        else if (Input.ContentType == ContentTypes.HtmlFile)
+        {
+            if (string.IsNullOrWhiteSpace(Input.HtmlFileKey))
+            {
+                ModelState.AddModelError("Input.HtmlFileKey", T("HTML file key is required."));
+            }
+            else if (!_htmlFileLoader.IsValidHtmlFileKey(Input.HtmlFileKey))
+            {
+                ModelState.AddModelError("Input.HtmlFileKey", T("HTML file key may only contain letters, numbers, underscores, and hyphens."));
+            }
+            else if (!_htmlFileLoader.HtmlFileExists(Input.HtmlFileKey))
+            {
+                ModelState.AddModelError("Input.HtmlFileKey", T("HTML file was not found."));
+            }
+        }
         else if (string.IsNullOrWhiteSpace(Input.Body))
         {
             ModelState.AddModelError("Input.Body", T("The Content field is required."));
@@ -291,6 +321,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
             ContentType = Input.ContentType,
             Body = Input.Body ?? string.Empty,
             ServerReportKey = Input.ServerReportKey,
+            HtmlFileKey = Input.HtmlFileKey,
             IsEnabled = Input.IsEnabled,
             SortOrder = Input.SortOrder,
             RoleAccesses = Input.RoleAccesses
@@ -314,7 +345,8 @@ public sealed class EditModel : ContentWebAppModulePageModel
             Title = row.Title,
             ContentType = row.ContentType,
             Body = row.Body,
-            ServerReportKey = row.ServerReportKey,
+            HtmlFileKey = row.ContentType == ContentTypes.HtmlFile ? row.ServerReportKey : null,
+            ServerReportKey = row.ContentType == ContentTypes.ServerReport ? row.ServerReportKey : null,
             IsEnabled = row.IsEnabled,
             SortOrder = row.SortOrder,
             CreatedAtUtc = row.CreatedAtUtc,
@@ -348,6 +380,10 @@ public sealed class EditModel : ContentWebAppModulePageModel
         [Display(Name = "Server report")]
         [StringLength(128)]
         public string? ServerReportKey { get; set; }
+
+        [Display(Name = "HTML file")]
+        [StringLength(128)]
+        public string? HtmlFileKey { get; set; }
 
         [Display(Name = "Enabled")]
         public bool IsEnabled { get; set; } = true;

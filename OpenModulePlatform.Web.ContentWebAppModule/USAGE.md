@@ -10,13 +10,14 @@ This guide describes how to use the Content Web App module, with extra detail fo
 - `/content/admin/create` creates a new page.
 - `/content/admin/edit/{contentId}` edits an existing page.
 
-The module supports three content types:
+The admin UI supports four content modes:
 
 - `markdown`
 - `html`
+- `html_file`
 - `server_report`
 
-Markdown and HTML content is stored in the database. Server reports are stored as JSON files on the server and referenced by key.
+Markdown and raw HTML content is stored in the database. HTML file pages are stored as compatible HTML rows with a file key. Server reports are stored as JSON files on the server and referenced by key.
 
 ## Content Type Editors
 
@@ -26,11 +27,17 @@ Choose the page content type before editing the body:
   textarea remains available and the page still saves Markdown.
 - `html` uses a raw HTML source textarea. HTML is trusted editor content and is
   rendered without sanitization.
+- `html_file` stores only a file key in the database. The trusted HTML body is
+  read from the configured HTML file directory or packaged ContentPages folder.
 - `server_report` hides the body editor and shows only the report-key picker.
 
 Changing the content type changes the editor, but it does not convert existing
 body content. Treat Markdown-to-HTML or HTML-to-Markdown changes as manual
 content migrations.
+
+Use `html_file` when a deployment gateway blocks posting raw HTML or JavaScript
+through the admin form, or when the same content file should be shared by several
+web servers.
 
 ## Permissions And Roles
 
@@ -90,6 +97,30 @@ Host Agent normally preserves `App_Data` as runtime data during web-app
 deployments. If the same report key exists in both locations, the configured
 runtime directory wins so operators can override a packaged report without
 modifying the artifact.
+
+HTML file pages use the same two-location model.
+
+Configured runtime/shared directory:
+
+```json
+ContentWebAppModule:HtmlFilesPath
+```
+
+Default value:
+
+```text
+App_Data/ContentPages
+```
+
+Packaged fallback folder:
+
+```text
+ContentPages
+```
+
+When running several web servers behind a load balancer, set both
+`ServerReportsPath` and `HtmlFilesPath` to shared absolute paths so every server
+loads the same JSON and HTML files.
 
 Report keys map directly to JSON filenames:
 
@@ -195,6 +226,7 @@ Relevant config section:
 ```powershell
 ContentWebApp = @{
     ServerReportsPath = 'App_Data/ContentReports'
+    HtmlFilesPath = 'App_Data/ContentPages'
     AllowedServerReportDatabases = @('OpenModulePlatform', 'alfons-test-db')
 }
 ```
@@ -210,6 +242,7 @@ Runtime config example:
 ```json
 "ContentWebAppModule": {
   "ServerReportsPath": "App_Data/ContentReports",
+  "HtmlFilesPath": "App_Data/ContentPages",
   "AllowedServerReportDatabases": [
     "OpenModulePlatform",
     "alfons-test-db"
