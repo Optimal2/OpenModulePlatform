@@ -1644,4 +1644,8 @@
   <data name="Desired app removed." xml:space="preserve"><value>Den önskade appen har tagits bort.</value></data>
   <data name="The desired app could not be removed. Delete or update dependent rows first." xml:space="preserve"><value>Den önskade appen kunde inte tas bort. Ta bort eller ändra beroende rader först.</value></data>
   <data name="This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change." xml:space="preserve"><value>Den här appinstansen styrs av en instansmall. Ta bort eller inaktivera den önskade mallappen i stället och låt HostAgent materialisera ändringen.</value></data>
+  <data name="Delete runtime row" xml:space="preserve"><value>Ta bort runtime-rad</value></data>
+  <data name="Delete this runtime row? If the instance template still expects it, HostAgent may recreate it." xml:space="preserve"><value>Ta bort den här runtime-raden? Om instansmallen fortfarande förväntar sig den kan HostAgent skapa den igen.</value></data>
+  <data name="Runtime row deleted." xml:space="preserve"><value>Runtime-raden har tagits bort.</value></data>
+  <data name="The runtime row could not be deleted. Delete or update dependent rows first." xml:space="preserve"><value>Runtime-raden kunde inte tas bort. Ta bort eller ändra beroende rader först.</value></data>
 </root>
