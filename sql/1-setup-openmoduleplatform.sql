@@ -608,6 +608,7 @@ BEGIN
         DesiredState tinyint NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_DesiredState DEFAULT(1),
         SortOrder int NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_SortOrder DEFAULT(0),
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_IsEnabled DEFAULT(1),
+        IsAllowed bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_IsAllowed DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT FK_omp_InstanceTemplateAppInstances_ModuleInstance
@@ -625,6 +626,13 @@ BEGIN
         CONSTRAINT UQ_omp_InstanceTemplateAppInstances_ModuleInstance_AppInstanceKey
             UNIQUE(InstanceTemplateModuleInstanceId, AppInstanceKey)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.InstanceTemplateAppInstances', N'IsAllowed') IS NULL
+BEGIN
+    ALTER TABLE omp.InstanceTemplateAppInstances
+        ADD IsAllowed bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_IsAllowed DEFAULT(1) WITH VALUES;
 END
 GO
 
@@ -834,7 +842,8 @@ BEGIN
             tai.ExpectedClientIp,
             tai.DesiredState,
             tai.SortOrder,
-            tai.IsEnabled
+            tai.IsEnabled,
+            tai.IsAllowed
         FROM omp.InstanceTemplateAppInstances tai
         INNER JOIN ConcreteModules cm
             ON cm.InstanceTemplateModuleInstanceId = tai.InstanceTemplateModuleInstanceId
@@ -872,7 +881,7 @@ BEGIN
         OR ISNULL(target.ExpectedClientHostName, N'') <> ISNULL(source.ExpectedClientHostName, N'')
         OR ISNULL(target.ExpectedClientIp, N'') <> ISNULL(source.ExpectedClientIp, N'')
         OR target.IsEnabled <> source.IsEnabled
-        OR target.IsAllowed <> source.IsEnabled
+        OR target.IsAllowed <> source.IsAllowed
         OR target.DesiredState <> source.DesiredState
         OR target.SortOrder <> source.SortOrder
     ) THEN
@@ -890,7 +899,7 @@ BEGIN
                    ExpectedClientHostName = source.ExpectedClientHostName,
                    ExpectedClientIp = source.ExpectedClientIp,
                    IsEnabled = source.IsEnabled,
-                   IsAllowed = source.IsEnabled,
+                   IsAllowed = source.IsAllowed,
                    DesiredState = source.DesiredState,
                    SortOrder = source.SortOrder,
                    UpdatedUtc = SYSUTCDATETIME()
@@ -934,7 +943,7 @@ BEGIN
             source.ExpectedClientHostName,
             source.ExpectedClientIp,
             source.IsEnabled,
-            source.IsEnabled,
+            source.IsAllowed,
             source.DesiredState,
             source.SortOrder)
     OUTPUT $action INTO @AppActions(ActionName);
