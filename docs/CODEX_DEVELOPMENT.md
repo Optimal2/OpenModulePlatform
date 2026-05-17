@@ -17,6 +17,7 @@ Use these files as the main map:
 - `docs/ARCHITECTURE.md` - platform model and request flows.
 - `docs/AUTHENTICATION_AND_RBAC.md` - shared OMP authentication, users, role principals, and RBAC.
 - `docs/ADMIN_CONFIGURATION.md` - manual Portal administration guidance.
+- `docs/VERSIONING_AND_IDENTITIES.md` - artifact versioning and stable identity policy.
 - `PUBLISH_README.md` - publish helper behavior and local runtime layout.
 - `sql/README.md` - SQL setup and initialization conventions.
 
