@@ -25,6 +25,13 @@ stores it as text because different module repositories may have their own
 release tooling, but new deployable artifacts should use SemVer-compatible
 versions whenever practical.
 
+`Repository version` is an optional source-control or release-bundle version.
+It may describe a coordinated release from a repository, but it is not the
+version HostAgent deploys.
+
+`Component version` is the version of one deployable application or package in a
+repository. This is the value stored on `omp.Artifacts.Version`.
+
 `Artifact` is an immutable deployable output for one `omp.Apps` definition. A
 new build of the same app creates a new artifact row. Existing artifact rows are
 kept for audit, rollback, and host-state comparison until a retention policy
@@ -47,10 +54,42 @@ automation.
 
 ## Version Policy
 
-Source repositories should expose one authoritative version for the build
-output being installed. Installation scripts may pass that value into SQL, but
+Source repositories should expose one authoritative component version for each
+deployable build output. Installation scripts may pass that value into SQL, but
 SQL initialization files should not become the long-term source of truth for
 normal release versions.
+
+A repository may contain one deployable app or several deployable apps. In a
+single-app repository, the repository version and component version can be the
+same value. In a multi-app repository, each deployable component must be able to
+move independently. A repository tag or release can still group the work for
+human review, but OMP must register artifacts by component version.
+
+For example, a repository containing a web app and a backend service should be
+able to register a new `service-app` artifact without registering a new
+`web-app` artifact. The web app instance keeps pointing to its existing
+`ArtifactId`, while the service app instance or template app instance is moved
+to the new service artifact.
+
+The recommended manifest shape for multi-app repositories is a component list
+keyed by stable OMP identity fields:
+
+```text
+repository key
+optional repository release version
+components:
+  - module key
+  - app key
+  - package type
+  - target name
+  - component version
+  - package relative path
+  - package hash
+```
+
+The combination of `module key`, `app key`, `package type`, and `target name`
+identifies which deployable component the version belongs to. `component
+version` identifies the specific build output for that component.
 
 When a new version is produced:
 
@@ -130,9 +169,9 @@ multi-host execution according to the app's own runtime contract.
 
 1. Keep this document as the shared contract for OMP and consumer module
    repositories.
-2. Add a small manifest convention for module repositories so installers can
-   read version, app keys, package types, and stable seed identities from one
-   source.
+2. Add a small component-manifest convention for module repositories so
+   installers can read component versions, app keys, package types, package
+   paths, hashes, and stable seed identities from one source.
 3. Add schema constraints or validation to prevent duplicate active artifacts
    for the same app/version/package/target combination when that can be done
    without breaking existing installations.
