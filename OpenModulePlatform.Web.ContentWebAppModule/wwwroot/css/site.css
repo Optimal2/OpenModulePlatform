@@ -371,6 +371,47 @@ textarea {
     background: #fff;
 }
 
+.editor-tabs {
+    display: inline-flex;
+    width: max-content;
+    overflow: hidden;
+    border: 1px solid #c8d1dc;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.editor-tabs[hidden] {
+    display: none !important;
+}
+
+.editor-tab {
+    min-height: 2rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+}
+
+.editor-tab[aria-selected="true"] {
+    background: var(--panel);
+    color: var(--text);
+}
+
+.html-visual-editor {
+    min-height: 24rem;
+    overflow: auto;
+    padding: 0.85rem;
+    border: 1px solid #c8d1dc;
+    border-radius: 6px;
+    background: #fff;
+    line-height: 1.65;
+}
+
+.html-visual-editor:focus {
+    outline: 2px solid rgba(31, 111, 235, 0.25);
+    outline-offset: 2px;
+}
+
 .content-editor__source.is-enhanced {
     display: none;
 }
@@ -397,6 +438,16 @@ textarea {
 
 .content-metadata {
     margin-top: 1rem;
+}
+
+.danger-zone {
+    margin-top: 1rem;
+    border-color: #fecaca;
+}
+
+.danger-zone h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.15rem;
 }
 
 .content-metadata dl {

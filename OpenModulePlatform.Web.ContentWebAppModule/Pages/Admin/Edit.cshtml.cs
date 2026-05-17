@@ -104,14 +104,14 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return Forbid();
         }
 
-        if (Input.ContentId != Guid.Empty && !CanManageAll)
+        if (Input.ContentId != Guid.Empty)
         {
             var accessContext = await GetContentAccessContextAsync(ct);
             var editableRow = await _repo.GetPageForEditAsync(
                 AppInstanceId,
                 Input.ContentId,
                 accessContext.RoleIds,
-                canManageAll: false,
+                accessContext.CanManageAll,
                 ct);
 
             if (editableRow is null)
@@ -119,8 +119,12 @@ public sealed class EditModel : ContentWebAppModulePageModel
                 return Forbid();
             }
 
-            Input.IsEnabled = editableRow.IsEnabled;
-            Input.RoleAccesses = ToRoleAccessInputs(await _repo.ListRoleAccessAsync(Input.ContentId, ct));
+            Input.ContentType = editableRow.ContentType;
+            if (!CanManageAll)
+            {
+                Input.IsEnabled = editableRow.IsEnabled;
+                Input.RoleAccesses = ToRoleAccessInputs(await _repo.ListRoleAccessAsync(Input.ContentId, ct));
+            }
         }
 
         NormalizeInput();
@@ -170,6 +174,18 @@ public sealed class EditModel : ContentWebAppModulePageModel
 
         await _repo.SetEnabledAsync(AppInstanceId, Input.ContentId, isEnabled: false, CurrentUserName(), ct);
         return RedirectToPage("/Admin/Edit", new { contentId = Input.ContentId, saved = "disabled" });
+    }
+
+    public async Task<IActionResult> OnPostDelete(CancellationToken ct)
+    {
+        var guard = await PrepareStateMutationAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        await _repo.DeletePageAsync(AppInstanceId, Input.ContentId, ct);
+        return RedirectToPage("/Admin/Index", new { saved = "deleted" });
     }
 
     private async Task<IActionResult?> PrepareAsync(string title, CancellationToken ct)

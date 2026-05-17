@@ -1627,6 +1627,9 @@
   <data name="Edit manual runtime row" xml:space="preserve"><value>Edit manual runtime row</value></data>
   <data name="Delete this worker runtime row?" xml:space="preserve"><value>Delete this worker runtime row?</value></data>
   <data name="Delete runtime row" xml:space="preserve"><value>Delete runtime row</value></data>
+  <data name="Delete this runtime row? If the instance template still expects it, HostAgent may recreate it." xml:space="preserve"><value>Delete this runtime row? If the instance template still expects it, HostAgent may recreate it.</value></data>
+  <data name="Runtime row deleted." xml:space="preserve"><value>Runtime row deleted.</value></data>
+  <data name="The runtime row could not be deleted. Delete or update dependent rows first." xml:space="preserve"><value>The runtime row could not be deleted. Delete or update dependent rows first.</value></data>
   <data name="Worker runtime row deleted." xml:space="preserve"><value>Worker runtime row deleted.</value></data>
   <data name="This worker runtime row is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change." xml:space="preserve"><value>This worker runtime row is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.</value></data>
   <data name="Stop the worker runtime before deleting the runtime row." xml:space="preserve"><value>Stop the worker runtime before deleting the runtime row.</value></data>

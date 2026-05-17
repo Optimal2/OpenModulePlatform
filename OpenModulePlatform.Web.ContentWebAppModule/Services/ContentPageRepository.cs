@@ -441,6 +441,37 @@ WHERE app_instance_id = @AppInstanceId
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task DeletePageAsync(Guid appInstanceId, Guid contentId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        const string deleteAccessSql = @"
+DELETE FROM omp_content.content_role_access
+WHERE content_id = @ContentId;";
+
+        await using (var deleteAccess = new SqlCommand(deleteAccessSql, conn, tx))
+        {
+            Add(deleteAccess, "@ContentId", contentId);
+            await deleteAccess.ExecuteNonQueryAsync(ct);
+        }
+
+        const string deleteContentSql = @"
+DELETE FROM omp_content.contents
+WHERE app_instance_id = @AppInstanceId
+  AND content_id = @ContentId;";
+
+        await using (var deleteContent = new SqlCommand(deleteContentSql, conn, tx))
+        {
+            Add(deleteContent, "@AppInstanceId", appInstanceId);
+            Add(deleteContent, "@ContentId", contentId);
+            await deleteContent.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+    }
+
     private static async Task ReplaceRoleAccessAsync(
         SqlConnection conn,
         SqlTransaction tx,

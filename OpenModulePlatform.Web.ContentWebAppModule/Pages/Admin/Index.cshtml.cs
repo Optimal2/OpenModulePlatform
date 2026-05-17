@@ -26,8 +26,9 @@ public sealed class IndexModel : ContentWebAppModulePageModel
 
     public IReadOnlyList<ContentPageListRow> Rows { get; private set; } = [];
     public bool CanCreatePages { get; private set; }
+    public string? StatusMessage { get; private set; }
 
-    public async Task<IActionResult> OnGet(CancellationToken ct)
+    public async Task<IActionResult> OnGet(string? saved, CancellationToken ct)
     {
         var appInstanceGuard = ValidateAppInstanceConfigured();
         if (appInstanceGuard is not null)
@@ -44,6 +45,7 @@ public sealed class IndexModel : ContentWebAppModulePageModel
             accessContext.CanManageAll,
             ct);
         CanCreatePages = accessContext.CanManageAll;
+        StatusMessage = saved == "deleted" ? T("Page deleted.") : null;
 
         if (!accessContext.CanManageAll && Rows.Count == 0)
         {

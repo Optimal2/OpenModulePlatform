@@ -98,5 +98,13 @@
   <data name="HTML file key is required." xml:space="preserve"><value>HTML-filnyckel krävs.</value></data>
   <data name="HTML file key may only contain letters, numbers, underscores, and hyphens." xml:space="preserve"><value>HTML-filnyckeln får bara innehålla bokstäver, siffror, understreck och bindestreck.</value></data>
   <data name="HTML file was not found." xml:space="preserve"><value>HTML-filen hittades inte.</value></data>
+  <data name="Content type is locked after the page has been created." xml:space="preserve"><value>Innehållstypen är låst efter att sidan har skapats.</value></data>
+  <data name="Visual" xml:space="preserve"><value>Visuell</value></data>
+  <data name="HTML source" xml:space="preserve"><value>HTML-kod</value></data>
+  <data name="Delete this page permanently?" xml:space="preserve"><value>Ta bort den här sidan permanent?</value></data>
+  <data name="Delete page" xml:space="preserve"><value>Ta bort sida</value></data>
+  <data name="Delete removes the page and its role access rows. It cannot be undone." xml:space="preserve"><value>Radering tar bort sidan och dess rollåtkomstrader. Det går inte att ångra.</value></data>
+  <data name="Delete permanently" xml:space="preserve"><value>Ta bort permanent</value></data>
+  <data name="Page deleted." xml:space="preserve"><value>Sidan har tagits bort.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId är inte konfigurerad.</value></data>
 </root>

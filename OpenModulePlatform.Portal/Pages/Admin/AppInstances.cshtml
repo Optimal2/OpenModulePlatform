@@ -16,6 +16,11 @@
     <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Open installation"]</a>
 </div>
 
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">@L["No app instances found."]</div>
@@ -53,7 +58,18 @@ else
                 <td>@row.ArtifactVersion</td>
                 <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
-                <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["View"]</a></td>
+                <td>
+                    <div class="stacked-actions">
+                        <a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["View"]</a>
+                        <form method="post"
+                              asp-page-handler="DeleteRuntime"
+                              asp-route-appInstanceId="@row.AppInstanceId"
+                              class="inline-form"
+                              onsubmit="return confirm('@L["Delete this runtime row? If the instance template still expects it, HostAgent may recreate it."]');">
+                            <button type="submit" class="btn btn-link-danger">@L["Delete runtime row"]</button>
+                        </form>
+                    </div>
+                </td>
             </tr>
         }
         </tbody>
