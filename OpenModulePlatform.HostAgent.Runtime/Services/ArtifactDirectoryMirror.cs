@@ -2,6 +2,11 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 internal static class ArtifactDirectoryMirror
 {
+    // app_offline.htm asks ASP.NET Core to shut down, but loaded assemblies can
+    // remain locked briefly while the worker process exits.
+    private const int FileOperationMaxAttempts = 60;
+    private static readonly TimeSpan FileOperationRetryDelay = TimeSpan.FromMilliseconds(500);
+
     public static void MirrorDirectory(
         string sourceDirectory,
         string targetDirectory,
@@ -16,6 +21,18 @@ internal static class ArtifactDirectoryMirror
         Directory.CreateDirectory(targetDirectory);
         CopySourceFiles(sourceDirectory, targetDirectory, excludedEntries, cancellationToken);
         DeleteStaleTargetEntries(sourceDirectory, targetDirectory, excludedEntries, cancellationToken);
+    }
+
+    public static void DeleteFileIfExistsWithRetry(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        DeleteFileWithRetry(path, cancellationToken);
     }
 
     private static void CopySourceFiles(
@@ -53,7 +70,7 @@ internal static class ArtifactDirectoryMirror
                 relative,
                 "Artifact target file path");
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(file, target, overwrite: true);
+            CopyFileWithRetry(file, target, cancellationToken);
         }
     }
 
@@ -78,7 +95,7 @@ internal static class ArtifactDirectoryMirror
                 "Artifact source file path");
             if (!File.Exists(source))
             {
-                File.Delete(file);
+                DeleteFileWithRetry(file, cancellationToken);
             }
         }
 
@@ -101,8 +118,62 @@ internal static class ArtifactDirectoryMirror
                 "Artifact source directory");
             if (!Directory.Exists(source) && !Directory.EnumerateFileSystemEntries(directory).Any())
             {
-                Directory.Delete(directory);
+                DeleteDirectoryWithRetry(directory, cancellationToken);
             }
+        }
+    }
+
+    private static void CopyFileWithRetry(
+        string sourcePath,
+        string targetPath,
+        CancellationToken cancellationToken)
+        => ExecuteFileOperationWithRetry(
+            () => File.Copy(sourcePath, targetPath, overwrite: true),
+            cancellationToken);
+
+    private static void DeleteFileWithRetry(
+        string path,
+        CancellationToken cancellationToken)
+        => ExecuteFileOperationWithRetry(
+            () => File.Delete(path),
+            cancellationToken);
+
+    private static void DeleteDirectoryWithRetry(
+        string path,
+        CancellationToken cancellationToken)
+        => ExecuteFileOperationWithRetry(
+            () => Directory.Delete(path),
+            cancellationToken);
+
+    private static void ExecuteFileOperationWithRetry(
+        Action operation,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                operation();
+                return;
+            }
+            catch (IOException) when (attempt < FileOperationMaxAttempts)
+            {
+                WaitBeforeRetry(cancellationToken);
+            }
+            catch (UnauthorizedAccessException) when (attempt < FileOperationMaxAttempts)
+            {
+                WaitBeforeRetry(cancellationToken);
+            }
+        }
+    }
+
+    private static void WaitBeforeRetry(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.WaitHandle.WaitOne(FileOperationRetryDelay))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 
