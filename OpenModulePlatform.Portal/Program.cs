@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 // File: OpenModulePlatform.Portal/Program.cs
+using Microsoft.AspNetCore.Http.Features;
 using OpenModulePlatform.Portal.Localization;
+using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.Security;
@@ -18,6 +20,16 @@ builder.Services.AddScoped<PortalUserSettingsAdminRepository>();
 builder.Services.AddScoped<PortalEntryService>();
 builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<RbacAdminRepository>();
+builder.Services.Configure<ArtifactUploadOptions>(
+    builder.Configuration.GetSection(ArtifactUploadOptions.SectionName));
+builder.Services.Configure<FormOptions>(options =>
+{
+    var maxUploadBytes = builder.Configuration.GetValue<long?>(
+        $"{ArtifactUploadOptions.SectionName}:MaxUploadBytes");
+    options.MultipartBodyLengthLimit = maxUploadBytes is > 0
+        ? maxUploadBytes.Value
+        : ArtifactUploadOptions.DefaultMaxUploadBytes;
+});
 
 builder.Services.Configure<RazorPagesOptions>(options =>
 {
