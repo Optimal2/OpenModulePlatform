@@ -701,8 +701,45 @@ WHERE HostId = @HostId;";
         return input.HostId;
     }
 
-    public Task DeleteHostAsync(Guid hostId, CancellationToken ct)
-        => DeleteAsync("DELETE FROM omp.Hosts WHERE HostId = @Id;", hostId, ct);
+    public async Task DeleteHostAsync(Guid hostId, CancellationToken ct)
+    {
+        const string sql = @"
+DELETE FROM omp.HostAppDeploymentStates
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostArtifactStates
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostArtifactRequirements
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostDeploymentAssignments
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostDeployments
+WHERE HostId = @HostId;
+
+UPDATE omp.WorkerInstances
+SET HostId = NULL,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostId = @HostId;
+
+UPDATE omp.AppInstances
+SET HostId = NULL,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostId = @HostId;
+
+DELETE FROM omp.Hosts
+WHERE HostId = @HostId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@HostId", hostId);
+        await cmd.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct);
+    }
 
     // -------------------------------------------------------------------------
     // Module definition editing

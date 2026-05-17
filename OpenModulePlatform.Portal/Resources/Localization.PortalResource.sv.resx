@@ -741,8 +741,14 @@
   <data name="Delete this host? App instances using it must be moved or removed first." xml:space="preserve">
     <value>Ta bort den här värden? Appinstanser som använder den måste flyttas eller tas bort först.</value>
   </data>
+  <data name="Delete this host? App and worker instances are kept, but their host placement and HostAgent deployment state for this host are removed." xml:space="preserve">
+    <value>Ta bort den här värden? App- och arbetarinstanser behålls, men deras värdplacering och HostAgent-status för den här värden tas bort.</value>
+  </data>
   <data name="Host deletion is blocked when app instances or deployments still reference the host." xml:space="preserve">
     <value>Borttagning av värd blockeras när appinstanser eller distributioner fortfarande refererar till värden.</value>
+  </data>
+  <data name="Use host deletion for stale or incorrect host rows. App and worker instances are detached from this host instead of being deleted." xml:space="preserve">
+    <value>Använd borttagning av värd för gamla eller felaktiga värdrader. App- och arbetarinstanser kopplas loss från värden i stället för att tas bort.</value>
   </data>
   <data name="Delete host" xml:space="preserve">
     <value>Ta bort värd</value>
@@ -1133,6 +1139,12 @@
   </data>
   <data name="The host could not be deleted." xml:space="preserve">
     <value>Värden kunde inte tas bort.</value>
+  </data>
+  <data name="The host is still referenced by data that Portal cannot detach automatically." xml:space="preserve">
+    <value>Värden refereras fortfarande av data som portalen inte kan koppla loss automatiskt.</value>
+  </data>
+  <data name="Host id is missing." xml:space="preserve">
+    <value>Värd-id saknas.</value>
   </data>
   <data name="Display name is required." xml:space="preserve">
     <value>Visningsnamn krävs.</value>
