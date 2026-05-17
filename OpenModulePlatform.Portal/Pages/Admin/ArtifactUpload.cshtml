@@ -117,6 +117,23 @@
         }
     };
 
+    const defaultRelativePath = metadata => {
+        let targetSegment = pathSegment(metadata.targetName);
+        let packageSegment = packagePathSegment(metadata.packageType);
+
+        if ((packageSegment === 'web' || packageSegment === 'service')
+            && targetSegment.toLowerCase().endsWith(`-${packageSegment}`)) {
+            targetSegment = targetSegment.slice(0, -1 * (`-${packageSegment}`.length));
+        } else if (packageSegment === 'service' && targetSegment.toLowerCase().endsWith('-backend')) {
+            // Match existing installer artifact roots such as ikrock2/backend,
+            // even when the upload target uses the friendlier ikrock2-backend.
+            targetSegment = targetSegment.slice(0, -1 * '-backend'.length);
+            packageSegment = 'backend';
+        }
+
+        return `${targetSegment}/${packageSegment}/${pathSegment(metadata.version)}`;
+    };
+
     const parseMetadata = name => {
         if (!name || !name.toLowerCase().endsWith('.zip')) {
             return null;
@@ -161,9 +178,7 @@
         fillBlank(packageType, metadata.packageType);
         fillBlank(targetName, metadata.targetName);
         fillBlank(version, metadata.version);
-        fillBlank(
-            relativePath,
-            `${pathSegment(metadata.targetName)}/${packagePathSegment(metadata.packageType)}/${pathSegment(metadata.version)}`);
+        fillBlank(relativePath, defaultRelativePath(metadata));
     });
 })();
 </script>
