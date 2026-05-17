@@ -167,6 +167,7 @@ $contentWebAppConfig = [ordered]@{
         AppInstanceId = '11111111-1111-1111-1111-111111111232'
         HomeSlug = 'home'
         ServerReportsPath = 'App_Data/ContentReports'
+        HtmlFilesPath = 'App_Data/ContentPages'
         AllowedServerReportDatabases = @($Database)
         ServerReportDefaultMaxRows = 100
         ServerReportMaxRowsLimit = 1000

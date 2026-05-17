@@ -42,6 +42,8 @@ public sealed class ContentPageEditRow
 
     public string? ServerReportKey { get; set; }
 
+    public string? HtmlFileKey { get; set; }
+
     public bool IsEnabled { get; set; }
 
     public int? SortOrder { get; set; }
@@ -106,6 +108,8 @@ public sealed class ContentPageSaveRequest
 
     public string? ServerReportKey { get; set; }
 
+    public string? HtmlFileKey { get; set; }
+
     public bool IsEnabled { get; set; }
 
     public int? SortOrder { get; set; }
@@ -119,6 +123,7 @@ public static class ContentTypes
 {
     public const string Markdown = "markdown";
     public const string Html = "html";
+    public const string HtmlFile = "html_file";
     public const string ServerReport = "server_report";
 
     public static string Normalize(string? value)
@@ -130,6 +135,7 @@ public static class ContentTypes
         return normalized switch
         {
             Html => Html,
+            HtmlFile => HtmlFile,
             ServerReport => ServerReport,
             _ => Markdown
         };

@@ -26,6 +26,7 @@
   <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Use Markdown for simple pages. Rendered output is sanitized before it is shown to users.</value></data>
   <data name="Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization." xml:space="preserve"><value>Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization.</value></data>
   <data name="Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor." xml:space="preserve"><value>Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor.</value></data>
+  <data name="Choose a content type first. Markdown, HTML, HTML files, and server reports each use a dedicated editor." xml:space="preserve"><value>Choose a content type first. Markdown, HTML, HTML files, and server reports each use a dedicated editor.</value></data>
   <data name="Write Markdown content. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Write Markdown content. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] are supported.</value></data>
   <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Write trusted HTML directly. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] are supported.</value></data>
   <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported." xml:space="preserve"><value>Write trusted HTML directly. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] and [DB_JSON_SCRIPT=&quot;module-status&quot;] are supported.</value></data>
@@ -84,12 +85,18 @@
   <data name="The Content field is required." xml:space="preserve"><value>The Content field is required.</value></data>
   <data name="Markdown" xml:space="preserve"><value>Markdown</value></data>
   <data name="HTML" xml:space="preserve"><value>HTML</value></data>
+  <data name="HTML file" xml:space="preserve"><value>HTML file</value></data>
   <data name="Server report" xml:space="preserve"><value>Server report</value></data>
   <data name="Choose a server report" xml:space="preserve"><value>Choose a server report</value></data>
+  <data name="Choose an HTML file" xml:space="preserve"><value>Choose an HTML file</value></data>
   <data name="missing" xml:space="preserve"><value>missing</value></data>
   <data name="Server reports are JSON files in the server report directory. SQL is not edited here." xml:space="preserve"><value>Server reports are JSON files in the server report directory. SQL is not edited here.</value></data>
+  <data name="HTML files are read from the configured HTML file directory or packaged ContentPages folder. Server report shortcodes are supported." xml:space="preserve"><value>HTML files are read from the configured HTML file directory or packaged ContentPages folder. Server report shortcodes are supported.</value></data>
   <data name="Server report key is required." xml:space="preserve"><value>Server report key is required.</value></data>
   <data name="Server report key may only contain letters, numbers, underscores, and hyphens." xml:space="preserve"><value>Server report key may only contain letters, numbers, underscores, and hyphens.</value></data>
   <data name="Server report definition was not found." xml:space="preserve"><value>Server report definition was not found.</value></data>
+  <data name="HTML file key is required." xml:space="preserve"><value>HTML file key is required.</value></data>
+  <data name="HTML file key may only contain letters, numbers, underscores, and hyphens." xml:space="preserve"><value>HTML file key may only contain letters, numbers, underscores, and hyphens.</value></data>
+  <data name="HTML file was not found." xml:space="preserve"><value>HTML file was not found.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId is not configured.</value></data>
 </root>

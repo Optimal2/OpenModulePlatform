@@ -1622,11 +1622,72 @@ WHERE AppInstanceId = @AppInstanceId;";
         return input.AppInstanceId;
     }
 
-    public Task DeleteAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
-        => DeleteAsync(
+    public async Task DeleteAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        var hasWorkerInstances = await TableExistsAsync(conn, "omp.WorkerInstances", ct);
+        var hasWorkerInstanceRuntimeStates = await TableExistsAsync(conn, "omp.WorkerInstanceRuntimeStates", ct);
+        var hasAppInstanceRuntimeStates = await TableExistsAsync(conn, "omp.AppInstanceRuntimeStates", ct);
+        var hasHostAppDeploymentStates = await TableExistsAsync(conn, "omp.HostAppDeploymentStates", ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        var templateAppInstanceId = await GetTemplateAppInstanceIdAsync(conn, tx, appInstanceId, ct);
+        if (templateAppInstanceId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.");
+        }
+
+        if (hasWorkerInstanceRuntimeStates)
+        {
+            await ExecuteNonQueryAsync(
+                conn,
+                tx,
+                "DELETE FROM omp.WorkerInstanceRuntimeStates WHERE AppInstanceId = @Id;",
+                appInstanceId,
+                ct);
+        }
+
+        if (hasWorkerInstances)
+        {
+            await ExecuteNonQueryAsync(
+                conn,
+                tx,
+                "DELETE FROM omp.WorkerInstances WHERE AppInstanceId = @Id;",
+                appInstanceId,
+                ct);
+        }
+
+        if (hasAppInstanceRuntimeStates)
+        {
+            await ExecuteNonQueryAsync(
+                conn,
+                tx,
+                "DELETE FROM omp.AppInstanceRuntimeStates WHERE AppInstanceId = @Id;",
+                appInstanceId,
+                ct);
+        }
+
+        if (hasHostAppDeploymentStates)
+        {
+            await ExecuteNonQueryAsync(
+                conn,
+                tx,
+                "DELETE FROM omp.HostAppDeploymentStates WHERE AppInstanceId = @Id;",
+                appInstanceId,
+                ct);
+        }
+
+        await ExecuteNonQueryAsync(
+            conn,
+            tx,
             "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
             appInstanceId,
             ct);
+
+        await tx.CommitAsync(ct);
+    }
 
     // -------------------------------------------------------------------------
     // Context lookups used by validation on edit pages

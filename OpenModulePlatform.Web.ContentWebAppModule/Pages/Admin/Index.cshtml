@@ -42,7 +42,10 @@ else
                         @row.ContentType
                         @if (!string.IsNullOrWhiteSpace(row.ServerReportKey))
                         {
-                            <span>@L["Server report"]: @row.ServerReportKey</span>
+                            <span>
+                                @(row.ContentType == "html_file" ? L["HTML file"] : L["Server report"]):
+                                @row.ServerReportKey
+                            </span>
                         }
                         @if (row.SortOrder is not null)
                         {

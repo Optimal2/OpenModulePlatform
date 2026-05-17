@@ -17,6 +17,11 @@
     </div>
 </section>
 
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
 <section class="card section-card section-card--wide">
     <div class="detail-grid">
         <div>
@@ -162,7 +167,19 @@
                         <td>@row.InstallationName</td>
                         <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
                         <td><span class="pill">@row.DesiredState</span></td>
-                        <td><a class="action-link" href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId">@L["Edit desired state"]</a></td>
+                        <td>
+                            <div class="stacked-actions">
+                                <a class="action-link" href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId">@L["Edit desired state"]</a>
+                                <form method="post"
+                                      asp-page-handler="DeleteApp"
+                                      asp-route-id="@row.InstanceTemplateAppInstanceId"
+                                      asp-route-templateId="@Model.Template.InstanceTemplateId"
+                                      class="inline-form"
+                                      onsubmit="return confirm('@L["Remove this desired app from the template?"]');">
+                                    <button type="submit" class="btn btn-link-danger">@L["Remove desired app"]</button>
+                                </form>
+                            </div>
+                        </td>
                     </tr>
                 }
                 </tbody>

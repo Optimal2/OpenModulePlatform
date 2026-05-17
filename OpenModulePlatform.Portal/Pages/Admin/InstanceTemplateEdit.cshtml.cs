@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/InstanceTemplateEdit.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
@@ -33,6 +34,9 @@ public sealed class InstanceTemplateEditModel : OmpPortalPageModel
 
     public IReadOnlyList<InstanceTemplateAppTopologyRow> Apps { get; private set; } = [];
 
+    [TempData]
+    public string? StatusMessage { get; set; }
+
     public async Task<IActionResult> OnGet(int id, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -53,5 +57,26 @@ public sealed class InstanceTemplateEditModel : OmpPortalPageModel
 
         SetTitles("Instance template");
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostDeleteApp(int id, int templateId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        try
+        {
+            await _repo.DeleteInstanceTemplateAppInstanceAsync(id, ct);
+            StatusMessage = T("Desired app removed.");
+        }
+        catch (SqlException)
+        {
+            StatusMessage = T("The desired app could not be removed. Delete or update dependent rows first.");
+        }
+
+        return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });
     }
 }

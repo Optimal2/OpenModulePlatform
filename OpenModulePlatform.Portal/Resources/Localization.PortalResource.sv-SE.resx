@@ -1639,4 +1639,9 @@
   <data name="Hosts are the concrete machines or runtime targets inside the OMP installation. HostAgent reports and deploys apps against these host keys." xml:space="preserve"><value>Värdar är de konkreta maskinerna eller runtime-målen i OMP-installationen. HostAgent rapporterar och deployar appar mot dessa värdnycklar.</value></data>
   <data name="Back to admin overview" xml:space="preserve"><value>Tillbaka till adminöversikt</value></data>
   <data name="Open installation" xml:space="preserve"><value>Öppna installation</value></data>
+  <data name="Remove this desired app from the template?" xml:space="preserve"><value>Ta bort den här önskade appen från mallen?</value></data>
+  <data name="Remove desired app" xml:space="preserve"><value>Ta bort önskad app</value></data>
+  <data name="Desired app removed." xml:space="preserve"><value>Den önskade appen har tagits bort.</value></data>
+  <data name="The desired app could not be removed. Delete or update dependent rows first." xml:space="preserve"><value>Den önskade appen kunde inte tas bort. Ta bort eller ändra beroende rader först.</value></data>
+  <data name="This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change." xml:space="preserve"><value>Den här appinstansen styrs av en instansmall. Ta bort eller inaktivera den önskade mallappen i stället och låt HostAgent materialisera ändringen.</value></data>
 </root>
