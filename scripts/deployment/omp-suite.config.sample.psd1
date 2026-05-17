@@ -82,6 +82,8 @@
     ContentWebApp = @{
         AppInstanceId = '11111111-1111-1111-1111-111111111232'
         HomeSlug = 'home'
+        # Use absolute shared paths for multi-server deployments so HTML files
+        # and server reports are not tied to a single IIS node or app artifact.
         ServerReportsPath = 'App_Data/ContentReports'
         HtmlFilesPath = 'App_Data/ContentPages'
         AllowedServerReportDatabases = @('OpenModulePlatform')

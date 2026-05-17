@@ -101,6 +101,16 @@
   <data name="Content type is locked after the page has been created." xml:space="preserve"><value>Content type is locked after the page has been created.</value></data>
   <data name="Visual" xml:space="preserve"><value>Visual</value></data>
   <data name="HTML source" xml:space="preserve"><value>HTML source</value></data>
+  <data name="Markdown source" xml:space="preserve"><value>Markdown source</value></data>
+  <data name="Bold" xml:space="preserve"><value>Bold</value></data>
+  <data name="Italic" xml:space="preserve"><value>Italic</value></data>
+  <data name="Heading 2" xml:space="preserve"><value>Heading 2</value></data>
+  <data name="Heading 3" xml:space="preserve"><value>Heading 3</value></data>
+  <data name="Bulleted list" xml:space="preserve"><value>Bulleted list</value></data>
+  <data name="Numbered list" xml:space="preserve"><value>Numbered list</value></data>
+  <data name="Link" xml:space="preserve"><value>Link</value></data>
+  <data name="Clear formatting" xml:space="preserve"><value>Clear formatting</value></data>
+  <data name="Enter link URL" xml:space="preserve"><value>Enter link URL</value></data>
   <data name="Delete this page permanently?" xml:space="preserve"><value>Delete this page permanently?</value></data>
   <data name="Delete page" xml:space="preserve"><value>Delete page</value></data>
   <data name="Delete removes the page and its role access rows. It cannot be undone." xml:space="preserve"><value>Delete removes the page and its role access rows. It cannot be undone.</value></data>

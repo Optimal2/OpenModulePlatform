@@ -101,6 +101,16 @@
   <data name="Content type is locked after the page has been created." xml:space="preserve"><value>Innehållstypen är låst efter att sidan har skapats.</value></data>
   <data name="Visual" xml:space="preserve"><value>Visuell</value></data>
   <data name="HTML source" xml:space="preserve"><value>HTML-kod</value></data>
+  <data name="Markdown source" xml:space="preserve"><value>Markdown-kod</value></data>
+  <data name="Bold" xml:space="preserve"><value>Fet</value></data>
+  <data name="Italic" xml:space="preserve"><value>Kursiv</value></data>
+  <data name="Heading 2" xml:space="preserve"><value>Rubrik 2</value></data>
+  <data name="Heading 3" xml:space="preserve"><value>Rubrik 3</value></data>
+  <data name="Bulleted list" xml:space="preserve"><value>Punktlista</value></data>
+  <data name="Numbered list" xml:space="preserve"><value>Numrerad lista</value></data>
+  <data name="Link" xml:space="preserve"><value>Länk</value></data>
+  <data name="Clear formatting" xml:space="preserve"><value>Rensa formatering</value></data>
+  <data name="Enter link URL" xml:space="preserve"><value>Ange länkadress</value></data>
   <data name="Delete this page permanently?" xml:space="preserve"><value>Ta bort den här sidan permanent?</value></data>
   <data name="Delete page" xml:space="preserve"><value>Ta bort sida</value></data>
   <data name="Delete removes the page and its role access rows. It cannot be undone." xml:space="preserve"><value>Radering tar bort sidan och dess rollåtkomstrader. Det går inte att ångra.</value></data>

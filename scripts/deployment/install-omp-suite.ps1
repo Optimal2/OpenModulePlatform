@@ -1217,6 +1217,20 @@ function Resolve-ContentWebAppServerReportsPath {
     return [System.IO.Path]::GetFullPath((Join-Path $contentRoot $configuredPath))
 }
 
+function Resolve-ContentWebAppHtmlFilesPath {
+    $configuredPath = $script:ContentWebAppHtmlFilesPath
+    if ([string]::IsNullOrWhiteSpace($configuredPath)) {
+        $configuredPath = 'App_Data/ContentPages'
+    }
+
+    if ([System.IO.Path]::IsPathRooted($configuredPath)) {
+        return [System.IO.Path]::GetFullPath($configuredPath)
+    }
+
+    $contentRoot = Join-Path $script:WebAppsRoot $script:ContentWebAppPath
+    return [System.IO.Path]::GetFullPath((Join-Path $contentRoot $configuredPath))
+}
+
 function Add-SqlParameter {
     param(
         [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlCommand]$Command,
@@ -1403,6 +1417,32 @@ function Copy-ContentWebAppSeedReports {
     Write-Host "Copied $($reportFiles.Count) Content Web App server report definition(s) to: $targetRoot"
 }
 
+function Copy-ContentWebAppSeedHtmlFiles {
+    param([Parameter(Mandatory = $true)][string]$SeedRoot)
+
+    $pagesRoot = Join-Path $SeedRoot 'pages'
+    if (-not (Test-Path -LiteralPath $pagesRoot -PathType Container)) {
+        return
+    }
+
+    $htmlFiles = @(
+        Get-ChildItem -LiteralPath $pagesRoot -File |
+            Where-Object { $_.Extension -in @('.html', '.htm') }
+    )
+    if ($htmlFiles.Count -eq 0) {
+        return
+    }
+
+    $targetRoot = Resolve-ContentWebAppHtmlFilesPath
+    New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+
+    foreach ($htmlFile in $htmlFiles) {
+        Copy-Item -LiteralPath $htmlFile.FullName -Destination (Join-Path $targetRoot $htmlFile.Name) -Force
+    }
+
+    Write-Host "Copied $($htmlFiles.Count) Content Web App HTML file(s) to: $targetRoot"
+}
+
 function Import-ContentWebAppSeedPages {
     param([Parameter(Mandatory = $true)][string]$SeedRoot)
 
@@ -1426,6 +1466,7 @@ function Import-ContentWebAppSeedPages {
             $contentType = ([string](Get-ObjectPropertyValue -Entry $page -Name 'contentType' -DefaultValue 'html')).ToLowerInvariant()
             $bodyFile = [string](Get-ObjectPropertyValue -Entry $page -Name 'bodyFile' -DefaultValue '')
             $serverReportKey = Get-ObjectPropertyValue -Entry $page -Name 'serverReportKey' -DefaultValue $null
+            $htmlFileKey = Get-ObjectPropertyValue -Entry $page -Name 'htmlFileKey' -DefaultValue $null
             $isEnabled = [bool](Get-ObjectPropertyValue -Entry $page -Name 'isEnabled' -DefaultValue $true)
             $sortOrder = Get-ObjectPropertyValue -Entry $page -Name 'sortOrder' -DefaultValue $null
 
@@ -1433,12 +1474,28 @@ function Import-ContentWebAppSeedPages {
                 throw "Content Web App seed page in '$manifestPath' is missing slug."
             }
 
-            if ($contentType -notin @('markdown', 'html', 'server_report')) {
+            if ($contentType -notin @('markdown', 'html', 'html_file', 'server_report')) {
                 throw "Content Web App seed page '$slug' has unsupported content type '$contentType'."
             }
 
+            if ($contentType -eq 'html_file' -and [string]::IsNullOrWhiteSpace([string]$htmlFileKey)) {
+                throw "Content Web App seed page '$slug' is an HTML file page but has no htmlFileKey."
+            }
+
+            if ($contentType -eq 'server_report' -and [string]::IsNullOrWhiteSpace([string]$serverReportKey)) {
+                throw "Content Web App seed page '$slug' is a server report page but has no serverReportKey."
+            }
+
+            $contentKey = if ($contentType -eq 'html_file') {
+                $htmlFileKey
+            } elseif ($contentType -eq 'server_report') {
+                $serverReportKey
+            } else {
+                $null
+            }
+
             $body = ''
-            if (-not [string]::IsNullOrWhiteSpace($bodyFile)) {
+            if ($contentType -in @('markdown', 'html') -and -not [string]::IsNullOrWhiteSpace($bodyFile)) {
                 $bodyPath = Resolve-ContentSeedFile -SeedRoot $SeedRoot -RelativePath $bodyFile
                 $body = Get-Content -LiteralPath $bodyPath -Raw -Encoding UTF8
             }
@@ -1449,7 +1506,7 @@ function Import-ContentWebAppSeedPages {
                 -Title $title `
                 -ContentType $contentType `
                 -Body $body `
-                -ServerReportKey $serverReportKey `
+                -ServerReportKey $contentKey `
                 -IsEnabled $isEnabled `
                 -SortOrder $sortOrder)
 
@@ -1485,6 +1542,7 @@ function Install-ContentWebAppSeed {
 
     Write-Step 'Installing Content Web App seed'
     Copy-ContentWebAppSeedReports -SeedRoot $script:ContentWebAppSeedPath
+    Copy-ContentWebAppSeedHtmlFiles -SeedRoot $script:ContentWebAppSeedPath
 
     if ($script:RunSql) {
         Import-ContentWebAppSeedPages -SeedRoot $script:ContentWebAppSeedPath

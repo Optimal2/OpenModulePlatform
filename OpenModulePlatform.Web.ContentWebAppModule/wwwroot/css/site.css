@@ -384,6 +384,26 @@ textarea {
     display: none !important;
 }
 
+.rich-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.45rem;
+    border: 1px solid #c8d1dc;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.rich-editor-toolbar[hidden] {
+    display: none !important;
+}
+
+.rich-editor-toolbar button {
+    min-height: 2rem;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.9rem;
+}
+
 .editor-tab {
     min-height: 2rem;
     border: 0;
