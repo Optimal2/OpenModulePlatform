@@ -1603,8 +1603,10 @@ function Write-RuntimeConfiguration {
                 IisSiteName = $script:IisSiteName
                 WebAppsRoot = $script:WebAppsRoot
                 PortalPhysicalPath = $script:PortalPath
-                StopIisAppPoolForWebAppDeployment = $true
-                StartIisAppPoolAfterWebAppDeployment = $true
+                UseAppOfflineForWebAppDeployment = $true
+                AppOfflineShutdownDelayMilliseconds = 1500
+                StopIisAppPoolForWebAppDeployment = $false
+                StartIisAppPoolAfterWebAppDeployment = $false
                 IisAppPoolStopTimeoutSeconds = 30
                 WebAppDeploymentExcludedEntries = @('appsettings.json', 'appsettings.*.json', 'logs', 'App_Data')
                 DeployServiceApps = $true
