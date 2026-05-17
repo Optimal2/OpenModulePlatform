@@ -59,7 +59,19 @@ public sealed partial class ContentRenderer
         {
             result.Append(content, lastIndex, match.Index - lastIndex);
             result.AppendLine();
-            result.Append(await _serverReportRenderer.RenderAsync(match.Groups["key"].Value, ct));
+            var key = match.Groups["key"].Value;
+            if (match.Groups["script"].Success)
+            {
+                result.Append(await _serverReportRenderer.RenderJavaScriptAsync(
+                    key,
+                    match.Groups["variable"].Success ? match.Groups["variable"].Value : null,
+                    ct));
+            }
+            else
+            {
+                result.Append(await _serverReportRenderer.RenderAsync(key, ct));
+            }
+
             result.AppendLine();
             lastIndex = match.Index + match.Length;
         }
@@ -68,6 +80,6 @@ public sealed partial class ContentRenderer
         return result.ToString();
     }
 
-    [GeneratedRegex("""\[\s*DB\\?_JSON\s*=\s*["'](?<key>[a-zA-Z0-9_-]+)["']\s*\]""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex("""\[\s*DB\\?_JSON(?<script>\\?_SCRIPT)?\s*=\s*["'](?<key>[a-zA-Z0-9_-]+)["'](?:\s+(?:variable|var|name)\s*=\s*["'](?<variable>[A-Za-z_][A-Za-z0-9_]{0,127})["'])?\s*\]""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ServerReportShortcodeRegex();
 }

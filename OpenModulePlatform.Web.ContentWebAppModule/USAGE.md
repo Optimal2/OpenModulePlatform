@@ -279,13 +279,40 @@ module-status.json
 
 The same key validation and report directory rules apply as for full server report pages.
 
+HTML pages can embed the same report as JavaScript data instead of an HTML table:
+
+```text
+[DB_JSON_SCRIPT="module-status"]
+```
+
+This writes two globals:
+
+```javascript
+window.module_status = [];
+window.module_statusReport = {};
+```
+
+`window.module_status` is a flat array of row objects. When a report has several
+queries, each row also includes `__queryName` and `__queryTitle` so page-level
+HTML and JavaScript can filter the rows. `window.module_statusReport` contains
+the full report title, query metadata, per-query rows, truncation flags, and
+sanitized error messages.
+
+The default variable name is derived from the JSON file key by replacing
+non-identifier characters with underscores. Use an explicit variable name when
+that is clearer:
+
+```text
+[DB_JSON_SCRIPT="module-status" variable="moduleStatusRows"]
+```
+
 Some Markdown editors escape underscores and save this as:
 
 ```text
 [DB\_JSON="module-status"]
 ```
 
-The renderer accepts both forms.
+The renderer accepts escaped underscores for both shortcode names.
 
 Examples:
 
@@ -302,6 +329,18 @@ The current module status:
 <p>The current module status:</p>
 
 [DB_JSON="module-status"]
+```
+
+```html
+<h1>Status</h1>
+
+[DB_JSON_SCRIPT="module-status" variable="moduleStatusRows"]
+
+<div id="status-count"></div>
+<script>
+  document.getElementById('status-count').textContent =
+    `${window.moduleStatusRows.length} rows loaded`;
+</script>
 ```
 
 ## Deployment Checklist
