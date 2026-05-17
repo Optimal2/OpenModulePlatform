@@ -250,6 +250,52 @@ public sealed class InstanceTemplateAppInstanceEditData
 }
 
 /// <summary>
+/// Editable host row stored on an instance template.
+/// HostAgent materializes this into concrete host metadata when a matching host reports in.
+/// </summary>
+public sealed class InstanceTemplateHostEditData
+{
+    public int InstanceTemplateHostId { get; set; }
+
+    public int InstanceTemplateId { get; set; }
+
+    public int HostTemplateId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Environment { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public bool IsEnabled { get; set; }
+}
+
+/// <summary>
+/// Editable module-instance row stored on an instance template.
+/// Desired app rows attach to this template module slot.
+/// </summary>
+public sealed class InstanceTemplateModuleEditData
+{
+    public int InstanceTemplateModuleInstanceId { get; set; }
+
+    public int InstanceTemplateId { get; set; }
+
+    public int ModuleId { get; set; }
+
+    public string ModuleInstanceKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public bool IsEnabled { get; set; }
+}
+
+/// <summary>
 /// Editable runtime/app-instance fields.
 /// This is the manual fallback surface for app instances that are not managed by an instance template.
 /// </summary>

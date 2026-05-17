@@ -1315,7 +1315,7 @@
     <value>Host Deployments</value>
   </data>
   <data name="HostDeployments.Lede" xml:space="preserve">
-    <value>Deployment records track rollout requests and execution status. They are kept outside the main manual topology workflow.</value>
+    <value>Inspect HostAgent app deployments, artifact provisioning and explicit template rollout requests.</value>
   </data>
   <data name="More" xml:space="preserve">
     <value>More</value>
@@ -1577,4 +1577,55 @@
   <data name="Where to go" xml:space="preserve"><value>Where to go</value></data>
   <data name="Use these direct links if you reached the old automation page from a bookmark." xml:space="preserve"><value>Use these direct links if you reached the old automation page from a bookmark.</value></data>
   <data name="Moved" xml:space="preserve"><value>Moved</value></data>
+  <data name="Add template host" xml:space="preserve"><value>Add template host</value></data>
+  <data name="Edit template host" xml:space="preserve"><value>Edit template host</value></data>
+  <data name="Save template host" xml:space="preserve"><value>Save template host</value></data>
+  <data name="Remove template host" xml:space="preserve"><value>Remove template host</value></data>
+  <data name="Template hosts define the host keys that HostAgent materializes for instances using this template." xml:space="preserve"><value>Template hosts define the host keys that HostAgent materializes for instances using this template.</value></data>
+  <data name="Select host template" xml:space="preserve"><value>Select host template</value></data>
+  <data name="Select a host template." xml:space="preserve"><value>Select a host template.</value></data>
+  <data name="Remove this template host? Desired app rows using it must be moved or removed first." xml:space="preserve"><value>Remove this template host? Desired app rows using it must be moved or removed first.</value></data>
+  <data name="Removing a template host does not delete existing runtime hosts. Move or remove desired app rows that are pinned to this host first." xml:space="preserve"><value>Removing a template host does not delete existing runtime hosts. Move or remove desired app rows that are pinned to this host first.</value></data>
+  <data name="Template host added." xml:space="preserve"><value>Template host added.</value></data>
+  <data name="Template host updated." xml:space="preserve"><value>Template host updated.</value></data>
+  <data name="Template host removed." xml:space="preserve"><value>Template host removed.</value></data>
+  <data name="A template host with the same key already exists in this template." xml:space="preserve"><value>A template host with the same key already exists in this template.</value></data>
+  <data name="Move or delete desired app rows that use this template host first." xml:space="preserve"><value>Move or delete desired app rows that use this template host first.</value></data>
+  <data name="The template host could not be saved." xml:space="preserve"><value>The template host could not be saved.</value></data>
+  <data name="Add template module instance" xml:space="preserve"><value>Add template module instance</value></data>
+  <data name="Edit template module instance" xml:space="preserve"><value>Edit template module instance</value></data>
+  <data name="Save template module instance" xml:space="preserve"><value>Save template module instance</value></data>
+  <data name="Remove template module instance" xml:space="preserve"><value>Remove template module instance</value></data>
+  <data name="Template module instances are desired module slots. Desired app rows attach to them before HostAgent creates runtime module instances." xml:space="preserve"><value>Template module instances are desired module slots. Desired app rows attach to them before HostAgent creates runtime module instances.</value></data>
+  <data name="Remove this template module instance? Desired app rows using it must be removed first." xml:space="preserve"><value>Remove this template module instance? Desired app rows using it must be removed first.</value></data>
+  <data name="Removing a template module instance stops future materialization from this template. Existing runtime rows are not removed by this action." xml:space="preserve"><value>Removing a template module instance stops future materialization from this template. Existing runtime rows are not removed by this action.</value></data>
+  <data name="Template module instance added." xml:space="preserve"><value>Template module instance added.</value></data>
+  <data name="Template module instance updated." xml:space="preserve"><value>Template module instance updated.</value></data>
+  <data name="Template module instance removed." xml:space="preserve"><value>Template module instance removed.</value></data>
+  <data name="A template module instance with the same key already exists in this template." xml:space="preserve"><value>A template module instance with the same key already exists in this template.</value></data>
+  <data name="Delete desired app rows that use this template module instance first." xml:space="preserve"><value>Delete desired app rows that use this template module instance first.</value></data>
+  <data name="The template module instance could not be saved." xml:space="preserve"><value>The template module instance could not be saved.</value></data>
+  <data name="Back to template" xml:space="preserve"><value>Back to template</value></data>
+  <data name="App deployment state" xml:space="preserve"><value>App deployment state</value></data>
+  <data name="These rows show the latest HostAgent result for each host and app instance. This is usually the most useful view after a desired version has been selected." xml:space="preserve"><value>These rows show the latest HostAgent result for each host and app instance. This is usually the most useful view after a desired version has been selected.</value></data>
+  <data name="No app deployment state has been recorded yet." xml:space="preserve"><value>No app deployment state has been recorded yet.</value></data>
+  <data name="Artifact provisioning state" xml:space="preserve"><value>Artifact provisioning state</value></data>
+  <data name="These rows show whether HostAgent has downloaded and verified artifact packages on each host." xml:space="preserve"><value>These rows show whether HostAgent has downloaded and verified artifact packages on each host.</value></data>
+  <data name="No artifact provisioning state has been recorded yet." xml:space="preserve"><value>No artifact provisioning state has been recorded yet.</value></data>
+  <data name="Template deployment requests" xml:space="preserve"><value>Template deployment requests</value></data>
+  <data name="These rows are explicit template materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty." xml:space="preserve"><value>These rows are explicit template materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty.</value></data>
+  <data name="App instance" xml:space="preserve"><value>App instance</value></data>
+  <data name="Last checked UTC" xml:space="preserve"><value>Last checked UTC</value></data>
+  <data name="Last applied UTC" xml:space="preserve"><value>Last applied UTC</value></data>
+  <data name="Last provisioned UTC" xml:space="preserve"><value>Last provisioned UTC</value></data>
+  <data name="Started UTC" xml:space="preserve"><value>Started UTC</value></data>
+  <data name="Target path" xml:space="preserve"><value>Target path</value></data>
+  <data name="Local path" xml:space="preserve"><value>Local path</value></data>
+  <data name="Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Message" xml:space="preserve"><value>Message</value></data>
+  <data name="Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="Running" xml:space="preserve"><value>Running</value></data>
+  <data name="Succeeded" xml:space="preserve"><value>Succeeded</value></data>
+  <data name="Failed" xml:space="preserve"><value>Failed</value></data>
+  <data name="Hash mismatch" xml:space="preserve"><value>Hash mismatch</value></data>
 </root>
