@@ -244,6 +244,243 @@ ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
         return rows;
     }
 
+    public Task<IReadOnlyList<OptionItem>> GetInstanceTemplateModuleOptionsAsync(
+        int instanceTemplateId,
+        CancellationToken ct)
+        => GetOptionsAsync(
+            @"
+SELECT CAST(tmi.InstanceTemplateModuleInstanceId AS nvarchar(50)),
+       m.ModuleKey + N' / ' + tmi.ModuleInstanceKey + N' - ' + tmi.DisplayName
+FROM omp.InstanceTemplateModuleInstances tmi
+INNER JOIN omp.Modules m ON m.ModuleId = tmi.ModuleId
+WHERE tmi.InstanceTemplateId = @InstanceTemplateId
+ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey;",
+            ct,
+            cmd => Add(cmd, "@InstanceTemplateId", instanceTemplateId));
+
+    public Task<IReadOnlyList<OptionItem>> GetInstanceTemplateHostOptionsAsync(
+        int instanceTemplateId,
+        CancellationToken ct)
+        => GetOptionsAsync(
+            @"
+SELECT CAST(ith.InstanceTemplateHostId AS nvarchar(50)),
+       ith.HostKey + N' - ' + ith.DisplayName
+FROM omp.InstanceTemplateHosts ith
+WHERE ith.InstanceTemplateId = @InstanceTemplateId
+ORDER BY ith.SortOrder, ith.HostKey;",
+            ct,
+            cmd => Add(cmd, "@InstanceTemplateId", instanceTemplateId));
+
+    public async Task<TemplateManagedAppInstanceInfo?> GetTemplateManagedAppInstanceInfoAsync(
+        Guid appInstanceId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       tai.InstanceTemplateAppInstanceId,
+       it.InstanceTemplateId,
+       it.TemplateKey,
+       it.DisplayName
+FROM omp.AppInstances ai
+INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
+INNER JOIN omp.Instances i ON i.InstanceId = mi.InstanceId
+INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
+INNER JOIN omp.InstanceTemplateModuleInstances tmi
+    ON tmi.InstanceTemplateId = i.InstanceTemplateId
+   AND tmi.ModuleId = mi.ModuleId
+   AND tmi.ModuleInstanceKey = mi.ModuleInstanceKey
+INNER JOIN omp.InstanceTemplateAppInstances tai
+    ON tai.InstanceTemplateModuleInstanceId = tmi.InstanceTemplateModuleInstanceId
+   AND tai.AppInstanceKey = ai.AppInstanceKey
+WHERE ai.AppInstanceId = @AppInstanceId
+ORDER BY tai.InstanceTemplateAppInstanceId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new TemplateManagedAppInstanceInfo
+        {
+            InstanceTemplateAppInstanceId = rdr.GetInt32(0),
+            InstanceTemplateId = rdr.GetInt32(1),
+            InstanceTemplateKey = rdr.GetString(2),
+            InstanceTemplateDisplayName = rdr.GetString(3)
+        };
+    }
+
+    public async Task<InstanceTemplateAppInstanceEditData?> GetInstanceTemplateAppInstanceAsync(
+        int instanceTemplateAppInstanceId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT tai.InstanceTemplateAppInstanceId,
+       tmi.InstanceTemplateId,
+       tai.InstanceTemplateModuleInstanceId,
+       tai.InstanceTemplateHostId,
+       tai.AppId,
+       tai.AppInstanceKey,
+       tai.DisplayName,
+       tai.Description,
+       tai.RoutePath,
+       tai.PublicUrl,
+       tai.InstallPath,
+       tai.InstallationName,
+       tai.DesiredArtifactId,
+       tai.DesiredConfigId,
+       tai.ExpectedLogin,
+       tai.ExpectedClientHostName,
+       tai.ExpectedClientIp,
+       tai.IsEnabled,
+       tai.IsAllowed,
+       tai.DesiredState,
+       tai.SortOrder
+FROM omp.InstanceTemplateAppInstances tai
+INNER JOIN omp.InstanceTemplateModuleInstances tmi
+    ON tmi.InstanceTemplateModuleInstanceId = tai.InstanceTemplateModuleInstanceId
+WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateAppInstanceId", instanceTemplateAppInstanceId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new InstanceTemplateAppInstanceEditData
+        {
+            InstanceTemplateAppInstanceId = rdr.GetInt32(0),
+            InstanceTemplateId = rdr.GetInt32(1),
+            InstanceTemplateModuleInstanceId = rdr.GetInt32(2),
+            InstanceTemplateHostId = rdr.IsDBNull(3) ? null : rdr.GetInt32(3),
+            AppId = rdr.GetInt32(4),
+            AppInstanceKey = rdr.GetString(5),
+            DisplayName = rdr.GetString(6),
+            Description = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+            RoutePath = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+            PublicUrl = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+            InstallPath = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+            InstallationName = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+            DesiredArtifactId = rdr.IsDBNull(12) ? null : rdr.GetInt32(12),
+            DesiredConfigId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
+            ExpectedLogin = rdr.IsDBNull(14) ? null : rdr.GetString(14),
+            ExpectedClientHostName = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+            ExpectedClientIp = rdr.IsDBNull(16) ? null : rdr.GetString(16),
+            IsEnabled = rdr.GetBoolean(17),
+            IsAllowed = rdr.GetBoolean(18),
+            DesiredState = rdr.GetByte(19),
+            SortOrder = rdr.GetInt32(20)
+        };
+    }
+
+    public async Task<int> SaveInstanceTemplateAppInstanceAsync(
+        InstanceTemplateAppInstanceEditData input,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (input.InstanceTemplateAppInstanceId == 0)
+        {
+            const string insertSql = @"
+INSERT INTO omp.InstanceTemplateAppInstances
+(
+    InstanceTemplateModuleInstanceId,
+    InstanceTemplateHostId,
+    AppId,
+    AppInstanceKey,
+    DisplayName,
+    Description,
+    RoutePath,
+    PublicUrl,
+    InstallPath,
+    InstallationName,
+    DesiredArtifactId,
+    DesiredConfigId,
+    ExpectedLogin,
+    ExpectedClientHostName,
+    ExpectedClientIp,
+    DesiredState,
+    SortOrder,
+    IsEnabled,
+    IsAllowed
+)
+VALUES
+(
+    @InstanceTemplateModuleInstanceId,
+    @InstanceTemplateHostId,
+    @AppId,
+    @AppInstanceKey,
+    @DisplayName,
+    @Description,
+    @RoutePath,
+    @PublicUrl,
+    @InstallPath,
+    @InstallationName,
+    @DesiredArtifactId,
+    @DesiredConfigId,
+    @ExpectedLogin,
+    @ExpectedClientHostName,
+    @ExpectedClientIp,
+    @DesiredState,
+    @SortOrder,
+    @IsEnabled,
+    @IsAllowed
+);
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+            await using var insert = new SqlCommand(insertSql, conn);
+            BindInstanceTemplateAppInstance(insert, input, includePrimaryKey: false);
+            input.InstanceTemplateAppInstanceId = Convert.ToInt32(await insert.ExecuteScalarAsync(ct));
+            return input.InstanceTemplateAppInstanceId;
+        }
+
+        const string updateSql = @"
+UPDATE omp.InstanceTemplateAppInstances
+SET InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId,
+    InstanceTemplateHostId = @InstanceTemplateHostId,
+    AppId = @AppId,
+    AppInstanceKey = @AppInstanceKey,
+    DisplayName = @DisplayName,
+    Description = @Description,
+    RoutePath = @RoutePath,
+    PublicUrl = @PublicUrl,
+    InstallPath = @InstallPath,
+    InstallationName = @InstallationName,
+    DesiredArtifactId = @DesiredArtifactId,
+    DesiredConfigId = @DesiredConfigId,
+    ExpectedLogin = @ExpectedLogin,
+    ExpectedClientHostName = @ExpectedClientHostName,
+    ExpectedClientIp = @ExpectedClientIp,
+    DesiredState = @DesiredState,
+    SortOrder = @SortOrder,
+    IsEnabled = @IsEnabled,
+    IsAllowed = @IsAllowed,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
+
+        await using var update = new SqlCommand(updateSql, conn);
+        BindInstanceTemplateAppInstance(update, input, includePrimaryKey: true);
+        await update.ExecuteNonQueryAsync(ct);
+        return input.InstanceTemplateAppInstanceId;
+    }
+
+    public Task DeleteInstanceTemplateAppInstanceAsync(int instanceTemplateAppInstanceId, CancellationToken ct)
+        => DeleteAsync(
+            "DELETE FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateAppInstanceId = @Id;",
+            instanceTemplateAppInstanceId,
+            ct);
+
     // -------------------------------------------------------------------------
     // Instance editing
     // -------------------------------------------------------------------------
@@ -1059,9 +1296,11 @@ WHERE AppInstanceId = @AppInstanceId;";
 
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         var templateAppInstanceId = await GetTemplateAppInstanceIdAsync(conn, tx, input.AppInstanceId, ct);
-        var templateHostId = templateAppInstanceId.HasValue
-            ? await ResolveTemplateHostIdAsync(conn, tx, input.HostId, ct)
-            : null;
+        if (templateAppInstanceId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "This app instance is managed by an instance template. Change the desired template app instead and let HostAgent update the runtime row.");
+        }
 
         await using var update = new SqlCommand(updateSql, conn);
         update.Transaction = tx;
@@ -1071,17 +1310,6 @@ WHERE AppInstanceId = @AppInstanceId;";
         {
             throw new InvalidOperationException(
                 $"App instance '{input.AppInstanceId}' no longer exists and could not be updated.");
-        }
-
-        if (templateAppInstanceId.HasValue)
-        {
-            await UpdateTemplateAppInstanceAsync(
-                conn,
-                tx,
-                templateAppInstanceId.Value,
-                templateHostId,
-                input,
-                ct);
         }
 
         await tx.CommitAsync(ct);
@@ -1189,6 +1417,64 @@ WHERE AppId = @AppId;";
         };
     }
 
+    public async Task<InstanceTemplateModuleContext?> GetInstanceTemplateModuleContextAsync(
+        int instanceTemplateModuleInstanceId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT InstanceTemplateModuleInstanceId,
+       InstanceTemplateId,
+       ModuleId
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateModuleInstanceId", instanceTemplateModuleInstanceId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new InstanceTemplateModuleContext
+        {
+            InstanceTemplateModuleInstanceId = rdr.GetInt32(0),
+            InstanceTemplateId = rdr.GetInt32(1),
+            ModuleId = rdr.GetInt32(2)
+        };
+    }
+
+    public async Task<InstanceTemplateHostContext?> GetInstanceTemplateHostContextAsync(
+        int instanceTemplateHostId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT InstanceTemplateHostId,
+       InstanceTemplateId
+FROM omp.InstanceTemplateHosts
+WHERE InstanceTemplateHostId = @InstanceTemplateHostId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateHostId", instanceTemplateHostId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new InstanceTemplateHostContext
+        {
+            InstanceTemplateHostId = rdr.GetInt32(0),
+            InstanceTemplateId = rdr.GetInt32(1)
+        };
+    }
+
     public async Task<bool> ArtifactBelongsToAppAsync(int artifactId, int appId, CancellationToken ct)
     {
         const string sql = @"
@@ -1232,95 +1518,6 @@ ORDER BY tai.InstanceTemplateAppInstanceId;";
 
         var value = await cmd.ExecuteScalarAsync(ct);
         return value is null or DBNull ? null : Convert.ToInt32(value);
-    }
-
-    private static async Task<int?> ResolveTemplateHostIdAsync(
-        SqlConnection conn,
-        SqlTransaction tx,
-        Guid? hostId,
-        CancellationToken ct)
-    {
-        if (!hostId.HasValue)
-        {
-            return null;
-        }
-
-        const string sql = @"
-SELECT TOP (1) ith.InstanceTemplateHostId
-FROM omp.Hosts h
-INNER JOIN omp.Instances i ON i.InstanceId = h.InstanceId
-INNER JOIN omp.InstanceTemplateHosts ith
-    ON ith.InstanceTemplateId = i.InstanceTemplateId
-   AND ith.HostKey = h.HostKey
-WHERE h.HostId = @HostId
-ORDER BY ith.InstanceTemplateHostId;";
-
-        await using var cmd = new SqlCommand(sql, conn, tx);
-        Add(cmd, "@HostId", hostId.Value);
-
-        var value = await cmd.ExecuteScalarAsync(ct);
-        if (value is null or DBNull)
-        {
-            throw new InvalidOperationException(
-                "The selected host is not part of the instance template that manages this app instance.");
-        }
-
-        return Convert.ToInt32(value);
-    }
-
-    private static async Task UpdateTemplateAppInstanceAsync(
-        SqlConnection conn,
-        SqlTransaction tx,
-        int templateAppInstanceId,
-        int? templateHostId,
-        AppInstanceEditData input,
-        CancellationToken ct)
-    {
-        const string sql = @"
-UPDATE omp.InstanceTemplateAppInstances
-SET InstanceTemplateHostId = @InstanceTemplateHostId,
-    AppId = @AppId,
-    AppInstanceKey = @AppInstanceKey,
-    DisplayName = @DisplayName,
-    Description = @Description,
-    RoutePath = @RoutePath,
-    PublicUrl = @PublicUrl,
-    InstallPath = @InstallPath,
-    InstallationName = @InstallationName,
-    DesiredArtifactId = @ArtifactId,
-    DesiredConfigId = @ConfigId,
-    ExpectedLogin = @ExpectedLogin,
-    ExpectedClientHostName = @ExpectedClientHostName,
-    ExpectedClientIp = @ExpectedClientIp,
-    IsEnabled = @IsEnabled,
-    IsAllowed = @IsAllowed,
-    DesiredState = @DesiredState,
-    SortOrder = @SortOrder,
-    UpdatedUtc = SYSUTCDATETIME()
-WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
-
-        await using var cmd = new SqlCommand(sql, conn, tx);
-        Add(cmd, "@InstanceTemplateAppInstanceId", templateAppInstanceId);
-        Add(cmd, "@InstanceTemplateHostId", templateHostId);
-        Add(cmd, "@AppId", input.AppId);
-        Add(cmd, "@AppInstanceKey", input.AppInstanceKey);
-        Add(cmd, "@DisplayName", input.DisplayName);
-        Add(cmd, "@Description", input.Description);
-        Add(cmd, "@RoutePath", input.RoutePath);
-        Add(cmd, "@PublicUrl", input.PublicUrl);
-        Add(cmd, "@InstallPath", input.InstallPath);
-        Add(cmd, "@InstallationName", input.InstallationName);
-        Add(cmd, "@ArtifactId", input.ArtifactId);
-        Add(cmd, "@ConfigId", input.ConfigId);
-        Add(cmd, "@ExpectedLogin", input.ExpectedLogin);
-        Add(cmd, "@ExpectedClientHostName", input.ExpectedClientHostName);
-        Add(cmd, "@ExpectedClientIp", input.ExpectedClientIp);
-        Add(cmd, "@IsEnabled", input.IsEnabled);
-        Add(cmd, "@IsAllowed", input.IsAllowed);
-        Add(cmd, "@DesiredState", input.DesiredState);
-        Add(cmd, "@SortOrder", input.SortOrder);
-
-        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     // -------------------------------------------------------------------------
@@ -1438,6 +1635,36 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
         Add(cmd, "@SortOrder", input.SortOrder);
     }
 
+    private static void BindInstanceTemplateAppInstance(
+        SqlCommand cmd,
+        InstanceTemplateAppInstanceEditData input,
+        bool includePrimaryKey)
+    {
+        if (includePrimaryKey)
+        {
+            Add(cmd, "@InstanceTemplateAppInstanceId", input.InstanceTemplateAppInstanceId);
+        }
+
+        Add(cmd, "@InstanceTemplateModuleInstanceId", input.InstanceTemplateModuleInstanceId);
+        Add(cmd, "@InstanceTemplateHostId", input.InstanceTemplateHostId);
+        Add(cmd, "@AppId", input.AppId);
+        Add(cmd, "@AppInstanceKey", input.AppInstanceKey);
+        Add(cmd, "@DisplayName", input.DisplayName);
+        Add(cmd, "@Description", input.Description);
+        Add(cmd, "@RoutePath", input.RoutePath);
+        Add(cmd, "@PublicUrl", input.PublicUrl);
+        Add(cmd, "@InstallPath", input.InstallPath);
+        Add(cmd, "@InstallationName", input.InstallationName);
+        Add(cmd, "@DesiredArtifactId", input.DesiredArtifactId);
+        Add(cmd, "@DesiredConfigId", input.DesiredConfigId);
+        Add(cmd, "@ExpectedLogin", input.ExpectedLogin);
+        Add(cmd, "@ExpectedClientHostName", input.ExpectedClientHostName);
+        Add(cmd, "@ExpectedClientIp", input.ExpectedClientIp);
+        Add(cmd, "@DesiredState", input.DesiredState);
+        Add(cmd, "@SortOrder", input.SortOrder);
+        Add(cmd, "@IsEnabled", input.IsEnabled);
+        Add(cmd, "@IsAllowed", input.IsAllowed);
+    }
 
     private static void BindAppWorkerDefinition(SqlCommand cmd, AppWorkerDefinitionEditData input)
     {
@@ -1449,12 +1676,19 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
     }
 
     private async Task<IReadOnlyList<OptionItem>> GetOptionsAsync(string sql, CancellationToken ct)
+        => await GetOptionsAsync(sql, ct, bind: null);
+
+    private async Task<IReadOnlyList<OptionItem>> GetOptionsAsync(
+        string sql,
+        CancellationToken ct,
+        Action<SqlCommand>? bind)
     {
         var rows = new List<OptionItem>();
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
+        bind?.Invoke(cmd);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         while (await rdr.ReadAsync(ct))

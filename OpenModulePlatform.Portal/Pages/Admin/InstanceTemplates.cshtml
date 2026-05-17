@@ -3,9 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Automation"]</div>
+        <div class="eyebrow">@L["Desired topology"]</div>
         <h2>@L["Instance templates"]</h2>
-        <p class="lede">@L["Instance templates belong to the future automation path. They describe desired topology rather than the manually managed live runtime."]</p>
+        <p class="lede">@L["Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows."]</p>
     </div>
 </section>
 
@@ -22,6 +22,7 @@ else
                 <th>@L["Display name"]</th>
                 <th>@L["Enabled"]</th>
                 <th>@L["Description"]</th>
+                <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -32,6 +33,7 @@ else
                 <td>@row.DisplayName</td>
                 <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
                 <td>@row.Description</td>
+                <td><a class="action-link" href="~/admin/instancetemplateedit?id=@row.InstanceTemplateId">@L["Open template"]</a></td>
             </tr>
         }
         </tbody>

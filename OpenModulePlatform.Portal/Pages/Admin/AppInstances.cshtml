@@ -3,17 +3,17 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Manual core"]</div>
+        <div class="eyebrow">@L["Runtime result"]</div>
         <h2>@L["App instances"]</h2>
         <p class="lede">
-            App instances are the runtime-facing layer. They connect app definitions
-            to hosts, artifacts, route or installation data and observed runtime state.
+            @L["App instances show the materialized runtime state. For template-managed apps, change host placement, version and desired state on the instance template instead."]
         </p>
     </div>
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/appinstanceedit">@L["Create app instance"]</a>
+    <a class="action-link" href="~/admin/appinstanceedit">@L["Create manual app instance"]</a>
+    <a class="action-link" href="~/admin/instancetemplates">@L["Open instance templates"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
@@ -53,7 +53,7 @@ else
                 <td>@row.ArtifactVersion</td>
                 <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
-                <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit"]</a></td>
+                <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["View"]</a></td>
             </tr>
         }
         </tbody>

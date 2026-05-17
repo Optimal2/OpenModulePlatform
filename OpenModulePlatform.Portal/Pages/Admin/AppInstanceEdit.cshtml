@@ -6,9 +6,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Manual core"]</div>
-        <h2>@(Model.IsCreate ? L["Create app instance"] : L["Edit app instance"])</h2>
-        <p class="lede">@ompBranding.ApplyPlatformName(L["App instances are the runtime center of OMP. This page handles host placement, artifact choice, routing and verification policy for a concrete app inside an OMP instance."].Value)</p>
+        <div class="eyebrow">@(Model.TemplateControl is null ? L["Manual runtime"] : L["Runtime result"])</div>
+        <h2>@(Model.IsCreate ? L["Create manual app instance"] : Model.TemplateControl is null ? L["Edit manual app instance"] : L["View app instance"])</h2>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Template-managed app instances are runtime results. Change desired versions and placement on the instance template; use this page only for manual fallback rows."].Value)</p>
     </div>
 </section>
 
@@ -22,6 +22,65 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
+@if (Model.TemplateControl is not null)
+{
+    <section class="card section-card section-card--wide">
+        <h3>@L["Template-managed app instance"]</h3>
+        <p class="muted">
+            @L["This row is materialized by HostAgent from an instance template. Change the desired template app instead; this page shows the current runtime result."]
+        </p>
+        <div class="detail-grid">
+            <div>
+                <div class="muted">@L["Instance template"]</div>
+                <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.TemplateControl.InstanceTemplateId">@Model.TemplateControl.InstanceTemplateDisplayName</a>
+            </div>
+            <div>
+                <div class="muted">@L["Template key"]</div>
+                <code>@Model.TemplateControl.InstanceTemplateKey</code>
+            </div>
+            <div>
+                <div class="muted">@L["Desired app"]</div>
+                <a class="action-link" href="~/admin/instancetemplateappedit?id=@Model.TemplateControl.InstanceTemplateAppInstanceId">@L["Edit desired state"]</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="card section-card section-card--wide">
+        <h3>@L["Current materialized runtime row"]</h3>
+        <div class="detail-grid">
+            <div>
+                <div class="muted">@L["App instance key"]</div>
+                <code>@Model.Input.AppInstanceKey</code>
+            </div>
+            <div>
+                <div class="muted">@L["Display name"]</div>
+                <span>@Model.Input.DisplayName</span>
+            </div>
+            <div>
+                <div class="muted">@L["Route"]</div>
+                <span>@Model.Input.RoutePath</span>
+            </div>
+            <div>
+                <div class="muted">@L["Installation"]</div>
+                <span>@Model.Input.InstallationName</span>
+            </div>
+            <div>
+                <div class="muted">@L["Artifact"]</div>
+                <span>@Model.Input.ArtifactId</span>
+            </div>
+            <div>
+                <div class="muted">@L["Allowed"]</div>
+                <span class="pill">@(Model.Input.IsAllowed ? L["Allowed"] : L["Blocked"])</span>
+            </div>
+        </div>
+    </section>
+
+    <div class="toolbar">
+        <a class="action-link" href="~/admin/appinstances">@L["Back to app instances"]</a>
+    </div>
+}
+else
+{
 <form method="post" class="card form-grid">
     <input type="hidden" asp-for="Input.AppInstanceId" />
 
@@ -253,4 +312,5 @@
         <p class="muted">@L["Delete removes the runtime row. Make sure no external system still relies on this app instance key."]</p>
         <button type="submit" class="btn btn-danger">@L["Delete app instance"]</button>
     </form>
+}
 }

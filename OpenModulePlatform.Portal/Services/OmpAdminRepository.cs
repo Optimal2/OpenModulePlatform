@@ -441,6 +441,172 @@ ORDER BY TemplateKey;";
         return rows;
     }
 
+    public async Task<InstanceTemplateRow?> GetInstanceTemplateAsync(int instanceTemplateId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT InstanceTemplateId, TemplateKey, DisplayName, Description, IsEnabled
+FROM omp.InstanceTemplates
+WHERE InstanceTemplateId = @InstanceTemplateId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new InstanceTemplateRow
+        {
+            InstanceTemplateId = rdr.GetInt32(0),
+            TemplateKey = rdr.GetString(1),
+            DisplayName = rdr.GetString(2),
+            Description = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+            IsEnabled = rdr.GetBoolean(4)
+        };
+    }
+
+    public async Task<IReadOnlyList<InstanceTemplateHostTopologyRow>> GetInstanceTemplateHostsAsync(
+        int instanceTemplateId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ith.InstanceTemplateHostId,
+       ith.HostKey,
+       ht.TemplateKey,
+       ith.DisplayName,
+       ith.Environment,
+       ith.SortOrder,
+       ith.IsEnabled
+FROM omp.InstanceTemplateHosts ith
+INNER JOIN omp.HostTemplates ht ON ht.HostTemplateId = ith.HostTemplateId
+WHERE ith.InstanceTemplateId = @InstanceTemplateId
+ORDER BY ith.SortOrder, ith.HostKey;";
+
+        var rows = new List<InstanceTemplateHostTopologyRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new InstanceTemplateHostTopologyRow
+            {
+                InstanceTemplateHostId = rdr.GetInt32(0),
+                HostKey = rdr.GetString(1),
+                HostTemplateKey = rdr.GetString(2),
+                DisplayName = rdr.GetString(3),
+                Environment = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                SortOrder = rdr.GetInt32(5),
+                IsEnabled = rdr.GetBoolean(6)
+            });
+        }
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<InstanceTemplateModuleTopologyRow>> GetInstanceTemplateModulesAsync(
+        int instanceTemplateId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT tmi.InstanceTemplateModuleInstanceId,
+       m.ModuleKey,
+       tmi.ModuleInstanceKey,
+       tmi.DisplayName,
+       tmi.SortOrder,
+       tmi.IsEnabled
+FROM omp.InstanceTemplateModuleInstances tmi
+INNER JOIN omp.Modules m ON m.ModuleId = tmi.ModuleId
+WHERE tmi.InstanceTemplateId = @InstanceTemplateId
+ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey;";
+
+        var rows = new List<InstanceTemplateModuleTopologyRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new InstanceTemplateModuleTopologyRow
+            {
+                InstanceTemplateModuleInstanceId = rdr.GetInt32(0),
+                ModuleKey = rdr.GetString(1),
+                ModuleInstanceKey = rdr.GetString(2),
+                DisplayName = rdr.GetString(3),
+                SortOrder = rdr.GetInt32(4),
+                IsEnabled = rdr.GetBoolean(5)
+            });
+        }
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<InstanceTemplateAppTopologyRow>> GetInstanceTemplateAppsAsync(
+        int instanceTemplateId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT tai.InstanceTemplateAppInstanceId,
+       tmi.ModuleInstanceKey,
+       ith.HostKey,
+       a.AppKey,
+       tai.AppInstanceKey,
+       tai.DisplayName,
+       tai.RoutePath,
+       tai.InstallationName,
+       ar.Version,
+       tai.IsEnabled,
+       tai.IsAllowed,
+       tai.DesiredState,
+       tai.SortOrder
+FROM omp.InstanceTemplateAppInstances tai
+INNER JOIN omp.InstanceTemplateModuleInstances tmi
+    ON tmi.InstanceTemplateModuleInstanceId = tai.InstanceTemplateModuleInstanceId
+INNER JOIN omp.Apps a ON a.AppId = tai.AppId
+LEFT JOIN omp.InstanceTemplateHosts ith
+    ON ith.InstanceTemplateHostId = tai.InstanceTemplateHostId
+LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = tai.DesiredArtifactId
+WHERE tmi.InstanceTemplateId = @InstanceTemplateId
+ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey, tai.SortOrder, tai.AppInstanceKey;";
+
+        var rows = new List<InstanceTemplateAppTopologyRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new InstanceTemplateAppTopologyRow
+            {
+                InstanceTemplateAppInstanceId = rdr.GetInt32(0),
+                ModuleInstanceKey = rdr.GetString(1),
+                HostKey = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                AppKey = rdr.GetString(3),
+                AppInstanceKey = rdr.GetString(4),
+                DisplayName = rdr.GetString(5),
+                RoutePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                InstallationName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                ArtifactVersion = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                IsEnabled = rdr.GetBoolean(9),
+                IsAllowed = rdr.GetBoolean(10),
+                DesiredState = rdr.GetByte(11),
+                SortOrder = rdr.GetInt32(12)
+            });
+        }
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<HostTemplateRow>> GetHostTemplatesAsync(CancellationToken ct)
     {
         const string sql = @"

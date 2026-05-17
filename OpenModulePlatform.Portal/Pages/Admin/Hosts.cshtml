@@ -6,14 +6,16 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Manual core"]</div>
+        <div class="eyebrow">@L["Host inventory"]</div>
         <h2>@L["Hosts"]</h2>
-        <p class="lede">@ompBranding.ApplyPlatformName(L["Hosts represent concrete runtime targets within an OMP instance. App instances attach to hosts for actual placement and observation."].Value)</p>
+        <p class="lede">@ompBranding.ApplyPlatformName(L["Hosts are the concrete machines or runtime targets inside an OMP instance. Host templates and assignments describe what each host role should run."].Value)</p>
     </div>
 </section>
 
 <div class="toolbar top-gap">
     <a class="action-link" href="~/admin/hostedit">@L["Create host"]</a>
+    <a class="action-link" href="~/admin/hosttemplates">@L["Open host templates"]</a>
+    <a class="action-link" href="~/admin/hostdeploymentassignments">@L["Open template assignments"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)

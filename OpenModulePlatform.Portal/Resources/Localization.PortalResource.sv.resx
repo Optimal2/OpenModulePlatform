@@ -1522,4 +1522,46 @@
   <data name="Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar." xml:space="preserve"><value>Lämna tomt för en toppnivå-entry. Välj en parent för att skapa en underlänk i topbaren.</value></data>
   <data name="Select a valid parent entry." xml:space="preserve"><value>Välj en giltig parent entry.</value></data>
   <data name="The selected parent would create a Portal Entry cycle." xml:space="preserve"><value>Vald parent skulle skapa en cirkel bland Portal Entries.</value></data>
+  <data name="Desired topology" xml:space="preserve"><value>Önskad topologi</value></data>
+  <data name="Runtime result" xml:space="preserve"><value>Runtime-resultat</value></data>
+  <data name="Manual runtime" xml:space="preserve"><value>Manuell runtime</value></data>
+  <data name="Host inventory" xml:space="preserve"><value>Värdinventering</value></data>
+  <data name="Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows." xml:space="preserve"><value>Instansmallar beskriver vad som ska finnas i en OMP-instans. Ändra önskade appar här och låt sedan HostAgent materialisera runtime-raderna.</value></data>
+  <data name="This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances." xml:space="preserve"><value>Den här mallen är önskat läge för OMP-instanser som använder den. HostAgent materialiserar raderna till konkreta värdar, modulinstanser och appinstanser.</value></data>
+  <data name="Template hosts" xml:space="preserve"><value>Mallvärdar</value></data>
+  <data name="Template hosts define the host keys that should exist inside each OMP instance using this template. Concrete hosts report in with the same host key." xml:space="preserve"><value>Mallvärdar definierar vilka värdnycklar som ska finnas i varje OMP-instans som använder mallen. Konkreta värdar rapporterar in med samma värdnyckel.</value></data>
+  <data name="No template hosts found." xml:space="preserve"><value>Inga mallvärdar hittades.</value></data>
+  <data name="Template module instances" xml:space="preserve"><value>Mallens modulinstanser</value></data>
+  <data name="Module instances are materialized before desired app rows, so apps have a stable module slot to attach to." xml:space="preserve"><value>Modulinstanser materialiseras före önskade apprader, så apparna får en stabil modulplats att kopplas till.</value></data>
+  <data name="No template module instances found." xml:space="preserve"><value>Inga modulinstanser hittades i mallen.</value></data>
+  <data name="Desired apps" xml:space="preserve"><value>Önskade appar</value></data>
+  <data name="Change versions, placement and desired runtime policy here. HostAgent updates the concrete app instances after its next cycle." xml:space="preserve"><value>Ändra versioner, placering och önskad runtime-policy här. HostAgent uppdaterar de konkreta appinstanserna efter nästa cykel.</value></data>
+  <data name="No desired apps found." xml:space="preserve"><value>Inga önskade appar hittades.</value></data>
+  <data name="Add desired app" xml:space="preserve"><value>Lägg till önskad app</value></data>
+  <data name="Edit desired app" xml:space="preserve"><value>Redigera önskad app</value></data>
+  <data name="Save desired app" xml:space="preserve"><value>Spara önskad app</value></data>
+  <data name="Edit desired state" xml:space="preserve"><value>Redigera önskat läge</value></data>
+  <data name="Back to instance templates" xml:space="preserve"><value>Tillbaka till instansmallar</value></data>
+  <data name="View materialized app instances" xml:space="preserve"><value>Visa materialiserade appinstanser</value></data>
+  <data name="Any host" xml:space="preserve"><value>Valfri värd</value></data>
+  <data name="Any host / not pinned" xml:space="preserve"><value>Valfri värd / inte låst</value></data>
+  <data name="Template-managed app instance" xml:space="preserve"><value>Mallstyrd appinstans</value></data>
+  <data name="This row is materialized by HostAgent from an instance template. Change the desired template app instead; this page shows the current runtime result." xml:space="preserve"><value>Den här raden materialiseras av HostAgent från en instansmall. Ändra den önskade appen i mallen i stället; den här sidan visar aktuellt runtime-resultat.</value></data>
+  <data name="Current materialized runtime row" xml:space="preserve"><value>Aktuell materialiserad runtime-rad</value></data>
+  <data name="Template-managed app instances are runtime results. Change desired versions and placement on the instance template; use this page only for manual fallback rows." xml:space="preserve"><value>Mallstyrda appinstanser är runtime-resultat. Ändra önskade versioner och placering i instansmallen; använd den här sidan bara för manuella fallback-rader.</value></data>
+  <data name="App instances show the materialized runtime state. For template-managed apps, change host placement, version and desired state on the instance template instead." xml:space="preserve"><value>Appinstanser visar materialiserat runtime-läge. För mallstyrda appar ändras värdplacering, version och önskat läge i instansmallen i stället.</value></data>
+  <data name="Create manual app instance" xml:space="preserve"><value>Skapa manuell appinstans</value></data>
+  <data name="Edit manual app instance" xml:space="preserve"><value>Redigera manuell appinstans</value></data>
+  <data name="View app instance" xml:space="preserve"><value>Visa appinstans</value></data>
+  <data name="Open instance templates" xml:space="preserve"><value>Öppna instansmallar</value></data>
+  <data name="Open host templates" xml:space="preserve"><value>Öppna värdmallar</value></data>
+  <data name="Open template assignments" xml:space="preserve"><value>Öppna malltilldelningar</value></data>
+  <data name="Open deployment log" xml:space="preserve"><value>Öppna deploylogg</value></data>
+  <data name="Hosts are the concrete machines or runtime targets inside an OMP instance. Host templates and assignments describe what each host role should run." xml:space="preserve"><value>Värdar är de konkreta maskinerna eller runtime-målen i en OMP-instans. Värdmallar och tilldelningar beskriver vad varje värdroll ska köra.</value></data>
+  <data name="Host templates describe reusable host roles. Assign a host template to a concrete host so HostAgent knows which desired topology applies there." xml:space="preserve"><value>Värdmallar beskriver återanvändbara värdroller. Tilldela en värdmall till en konkret värd så att HostAgent vet vilken önskad topologi som gäller där.</value></data>
+  <data name="Template-driven administration" xml:space="preserve"><value>Mallstyrd administration</value></data>
+  <data name="Template pages now live under System and Hosts so the admin flow follows the actual model: define desired topology, let HostAgent materialize runtime rows, then inspect the result." xml:space="preserve"><value>Mallsidorna ligger nu under System och Värdar så att adminflödet följer modellen: definiera önskad topologi, låt HostAgent materialisera runtime-rader och granska sedan resultatet.</value></data>
+  <data name="Where to go" xml:space="preserve"><value>Vart du går nu</value></data>
+  <data name="Use these direct links if you reached the old automation page from a bookmark." xml:space="preserve"><value>Använd de här direktlänkarna om du kom till den gamla automationssidan via ett bokmärke.</value></data>
+  <data name="Moved" xml:space="preserve"><value>Flyttat</value></data>
 </root>
