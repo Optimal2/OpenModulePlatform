@@ -744,8 +744,14 @@
   <data name="Delete this host? App instances using it must be moved or removed first." xml:space="preserve">
     <value>Delete this host? App instances using it must be moved or removed first.</value>
   </data>
+  <data name="Delete this host? App and worker instances are kept, but their host placement and HostAgent deployment state for this host are removed." xml:space="preserve">
+    <value>Delete this host? App and worker instances are kept, but their host placement and HostAgent deployment state for this host are removed.</value>
+  </data>
   <data name="Host deletion is blocked when app instances or deployments still reference the host." xml:space="preserve">
     <value>Host deletion is blocked when app instances or deployments still reference the host.</value>
+  </data>
+  <data name="Use host deletion for stale or incorrect host rows. App and worker instances are detached from this host instead of being deleted." xml:space="preserve">
+    <value>Use host deletion for stale or incorrect host rows. App and worker instances are detached from this host instead of being deleted.</value>
   </data>
   <data name="Delete host" xml:space="preserve">
     <value>Delete host</value>
@@ -1136,6 +1142,12 @@
   </data>
   <data name="The host could not be deleted." xml:space="preserve">
     <value>The host could not be deleted.</value>
+  </data>
+  <data name="The host is still referenced by data that Portal cannot detach automatically." xml:space="preserve">
+    <value>The host is still referenced by data that Portal cannot detach automatically.</value>
+  </data>
+  <data name="Host id is missing." xml:space="preserve">
+    <value>Host id is missing.</value>
   </data>
   <data name="Display name is required." xml:space="preserve">
     <value>Display name is required.</value>

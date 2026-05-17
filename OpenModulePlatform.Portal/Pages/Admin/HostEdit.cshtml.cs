@@ -80,25 +80,10 @@ public sealed class HostEditModel : OmpPortalPageModel
             return Page();
         }
 
-        var row = await _repo.GetHostAsync(id.Value, ct);
-        if (row is null)
+        if (!await LoadHostInputAsync(id.Value, ct))
         {
             return NotFound();
         }
-
-        Input = new InputModel
-        {
-            HostId = row.HostId,
-            InstanceId = row.InstanceId,
-            HostKey = row.HostKey,
-            DisplayName = row.DisplayName,
-            BaseUrl = row.BaseUrl,
-            Environment = row.Environment,
-            OsFamily = row.OsFamily,
-            OsVersion = row.OsVersion,
-            Architecture = row.Architecture,
-            IsEnabled = row.IsEnabled
-        };
 
         return Page();
     }
@@ -164,6 +149,15 @@ public sealed class HostEditModel : OmpPortalPageModel
             return guard;
         }
 
+        ModelState.Clear();
+        if (Input.HostId == Guid.Empty)
+        {
+            await LoadAsync(ct);
+            SetTitles("Edit host");
+            ModelState.AddModelError(string.Empty, T("Host id is missing."));
+            return Page();
+        }
+
         try
         {
             await _repo.DeleteHostAsync(Input.HostId, ct);
@@ -173,6 +167,7 @@ public sealed class HostEditModel : OmpPortalPageModel
         catch (SqlException ex)
         {
             await LoadAsync(ct);
+            await LoadHostInputAsync(Input.HostId, ct);
             SetTitles("Edit host");
             ModelState.AddModelError(
                 string.Empty,
@@ -185,6 +180,31 @@ public sealed class HostEditModel : OmpPortalPageModel
     private async Task LoadAsync(CancellationToken ct)
     {
         InstanceOptions = await _repo.GetInstanceOptionsAsync(ct);
+    }
+
+    private async Task<bool> LoadHostInputAsync(Guid hostId, CancellationToken ct)
+    {
+        var row = await _repo.GetHostAsync(hostId, ct);
+        if (row is null)
+        {
+            return false;
+        }
+
+        Input = new InputModel
+        {
+            HostId = row.HostId,
+            InstanceId = row.InstanceId,
+            HostKey = row.HostKey,
+            DisplayName = row.DisplayName,
+            BaseUrl = row.BaseUrl,
+            Environment = row.Environment,
+            OsFamily = row.OsFamily,
+            OsVersion = row.OsVersion,
+            Architecture = row.Architecture,
+            IsEnabled = row.IsEnabled
+        };
+
+        return true;
     }
 
     private void ValidateInput()
@@ -242,7 +262,7 @@ public sealed class HostEditModel : OmpPortalPageModel
         => ex.Number switch
         {
             2601 or 2627 => "A host with the same key already exists in the selected instance.",
-            547 => "Delete or update dependent rows first.",
+            547 => "The host is still referenced by data that Portal cannot detach automatically.",
             _ => fallback
         };
 
