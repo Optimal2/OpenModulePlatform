@@ -2,6 +2,8 @@
 [CmdletBinding()]
 param(
     [string]$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
+    # E:\OMP is the documented local development runtime root for this repository.
+    # Pass -RuntimeRoot explicitly when a workstation uses a different local layout.
     [string]$RuntimeRoot = 'E:\OMP',
     [string]$SqlServer = 'localhost',
     [string]$Database = 'OpenModulePlatform',
@@ -20,6 +22,8 @@ param(
     [switch]$SkipRuntimeServices,
     [switch]$SkipStartRuntimeServices,
     [string]$RunAsUser = '',
+    # Prefer leaving this blank so the script prompts with Read-Host -AsSecureString.
+    # The parameter remains for non-interactive local developer runs.
     [string]$RunAsPassword = '',
     [switch]$GrantRunAsDatabaseAccess,
     [switch]$RemoveLegacyAppPoolDatabaseUsers,
@@ -30,6 +34,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$script:JsonSerializationDepth = 12
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:webAppsRoot = Join-Path $RuntimeRoot 'WebApps'
 $script:portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
@@ -131,6 +136,7 @@ function Initialize-RunAsIdentity {
         $script:resolvedRunAsPasswordSecure = Read-Host "Password for $script:resolvedRunAsUser" -AsSecureString
     }
     else {
+        Write-Warning 'RunAsPassword was supplied as a plain-text parameter. Prefer the interactive SecureString prompt for local runs and avoid command history/process-list exposure.'
         $script:resolvedRunAsPasswordSecure = ConvertTo-SecureString -String $RunAsPassword -AsPlainText -Force
     }
 
@@ -267,7 +273,12 @@ function Assert-NoReparsePointInPath {
 }
 
 function Get-OmpConnectionString {
-    return "Server=$SqlServer;Database=$Database;Integrated Security=true;TrustServerCertificate=true;"
+    $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
+    $builder['Data Source'] = $SqlServer
+    $builder['Initial Catalog'] = $Database
+    $builder['Integrated Security'] = $true
+    $builder['TrustServerCertificate'] = $true
+    return $builder.ConnectionString
 }
 
 function ConvertTo-SqlUnicodeLiteral {
@@ -606,7 +617,7 @@ function Write-ExampleRuntimeConfig {
         }
 
         $target = Join-Path $script:portalPath 'appsettings.Production.json'
-        $json = $portalOverride | ConvertTo-Json -Depth 8
+        $json = $portalOverride | ConvertTo-Json -Depth $script:JsonSerializationDepth
         Set-Content -LiteralPath $target -Value $json -Encoding UTF8
         Write-Host "Wrote: $target"
     }
@@ -620,7 +631,7 @@ function Write-ExampleRuntimeConfig {
         }
 
         $target = Join-Path $script:authAppPath 'appsettings.Production.json'
-        $json = $authOverride | ConvertTo-Json -Depth 8
+        $json = $authOverride | ConvertTo-Json -Depth $script:JsonSerializationDepth
         Set-Content -LiteralPath $target -Value $json -Encoding UTF8
         Write-Host "Wrote: $target"
     }
@@ -655,7 +666,7 @@ function Write-ExampleRuntimeConfig {
         }
 
         $target = Join-Path $appPath 'appsettings.Production.json'
-        $json = $override | ConvertTo-Json -Depth 8
+        $json = $override | ConvertTo-Json -Depth $script:JsonSerializationDepth
         Set-Content -LiteralPath $target -Value $json -Encoding UTF8
         Write-Host "Wrote: $target"
     }
@@ -675,7 +686,7 @@ function Write-ExampleRuntimeConfig {
         }
 
         $target = Join-Path $iframeAppPath 'appsettings.Production.json'
-        $json = $iframeOverride | ConvertTo-Json -Depth 8
+        $json = $iframeOverride | ConvertTo-Json -Depth $script:JsonSerializationDepth
         Set-Content -LiteralPath $target -Value $json -Encoding UTF8
         Write-Host "Wrote: $target"
     }
@@ -690,7 +701,7 @@ function Write-ExampleRuntimeConfig {
             }
 
             $target = Join-Path $servicePath 'appsettings.Production.json'
-            $json = $override | ConvertTo-Json -Depth 8
+            $json = $override | ConvertTo-Json -Depth $script:JsonSerializationDepth
             Set-Content -LiteralPath $target -Value $json -Encoding UTF8
             Write-Host "Wrote: $target"
         }
@@ -736,7 +747,7 @@ function Write-ExampleRuntimeConfig {
             }
 
             $target = Join-Path $hostAgentPath 'appsettings.Production.json'
-            $json = $hostAgentConfig | ConvertTo-Json -Depth 8
+            $json = $hostAgentConfig | ConvertTo-Json -Depth $script:JsonSerializationDepth
             Set-Content -LiteralPath $target -Value $json -Encoding UTF8
             Write-Host "Wrote: $target"
         }
@@ -772,7 +783,7 @@ function Write-ExampleRuntimeConfig {
             }
 
             $target = Join-Path $workerManagerPath 'appsettings.Production.json'
-            $json = $workerManagerConfig | ConvertTo-Json -Depth 8
+            $json = $workerManagerConfig | ConvertTo-Json -Depth $script:JsonSerializationDepth
             Set-Content -LiteralPath $target -Value $json -Encoding UTF8
             Write-Host "Wrote: $target"
         }
@@ -795,7 +806,7 @@ function Write-ExampleRuntimeConfig {
             }
 
             $target = Join-Path $workerProcessHostPath 'appsettings.Production.json'
-            $json = $workerProcessHostConfig | ConvertTo-Json -Depth 8
+            $json = $workerProcessHostConfig | ConvertTo-Json -Depth $script:JsonSerializationDepth
             Set-Content -LiteralPath $target -Value $json -Encoding UTF8
             Write-Host "Wrote: $target"
         }
