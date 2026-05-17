@@ -26,6 +26,7 @@
   <data name="Use Markdown for simple pages. Rendered output is sanitized before it is shown to users." xml:space="preserve"><value>Använd Markdown för enkla sidor. Renderat innehåll saneras innan det visas för användare.</value></data>
   <data name="Trusted editors can use Markdown or raw HTML. HTML is rendered without sanitization." xml:space="preserve"><value>Betrodda redaktörer kan använda Markdown eller rå HTML. HTML renderas utan sanering.</value></data>
   <data name="Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor." xml:space="preserve"><value>Välj innehållstyp först. Markdown, HTML och serverrapporter har varsin editor.</value></data>
+  <data name="Choose a content type first. Markdown, HTML, HTML files, and server reports each use a dedicated editor." xml:space="preserve"><value>Välj innehållstyp först. Markdown, HTML, HTML-filer och serverrapporter har varsin editor.</value></data>
   <data name="Write Markdown content. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Skriv Markdown-innehåll. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] stöds.</value></data>
   <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Skriv betrodd HTML direkt. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] stöds.</value></data>
   <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported." xml:space="preserve"><value>Skriv betrodd HTML direkt. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] och [DB_JSON_SCRIPT=&quot;module-status&quot;] stöds.</value></data>
@@ -84,12 +85,18 @@
   <data name="The Content field is required." xml:space="preserve"><value>Innehåll krävs.</value></data>
   <data name="Markdown" xml:space="preserve"><value>Markdown</value></data>
   <data name="HTML" xml:space="preserve"><value>HTML</value></data>
+  <data name="HTML file" xml:space="preserve"><value>HTML-fil</value></data>
   <data name="Server report" xml:space="preserve"><value>Serverrapport</value></data>
   <data name="Choose a server report" xml:space="preserve"><value>Välj en serverrapport</value></data>
+  <data name="Choose an HTML file" xml:space="preserve"><value>Välj en HTML-fil</value></data>
   <data name="missing" xml:space="preserve"><value>saknas</value></data>
   <data name="Server reports are JSON files in the server report directory. SQL is not edited here." xml:space="preserve"><value>Serverrapporter är JSON-filer i serverns rapportkatalog. SQL redigeras inte här.</value></data>
+  <data name="HTML files are read from the configured HTML file directory or packaged ContentPages folder. Server report shortcodes are supported." xml:space="preserve"><value>HTML-filer läses från den konfigurerade HTML-katalogen eller den paketerade ContentPages-mappen. Serverrapport-shortcodes stöds.</value></data>
   <data name="Server report key is required." xml:space="preserve"><value>Serverrapportnyckel krävs.</value></data>
   <data name="Server report key may only contain letters, numbers, underscores, and hyphens." xml:space="preserve"><value>Serverrapportnyckeln får bara innehålla bokstäver, siffror, understreck och bindestreck.</value></data>
   <data name="Server report definition was not found." xml:space="preserve"><value>Serverrapportdefinitionen hittades inte.</value></data>
+  <data name="HTML file key is required." xml:space="preserve"><value>HTML-filnyckel krävs.</value></data>
+  <data name="HTML file key may only contain letters, numbers, underscores, and hyphens." xml:space="preserve"><value>HTML-filnyckeln får bara innehålla bokstäver, siffror, understreck och bindestreck.</value></data>
+  <data name="HTML file was not found." xml:space="preserve"><value>HTML-filen hittades inte.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId är inte konfigurerad.</value></data>
 </root>
