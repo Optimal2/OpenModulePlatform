@@ -1,0 +1,159 @@
+{
+  "manifestVersion": 1,
+  "repositoryKey": "openmoduleplatform",
+  "repositoryVersion": "0.3.3",
+  "components": [
+    {
+      "componentKey": "omp-portal-web",
+      "displayName": "OMP Portal",
+      "moduleKey": "omp_portal",
+      "appKey": "omp_portal",
+      "packageType": "web-app",
+      "targetName": "omp-portal",
+      "version": "0.3.3",
+      "projectPath": "OpenModulePlatform.Portal",
+      "relativePathTemplate": "omp-portal/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip"
+    },
+    {
+      "componentKey": "omp-auth-web",
+      "displayName": "OMP Auth",
+      "registrationMode": "bootstrap",
+      "packageType": "web-app",
+      "targetName": "omp-auth",
+      "version": "0.3.3",
+      "projectPath": "OpenModulePlatform.Auth",
+      "relativePathTemplate": "omp-auth/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Auth.zip"
+    },
+    {
+      "componentKey": "omp-hostagent-service",
+      "displayName": "OMP HostAgent",
+      "registrationMode": "bootstrap",
+      "packageType": "service-app",
+      "targetName": "omp-hostagent",
+      "version": "0.3.3",
+      "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
+      "relativePathTemplate": "omp-hostagent/service/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
+    },
+    {
+      "componentKey": "omp-workermanager-service",
+      "displayName": "OMP WorkerManager",
+      "registrationMode": "bootstrap",
+      "packageType": "service-app",
+      "targetName": "omp-workermanager",
+      "version": "0.3.3",
+      "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
+      "relativePathTemplate": "omp-workermanager/service/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip"
+    },
+    {
+      "componentKey": "omp-workerprocesshost",
+      "displayName": "OMP Worker Process Host",
+      "registrationMode": "bootstrap",
+      "packageType": "worker-host",
+      "targetName": "omp-workerprocesshost",
+      "version": "0.3.3",
+      "projectPath": "OpenModulePlatform.WorkerProcessHost",
+      "relativePathTemplate": "omp-workerprocesshost/host/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.WorkerProcessHost.zip"
+    },
+    {
+      "componentKey": "content-webapp",
+      "displayName": "Content Web App Module",
+      "moduleKey": "content_webapp",
+      "appKey": "content_webapp_webapp",
+      "packageType": "web-app",
+      "targetName": "content-webapp",
+      "version": "0.3.3",
+      "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
+      "relativePathTemplate": "content-webapp/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip"
+    },
+    {
+      "componentKey": "iframe-webapp",
+      "displayName": "iFrame Web App Module",
+      "moduleKey": "iframe_webapp",
+      "appKey": "iframe_webapp_webapp",
+      "packageType": "web-app",
+      "targetName": "iframe-webapp",
+      "version": "0.3.3",
+      "projectPath": "OpenModulePlatform.Web.iFrameWebAppModule",
+      "relativePathTemplate": "iframe-webapp/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.iFrameWebAppModule.zip"
+    },
+    {
+      "componentKey": "example-webapp",
+      "displayName": "Example Web App Module",
+      "moduleKey": "example_webapp",
+      "appKey": "example_webapp_webapp",
+      "packageType": "web-app",
+      "targetName": "example-webapp",
+      "version": "0.3.3",
+      "projectPath": "examples/WebAppModule/WebApp",
+      "relativePathTemplate": "example-webapp/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppModule.zip"
+    },
+    {
+      "componentKey": "example-webapp-blazor",
+      "displayName": "Example Blazor Web App Module",
+      "moduleKey": "example_webapp_blazor",
+      "appKey": "example_webapp_blazor_webapp",
+      "packageType": "web-app",
+      "targetName": "example-webapp-blazor",
+      "version": "0.3.3",
+      "projectPath": "examples/WebAppBlazorModule/WebApp",
+      "relativePathTemplate": "example-webapp-blazor/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip"
+    },
+    {
+      "componentKey": "example-serviceapp-web",
+      "displayName": "Example Service Web App Module",
+      "moduleKey": "example_serviceapp",
+      "appKey": "example_serviceapp_webapp",
+      "packageType": "web-app",
+      "targetName": "example-serviceapp-web",
+      "version": "0.3.3",
+      "projectPath": "examples/ServiceAppModule/WebApp",
+      "relativePathTemplate": "example-serviceapp/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleServiceAppModule.zip"
+    },
+    {
+      "componentKey": "example-serviceapp-service",
+      "displayName": "Example Service App Module Service",
+      "moduleKey": "example_serviceapp",
+      "appKey": "example_serviceapp_service",
+      "packageType": "service-app",
+      "targetName": "example-serviceapp-service",
+      "version": "0.3.3",
+      "projectPath": "examples/ServiceAppModule/ServiceApp",
+      "relativePathTemplate": "example-serviceapp/service/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Service.ExampleServiceAppModule.zip"
+    },
+    {
+      "componentKey": "example-workerapp-web",
+      "displayName": "Example Worker Web App Module",
+      "moduleKey": "example_workerapp",
+      "appKey": "example_workerapp_webapp",
+      "packageType": "web-app",
+      "targetName": "example-workerapp-web",
+      "version": "0.3.3",
+      "projectPath": "examples/WorkerAppModule/WebApp",
+      "relativePathTemplate": "example-workerapp/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWorkerAppModule.zip"
+    },
+    {
+      "componentKey": "example-workerapp-worker",
+      "displayName": "Example Worker App Module Worker",
+      "moduleKey": "example_workerapp",
+      "appKey": "example_workerapp_worker",
+      "packageType": "worker",
+      "targetName": "example-workerapp",
+      "version": "0.3.3",
+      "projectPath": "examples/WorkerAppModule/WorkerApp",
+      "relativePathTemplate": "example-workerapp/worker/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Worker.ExampleWorkerAppModule.zip"
+    }
+  ]
+}
