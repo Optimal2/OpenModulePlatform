@@ -334,6 +334,25 @@ a:hover {
     min-height: 100%;
 }
 
+.section-heading-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.section-heading-row h3,
+.section-heading-row p {
+    margin-top: 0;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px 18px;
+}
+
 .metric {
     font-size: 1.8rem;
     font-weight: 700;

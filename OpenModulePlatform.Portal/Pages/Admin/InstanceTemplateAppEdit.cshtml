@@ -1,0 +1,258 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.InstanceTemplateAppEditModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Desired topology"]</div>
+        <h2>@(Model.IsCreate ? L["Add desired app"] : L["Edit desired app"])</h2>
+        <p class="lede">
+            @L["This edits the template row that HostAgent watches. The concrete app instance changes only after HostAgent has materialized the template."]
+        </p>
+    </div>
+</section>
+
+@if (Model.Template is not null)
+{
+    <section class="card section-card section-card--wide">
+        <div class="detail-grid">
+            <div>
+                <div class="muted">@L["Instance template"]</div>
+                <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Template.InstanceTemplateId">@Model.Template.DisplayName</a>
+            </div>
+            <div>
+                <div class="muted">@L["Template key"]</div>
+                <code>@Model.Template.TemplateKey</code>
+            </div>
+        </div>
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="Input.InstanceTemplateAppInstanceId" />
+    <input type="hidden" asp-for="Input.InstanceTemplateId" />
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.InstanceTemplateModuleInstanceId"></label>
+            <select asp-for="Input.InstanceTemplateModuleInstanceId">
+                <option value="">@L["Select template module instance"]</option>
+                @foreach (var option in Model.TemplateModuleOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["The desired app will be attached to this module instance when HostAgent materializes the template."]</div>
+            <span asp-validation-for="Input.InstanceTemplateModuleInstanceId" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.AppId"></label>
+            <select asp-for="Input.AppId">
+                <option value="">@L["Select app"]</option>
+                @foreach (var option in Model.AppOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["The app definition must belong to the selected template module instance's module."]</div>
+            <span asp-validation-for="Input.AppId" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.AppInstanceKey"></label>
+            <input asp-for="Input.AppInstanceKey" />
+            <span asp-validation-for="Input.AppInstanceKey" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.DisplayName"></label>
+            <input asp-for="Input.DisplayName" />
+            <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.SortOrder"></label>
+            <input asp-for="Input.SortOrder" type="number" />
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.Description"></label>
+        <textarea asp-for="Input.Description"></textarea>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.InstanceTemplateHostId"></label>
+            <select asp-for="Input.InstanceTemplateHostId">
+                <option value="">@L["Any host / not pinned"]</option>
+                @foreach (var option in Model.TemplateHostOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["Choose a template host when the app belongs on one specific host role. Leave empty for host-neutral apps."]</div>
+            <span asp-validation-for="Input.InstanceTemplateHostId" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.DesiredArtifactId"></label>
+            <select asp-for="Input.DesiredArtifactId">
+                <option value="">@L["No artifact selected"]</option>
+                @foreach (var option in Model.ArtifactOptions)
+                {
+                    var isCurrentAppArtifact = Model.Input.AppId > 0 && option.AppId == Model.Input.AppId;
+                    <option
+                        value="@option.Value"
+                        data-app-id="@option.AppId"
+                        disabled="@(!isCurrentAppArtifact)"
+                        hidden="@(!isCurrentAppArtifact)">
+                        @option.Label
+                    </option>
+                }
+            </select>
+            <div class="field-help">@L["This is the desired artifact version. HostAgent deploys it after its next cycle."]</div>
+            <span asp-validation-for="Input.DesiredArtifactId" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.RoutePath"></label>
+            <input asp-for="Input.RoutePath" />
+            <span asp-validation-for="Input.RoutePath" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.PublicUrl"></label>
+            <input asp-for="Input.PublicUrl" type="url" />
+            <span asp-validation-for="Input.PublicUrl" class="field-validation-error"></span>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.InstallPath"></label>
+            <input asp-for="Input.InstallPath" />
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.InstallationName"></label>
+            <input asp-for="Input.InstallationName" />
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.DesiredConfigId"></label>
+            <input asp-for="Input.DesiredConfigId" type="number" />
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.DesiredState"></label>
+            <select asp-for="Input.DesiredState">
+                @foreach (var option in Model.DesiredStateOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.IsEnabled" type="checkbox" />
+            <label asp-for="Input.IsEnabled"></label>
+        </div>
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.IsAllowed" type="checkbox" />
+            <label asp-for="Input.IsAllowed"></label>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--3">
+        <div class="form-field">
+            <label asp-for="Input.ExpectedLogin"></label>
+            <input asp-for="Input.ExpectedLogin" />
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.ExpectedClientHostName"></label>
+            <input asp-for="Input.ExpectedClientHostName" />
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.ExpectedClientIp"></label>
+            <input asp-for="Input.ExpectedClientIp" />
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save desired app"]</button>
+        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to template"]</a>
+    </div>
+</form>
+
+@if (!Model.IsCreate)
+{
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('@L["Remove this desired app from the template?"]');">
+        <input type="hidden" asp-for="Input.InstanceTemplateAppInstanceId" />
+        <input type="hidden" asp-for="Input.InstanceTemplateId" />
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Removing the desired app stops future materialization from this template. Existing runtime rows are not removed by this action."]</p>
+        <button type="submit" class="btn btn-danger">@L["Remove desired app"]</button>
+    </form>
+}
+
+<script>
+(() => {
+    const appSelect = document.getElementById('Input_AppId');
+    const artifactSelect = document.getElementById('Input_DesiredArtifactId');
+    if (!appSelect || !artifactSelect) {
+        return;
+    }
+
+    const applyArtifactFilter = () => {
+        const appId = appSelect.value || '';
+        let selectedStillVisible = false;
+
+        for (const option of artifactSelect.options) {
+            if (!option.value) {
+                option.hidden = false;
+                option.disabled = false;
+                continue;
+            }
+
+            const visible = appId && option.dataset.appId === appId;
+            option.hidden = !visible;
+            option.disabled = !visible;
+
+            if (visible && option.selected) {
+                selectedStillVisible = true;
+            }
+        }
+
+        if (!selectedStillVisible) {
+            artifactSelect.value = '';
+        }
+    };
+
+    appSelect.addEventListener('change', applyArtifactFilter);
+    applyArtifactFilter();
+})();
+</script>

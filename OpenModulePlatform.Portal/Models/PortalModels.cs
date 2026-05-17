@@ -462,6 +462,78 @@ public sealed class InstanceTemplateRow
 }
 
 /// <summary>
+/// Host placeholder declared by an instance template.
+/// HostAgent materialization maps this desired host key to a concrete host row in each instance.
+/// </summary>
+public sealed class InstanceTemplateHostTopologyRow
+{
+    public int InstanceTemplateHostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string HostTemplateKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Environment { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public bool IsEnabled { get; set; }
+}
+
+/// <summary>
+/// Module instance declared by an instance template.
+/// </summary>
+public sealed class InstanceTemplateModuleTopologyRow
+{
+    public int InstanceTemplateModuleInstanceId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string ModuleInstanceKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public int SortOrder { get; set; }
+
+    public bool IsEnabled { get; set; }
+}
+
+/// <summary>
+/// Desired app instance declared by an instance template.
+/// This is the admin-facing source of truth that HostAgent materializes into concrete app instances.
+/// </summary>
+public sealed class InstanceTemplateAppTopologyRow
+{
+    public int InstanceTemplateAppInstanceId { get; set; }
+
+    public string ModuleInstanceKey { get; set; } = string.Empty;
+
+    public string? HostKey { get; set; }
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string AppInstanceKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? RoutePath { get; set; }
+
+    public string? InstallationName { get; set; }
+
+    public string? ArtifactVersion { get; set; }
+
+    public bool IsEnabled { get; set; }
+
+    public bool IsAllowed { get; set; }
+
+    public byte DesiredState { get; set; }
+
+    public int SortOrder { get; set; }
+}
+
+/// <summary>
 /// Lightweight host-template row for admin lists.
 /// </summary>
 public sealed class HostTemplateRow
