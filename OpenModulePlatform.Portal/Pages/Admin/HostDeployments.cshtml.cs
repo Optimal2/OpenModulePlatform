@@ -20,6 +20,10 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     public IReadOnlyList<HostDeploymentRow> Rows { get; private set; } = [];
 
+    public IReadOnlyList<HostAppDeploymentStateRow> AppDeploymentStates { get; private set; } = [];
+
+    public IReadOnlyList<HostArtifactStateRow> ArtifactStates { get; private set; } = [];
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -28,6 +32,29 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         SetTitles("Host deployments");
         Rows = await _repo.GetHostDeploymentsAsync(ct);
+        AppDeploymentStates = await _repo.GetHostAppDeploymentStatesAsync(ct);
+        ArtifactStates = await _repo.GetHostArtifactStatesAsync(ct);
         return Page();
     }
+
+    public static string FormatHostDeploymentStatus(byte status)
+        => status switch
+        {
+            0 => "Pending",
+            1 => "Running",
+            2 => "Succeeded",
+            3 => "Failed",
+            _ => "Unknown"
+        };
+
+    public static string FormatArtifactProvisioningStatus(byte status)
+        => status switch
+        {
+            0 => "Unknown",
+            1 => "Pending",
+            2 => "Succeeded",
+            3 => "Failed",
+            4 => "Hash mismatch",
+            _ => "Unknown"
+        };
 }

@@ -61,6 +61,15 @@ INNER JOIN omp.Instances i ON i.InstanceId = h.InstanceId
 ORDER BY i.InstanceKey, h.HostKey;",
             ct);
 
+    public Task<IReadOnlyList<OptionItem>> GetHostTemplateOptionsAsync(CancellationToken ct)
+        => GetOptionsAsync(
+            @"
+SELECT CAST(HostTemplateId AS nvarchar(50)),
+       TemplateKey + N' - ' + DisplayName
+FROM omp.HostTemplates
+ORDER BY SortOrder, TemplateKey;",
+            ct);
+
     public Task<IReadOnlyList<OptionItem>> GetAppOptionsAsync(CancellationToken ct)
         => GetOptionsAsync(
             @"
@@ -479,6 +488,210 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
         => DeleteAsync(
             "DELETE FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateAppInstanceId = @Id;",
             instanceTemplateAppInstanceId,
+            ct);
+
+    public async Task<InstanceTemplateHostEditData?> GetInstanceTemplateHostAsync(
+        int instanceTemplateHostId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT InstanceTemplateHostId,
+       InstanceTemplateId,
+       HostTemplateId,
+       HostKey,
+       DisplayName,
+       Environment,
+       SortOrder,
+       IsEnabled
+FROM omp.InstanceTemplateHosts
+WHERE InstanceTemplateHostId = @InstanceTemplateHostId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateHostId", instanceTemplateHostId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new InstanceTemplateHostEditData
+        {
+            InstanceTemplateHostId = rdr.GetInt32(0),
+            InstanceTemplateId = rdr.GetInt32(1),
+            HostTemplateId = rdr.GetInt32(2),
+            HostKey = rdr.GetString(3),
+            DisplayName = rdr.IsDBNull(4) ? string.Empty : rdr.GetString(4),
+            Environment = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            SortOrder = rdr.GetInt32(6),
+            IsEnabled = rdr.GetBoolean(7)
+        };
+    }
+
+    public async Task<int> SaveInstanceTemplateHostAsync(
+        InstanceTemplateHostEditData input,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (input.InstanceTemplateHostId == 0)
+        {
+            const string insertSql = @"
+INSERT INTO omp.InstanceTemplateHosts
+(
+    InstanceTemplateId,
+    HostTemplateId,
+    HostKey,
+    DisplayName,
+    Environment,
+    SortOrder,
+    IsEnabled
+)
+VALUES
+(
+    @InstanceTemplateId,
+    @HostTemplateId,
+    @HostKey,
+    @DisplayName,
+    @Environment,
+    @SortOrder,
+    @IsEnabled
+);
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+            await using var insert = new SqlCommand(insertSql, conn);
+            BindInstanceTemplateHost(insert, input, includePrimaryKey: false);
+            input.InstanceTemplateHostId = Convert.ToInt32(await insert.ExecuteScalarAsync(ct));
+            return input.InstanceTemplateHostId;
+        }
+
+        const string updateSql = @"
+UPDATE omp.InstanceTemplateHosts
+SET HostTemplateId = @HostTemplateId,
+    HostKey = @HostKey,
+    DisplayName = @DisplayName,
+    Environment = @Environment,
+    SortOrder = @SortOrder,
+    IsEnabled = @IsEnabled,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE InstanceTemplateHostId = @InstanceTemplateHostId;";
+
+        await using var update = new SqlCommand(updateSql, conn);
+        BindInstanceTemplateHost(update, input, includePrimaryKey: true);
+        await update.ExecuteNonQueryAsync(ct);
+        return input.InstanceTemplateHostId;
+    }
+
+    public Task DeleteInstanceTemplateHostAsync(int instanceTemplateHostId, CancellationToken ct)
+        => DeleteAsync(
+            "DELETE FROM omp.InstanceTemplateHosts WHERE InstanceTemplateHostId = @Id;",
+            instanceTemplateHostId,
+            ct);
+
+    public async Task<InstanceTemplateModuleEditData?> GetInstanceTemplateModuleAsync(
+        int instanceTemplateModuleInstanceId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT InstanceTemplateModuleInstanceId,
+       InstanceTemplateId,
+       ModuleId,
+       ModuleInstanceKey,
+       DisplayName,
+       Description,
+       SortOrder,
+       IsEnabled
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateModuleInstanceId", instanceTemplateModuleInstanceId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new InstanceTemplateModuleEditData
+        {
+            InstanceTemplateModuleInstanceId = rdr.GetInt32(0),
+            InstanceTemplateId = rdr.GetInt32(1),
+            ModuleId = rdr.GetInt32(2),
+            ModuleInstanceKey = rdr.GetString(3),
+            DisplayName = rdr.GetString(4),
+            Description = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            SortOrder = rdr.GetInt32(6),
+            IsEnabled = rdr.GetBoolean(7)
+        };
+    }
+
+    public async Task<int> SaveInstanceTemplateModuleAsync(
+        InstanceTemplateModuleEditData input,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (input.InstanceTemplateModuleInstanceId == 0)
+        {
+            const string insertSql = @"
+INSERT INTO omp.InstanceTemplateModuleInstances
+(
+    InstanceTemplateId,
+    ModuleId,
+    ModuleInstanceKey,
+    DisplayName,
+    Description,
+    SortOrder,
+    IsEnabled
+)
+VALUES
+(
+    @InstanceTemplateId,
+    @ModuleId,
+    @ModuleInstanceKey,
+    @DisplayName,
+    @Description,
+    @SortOrder,
+    @IsEnabled
+);
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+            await using var insert = new SqlCommand(insertSql, conn);
+            BindInstanceTemplateModule(insert, input, includePrimaryKey: false);
+            input.InstanceTemplateModuleInstanceId = Convert.ToInt32(await insert.ExecuteScalarAsync(ct));
+            return input.InstanceTemplateModuleInstanceId;
+        }
+
+        const string updateSql = @"
+UPDATE omp.InstanceTemplateModuleInstances
+SET ModuleId = @ModuleId,
+    ModuleInstanceKey = @ModuleInstanceKey,
+    DisplayName = @DisplayName,
+    Description = @Description,
+    SortOrder = @SortOrder,
+    IsEnabled = @IsEnabled,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId;";
+
+        await using var update = new SqlCommand(updateSql, conn);
+        BindInstanceTemplateModule(update, input, includePrimaryKey: true);
+        await update.ExecuteNonQueryAsync(ct);
+        return input.InstanceTemplateModuleInstanceId;
+    }
+
+    public Task DeleteInstanceTemplateModuleAsync(
+        int instanceTemplateModuleInstanceId,
+        CancellationToken ct)
+        => DeleteAsync(
+            "DELETE FROM omp.InstanceTemplateModuleInstances WHERE InstanceTemplateModuleInstanceId = @Id;",
+            instanceTemplateModuleInstanceId,
             ct);
 
     // -------------------------------------------------------------------------
@@ -1701,6 +1914,44 @@ ORDER BY tai.InstanceTemplateAppInstanceId;";
         Add(cmd, "@SortOrder", input.SortOrder);
         Add(cmd, "@IsEnabled", input.IsEnabled);
         Add(cmd, "@IsAllowed", input.IsAllowed);
+    }
+
+    private static void BindInstanceTemplateHost(
+        SqlCommand cmd,
+        InstanceTemplateHostEditData input,
+        bool includePrimaryKey)
+    {
+        if (includePrimaryKey)
+        {
+            Add(cmd, "@InstanceTemplateHostId", input.InstanceTemplateHostId);
+        }
+
+        Add(cmd, "@InstanceTemplateId", input.InstanceTemplateId);
+        Add(cmd, "@HostTemplateId", input.HostTemplateId);
+        Add(cmd, "@HostKey", input.HostKey);
+        Add(cmd, "@DisplayName", input.DisplayName);
+        Add(cmd, "@Environment", input.Environment);
+        Add(cmd, "@SortOrder", input.SortOrder);
+        Add(cmd, "@IsEnabled", input.IsEnabled);
+    }
+
+    private static void BindInstanceTemplateModule(
+        SqlCommand cmd,
+        InstanceTemplateModuleEditData input,
+        bool includePrimaryKey)
+    {
+        if (includePrimaryKey)
+        {
+            Add(cmd, "@InstanceTemplateModuleInstanceId", input.InstanceTemplateModuleInstanceId);
+        }
+
+        Add(cmd, "@InstanceTemplateId", input.InstanceTemplateId);
+        Add(cmd, "@ModuleId", input.ModuleId);
+        Add(cmd, "@ModuleInstanceKey", input.ModuleInstanceKey);
+        Add(cmd, "@DisplayName", input.DisplayName);
+        Add(cmd, "@Description", input.Description);
+        Add(cmd, "@SortOrder", input.SortOrder);
+        Add(cmd, "@IsEnabled", input.IsEnabled);
     }
 
     private static void BindAppWorkerDefinition(SqlCommand cmd, AppWorkerDefinitionEditData input)

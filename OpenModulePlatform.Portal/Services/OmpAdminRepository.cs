@@ -146,7 +146,7 @@ ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;";
                 AppId = rdr.GetInt32(0),
                 ModuleKey = rdr.GetString(1),
                 AppKey = rdr.GetString(2),
-                DisplayName = rdr.GetString(3),
+                DisplayName = rdr.IsDBNull(3) ? rdr.GetString(1) : rdr.GetString(3),
                 AppType = rdr.GetString(4),
                 Description = rdr.IsDBNull(5) ? null : rdr.GetString(5),
                 IsEnabled = rdr.GetBoolean(6),
@@ -689,6 +689,96 @@ ORDER BY d.RequestedUtc DESC, d.HostDeploymentId DESC;";
                 StartedUtc = rdr.IsDBNull(6) ? null : rdr.GetDateTime(6),
                 CompletedUtc = rdr.IsDBNull(7) ? null : rdr.GetDateTime(7),
                 OutcomeMessage = rdr.IsDBNull(8) ? null : rdr.GetString(8)
+            });
+        }
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<HostAppDeploymentStateRow>> GetHostAppDeploymentStatesAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (100)
+       h.HostKey,
+       ai.AppInstanceKey,
+       ai.DisplayName,
+       ar.Version,
+       ar.PackageType,
+       s.DeploymentState,
+       s.TargetPath,
+       s.RuntimeName,
+       s.LastCheckedUtc,
+       s.LastAppliedUtc,
+       s.LastError
+FROM omp.HostAppDeploymentStates s
+INNER JOIN omp.Hosts h ON h.HostId = s.HostId
+INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = s.AppInstanceId
+LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = s.ArtifactId
+ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey, ai.AppInstanceKey;";
+
+        var rows = new List<HostAppDeploymentStateRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new HostAppDeploymentStateRow
+            {
+                HostKey = rdr.GetString(0),
+                AppInstanceKey = rdr.GetString(1),
+                DisplayName = rdr.GetString(2),
+                ArtifactVersion = rdr.IsDBNull(3) ? string.Empty : rdr.GetString(3),
+                PackageType = rdr.IsDBNull(4) ? string.Empty : rdr.GetString(4),
+                DeploymentState = rdr.GetByte(5),
+                TargetPath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                RuntimeName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                LastCheckedUtc = rdr.IsDBNull(8) ? null : rdr.GetDateTime(8),
+                LastAppliedUtc = rdr.IsDBNull(9) ? null : rdr.GetDateTime(9),
+                LastError = rdr.IsDBNull(10) ? null : rdr.GetString(10)
+            });
+        }
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<HostArtifactStateRow>> GetHostArtifactStatesAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (100)
+       h.HostKey,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName,
+       s.ProvisioningState,
+       s.LocalPath,
+       s.LastCheckedUtc,
+       s.LastProvisionedUtc,
+       s.LastError
+FROM omp.HostArtifactStates s
+INNER JOIN omp.Hosts h ON h.HostId = s.HostId
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = s.ArtifactId
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey, a.AppKey, ar.Version DESC;";
+
+        var rows = new List<HostArtifactStateRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new HostArtifactStateRow
+            {
+                HostKey = rdr.GetString(0),
+                AppKey = rdr.GetString(1),
+                ArtifactVersion = rdr.GetString(2),
+                PackageType = rdr.GetString(3),
+                TargetName = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                ProvisioningState = rdr.GetByte(5),
+                LocalPath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                LastCheckedUtc = rdr.IsDBNull(7) ? null : rdr.GetDateTime(7),
+                LastProvisionedUtc = rdr.IsDBNull(8) ? null : rdr.GetDateTime(8),
+                LastError = rdr.IsDBNull(9) ? null : rdr.GetString(9)
             });
         }
         return rows;

@@ -1312,7 +1312,7 @@
     <value>Värddistributioner</value>
   </data>
   <data name="HostDeployments.Lede" xml:space="preserve">
-    <value>Distributionsposter spårar utrullningsbegäranden och körningsstatus. De hålls utanför det huvudsakliga manuella topologiflödet.</value>
+    <value>Granska HostAgentens appdeployments, artefaktprovisionering och uttryckliga mallutrullningar.</value>
   </data>
   <data name="More" xml:space="preserve">
     <value>Mer</value>
@@ -1576,4 +1576,55 @@
   <data name="Where to go" xml:space="preserve"><value>Vart du går nu</value></data>
   <data name="Use these direct links if you reached the old automation page from a bookmark." xml:space="preserve"><value>Använd de här direktlänkarna om du kom till den gamla automationssidan via ett bokmärke.</value></data>
   <data name="Moved" xml:space="preserve"><value>Flyttat</value></data>
+  <data name="Add template host" xml:space="preserve"><value>Lägg till mallvärd</value></data>
+  <data name="Edit template host" xml:space="preserve"><value>Redigera mallvärd</value></data>
+  <data name="Save template host" xml:space="preserve"><value>Spara mallvärd</value></data>
+  <data name="Remove template host" xml:space="preserve"><value>Ta bort mallvärd</value></data>
+  <data name="Template hosts define the host keys that HostAgent materializes for instances using this template." xml:space="preserve"><value>Mallvärdar definierar värdnycklarna som HostAgent materialiserar för instanser som använder mallen.</value></data>
+  <data name="Select host template" xml:space="preserve"><value>Välj värdmall</value></data>
+  <data name="Select a host template." xml:space="preserve"><value>Välj en värdmall.</value></data>
+  <data name="Remove this template host? Desired app rows using it must be moved or removed first." xml:space="preserve"><value>Ta bort den här mallvärden? Önskade apprader som använder den måste flyttas eller tas bort först.</value></data>
+  <data name="Removing a template host does not delete existing runtime hosts. Move or remove desired app rows that are pinned to this host first." xml:space="preserve"><value>Att ta bort en mallvärd tar inte bort befintliga runtime-värdar. Flytta eller ta bort önskade apprader som är låsta till värden först.</value></data>
+  <data name="Template host added." xml:space="preserve"><value>Mallvärden har lagts till.</value></data>
+  <data name="Template host updated." xml:space="preserve"><value>Mallvärden har uppdaterats.</value></data>
+  <data name="Template host removed." xml:space="preserve"><value>Mallvärden har tagits bort.</value></data>
+  <data name="A template host with the same key already exists in this template." xml:space="preserve"><value>Det finns redan en mallvärd med samma nyckel i den här mallen.</value></data>
+  <data name="Move or delete desired app rows that use this template host first." xml:space="preserve"><value>Flytta eller ta bort önskade apprader som använder den här mallvärden först.</value></data>
+  <data name="The template host could not be saved." xml:space="preserve"><value>Mallvärden kunde inte sparas.</value></data>
+  <data name="Add template module instance" xml:space="preserve"><value>Lägg till mallmodulinstans</value></data>
+  <data name="Edit template module instance" xml:space="preserve"><value>Redigera mallmodulinstans</value></data>
+  <data name="Save template module instance" xml:space="preserve"><value>Spara mallmodulinstans</value></data>
+  <data name="Remove template module instance" xml:space="preserve"><value>Ta bort mallmodulinstans</value></data>
+  <data name="Template module instances are desired module slots. Desired app rows attach to them before HostAgent creates runtime module instances." xml:space="preserve"><value>Mallmodulinstanser är önskade modulplatser. Önskade apprader kopplas till dem innan HostAgent skapar runtime-modulinstanser.</value></data>
+  <data name="Remove this template module instance? Desired app rows using it must be removed first." xml:space="preserve"><value>Ta bort den här mallmodulinstansen? Önskade apprader som använder den måste tas bort först.</value></data>
+  <data name="Removing a template module instance stops future materialization from this template. Existing runtime rows are not removed by this action." xml:space="preserve"><value>Att ta bort en mallmodulinstans stoppar framtida materialisering från mallen. Befintliga runtime-rader tas inte bort av den här åtgärden.</value></data>
+  <data name="Template module instance added." xml:space="preserve"><value>Mallmodulinstansen har lagts till.</value></data>
+  <data name="Template module instance updated." xml:space="preserve"><value>Mallmodulinstansen har uppdaterats.</value></data>
+  <data name="Template module instance removed." xml:space="preserve"><value>Mallmodulinstansen har tagits bort.</value></data>
+  <data name="A template module instance with the same key already exists in this template." xml:space="preserve"><value>Det finns redan en mallmodulinstans med samma nyckel i den här mallen.</value></data>
+  <data name="Delete desired app rows that use this template module instance first." xml:space="preserve"><value>Ta bort önskade apprader som använder den här mallmodulinstansen först.</value></data>
+  <data name="The template module instance could not be saved." xml:space="preserve"><value>Mallmodulinstansen kunde inte sparas.</value></data>
+  <data name="Back to template" xml:space="preserve"><value>Tillbaka till mallen</value></data>
+  <data name="App deployment state" xml:space="preserve"><value>Appdeployment-status</value></data>
+  <data name="These rows show the latest HostAgent result for each host and app instance. This is usually the most useful view after a desired version has been selected." xml:space="preserve"><value>De här raderna visar senaste HostAgent-resultat för varje värd och appinstans. Det här är oftast den mest användbara vyn efter att en önskad version har valts.</value></data>
+  <data name="No app deployment state has been recorded yet." xml:space="preserve"><value>Ingen appdeployment-status har registrerats ännu.</value></data>
+  <data name="Artifact provisioning state" xml:space="preserve"><value>Artefaktprovisionering</value></data>
+  <data name="These rows show whether HostAgent has downloaded and verified artifact packages on each host." xml:space="preserve"><value>De här raderna visar om HostAgent har hämtat och verifierat artefaktpaket på varje värd.</value></data>
+  <data name="No artifact provisioning state has been recorded yet." xml:space="preserve"><value>Ingen artefaktprovisionering har registrerats ännu.</value></data>
+  <data name="Template deployment requests" xml:space="preserve"><value>Mallutrullningsbegäranden</value></data>
+  <data name="These rows are explicit template materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty." xml:space="preserve"><value>De här raderna är uttryckliga begäranden om mallmaterialisering. Vanliga HostAgent-uppgraderingar av appar visas ovan även när den här listan är tom.</value></data>
+  <data name="App instance" xml:space="preserve"><value>Appinstans</value></data>
+  <data name="Last checked UTC" xml:space="preserve"><value>Senast kontrollerad UTC</value></data>
+  <data name="Last applied UTC" xml:space="preserve"><value>Senast applicerad UTC</value></data>
+  <data name="Last provisioned UTC" xml:space="preserve"><value>Senast provisionerad UTC</value></data>
+  <data name="Started UTC" xml:space="preserve"><value>Startad UTC</value></data>
+  <data name="Target path" xml:space="preserve"><value>Målsökväg</value></data>
+  <data name="Local path" xml:space="preserve"><value>Lokal sökväg</value></data>
+  <data name="Error" xml:space="preserve"><value>Fel</value></data>
+  <data name="Message" xml:space="preserve"><value>Meddelande</value></data>
+  <data name="Pending" xml:space="preserve"><value>Väntar</value></data>
+  <data name="Running" xml:space="preserve"><value>Kör</value></data>
+  <data name="Succeeded" xml:space="preserve"><value>Lyckades</value></data>
+  <data name="Failed" xml:space="preserve"><value>Misslyckades</value></data>
+  <data name="Hash mismatch" xml:space="preserve"><value>Hashfel</value></data>
 </root>

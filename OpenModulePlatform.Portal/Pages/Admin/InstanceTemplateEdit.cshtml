@@ -35,8 +35,13 @@
 </section>
 
 <section class="card section-card section-card--wide">
-    <h3>@L["Template hosts"]</h3>
-    <p class="muted">@L["Template hosts define the host keys that should exist inside each OMP instance using this template. Concrete hosts report in with the same host key."]</p>
+    <div class="section-heading-row">
+        <div>
+            <h3>@L["Template hosts"]</h3>
+            <p class="muted">@L["Template hosts define the host keys that should exist inside each OMP instance using this template. Concrete hosts report in with the same host key."]</p>
+        </div>
+        <a class="action-link" href="~/admin/instancetemplatehostedit?templateId=@Model.Template.InstanceTemplateId">@L["Add template host"]</a>
+    </div>
 
     @if (Model.Hosts.Count == 0)
     {
@@ -52,6 +57,7 @@
                     <th>@L["Display name"]</th>
                     <th>@L["Environment"]</th>
                     <th>@L["Enabled"]</th>
+                    <th>@L["Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -63,6 +69,7 @@
                     <td>@row.DisplayName</td>
                     <td>@row.Environment</td>
                     <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                    <td><a class="action-link" href="~/admin/instancetemplatehostedit?id=@row.InstanceTemplateHostId">@L["Edit"]</a></td>
                 </tr>
             }
             </tbody>
@@ -71,8 +78,13 @@
 </section>
 
 <section class="card section-card section-card--wide">
-    <h3>@L["Template module instances"]</h3>
-    <p class="muted">@L["Module instances are materialized before desired app rows, so apps have a stable module slot to attach to."]</p>
+    <div class="section-heading-row">
+        <div>
+            <h3>@L["Template module instances"]</h3>
+            <p class="muted">@L["Module instances are materialized before desired app rows, so apps have a stable module slot to attach to."]</p>
+        </div>
+        <a class="action-link" href="~/admin/instancetemplatemoduleedit?templateId=@Model.Template.InstanceTemplateId">@L["Add template module instance"]</a>
+    </div>
 
     @if (Model.Modules.Count == 0)
     {
@@ -87,6 +99,7 @@
                     <th>@L["Module instance"]</th>
                     <th>@L["Display name"]</th>
                     <th>@L["Enabled"]</th>
+                    <th>@L["Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -97,6 +110,7 @@
                     <td><code>@row.ModuleInstanceKey</code></td>
                     <td>@row.DisplayName</td>
                     <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                    <td><a class="action-link" href="~/admin/instancetemplatemoduleedit?id=@row.InstanceTemplateModuleInstanceId">@L["Edit"]</a></td>
                 </tr>
             }
             </tbody>
