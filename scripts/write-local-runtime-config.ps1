@@ -50,6 +50,48 @@ function Get-OmpConnectionString {
     return $builder.ConnectionString
 }
 
+function New-NLogConfig {
+    param([Parameter(Mandatory = $true)][string]$AppName)
+
+    return [ordered]@{
+        autoReload = $true
+        throwConfigExceptions = $true
+        variables = [ordered]@{
+            appName = $AppName
+            logDirectory = '${basedir}/logs'
+        }
+        targets = [ordered]@{
+            logfile = [ordered]@{
+                type = 'File'
+                fileName = '${var:logDirectory}/${var:appName}-${shortdate}.log'
+                layout = '${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}'
+            }
+            console = [ordered]@{
+                type = 'Console'
+                layout = '${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}'
+            }
+        }
+        rules = @(
+            [ordered]@{
+                logger = 'Microsoft.Hosting.Lifetime'
+                minLevel = 'Info'
+                writeTo = 'console,logfile'
+                final = $true
+            },
+            [ordered]@{
+                logger = 'Microsoft.*'
+                maxLevel = 'Info'
+                final = $true
+            },
+            [ordered]@{
+                logger = '*'
+                minLevel = 'Info'
+                writeTo = 'console,logfile'
+            }
+        )
+    }
+}
+
 $connectionString = Get-OmpConnectionString
 $dataProtectionKeyPath = Join-Path $RuntimeRoot 'DataProtectionKeys'
 $artifactStoreRoot = Join-Path $RuntimeRoot 'ArtifactStore'
@@ -203,6 +245,7 @@ $hostAgentConfig = [ordered]@{
             'Microsoft.Hosting.Lifetime' = 'Information'
         }
     }
+    NLog = New-NLogConfig -AppName 'OpenModulePlatform.HostAgent.WindowsService'
 }
 
 $workerManagerConfig = [ordered]@{
@@ -237,6 +280,7 @@ $workerManagerConfig = [ordered]@{
             'Microsoft.Hosting.Lifetime' = 'Information'
         }
     }
+    NLog = New-NLogConfig -AppName 'OpenModulePlatform.WorkerManager.WindowsService'
 }
 
 New-Item -ItemType Directory -Path $dataProtectionKeyPath -Force | Out-Null
