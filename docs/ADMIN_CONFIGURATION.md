@@ -146,6 +146,12 @@ the filename does not match, the admin must fill the same fields manually.
 Filename metadata is only a convenience; the form values are the values that
 are saved.
 
+The default relative path keeps deployment packages grouped by product root and
+package-kind folder. Targets ending in `-web` or `-service` drop that suffix for
+the root folder. Service targets ending in `-backend` use `backend` as the
+package-kind folder, so a target such as `ikrock2-backend` defaults to
+`ikrock2/backend/<version>`.
+
 The first upload version expects a deployment-ready zip with files at the zip
 root. Subdirectories are allowed, but paths must stay relative to the zip root:
 

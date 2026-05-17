@@ -482,7 +482,29 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
     }
 
     private static string BuildDefaultRelativePath(string targetName, string packageType, string version)
-        => $"{SanitizePathSegment(targetName)}/{GetPackagePathSegment(packageType)}/{SanitizePathSegment(version)}";
+    {
+        var sanitizedTarget = SanitizePathSegment(targetName);
+        var packageSegment = GetPackagePathSegment(packageType);
+        var rootSegment = sanitizedTarget;
+        var typedTargetSuffix = "-" + packageSegment;
+
+        if (packageSegment is "web" or "service"
+            && sanitizedTarget.EndsWith(typedTargetSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            rootSegment = sanitizedTarget[..^typedTargetSuffix.Length];
+        }
+        else if (packageSegment == "service"
+            && sanitizedTarget.EndsWith("-backend", StringComparison.OrdinalIgnoreCase))
+        {
+            // Service components often expose a friendly "-backend" target
+            // while the artifact store keeps the package-kind folder as
+            // "backend" for compatibility with existing installers.
+            rootSegment = sanitizedTarget[..^"-backend".Length];
+            packageSegment = "backend";
+        }
+
+        return $"{rootSegment}/{packageSegment}/{SanitizePathSegment(version)}";
+    }
 
     private static string GetPackagePathSegment(string packageType)
         => packageType.Trim().ToLowerInvariant() switch
