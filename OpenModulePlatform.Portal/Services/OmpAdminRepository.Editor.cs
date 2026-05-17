@@ -212,16 +212,37 @@ VALUES
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public Task<IReadOnlyList<OptionItem>> GetArtifactOptionsAsync(CancellationToken ct)
-        => GetOptionsAsync(
-            @"
+    public async Task<IReadOnlyList<ArtifactSelectionOption>> GetArtifactOptionsAsync(CancellationToken ct)
+    {
+        const string sql = @"
 SELECT CAST(ar.ArtifactId AS nvarchar(50)),
+       ar.AppId,
        a.AppKey + N' / ' + ar.Version + N' / ' + ar.PackageType
        + COALESCE(N' / ' + ar.TargetName, N'')
 FROM omp.Artifacts ar
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
-ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;",
-            ct);
+ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
+
+        var rows = new List<ArtifactSelectionOption>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(
+                new ArtifactSelectionOption
+                {
+                    Value = rdr.GetString(0),
+                    AppId = rdr.GetInt32(1),
+                    Label = rdr.GetString(2)
+                });
+        }
+
+        return rows;
+    }
 
     // -------------------------------------------------------------------------
     // Instance editing
@@ -1038,7 +1059,13 @@ WHERE AppInstanceId = @AppInstanceId;";
 
         await using var update = new SqlCommand(updateSql, conn);
         BindAppInstance(update, input);
-        await update.ExecuteNonQueryAsync(ct);
+        var affected = await update.ExecuteNonQueryAsync(ct);
+        if (affected == 0)
+        {
+            throw new InvalidOperationException(
+                $"App instance '{input.AppInstanceId}' no longer exists and could not be updated.");
+        }
+
         return input.AppInstanceId;
     }
 

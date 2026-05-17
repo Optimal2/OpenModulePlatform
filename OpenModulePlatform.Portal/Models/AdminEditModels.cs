@@ -174,6 +174,18 @@ public sealed class ArtifactDuplicateInfo
 }
 
 /// <summary>
+/// Artifact option with owning app context for app-instance artifact selection.
+/// </summary>
+public sealed class ArtifactSelectionOption
+{
+    public string Value { get; set; } = string.Empty;
+
+    public int AppId { get; set; }
+
+    public string Label { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Editable runtime/app-instance fields.
 /// This is the main manual configuration surface for placement, routing and runtime policy.
 /// </summary>
