@@ -2,6 +2,10 @@
 
 HostAgent is host-local OMP/ODV infrastructure. It is intentionally generic and is not tied to a specific module such as IbsPackager.
 
+Artifact versions and stable identifiers follow
+`docs/VERSIONING_AND_IDENTITIES.md`. HostAgent deploys the artifact selected by
+OMP metadata; it does not infer the latest version from file or folder names.
+
 ## Implemented
 
 - Windows Service project: `OpenModulePlatform.HostAgent.WindowsService`
