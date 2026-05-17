@@ -17,6 +17,7 @@
   <data name="Remove favorite" xml:space="preserve"><value>Ta bort favorit</value></data>
   <data name="No favorites" xml:space="preserve"><value>Inga favoriter</value></data>
   <data name="Config settings" xml:space="preserve"><value>Konfiguration</value></data>
+  <data name="Installation" xml:space="preserve"><value>Installation</value></data>
   <data name="Instance templates" xml:space="preserve"><value>Instansmallar</value></data>
   <data name="Host templates" xml:space="preserve"><value>Värdmallar</value></data>
   <data name="Template assignments" xml:space="preserve"><value>Malltilldelningar</value></data>

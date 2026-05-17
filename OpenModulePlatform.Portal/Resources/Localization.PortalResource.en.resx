@@ -202,4 +202,14 @@
   <data name="Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar." xml:space="preserve"><value>Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar.</value></data>
   <data name="Select a valid parent entry." xml:space="preserve"><value>Select a valid parent entry.</value></data>
   <data name="The selected parent would create a Portal Entry cycle." xml:space="preserve"><value>The selected parent would create a Portal Entry cycle.</value></data>
+  <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Hosts for concrete machines, Apps for deployable components and System for configuration and access." xml:space="preserve"><value>The admin area is organized around one OMP installation. Use Installation for desired topology, Hosts for concrete machines, Apps for deployable components and System for configuration and access.</value></data>
+  <data name="Core administration" xml:space="preserve"><value>Core administration</value></data>
+  <data name="These pages are the main workflow when setting up and maintaining the OMP installation." xml:space="preserve"><value>These pages are the main workflow when setting up and maintaining the OMP installation.</value></data>
+  <data name="HostAgent" xml:space="preserve"><value>HostAgent</value></data>
+  <data name="HostAgent follows the desired installation state and records deployment attempts for review." xml:space="preserve"><value>HostAgent follows the desired installation state and records deployment attempts for review.</value></data>
+  <data name="Automation pages now live under System so the admin flow follows the current model: one installation, concrete hosts, deployable apps and HostAgent status." xml:space="preserve"><value>Automation pages now live under System so the admin flow follows the current model: one installation, concrete hosts, deployable apps and HostAgent status.</value></data>
+  <data name="Deployment log" xml:space="preserve"><value>Deployment log</value></data>
+  <data name="Hosts are the concrete machines or runtime targets inside the OMP installation. HostAgent reports and deploys apps against these host keys." xml:space="preserve"><value>Hosts are the concrete machines or runtime targets inside the OMP installation. HostAgent reports and deploys apps against these host keys.</value></data>
+  <data name="Back to admin overview" xml:space="preserve"><value>Back to admin overview</value></data>
+  <data name="Open installation" xml:space="preserve"><value>Open installation</value></data>
 </root>
