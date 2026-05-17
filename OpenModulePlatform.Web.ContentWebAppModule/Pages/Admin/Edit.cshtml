@@ -119,9 +119,25 @@
 
     <div class="form-field content-editor-field" data-content-editor-field hidden="@(Model.Input.ContentType == "server_report" || Model.Input.ContentType == "html_file")">
         <label asp-for="Input.Body"></label>
-        <div class="editor-tabs" data-html-editor-tabs hidden>
-            <button type="button" class="editor-tab" data-html-editor-mode="visual" aria-selected="true">@L["Visual"]</button>
-            <button type="button" class="editor-tab" data-html-editor-mode="source" aria-selected="false">@L["HTML source"]</button>
+        <div class="editor-tabs" data-editor-tabs hidden>
+            <button type="button" class="editor-tab" data-editor-mode="visual" aria-selected="true">@L["Visual"]</button>
+            <button
+                type="button"
+                class="editor-tab"
+                data-editor-mode="source"
+                data-html-source-label="@L["HTML source"]"
+                data-markdown-source-label="@L["Markdown source"]"
+                aria-selected="false">@L["Markdown source"]</button>
+        </div>
+        <div class="rich-editor-toolbar" data-html-toolbar hidden>
+            <button type="button" data-html-command="bold">@L["Bold"]</button>
+            <button type="button" data-html-command="italic">@L["Italic"]</button>
+            <button type="button" data-html-command="formatBlock" data-command-value="H2">@L["Heading 2"]</button>
+            <button type="button" data-html-command="formatBlock" data-command-value="H3">@L["Heading 3"]</button>
+            <button type="button" data-html-command="insertUnorderedList">@L["Bulleted list"]</button>
+            <button type="button" data-html-command="insertOrderedList">@L["Numbered list"]</button>
+            <button type="button" data-html-command="createLink">@L["Link"]</button>
+            <button type="button" data-html-command="removeFormat">@L["Clear formatting"]</button>
         </div>
         <div id="content-editor" class="content-editor" hidden></div>
         <div id="html-visual-editor" class="html-visual-editor" contenteditable="true" hidden></div>
@@ -239,8 +255,11 @@
             const source = document.getElementById('Input_Body');
             const host = document.getElementById('content-editor');
             const htmlVisual = document.getElementById('html-visual-editor');
-            const htmlTabs = document.querySelector('[data-html-editor-tabs]');
-            const htmlTabButtons = Array.from(document.querySelectorAll('[data-html-editor-mode]'));
+            const editorTabs = document.querySelector('[data-editor-tabs]');
+            const editorTabButtons = Array.from(document.querySelectorAll('[data-editor-mode]'));
+            const sourceTab = document.querySelector('[data-editor-mode="source"]');
+            const htmlToolbar = document.querySelector('[data-html-toolbar]');
+            const htmlToolbarButtons = Array.from(document.querySelectorAll('[data-html-command]'));
             const form = document.getElementById('content-edit-form');
             const contentType = document.getElementById('Input_ContentType');
             const editorField = document.querySelector('[data-content-editor-field]');
@@ -248,8 +267,9 @@
             const reportField = document.querySelector('[data-server-report-field]');
             const markdownHint = document.querySelector('[data-editor-hint="markdown"]');
             const htmlHint = document.querySelector('[data-editor-hint="html"]');
+            const linkPromptText = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(L["Enter link URL"].Value));
             let markdownEditor = null;
-            let htmlMode = 'visual';
+            let editorMode = 'visual';
             let previousType = null;
 
             const pullMarkdownEditorValue = () => {
@@ -258,8 +278,8 @@
                 }
             };
 
-            const pullHtmlVisualValue = () => {
-                if (source && htmlVisual && htmlMode === 'visual') {
+            const pullVisualHtmlValue = () => {
+                if (source && htmlVisual && editorMode === 'visual') {
                     source.value = htmlVisual.innerHTML;
                 }
             };
@@ -273,8 +293,9 @@
                     markdownEditor = new toastui.Editor({
                         el: host,
                         height: '520px',
-                        initialEditType: 'markdown',
-                        previewStyle: 'vertical',
+                        initialEditType: 'wysiwyg',
+                        previewStyle: 'tab',
+                        hideModeSwitch: true,
                         initialValue: source.value || ''
                     });
                 }
@@ -282,34 +303,87 @@
                     markdownEditor.setMarkdown(source.value || '');
                 }
 
-                host.hidden = false;
-                source.classList.add('is-enhanced');
+                if (editorMode === 'visual') {
+                    host.hidden = false;
+                    source.classList.add('is-enhanced');
+                }
             };
 
-            const setHtmlMode = (mode) => {
-                if (!source || !htmlVisual) {
+            const updateEditorTabs = (type) => {
+                if (!editorTabs || !sourceTab) {
                     return;
                 }
 
-                const nextMode = mode === 'source' ? 'source' : 'visual';
-                if (htmlMode === 'visual' && nextMode === 'source') {
-                    source.value = htmlVisual.innerHTML;
-                }
-                else if (htmlMode === 'source' && nextMode === 'visual') {
-                    htmlVisual.innerHTML = source.value || '';
-                }
+                sourceTab.textContent = type === 'html'
+                    ? (sourceTab.dataset.htmlSourceLabel || 'HTML source')
+                    : (sourceTab.dataset.markdownSourceLabel || 'Markdown source');
 
-                htmlMode = nextMode;
-                htmlVisual.hidden = htmlMode !== 'visual';
-                source.classList.toggle('is-enhanced', htmlMode === 'visual');
-
-                for (const button of htmlTabButtons) {
-                    button.setAttribute('aria-selected', button.dataset.htmlEditorMode === htmlMode ? 'true' : 'false');
+                for (const button of editorTabButtons) {
+                    button.setAttribute('aria-selected', button.dataset.editorMode === editorMode ? 'true' : 'false');
                 }
             };
 
-            for (const button of htmlTabButtons) {
-                button.addEventListener('click', () => setHtmlMode(button.dataset.htmlEditorMode));
+            const setEditorMode = (mode) => {
+                if (!source) {
+                    return;
+                }
+
+                const type = contentType?.value || 'markdown';
+                const nextMode = mode === 'source' ? 'source' : 'visual';
+
+                if (type === 'markdown') {
+                    if (editorMode === 'visual' && nextMode === 'source') {
+                        pullMarkdownEditorValue();
+                    }
+
+                    editorMode = nextMode;
+                    if (editorMode === 'visual') {
+                        ensureMarkdownEditor();
+                        markdownEditor?.setMarkdown(source.value || '');
+                        host.hidden = false;
+                        source.classList.add('is-enhanced');
+                    }
+                    else {
+                        host.hidden = true;
+                        source.classList.remove('is-enhanced');
+                    }
+                }
+                else if (type === 'html' && htmlVisual) {
+                    if (editorMode === 'visual' && nextMode === 'source') {
+                        source.value = htmlVisual.innerHTML;
+                    }
+                    else if (editorMode === 'source' && nextMode === 'visual') {
+                        htmlVisual.innerHTML = source.value || '';
+                    }
+
+                    editorMode = nextMode;
+                    htmlVisual.hidden = editorMode !== 'visual';
+                    source.classList.toggle('is-enhanced', editorMode === 'visual');
+                }
+
+                htmlToolbar.hidden = !(type === 'html' && editorMode === 'visual');
+                updateEditorTabs(type);
+            };
+
+            for (const button of editorTabButtons) {
+                button.addEventListener('click', () => setEditorMode(button.dataset.editorMode));
+            }
+
+            for (const button of htmlToolbarButtons) {
+                button.addEventListener('click', () => {
+                    htmlVisual?.focus();
+                    const command = button.dataset.htmlCommand;
+                    let value = button.dataset.commandValue || null;
+                    if (command === 'createLink') {
+                        value = window.prompt(linkPromptText) || null;
+                        if (!value) {
+                            return;
+                        }
+                    }
+
+                    document.execCommand(command, false, value);
+                    pullVisualHtmlValue();
+                });
             }
 
             const hideEnhancedEditors = () => {
@@ -317,7 +391,7 @@
                     pullMarkdownEditorValue();
                 }
                 else if (previousType === 'html') {
-                    pullHtmlVisualValue();
+                    pullVisualHtmlValue();
                 }
 
                 if (host) {
@@ -328,8 +402,12 @@
                     htmlVisual.hidden = true;
                 }
 
-                if (htmlTabs) {
-                    htmlTabs.hidden = true;
+                if (editorTabs) {
+                    editorTabs.hidden = true;
+                }
+
+                if (htmlToolbar) {
+                    htmlToolbar.hidden = true;
                 }
 
                 source?.classList.remove('is-enhanced');
@@ -340,6 +418,10 @@
                 const isServerReport = type === 'server_report';
                 const isHtmlFile = type === 'html_file';
                 const isHtml = type === 'html';
+                const typeChanged = previousType !== null && previousType !== type;
+                if (typeChanged) {
+                    editorMode = 'visual';
+                }
 
                 if (editorField) {
                     editorField.hidden = isServerReport || isHtmlFile;
@@ -374,33 +456,37 @@
                         host.hidden = true;
                     }
 
-                    if (htmlTabs) {
-                        htmlTabs.hidden = false;
+                    if (editorTabs) {
+                        editorTabs.hidden = false;
                     }
 
                     if (htmlVisual && previousType !== 'html') {
                         htmlVisual.innerHTML = source?.value || '';
-                        htmlMode = 'visual';
                     }
 
                     source?.classList.add('content-editor__source--html');
-                    setHtmlMode(htmlMode);
+                    setEditorMode(editorMode);
                 }
                 else {
                     if (previousType === 'html') {
-                        pullHtmlVisualValue();
+                        pullVisualHtmlValue();
                     }
 
-                    if (htmlTabs) {
-                        htmlTabs.hidden = true;
+                    if (editorTabs) {
+                        editorTabs.hidden = false;
                     }
 
                     if (htmlVisual) {
                         htmlVisual.hidden = true;
                     }
 
+                    if (htmlToolbar) {
+                        htmlToolbar.hidden = true;
+                    }
+
                     source?.classList.remove('content-editor__source--html');
                     ensureMarkdownEditor();
+                    setEditorMode(editorMode);
                 }
 
                 previousType = type;
@@ -423,7 +509,7 @@
                     pullMarkdownEditorValue();
                 }
                 else if (contentType.value === 'html') {
-                    pullHtmlVisualValue();
+                    pullVisualHtmlValue();
                 }
             });
         })();

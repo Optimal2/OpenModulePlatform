@@ -23,17 +23,17 @@ Markdown and raw HTML content is stored in the database. HTML file pages are sto
 
 Choose the page content type before editing the body:
 
-- `markdown` uses the Markdown editor. If the editor CDN cannot load, the raw
-  textarea remains available and the page still saves Markdown.
-- `html` uses a raw HTML source textarea. HTML is trusted editor content and is
+- `markdown` uses visual and Markdown-source tabs. If the editor CDN cannot
+  load, the raw textarea remains available and the page still saves Markdown.
+- `html` uses visual and HTML-source tabs. HTML is trusted editor content and is
   rendered without sanitization.
 - `html_file` stores only a file key in the database. The trusted HTML body is
   read from the configured HTML file directory or packaged ContentPages folder.
 - `server_report` hides the body editor and shows only the report-key picker.
 
-Changing the content type changes the editor, but it does not convert existing
-body content. Treat Markdown-to-HTML or HTML-to-Markdown changes as manual
-content migrations.
+Content type is locked after a page has been created. Create a replacement page
+when content needs to move between Markdown, inline HTML, HTML file, and server
+report modes.
 
 Use `html_file` when a deployment gateway blocks posting raw HTML or JavaScript
 through the admin form, or when the same content file should be shared by several
