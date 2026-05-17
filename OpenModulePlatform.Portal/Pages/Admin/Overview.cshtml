@@ -9,7 +9,7 @@
         <div class="eyebrow">@L["Administration"]</div>
         <h2>@ompBranding.ApplyPlatformName(L["OMP admin overview"].Value)</h2>
         <p class="lede">
-            @L["The admin area follows the desired-state model. Use System and Hosts to define templates and host roles, Apps to manage definitions and artifacts, and app instances to inspect what HostAgent has materialized."]
+            @ompBranding.ApplyPlatformName(L["The admin area is organized around one OMP installation. Use Installation for desired topology, Hosts for concrete machines, Apps for deployable components and System for configuration and access."].Value)
         </p>
     </div>
 </section>
@@ -17,12 +17,12 @@
 
 <div class="section-grid section-grid--wide top-gap">
     <section class="card section-card">
-        <h3>@L["Manual core administration"]</h3>
+        <h3>@L["Core administration"]</h3>
         <p class="muted">
-            @ompBranding.ApplyPlatformName(L["These pages are the main workflow when setting up and maintaining an OMP instance without HostAgent automation."].Value)
+            @ompBranding.ApplyPlatformName(L["These pages are the main workflow when setting up and maintaining the OMP installation."].Value)
         </p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/instances">@L["Instances"]</a>
+            <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Installation"]</a>
             <a class="action-link" href="~/admin/hosts">@L["Hosts"]</a>
             <a class="action-link" href="~/admin/modules">@L["Modules"]</a>
             <a class="action-link" href="~/admin/moduleinstances">@L["Module instances"]</a>
@@ -35,12 +35,12 @@
     </section>
 
     <section class="card section-card">
-        <h3>@L["Advanced automation"]</h3>
+        <h3>@L["HostAgent"]</h3>
         <p class="muted">
-            @L["Template topology, deployment assignments and deployment tracking are separated from the main workflow until the HostAgent path is more complete."]
+            @L["HostAgent follows the desired installation state and records deployment attempts for review."]
         </p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/automation">@L["Open automation area"]</a>
+            <a class="action-link" href="~/admin/hostdeployments">@L["Open deployment log"]</a>
         </div>
     </section>
 
