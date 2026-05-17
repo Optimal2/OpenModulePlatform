@@ -1555,6 +1555,10 @@ function Write-RuntimeConfiguration {
             $settings.Portal['SupportedCultures'] = $script:SupportedCultures
             $settings.Portal['AllowAnonymous'] = $script:PortalAllowAnonymous
             $settings.Portal['PermissionMode'] = $script:PortalPermissionMode
+            $settings.ArtifactUpload = [ordered]@{
+                ArtifactStoreRoot = $script:ArtifactStoreRoot
+                MaxUploadBytes = 536870912
+            }
         }
 
         if ([bool]$folder.IncludeOpenDocViewer) {

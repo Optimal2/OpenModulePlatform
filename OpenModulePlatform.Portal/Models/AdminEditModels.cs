@@ -144,6 +144,36 @@ public sealed class ArtifactEditData
 }
 
 /// <summary>
+/// App-definition option with stable keys used by artifact filename metadata parsing.
+/// </summary>
+public sealed class ArtifactAppOption
+{
+    public int AppId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Existing artifact row used when duplicate content is detected during upload.
+/// </summary>
+public sealed class ArtifactDuplicateInfo
+{
+    public int ArtifactId { get; set; }
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string Version { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+}
+
+/// <summary>
 /// Editable runtime/app-instance fields.
 /// This is the main manual configuration surface for placement, routing and runtime policy.
 /// </summary>
@@ -247,4 +277,3 @@ public sealed class AppWorkerDefinitionEditData
 
     public bool IsEnabled { get; set; }
 }
-
