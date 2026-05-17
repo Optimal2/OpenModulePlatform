@@ -17,6 +17,10 @@
   <data name="Remove favorite" xml:space="preserve"><value>Remove favorite</value></data>
   <data name="No favorites" xml:space="preserve"><value>No favorites</value></data>
   <data name="Config settings" xml:space="preserve"><value>Configuration</value></data>
+  <data name="Instance templates" xml:space="preserve"><value>Instance templates</value></data>
+  <data name="Host templates" xml:space="preserve"><value>Host templates</value></data>
+  <data name="Template assignments" xml:space="preserve"><value>Template assignments</value></data>
+  <data name="Deployment log" xml:space="preserve"><value>Deployment log</value></data>
   <data name="Expand" xml:space="preserve"><value>Expand</value></data>
   <data name="Collapse" xml:space="preserve"><value>Collapse</value></data>
 </root>

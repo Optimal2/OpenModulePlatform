@@ -43,6 +43,8 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
 
     public IReadOnlyList<ArtifactSelectionOption> ArtifactOptions { get; private set; } = [];
 
+    public TemplateManagedAppInstanceInfo? TemplateControl { get; private set; }
+
     public IReadOnlyList<OptionItem> DesiredStateOptions =>
     [
         Opt("0", T("Unknown / unmanaged")),
@@ -103,6 +105,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
             DesiredState = row.DesiredState,
             SortOrder = row.SortOrder
         };
+        TemplateControl = await _repo.GetTemplateManagedAppInstanceInfoAsync(id.Value, ct);
 
         return Page();
     }
@@ -117,6 +120,17 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
 
         await LoadAsync(ct);
         SetTitles(IsCreate ? "Create app instance" : "Edit app instance");
+        if (!IsCreate)
+        {
+            TemplateControl = await _repo.GetTemplateManagedAppInstanceInfoAsync(Input.AppInstanceId, ct);
+            if (TemplateControl is not null)
+            {
+                ModelState.AddModelError(
+                    string.Empty,
+                    T("This app instance is managed by an instance template. Change the desired template app instead and let HostAgent update the runtime row."));
+                return Page();
+            }
+        }
 
         await ValidateInputAsync(ct);
         if (!ModelState.IsValid)

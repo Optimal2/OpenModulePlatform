@@ -12,18 +12,19 @@ public static class PortalAdminNavigation
             new(
                 "System",
                 [
-                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/instancetemplates")),
+                    new PortalAdminMenuItem("Instance templates", hrefFactory("/admin/instancetemplates")),
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/instances")),
                     new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings"), SeparatorBefore: true),
                     new PortalAdminMenuItem("Security", hrefFactory("/admin/security")),
-                    new PortalAdminMenuItem("Users", hrefFactory("/admin/users")),
-                    new PortalAdminMenuItem("Automation", hrefFactory("/admin/automation"))
+                    new PortalAdminMenuItem("Users", hrefFactory("/admin/users"))
                 ]),
             new(
                 "Hosts",
                 [
-                    new PortalAdminMenuItem("Definitions", hrefFactory("/admin/hosttemplates")),
-                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/hosts"))
+                    new PortalAdminMenuItem("Host templates", hrefFactory("/admin/hosttemplates")),
+                    new PortalAdminMenuItem("Instances", hrefFactory("/admin/hosts")),
+                    new PortalAdminMenuItem("Template assignments", hrefFactory("/admin/hostdeploymentassignments"), SeparatorBefore: true),
+                    new PortalAdminMenuItem("Deployment log", hrefFactory("/admin/hostdeployments"))
                 ]),
             new(
                 "Modules",

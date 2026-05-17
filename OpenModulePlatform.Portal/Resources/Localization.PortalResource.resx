@@ -1523,4 +1523,46 @@
   <data name="Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar." xml:space="preserve"><value>Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar.</value></data>
   <data name="Select a valid parent entry." xml:space="preserve"><value>Select a valid parent entry.</value></data>
   <data name="The selected parent would create a Portal Entry cycle." xml:space="preserve"><value>The selected parent would create a Portal Entry cycle.</value></data>
+  <data name="Desired topology" xml:space="preserve"><value>Desired topology</value></data>
+  <data name="Runtime result" xml:space="preserve"><value>Runtime result</value></data>
+  <data name="Manual runtime" xml:space="preserve"><value>Manual runtime</value></data>
+  <data name="Host inventory" xml:space="preserve"><value>Host inventory</value></data>
+  <data name="Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows." xml:space="preserve"><value>Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows.</value></data>
+  <data name="This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances." xml:space="preserve"><value>This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances.</value></data>
+  <data name="Template hosts" xml:space="preserve"><value>Template hosts</value></data>
+  <data name="Template hosts define the host keys that should exist inside each OMP instance using this template. Concrete hosts report in with the same host key." xml:space="preserve"><value>Template hosts define the host keys that should exist inside each OMP instance using this template. Concrete hosts report in with the same host key.</value></data>
+  <data name="No template hosts found." xml:space="preserve"><value>No template hosts found.</value></data>
+  <data name="Template module instances" xml:space="preserve"><value>Template module instances</value></data>
+  <data name="Module instances are materialized before desired app rows, so apps have a stable module slot to attach to." xml:space="preserve"><value>Module instances are materialized before desired app rows, so apps have a stable module slot to attach to.</value></data>
+  <data name="No template module instances found." xml:space="preserve"><value>No template module instances found.</value></data>
+  <data name="Desired apps" xml:space="preserve"><value>Desired apps</value></data>
+  <data name="Change versions, placement and desired runtime policy here. HostAgent updates the concrete app instances after its next cycle." xml:space="preserve"><value>Change versions, placement and desired runtime policy here. HostAgent updates the concrete app instances after its next cycle.</value></data>
+  <data name="No desired apps found." xml:space="preserve"><value>No desired apps found.</value></data>
+  <data name="Add desired app" xml:space="preserve"><value>Add desired app</value></data>
+  <data name="Edit desired app" xml:space="preserve"><value>Edit desired app</value></data>
+  <data name="Save desired app" xml:space="preserve"><value>Save desired app</value></data>
+  <data name="Edit desired state" xml:space="preserve"><value>Edit desired state</value></data>
+  <data name="Back to instance templates" xml:space="preserve"><value>Back to instance templates</value></data>
+  <data name="View materialized app instances" xml:space="preserve"><value>View materialized app instances</value></data>
+  <data name="Any host" xml:space="preserve"><value>Any host</value></data>
+  <data name="Any host / not pinned" xml:space="preserve"><value>Any host / not pinned</value></data>
+  <data name="Template-managed app instance" xml:space="preserve"><value>Template-managed app instance</value></data>
+  <data name="This row is materialized by HostAgent from an instance template. Change the desired template app instead; this page shows the current runtime result." xml:space="preserve"><value>This row is materialized by HostAgent from an instance template. Change the desired template app instead; this page shows the current runtime result.</value></data>
+  <data name="Current materialized runtime row" xml:space="preserve"><value>Current materialized runtime row</value></data>
+  <data name="Template-managed app instances are runtime results. Change desired versions and placement on the instance template; use this page only for manual fallback rows." xml:space="preserve"><value>Template-managed app instances are runtime results. Change desired versions and placement on the instance template; use this page only for manual fallback rows.</value></data>
+  <data name="App instances show the materialized runtime state. For template-managed apps, change host placement, version and desired state on the instance template instead." xml:space="preserve"><value>App instances show the materialized runtime state. For template-managed apps, change host placement, version and desired state on the instance template instead.</value></data>
+  <data name="Create manual app instance" xml:space="preserve"><value>Create manual app instance</value></data>
+  <data name="Edit manual app instance" xml:space="preserve"><value>Edit manual app instance</value></data>
+  <data name="View app instance" xml:space="preserve"><value>View app instance</value></data>
+  <data name="Open instance templates" xml:space="preserve"><value>Open instance templates</value></data>
+  <data name="Open host templates" xml:space="preserve"><value>Open host templates</value></data>
+  <data name="Open template assignments" xml:space="preserve"><value>Open template assignments</value></data>
+  <data name="Open deployment log" xml:space="preserve"><value>Open deployment log</value></data>
+  <data name="Hosts are the concrete machines or runtime targets inside an OMP instance. Host templates and assignments describe what each host role should run." xml:space="preserve"><value>Hosts are the concrete machines or runtime targets inside an OMP instance. Host templates and assignments describe what each host role should run.</value></data>
+  <data name="Host templates describe reusable host roles. Assign a host template to a concrete host so HostAgent knows which desired topology applies there." xml:space="preserve"><value>Host templates describe reusable host roles. Assign a host template to a concrete host so HostAgent knows which desired topology applies there.</value></data>
+  <data name="Template-driven administration" xml:space="preserve"><value>Template-driven administration</value></data>
+  <data name="Template pages now live under System and Hosts so the admin flow follows the actual model: define desired topology, let HostAgent materialize runtime rows, then inspect the result." xml:space="preserve"><value>Template pages now live under System and Hosts so the admin flow follows the actual model: define desired topology, let HostAgent materialize runtime rows, then inspect the result.</value></data>
+  <data name="Where to go" xml:space="preserve"><value>Where to go</value></data>
+  <data name="Use these direct links if you reached the old automation page from a bookmark." xml:space="preserve"><value>Use these direct links if you reached the old automation page from a bookmark.</value></data>
+  <data name="Moved" xml:space="preserve"><value>Moved</value></data>
 </root>

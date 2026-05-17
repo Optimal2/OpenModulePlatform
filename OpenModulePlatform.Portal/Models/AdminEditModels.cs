@@ -186,8 +186,72 @@ public sealed class ArtifactSelectionOption
 }
 
 /// <summary>
+/// Template context for a concrete app instance that is managed by HostAgent materialization.
+/// Admins should change the template row, not the materialized runtime row.
+/// </summary>
+public sealed class TemplateManagedAppInstanceInfo
+{
+    public int InstanceTemplateAppInstanceId { get; set; }
+
+    public int InstanceTemplateId { get; set; }
+
+    public string InstanceTemplateKey { get; set; } = string.Empty;
+
+    public string InstanceTemplateDisplayName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Editable desired app-instance row stored on an instance template.
+/// HostAgent copies these values to concrete app instances during materialization.
+/// </summary>
+public sealed class InstanceTemplateAppInstanceEditData
+{
+    public int InstanceTemplateAppInstanceId { get; set; }
+
+    public int InstanceTemplateId { get; set; }
+
+    public int InstanceTemplateModuleInstanceId { get; set; }
+
+    public int? InstanceTemplateHostId { get; set; }
+
+    public int AppId { get; set; }
+
+    public string AppInstanceKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string? RoutePath { get; set; }
+
+    public string? PublicUrl { get; set; }
+
+    public string? InstallPath { get; set; }
+
+    public string? InstallationName { get; set; }
+
+    public int? DesiredArtifactId { get; set; }
+
+    public int? DesiredConfigId { get; set; }
+
+    public string? ExpectedLogin { get; set; }
+
+    public string? ExpectedClientHostName { get; set; }
+
+    public string? ExpectedClientIp { get; set; }
+
+    public bool IsEnabled { get; set; }
+
+    public bool IsAllowed { get; set; }
+
+    public byte DesiredState { get; set; }
+
+    public int SortOrder { get; set; }
+}
+
+/// <summary>
 /// Editable runtime/app-instance fields.
-/// This is the main manual configuration surface for placement, routing and runtime policy.
+/// This is the manual fallback surface for app instances that are not managed by an instance template.
 /// </summary>
 public sealed class AppInstanceEditData
 {
@@ -272,6 +336,28 @@ public sealed class AppDefinitionContext
     public string AppKey { get; set; } = string.Empty;
 
     public string AppType { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Minimal context for validating desired app rows on instance templates.
+/// </summary>
+public sealed class InstanceTemplateModuleContext
+{
+    public int InstanceTemplateModuleInstanceId { get; set; }
+
+    public int InstanceTemplateId { get; set; }
+
+    public int ModuleId { get; set; }
+}
+
+/// <summary>
+/// Minimal context for validating desired host placement on instance templates.
+/// </summary>
+public sealed class InstanceTemplateHostContext
+{
+    public int InstanceTemplateHostId { get; set; }
+
+    public int InstanceTemplateId { get; set; }
 }
 
 /// <summary>

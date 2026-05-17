@@ -1,0 +1,57 @@
+// File: OpenModulePlatform.Portal/Pages/Admin/InstanceTemplateEdit.cshtml.cs
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Services;
+
+namespace OpenModulePlatform.Portal.Pages.Admin;
+
+/// <summary>
+/// Shows the desired topology stored in an instance template.
+/// This is the admin-facing source of truth that HostAgent materializes into runtime rows.
+/// </summary>
+public sealed class InstanceTemplateEditModel : OmpPortalPageModel
+{
+    private readonly OmpAdminRepository _repo;
+
+    public InstanceTemplateEditModel(
+        IOptions<WebAppOptions> options,
+        RbacService rbac,
+        OmpAdminRepository repo)
+        : base(options, rbac)
+    {
+        _repo = repo;
+    }
+
+    public InstanceTemplateRow? Template { get; private set; }
+
+    public IReadOnlyList<InstanceTemplateHostTopologyRow> Hosts { get; private set; } = [];
+
+    public IReadOnlyList<InstanceTemplateModuleTopologyRow> Modules { get; private set; } = [];
+
+    public IReadOnlyList<InstanceTemplateAppTopologyRow> Apps { get; private set; } = [];
+
+    public async Task<IActionResult> OnGet(int id, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        Template = await _repo.GetInstanceTemplateAsync(id, ct);
+        if (Template is null)
+        {
+            return NotFound();
+        }
+
+        Hosts = await _repo.GetInstanceTemplateHostsAsync(id, ct);
+        Modules = await _repo.GetInstanceTemplateModulesAsync(id, ct);
+        Apps = await _repo.GetInstanceTemplateAppsAsync(id, ct);
+
+        SetTitles("Instance template");
+        return Page();
+    }
+}
