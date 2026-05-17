@@ -3,6 +3,11 @@
 This document tracks the path from the current metadata model to full
 HostAgent-driven deployment automation.
 
+Artifact versioning and stable identity rules are defined in
+`docs/VERSIONING_AND_IDENTITIES.md`. This automation flow assumes that
+templates use stable text keys for matching and that version changes are made by
+selecting a new artifact in OMP metadata.
+
 ## Target Flow
 
 1. SQL setup and module installers register modules, apps, artifacts, instance
