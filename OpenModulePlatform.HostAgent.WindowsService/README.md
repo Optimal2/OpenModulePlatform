@@ -27,7 +27,9 @@ Expected first use:
 4. HostAgent copies the artifact to `HostAgent:LocalArtifactCacheRoot`.
 5. If the artifact is a `web-app` package and `HostAgent:DeployWebApps` is
    enabled, HostAgent mirrors it to the IIS runtime folder while preserving
-   local configuration and runtime data exclusions.
+   local configuration and runtime data exclusions. By default this uses
+   `app_offline.htm` instead of `appcmd.exe`, so normal web-app deployments do
+   not need IIS administration permissions.
 6. If the artifact is a `service-app` package and
    `HostAgent:DeployServiceApps` is enabled, HostAgent mirrors it to the
    service runtime folder and creates or updates the Windows service.

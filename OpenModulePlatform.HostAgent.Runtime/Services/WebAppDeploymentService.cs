@@ -59,58 +59,61 @@ public sealed class WebAppDeploymentService
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
-        string? appPoolName = null;
+        string? runtimeName = null;
         var appPoolStopped = false;
 
         try
         {
             targetPath = ResolveTargetPath(settings, deployment);
             var iisAppName = ResolveIisAppName(settings, deployment);
-            appPoolName = GetIisAppPoolName(iisAppName);
+            var useAppCmdAppPoolControl = UseAppCmdAppPoolControl(settings);
+            runtimeName = useAppCmdAppPoolControl
+                ? GetIisAppPoolName(iisAppName)
+                : iisAppName;
 
-            if (IsAlreadyApplied(deployment, targetPath, appPoolName))
+            if (IsAlreadyApplied(deployment, targetPath, runtimeName))
             {
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AppDeploymentResult.Succeeded(targetPath, appPoolName, applied: false),
+                    AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: false),
                     cancellationToken);
                 return;
             }
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Running(targetPath, appPoolName),
+                AppDeploymentResult.Running(targetPath, runtimeName),
                 cancellationToken);
 
-            if (settings.StopIisAppPoolForWebAppDeployment && !string.IsNullOrWhiteSpace(appPoolName))
+            if (useAppCmdAppPoolControl
+                && settings.StopIisAppPoolForWebAppDeployment
+                && !string.IsNullOrWhiteSpace(runtimeName))
             {
-                appPoolStopped = StopAppPoolIfRunning(appPoolName, settings.IisAppPoolStopTimeoutSeconds);
+                appPoolStopped = StopAppPoolIfRunning(runtimeName, settings.IisAppPoolStopTimeoutSeconds);
             }
 
-            ArtifactDirectoryMirror.MirrorDirectory(
-                deployment.SourceLocalPath,
-                targetPath,
-                settings.WebAppDeploymentExcludedEntries,
-                cancellationToken);
+            await MirrorWebAppAsync(settings, deployment, targetPath, cancellationToken);
 
-            if (settings.StartIisAppPoolAfterWebAppDeployment && !string.IsNullOrWhiteSpace(appPoolName))
+            if (useAppCmdAppPoolControl
+                && settings.StartIisAppPoolAfterWebAppDeployment
+                && !string.IsNullOrWhiteSpace(runtimeName))
             {
-                StartAppPoolIfStopped(appPoolName);
+                StartAppPoolIfStopped(runtimeName);
                 appPoolStopped = false;
             }
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Succeeded(targetPath, appPoolName, applied: true),
+                AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: true),
                 cancellationToken);
 
             _logger.LogInformation(
-                "Web app deployed. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, TargetPath={TargetPath}, AppPoolName={AppPoolName}",
+                "Web app deployed. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, TargetPath={TargetPath}, RuntimeName={RuntimeName}",
                 deployment.AppInstanceId,
                 deployment.ArtifactId,
                 deployment.Version,
                 targetPath,
-                appPoolName);
+                runtimeName);
         }
         catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
         {
@@ -121,15 +124,57 @@ public sealed class WebAppDeploymentService
                 deployment.ArtifactId,
                 deployment.Version);
 
-            if (appPoolStopped && settings.StartIisAppPoolAfterWebAppDeployment && !string.IsNullOrWhiteSpace(appPoolName))
+            if (appPoolStopped
+                && !settings.UseAppOfflineForWebAppDeployment
+                && settings.StartIisAppPoolAfterWebAppDeployment
+                && !string.IsNullOrWhiteSpace(runtimeName))
             {
-                TryStartAppPool(appPoolName, _logger);
+                TryStartAppPool(runtimeName, _logger);
             }
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Failed(targetPath, appPoolName, ex.Message),
+                AppDeploymentResult.Failed(targetPath, runtimeName, ex.Message),
                 cancellationToken);
+        }
+    }
+
+    private async Task MirrorWebAppAsync(
+        HostAgentSettings settings,
+        WebAppDeploymentDescriptor deployment,
+        string targetPath,
+        CancellationToken cancellationToken)
+    {
+        string? appOfflinePath = null;
+        try
+        {
+            if (settings.UseAppOfflineForWebAppDeployment)
+            {
+                appOfflinePath = CreateAppOfflineFile(targetPath, deployment);
+                if (settings.AppOfflineShutdownDelayMilliseconds > 0)
+                {
+                    await Task.Delay(settings.AppOfflineShutdownDelayMilliseconds, cancellationToken);
+                }
+            }
+
+            var excludedEntries = settings.WebAppDeploymentExcludedEntries;
+            if (!string.IsNullOrWhiteSpace(appOfflinePath))
+            {
+                excludedEntries = [.. excludedEntries, "app_offline.htm"];
+            }
+
+            ArtifactDirectoryMirror.MirrorDirectory(
+                deployment.SourceLocalPath,
+                targetPath,
+                excludedEntries,
+                cancellationToken);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(appOfflinePath) && File.Exists(appOfflinePath))
+            {
+                File.Delete(appOfflinePath);
+            }
         }
     }
 
@@ -223,6 +268,27 @@ public sealed class WebAppDeploymentService
 
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool UseAppCmdAppPoolControl(HostAgentSettings settings)
+        => !settings.UseAppOfflineForWebAppDeployment
+            && (settings.StopIisAppPoolForWebAppDeployment || settings.StartIisAppPoolAfterWebAppDeployment);
+
+    private static string CreateAppOfflineFile(
+        string targetPath,
+        WebAppDeploymentDescriptor deployment)
+    {
+        Directory.CreateDirectory(targetPath);
+        var path = Path.Combine(targetPath, "app_offline.htm");
+        var content = $"""
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Maintenance</title></head>
+<body>OpenModulePlatform HostAgent is updating {deployment.AppInstanceKey}.</body>
+</html>
+""";
+        File.WriteAllText(path, content);
+        return path;
+    }
 
     private static string GetAppCmdPath()
     {
@@ -362,11 +428,24 @@ public sealed class WebAppDeploymentService
         if (process.ExitCode != 0)
         {
             var message = string.IsNullOrWhiteSpace(error) ? output : error;
-            throw new InvalidOperationException($"appcmd.exe failed with exit code {process.ExitCode}: {message.Trim()}");
+            throw new InvalidOperationException(CreateAppCmdFailureMessage(process.ExitCode, message));
         }
 
         return output
             .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static string CreateAppCmdFailureMessage(int exitCode, string message)
+    {
+        var trimmed = message.Trim();
+        var result = $"appcmd.exe failed with exit code {exitCode}: {trimmed}";
+        if (trimmed.Contains("redirection.config", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase))
+        {
+            result += " HostAgent could not read IIS configuration. Grant the HostAgent service identity access to IIS configuration, or keep HostAgent:UseAppOfflineForWebAppDeployment enabled so web-app deployment does not need appcmd.exe.";
+        }
+
+        return result;
     }
 
     private static bool IsExpectedDeploymentFailure(Exception exception)
