@@ -69,7 +69,10 @@ public sealed class ServiceAppDeploymentService
             var executableRelativePath = ResolveExecutableRelativePath(deployment);
             serviceName = ResolveServiceName(deployment, executableRelativePath);
             targetPath = ResolveTargetPath(settings, deployment, serviceName);
-            var targetExecutablePath = Path.GetFullPath(Path.Combine(targetPath, executableRelativePath));
+            var targetExecutablePath = DeploymentPath.CombineUnderRoot(
+                targetPath,
+                executableRelativePath,
+                $"Service app instance '{deployment.AppInstanceKey}' executable path");
 
             if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath))
             {
@@ -128,7 +131,7 @@ public sealed class ServiceAppDeploymentService
 
             if (serviceStopped && settings.StartServiceAfterServiceAppDeployment && !string.IsNullOrWhiteSpace(serviceName))
             {
-                TryStartService(serviceName, settings.ServiceAppStartTimeoutSeconds);
+                TryStartService(serviceName, settings.ServiceAppStartTimeoutSeconds, _logger);
             }
 
             await _repository.PublishAppDeploymentResultAsync(
@@ -201,11 +204,17 @@ public sealed class ServiceAppDeploymentService
                 return Path.GetFullPath(installPath);
             }
 
-            return Path.GetFullPath(Path.Combine(settings.ServicesRoot.Trim(), installPath));
+            return DeploymentPath.CombineUnderRoot(
+                settings.ServicesRoot.Trim(),
+                installPath,
+                $"Service app instance '{deployment.AppInstanceKey}' InstallPath");
         }
 
         var folderName = SanitizeFolderName(serviceName);
-        return Path.GetFullPath(Path.Combine(settings.ServicesRoot.Trim(), folderName));
+        return DeploymentPath.CombineUnderRoot(
+            settings.ServicesRoot.Trim(),
+            folderName,
+            $"Service app instance '{deployment.AppInstanceKey}' folder name");
     }
 
     private static bool IsAlreadyApplied(
@@ -303,28 +312,20 @@ public sealed class ServiceAppDeploymentService
         WaitForServiceState(serviceName, "RUNNING", timeoutSeconds);
     }
 
-    private static void TryStartService(string serviceName, int timeoutSeconds)
+    private static void TryStartService(string serviceName, int timeoutSeconds, ILogger logger)
     {
         // The original deployment failure is the actionable error. Restart
-        // recovery is best-effort and is logged by Windows if it fails.
+        // recovery is best-effort and should not mask that primary failure.
         try
         {
             StartServiceIfStopped(serviceName, timeoutSeconds);
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (IsExpectedRecoveryStartFailure(ex))
         {
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-        catch (TimeoutException)
-        {
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
+            logger.LogDebug(
+                ex,
+                "Failed to restart Windows service after deployment failure. ServiceName={ServiceName}",
+                serviceName);
         }
     }
 
@@ -416,7 +417,7 @@ public sealed class ServiceAppDeploymentService
     private static string GetScPath()
     {
         var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var scPath = Path.Combine(windowsDirectory, "System32", "sc.exe");
+        var scPath = Path.Join(windowsDirectory, "System32", "sc.exe");
         if (!File.Exists(scPath))
         {
             throw new FileNotFoundException($"Windows sc.exe was not found: '{scPath}'.", scPath);
@@ -457,6 +458,13 @@ public sealed class ServiceAppDeploymentService
         => '"' + value.Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
 
     private static bool IsExpectedDeploymentFailure(Exception exception)
+        => exception is InvalidOperationException
+            or IOException
+            or UnauthorizedAccessException
+            or TimeoutException
+            or System.ComponentModel.Win32Exception;
+
+    private static bool IsExpectedRecoveryStartFailure(Exception exception)
         => exception is InvalidOperationException
             or IOException
             or UnauthorizedAccessException

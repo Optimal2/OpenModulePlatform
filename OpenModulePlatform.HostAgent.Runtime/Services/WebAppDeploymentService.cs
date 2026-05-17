@@ -123,7 +123,7 @@ public sealed class WebAppDeploymentService
 
             if (appPoolStopped && settings.StartIisAppPoolAfterWebAppDeployment && !string.IsNullOrWhiteSpace(appPoolName))
             {
-                TryStartAppPool(appPoolName);
+                TryStartAppPool(appPoolName, _logger);
             }
 
             await _repository.PublishAppDeploymentResultAsync(
@@ -191,14 +191,10 @@ public sealed class WebAppDeploymentService
         }
 
         var webAppsRoot = Path.GetFullPath(settings.WebAppsRoot.Trim());
-        var targetPath = Path.GetFullPath(Path.Combine(webAppsRoot, normalized));
-        if (!IsUnderRoot(webAppsRoot, targetPath))
-        {
-            throw new InvalidOperationException(
-                $"App instance '{deployment.AppInstanceKey}' resolved outside HostAgent:WebAppsRoot.");
-        }
-
-        return targetPath;
+        return DeploymentPath.CombineUnderRoot(
+            webAppsRoot,
+            normalized,
+            $"App instance '{deployment.AppInstanceKey}' RoutePath");
     }
 
     private static string ResolveRelativeIisAppPath(WebAppDeploymentDescriptor deployment)
@@ -231,7 +227,7 @@ public sealed class WebAppDeploymentService
     private static string GetAppCmdPath()
     {
         var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var appCmdPath = Path.Combine(windowsDirectory, "System32", "inetsrv", "appcmd.exe");
+        var appCmdPath = Path.Join(windowsDirectory, "System32", "inetsrv", "appcmd.exe");
         if (!File.Exists(appCmdPath))
         {
             throw new FileNotFoundException($"IIS appcmd.exe was not found: '{appCmdPath}'.", appCmdPath);
@@ -324,28 +320,20 @@ public sealed class WebAppDeploymentService
         RunAppCmd("start", "apppool", $"/apppool.name:{appPoolName}");
     }
 
-    private static void TryStartAppPool(string appPoolName)
+    private static void TryStartAppPool(string appPoolName, ILogger logger)
     {
         // The original deployment failure is the actionable error. Restart
-        // recovery is best-effort and is logged by IIS/EventLog if it fails.
+        // recovery is best-effort and should not mask that primary failure.
         try
         {
             StartAppPoolIfStopped(appPoolName);
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (IsExpectedRecoveryStartFailure(ex))
         {
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-        catch (TimeoutException)
-        {
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
+            logger.LogDebug(
+                ex,
+                "Failed to restart IIS app pool after deployment failure. AppPoolName={AppPoolName}",
+                appPoolName);
         }
     }
 
@@ -387,11 +375,10 @@ public sealed class WebAppDeploymentService
             or UnauthorizedAccessException
             or TimeoutException;
 
-    private static bool IsUnderRoot(string root, string path)
-    {
-        var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        var fullPath = Path.GetFullPath(path);
-        return fullPath.Equals(fullRoot, StringComparison.OrdinalIgnoreCase)
-            || fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsExpectedRecoveryStartFailure(Exception exception)
+        => exception is InvalidOperationException
+            or IOException
+            or UnauthorizedAccessException
+            or TimeoutException
+            or System.ComponentModel.Win32Exception;
 }

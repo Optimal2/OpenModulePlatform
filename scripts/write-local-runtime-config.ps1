@@ -1,6 +1,8 @@
 # File: scripts/write-local-runtime-config.ps1
 [CmdletBinding()]
 param(
+    # E:\OMP is the documented local development runtime root for this repository.
+    # Pass -RuntimeRoot explicitly when a workstation uses a different local layout.
     [string]$RuntimeRoot = 'E:\OMP',
     [string]$SqlServer = 'localhost',
     [string]$Database = 'OpenModulePlatform',
@@ -10,6 +12,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$script:JsonSerializationDepth = 12
 
 function Write-JsonFile {
     param(
@@ -31,14 +34,23 @@ function Write-JsonFile {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
 
-    $json = $Object | ConvertTo-Json -Depth 20
+    $json = $Object | ConvertTo-Json -Depth $script:JsonSerializationDepth
     Set-Content -LiteralPath $Path -Value $json -Encoding UTF8
     Write-Host "Wrote config: $Path"
 }
 
 # TrustServerCertificate=true is only for local development with dev SQL Server certificates.
 # Do not reuse the generated appsettings files for shared test or production environments.
-$connectionString = "Server=$SqlServer;Database=$Database;Integrated Security=true;TrustServerCertificate=true;"
+function Get-OmpConnectionString {
+    $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
+    $builder['Data Source'] = $SqlServer
+    $builder['Initial Catalog'] = $Database
+    $builder['Integrated Security'] = $true
+    $builder['TrustServerCertificate'] = $true
+    return $builder.ConnectionString
+}
+
+$connectionString = Get-OmpConnectionString
 $dataProtectionKeyPath = Join-Path $RuntimeRoot 'DataProtectionKeys'
 
 $ompAuthConfig = [ordered]@{

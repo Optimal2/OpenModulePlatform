@@ -33,7 +33,10 @@ internal static class ArtifactDirectoryMirror
                 continue;
             }
 
-            Directory.CreateDirectory(Path.Combine(targetDirectory, relative));
+            Directory.CreateDirectory(DeploymentPath.CombineUnderRoot(
+                targetDirectory,
+                relative,
+                "Artifact target directory"));
         }
 
         foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
@@ -45,7 +48,10 @@ internal static class ArtifactDirectoryMirror
                 continue;
             }
 
-            var target = Path.Combine(targetDirectory, relative);
+            var target = DeploymentPath.CombineUnderRoot(
+                targetDirectory,
+                relative,
+                "Artifact target file path");
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, overwrite: true);
         }
@@ -66,7 +72,10 @@ internal static class ArtifactDirectoryMirror
                 continue;
             }
 
-            var source = Path.Combine(sourceDirectory, relative);
+            var source = DeploymentPath.CombineUnderRoot(
+                sourceDirectory,
+                relative,
+                "Artifact source file path");
             if (!File.Exists(source))
             {
                 File.Delete(file);
@@ -86,7 +95,10 @@ internal static class ArtifactDirectoryMirror
                 continue;
             }
 
-            var source = Path.Combine(sourceDirectory, relative);
+            var source = DeploymentPath.CombineUnderRoot(
+                sourceDirectory,
+                relative,
+                "Artifact source directory");
             if (!Directory.Exists(source) && !Directory.EnumerateFileSystemEntries(directory).Any())
             {
                 Directory.Delete(directory);
