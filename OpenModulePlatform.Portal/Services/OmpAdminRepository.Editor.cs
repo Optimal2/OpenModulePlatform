@@ -221,6 +221,62 @@ VALUES
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task DeleteManualWorkerRuntimeAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        var hasAppInstanceRuntimeStates = await TableExistsAsync(conn, "omp.AppInstanceRuntimeStates", ct);
+        var hasHostAppDeploymentStates = await TableExistsAsync(conn, "omp.HostAppDeploymentStates", ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        var templateAppInstanceId = await GetTemplateAppInstanceIdAsync(conn, tx, appInstanceId, ct);
+        if (templateAppInstanceId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "This worker runtime row is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.");
+        }
+
+        var observedState = await GetWorkerRuntimeObservedStateAsync(conn, tx, appInstanceId, ct);
+        if (!observedState.HasValue)
+        {
+            throw new InvalidOperationException("The worker runtime row was not found.");
+        }
+
+        if (observedState.Value is 1 or 2 or 3)
+        {
+            throw new InvalidOperationException("Stop the worker runtime before deleting the runtime row.");
+        }
+
+        if (hasAppInstanceRuntimeStates)
+        {
+            await ExecuteNonQueryAsync(
+                conn,
+                tx,
+                "DELETE FROM omp.AppInstanceRuntimeStates WHERE AppInstanceId = @Id;",
+                appInstanceId,
+                ct);
+        }
+
+        if (hasHostAppDeploymentStates)
+        {
+            await ExecuteNonQueryAsync(
+                conn,
+                tx,
+                "DELETE FROM omp.HostAppDeploymentStates WHERE AppInstanceId = @Id;",
+                appInstanceId,
+                ct);
+        }
+
+        await ExecuteNonQueryAsync(
+            conn,
+            tx,
+            "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
+            appInstanceId,
+            ct);
+
+        await tx.CommitAsync(ct);
+    }
+
     public async Task<IReadOnlyList<ArtifactSelectionOption>> GetArtifactOptionsAsync(CancellationToken ct)
     {
         const string sql = @"
@@ -1770,6 +1826,27 @@ ORDER BY tai.InstanceTemplateAppInstanceId;";
         return value is null or DBNull ? null : Convert.ToInt32(value);
     }
 
+    private static async Task<byte?> GetWorkerRuntimeObservedStateAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid appInstanceId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       CAST(ISNULL(rs.ObservedState, CAST(0 AS tinyint)) AS tinyint)
+FROM omp.AppInstances ai
+INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
+LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId
+WHERE ai.AppInstanceId = @AppInstanceId;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is null or DBNull ? null : Convert.ToByte(value);
+    }
+
     // -------------------------------------------------------------------------
     // Parameter binders and low-level helpers
     // -------------------------------------------------------------------------
@@ -1997,6 +2074,18 @@ ORDER BY tai.InstanceTemplateAppInstanceId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@Id", id);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ExecuteNonQueryAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string sql,
+        object id,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@Id", id);
         await cmd.ExecuteNonQueryAsync(ct);
     }

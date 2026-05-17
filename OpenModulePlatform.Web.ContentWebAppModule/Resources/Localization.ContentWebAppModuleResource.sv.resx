@@ -28,6 +28,7 @@
   <data name="Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor." xml:space="preserve"><value>Välj innehållstyp först. Markdown, HTML och serverrapporter har varsin editor.</value></data>
   <data name="Write Markdown content. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Skriv Markdown-innehåll. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] stöds.</value></data>
   <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Skriv betrodd HTML direkt. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] stöds.</value></data>
+  <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported." xml:space="preserve"><value>Skriv betrodd HTML direkt. Serverrapport-shortcodes som [DB_JSON=&quot;module-status&quot;] och [DB_JSON_SCRIPT=&quot;module-status&quot;] stöds.</value></data>
   <data name="Changing content type changes the editor but does not convert existing content." xml:space="preserve"><value>Byte av innehållstyp byter editor men konverterar inte befintligt innehåll.</value></data>
   <data name="Back to pages" xml:space="preserve"><value>Tillbaka till sidor</value></data>
   <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Lämna tomt för rotsidan. Sökvägar normaliseras när sidan sparas.</value></data>

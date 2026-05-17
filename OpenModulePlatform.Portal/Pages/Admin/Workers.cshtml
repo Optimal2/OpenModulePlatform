@@ -12,6 +12,11 @@
     </div>
 </section>
 
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
 <section class="card bottom-gap" id="worker-definitions-panel">
     <div class="page-header">
         <div>
@@ -146,7 +151,26 @@
                         <div class="small-text">@row.StatusMessage</div>
                         <div class="muted small-text"><code>@row.PluginRelativePath</code></div>
                     </td>
-                    <td><a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit"]</a></td>
+                    <td>
+                        <div class="stacked-actions">
+                            @if (row.InstanceTemplateAppInstanceId.HasValue)
+                            {
+                                <a class="action-link" href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId.Value">@L["Edit desired state"]</a>
+                                <a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["View runtime row"]</a>
+                            }
+                            else
+                            {
+                                <a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit manual runtime row"]</a>
+                                <form
+                                    method="post"
+                                    asp-page-handler="DeleteRuntime"
+                                    asp-route-appInstanceId="@row.AppInstanceId"
+                                    onsubmit="return confirm('@L["Delete this worker runtime row?"]');">
+                                    <button type="submit" class="btn btn-link-danger">@L["Delete runtime row"]</button>
+                                </form>
+                            }
+                        </div>
+                    </td>
                 </tr>
             }
             </tbody>

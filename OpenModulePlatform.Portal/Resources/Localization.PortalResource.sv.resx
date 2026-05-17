@@ -1622,6 +1622,15 @@
   <data name="Local path" xml:space="preserve"><value>Lokal sökväg</value></data>
   <data name="Error" xml:space="preserve"><value>Fel</value></data>
   <data name="Message" xml:space="preserve"><value>Meddelande</value></data>
+  <data name="View runtime row" xml:space="preserve"><value>Visa runtime-rad</value></data>
+  <data name="Edit manual runtime row" xml:space="preserve"><value>Redigera manuell runtime-rad</value></data>
+  <data name="Delete this worker runtime row?" xml:space="preserve"><value>Ta bort den här worker runtime-raden?</value></data>
+  <data name="Delete runtime row" xml:space="preserve"><value>Ta bort runtime-rad</value></data>
+  <data name="Worker runtime row deleted." xml:space="preserve"><value>Worker runtime-raden har tagits bort.</value></data>
+  <data name="This worker runtime row is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change." xml:space="preserve"><value>Den här worker runtime-raden styrs av en instansmall. Ta bort eller inaktivera den önskade mallappen i stället och låt HostAgent materialisera ändringen.</value></data>
+  <data name="Stop the worker runtime before deleting the runtime row." xml:space="preserve"><value>Stoppa worker runtime innan runtime-raden tas bort.</value></data>
+  <data name="The worker runtime row was not found." xml:space="preserve"><value>Worker runtime-raden hittades inte.</value></data>
+  <data name="The worker runtime row could not be deleted. Delete or update dependent rows first." xml:space="preserve"><value>Worker runtime-raden kunde inte tas bort. Ta bort eller ändra beroende rader först.</value></data>
   <data name="Pending" xml:space="preserve"><value>Väntar</value></data>
   <data name="Running" xml:space="preserve"><value>Kör</value></data>
   <data name="Succeeded" xml:space="preserve"><value>Lyckades</value></data>

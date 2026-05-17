@@ -208,6 +208,8 @@ ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;";
     {
         const string sql = @"
 SELECT ai.AppInstanceId,
+       tai.InstanceTemplateAppInstanceId,
+       i.InstanceTemplateId,
        i.InstanceKey,
        mi.ModuleInstanceKey,
        a.AppKey,
@@ -233,6 +235,13 @@ INNER JOIN omp.Apps a ON a.AppId = ai.AppId
 INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
 LEFT JOIN omp.Hosts h ON h.HostId = ai.HostId
 LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId
+LEFT JOIN omp.InstanceTemplateModuleInstances tmi
+    ON tmi.InstanceTemplateId = i.InstanceTemplateId
+   AND tmi.ModuleId = mi.ModuleId
+   AND tmi.ModuleInstanceKey = mi.ModuleInstanceKey
+LEFT JOIN omp.InstanceTemplateAppInstances tai
+    ON tai.InstanceTemplateModuleInstanceId = tmi.InstanceTemplateModuleInstanceId
+   AND tai.AppInstanceKey = ai.AppInstanceKey
 ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
 
         var rows = new List<AppWorkerRuntimeRow>();
@@ -264,24 +273,26 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
             rows.Add(new AppWorkerRuntimeRow
             {
                 AppInstanceId = rdr.GetGuid(0),
-                InstanceKey = rdr.GetString(1),
-                ModuleInstanceKey = rdr.GetString(2),
-                AppKey = rdr.GetString(3),
-                AppInstanceKey = rdr.GetString(4),
-                DisplayName = rdr.GetString(5),
-                HostKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                IsAllowed = rdr.GetBoolean(7),
-                DesiredState = rdr.GetByte(8),
-                RuntimeKind = rdr.IsDBNull(9) ? string.Empty : rdr.GetString(9),
-                WorkerTypeKey = rdr.IsDBNull(10) ? string.Empty : rdr.GetString(10),
-                PluginRelativePath = rdr.IsDBNull(11) ? string.Empty : rdr.GetString(11),
-                ObservedState = rdr.GetByte(12),
-                ProcessId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
-                StartedUtc = rdr.IsDBNull(14) ? null : rdr.GetDateTime(14),
-                LastSeenUtc = rdr.IsDBNull(15) ? null : rdr.GetDateTime(15),
-                LastExitUtc = rdr.IsDBNull(16) ? null : rdr.GetDateTime(16),
-                LastExitCode = rdr.IsDBNull(17) ? null : rdr.GetInt32(17),
-                StatusMessage = rdr.IsDBNull(18) ? null : rdr.GetString(18)
+                InstanceTemplateAppInstanceId = rdr.IsDBNull(1) ? null : rdr.GetInt32(1),
+                InstanceTemplateId = rdr.IsDBNull(2) ? null : rdr.GetInt32(2),
+                InstanceKey = rdr.GetString(3),
+                ModuleInstanceKey = rdr.GetString(4),
+                AppKey = rdr.GetString(5),
+                AppInstanceKey = rdr.GetString(6),
+                DisplayName = rdr.GetString(7),
+                HostKey = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                IsAllowed = rdr.GetBoolean(9),
+                DesiredState = rdr.GetByte(10),
+                RuntimeKind = rdr.IsDBNull(11) ? string.Empty : rdr.GetString(11),
+                WorkerTypeKey = rdr.IsDBNull(12) ? string.Empty : rdr.GetString(12),
+                PluginRelativePath = rdr.IsDBNull(13) ? string.Empty : rdr.GetString(13),
+                ObservedState = rdr.GetByte(14),
+                ProcessId = rdr.IsDBNull(15) ? null : rdr.GetInt32(15),
+                StartedUtc = rdr.IsDBNull(16) ? null : rdr.GetDateTime(16),
+                LastSeenUtc = rdr.IsDBNull(17) ? null : rdr.GetDateTime(17),
+                LastExitUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
+                LastExitCode = rdr.IsDBNull(19) ? null : rdr.GetInt32(19),
+                StatusMessage = rdr.IsDBNull(20) ? null : rdr.GetString(20)
             });
         }
 
