@@ -71,8 +71,9 @@ able to register a new `service-app` artifact without registering a new
 `ArtifactId`, while the service app instance or template app instance is moved
 to the new service artifact.
 
-The recommended manifest shape for multi-app repositories is a component list
-keyed by stable OMP identity fields:
+Repositories should keep a root `omp-components.json` manifest. The recommended
+shape for multi-app repositories is a component list keyed by stable OMP
+identity fields:
 
 ```text
 repository key
@@ -90,6 +91,12 @@ components:
 The combination of `module key`, `app key`, `package type`, and `target name`
 identifies which deployable component the version belongs to. `component
 version` identifies the specific build output for that component.
+
+Repositories may also list bootstrap infrastructure components that are
+deployable but not yet modeled as normal OMP app artifacts. Those components
+should use `registrationMode = bootstrap` in the manifest so they remain visible
+to release tooling without pretending that HostAgent can already update them as
+ordinary app instances.
 
 When a new version is produced:
 
@@ -169,9 +176,9 @@ multi-host execution according to the app's own runtime contract.
 
 1. Keep this document as the shared contract for OMP and consumer module
    repositories.
-2. Add a small component-manifest convention for module repositories so
-   installers can read component versions, app keys, package types, package
-   paths, hashes, and stable seed identities from one source.
+2. Teach package and installer scripts to consume `omp-components.json` so they
+   can read component versions, app keys, package types, package paths, hashes,
+   and stable seed identities from one source.
 3. Add schema constraints or validation to prevent duplicate active artifacts
    for the same app/version/package/target combination when that can be done
    without breaking existing installations.
