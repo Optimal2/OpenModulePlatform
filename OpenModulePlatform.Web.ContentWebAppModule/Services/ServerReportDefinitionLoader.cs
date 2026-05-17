@@ -9,6 +9,8 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
 
 public sealed partial class ServerReportDefinitionLoader
 {
+    private const string PackagedReportsPath = "ContentReports";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -32,16 +34,12 @@ public sealed partial class ServerReportDefinitionLoader
 
     public IReadOnlyList<string> ListReportKeys()
     {
-        var directory = GetReportsDirectory();
-        if (!Directory.Exists(directory))
-        {
-            return [];
-        }
-
-        return Directory
-            .EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly)
+        return GetReportsDirectories()
+            .Where(Directory.Exists)
+            .SelectMany(static directory => Directory.EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly))
             .Select(Path.GetFileNameWithoutExtension)
             .Where(IsValidReportKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray()!;
     }
@@ -56,7 +54,7 @@ public sealed partial class ServerReportDefinitionLoader
             return false;
         }
 
-        return File.Exists(ResolveReportPath(reportKey!));
+        return TryResolveExistingReportPath(reportKey!) is not null;
     }
 
     public async Task<ServerReportDefinition> LoadAsync(string? reportKey, CancellationToken ct)
@@ -66,8 +64,8 @@ public sealed partial class ServerReportDefinitionLoader
             throw new ServerReportException("The server report key is invalid.");
         }
 
-        var reportPath = ResolveReportPath(reportKey!);
-        if (!File.Exists(reportPath))
+        var reportPath = TryResolveExistingReportPath(reportKey!);
+        if (reportPath is null)
         {
             throw new ServerReportException("The server report definition was not found.");
         }
@@ -88,23 +86,34 @@ public sealed partial class ServerReportDefinitionLoader
         }
     }
 
-    private string ResolveReportPath(string reportKey)
+    private string? TryResolveExistingReportPath(string reportKey)
     {
-        var directory = GetReportsDirectory();
-        var fileName = $"{reportKey}.json";
-        var fullPath = Path.GetFullPath(Path.Join(directory, fileName));
-        var directoryPrefix = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
-
-        if (!fullPath.StartsWith(directoryPrefix, StringComparison.OrdinalIgnoreCase))
+        foreach (var directory in GetReportsDirectories())
         {
-            throw new ServerReportException("The server report key is invalid.");
+            var fullPath = ResolveReportPath(directory, reportKey);
+            if (File.Exists(fullPath))
+            {
+                return fullPath;
+            }
         }
 
-        return fullPath;
+        return null;
     }
 
-    private string GetReportsDirectory()
+    private IReadOnlyList<string> GetReportsDirectories()
+    {
+        var configuredDirectory = GetConfiguredReportsDirectory();
+        var packagedDirectory = Path.GetFullPath(Path.Join(_environment.ContentRootPath, PackagedReportsPath));
+
+        // Runtime App_Data reports intentionally stay first. They are local data
+        // and can override a packaged report with the same key without editing
+        // the immutable app artifact.
+        return new[] { configuredDirectory, packagedDirectory }
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private string GetConfiguredReportsDirectory()
     {
         var configuredPath = _options.Value.ServerReportsPath;
         if (string.IsNullOrWhiteSpace(configuredPath))
@@ -118,6 +127,22 @@ public sealed partial class ServerReportDefinitionLoader
         }
 
         return Path.GetFullPath(Path.Join(_environment.ContentRootPath, configuredPath));
+    }
+
+    private static string ResolveReportPath(string directory, string reportKey)
+    {
+        var fileName = $"{reportKey}.json";
+        var fullDirectory = Path.GetFullPath(directory);
+        var fullPath = Path.GetFullPath(Path.Join(fullDirectory, fileName));
+        var directoryPrefix = fullDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        if (!fullPath.StartsWith(directoryPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ServerReportException("The server report key is invalid.");
+        }
+
+        return fullPath;
     }
 
     private static void ValidateDefinition(ServerReportDefinition definition)

@@ -78,6 +78,19 @@ The default value is:
 App_Data/ContentReports
 ```
 
+The module can also load packaged report definitions from this deployable
+application folder:
+
+```text
+ContentReports
+```
+
+This folder is useful for immutable app artifacts managed by Host Agent, because
+Host Agent normally preserves `App_Data` as runtime data during web-app
+deployments. If the same report key exists in both locations, the configured
+runtime directory wins so operators can override a packaged report without
+modifying the artifact.
+
 Report keys map directly to JSON filenames:
 
 ```text
@@ -97,10 +110,18 @@ For a local persistent development change, add the JSON file under:
 OpenModulePlatform.Web.ContentWebAppModule/App_Data/ContentReports
 ```
 
-Then publish/install the suite so the file is copied to:
+For an app-artifact packaged report, include the JSON file under:
+
+```text
+ContentReports
+```
+
+Then publish/install the suite or deploy the app artifact so the file is copied
+to the matching runtime folder:
 
 ```text
 C:\OMP\WebApps\content\App_Data\ContentReports
+C:\OMP\WebApps\content\ContentReports
 ```
 
 For a quick runtime-only test, place the JSON file directly under:
