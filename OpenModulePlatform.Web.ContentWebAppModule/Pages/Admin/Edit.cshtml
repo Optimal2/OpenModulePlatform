@@ -93,7 +93,7 @@
         <div id="content-editor" class="content-editor" hidden></div>
         <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
         <span class="field-hint" data-editor-hint="markdown">@L["Write Markdown content. Server report shortcodes such as DB_JSON are supported."]</span>
-        <span class="field-hint" data-editor-hint="html" hidden>@L["Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported."]</span>
+        <span class="field-hint" data-editor-hint="html" hidden>@L["Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported."]</span>
         <span class="field-hint">@L["Changing content type changes the editor but does not convert existing content."]</span>
         <span asp-validation-for="Input.Body" class="field-validation-error"></span>
     </div>

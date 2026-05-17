@@ -320,6 +320,10 @@ public sealed class AppWorkerRuntimeRow
 {
     public Guid AppInstanceId { get; set; }
 
+    public int? InstanceTemplateAppInstanceId { get; set; }
+
+    public int? InstanceTemplateId { get; set; }
+
     public string InstanceKey { get; set; } = string.Empty;
 
     public string ModuleInstanceKey { get; set; } = string.Empty;

@@ -20,6 +20,8 @@ Server report JSON may contain one or more read-like SQL queries. A report can o
 
 Markdown and HTML content can embed a server report with the shortcode `[DB_JSON="module-status"]`. The key uses the same whitelist and file mapping as server report content pages.
 
+HTML content can also embed a report as JavaScript data with `[DB_JSON_SCRIPT="module-status"]`. The renderer writes `window.module_status` as a flat array of row objects and `window.module_statusReport` as the full report metadata object. Hyphens and other non-identifier characters in the JSON file key are converted to underscores for the default JavaScript variable name. Use `variable="customName"` when the page needs an explicit global name.
+
 The web application must be configured with `ContentWebAppModule:AppInstanceId`. The default setup script seeds a standard app instance at route path `content`.
 
 Permissions:

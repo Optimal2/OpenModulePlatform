@@ -144,6 +144,13 @@ HostAgent can stop an existing service, mirror the provisioned artifact into
 the runtime folder, create or update the Windows service with `sc.exe`, start
 the service, and record the result in `omp.HostAppDeploymentStates`.
 
+Service app deployment requires the HostAgent service identity to have Windows
+service-control rights for the target service. The agent must be able to query,
+stop, configure, and start the service before it can safely replace binaries in
+the runtime folder. If `sc.exe query` fails with access denied, HostAgent treats
+that as a deployment failure instead of assuming the service is missing; copying
+over files while the service may still be running can leave assemblies locked.
+
 Runtime-local files are preserved through
 `HostAgent:ServiceAppDeploymentExcludedEntries`. The default exclusions are the
 same as for web apps: `appsettings.json`, `appsettings.*.json`, `logs`, and

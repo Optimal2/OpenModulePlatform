@@ -7,6 +7,9 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class ServiceAppDeploymentService
 {
+    private const int ScAccessDeniedExitCode = 5;
+    private const int ScServiceNotFoundExitCode = 1060;
+
     private static readonly char[] InvalidServiceNameCharacters = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
@@ -351,7 +354,17 @@ public sealed class ServiceAppDeploymentService
         var result = RunSc("query", serviceName);
         if (result.ExitCode != 0)
         {
-            return null;
+            if (IsServiceNotFound(result))
+            {
+                return null;
+            }
+
+            throw new InvalidOperationException(CreateScFailureMessage(
+                result.ExitCode,
+                result.Output,
+                result.Error,
+                "query",
+                serviceName));
         }
 
         foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
@@ -409,9 +422,55 @@ public sealed class ServiceAppDeploymentService
         var result = RunSc(arguments);
         if (result.ExitCode != 0)
         {
-            var message = string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error;
-            throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {message.Trim()}");
+            var operation = arguments.Length > 0 ? arguments[0] : "unknown";
+            var serviceName = arguments.Length > 1 ? arguments[1] : null;
+            throw new InvalidOperationException(CreateScFailureMessage(
+                result.ExitCode,
+                result.Output,
+                result.Error,
+                operation,
+                serviceName));
         }
+    }
+
+    private static bool IsServiceNotFound(ScResult result)
+    {
+        var text = result.CombinedOutput;
+        return result.ExitCode == ScServiceNotFoundExitCode
+            || text.Contains("FAILED 1060", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string CreateScFailureMessage(
+        int exitCode,
+        string output,
+        string error,
+        string operation,
+        string? serviceName)
+    {
+        var message = string.IsNullOrWhiteSpace(error) ? output : error;
+        var trimmed = message.Trim();
+        var result = $"sc.exe failed with exit code {exitCode}";
+        if (!string.IsNullOrWhiteSpace(operation))
+        {
+            result += $" while trying to {operation} Windows service";
+        }
+
+        if (!string.IsNullOrWhiteSpace(serviceName))
+        {
+            result += $" '{serviceName}'";
+        }
+
+        result += $": {trimmed}";
+
+        if (exitCode == ScAccessDeniedExitCode
+            || trimmed.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Contains("OpenSCManager", StringComparison.OrdinalIgnoreCase))
+        {
+            result += " HostAgent cannot safely deploy service apps without Windows service-control rights. Run the HostAgent service as an account with permission to query, stop, configure, and start the target service before retrying.";
+        }
+
+        return result;
     }
 
     private static string GetScPath()
@@ -471,5 +530,8 @@ public sealed class ServiceAppDeploymentService
             or TimeoutException
             or System.ComponentModel.Win32Exception;
 
-    private sealed record ScResult(int ExitCode, string Output, string Error);
+    private sealed record ScResult(int ExitCode, string Output, string Error)
+    {
+        public string CombinedOutput => string.Concat(Output, "\n", Error);
+    }
 }

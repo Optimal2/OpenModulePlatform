@@ -22,6 +22,9 @@ public sealed class WorkersModel : OmpPortalPageModel
 
     public IReadOnlyList<AppWorkerRuntimeRow> RuntimeRows { get; private set; } = [];
 
+    [TempData]
+    public string? StatusMessage { get; set; }
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -34,6 +37,31 @@ public sealed class WorkersModel : OmpPortalPageModel
         AppWorkerRows = await _repo.GetAppWorkerDefinitionsAsync(ct);
         RuntimeRows = await _repo.GetAppWorkerRuntimeAsync(ct);
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostDeleteRuntime(Guid appInstanceId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        try
+        {
+            await _repo.DeleteManualWorkerRuntimeAppInstanceAsync(appInstanceId, ct);
+            StatusMessage = T("Worker runtime row deleted.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = T(ex.Message);
+        }
+        catch (Microsoft.Data.SqlClient.SqlException)
+        {
+            StatusMessage = T("The worker runtime row could not be deleted. Delete or update dependent rows first.");
+        }
+
+        return RedirectToPage("/Admin/Workers");
     }
 
     public string GetObservedStateLabel(byte observedState)

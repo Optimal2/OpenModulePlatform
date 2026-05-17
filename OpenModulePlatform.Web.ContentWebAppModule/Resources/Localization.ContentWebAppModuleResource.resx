@@ -28,6 +28,7 @@
   <data name="Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor." xml:space="preserve"><value>Choose a content type first. Markdown, HTML, and server reports each use a dedicated editor.</value></data>
   <data name="Write Markdown content. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Write Markdown content. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] are supported.</value></data>
   <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON are supported." xml:space="preserve"><value>Write trusted HTML directly. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] are supported.</value></data>
+  <data name="Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported." xml:space="preserve"><value>Write trusted HTML directly. Server report shortcodes such as [DB_JSON=&quot;module-status&quot;] and [DB_JSON_SCRIPT=&quot;module-status&quot;] are supported.</value></data>
   <data name="Changing content type changes the editor but does not convert existing content." xml:space="preserve"><value>Changing content type changes the editor but does not convert existing content.</value></data>
   <data name="Back to pages" xml:space="preserve"><value>Back to pages</value></data>
   <data name="Leave empty for the root page. Slugs are normalized when saved." xml:space="preserve"><value>Leave empty for the root page. Slugs are normalized when saved.</value></data>
