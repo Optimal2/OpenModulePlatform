@@ -16,6 +16,7 @@ var builder = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
     {
         logging.ClearProviders();
+        logging.SetMinimumLevel(LogLevel.Information);
     })
     .UseNLog()
     .ConfigureServices((context, services) =>
