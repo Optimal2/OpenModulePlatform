@@ -163,11 +163,19 @@ BEGIN
         TemplateKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
         Description nvarchar(500) NULL,
+        SortOrder int NOT NULL CONSTRAINT DF_omp_InstanceTemplates_SortOrder DEFAULT(0),
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_InstanceTemplates_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplates_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_InstanceTemplates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT UQ_omp_InstanceTemplates_TemplateKey UNIQUE(TemplateKey)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.InstanceTemplates', N'SortOrder') IS NULL
+BEGIN
+    ALTER TABLE omp.InstanceTemplates
+        ADD SortOrder int NOT NULL CONSTRAINT DF_omp_InstanceTemplates_SortOrder DEFAULT(0) WITH VALUES;
 END
 GO
 
@@ -179,11 +187,19 @@ BEGIN
         TemplateKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
         Description nvarchar(500) NULL,
+        SortOrder int NOT NULL CONSTRAINT DF_omp_HostTemplates_SortOrder DEFAULT(0),
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_HostTemplates_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostTemplates_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostTemplates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT UQ_omp_HostTemplates_TemplateKey UNIQUE(TemplateKey)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.HostTemplates', N'SortOrder') IS NULL
+BEGIN
+    ALTER TABLE omp.HostTemplates
+        ADD SortOrder int NOT NULL CONSTRAINT DF_omp_HostTemplates_SortOrder DEFAULT(0) WITH VALUES;
 END
 GO
 
