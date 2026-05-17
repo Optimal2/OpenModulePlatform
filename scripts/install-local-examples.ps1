@@ -728,8 +728,10 @@ function Write-ExampleRuntimeConfig {
                     IisSiteName = 'OpenModulePlatform'
                     WebAppsRoot = $script:webAppsRoot
                     PortalPhysicalPath = $script:portalPath
-                    StopIisAppPoolForWebAppDeployment = $true
-                    StartIisAppPoolAfterWebAppDeployment = $true
+                    UseAppOfflineForWebAppDeployment = $true
+                    AppOfflineShutdownDelayMilliseconds = 1500
+                    StopIisAppPoolForWebAppDeployment = $false
+                    StartIisAppPoolAfterWebAppDeployment = $false
                     IisAppPoolStopTimeoutSeconds = 30
                     WebAppDeploymentExcludedEntries = @('appsettings.json', 'appsettings.*.json', 'logs', 'App_Data')
                     DeployServiceApps = $true

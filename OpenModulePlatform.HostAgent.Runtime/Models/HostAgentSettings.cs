@@ -28,6 +28,10 @@ public sealed class HostAgentSettings
 
     public string PortalPhysicalPath { get; set; } = string.Empty;
 
+    public bool UseAppOfflineForWebAppDeployment { get; set; } = true;
+
+    public int AppOfflineShutdownDelayMilliseconds { get; set; } = 1500;
+
     public bool StopIisAppPoolForWebAppDeployment { get; set; } = true;
 
     public bool StartIisAppPoolAfterWebAppDeployment { get; set; } = true;
@@ -129,6 +133,11 @@ public sealed class HostAgentSettings
             if (IisAppPoolStopTimeoutSeconds < 1)
             {
                 throw new InvalidOperationException("HostAgent:IisAppPoolStopTimeoutSeconds must be at least 1.");
+            }
+
+            if (AppOfflineShutdownDelayMilliseconds < 0)
+            {
+                throw new InvalidOperationException("HostAgent:AppOfflineShutdownDelayMilliseconds must be zero or greater.");
             }
         }
 

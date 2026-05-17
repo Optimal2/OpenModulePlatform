@@ -74,7 +74,8 @@ provisioned to the local artifact cache. This is enabled with:
     "DeployWebApps": true,
     "IisSiteName": "OpenModulePlatform",
     "WebAppsRoot": "D:\\OMP\\WebApps",
-    "PortalPhysicalPath": "D:\\OMP\\Sites\\Portal"
+    "PortalPhysicalPath": "D:\\OMP\\Sites\\Portal",
+    "UseAppOfflineForWebAppDeployment": true
   }
 }
 ```
@@ -93,10 +94,19 @@ host. First-party load-balanced IIS apps use this model so the portal menu
 contains one logical app entry even when two or more web servers serve the same
 public URL.
 
-Before copying files, HostAgent resolves the IIS application and its app pool
-with `appcmd.exe`. It can stop the app pool, mirror the provisioned artifact
-into the runtime folder, restart the app pool, and record the result in
-`omp.HostAppDeploymentStates`.
+Before copying files, HostAgent writes an `app_offline.htm` marker by default,
+waits briefly for ASP.NET Core to release loaded files, mirrors the provisioned
+artifact into the runtime folder, removes the marker, and records the result in
+`omp.HostAppDeploymentStates`. This default path does not require HostAgent to
+read IIS configuration with `appcmd.exe`; the HostAgent service identity only
+needs file-system access to the artifact cache and runtime web folders.
+
+The older app-pool control path is still available by setting
+`HostAgent:UseAppOfflineForWebAppDeployment` to `false` and enabling
+`StopIisAppPoolForWebAppDeployment` and/or
+`StartIisAppPoolAfterWebAppDeployment`. That mode requires the HostAgent service
+identity to have permission to read and control IIS configuration through
+`appcmd.exe`.
 
 Runtime-local files are preserved through
 `HostAgent:WebAppDeploymentExcludedEntries`. The default exclusions are
