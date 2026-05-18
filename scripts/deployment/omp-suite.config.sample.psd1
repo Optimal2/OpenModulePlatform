@@ -140,6 +140,16 @@
         ExampleService = 'OpenModulePlatform.Service.ExampleServiceAppModule'
     }
 
+    HostAgent = @{
+        # Disabled by default. Local lab installs can enable this so dropping a
+        # valid artifact zip in the import folder registers it and selects it as
+        # the desired version automatically.
+        ArtifactZipImportEnabled = $false
+        ArtifactZipImportPath = 'C:\OMP\ArtifactImports'
+        ArtifactZipImportProcessedPath = ''
+        ArtifactZipImportFailedPath = ''
+    }
+
     Package = @{
         OutputRoot = 'artifacts\suite-release'
         KeepStaging = $false

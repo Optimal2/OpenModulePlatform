@@ -179,6 +179,20 @@ file rows from the latest previous artifact with the same app, package type and
 target. This is intended for site-local runtime files such as ODV site config
 that should normally follow the app across immutable artifact versions.
 
+The upload form also has an enabled-by-default option to use the uploaded
+artifact immediately. When selected, Portal updates matching desired template
+app rows and already materialized app rows to the new artifact. HostAgent then
+provisions and deploys the version on its next cycle.
+
+HostAgent can optionally import the same artifact zip format from a local or
+shared folder without a Portal upload. Configure this under
+`HostAgent:ArtifactZipImport`; it is disabled by default. Imported zip files
+must use the same `moduleKey__appKey__packageType__targetName__version.zip`
+filename format. Successful imports are moved to `processed`, failed imports
+are moved to `failed` with an adjacent `.error.txt` file, previous artifact
+configuration file rows are copied when available, and matching apps are always
+set to use the imported artifact.
+
 Artifact-owned configuration files are managed from the artifact edit page.
 These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them
 only for deployment-owned text files that should live beside the deployed app
