@@ -35,7 +35,7 @@ internal static partial class Program
                 return 0;
             }
 
-            if (cli.Gui)
+            if (cli.Gui || (args.Length == 0 && OperatingSystem.IsWindows() && Environment.UserInteractive))
             {
                 return RunInstallerGui(cli);
             }

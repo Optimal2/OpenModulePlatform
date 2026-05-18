@@ -450,6 +450,7 @@ Set-Content -LiteralPath (Join-Path $sqlRoot 'bootstrap-local.sql') -Value $boot
 Write-Step 'Copying bootstrapper'
 Compress-FolderToZip -Source (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $payloadRoot 'OpenModulePlatform.Bootstrapper.zip')
 Copy-Item -LiteralPath (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper') -Recurse -Force
+Copy-Item -Path (Join-Path (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') '*') -Destination $packageRoot -Recurse -Force
 
 Write-Step 'Writing bootstrap manifest'
 $artifacts = [System.Collections.ArrayList]::new()
