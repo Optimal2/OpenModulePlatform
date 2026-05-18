@@ -151,6 +151,37 @@ For values written inside JSON strings, use the `Omp.Json.` variants, for
 example `{{Omp.Json.ConnectionStrings.OmpDb}}`. Those variants escape the value
 for JSON string content but do not include the surrounding quotes.
 
+## Runtime file mirrors
+
+HostAgent can mirror environment-owned files from a shared folder to local
+runtime folders on every host. This is useful for multi-server web apps where
+operators maintain content files centrally, but the application should read from
+local `App_Data` folders during normal requests.
+
+```json
+{
+  "HostAgent": {
+    "FileMirrors": [
+      {
+        "SourcePath": "\\\\server\\share\\EMP\\Data\\ContentReports",
+        "TargetPath": "D:\\\\Netserv\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentReports",
+        "DeleteStaleTargetEntries": true
+      },
+      {
+        "SourcePath": "\\\\server\\share\\EMP\\Data\\ContentPages",
+        "TargetPath": "D:\\\\Netserv\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentPages",
+        "DeleteStaleTargetEntries": true
+      }
+    ]
+  }
+}
+```
+
+Mirrors run after artifact provisioning and app deployment in each HostAgent
+cycle. The target path must not be a drive or share root. `ExcludedEntries` uses
+the same simple entry and filename-wildcard matching as app deployment
+exclusions.
+
 ## Windows service app deployment
 
 HostAgent can also deploy service-backed app instances after their artifacts

@@ -12,6 +12,7 @@ public sealed class HostAgentEngine
     private readonly ArtifactProvisioner _provisioner;
     private readonly WebAppDeploymentService _webAppDeploymentService;
     private readonly ServiceAppDeploymentService _serviceAppDeploymentService;
+    private readonly HostAgentFileMirrorService _fileMirrorService;
     private readonly ILogger<HostAgentEngine> _logger;
 
     public HostAgentEngine(
@@ -20,6 +21,7 @@ public sealed class HostAgentEngine
         ArtifactProvisioner provisioner,
         WebAppDeploymentService webAppDeploymentService,
         ServiceAppDeploymentService serviceAppDeploymentService,
+        HostAgentFileMirrorService fileMirrorService,
         ILogger<HostAgentEngine> logger)
     {
         _settings = settings;
@@ -27,6 +29,7 @@ public sealed class HostAgentEngine
         _provisioner = provisioner;
         _webAppDeploymentService = webAppDeploymentService;
         _serviceAppDeploymentService = serviceAppDeploymentService;
+        _fileMirrorService = fileMirrorService;
         _logger = logger;
     }
 
@@ -76,6 +79,7 @@ public sealed class HostAgentEngine
 
         await _webAppDeploymentService.DeployDesiredWebAppsAsync(hostKey, cancellationToken);
         await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(hostKey, cancellationToken);
+        await _fileMirrorService.MirrorConfiguredFilesAsync(cancellationToken);
     }
 
     public async Task<ArtifactProvisioningResult> EnsureArtifactByIdAsync(

@@ -26,6 +26,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<ArtifactProvisioner>();
         services.AddSingleton<WebAppDeploymentService>();
         services.AddSingleton<ServiceAppDeploymentService>();
+        services.AddSingleton<HostAgentFileMirrorService>();
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
         services.AddHostedService<HostAgentRpcHostedService>();
