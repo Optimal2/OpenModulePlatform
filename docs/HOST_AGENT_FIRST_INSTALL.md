@@ -123,6 +123,12 @@ applied:
 - inject the bootstrap portal admin principal
 - inject component artifact versions from the package manifest
 
+The neutral bootstrap registers the shared Auth app as the `/auth` web
+application. Auth is not shown as a portal module entry, but it is deliberately
+modeled as a normal web-app artifact so HostAgent can create the IIS child
+application and keep its runtime configuration in
+`omp.ArtifactConfigurationFiles` like other deployable apps.
+
 Customer-specific packages should keep customer-specific SQL values outside the
 public repository and inject them into the package configuration or generated
 SQL during protected package creation.
