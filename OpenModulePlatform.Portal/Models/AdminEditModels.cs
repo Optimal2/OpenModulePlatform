@@ -160,6 +160,18 @@ public sealed class ArtifactConfigurationFileEditData
 }
 
 /// <summary>
+/// Result from copying artifact-owned configuration files from an older artifact.
+/// </summary>
+public sealed class ArtifactConfigurationFileCopyResult
+{
+    public int SourceArtifactId { get; set; }
+
+    public string SourceVersion { get; set; } = string.Empty;
+
+    public int CopiedCount { get; set; }
+}
+
+/// <summary>
 /// App-definition option with stable keys used by artifact filename metadata parsing.
 /// </summary>
 public sealed class ArtifactAppOption

@@ -78,6 +78,14 @@
         </div>
     </div>
 
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.CopyConfigurationFilesFromPreviousVersion" type="checkbox" />
+        <div>
+            <label asp-for="Input.CopyConfigurationFilesFromPreviousVersion"></label>
+            <div class="field-help">@L["Copies artifact configuration file rows from the latest previous artifact with the same app, package type, and target."]</div>
+        </div>
+    </div>
+
     <div class="toolbar">
         <button type="submit">@L["Upload artifact"]</button>
         <a class="action-link" href="~/admin/artifacts">@L["Back to artifacts"]</a>

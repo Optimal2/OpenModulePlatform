@@ -136,29 +136,52 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             Directory.Move(stagingPath, finalPath);
             movedToFinal = true;
 
+            var artifactData = new ArtifactEditData
+            {
+                AppId = Input.AppId,
+                Version = Input.Version.Trim(),
+                PackageType = Input.PackageType.Trim(),
+                TargetName = Clean(Input.TargetName),
+                RelativePath = relativePath,
+                Sha256 = contentHash,
+                IsEnabled = true
+            };
+
+            var artifactId = 0;
             try
             {
-                var artifactId = await _repo.SaveArtifactAsync(
-                    new ArtifactEditData
-                    {
-                        AppId = Input.AppId,
-                        Version = Input.Version.Trim(),
-                        PackageType = Input.PackageType.Trim(),
-                        TargetName = Clean(Input.TargetName),
-                        RelativePath = relativePath,
-                        Sha256 = contentHash,
-                        IsEnabled = true
-                    },
-                    ct);
-
-                StatusMessage = T("Artifact uploaded and registered.");
-                return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
+                artifactId = await _repo.SaveArtifactAsync(artifactData, ct);
             }
             catch
             {
                 TryDelete(finalPath);
                 throw;
             }
+
+            ArtifactConfigurationFileCopyResult? copyResult = null;
+            if (Input.CopyConfigurationFilesFromPreviousVersion)
+            {
+                try
+                {
+                    copyResult = await _repo.CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+                        artifactId,
+                        artifactData.AppId,
+                        artifactData.PackageType,
+                        artifactData.TargetName,
+                        ct);
+                }
+                catch (SqlException)
+                {
+                    StatusMessage = T("Artifact uploaded and registered.")
+                        + " "
+                        + T("Configuration files could not be copied automatically. Add them from the artifact edit page.");
+
+                    return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
+                }
+            }
+
+            StatusMessage = BuildUploadStatusMessage(copyResult, Input.CopyConfigurationFilesFromPreviousVersion);
+            return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
         }
         catch (InvalidDataException ex)
         {
@@ -534,6 +557,27 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private string BuildUploadStatusMessage(
+        ArtifactConfigurationFileCopyResult? copyResult,
+        bool copyWasRequested)
+    {
+        var message = T("Artifact uploaded and registered.");
+        if (!copyWasRequested)
+        {
+            return message;
+        }
+
+        if (copyResult is null || copyResult.CopiedCount == 0)
+        {
+            return message + " " + T("No previous artifact configuration files were found to copy.");
+        }
+
+        return message + " " + string.Format(
+            T("Copied {0} configuration file(s) from artifact version {1}."),
+            copyResult.CopiedCount,
+            copyResult.SourceVersion);
+    }
+
     private long GetMaxUploadBytes()
         => _uploadOptions.MaxUploadBytes > 0
             ? _uploadOptions.MaxUploadBytes
@@ -597,5 +641,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         [StringLength(400)]
         [Display(Name = "Relative path")]
         public string? RelativePath { get; set; }
+
+        [Display(Name = "Copy configuration files from previous version")]
+        public bool CopyConfigurationFilesFromPreviousVersion { get; set; }
     }
 }
