@@ -13,6 +13,14 @@ Use these scripts for the neutral OMP core installation flow:
 2. `2-initialize-openmoduleplatform.sql`
    - Seeds the default OMP instance, host/template baseline, RBAC baseline, built-in baseline roles, and bootstrap administrator principal.
 
+3. `3-initialize-opendocviewer.sql`
+   - Registers OpenDocViewer as a host-neutral OMP web app artifact target so
+     HostAgent can deploy it like other web apps.
+
+`bootstrap-hostagent-first-local.sql` is a SQLCMD-style include file for local
+HostAgent-first bootstrap packages. It is intended for the bootstrapper or SQLCMD
+mode; normal SQL editors that do not expand `:r` includes cannot run it as-is.
+
 `2-initialize-openmoduleplatform.sql` requires a bootstrap administrator principal. Prefer the local installer because it writes a temporary SQL file with the principal escaped safely:
 
 ```powershell
