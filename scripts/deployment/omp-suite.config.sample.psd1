@@ -150,6 +150,18 @@
         ArtifactZipImportFailedPath = ''
     }
 
+    HostAgentFirst = @{
+        # Full uninstall removes the HostAgent service and any services found
+        # below ServicesRoot automatically. Keep explicit names here for older
+        # service names that may no longer point at the configured runtime root.
+        AdditionalServiceNamesToRemove = @(
+            'OpenModulePlatform.WorkerManager',
+            'OpenModulePlatform.Service.ExampleServiceAppModule'
+        )
+
+        AdditionalSqlFiles = @()
+    }
+
     Package = @{
         OutputRoot = 'artifacts\suite-release'
         KeepStaging = $false

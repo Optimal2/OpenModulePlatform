@@ -526,6 +526,21 @@ $iisProtocol = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Na
 $iisPort = [int](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'Port' -DefaultValue 80)
 $iisHostHeader = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'HostHeader' -DefaultValue '')
 $hostAgentServiceName = [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'HostAgent' -DefaultValue 'OpenModulePlatform.HostAgent')
+$additionalServiceNamesToRemove = [System.Collections.Generic.List[string]]::new()
+foreach ($name in @(
+        [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'WorkerManager' -DefaultValue 'OpenModulePlatform.WorkerManager'),
+        [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'ExampleService' -DefaultValue 'OpenModulePlatform.Service.ExampleServiceAppModule')
+    )) {
+    if (-not [string]::IsNullOrWhiteSpace($name) -and -not $additionalServiceNamesToRemove.Contains($name.Trim())) {
+        $additionalServiceNamesToRemove.Add($name.Trim())
+    }
+}
+foreach ($name in @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalServiceNamesToRemove' -DefaultValue @()))) {
+    $nameText = [string]$name
+    if (-not [string]::IsNullOrWhiteSpace($nameText) -and -not $additionalServiceNamesToRemove.Contains($nameText.Trim())) {
+        $additionalServiceNamesToRemove.Add($nameText.Trim())
+    }
+}
 $runAsUser = [string](Get-ConfigValue -Config $config -Name 'RunAsUser' -DefaultValue '')
 $runAsPassword = [string](Get-ConfigValue -Config $config -Name 'RunAsPassword' -DefaultValue '')
 $bootstrapPrincipal = @((Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipals' -DefaultValue @('DOMAIN\UserOrGroup')))[0]
@@ -563,6 +578,7 @@ $bootstrapConfig = [ordered]@{
     hostAgent = [ordered]@{
         enabled = $true
         serviceName = $hostAgentServiceName
+        additionalServiceNamesToRemove = @($additionalServiceNamesToRemove)
         displayName = 'OpenModulePlatform HostAgent'
         description = 'OpenModulePlatform artifact provisioning agent.'
         serviceAccountName = $runAsUser
@@ -780,6 +796,7 @@ if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
 $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $hostAgent = $config.hostAgent
 $serviceName = [string](Get-PropertyValue -Object $hostAgent -Name 'serviceName')
+$additionalServiceNamesToRemove = @((Get-PropertyValue -Object $hostAgent -Name 'additionalServiceNamesToRemove' -DefaultValue @()))
 $servicesRoot = [string](Get-PropertyValue -Object $hostAgent -Name 'servicesRoot')
 $iisSiteName = [string](Get-PropertyValue -Object $hostAgent -Name 'iisSiteName')
 $appPoolPrefix = [string](Get-PropertyValue -Object $hostAgent -Name 'iisAppPoolNamePrefix' -DefaultValue 'OMP_')
@@ -799,6 +816,12 @@ Write-Step 'Removing Windows services'
 $serviceNames = [System.Collections.Generic.List[string]]::new()
 if (-not [string]::IsNullOrWhiteSpace($serviceName)) {
     $serviceNames.Add($serviceName)
+}
+foreach ($configuredServiceName in $additionalServiceNamesToRemove) {
+    $configuredServiceNameText = [string]$configuredServiceName
+    if (-not [string]::IsNullOrWhiteSpace($configuredServiceNameText) -and -not $serviceNames.Contains($configuredServiceNameText.Trim())) {
+        $serviceNames.Add($configuredServiceNameText.Trim())
+    }
 }
 
 $resolvedServicesRoot = Resolve-ConfiguredPath -Path $servicesRoot
