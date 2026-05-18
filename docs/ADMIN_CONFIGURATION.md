@@ -170,10 +170,13 @@ These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them
 only for deployment-owned text files that should live beside the deployed app
 but should not be packaged into the artifact zip. HostAgent writes enabled rows
 after deployment and repairs files whose content differs from the database.
+The edit page supports both direct text editing and file upload. Prefer file
+upload in environments with strict request filtering, because the configuration
+body is then sent as a file rather than as a large textarea value.
 
 Typical examples:
 
-- `public/odv.site.config.js` for OpenDocViewer site configuration
+- `odv.site.config.js` for OpenDocViewer site configuration
 - deployment-specific JSON/XML/text files that are not part of the immutable app
   package
 

@@ -7,6 +7,7 @@ using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
+using System.Text;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -15,6 +16,8 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 /// </summary>
 public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
 {
+    private const long MaxConfigurationFileBytes = 1024 * 1024;
+
     private readonly OmpAdminRepository _repo;
 
     public ArtifactConfigFileEditModel(
@@ -28,6 +31,10 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
+
+    [BindProperty]
+    [Display(Name = "Configuration file")]
+    public IFormFile? UploadedFile { get; set; }
 
     public ArtifactEditData? Artifact { get; private set; }
 
@@ -89,7 +96,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         return Page();
     }
 
-    public async Task<IActionResult> OnPost(CancellationToken ct)
+    public async Task<IActionResult> OnPostMetadata(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
@@ -107,6 +114,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         ValidateInput();
         if (!ModelState.IsValid)
         {
+            Input.FileContent = await GetExistingFileContentOrEmptyAsync(Input.ArtifactConfigurationFileId, ct);
             return Page();
         }
 
@@ -118,7 +126,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
                     ArtifactConfigurationFileId = Input.ArtifactConfigurationFileId,
                     ArtifactId = Input.ArtifactId,
                     RelativePath = NormalizeRelativePath(Input.RelativePath),
-                    FileContent = Input.FileContent ?? string.Empty,
+                    FileContent = await GetExistingFileContentOrEmptyAsync(Input.ArtifactConfigurationFileId, ct),
                     IsEnabled = Input.IsEnabled
                 },
                 ct);
@@ -128,6 +136,90 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
                 : T("Artifact configuration file updated.");
 
             return RedirectToPage("/Admin/ArtifactConfigFileEdit", new { id });
+        }
+        catch (SqlException ex)
+        {
+            ModelState.AddModelError(
+                string.Empty,
+                T(ToFriendlySqlMessage(ex, "The artifact configuration file could not be saved.")));
+
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostUploadContent(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Edit artifact configuration file");
+        var row = await LoadExistingRowForContentUpdateAsync(ct);
+        if (row is null)
+        {
+            return Page();
+        }
+
+        if (UploadedFile is null)
+        {
+            ModelState.AddModelError(nameof(UploadedFile), T("Select a file to upload."));
+            return Page();
+        }
+
+        if (UploadedFile.Length > MaxConfigurationFileBytes)
+        {
+            ModelState.AddModelError(
+                nameof(UploadedFile),
+                T($"The uploaded configuration file is too large. The maximum size is {MaxConfigurationFileBytes} bytes."));
+
+            return Page();
+        }
+
+        try
+        {
+            row.FileContent = await ReadUploadedTextFileAsync(UploadedFile, ct);
+            await _repo.SaveArtifactConfigurationFileAsync(row, ct);
+            StatusMessage = T("Artifact configuration file content updated.");
+            return RedirectToPage("/Admin/ArtifactConfigFileEdit", new { id = row.ArtifactConfigurationFileId });
+        }
+        catch (DecoderFallbackException)
+        {
+            ModelState.AddModelError(nameof(UploadedFile), T("The uploaded configuration file must be valid UTF-8 text."));
+            return Page();
+        }
+        catch (SqlException ex)
+        {
+            ModelState.AddModelError(
+                string.Empty,
+                T(ToFriendlySqlMessage(ex, "The artifact configuration file could not be saved.")));
+
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostContent(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Edit artifact configuration file");
+        var row = await LoadExistingRowForContentUpdateAsync(ct);
+        if (row is null)
+        {
+            return Page();
+        }
+
+        try
+        {
+            row.FileContent = Input.FileContent ?? string.Empty;
+            await _repo.SaveArtifactConfigurationFileAsync(row, ct);
+            StatusMessage = T("Artifact configuration file content updated.");
+            return RedirectToPage("/Admin/ArtifactConfigFileEdit", new { id = row.ArtifactConfigurationFileId });
         }
         catch (SqlException ex)
         {
@@ -186,6 +278,65 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         }
     }
 
+    private async Task<string> GetExistingFileContentOrEmptyAsync(int artifactConfigurationFileId, CancellationToken ct)
+    {
+        if (artifactConfigurationFileId <= 0)
+        {
+            return string.Empty;
+        }
+
+        var row = await _repo.GetArtifactConfigurationFileAsync(artifactConfigurationFileId, ct);
+        return row?.FileContent ?? string.Empty;
+    }
+
+    private async Task<ArtifactConfigurationFileEditData?> LoadExistingRowForContentUpdateAsync(CancellationToken ct)
+    {
+        if (Input.ArtifactConfigurationFileId <= 0)
+        {
+            return NotFoundRow();
+        }
+
+        var row = await _repo.GetArtifactConfigurationFileAsync(Input.ArtifactConfigurationFileId, ct);
+        if (row is null)
+        {
+            return NotFoundRow();
+        }
+
+        Artifact = await _repo.GetArtifactAsync(row.ArtifactId, ct);
+        if (Artifact is null)
+        {
+            return NotFoundRow();
+        }
+
+        Input = new InputModel
+        {
+            ArtifactConfigurationFileId = row.ArtifactConfigurationFileId,
+            ArtifactId = row.ArtifactId,
+            RelativePath = row.RelativePath,
+            FileContent = row.FileContent,
+            IsEnabled = row.IsEnabled
+        };
+
+        return row;
+
+        ArtifactConfigurationFileEditData? NotFoundRow()
+        {
+            ModelState.AddModelError(string.Empty, T("Artifact configuration file was not found."));
+            return null;
+        }
+    }
+
+    private static async Task<string> ReadUploadedTextFileAsync(IFormFile file, CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        using var reader = new StreamReader(
+            stream,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+            detectEncodingFromByteOrderMarks: true);
+
+        return await reader.ReadToEndAsync(ct);
+    }
+
     private static string NormalizeRelativePath(string relativePath)
         => relativePath.Trim().Replace('\\', '/').Trim('/');
 
@@ -221,7 +372,6 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
 
         public int ArtifactId { get; set; }
 
-        [Required]
         [StringLength(400)]
         [Display(Name = "Relative path")]
         public string RelativePath { get; set; } = string.Empty;
