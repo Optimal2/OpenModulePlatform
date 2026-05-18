@@ -17,6 +17,8 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 /// </summary>
 public sealed class AppInstanceEditModel : OmpPortalPageModel
 {
+    private const byte DesiredStateShouldRun = 1;
+
     private static readonly Regex KeyPattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
         RegexOptions.Compiled);
@@ -292,6 +294,19 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
                 nameof(Input.AppId), T("The selected app does not belong to the selected module instance's module."));
         }
 
+        var isActiveDesired = Input.IsEnabled
+            && Input.IsAllowed
+            && Input.DesiredState == DesiredStateShouldRun;
+
+        if (isActiveDesired
+            && !Input.HostId.HasValue
+            && !AllowsHostNeutralPlacement(app))
+        {
+            ModelState.AddModelError(
+                nameof(Input.HostId),
+                T("Choose a host for runtime apps. Leave host empty only for host-neutral web apps behind a load balancer."));
+        }
+
         if (Input.HostId.HasValue)
         {
             await ValidateHostSelectionAsync(moduleInstance, Input.HostId.Value, ct);
@@ -300,6 +315,19 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         if (Input.ArtifactId.HasValue)
         {
             await ValidateArtifactSelectionAsync(Input.ArtifactId.Value, Input.AppId, ct);
+        }
+
+        if (isActiveDesired
+            && await _repo.ActiveAppInstancePlacementConflictExistsAsync(
+                Input.AppInstanceId,
+                Input.ModuleInstanceId,
+                Input.HostId,
+                Input.AppId,
+                ct))
+        {
+            ModelState.AddModelError(
+                nameof(Input.HostId),
+                T("Only one active desired app row can exist for the selected app and host placement."));
         }
     }
 
@@ -343,10 +371,15 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         return Clean(value);
     }
 
+    private static bool AllowsHostNeutralPlacement(AppDefinitionContext app)
+        => string.Equals(app.AppType, "WebApp", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(app.AppType, "Portal", StringComparison.OrdinalIgnoreCase);
+
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
         => ex.Number switch
         {
-            2601 or 2627 => "An app instance with the same key already exists in the selected module instance.",
+            2601 or 2627 => "An app instance with the same key or active host placement already exists.",
+            >= 51050 and <= 51057 => "Only one active desired app row can exist for the selected app and host placement.",
             547 => "Update dependent references first.",
             _ => fallback
         };

@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Services/OmpAdminRepository.Editor.cs
+using System.Data;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Portal.Models;
 
@@ -2033,6 +2034,76 @@ WHERE ArtifactId = @ArtifactId
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@ArtifactId", artifactId);
+        Add(cmd, "@AppId", appId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    public async Task<bool> ActiveAppInstancePlacementConflictExistsAsync(
+        Guid appInstanceId,
+        Guid moduleInstanceId,
+        Guid? hostId,
+        int appId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.AppInstances
+WHERE AppInstanceId <> @AppInstanceId
+  AND ModuleInstanceId = @ModuleInstanceId
+  AND AppId = @AppId
+  AND IsEnabled = 1
+  AND IsAllowed = 1
+  AND DesiredState = 1
+  AND
+  (
+      (@HostId IS NULL)
+      OR HostId IS NULL
+      OR HostId = @HostId
+  );";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@ModuleInstanceId", moduleInstanceId);
+        cmd.Parameters.Add("@HostId", SqlDbType.UniqueIdentifier).Value =
+            hostId.HasValue ? hostId.Value : DBNull.Value;
+        Add(cmd, "@AppId", appId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    public async Task<bool> ActiveTemplateAppPlacementConflictExistsAsync(
+        int instanceTemplateAppInstanceId,
+        int instanceTemplateModuleInstanceId,
+        int? instanceTemplateHostId,
+        int appId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.InstanceTemplateAppInstances
+WHERE InstanceTemplateAppInstanceId <> @InstanceTemplateAppInstanceId
+  AND InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId
+  AND AppId = @AppId
+  AND IsEnabled = 1
+  AND IsAllowed = 1
+  AND DesiredState = 1
+  AND
+  (
+      (@InstanceTemplateHostId IS NULL)
+      OR InstanceTemplateHostId IS NULL
+      OR InstanceTemplateHostId = @InstanceTemplateHostId
+  );";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateAppInstanceId", instanceTemplateAppInstanceId);
+        Add(cmd, "@InstanceTemplateModuleInstanceId", instanceTemplateModuleInstanceId);
+        cmd.Parameters.Add("@InstanceTemplateHostId", SqlDbType.Int).Value =
+            instanceTemplateHostId.HasValue ? instanceTemplateHostId.Value : DBNull.Value;
         Add(cmd, "@AppId", appId);
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;

@@ -672,6 +672,263 @@ BEGIN
 END
 GO
 
+-------------------------------------------------------------------------------
+-- App placement invariants
+-------------------------------------------------------------------------------
+IF EXISTS
+(
+    SELECT 1
+    FROM omp.AppInstances
+    WHERE HostId IS NOT NULL
+      AND IsEnabled = 1
+      AND IsAllowed = 1
+      AND DesiredState = 1
+    GROUP BY ModuleInstanceId, HostId, AppId
+    HAVING COUNT(1) > 1
+)
+BEGIN
+    THROW 51050, 'Duplicate active host-specific app instances exist. Keep only one active desired row per module instance, app definition and host.', 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM omp.AppInstances
+    WHERE HostId IS NULL
+      AND IsEnabled = 1
+      AND IsAllowed = 1
+      AND DesiredState = 1
+    GROUP BY ModuleInstanceId, AppId
+    HAVING COUNT(1) > 1
+)
+BEGIN
+    THROW 51051, 'Duplicate active host-neutral app instances exist. Keep only one active desired host-neutral row per module instance and app definition.', 1;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.AppInstances')
+      AND name = N'UX_omp_AppInstances_Active_Module_Host_App'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_AppInstances_Active_Module_Host_App
+        ON omp.AppInstances(ModuleInstanceId, HostId, AppId)
+        WHERE HostId IS NOT NULL
+          AND IsEnabled = 1
+          AND IsAllowed = 1
+          AND DesiredState = 1;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.AppInstances')
+      AND name = N'UX_omp_AppInstances_Active_Module_HostNeutral_App'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_AppInstances_Active_Module_HostNeutral_App
+        ON omp.AppInstances(ModuleInstanceId, AppId)
+        WHERE HostId IS NULL
+          AND IsEnabled = 1
+          AND IsAllowed = 1
+          AND DesiredState = 1;
+END
+GO
+
+IF OBJECT_ID(N'omp.TR_AppInstances_ValidateActivePlacement', N'TR') IS NULL
+    EXEC(N'CREATE TRIGGER omp.TR_AppInstances_ValidateActivePlacement ON omp.AppInstances AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER TRIGGER omp.TR_AppInstances_ValidateActivePlacement
+ON omp.AppInstances
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN omp.AppInstances existing
+            ON existing.ModuleInstanceId = i.ModuleInstanceId
+           AND existing.AppId = i.AppId
+           AND existing.AppInstanceId <> i.AppInstanceId
+           AND
+           (
+               (i.HostId IS NULL AND existing.HostId IS NULL)
+               OR (i.HostId IS NOT NULL AND existing.HostId = i.HostId)
+           )
+        WHERE i.IsEnabled = 1
+          AND i.IsAllowed = 1
+          AND i.DesiredState = 1
+          AND existing.IsEnabled = 1
+          AND existing.IsAllowed = 1
+          AND existing.DesiredState = 1
+    )
+    BEGIN
+        THROW 51052, 'Only one active desired app instance is allowed per module instance, app definition and host placement.', 1;
+    END;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN omp.AppInstances existing
+            ON existing.ModuleInstanceId = i.ModuleInstanceId
+           AND existing.AppId = i.AppId
+           AND existing.AppInstanceId <> i.AppInstanceId
+           AND
+           (
+               (i.HostId IS NULL AND existing.HostId IS NOT NULL)
+               OR (i.HostId IS NOT NULL AND existing.HostId IS NULL)
+           )
+        WHERE i.IsEnabled = 1
+          AND i.IsAllowed = 1
+          AND i.DesiredState = 1
+          AND existing.IsEnabled = 1
+          AND existing.IsAllowed = 1
+          AND existing.DesiredState = 1
+    )
+    BEGIN
+        THROW 51053, 'Do not mix active host-neutral and host-specific app instances for the same module instance and app definition.', 1;
+    END;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateHostId IS NOT NULL
+      AND IsEnabled = 1
+      AND IsAllowed = 1
+      AND DesiredState = 1
+    GROUP BY InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId
+    HAVING COUNT(1) > 1
+)
+BEGIN
+    THROW 51054, 'Duplicate active host-specific template app rows exist. Keep only one active desired row per template module, app definition and template host.', 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances
+    WHERE InstanceTemplateHostId IS NULL
+      AND IsEnabled = 1
+      AND IsAllowed = 1
+      AND DesiredState = 1
+    GROUP BY InstanceTemplateModuleInstanceId, AppId
+    HAVING COUNT(1) > 1
+)
+BEGIN
+    THROW 51055, 'Duplicate active host-neutral template app rows exist. Keep only one active desired host-neutral row per template module and app definition.', 1;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+      AND name = N'UX_omp_InstanceTemplateAppInstances_Active_Module_Host_App'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_InstanceTemplateAppInstances_Active_Module_Host_App
+        ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId)
+        WHERE InstanceTemplateHostId IS NOT NULL
+          AND IsEnabled = 1
+          AND IsAllowed = 1
+          AND DesiredState = 1;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+      AND name = N'UX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App
+        ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, AppId)
+        WHERE InstanceTemplateHostId IS NULL
+          AND IsEnabled = 1
+          AND IsAllowed = 1
+          AND DesiredState = 1;
+END
+GO
+
+IF OBJECT_ID(N'omp.TR_InstanceTemplateAppInstances_ValidateActivePlacement', N'TR') IS NULL
+    EXEC(N'CREATE TRIGGER omp.TR_InstanceTemplateAppInstances_ValidateActivePlacement ON omp.InstanceTemplateAppInstances AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER TRIGGER omp.TR_InstanceTemplateAppInstances_ValidateActivePlacement
+ON omp.InstanceTemplateAppInstances
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN omp.InstanceTemplateAppInstances existing
+            ON existing.InstanceTemplateModuleInstanceId = i.InstanceTemplateModuleInstanceId
+           AND existing.AppId = i.AppId
+           AND existing.InstanceTemplateAppInstanceId <> i.InstanceTemplateAppInstanceId
+           AND
+           (
+               (i.InstanceTemplateHostId IS NULL AND existing.InstanceTemplateHostId IS NULL)
+               OR (i.InstanceTemplateHostId IS NOT NULL AND existing.InstanceTemplateHostId = i.InstanceTemplateHostId)
+           )
+        WHERE i.IsEnabled = 1
+          AND i.IsAllowed = 1
+          AND i.DesiredState = 1
+          AND existing.IsEnabled = 1
+          AND existing.IsAllowed = 1
+          AND existing.DesiredState = 1
+    )
+    BEGIN
+        THROW 51056, 'Only one active desired template app row is allowed per template module, app definition and host placement.', 1;
+    END;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN omp.InstanceTemplateAppInstances existing
+            ON existing.InstanceTemplateModuleInstanceId = i.InstanceTemplateModuleInstanceId
+           AND existing.AppId = i.AppId
+           AND existing.InstanceTemplateAppInstanceId <> i.InstanceTemplateAppInstanceId
+           AND
+           (
+               (i.InstanceTemplateHostId IS NULL AND existing.InstanceTemplateHostId IS NOT NULL)
+               OR (i.InstanceTemplateHostId IS NOT NULL AND existing.InstanceTemplateHostId IS NULL)
+           )
+        WHERE i.IsEnabled = 1
+          AND i.IsAllowed = 1
+          AND i.DesiredState = 1
+          AND existing.IsEnabled = 1
+          AND existing.IsAllowed = 1
+          AND existing.DesiredState = 1
+    )
+    BEGIN
+        THROW 51057, 'Do not mix active host-neutral and host-specific template app rows for the same template module and app definition.', 1;
+    END;
+END
+GO
+
 IF OBJECT_ID(N'omp.HostDeploymentAssignments', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostDeploymentAssignments
