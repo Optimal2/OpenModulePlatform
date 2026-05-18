@@ -151,7 +151,7 @@ else
                 }
             </select>
             <div class="field-help">
-                @L["If set, the host must belong to the same instance as the selected module instance."]
+                @L["Leave host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one host."]
             </div>
             <span asp-validation-for="Input.HostId" class="field-validation-error"></span>
         </div>

@@ -64,6 +64,12 @@ the portal still presents one logical app entry. This supports both a single
 local development host and multi-node IIS deployments behind one load-balanced
 public URL.
 
+Services, worker runtimes, and web apps that are not behind a load-balanced
+identity should be template-host-specific instead. A single app definition may
+be active once per concrete host, giving each runtime its own `AppInstanceId`,
+but a module instance must not mix host-neutral and host-specific desired rows
+for the same app definition.
+
 ## Remaining Steps
 
 1. Add Portal actions for previewing and enqueuing host deployments from the

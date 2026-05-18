@@ -17,6 +17,8 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 /// </summary>
 public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
 {
+    private const byte DesiredStateShouldRun = 1;
+
     private static readonly Regex KeyPattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
         RegexOptions.Compiled);
@@ -237,6 +239,19 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
                 T("The selected app does not belong to the selected template module instance's module."));
         }
 
+        var isActiveDesired = Input.IsEnabled
+            && Input.IsAllowed
+            && Input.DesiredState == DesiredStateShouldRun;
+
+        if (isActiveDesired
+            && !Input.InstanceTemplateHostId.HasValue
+            && !AllowsHostNeutralPlacement(app))
+        {
+            ModelState.AddModelError(
+                nameof(Input.InstanceTemplateHostId),
+                T("Choose a template host for runtime apps. Leave host empty only for host-neutral web apps behind a load balancer."));
+        }
+
         if (Input.DesiredArtifactId.HasValue)
         {
             var belongsToApp = await _repo.ArtifactBelongsToAppAsync(
@@ -250,6 +265,19 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
                     nameof(Input.DesiredArtifactId),
                     T("The selected artifact does not belong to the selected app."));
             }
+        }
+
+        if (isActiveDesired
+            && await _repo.ActiveTemplateAppPlacementConflictExistsAsync(
+                Input.InstanceTemplateAppInstanceId,
+                Input.InstanceTemplateModuleInstanceId,
+                Input.InstanceTemplateHostId,
+                Input.AppId,
+                ct))
+        {
+            ModelState.AddModelError(
+                nameof(Input.InstanceTemplateHostId),
+                T("Only one active desired app row can exist for the selected app and host placement."));
         }
     }
 
@@ -320,10 +348,15 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static bool AllowsHostNeutralPlacement(AppDefinitionContext app)
+        => string.Equals(app.AppType, "WebApp", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(app.AppType, "Portal", StringComparison.OrdinalIgnoreCase);
+
     private static string ToFriendlySqlMessage(SqlException ex)
         => ex.Number switch
         {
-            2601 or 2627 => "A desired app with the same key already exists in this template module instance.",
+            2601 or 2627 => "A desired app with the same key or active host placement already exists.",
+            >= 51050 and <= 51057 => "Only one active desired app row can exist for the selected app and host placement.",
             547 => "Update dependent references first.",
             _ => "The desired app could not be saved."
         };
