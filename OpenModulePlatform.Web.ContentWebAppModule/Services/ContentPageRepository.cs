@@ -2,6 +2,7 @@
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using OpenModulePlatform.Web.Shared.Services;
+using System.Globalization;
 
 namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
 
@@ -472,6 +473,70 @@ WHERE app_instance_id = @AppInstanceId
         await tx.CommitAsync(ct);
     }
 
+    public async Task<ContentFileImportResult> ImportFileBackedPagesAsync(
+        Guid appInstanceId,
+        IReadOnlyCollection<string> htmlFileKeys,
+        IReadOnlyCollection<string> serverReportKeys,
+        string actor,
+        CancellationToken ct)
+    {
+        var htmlKeys = NormalizeContentKeys(htmlFileKeys);
+        var reportKeys = NormalizeContentKeys(serverReportKeys)
+            .Where(key => !htmlKeys.Contains(key, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+
+        var result = new ContentFileImportResult();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        var existing = await LoadExistingFileBackedPageStateAsync(conn, tx, appInstanceId, ct);
+        foreach (var key in htmlKeys)
+        {
+            if (existing.HtmlFileKeys.Contains(key)
+                || existing.Slugs.Contains(ContentSlugNormalizer.Normalize(key)))
+            {
+                continue;
+            }
+
+            await InsertImportedFileBackedPageAsync(
+                conn,
+                tx,
+                appInstanceId,
+                key,
+                ContentTypes.Html,
+                actor,
+                ct);
+            existing.HtmlFileKeys.Add(key);
+            existing.Slugs.Add(ContentSlugNormalizer.Normalize(key));
+            result.HtmlPagesAdded++;
+        }
+
+        foreach (var key in reportKeys)
+        {
+            if (existing.ServerReportKeys.Contains(key)
+                || existing.Slugs.Contains(ContentSlugNormalizer.Normalize(key)))
+            {
+                continue;
+            }
+
+            await InsertImportedFileBackedPageAsync(
+                conn,
+                tx,
+                appInstanceId,
+                key,
+                ContentTypes.ServerReport,
+                actor,
+                ct);
+            existing.ServerReportKeys.Add(key);
+            existing.Slugs.Add(ContentSlugNormalizer.Normalize(key));
+            result.ServerReportPagesAdded++;
+        }
+
+        await tx.CommitAsync(ct);
+        return result;
+    }
+
     private static async Task ReplaceRoleAccessAsync(
         SqlConnection conn,
         SqlTransaction tx,
@@ -502,6 +567,96 @@ VALUES(@ContentId, @RoleId, @CanRead, @CanWrite);";
             Add(insert, "@CanWrite", access.CanWrite);
             await insert.ExecuteNonQueryAsync(ct);
         }
+    }
+
+    private static async Task<ExistingFileBackedPageState> LoadExistingFileBackedPageStateAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid appInstanceId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT slug,
+       content_type,
+       body,
+       server_report_key
+FROM omp_content.contents
+WHERE app_instance_id = @AppInstanceId;";
+
+        var state = new ExistingFileBackedPageState();
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@AppInstanceId", appInstanceId);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            state.Slugs.Add(ContentSlugNormalizer.Normalize(rdr.GetString(0)));
+            var contentType = rdr.GetString(1);
+            var body = rdr.GetString(2);
+            var contentKey = rdr.IsDBNull(3) ? null : rdr.GetString(3);
+            if (string.IsNullOrWhiteSpace(contentKey))
+            {
+                continue;
+            }
+
+            if (ContentTypes.Normalize(contentType) == ContentTypes.ServerReport)
+            {
+                state.ServerReportKeys.Add(contentKey.Trim());
+            }
+            else if (ContentTypes.Normalize(contentType) == ContentTypes.Html
+                && string.IsNullOrWhiteSpace(body))
+            {
+                state.HtmlFileKeys.Add(contentKey.Trim());
+            }
+        }
+
+        return state;
+    }
+
+    private static async Task InsertImportedFileBackedPageAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid appInstanceId,
+        string contentKey,
+        string contentType,
+        string actor,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp_content.contents(
+    content_id,
+    app_instance_id,
+    slug,
+    title,
+    content_type,
+    body,
+    server_report_key,
+    is_enabled,
+    sort_order,
+    created_by,
+    updated_by)
+VALUES(
+    @ContentId,
+    @AppInstanceId,
+    @Slug,
+    @Title,
+    @ContentType,
+    N'',
+    @ContentKey,
+    1,
+    NULL,
+    @Actor,
+    @Actor);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@ContentId", Guid.NewGuid());
+        Add(cmd, "@AppInstanceId", appInstanceId);
+        Add(cmd, "@Slug", ContentSlugNormalizer.Normalize(contentKey));
+        Add(cmd, "@Title", CreateImportedTitle(contentKey));
+        Add(cmd, "@ContentType", contentType);
+        Add(cmd, "@ContentKey", contentKey);
+        Add(cmd, "@Actor", actor);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task<bool> SlugExistsAsync(
@@ -624,6 +779,23 @@ WHERE app_instance_id = @AppInstanceId
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
+    private static string[] NormalizeContentKeys(IReadOnlyCollection<string> keys)
+        => keys
+            .Select(static key => key?.Trim())
+            .Where(static key => !string.IsNullOrWhiteSpace(key))
+            .Select(static key => key!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static string CreateImportedTitle(string key)
+    {
+        var text = key.Replace('-', ' ').Replace('_', ' ').Trim();
+        return string.IsNullOrWhiteSpace(text)
+            ? key
+            : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(text.ToLower(CultureInfo.CurrentCulture));
+    }
+
     private static string GetStorageContentType(string contentType)
         => contentType == ContentTypes.HtmlFile ? ContentTypes.Html : contentType;
 
@@ -671,5 +843,14 @@ WHERE app_instance_id = @AppInstanceId
         {
             Add(cmd, $"@RoleId{i}", roleIds[i]);
         }
+    }
+
+    private sealed class ExistingFileBackedPageState
+    {
+        public HashSet<string> Slugs { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public HashSet<string> HtmlFileKeys { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public HashSet<string> ServerReportKeys { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }

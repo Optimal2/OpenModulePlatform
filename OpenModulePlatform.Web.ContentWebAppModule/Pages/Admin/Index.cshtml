@@ -10,13 +10,32 @@
     </div>
     @if (Model.CanCreatePages)
     {
-        <a class="button button--primary" href="~/admin/create">@L["New page"]</a>
+        <div class="toolbar">
+            <form method="post" asp-page-handler="LoadContentFiles">
+                <button type="submit">@L["Load content files"]</button>
+            </form>
+            <a class="button button--primary" href="~/admin/create">@L["New page"]</a>
+        </div>
     }
 </div>
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
     <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (Model.CanCreatePages)
+{
+    <section class="card content-file-summary">
+        <div>
+            <h2>@L["Available file-backed content"]</h2>
+            <p class="muted">@L["Load content files creates missing pages from HTML files and JSON server reports in the configured directories."]</p>
+        </div>
+        <div class="toolbar">
+            <span class="pill">@L["HTML files"]: @Model.AvailableHtmlFileKeys.Count</span>
+            <span class="pill">@L["Server reports"]: @Model.AvailableServerReportKeys.Count</span>
+        </div>
+    </section>
 }
 
 @if (Model.Rows.Count == 0)

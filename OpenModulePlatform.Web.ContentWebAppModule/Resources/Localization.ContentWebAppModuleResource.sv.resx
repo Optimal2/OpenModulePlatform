@@ -117,4 +117,11 @@
   <data name="Delete permanently" xml:space="preserve"><value>Ta bort permanent</value></data>
   <data name="Page deleted." xml:space="preserve"><value>Sidan har tagits bort.</value></data>
   <data name="ContentWebAppModule:AppInstanceId is not configured." xml:space="preserve"><value>ContentWebAppModule:AppInstanceId är inte konfigurerad.</value></data>
+  <data name="Load content files" xml:space="preserve"><value>Ladda innehållsfiler</value></data>
+  <data name="Available file-backed content" xml:space="preserve"><value>Tillgängligt filbaserat innehåll</value></data>
+  <data name="Load content files creates missing pages from HTML files and JSON server reports in the configured directories." xml:space="preserve"><value>Ladda innehållsfiler skapar saknade sidor från HTML-filer och JSON-serverrapporter i de konfigurerade katalogerna.</value></data>
+  <data name="HTML files" xml:space="preserve"><value>HTML-filer</value></data>
+  <data name="Server reports" xml:space="preserve"><value>Serverrapporter</value></data>
+  <data name="Loaded content files. Added {0} HTML page(s) and {1} server report page(s)." xml:space="preserve"><value>Innehållsfiler har laddats. Lade till {0} HTML-sida/sidor och {1} serverrapport-sida/sidor.</value></data>
+  <data name="No new content pages were created. Discovered files already had pages or matching slugs." xml:space="preserve"><value>Inga nya innehållssidor skapades. Hittade filer hade redan sidor eller matchande sluggar.</value></data>
 </root>

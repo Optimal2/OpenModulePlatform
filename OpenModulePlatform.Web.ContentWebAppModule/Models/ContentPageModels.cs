@@ -119,6 +119,15 @@ public sealed class ContentPageSaveRequest
     public bool SaveRoleAccess { get; set; }
 }
 
+public sealed class ContentFileImportResult
+{
+    public int HtmlPagesAdded { get; set; }
+
+    public int ServerReportPagesAdded { get; set; }
+
+    public int TotalPagesAdded => HtmlPagesAdded + ServerReportPagesAdded;
+}
+
 public static class ContentTypes
 {
     public const string Markdown = "markdown";
