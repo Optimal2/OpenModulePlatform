@@ -83,11 +83,14 @@ The package script then copies that config into the package as
 `omp-suite.local.psd1`, next to `install-omp-suite.ps1`. Only enable this for
 private packages that are allowed to contain customer paths and credentials.
 
-If OpenDocViewer needs customer-specific runtime files, set
+If OpenDocViewer needs customer-specific static files, set
 `Package.OpenDocViewerPackageZip` to a prebuilt OpenDocViewer zip. The package
 script then uses that zip as `payload\OpenDocViewer.dist.zip` instead of
 zipping `OpenDocViewer\dist` directly. This is useful when the ODV package must
-include a site-local `odv.site.config.js` and `help\site` manual content.
+include site-local `help\site` manual content or other static assets.
+Deployment-owned runtime configuration such as `public\odv.site.config.js`
+should normally be managed as an artifact configuration file in OMP so it can be
+edited without rebuilding the artifact zip.
 The package manifest records `openDocViewerVersion`, normally read from
 `OpenDocViewer\package.json`. Set `OpenDocViewer.Version` in the deployment
 config only when a prebuilt ODV payload should be registered with a known

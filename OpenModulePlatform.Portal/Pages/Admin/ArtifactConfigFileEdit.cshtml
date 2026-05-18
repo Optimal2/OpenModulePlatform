@@ -1,0 +1,82 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ArtifactConfigFileEditModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Artifacts"]</div>
+        <h2>@(Model.IsCreate ? L["Create artifact configuration file"] : L["Edit artifact configuration file"])</h2>
+        <p class="lede">@L["HostAgent writes enabled configuration files after deploying the artifact so site-specific settings can change without rebuilding the zip package."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+@if (Model.Artifact is not null)
+{
+    <section class="card">
+        <h3>@L["Artifact"]</h3>
+        <dl class="details-list">
+            <dt>@L["Version"]</dt>
+            <dd>@Model.Artifact.Version</dd>
+            <dt>@L["Package type"]</dt>
+            <dd>@Model.Artifact.PackageType</dd>
+            <dt>@L["Target"]</dt>
+            <dd>@Model.Artifact.TargetName</dd>
+            <dt>@L["Relative path"]</dt>
+            <dd><code>@Model.Artifact.RelativePath</code></dd>
+        </dl>
+    </section>
+}
+
+<form method="post" class="card form-grid">
+    <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
+    <input type="hidden" asp-for="Input.ArtifactId" />
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field">
+            <label asp-for="Input.RelativePath"></label>
+            <input asp-for="Input.RelativePath" />
+            <div class="field-help">@L["Path relative to the deployed app root, for example public/odv.site.config.js."]</div>
+            <span asp-validation-for="Input.RelativePath" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.IsEnabled" type="checkbox" />
+            <label asp-for="Input.IsEnabled"></label>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.FileContent"></label>
+        <textarea asp-for="Input.FileContent" rows="22" spellcheck="false"></textarea>
+        <div class="field-help">@L["HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs."]</div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Save configuration file"]</button>
+        <a class="action-link" href="~/admin/artifactedit?id=@Model.Input.ArtifactId">@L["Back to artifact"]</a>
+    </div>
+</form>
+
+@if (!Model.IsCreate)
+{
+    <form
+        method="post"
+        asp-page-handler="Delete"
+        class="card danger-zone"
+        onsubmit="return confirm('@L["Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed."]');">
+        <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
+        <input type="hidden" asp-for="Input.ArtifactId" />
+        <h3>@L["Danger zone"]</h3>
+        <p class="muted">@L["Deleting this row does not delete files that have already been written on hosts."]</p>
+        <button type="submit" class="btn btn-danger">@L["Delete configuration file"]</button>
+    </form>
+}

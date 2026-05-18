@@ -247,6 +247,51 @@ WHERE ar.ArtifactId = @artifactId
         };
     }
 
+    public async Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.ArtifactConfigurationFiles', N'U') IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS int) AS ArtifactConfigurationFileId,
+        CAST(NULL AS int) AS ArtifactId,
+        CAST(NULL AS nvarchar(400)) AS RelativePath,
+        CAST(NULL AS nvarchar(max)) AS FileContent;
+    RETURN;
+END;
+
+SELECT ArtifactConfigurationFileId,
+       ArtifactId,
+       RelativePath,
+       FileContent
+FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @artifactId
+  AND IsEnabled = 1
+ORDER BY RelativePath, ArtifactConfigurationFileId;";
+
+        var rows = new List<ArtifactConfigurationFileDescriptor>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ArtifactConfigurationFileDescriptor
+            {
+                ArtifactConfigurationFileId = rdr.GetInt32(0),
+                ArtifactId = rdr.GetInt32(1),
+                RelativePath = rdr.GetString(2),
+                FileContent = rdr.GetString(3)
+            });
+        }
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<ArtifactDescriptor>> GetDesiredArtifactsAsync(
         string hostKey,
         bool includeAppInstanceArtifacts,

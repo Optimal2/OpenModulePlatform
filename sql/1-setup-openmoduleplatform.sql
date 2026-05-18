@@ -328,6 +328,26 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.ArtifactConfigurationFiles', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ArtifactConfigurationFiles
+    (
+        ArtifactConfigurationFileId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ArtifactConfigurationFiles PRIMARY KEY,
+        ArtifactId int NOT NULL,
+        RelativePath nvarchar(400) NOT NULL,
+        FileContent nvarchar(max) NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_FileContent DEFAULT(N''),
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_ArtifactConfigurationFiles_Artifact
+            FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId),
+        CONSTRAINT UQ_omp_ArtifactConfigurationFiles_Artifact_Path
+            UNIQUE(ArtifactId, RelativePath)
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp.Hosts', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.Hosts

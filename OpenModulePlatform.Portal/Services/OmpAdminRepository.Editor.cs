@@ -1412,6 +1412,95 @@ WHERE ArtifactId = @ArtifactId;";
     public Task DeleteArtifactAsync(int artifactId, CancellationToken ct)
         => DeleteAsync("DELETE FROM omp.Artifacts WHERE ArtifactId = @Id;", artifactId, ct);
 
+    public async Task<ArtifactConfigurationFileEditData?> GetArtifactConfigurationFileAsync(
+        int artifactConfigurationFileId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ArtifactConfigurationFileId,
+       ArtifactId,
+       RelativePath,
+       FileContent,
+       IsEnabled
+FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ArtifactConfigurationFileId", artifactConfigurationFileId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactConfigurationFileEditData
+        {
+            ArtifactConfigurationFileId = rdr.GetInt32(0),
+            ArtifactId = rdr.GetInt32(1),
+            RelativePath = rdr.GetString(2),
+            FileContent = rdr.GetString(3),
+            IsEnabled = rdr.GetBoolean(4)
+        };
+    }
+
+    public async Task<int> SaveArtifactConfigurationFileAsync(
+        ArtifactConfigurationFileEditData input,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (input.ArtifactConfigurationFileId == 0)
+        {
+            const string insertSql = @"
+INSERT INTO omp.ArtifactConfigurationFiles
+(
+    ArtifactId,
+    RelativePath,
+    FileContent,
+    IsEnabled
+)
+VALUES
+(
+    @ArtifactId,
+    @RelativePath,
+    @FileContent,
+    @IsEnabled
+);
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+            await using var insert = new SqlCommand(insertSql, conn);
+            BindArtifactConfigurationFile(insert, input, includePrimaryKey: false);
+            input.ArtifactConfigurationFileId = Convert.ToInt32(await insert.ExecuteScalarAsync(ct));
+            return input.ArtifactConfigurationFileId;
+        }
+
+        const string updateSql = @"
+UPDATE omp.ArtifactConfigurationFiles
+SET ArtifactId = @ArtifactId,
+    RelativePath = @RelativePath,
+    FileContent = @FileContent,
+    IsEnabled = @IsEnabled,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
+
+        await using var update = new SqlCommand(updateSql, conn);
+        BindArtifactConfigurationFile(update, input, includePrimaryKey: true);
+        await update.ExecuteNonQueryAsync(ct);
+        return input.ArtifactConfigurationFileId;
+    }
+
+    public Task DeleteArtifactConfigurationFileAsync(
+        int artifactConfigurationFileId,
+        CancellationToken ct)
+        => DeleteAsync(
+            "DELETE FROM omp.ArtifactConfigurationFiles WHERE ArtifactConfigurationFileId = @Id;",
+            artifactConfigurationFileId,
+            ct);
+
     public async Task<ArtifactDuplicateInfo?> FindArtifactBySha256Async(string sha256, CancellationToken ct)
     {
         const string sql = @"
@@ -2005,6 +2094,22 @@ WHERE ai.AppInstanceId = @AppInstanceId;";
         Add(cmd, "@TargetName", input.TargetName);
         Add(cmd, "@RelativePath", input.RelativePath);
         Add(cmd, "@Sha256", input.Sha256);
+        Add(cmd, "@IsEnabled", input.IsEnabled);
+    }
+
+    private static void BindArtifactConfigurationFile(
+        SqlCommand cmd,
+        ArtifactConfigurationFileEditData input,
+        bool includePrimaryKey)
+    {
+        if (includePrimaryKey)
+        {
+            Add(cmd, "@ArtifactConfigurationFileId", input.ArtifactConfigurationFileId);
+        }
+
+        Add(cmd, "@ArtifactId", input.ArtifactId);
+        Add(cmd, "@RelativePath", input.RelativePath);
+        Add(cmd, "@FileContent", input.FileContent);
         Add(cmd, "@IsEnabled", input.IsEnabled);
     }
 

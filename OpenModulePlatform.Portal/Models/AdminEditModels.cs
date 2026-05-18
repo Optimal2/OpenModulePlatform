@@ -144,6 +144,22 @@ public sealed class ArtifactEditData
 }
 
 /// <summary>
+/// Editable text configuration file that HostAgent materializes for an artifact.
+/// </summary>
+public sealed class ArtifactConfigurationFileEditData
+{
+    public int ArtifactConfigurationFileId { get; set; }
+
+    public int ArtifactId { get; set; }
+
+    public string RelativePath { get; set; } = string.Empty;
+
+    public string FileContent { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; }
+}
+
+/// <summary>
 /// App-definition option with stable keys used by artifact filename metadata parsing.
 /// </summary>
 public sealed class ArtifactAppOption

@@ -386,6 +386,52 @@ ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
         return rows;
     }
 
+    public async Task<IReadOnlyList<ArtifactConfigurationFileRow>> GetArtifactConfigurationFilesAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.ArtifactConfigurationFiles', N'U') IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS int) AS ArtifactConfigurationFileId,
+        CAST(NULL AS int) AS ArtifactId,
+        CAST(NULL AS nvarchar(400)) AS RelativePath,
+        CAST(NULL AS bit) AS IsEnabled,
+        CAST(NULL AS datetime2(3)) AS UpdatedUtc;
+    RETURN;
+END;
+
+SELECT ArtifactConfigurationFileId,
+       ArtifactId,
+       RelativePath,
+       IsEnabled,
+       UpdatedUtc
+FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @ArtifactId
+ORDER BY RelativePath, ArtifactConfigurationFileId;";
+
+        var rows = new List<ArtifactConfigurationFileRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ArtifactId", artifactId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ArtifactConfigurationFileRow
+            {
+                ArtifactConfigurationFileId = rdr.GetInt32(0),
+                ArtifactId = rdr.GetInt32(1),
+                RelativePath = rdr.GetString(2),
+                IsEnabled = rdr.GetBoolean(3),
+                UpdatedUtc = rdr.GetDateTime(4)
+            });
+        }
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<HostRow>> GetHostsAsync(CancellationToken ct)
     {
         var rows = new List<HostRow>();

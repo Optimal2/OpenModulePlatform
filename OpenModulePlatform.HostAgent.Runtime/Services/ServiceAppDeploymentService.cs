@@ -77,13 +77,20 @@ public sealed class ServiceAppDeploymentService
                 executableRelativePath,
                 $"Service app instance '{deployment.AppInstanceKey}' executable path");
 
+            var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
+                deployment.ArtifactId,
+                cancellationToken);
+
             if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath))
             {
-                await _repository.PublishAppDeploymentResultAsync(
-                    deployment,
-                    AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false),
-                    cancellationToken);
-                return;
+                if (ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles))
+                {
+                    await _repository.PublishAppDeploymentResultAsync(
+                        deployment,
+                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false),
+                        cancellationToken);
+                    return;
+                }
             }
 
             await _repository.PublishAppDeploymentResultAsync(
@@ -101,6 +108,8 @@ public sealed class ServiceAppDeploymentService
                 targetPath,
                 settings.ServiceAppDeploymentExcludedEntries,
                 cancellationToken);
+
+            await ArtifactConfigurationFileWriter.ApplyAsync(targetPath, configurationFiles, cancellationToken);
 
             EnsureWindowsService(deployment, serviceName, targetExecutablePath);
 
