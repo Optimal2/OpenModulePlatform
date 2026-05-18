@@ -202,6 +202,20 @@ public sealed class ArtifactDuplicateInfo
 }
 
 /// <summary>
+/// Result from selecting an artifact as the desired version for matching apps.
+/// </summary>
+public sealed class ArtifactApplicationResult
+{
+    public int TemplateAppRowsUpdated { get; set; }
+
+    public int AppInstanceRowsUpdated { get; set; }
+
+    public int WorkerInstanceRowsUpdated { get; set; }
+
+    public int TotalRowsUpdated => TemplateAppRowsUpdated + AppInstanceRowsUpdated + WorkerInstanceRowsUpdated;
+}
+
+/// <summary>
 /// Artifact option with owning app context for app-instance artifact selection.
 /// </summary>
 public sealed class ArtifactSelectionOption

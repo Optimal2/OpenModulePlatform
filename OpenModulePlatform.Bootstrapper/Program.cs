@@ -666,6 +666,15 @@ END
                         ProcessHostDeployments = true,
                         ProvisionAppInstanceArtifacts = true,
                         ProvisionExplicitRequirements = true,
+                        ArtifactZipImport = new
+                        {
+                            IsEnabled = false,
+                            ImportPath = string.Empty,
+                            ProcessedPath = string.Empty,
+                            FailedPath = string.Empty,
+                            MaxFilesPerCycle = 10,
+                            CopyConfigurationFilesFromPreviousVersion = true
+                        },
                         DeployWebApps = hostAgent.DeployWebApps,
                         IisSiteName = hostAgent.IisSiteName,
                         EnsureIisSite = hostAgent.EnsureIisSite,

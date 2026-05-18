@@ -24,6 +24,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddSingleton<SqlConnectionFactory>();
         services.AddSingleton<OmpHostArtifactRepository>();
         services.AddSingleton<ArtifactProvisioner>();
+        services.AddSingleton<ArtifactZipImportService>();
         services.AddSingleton<WebAppDeploymentService>();
         services.AddSingleton<ServiceAppDeploymentService>();
         services.AddSingleton<HostAgentFileMirrorService>();
