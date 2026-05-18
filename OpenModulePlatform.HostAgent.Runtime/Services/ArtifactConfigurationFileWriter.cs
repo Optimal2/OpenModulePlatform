@@ -1,13 +1,51 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 internal static class ArtifactConfigurationFileWriter
 {
+    private const string AppSettingsRelativePath = "appsettings.json";
+
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+
+    public static IReadOnlyList<ArtifactConfigurationFileDescriptor> WithBuiltInWebAppConfiguration(
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
+        WebAppDeploymentDescriptor deployment,
+        string ompConnectionString,
+        HostAgentSettings settings)
+    {
+        if (HasAppSettingsJson(files))
+        {
+            return files;
+        }
+
+        return
+        [
+            CreateBuiltInWebAppConfigurationFile(deployment, ompConnectionString, settings),
+            .. files
+        ];
+    }
+
+    public static IReadOnlyList<ArtifactConfigurationFileDescriptor> WithBuiltInServiceAppConfiguration(
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
+        ServiceAppDeploymentDescriptor deployment,
+        string ompConnectionString)
+    {
+        if (HasAppSettingsJson(files))
+        {
+            return files;
+        }
+
+        return
+        [
+            CreateBuiltInServiceAppConfigurationFile(deployment, ompConnectionString),
+            .. files
+        ];
+    }
 
     public static bool AreApplied(
         string targetRoot,
@@ -102,6 +140,119 @@ internal static class ArtifactConfigurationFileWriter
             $"Artifact configuration file '{file.ArtifactConfigurationFileId}' RelativePath");
     }
 
+    private static ArtifactConfigurationFileDescriptor CreateBuiltInWebAppConfigurationFile(
+        WebAppDeploymentDescriptor deployment,
+        string ompConnectionString,
+        HostAgentSettings settings)
+    {
+        var databaseName = ResolveDatabaseName(ompConnectionString);
+        var dataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
+        var content = JsonSerializer.Serialize(
+            new
+            {
+                Portal = new
+                {
+                    Title = deployment.DisplayName,
+                    DefaultCulture = "sv-SE",
+                    SupportedCultures = new[] { "sv-SE", "en-US" },
+                    PortalTopBar = new
+                    {
+                        Enabled = true,
+                        PortalBaseUrl = "/"
+                    },
+                    AllowAnonymous = false,
+                    UseForwardedHeaders = false,
+                    PermissionMode = "Any"
+                },
+                ConnectionStrings = new
+                {
+                    OmpDb = ompConnectionString
+                },
+                OmpAuth = new
+                {
+                    CookieName = ".OpenModulePlatform.Auth",
+                    LoginPath = "/auth/login",
+                    LogoutPath = "/auth/logout",
+                    AccessDeniedPath = "/status/403",
+                    ApplicationName = "OpenModulePlatform",
+                    DataProtectionKeyPath = dataProtectionKeyPath
+                },
+                OpenDocViewer = new
+                {
+                    BaseUrl = "/opendocviewer/",
+                    SampleFileUrl = "/opendocviewer/sample.pdf"
+                },
+                ContentWebAppModule = new
+                {
+                    AppInstanceId = deployment.AppInstanceId,
+                    HomeSlug = "home",
+                    ServerReportsPath = "App_Data/ContentReports",
+                    HtmlFilesPath = "App_Data/ContentPages",
+                    AllowedServerReportDatabases = string.IsNullOrWhiteSpace(databaseName)
+                        ? Array.Empty<string>()
+                        : [databaseName],
+                    ServerReportDefaultMaxRows = 100,
+                    ServerReportMaxRowsLimit = 1000,
+                    ServerReportQueryTimeoutSeconds = 30
+                },
+                Logging = new
+                {
+                    LogLevel = new Dictionary<string, string>
+                    {
+                        ["Default"] = "Information",
+                        ["Microsoft.AspNetCore"] = "Warning"
+                    }
+                }
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+
+        return new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 0,
+            ArtifactId = deployment.ArtifactId,
+            RelativePath = AppSettingsRelativePath,
+            FileContent = content
+        };
+    }
+
+    private static ArtifactConfigurationFileDescriptor CreateBuiltInServiceAppConfigurationFile(
+        ServiceAppDeploymentDescriptor deployment,
+        string ompConnectionString)
+    {
+        var content = JsonSerializer.Serialize(
+            new
+            {
+                ConnectionStrings = new
+                {
+                    OmpDb = ompConnectionString
+                },
+                Worker = new
+                {
+                    AppInstanceId = deployment.AppInstanceId,
+                    PollSeconds = 5,
+                    ConfigRefreshSeconds = 15,
+                    HeartbeatSeconds = 10
+                },
+                Logging = new
+                {
+                    LogLevel = new Dictionary<string, string>
+                    {
+                        ["Default"] = "Information",
+                        ["Microsoft.Hosting.Lifetime"] = "Information"
+                    }
+                }
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+
+        return new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 0,
+            ArtifactId = deployment.ArtifactId,
+            RelativePath = AppSettingsRelativePath,
+            FileContent = content
+        };
+    }
+
     private static IReadOnlyDictionary<string, string> CreateVariables(
         Guid hostId,
         string hostKey,
@@ -169,5 +320,42 @@ internal static class ArtifactConfigurationFileWriter
         var expectedBytes = Utf8NoBom.GetBytes(expectedContent);
         var actualBytes = File.ReadAllBytes(path);
         return actualBytes.AsSpan().SequenceEqual(expectedBytes);
+    }
+
+    private static bool HasAppSettingsJson(IReadOnlyList<ArtifactConfigurationFileDescriptor> files)
+        => files.Any(file => string.Equals(
+            file.RelativePath.Trim().Replace('\\', '/'),
+            AppSettingsRelativePath,
+            StringComparison.OrdinalIgnoreCase));
+
+    private static string ResolveDatabaseName(string connectionString)
+    {
+        try
+        {
+            return new SqlConnectionStringBuilder(connectionString).InitialCatalog;
+        }
+        catch (ArgumentException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string ResolveWebAppDataProtectionKeyPath(HostAgentSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.WebAppDataProtectionKeyPath))
+        {
+            return settings.WebAppDataProtectionKeyPath.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.WebAppsRoot))
+        {
+            return string.Empty;
+        }
+
+        var webAppsRoot = Path.GetFullPath(settings.WebAppsRoot.Trim());
+        var runtimeRoot = Directory.GetParent(webAppsRoot)?.FullName;
+        return string.IsNullOrWhiteSpace(runtimeRoot)
+            ? string.Empty
+            : Path.Combine(runtimeRoot, "DataProtectionKeys");
     }
 }
