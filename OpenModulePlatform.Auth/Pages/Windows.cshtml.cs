@@ -91,14 +91,33 @@ public sealed class WindowsModel : PageModel
     }
 
     private IActionResult RedirectToSafeReturnUrl()
+        => LocalRedirect(ResolveSafeReturnUrl());
+
+    private string ResolveSafeReturnUrl()
     {
         if (!string.IsNullOrWhiteSpace(ReturnUrl) &&
-            Url.IsLocalUrl(ReturnUrl))
+            Url.IsLocalUrl(ReturnUrl) &&
+            !IsCurrentLoginUrl(ReturnUrl))
         {
-            return LocalRedirect(ReturnUrl);
+            return ReturnUrl;
         }
 
-        return LocalRedirect("/");
+        return "/";
+    }
+
+    private bool IsCurrentLoginUrl(string returnUrl)
+    {
+        var returnPath = ExtractPath(returnUrl);
+        var currentLoginPath = string.Concat(Request.PathBase.Value, "/login");
+
+        return string.Equals(returnPath, currentLoginPath, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(returnPath, OmpAuthDefaults.LoginPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ExtractPath(string returnUrl)
+    {
+        var queryIndex = returnUrl.IndexOfAny(new[] { '?', '#' });
+        return queryIndex >= 0 ? returnUrl[..queryIndex] : returnUrl;
     }
 
     private string GetWindowsChallengeScheme()

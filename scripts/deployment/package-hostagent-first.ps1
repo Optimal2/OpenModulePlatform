@@ -381,6 +381,7 @@ $sqlFiles = @(
     @{ Source = 'OpenModulePlatform.Auth\sql\2-initialize-omp-auth.sql'; Destination = 'OpenModulePlatform.Auth\2-initialize-omp-auth.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\1-setup-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\2-initialize-omp-portal.sql' },
+    @{ Source = 'OpenModulePlatform.Portal\sql\3-sync-omp-portal-entries.sql'; Destination = 'OpenModulePlatform.Portal\3-sync-omp-portal-entries.sql' },
     @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\1-setup-content-webapp.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql' },
     @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\2-initialize-content-webapp.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\2-initialize-content-webapp.sql' },
     @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\3-add-server-report-support.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\3-add-server-report-support.sql' },
@@ -462,6 +463,11 @@ if ($additionalSqlIncludes.Count -gt 0) {
     $bootstrapSql += [string]::Join([Environment]::NewLine, $additionalSqlIncludes)
     $bootstrapSql += [Environment]::NewLine
 }
+$bootstrapSql += [Environment]::NewLine
+$bootstrapSql += '/* Final Portal navigation sync after all app instances have been registered. */'
+$bootstrapSql += [Environment]::NewLine
+$bootstrapSql += ':r OpenModulePlatform.Portal\3-sync-omp-portal-entries.sql'
+$bootstrapSql += [Environment]::NewLine
 Set-Content -LiteralPath (Join-Path $sqlRoot 'bootstrap-local.sql') -Value $bootstrapSql -Encoding UTF8
 
 Write-Step 'Copying bootstrapper'
