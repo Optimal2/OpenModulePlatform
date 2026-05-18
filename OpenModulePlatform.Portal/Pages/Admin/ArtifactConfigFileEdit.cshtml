@@ -67,7 +67,7 @@
         <input type="hidden" asp-for="Input.ArtifactId" />
 
         <h3>@L["Upload file content"]</h3>
-        <p class="muted">@L["Upload a text file to replace the stored configuration content without posting the file body as a textarea field."]</p>
+        <p class="muted">@L["Upload a text file or a zip file containing exactly one text file. Zip upload is useful when request filters block script-like text content."]</p>
 
         <div class="form-field">
             <label asp-for="UploadedFile"></label>

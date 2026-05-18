@@ -170,9 +170,11 @@ These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them
 only for deployment-owned text files that should live beside the deployed app
 but should not be packaged into the artifact zip. HostAgent writes enabled rows
 after deployment and repairs files whose content differs from the database.
-The edit page supports both direct text editing and file upload. Prefer file
-upload in environments with strict request filtering, because the configuration
-body is then sent as a file rather than as a large textarea value.
+The edit page supports direct text editing, text-file upload, and zip upload.
+Prefer zip upload in environments with strict request filtering that blocks
+script-like text even in multipart file uploads. Zip uploads must contain
+exactly one UTF-8 text file; Portal reads that file and stores its text content
+in `omp.ArtifactConfigurationFiles`.
 
 Typical examples:
 

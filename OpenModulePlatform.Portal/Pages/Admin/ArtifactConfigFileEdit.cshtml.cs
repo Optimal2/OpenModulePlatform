@@ -7,6 +7,7 @@ using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
+using System.IO.Compression;
 using System.Text;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
@@ -189,6 +190,11 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
             ModelState.AddModelError(nameof(UploadedFile), T("The uploaded configuration file must be valid UTF-8 text."));
             return Page();
         }
+        catch (InvalidDataException)
+        {
+            ModelState.AddModelError(nameof(UploadedFile), T("The uploaded zip file must contain exactly one UTF-8 text file."));
+            return Page();
+        }
         catch (SqlException ex)
         {
             ModelState.AddModelError(
@@ -327,14 +333,46 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
     }
 
     private static async Task<string> ReadUploadedTextFileAsync(IFormFile file, CancellationToken ct)
+        => IsZipUpload(file)
+            ? await ReadUploadedZipTextFileAsync(file, ct)
+            : await ReadTextStreamAsync(file.OpenReadStream(), ct);
+
+    private static bool IsZipUpload(IFormFile file)
+    {
+        var fileName = Path.GetFileName(file.FileName);
+        return fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(file.ContentType, "application/zip", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(file.ContentType, "application/x-zip-compressed", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<string> ReadUploadedZipTextFileAsync(IFormFile file, CancellationToken ct)
     {
         await using var stream = file.OpenReadStream();
-        using var reader = new StreamReader(
-            stream,
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
-            detectEncodingFromByteOrderMarks: true);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+        var entries = archive.Entries
+            .Where(entry => !string.IsNullOrEmpty(entry.Name))
+            .ToArray();
 
-        return await reader.ReadToEndAsync(ct);
+        if (entries.Length != 1 || entries[0].Length > MaxConfigurationFileBytes)
+        {
+            throw new InvalidDataException();
+        }
+
+        await using var entryStream = entries[0].Open();
+        return await ReadTextStreamAsync(entryStream, ct);
+    }
+
+    private static async Task<string> ReadTextStreamAsync(Stream stream, CancellationToken ct)
+    {
+        await using (stream)
+        {
+            using var reader = new StreamReader(
+                stream,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+                detectEncodingFromByteOrderMarks: true);
+
+            return await reader.ReadToEndAsync(ct);
+        }
     }
 
     private static string NormalizeRelativePath(string relativePath)
