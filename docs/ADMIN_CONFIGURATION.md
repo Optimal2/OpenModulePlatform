@@ -165,6 +165,11 @@ directory-content SHA-256 with existing artifact rows. Zip metadata such as
 timestamps and compression settings is intentionally ignored; two zip files
 with the same deployable files count as the same artifact content.
 
+When uploading a new version, the form can copy artifact-owned configuration
+file rows from the latest previous artifact with the same app, package type and
+target. This is intended for site-local runtime files such as ODV site config
+that should normally follow the app across immutable artifact versions.
+
 Artifact-owned configuration files are managed from the artifact edit page.
 These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them
 only for deployment-owned text files that should live beside the deployed app
