@@ -185,7 +185,28 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 }
             }
 
-            StatusMessage = BuildUploadStatusMessage(copyResult, Input.CopyConfigurationFilesFromPreviousVersion);
+            ArtifactApplicationResult? applicationResult = null;
+            if (Input.UseArtifactImmediately)
+            {
+                try
+                {
+                    applicationResult = await _repo.ApplyArtifactToMatchingApplicationsAsync(artifactId, ct);
+                }
+                catch (SqlException)
+                {
+                    StatusMessage = T("Artifact uploaded and registered.")
+                        + " "
+                        + T("The artifact could not be selected as the desired version automatically. Choose it from the installation template page.");
+
+                    return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
+                }
+            }
+
+            StatusMessage = BuildUploadStatusMessage(
+                copyResult,
+                Input.CopyConfigurationFilesFromPreviousVersion,
+                applicationResult,
+                Input.UseArtifactImmediately);
             return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
         }
         catch (InvalidDataException ex)
@@ -592,23 +613,36 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
     private string BuildUploadStatusMessage(
         ArtifactConfigurationFileCopyResult? copyResult,
-        bool copyWasRequested)
+        bool copyWasRequested,
+        ArtifactApplicationResult? applicationResult,
+        bool applyWasRequested)
     {
         var message = T("Artifact uploaded and registered.");
-        if (!copyWasRequested)
+
+        if (copyWasRequested)
         {
-            return message;
+            if (copyResult is null || copyResult.CopiedCount == 0)
+            {
+                message += " " + T("No previous artifact configuration files were found to copy.");
+            }
+            else
+            {
+                message += " " + string.Format(
+                    T("Copied {0} configuration file(s) from artifact version {1}."),
+                    copyResult.CopiedCount,
+                    copyResult.SourceVersion);
+            }
         }
 
-        if (copyResult is null || copyResult.CopiedCount == 0)
+        if (applyWasRequested)
         {
-            return message + " " + T("No previous artifact configuration files were found to copy.");
+            var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
+            message += " " + string.Format(
+                T("Selected this artifact as desired version for {0} matching app row(s)."),
+                updatedRows);
         }
 
-        return message + " " + string.Format(
-            T("Copied {0} configuration file(s) from artifact version {1}."),
-            copyResult.CopiedCount,
-            copyResult.SourceVersion);
+        return message;
     }
 
     private long GetMaxUploadBytes()
@@ -677,5 +711,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         [Display(Name = "Copy configuration files from previous version")]
         public bool CopyConfigurationFilesFromPreviousVersion { get; set; }
+
+        [Display(Name = "Use this version immediately")]
+        public bool UseArtifactImmediately { get; set; } = true;
     }
 }

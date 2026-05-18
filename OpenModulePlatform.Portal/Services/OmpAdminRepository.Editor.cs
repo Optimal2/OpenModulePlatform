@@ -1618,6 +1618,82 @@ ORDER BY ar.ArtifactId;";
         };
     }
 
+    public async Task<ArtifactApplicationResult> ApplyArtifactToMatchingApplicationsAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @AppId int;
+DECLARE @TemplateAppRowsUpdated int = 0;
+DECLARE @AppInstanceRowsUpdated int = 0;
+DECLARE @WorkerInstanceRowsUpdated int = 0;
+
+SELECT @AppId = AppId
+FROM omp.Artifacts
+WHERE ArtifactId = @ArtifactId
+  AND IsEnabled = 1;
+
+IF @AppId IS NULL
+BEGIN
+    SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
+           @AppInstanceRowsUpdated AS AppInstanceRowsUpdated,
+           @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated;
+    RETURN;
+END;
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @ArtifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppId = @AppId
+  AND IsEnabled = 1
+  AND ISNULL(DesiredArtifactId, -1) <> @ArtifactId;
+
+SET @TemplateAppRowsUpdated = @@ROWCOUNT;
+
+UPDATE omp.AppInstances
+SET ArtifactId = @ArtifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppId = @AppId
+  AND IsEnabled = 1
+  AND ISNULL(ArtifactId, -1) <> @ArtifactId;
+
+SET @AppInstanceRowsUpdated = @@ROWCOUNT;
+
+UPDATE wi
+SET ArtifactId = @ArtifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.WorkerInstances wi
+INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
+WHERE ai.AppId = @AppId
+  AND wi.IsEnabled = 1
+  AND wi.ArtifactId IS NOT NULL
+  AND wi.ArtifactId <> @ArtifactId;
+
+SET @WorkerInstanceRowsUpdated = @@ROWCOUNT;
+
+SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
+       @AppInstanceRowsUpdated AS AppInstanceRowsUpdated,
+       @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return new ArtifactApplicationResult();
+        }
+
+        return new ArtifactApplicationResult
+        {
+            TemplateAppRowsUpdated = rdr.GetInt32(0),
+            AppInstanceRowsUpdated = rdr.GetInt32(1),
+            WorkerInstanceRowsUpdated = rdr.GetInt32(2)
+        };
+    }
+
     // -------------------------------------------------------------------------
     // App-instance editing
     // -------------------------------------------------------------------------

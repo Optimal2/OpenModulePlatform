@@ -10,6 +10,7 @@ public sealed class HostAgentEngine
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ArtifactProvisioner _provisioner;
+    private readonly ArtifactZipImportService _artifactZipImportService;
     private readonly WebAppDeploymentService _webAppDeploymentService;
     private readonly ServiceAppDeploymentService _serviceAppDeploymentService;
     private readonly HostAgentFileMirrorService _fileMirrorService;
@@ -19,6 +20,7 @@ public sealed class HostAgentEngine
         IOptionsMonitor<HostAgentSettings> settings,
         OmpHostArtifactRepository repository,
         ArtifactProvisioner provisioner,
+        ArtifactZipImportService artifactZipImportService,
         WebAppDeploymentService webAppDeploymentService,
         ServiceAppDeploymentService serviceAppDeploymentService,
         HostAgentFileMirrorService fileMirrorService,
@@ -27,6 +29,7 @@ public sealed class HostAgentEngine
         _settings = settings;
         _repository = repository;
         _provisioner = provisioner;
+        _artifactZipImportService = artifactZipImportService;
         _webAppDeploymentService = webAppDeploymentService;
         _serviceAppDeploymentService = serviceAppDeploymentService;
         _fileMirrorService = fileMirrorService;
@@ -40,6 +43,8 @@ public sealed class HostAgentEngine
 
         var hostKey = settings.ResolveHostKey();
         await _repository.TouchHostHeartbeatAsync(hostKey, cancellationToken);
+
+        await _artifactZipImportService.ImportPendingAsync(cancellationToken);
 
         if (settings.ProcessHostDeployments)
         {

@@ -485,6 +485,10 @@ $webAppsRoot = [string](Get-ConfigValue -Config $config -Name 'WebAppsRoot' -Def
 $servicesRoot = [string](Get-ConfigValue -Config $config -Name 'ServicesRoot' -DefaultValue (Join-Path $runtimeRoot 'Services'))
 $artifactStoreRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactStoreRoot' -DefaultValue (Join-Path $runtimeRoot 'ArtifactStore'))
 $artifactCacheRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactCacheRoot' -DefaultValue (Join-Path $runtimeRoot 'ArtifactCache'))
+$artifactZipImportEnabled = [bool](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportEnabled' -DefaultValue $false)
+$artifactZipImportPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportPath' -DefaultValue (Join-Path $runtimeRoot 'ArtifactImports'))
+$artifactZipImportProcessedPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportProcessedPath' -DefaultValue '')
+$artifactZipImportFailedPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportFailedPath' -DefaultValue '')
 $webAppDataProtectionKeyPath = [string](Get-ConfigValue -Config $config -Name 'WebAppDataProtectionKeyPath' -DefaultValue (Join-Path $runtimeRoot 'DataProtectionKeys'))
 $portalPhysicalPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'PortalPhysicalPath' -DefaultValue '')
 if ([string]::IsNullOrWhiteSpace($portalPhysicalPath)) {
@@ -570,6 +574,14 @@ $bootstrapConfig = [ordered]@{
                 ProcessHostDeployments = $true
                 ProvisionAppInstanceArtifacts = $true
                 ProvisionExplicitRequirements = $true
+                ArtifactZipImport = [ordered]@{
+                    IsEnabled = $artifactZipImportEnabled
+                    ImportPath = $artifactZipImportPath
+                    ProcessedPath = $artifactZipImportProcessedPath
+                    FailedPath = $artifactZipImportFailedPath
+                    MaxFilesPerCycle = 10
+                    CopyConfigurationFilesFromPreviousVersion = $true
+                }
                 DeployWebApps = $true
                 IisSiteName = $iisSiteName
                 EnsureIisSite = $true

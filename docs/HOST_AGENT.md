@@ -163,6 +163,34 @@ For values written inside JSON strings, use the `Omp.Json.` variants, for
 example `{{Omp.Json.ConnectionStrings.OmpDb}}`. Those variants escape the value
 for JSON string content but do not include the surrounding quotes.
 
+## Artifact zip import
+
+HostAgent can poll a folder for immutable artifact zip files. The feature is
+off unless `HostAgent:ArtifactZipImport:IsEnabled` is set to `true`.
+
+```json
+{
+  "HostAgent": {
+    "ArtifactZipImport": {
+      "IsEnabled": true,
+      "ImportPath": "E:\\\\OMP\\\\ArtifactImports",
+      "ProcessedPath": "",
+      "FailedPath": "",
+      "MaxFilesPerCycle": 10,
+      "CopyConfigurationFilesFromPreviousVersion": true
+    }
+  }
+}
+```
+
+Each zip filename must use the same metadata format as Portal upload:
+`moduleKey__appKey__packageType__targetName__version.zip`. HostAgent validates
+and extracts the zip below `CentralArtifactRoot`, rejects duplicate extracted
+content by SHA-256, registers the `omp.Artifacts` row, copies configuration file
+rows from the latest previous matching artifact when enabled, and selects the
+new artifact for matching desired app rows. Successful files move to
+`processed`; failed files move to `failed` with an adjacent `.error.txt`.
+
 ## Runtime file mirrors
 
 HostAgent can mirror environment-owned files from a shared folder to local

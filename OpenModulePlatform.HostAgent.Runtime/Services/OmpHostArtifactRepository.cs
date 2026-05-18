@@ -15,6 +15,255 @@ public sealed class OmpHostArtifactRepository
     public string GetConfiguredConnectionString()
         => _db.GetConnectionString();
 
+    public async Task<ArtifactZipImportAppDescriptor?> ResolveArtifactZipImportAppAsync(
+        string moduleKey,
+        string appKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       a.AppId,
+       m.ModuleKey,
+       a.AppKey
+FROM omp.Apps a
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = @moduleKey
+  AND a.AppKey = @appKey
+  AND m.IsEnabled = 1
+  AND a.IsEnabled = 1
+ORDER BY a.AppId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@moduleKey", moduleKey);
+        cmd.Parameters.AddWithValue("@appKey", appKey);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactZipImportAppDescriptor(
+            rdr.GetInt32(0),
+            rdr.GetString(1),
+            rdr.GetString(2));
+    }
+
+    public async Task<ArtifactZipImportDuplicateInfo?> FindImportedArtifactBySha256Async(
+        string sha256,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       ar.ArtifactId,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+WHERE ar.Sha256 = @sha256
+ORDER BY ar.ArtifactId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@sha256", sha256);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactZipImportDuplicateInfo(
+            rdr.GetInt32(0),
+            rdr.GetString(1),
+            rdr.GetString(2),
+            rdr.GetString(3),
+            rdr.IsDBNull(4) ? null : rdr.GetString(4));
+    }
+
+    public async Task<int> RegisterImportedArtifactAsync(
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        string relativePath,
+        string sha256,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.Artifacts
+(
+    AppId,
+    Version,
+    PackageType,
+    TargetName,
+    RelativePath,
+    Sha256,
+    IsEnabled
+)
+VALUES
+(
+    @appId,
+    @version,
+    @packageType,
+    @targetName,
+    @relativePath,
+    @sha256,
+    1
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@appId", appId);
+        cmd.Parameters.AddWithValue("@version", version);
+        cmd.Parameters.AddWithValue("@packageType", packageType);
+        cmd.Parameters.AddWithValue("@targetName", targetName);
+        cmd.Parameters.AddWithValue("@relativePath", relativePath);
+        cmd.Parameters.AddWithValue("@sha256", sha256);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    public async Task<int> CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+        int artifactId,
+        int appId,
+        string packageType,
+        string targetName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @SourceArtifactId int;
+
+SELECT TOP (1)
+       @SourceArtifactId = source.ArtifactId
+FROM omp.Artifacts source
+WHERE source.ArtifactId <> @artifactId
+  AND source.AppId = @appId
+  AND source.PackageType = @packageType
+  AND ((source.TargetName = @targetName) OR (source.TargetName IS NULL AND @targetName IS NULL))
+  AND source.IsEnabled = 1
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.ArtifactConfigurationFiles sourceFile
+      WHERE sourceFile.ArtifactId = source.ArtifactId
+  )
+ORDER BY source.CreatedUtc DESC, source.ArtifactId DESC;
+
+IF @SourceArtifactId IS NULL
+BEGIN
+    SELECT CAST(0 AS int);
+    RETURN;
+END;
+
+INSERT INTO omp.ArtifactConfigurationFiles
+(
+    ArtifactId,
+    RelativePath,
+    FileContent,
+    IsEnabled
+)
+SELECT @artifactId,
+       sourceFile.RelativePath,
+       sourceFile.FileContent,
+       sourceFile.IsEnabled
+FROM omp.ArtifactConfigurationFiles sourceFile
+WHERE sourceFile.ArtifactId = @SourceArtifactId
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.ArtifactConfigurationFiles targetFile
+      WHERE targetFile.ArtifactId = @artifactId
+        AND targetFile.RelativePath = sourceFile.RelativePath
+  );
+
+SELECT @@ROWCOUNT;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@appId", appId);
+        cmd.Parameters.AddWithValue("@packageType", packageType);
+        cmd.Parameters.AddWithValue("@targetName", targetName);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyImportedArtifactToMatchingApplicationsAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @AppId int;
+DECLARE @TemplateAppRowsUpdated int = 0;
+DECLARE @AppInstanceRowsUpdated int = 0;
+DECLARE @WorkerInstanceRowsUpdated int = 0;
+
+SELECT @AppId = AppId
+FROM omp.Artifacts
+WHERE ArtifactId = @artifactId
+  AND IsEnabled = 1;
+
+IF @AppId IS NOT NULL
+BEGIN
+    UPDATE omp.InstanceTemplateAppInstances
+    SET DesiredArtifactId = @artifactId,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE AppId = @AppId
+      AND IsEnabled = 1
+      AND ISNULL(DesiredArtifactId, -1) <> @artifactId;
+
+    SET @TemplateAppRowsUpdated = @@ROWCOUNT;
+
+    UPDATE omp.AppInstances
+    SET ArtifactId = @artifactId,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE AppId = @AppId
+      AND IsEnabled = 1
+      AND ISNULL(ArtifactId, -1) <> @artifactId;
+
+    SET @AppInstanceRowsUpdated = @@ROWCOUNT;
+
+    UPDATE wi
+    SET ArtifactId = @artifactId,
+        UpdatedUtc = SYSUTCDATETIME()
+    FROM omp.WorkerInstances wi
+    INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
+    WHERE ai.AppId = @AppId
+      AND wi.IsEnabled = 1
+      AND wi.ArtifactId IS NOT NULL
+      AND wi.ArtifactId <> @artifactId;
+
+    SET @WorkerInstanceRowsUpdated = @@ROWCOUNT;
+END;
+
+SELECT @TemplateAppRowsUpdated,
+       @AppInstanceRowsUpdated,
+       @WorkerInstanceRowsUpdated;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return (0, 0, 0);
+        }
+
+        return (rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetInt32(2));
+    }
+
     public async Task TouchHostHeartbeatAsync(string hostKey, CancellationToken ct)
     {
         const string sql = @"

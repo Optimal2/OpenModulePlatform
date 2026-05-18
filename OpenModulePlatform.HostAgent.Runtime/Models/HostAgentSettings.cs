@@ -84,6 +84,8 @@ public sealed class HostAgentSettings
 
     public HostAgentFileMirrorSettings[] FileMirrors { get; set; } = [];
 
+    public HostAgentArtifactZipImportSettings ArtifactZipImport { get; set; } = new();
+
     public int MaxArtifactsPerCycle { get; set; } = 100;
 
     public bool EnableRpc { get; set; } = true;
@@ -204,7 +206,52 @@ public sealed class HostAgentSettings
         {
             mirror.Validate();
         }
+
+        ArtifactZipImport.Validate();
     }
+}
+
+public sealed class HostAgentArtifactZipImportSettings
+{
+    public bool IsEnabled { get; set; }
+
+    public string ImportPath { get; set; } = string.Empty;
+
+    public string ProcessedPath { get; set; } = string.Empty;
+
+    public string FailedPath { get; set; } = string.Empty;
+
+    public int MaxFilesPerCycle { get; set; } = 10;
+
+    public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
+
+    public void Validate()
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ImportPath))
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:ImportPath must be configured when artifact zip import is enabled.");
+        }
+
+        if (MaxFilesPerCycle < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxFilesPerCycle must be at least 1.");
+        }
+    }
+
+    public string ResolveProcessedPath()
+        => string.IsNullOrWhiteSpace(ProcessedPath)
+            ? Path.Combine(ImportPath, "processed")
+            : ProcessedPath.Trim();
+
+    public string ResolveFailedPath()
+        => string.IsNullOrWhiteSpace(FailedPath)
+            ? Path.Combine(ImportPath, "failed")
+            : FailedPath.Trim();
 }
 
 public sealed class HostAgentFileMirrorSettings

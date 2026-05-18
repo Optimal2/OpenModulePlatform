@@ -1705,6 +1705,14 @@ function Write-RuntimeConfiguration {
                 ProcessHostDeployments = $true
                 ProvisionAppInstanceArtifacts = $true
                 ProvisionExplicitRequirements = $true
+                ArtifactZipImport = [ordered]@{
+                    IsEnabled = $script:ArtifactZipImportEnabled
+                    ImportPath = $script:ArtifactZipImportPath
+                    ProcessedPath = $script:ArtifactZipImportProcessedPath
+                    FailedPath = $script:ArtifactZipImportFailedPath
+                    MaxFilesPerCycle = 10
+                    CopyConfigurationFilesFromPreviousVersion = $true
+                }
                 DeployWebApps = $true
                 IisSiteName = $script:IisSiteName
                 WebAppsRoot = $script:WebAppsRoot
@@ -2314,6 +2322,10 @@ $script:WebAppsRoot = [System.IO.Path]::GetFullPath([string](Get-ConfigValue -Co
 $script:ServicesRoot = [System.IO.Path]::GetFullPath([string](Get-ConfigValue -Config $config -Name 'ServicesRoot' -DefaultValue (Join-Path $script:RuntimeRoot 'Services')))
 $script:ArtifactStoreRoot = [System.IO.Path]::GetFullPath([string](Get-ConfigValue -Config $config -Name 'ArtifactStoreRoot' -DefaultValue (Join-Path $script:RuntimeRoot 'ArtifactStore')))
 $script:ArtifactCacheRoot = [System.IO.Path]::GetFullPath([string](Get-ConfigValue -Config $config -Name 'ArtifactCacheRoot' -DefaultValue (Join-Path $script:RuntimeRoot 'ArtifactCache')))
+$script:ArtifactZipImportEnabled = [bool](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportEnabled' -DefaultValue $false)
+$script:ArtifactZipImportPath = [System.IO.Path]::GetFullPath([string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportPath' -DefaultValue (Join-Path $script:RuntimeRoot 'ArtifactImports')))
+$script:ArtifactZipImportProcessedPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportProcessedPath' -DefaultValue '')
+$script:ArtifactZipImportFailedPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportFailedPath' -DefaultValue '')
 $script:DataProtectionKeyPath = [System.IO.Path]::GetFullPath([string](Get-ConfigValue -Config $config -Name 'DataProtectionKeyPath' -DefaultValue (Join-Path $script:RuntimeRoot 'DataProtectionKeys')))
 
 $script:SqlServer = [string](Get-ConfigValue -Config $config -Name 'SqlServer' -DefaultValue 'localhost')
