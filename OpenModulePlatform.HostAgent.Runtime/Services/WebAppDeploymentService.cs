@@ -74,9 +74,12 @@ public sealed class WebAppDeploymentService
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
                 deployment.ArtifactId,
                 cancellationToken);
+            var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
+                deployment,
+                _repository.GetConfiguredConnectionString());
 
             if (IsAlreadyApplied(deployment, targetPath, runtimeName)
-                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles))
+                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
             {
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
@@ -97,7 +100,7 @@ public sealed class WebAppDeploymentService
                 appPoolStopped = StopAppPoolIfRunning(runtimeName, settings.IisAppPoolStopTimeoutSeconds);
             }
 
-            await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, cancellationToken);
+            await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken);
 
             if (useAppCmdAppPoolControl
                 && settings.StartIisAppPoolAfterWebAppDeployment
@@ -149,6 +152,7 @@ public sealed class WebAppDeploymentService
         WebAppDeploymentDescriptor deployment,
         string targetPath,
         IReadOnlyList<ArtifactConfigurationFileDescriptor> configurationFiles,
+        IReadOnlyDictionary<string, string> configurationVariables,
         CancellationToken cancellationToken)
     {
         string? appOfflinePath = null;
@@ -175,7 +179,7 @@ public sealed class WebAppDeploymentService
                 excludedEntries,
                 cancellationToken);
 
-            await ArtifactConfigurationFileWriter.ApplyAsync(targetPath, configurationFiles, cancellationToken);
+            await ArtifactConfigurationFileWriter.ApplyAsync(targetPath, configurationFiles, configurationVariables, cancellationToken);
         }
         finally
         {

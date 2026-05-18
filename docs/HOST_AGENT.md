@@ -128,6 +128,23 @@ uses this for deployment-owned runtime files, for example a site-local
 `odv.site.config.js`, without requiring a new artifact zip for every
 configuration change.
 
+Configuration file content may contain HostAgent tokens. Tokens are expanded per
+deployment, so one artifact-level row can still produce host- or
+app-instance-specific runtime configuration:
+
+- `{{Omp.AppInstanceId}}`
+- `{{Omp.AppInstanceKey}}`
+- `{{Omp.HostId}}`
+- `{{Omp.HostKey}}`
+- `{{Omp.ArtifactId}}`
+- `{{Omp.ArtifactVersion}}`
+- `{{Omp.TargetName}}`
+- `{{Omp.ConnectionStrings.OmpDb}}`
+
+For values written inside JSON strings, use the `Omp.Json.` variants, for
+example `{{Omp.Json.ConnectionStrings.OmpDb}}`. Those variants escape the value
+for JSON string content but do not include the surrounding quotes.
+
 ## Windows service app deployment
 
 HostAgent can also deploy service-backed app instances after their artifacts

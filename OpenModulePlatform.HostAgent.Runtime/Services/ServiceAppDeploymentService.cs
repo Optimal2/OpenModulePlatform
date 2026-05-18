@@ -80,10 +80,13 @@ public sealed class ServiceAppDeploymentService
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
                 deployment.ArtifactId,
                 cancellationToken);
+            var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
+                deployment,
+                _repository.GetConfiguredConnectionString());
 
             if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath))
             {
-                if (ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles))
+                if (ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
                 {
                     await _repository.PublishAppDeploymentResultAsync(
                         deployment,
@@ -109,7 +112,7 @@ public sealed class ServiceAppDeploymentService
                 settings.ServiceAppDeploymentExcludedEntries,
                 cancellationToken);
 
-            await ArtifactConfigurationFileWriter.ApplyAsync(targetPath, configurationFiles, cancellationToken);
+            await ArtifactConfigurationFileWriter.ApplyAsync(targetPath, configurationFiles, configurationVariables, cancellationToken);
 
             EnsureWindowsService(deployment, serviceName, targetExecutablePath);
 

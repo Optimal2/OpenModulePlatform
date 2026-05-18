@@ -4,6 +4,8 @@ public sealed class WebAppDeploymentDescriptor
 {
     public Guid HostId { get; init; }
 
+    public string HostKey { get; init; } = string.Empty;
+
     public Guid AppInstanceId { get; init; }
 
     public string AppInstanceKey { get; init; } = string.Empty;

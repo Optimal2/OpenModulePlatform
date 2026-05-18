@@ -184,6 +184,11 @@ These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them
 only for deployment-owned text files that should live beside the deployed app
 but should not be packaged into the artifact zip. HostAgent writes enabled rows
 after deployment and repairs files whose content differs from the database.
+HostAgent expands OMP tokens in the stored text before writing the file, so a
+single artifact configuration row can still write the correct runtime identity
+for each host/app instance deployment. Use `{{Omp.AppInstanceId}}`,
+`{{Omp.HostId}}`, or the JSON-safe forms such as
+`{{Omp.Json.ConnectionStrings.OmpDb}}` when the value is inside a JSON string.
 The edit page supports direct text editing, text-file upload, and zip upload.
 Prefer zip upload in environments with strict request filtering that blocks
 script-like text even in multipart file uploads. Zip uploads must contain
