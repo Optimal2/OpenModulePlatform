@@ -1663,6 +1663,7 @@
   <data name="Configuration file" xml:space="preserve"><value>Konfigurationsfil</value></data>
   <data name="Upload file content" xml:space="preserve"><value>Ladda upp filinnehåll</value></data>
   <data name="Upload a text file to replace the stored configuration content without posting the file body as a textarea field." xml:space="preserve"><value>Ladda upp en textfil för att ersätta det sparade konfigurationsinnehållet utan att skicka filinnehållet som ett textfält.</value></data>
+  <data name="Upload a text file or a zip file containing exactly one text file. Zip upload is useful when request filters block script-like text content." xml:space="preserve"><value>Ladda upp en textfil eller en zip-fil som innehåller exakt en textfil. Zip-uppladdning är användbart när request-filter blockerar skriptliknande textinnehåll.</value></data>
   <data name="HostAgent writes uploaded text as UTF-8 without BOM and overwrites the deployed file when the deployed copy differs." xml:space="preserve"><value>HostAgent skriver uppladdad text som UTF-8 utan BOM och skriver över den deployade filen när kopian skiljer sig.</value></data>
   <data name="Upload configuration file" xml:space="preserve"><value>Ladda upp konfigurationsfil</value></data>
   <data name="Manual text edit" xml:space="preserve"><value>Manuell textredigering</value></data>
@@ -1681,6 +1682,7 @@
   <data name="Select a file to upload." xml:space="preserve"><value>Välj en fil att ladda upp.</value></data>
   <data name="The uploaded configuration file is too large. The maximum size is 1048576 bytes." xml:space="preserve"><value>Den uppladdade konfigurationsfilen är för stor. Maxstorleken är 1048576 byte.</value></data>
   <data name="The uploaded configuration file must be valid UTF-8 text." xml:space="preserve"><value>Den uppladdade konfigurationsfilen måste vara giltig UTF-8-text.</value></data>
+  <data name="The uploaded zip file must contain exactly one UTF-8 text file." xml:space="preserve"><value>Den uppladdade zip-filen måste innehålla exakt en UTF-8-textfil.</value></data>
   <data name="Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments." xml:space="preserve"><value>Relativ sökväg måste ligga under den deployade appens rot och får inte innehålla rotade sökvägar eller överordnade katalogsegment.</value></data>
   <data name="This artifact already has a configuration file with the same relative path." xml:space="preserve"><value>Den här artefakten har redan en konfigurationsfil med samma relativa sökväg.</value></data>
   <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>Artefaktens konfigurationsfil kunde inte sparas.</value></data>
