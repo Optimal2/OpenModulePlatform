@@ -73,6 +73,9 @@ provisioned to the local artifact cache. This is enabled with:
   "HostAgent": {
     "DeployWebApps": true,
     "IisSiteName": "OpenModulePlatform",
+    "EnsureIisSite": true,
+    "IisBindingProtocol": "http",
+    "IisBindingPort": 8088,
     "WebAppsRoot": "D:\\OMP\\WebApps",
     "PortalPhysicalPath": "D:\\OMP\\Sites\\Portal",
     "UseAppOfflineForWebAppDeployment": true
@@ -86,6 +89,15 @@ whose artifact has `PackageType = 'web-app'` and a successful
 `AppInstances.InstallPath` when set, otherwise from the IIS route path under
 `HostAgent:WebAppsRoot`. The site-root portal app uses
 `HostAgent:PortalPhysicalPath`.
+
+When `HostAgent:EnsureIisSite` is enabled, HostAgent also creates or updates the
+configured IIS site, app pools, and IIS applications before it mirrors files.
+This is the normal HostAgent-first bootstrap path for a blank machine. Existing
+installations can leave it disabled when IIS is managed outside HostAgent.
+App pool names are generated from `HostAgent:IisAppPoolNamePrefix` and the OMP
+app instance key; `HostAgent:IisAppPoolUserName` and
+`HostAgent:IisAppPoolPassword` can be set when app pools must run as a specific
+Windows identity.
 
 An app instance with `HostId = NULL` is treated as host-neutral. HostAgent
 deploys that same logical app instance on every enabled host that runs the

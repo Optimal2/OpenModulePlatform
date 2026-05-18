@@ -7,8 +7,9 @@ by HostAgent itself:
 1. Run the initial SQL setup and initialization scripts.
 2. Prepare the central `ArtifactStore` with the package's component artifacts.
 3. Install or update the HostAgent Windows service.
-4. Start HostAgent so it can materialize templates and deploy web apps, service
-   apps, workers, and runtime configuration files from OMP metadata.
+4. Start HostAgent so it can materialize templates, create/update the IIS site
+   and app pools when configured, and deploy web apps, service apps, workers,
+   and runtime configuration files from OMP metadata.
 
 This keeps normal application deployment in the database/template model instead
 of in one-off PowerShell installation logic.
@@ -66,6 +67,8 @@ version, but it is not forced onto every app artifact.
    - `sql.bootstrapPortalAdminPrincipal`
    - `artifactStoreRoot`
    - `hostAgent.serviceName`
+   - `hostAgent.serviceAccountName`, when HostAgent must run as a specific
+     Windows account instead of LocalSystem
    - `hostAgent.installPath`
    - `hostAgent.webAppsRoot`
    - `hostAgent.portalPhysicalPath`
@@ -137,6 +140,8 @@ For example, a protected VGR package can set:
 
 - `hostAgent.serviceName` to the actual service name used on the servers
 - `artifactStoreRoot` to the shared ArtifactStore UNC path
+- `hostAgent.ensureIisSite`, `hostAgent.iisBinding*`, and app pool identity
+  settings when HostAgent should create or repair the IIS site and app pools
 - `HostAgent:FileMirrors` in `hostAgent.appSettings` for shared Content files
 - separate SQL/bootstrap JSON files for test and production if paths or host
   keys differ

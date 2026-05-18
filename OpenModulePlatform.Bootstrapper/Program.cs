@@ -646,8 +646,15 @@ END
                         ProvisionExplicitRequirements = true,
                         DeployWebApps = hostAgent.DeployWebApps,
                         IisSiteName = hostAgent.IisSiteName,
+                        EnsureIisSite = hostAgent.EnsureIisSite,
+                        IisBindingProtocol = hostAgent.IisBindingProtocol,
+                        IisBindingPort = hostAgent.IisBindingPort,
+                        IisBindingHostHeader = hostAgent.IisBindingHostHeader,
                         WebAppsRoot = hostAgent.WebAppsRoot,
                         PortalPhysicalPath = hostAgent.PortalPhysicalPath,
+                        IisAppPoolNamePrefix = hostAgent.IisAppPoolNamePrefix,
+                        IisAppPoolUserName = hostAgent.IisAppPoolUserName,
+                        IisAppPoolPassword = hostAgent.IisAppPoolPassword,
                         DeployServiceApps = hostAgent.DeployServiceApps,
                         ServicesRoot = hostAgent.ServicesRoot,
                         EnableRpc = true
@@ -743,37 +750,49 @@ END
     private static void CreateService(HostAgentInstallOptions hostAgent, string executablePath)
     {
         Console.WriteLine($"> Create service {hostAgent.ServiceName}");
-        RunProcess(
-            GetScPath(),
-            [
-                "create",
-                hostAgent.ServiceName,
-                "binPath=",
-                executablePath,
-                "start=",
-                "auto",
-                "DisplayName=",
-                hostAgent.DisplayName
-            ]);
+        var arguments = CreateServiceArguments("create", hostAgent, executablePath);
+        RunProcess(GetScPath(), arguments);
         SetServiceDescription(hostAgent);
     }
 
     private static void ConfigureService(HostAgentInstallOptions hostAgent, string executablePath)
     {
         Console.WriteLine($"> Configure service {hostAgent.ServiceName}");
-        RunProcess(
-            GetScPath(),
-            [
-                "config",
-                hostAgent.ServiceName,
-                "binPath=",
-                executablePath,
-                "start=",
-                "auto",
-                "DisplayName=",
-                hostAgent.DisplayName
-            ]);
+        var arguments = CreateServiceArguments("config", hostAgent, executablePath);
+        RunProcess(GetScPath(), arguments);
         SetServiceDescription(hostAgent);
+    }
+
+    private static string[] CreateServiceArguments(
+        string verb,
+        HostAgentInstallOptions hostAgent,
+        string executablePath)
+    {
+        var arguments = new List<string>
+        {
+            verb,
+            hostAgent.ServiceName,
+            "binPath=",
+            executablePath,
+            "start=",
+            "auto",
+            "DisplayName=",
+            hostAgent.DisplayName
+        };
+
+        if (!string.IsNullOrWhiteSpace(hostAgent.ServiceAccountName))
+        {
+            arguments.Add("obj=");
+            arguments.Add(hostAgent.ServiceAccountName.Trim());
+
+            if (!string.IsNullOrWhiteSpace(hostAgent.ServiceAccountPassword))
+            {
+                arguments.Add("password=");
+                arguments.Add(hostAgent.ServiceAccountPassword);
+            }
+        }
+
+        return [.. arguments];
     }
 
     private static void SetServiceDescription(HostAgentInstallOptions hostAgent)
@@ -1111,6 +1130,10 @@ internal sealed class HostAgentInstallOptions
 
     public string Description { get; set; } = "OpenModulePlatform artifact provisioning agent.";
 
+    public string ServiceAccountName { get; set; } = string.Empty;
+
+    public string ServiceAccountPassword { get; set; } = string.Empty;
+
     public string InstallPath { get; set; } = string.Empty;
 
     public string PackagePath { get; set; } = string.Empty;
@@ -1133,9 +1156,23 @@ internal sealed class HostAgentInstallOptions
 
     public string IisSiteName { get; set; } = string.Empty;
 
+    public bool EnsureIisSite { get; set; }
+
+    public string IisBindingProtocol { get; set; } = "http";
+
+    public int IisBindingPort { get; set; } = 80;
+
+    public string IisBindingHostHeader { get; set; } = string.Empty;
+
     public string WebAppsRoot { get; set; } = string.Empty;
 
     public string PortalPhysicalPath { get; set; } = string.Empty;
+
+    public string IisAppPoolNamePrefix { get; set; } = "OMP_";
+
+    public string IisAppPoolUserName { get; set; } = string.Empty;
+
+    public string IisAppPoolPassword { get; set; } = string.Empty;
 
     public bool DeployServiceApps { get; set; } = true;
 

@@ -66,10 +66,17 @@ public sealed class WebAppDeploymentService
         {
             targetPath = ResolveTargetPath(settings, deployment);
             var iisAppName = ResolveIisAppName(settings, deployment);
-            var useAppCmdAppPoolControl = UseAppCmdAppPoolControl(settings);
-            runtimeName = useAppCmdAppPoolControl
+            var appPoolName = settings.EnsureIisSite
+                ? ResolveIisAppPoolName(settings, deployment)
+                : null;
+            runtimeName = appPoolName ?? (UseAppCmdAppPoolControl(settings)
                 ? GetIisAppPoolName(iisAppName)
-                : iisAppName;
+                : iisAppName);
+
+            if (settings.EnsureIisSite)
+            {
+                EnsureIisApplication(settings, deployment, targetPath, iisAppName, runtimeName);
+            }
 
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
                 deployment.ArtifactId,
@@ -93,7 +100,7 @@ public sealed class WebAppDeploymentService
                 AppDeploymentResult.Running(targetPath, runtimeName),
                 cancellationToken);
 
-            if (useAppCmdAppPoolControl
+            if (UseAppCmdAppPoolControl(settings)
                 && settings.StopIisAppPoolForWebAppDeployment
                 && !string.IsNullOrWhiteSpace(runtimeName))
             {
@@ -102,7 +109,7 @@ public sealed class WebAppDeploymentService
 
             await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken);
 
-            if (useAppCmdAppPoolControl
+            if (UseAppCmdAppPoolControl(settings)
                 && settings.StartIisAppPoolAfterWebAppDeployment
                 && !string.IsNullOrWhiteSpace(runtimeName))
             {
@@ -133,7 +140,7 @@ public sealed class WebAppDeploymentService
                 deployment.Version);
 
             if (appPoolStopped
-                && !settings.UseAppOfflineForWebAppDeployment
+                && UseAppCmdAppPoolControl(settings)
                 && settings.StartIisAppPoolAfterWebAppDeployment
                 && !string.IsNullOrWhiteSpace(runtimeName))
             {
@@ -282,8 +289,160 @@ public sealed class WebAppDeploymentService
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool UseAppCmdAppPoolControl(HostAgentSettings settings)
-        => !settings.UseAppOfflineForWebAppDeployment
-            && (settings.StopIisAppPoolForWebAppDeployment || settings.StartIisAppPoolAfterWebAppDeployment);
+        => settings.EnsureIisSite
+            || (!settings.UseAppOfflineForWebAppDeployment
+                && (settings.StopIisAppPoolForWebAppDeployment || settings.StartIisAppPoolAfterWebAppDeployment));
+
+    private static void EnsureIisApplication(
+        HostAgentSettings settings,
+        WebAppDeploymentDescriptor deployment,
+        string targetPath,
+        string iisAppName,
+        string appPoolName)
+    {
+        Directory.CreateDirectory(targetPath);
+
+        var appPath = ResolveRelativeIisAppPath(deployment);
+        var siteRootPath = Path.GetFullPath(settings.PortalPhysicalPath.Trim());
+        Directory.CreateDirectory(siteRootPath);
+
+        if (string.IsNullOrWhiteSpace(appPath))
+        {
+            EnsureAppPool(settings, appPoolName);
+            EnsureIisSite(settings, targetPath, appPoolName);
+            return;
+        }
+
+        var rootAppPoolName = ResolvePortalAppPoolName(settings);
+        EnsureAppPool(settings, rootAppPoolName);
+        EnsureIisSite(settings, siteRootPath, rootAppPoolName);
+        EnsureAppPool(settings, appPoolName);
+        EnsureIisChildApplication(settings, iisAppName, appPath, targetPath, appPoolName);
+    }
+
+    private static void EnsureIisSite(
+        HostAgentSettings settings,
+        string physicalPath,
+        string appPoolName)
+    {
+        var siteName = settings.IisSiteName.Trim();
+        if (!IisObjectExists("list", "site", $"/name:{siteName}"))
+        {
+            RunAppCmd(
+                "add",
+                "site",
+                $"/name:{siteName}",
+                $"/bindings:{CreateIisBinding(settings)}",
+                $"/physicalPath:{physicalPath}");
+        }
+        else
+        {
+            RunAppCmd("set", "vdir", $"/vdir.name:{siteName}/", $"/physicalPath:{physicalPath}");
+        }
+
+        RunAppCmd("set", "app", $"/app.name:{siteName}/", $"/applicationPool:{appPoolName}");
+    }
+
+    private static void EnsureIisChildApplication(
+        HostAgentSettings settings,
+        string iisAppName,
+        string appPath,
+        string physicalPath,
+        string appPoolName)
+    {
+        if (!IisApplicationExists(iisAppName))
+        {
+            RunAppCmd(
+                "add",
+                "app",
+                $"/site.name:{settings.IisSiteName.Trim()}",
+                $"/path:/{appPath}",
+                $"/physicalPath:{physicalPath}",
+                $"/applicationPool:{appPoolName}");
+        }
+        else
+        {
+            RunAppCmd("set", "vdir", $"/vdir.name:{iisAppName}/", $"/physicalPath:{physicalPath}");
+            RunAppCmd("set", "app", $"/app.name:{iisAppName}", $"/applicationPool:{appPoolName}");
+        }
+    }
+
+    private static void EnsureAppPool(HostAgentSettings settings, string appPoolName)
+    {
+        if (!IisObjectExists("list", "apppool", $"/name:{appPoolName}"))
+        {
+            RunAppCmd("add", "apppool", $"/name:{appPoolName}");
+        }
+
+        RunAppCmd(
+            "set",
+            "apppool",
+            $"/apppool.name:{appPoolName}",
+            "/managedRuntimeVersion:",
+            "/processModel.loadUserProfile:true");
+
+        if (!string.IsNullOrWhiteSpace(settings.IisAppPoolUserName))
+        {
+            var arguments = new List<string>
+            {
+                "set",
+                "apppool",
+                $"/apppool.name:{appPoolName}",
+                "/processModel.identityType:SpecificUser",
+                $"/processModel.userName:{settings.IisAppPoolUserName.Trim()}"
+            };
+
+            if (!string.IsNullOrWhiteSpace(settings.IisAppPoolPassword))
+            {
+                arguments.Add($"/processModel.password:{settings.IisAppPoolPassword}");
+            }
+
+            RunAppCmd([.. arguments]);
+        }
+    }
+
+    private static string ResolveIisAppPoolName(
+        HostAgentSettings settings,
+        WebAppDeploymentDescriptor deployment)
+    {
+        var appPath = ResolveRelativeIisAppPath(deployment);
+        var baseName = string.IsNullOrWhiteSpace(appPath) ? "portal" : deployment.AppInstanceKey;
+        if (string.IsNullOrWhiteSpace(baseName))
+        {
+            baseName = deployment.DisplayName;
+        }
+
+        return BuildIisAppPoolName(settings, baseName);
+    }
+
+    private static string ResolvePortalAppPoolName(HostAgentSettings settings)
+        => BuildIisAppPoolName(settings, "portal");
+
+    private static string BuildIisAppPoolName(HostAgentSettings settings, string value)
+    {
+        var prefix = string.IsNullOrWhiteSpace(settings.IisAppPoolNamePrefix)
+            ? string.Empty
+            : settings.IisAppPoolNamePrefix.Trim();
+        var normalized = new string(value
+            .Trim()
+            .Select(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '-' or '_' ? ch : '_')
+            .ToArray());
+        normalized = normalized.Trim('_');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            normalized = "app";
+        }
+
+        var name = prefix + normalized;
+        return name.Length <= 80 ? name : name[..80].TrimEnd('_', '.', '-');
+    }
+
+    private static string CreateIisBinding(HostAgentSettings settings)
+    {
+        var protocol = settings.IisBindingProtocol.Trim();
+        var hostHeader = settings.IisBindingHostHeader?.Trim() ?? string.Empty;
+        return $"{protocol}/*:{settings.IisBindingPort}:{hostHeader}";
+    }
 
     private static string CreateAppOfflineFile(
         string targetPath,
@@ -415,7 +574,23 @@ public sealed class WebAppDeploymentService
         }
     }
 
+    private static bool IisObjectExists(params string[] arguments)
+        => RunAppCmdRaw(arguments, throwOnFailure: false).ExitCode == 0;
+
+    private static bool IisApplicationExists(string iisAppName)
+        => RunAppCmd("list", "app")
+            .Any(line => line.Contains(
+                $"\"{iisAppName}\"",
+                StringComparison.OrdinalIgnoreCase));
+
     private static string[] RunAppCmd(params string[] arguments)
+    {
+        var result = RunAppCmdRaw(arguments, throwOnFailure: true);
+        return result.StdOut
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static AppCmdResult RunAppCmdRaw(IReadOnlyList<string> arguments, bool throwOnFailure)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -437,14 +612,13 @@ public sealed class WebAppDeploymentService
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        if (process.ExitCode != 0)
+        if (throwOnFailure && process.ExitCode != 0)
         {
             var message = string.IsNullOrWhiteSpace(error) ? output : error;
             throw new InvalidOperationException(CreateAppCmdFailureMessage(process.ExitCode, message));
         }
 
-        return output
-            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return new AppCmdResult(process.ExitCode, output, error);
     }
 
     private static string CreateAppCmdFailureMessage(int exitCode, string message)
@@ -472,4 +646,6 @@ public sealed class WebAppDeploymentService
             or UnauthorizedAccessException
             or TimeoutException
             or System.ComponentModel.Win32Exception;
+
+    private sealed record AppCmdResult(int ExitCode, string StdOut, string StdErr);
 }
