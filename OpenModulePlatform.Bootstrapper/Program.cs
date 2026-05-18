@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Principal;
 using System.Text;
@@ -16,6 +17,7 @@ internal static partial class Program
     private const int SqlDeadlockErrorNumber = 1205;
     private const int SqlDeadlockRetryCount = 3;
     private const int ServiceStopTimeoutSeconds = 60;
+    private const int AttachParentProcess = -1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = true,
@@ -29,13 +31,19 @@ internal static partial class Program
         try
         {
             var cli = CliOptions.Parse(args);
+            var useGui = cli.Gui || (args.Length == 0 && OperatingSystem.IsWindows() && Environment.UserInteractive);
+            if (!useGui)
+            {
+                EnsureConsole();
+            }
+
             if (cli.ShowHelp)
             {
                 WriteUsage();
                 return 0;
             }
 
-            if (cli.Gui || (args.Length == 0 && OperatingSystem.IsWindows() && Environment.UserInteractive))
+            if (useGui)
             {
                 return RunInstallerGui(cli);
             }
@@ -95,7 +103,7 @@ internal static partial class Program
 
             if (config.Sql.Enabled)
             {
-                await RunSqlAsync(config.Sql, payloadRoot);
+                await RunSqlAsync(config, payloadRoot);
             }
 
             PrepareArtifacts(config, payloadRoot);
@@ -170,8 +178,9 @@ internal static partial class Program
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
 
-    private static async Task RunSqlAsync(SqlBootstrapOptions sql, string payloadRoot)
+    private static async Task RunSqlAsync(BootstrapConfig config, string payloadRoot)
     {
+        var sql = config.Sql;
         if (string.IsNullOrWhiteSpace(sql.Database))
         {
             throw new InvalidOperationException("Sql:Database must be configured.");
@@ -191,7 +200,7 @@ internal static partial class Program
 
             var scriptPath = ResolvePath(payloadRoot, script.Path);
             Console.WriteLine($"> SQL {scriptPath}");
-            var sqlText = ReadSqlFile(scriptPath, sql, payloadRoot, []);
+            var sqlText = ReadSqlFile(scriptPath, sql, payloadRoot, config.IncludeExampleApps, []);
             await ExecuteSqlBatchesAsync(sql, sql.Database, sqlText, scriptPath);
         }
     }
@@ -223,6 +232,7 @@ END
         string path,
         SqlBootstrapOptions options,
         string payloadRoot,
+        bool includeExampleApps,
         HashSet<string> includeStack)
     {
         var fullPath = Path.GetFullPath(path);
@@ -246,7 +256,12 @@ END
                 {
                     var includePath = include.Groups["path"].Value.Trim().Trim('"');
                     var resolvedInclude = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullPath)!, includePath));
-                    builder.AppendLine(ReadSqlFile(resolvedInclude, options, payloadRoot, includeStack));
+                    if (!includeExampleApps && IsExampleSqlPath(resolvedInclude, payloadRoot))
+                    {
+                        continue;
+                    }
+
+                    builder.AppendLine(ReadSqlFile(resolvedInclude, options, payloadRoot, includeExampleApps, includeStack));
                     continue;
                 }
 
@@ -284,6 +299,14 @@ END
         }
 
         return result;
+    }
+
+    private static bool IsExampleSqlPath(string path, string payloadRoot)
+    {
+        var relative = NormalizePathForMatch(Path.GetRelativePath(payloadRoot, path));
+        return relative.StartsWith("sql/examples/", StringComparison.OrdinalIgnoreCase)
+            || relative.StartsWith("examples/", StringComparison.OrdinalIgnoreCase)
+            || relative.Contains("/examples/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string PatchBootstrapPrincipal(string sqlText, SqlBootstrapOptions options)
@@ -478,6 +501,11 @@ END
 
         foreach (var artifact in config.Artifacts.Where(static item => item.Enabled))
         {
+            if (artifact.IsExample && !config.IncludeExampleApps)
+            {
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(artifact.Source) || string.IsNullOrWhiteSpace(artifact.Target))
             {
                 throw new InvalidOperationException("Artifacts contains an enabled entry without Source or Target.");
@@ -531,6 +559,7 @@ END
         }
 
         var hostAgent = config.HostAgent;
+        ValidateHostAgentServiceAccount(hostAgent);
         if (string.IsNullOrWhiteSpace(hostAgent.ServiceName))
         {
             throw new InvalidOperationException("HostAgent:ServiceName must be configured.");
@@ -750,6 +779,151 @@ END
         var principal = new WindowsPrincipal(identity);
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
+
+    private static void ValidateHostAgentServiceAccount(HostAgentInstallOptions hostAgent)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var account = NormalizeWindowsAccount(hostAgent.ServiceAccountName);
+        if (string.IsNullOrWhiteSpace(account) || IsBuiltInServiceAccount(account))
+        {
+            return;
+        }
+
+        if (IsCurrentWindowsIdentity(account) && IsWindowsAdministrator())
+        {
+            return;
+        }
+
+        var canCheckDirectMembership = TryGetLocalAdministratorMembers(out var members, out var checkError);
+        if (!canCheckDirectMembership)
+        {
+            Console.WriteLine($"WARNING: Could not verify whether '{account}' is a local administrator: {checkError}");
+            return;
+        }
+
+        var isDirectMember = members.Any(member => WindowsAccountEquals(member, account));
+        if (isDirectMember)
+        {
+            return;
+        }
+
+        if (IsLocalMachineAccount(account))
+        {
+            throw new InvalidOperationException(
+                $"HostAgent service account '{account}' is not listed as a local administrator. Add it to the local Administrators group before installing HostAgent, or choose another service account.");
+        }
+
+        Console.WriteLine(
+            $"WARNING: Could not confirm that HostAgent service account '{account}' is a direct local administrator. If access is granted through a nested domain group this may be fine; otherwise add it before installation.");
+    }
+
+    private static bool TryGetLocalAdministratorMembers(
+        out List<string> members,
+        out string error)
+    {
+        members = [];
+        error = string.Empty;
+
+        try
+        {
+            var adminGroup = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null)
+                .Translate(typeof(NTAccount))
+                .Value
+                .Split('\\')
+                .Last();
+
+            var result = RunProcess("net", ["localgroup", adminGroup], throwOnFailure: false);
+            if (result.ExitCode != 0)
+            {
+                error = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut.Trim() : result.StdErr.Trim();
+                return false;
+            }
+
+            var inMemberList = false;
+            foreach (var rawLine in result.StdOut.Split([Environment.NewLine], StringSplitOptions.None))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+
+                if (line.StartsWith("---", StringComparison.Ordinal))
+                {
+                    inMemberList = true;
+                    continue;
+                }
+
+                if (!inMemberList
+                    || line.Contains("command completed", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains("kommandot slutf", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                members.Add(NormalizeWindowsAccount(line));
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or SystemException)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static bool IsCurrentWindowsIdentity(string account)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        return WindowsAccountEquals(identity.Name, account);
+    }
+
+    private static bool IsLocalMachineAccount(string account)
+    {
+        var normalized = NormalizeWindowsAccount(account);
+        var prefix = Environment.MachineName + "\\";
+        return normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsBuiltInServiceAccount(string account)
+    {
+        var normalized = NormalizeWindowsAccount(account);
+        return normalized.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\SYSTEM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\LOCAL SERVICE", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\NETWORK SERVICE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool WindowsAccountEquals(string left, string right)
+        => NormalizeWindowsAccount(left).Equals(NormalizeWindowsAccount(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeWindowsAccount(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith(".\\", StringComparison.Ordinal))
+        {
+            return Environment.MachineName + "\\" + trimmed[2..];
+        }
+
+        if (!trimmed.Contains('\\', StringComparison.Ordinal)
+            && !trimmed.Contains('@', StringComparison.Ordinal)
+            && !IsBuiltInServiceAccountName(trimmed))
+        {
+            return Environment.MachineName + "\\" + trimmed;
+        }
+
+        return trimmed;
+    }
+
+    private static bool IsBuiltInServiceAccountName(string value)
+        => value.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("LocalService", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("NetworkService", StringComparison.OrdinalIgnoreCase);
 
     private static bool ServiceExists(string serviceName)
     {
@@ -985,6 +1159,19 @@ END
     private static string NormalizePathForMatch(string path)
         => path.Replace('\\', '/').TrimStart('/').Trim();
 
+    private static void EnsureConsole()
+    {
+        if (!OperatingSystem.IsWindows() || !Environment.UserInteractive)
+        {
+            return;
+        }
+
+        if (!AttachConsole(AttachParentProcess))
+        {
+            AllocConsole();
+        }
+    }
+
     private static string ConvertToSqlBracketName(string value)
         => "[" + value.Replace("]", "]]", StringComparison.Ordinal) + "]";
 
@@ -1008,6 +1195,12 @@ END
 
     [GeneratedRegex(@"DECLARE\s+@BootstrapPortalAdminPrincipalType\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';")]
     private static partial Regex BootstrapPrincipalTypeDeclarationRegex();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AttachConsole(int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AllocConsole();
 }
 
 internal sealed class CliOptions
@@ -1105,6 +1298,8 @@ internal sealed class BootstrapConfig
 
     public string ArtifactStoreRoot { get; set; } = string.Empty;
 
+    public bool IncludeExampleApps { get; set; } = true;
+
     public List<ArtifactPayloadOptions> Artifacts { get; set; } = [];
 
     public HostAgentInstallOptions HostAgent { get; set; } = new();
@@ -1157,6 +1352,8 @@ internal sealed class ArtifactPayloadOptions
     public bool Overwrite { get; set; } = true;
 
     public bool RemoveRuntimeConfigurationFiles { get; set; } = true;
+
+    public bool IsExample { get; set; }
 }
 
 internal sealed class HostAgentInstallOptions
