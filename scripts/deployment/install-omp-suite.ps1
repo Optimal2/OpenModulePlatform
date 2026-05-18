@@ -1254,6 +1254,30 @@ function Resolve-ContentWebAppHtmlFilesPath {
     return [System.IO.Path]::GetFullPath((Join-Path $contentRoot $configuredPath))
 }
 
+function Get-HostAgentFileMirrors {
+    $mirrors = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($script:ContentWebAppSharedServerReportsPath)) {
+        $mirrors += [ordered]@{
+            SourcePath = $script:ContentWebAppSharedServerReportsPath
+            TargetPath = Resolve-ContentWebAppServerReportsPath
+            DeleteStaleTargetEntries = $true
+            ExcludedEntries = @()
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($script:ContentWebAppSharedHtmlFilesPath)) {
+        $mirrors += [ordered]@{
+            SourcePath = $script:ContentWebAppSharedHtmlFilesPath
+            TargetPath = Resolve-ContentWebAppHtmlFilesPath
+            DeleteStaleTargetEntries = $true
+            ExcludedEntries = @()
+        }
+    }
+
+    return $mirrors
+}
+
 function Add-SqlParameter {
     param(
         [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlCommand]$Command,
@@ -1698,6 +1722,7 @@ function Write-RuntimeConfiguration {
                 ServiceAppStopTimeoutSeconds = 30
                 ServiceAppStartTimeoutSeconds = 30
                 ServiceAppDeploymentExcludedEntries = @('appsettings.json', 'appsettings.*.json', 'logs', 'App_Data')
+                FileMirrors = @(Get-HostAgentFileMirrors)
                 MaxArtifactsPerCycle = 100
                 EnableRpc = $true
                 RpcPipeName = ''
@@ -2353,6 +2378,8 @@ $script:ContentWebAppAppInstanceId = [string](Get-NestedConfigValue -Config $con
 $script:ContentWebAppHomeSlug = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HomeSlug' -DefaultValue 'home')
 $script:ContentWebAppServerReportsPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportsPath' -DefaultValue 'App_Data/ContentReports')
 $script:ContentWebAppHtmlFilesPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HtmlFilesPath' -DefaultValue 'App_Data/ContentPages')
+$script:ContentWebAppSharedServerReportsPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'SharedServerReportsPath' -DefaultValue '')
+$script:ContentWebAppSharedHtmlFilesPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'SharedHtmlFilesPath' -DefaultValue '')
 $script:ContentWebAppAllowedServerReportDatabases = @(
     Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'AllowedServerReportDatabases' -DefaultValue @($script:Database)
 )

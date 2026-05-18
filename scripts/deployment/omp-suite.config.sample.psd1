@@ -82,10 +82,16 @@
     ContentWebApp = @{
         AppInstanceId = '11111111-1111-1111-1111-111111111232'
         HomeSlug = 'home'
-        # Use absolute shared paths for multi-server deployments so HTML files
-        # and server reports are not tied to a single IIS node or app artifact.
+        # Content reads from these paths inside the IIS app. Keep App_Data for
+        # HostAgent-managed deployments so runtime content stays outside the
+        # immutable app artifact.
         ServerReportsPath = 'App_Data/ContentReports'
         HtmlFilesPath = 'App_Data/ContentPages'
+        # Optional shared source folders mirrored by HostAgent to the local
+        # App_Data paths above on every server. Use these for multi-server
+        # deployments where editors maintain HTML/JSON files on a shared disk.
+        SharedServerReportsPath = ''
+        SharedHtmlFilesPath = ''
         AllowedServerReportDatabases = @('OpenModulePlatform')
         ServerReportDefaultMaxRows = 100
         ServerReportMaxRowsLimit = 1000

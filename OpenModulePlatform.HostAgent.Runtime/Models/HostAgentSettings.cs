@@ -66,6 +66,8 @@ public sealed class HostAgentSettings
         "App_Data"
     ];
 
+    public HostAgentFileMirrorSettings[] FileMirrors { get; set; } = [];
+
     public int MaxArtifactsPerCycle { get; set; } = 100;
 
     public bool EnableRpc { get; set; } = true;
@@ -162,6 +164,51 @@ public sealed class HostAgentSettings
         if (RpcRequestTimeoutSeconds < 1)
         {
             throw new InvalidOperationException("HostAgent:RpcRequestTimeoutSeconds must be at least 1.");
+        }
+
+        foreach (var mirror in FileMirrors.Where(static mirror => mirror.IsEnabled))
+        {
+            mirror.Validate();
+        }
+    }
+}
+
+public sealed class HostAgentFileMirrorSettings
+{
+    public bool IsEnabled { get; set; } = true;
+
+    public string SourcePath { get; set; } = string.Empty;
+
+    public string TargetPath { get; set; } = string.Empty;
+
+    public bool DeleteStaleTargetEntries { get; set; } = true;
+
+    public string[] ExcludedEntries { get; set; } = [];
+
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(SourcePath))
+        {
+            throw new InvalidOperationException("HostAgent:FileMirrors:SourcePath must be configured for enabled file mirrors.");
+        }
+
+        if (string.IsNullOrWhiteSpace(TargetPath))
+        {
+            throw new InvalidOperationException("HostAgent:FileMirrors:TargetPath must be configured for enabled file mirrors.");
+        }
+
+        var source = Path.GetFullPath(SourcePath.Trim());
+        var target = Path.GetFullPath(TargetPath.Trim());
+        if (string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("HostAgent:FileMirrors source and target paths must be different.");
+        }
+
+        var targetRoot = Path.GetPathRoot(target);
+        if (string.IsNullOrWhiteSpace(targetRoot)
+            || string.Equals(Path.TrimEndingDirectorySeparator(targetRoot), Path.TrimEndingDirectorySeparator(target), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("HostAgent:FileMirrors target path must not be a drive or share root.");
         }
     }
 }
