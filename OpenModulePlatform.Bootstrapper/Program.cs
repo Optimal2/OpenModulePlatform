@@ -1391,6 +1391,12 @@ END;
         var appPoolsResult = RunProcess(appCmdPath, ["list", "apppool", "/text:name"], throwOnFailure: false);
         if (appPoolsResult.ExitCode != 0)
         {
+            if (IsEmptyAppCmdListResult(appPoolsResult))
+            {
+                Console.WriteLine("  no IIS app pools found.");
+                return;
+            }
+
             throw new InvalidOperationException(
                 $"appcmd.exe failed with exit code {appPoolsResult.ExitCode} while listing IIS app pools: {appPoolsResult.StdOut}{appPoolsResult.StdErr}");
         }
@@ -1406,6 +1412,11 @@ END;
             RunProcess(appCmdPath, ["delete", "apppool", $"/apppool.name:{appPool}"]);
         }
     }
+
+    private static bool IsEmptyAppCmdListResult(ProcessResult result)
+        => result.ExitCode == 1
+            && string.IsNullOrWhiteSpace(result.StdOut)
+            && string.IsNullOrWhiteSpace(result.StdErr);
 
     private static string TryGetAppCmdPath()
     {
