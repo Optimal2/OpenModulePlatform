@@ -77,12 +77,17 @@ public sealed class ServiceAppDeploymentService
                 executableRelativePath,
                 $"Service app instance '{deployment.AppInstanceKey}' executable path");
 
+            var configuredConnectionString = _repository.GetConfiguredConnectionString();
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
                 deployment.ArtifactId,
                 cancellationToken);
+            configurationFiles = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+                configurationFiles,
+                deployment,
+                configuredConnectionString);
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,
-                _repository.GetConfiguredConnectionString(),
+                configuredConnectionString,
                 settings);
 
             if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath))

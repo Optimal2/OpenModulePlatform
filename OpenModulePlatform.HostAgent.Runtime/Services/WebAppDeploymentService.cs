@@ -78,12 +78,18 @@ public sealed class WebAppDeploymentService
                 EnsureIisApplication(settings, deployment, targetPath, iisAppName, runtimeName);
             }
 
+            var configuredConnectionString = _repository.GetConfiguredConnectionString();
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
                 deployment.ArtifactId,
                 cancellationToken);
+            configurationFiles = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
+                configurationFiles,
+                deployment,
+                configuredConnectionString,
+                settings);
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,
-                _repository.GetConfiguredConnectionString(),
+                configuredConnectionString,
                 settings);
 
             if (IsAlreadyApplied(deployment, targetPath, runtimeName)
