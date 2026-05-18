@@ -13,6 +13,8 @@ namespace OpenModulePlatform.Bootstrapper;
 internal static partial class Program
 {
     private const string BootstrapPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
+    private const int SqlDeadlockErrorNumber = 1205;
+    private const int SqlDeadlockRetryCount = 3;
     private const int ServiceStopTimeoutSeconds = 60;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -259,12 +261,6 @@ END
                 1);
         }
 
-        if (result.Contains(BootstrapPrincipalPlaceholder, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Bootstrap principal placeholder remains in {scriptPath}. Configure Sql:BootstrapPortalAdminPrincipal.");
-        }
-
         return result;
     }
 
@@ -333,13 +329,35 @@ END
         foreach (var batch in SplitSqlBatches(sqlText))
         {
             batchNumber++;
+            await ExecuteSqlBatchWithRetryAsync(connection, batch, sql.CommandTimeoutSeconds, sourceName, database, batchNumber);
+        }
+    }
+
+    private static async Task ExecuteSqlBatchWithRetryAsync(
+        SqlConnection connection,
+        string batch,
+        int commandTimeoutSeconds,
+        string sourceName,
+        string database,
+        int batchNumber)
+    {
+        for (var attempt = 1; attempt <= SqlDeadlockRetryCount + 1; attempt++)
+        {
             await using var command = connection.CreateCommand();
             command.CommandText = batch;
-            command.CommandTimeout = sql.CommandTimeoutSeconds;
+            command.CommandTimeout = commandTimeoutSeconds;
 
             try
             {
                 await command.ExecuteNonQueryAsync();
+                return;
+            }
+            catch (SqlException ex) when (IsDeadlock(ex) && attempt <= SqlDeadlockRetryCount)
+            {
+                var delay = TimeSpan.FromSeconds(attempt * 2);
+                Console.WriteLine(
+                    $"> SQL deadlock in batch {batchNumber}; retrying attempt {attempt}/{SqlDeadlockRetryCount} after {delay.TotalSeconds:n0}s.");
+                await Task.Delay(delay);
             }
             catch (SqlException ex)
             {
@@ -349,6 +367,9 @@ END
             }
         }
     }
+
+    private static bool IsDeadlock(SqlException ex)
+        => ex.Errors.Cast<SqlError>().Any(static error => error.Number == SqlDeadlockErrorNumber);
 
     private static IEnumerable<string> SplitSqlBatches(string sqlText)
     {
@@ -533,11 +554,7 @@ END
                 var backupPath = CreateBackupPath(installPath);
                 Console.WriteLine($"> Backup HostAgent {installPath} -> {backupPath}");
                 Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
-                Directory.Move(installPath, backupPath);
-            }
-            else if (Directory.Exists(installPath))
-            {
-                TryDeleteDirectory(installPath);
+                CopyDirectory(installPath, backupPath);
             }
 
             Console.WriteLine($"> Install HostAgent {installPath}");
