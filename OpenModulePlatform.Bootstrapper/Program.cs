@@ -890,6 +890,8 @@ END;
                 throw new FileNotFoundException("HostAgent executable was not found after installation.", executablePath);
             }
 
+            RunHostAgentOnce(executablePath, installPath);
+
             if (serviceExists)
             {
                 ConfigureService(hostAgent, executablePath);
@@ -928,6 +930,7 @@ END;
         };
 
         ReplaceTokens(settings, tokens);
+        SynchronizeHostAgentSettings(settings, config);
 
         var fileName = string.IsNullOrWhiteSpace(hostAgent.SettingsFileName)
             ? "appsettings.Production.json"
@@ -939,6 +942,67 @@ END;
             path,
             settings.ToJsonString(JsonOptions),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static void RunHostAgentOnce(string executablePath, string installPath)
+    {
+        Console.WriteLine("> Run HostAgent once");
+        RunProcess(executablePath, ["--run-once"], workingDirectory: installPath);
+    }
+
+    private static void SynchronizeHostAgentSettings(JsonNode settings, BootstrapConfig config)
+    {
+        if (settings is not JsonObject root)
+        {
+            throw new InvalidOperationException("HostAgent appsettings root must be a JSON object.");
+        }
+
+        var hostAgent = config.HostAgent;
+        var connectionStrings = GetOrCreateJsonObject(root, "ConnectionStrings");
+        connectionStrings["OmpDb"] = BuildConnectionString(config.Sql, config.Sql.Database);
+
+        var hostAgentSettings = GetOrCreateJsonObject(root, "HostAgent");
+        hostAgentSettings["HostKey"] = hostAgent.HostKey;
+        hostAgentSettings["HostName"] = hostAgent.HostName;
+        hostAgentSettings["RefreshSeconds"] = hostAgent.RefreshSeconds;
+        hostAgentSettings["CentralArtifactRoot"] = Path.GetFullPath(config.ArtifactStoreRoot.Trim());
+        hostAgentSettings["LocalArtifactCacheRoot"] = hostAgent.LocalArtifactCacheRoot;
+        hostAgentSettings["DeployWebApps"] = hostAgent.DeployWebApps;
+        hostAgentSettings["IisSiteName"] = hostAgent.IisSiteName;
+        hostAgentSettings["EnsureIisSite"] = hostAgent.EnsureIisSite;
+        hostAgentSettings["IisBindingProtocol"] = hostAgent.IisBindingProtocol;
+        hostAgentSettings["IisBindingPort"] = hostAgent.IisBindingPort;
+        hostAgentSettings["IisBindingHostHeader"] = hostAgent.IisBindingHostHeader;
+        hostAgentSettings["WebAppsRoot"] = hostAgent.WebAppsRoot;
+        hostAgentSettings["PortalPhysicalPath"] = hostAgent.PortalPhysicalPath;
+        hostAgentSettings["IisAppPoolNamePrefix"] = hostAgent.IisAppPoolNamePrefix;
+        hostAgentSettings["IisAppPoolUserName"] = hostAgent.IisAppPoolUserName;
+        hostAgentSettings["IisAppPoolPassword"] = hostAgent.IisAppPoolPassword;
+        hostAgentSettings["DeployServiceApps"] = hostAgent.DeployServiceApps;
+        hostAgentSettings["ServicesRoot"] = hostAgent.ServicesRoot;
+    }
+
+    private static JsonObject GetOrCreateJsonObject(JsonObject parent, string propertyName)
+    {
+        foreach (var property in parent.ToArray())
+        {
+            if (!property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (property.Value is JsonObject existing)
+            {
+                return existing;
+            }
+
+            parent.Remove(property.Key);
+            break;
+        }
+
+        var created = new JsonObject();
+        parent[propertyName] = created;
+        return created;
     }
 
     private static JsonNode CreateDefaultHostAgentSettings(BootstrapConfig config)
@@ -1625,7 +1689,11 @@ END;
         return result.StdOut + Environment.NewLine + result.StdErr;
     }
 
-    private static ProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments, bool throwOnFailure = true)
+    private static ProcessResult RunProcess(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        bool throwOnFailure = true,
+        string? workingDirectory = null)
     {
         var info = new ProcessStartInfo(fileName)
         {
@@ -1634,6 +1702,11 @@ END;
             RedirectStandardError = true,
             UseShellExecute = false
         };
+
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            info.WorkingDirectory = workingDirectory;
+        }
 
         foreach (var argument in arguments)
         {

@@ -7,7 +7,12 @@ using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
 using OpenModulePlatform.HostAgent.WindowsService.Services;
 
-var builder = Host.CreateDefaultBuilder(args)
+var runOnce = args.Any(static arg => string.Equals(arg, "--run-once", StringComparison.OrdinalIgnoreCase));
+var hostArgs = args
+    .Where(static arg => !string.Equals(arg, "--run-once", StringComparison.OrdinalIgnoreCase))
+    .ToArray();
+
+var builder = Host.CreateDefaultBuilder(hostArgs)
     .UseWindowsService(options =>
     {
         options.ServiceName = "OpenModulePlatform.HostAgent.WindowsService";
@@ -33,4 +38,12 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddHostedService<HostAgentRpcHostedService>();
     });
 
-await builder.Build().RunAsync();
+using var host = builder.Build();
+if (runOnce)
+{
+    var engine = host.Services.GetRequiredService<HostAgentEngine>();
+    await engine.RunOnceAsync(CancellationToken.None);
+    return;
+}
+
+await host.RunAsync();
