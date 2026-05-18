@@ -64,7 +64,10 @@ internal static partial class Program
         private readonly string _payloadRoot;
         private readonly string _payloadZipPath;
         private readonly TextBox _logBox = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
-        private readonly Button _installButton = new() { Text = "Install", AutoSize = true };
+        private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
+        private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
+        private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
+        private readonly Button _fullUninstallButton = new() { Text = "Full uninstall", AutoSize = true, ForeColor = Color.DarkRed };
         private readonly Button _cancelButton = new() { Text = "Cancel", AutoSize = true };
         private readonly CheckBox _runSql = new() { Text = "Run SQL bootstrap" };
         private readonly CheckBox _installHostAgent = new() { Text = "Install/update HostAgent" };
@@ -94,32 +97,34 @@ internal static partial class Program
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 5,
+                RowCount = 6,
                 Padding = new Padding(12)
             };
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 54));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 46));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             Controls.Add(root);
 
             root.Controls.Add(CreateHeader(), 0, 0);
             root.Controls.Add(CreateSettingsTabs(), 0, 1);
+            root.Controls.Add(CreateActionPanel(), 0, 2);
 
             _logBox.Font = new Font(FontFamily.GenericMonospace, 9);
             _logBox.Margin = new Padding(0, 10, 0, 6);
-            root.Controls.Add(_logBox, 0, 2);
+            root.Controls.Add(_logBox, 0, 3);
 
             var warning = new Label
             {
                 AutoSize = true,
                 ForeColor = IsWindowsAdministrator() ? SystemColors.ControlText : Color.DarkRed,
                 Text = IsWindowsAdministrator()
-                    ? "Review the settings and click Install to start."
+                    ? "Review the settings and choose an action."
                     : "Run this installer as Administrator before installing Windows services or IIS settings."
             };
-            root.Controls.Add(warning, 0, 3);
+            root.Controls.Add(warning, 0, 4);
 
             var buttons = new FlowLayoutPanel
             {
@@ -128,11 +133,13 @@ internal static partial class Program
                 AutoSize = true
             };
             buttons.Controls.Add(_cancelButton);
-            buttons.Controls.Add(_installButton);
-            root.Controls.Add(buttons, 0, 4);
+            root.Controls.Add(buttons, 0, 5);
 
             LoadValues();
             _installButton.Click += async (_, _) => await InstallAsync();
+            _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
+            _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
+            _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
             _cancelButton.Click += (_, _) => Close();
         }
 
@@ -171,6 +178,64 @@ internal static partial class Program
                 Text = $"Payload: {_payloadRoot}"
             });
             return panel;
+        }
+
+        private Control CreateActionPanel()
+        {
+            var group = new GroupBox
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Text = "Actions",
+                Padding = new Padding(12)
+            };
+
+            var grid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2
+            };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            AddActionRow(
+                grid,
+                _installButton,
+                "Runs the SQL bootstrap, prepares ArtifactStore, and installs or updates HostAgent using the settings above.");
+            AddActionRow(
+                grid,
+                _uninstallRuntimeButton,
+                "Stops and removes HostAgent/runtime Windows services plus the configured IIS site and app pools. Runtime files and database objects are kept.");
+            AddActionRow(
+                grid,
+                _cleanUninstallButton,
+                "Does the runtime uninstall and also removes the configured runtime folders, ArtifactStore, web-app folders, and service folders. The database is kept.");
+            AddActionRow(
+                grid,
+                _fullUninstallButton,
+                "Does the clean uninstall and removes all user objects from the configured database. The database itself is never dropped.");
+
+            group.Controls.Add(grid);
+            return group;
+        }
+
+        private static void AddActionRow(TableLayoutPanel grid, Button button, string description)
+        {
+            var row = grid.RowCount++;
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            button.Width = 150;
+            button.Margin = new Padding(0, 4, 12, 4);
+            grid.Controls.Add(button, 0, row);
+            grid.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(780, 0),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 7, 0, 4),
+                Text = description
+            }, 1, row);
         }
 
         private Control CreateSettingsTabs()
@@ -338,7 +403,7 @@ internal static partial class Program
 
         private async Task InstallAsync()
         {
-            _installButton.Enabled = false;
+            SetActionButtonsEnabled(false);
             _cancelButton.Enabled = false;
             _logBox.Clear();
             ApplyValues();
@@ -379,9 +444,145 @@ internal static partial class Program
             {
                 Console.SetOut(originalOut);
                 Console.SetError(originalError);
-                _installButton.Enabled = true;
+                SetActionButtonsEnabled(true);
                 _cancelButton.Enabled = true;
             }
+        }
+
+        private async Task UninstallAsync(bool removeRuntimeFiles, bool removeDatabaseObjects)
+        {
+            ApplyValues();
+            if (!ConfirmUninstall(removeRuntimeFiles, removeDatabaseObjects))
+            {
+                return;
+            }
+
+            SetActionButtonsEnabled(false);
+            _cancelButton.Enabled = false;
+            _logBox.Clear();
+
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            using var writer = new TextBoxWriter(_logBox);
+            Console.SetOut(writer);
+            Console.SetError(writer);
+
+            try
+            {
+                ExitCode = await Task.Run(() => RunUninstallAsync(
+                    _config,
+                    _configPath,
+                    removeRuntimeFiles,
+                    removeDatabaseObjects,
+                    yes: true).GetAwaiter().GetResult());
+
+                MessageBox.Show(
+                    ExitCode == 0 ? "Uninstall completed." : "Uninstall did not complete.",
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    ExitCode == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                ExitCode = 1;
+                writer.WriteLine("Uninstall failed.");
+                writer.WriteLine(ex.Message);
+                MessageBox.Show(
+                    ex.Message,
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+                SetActionButtonsEnabled(true);
+                _cancelButton.Enabled = true;
+            }
+        }
+
+        private bool ConfirmUninstall(bool removeRuntimeFiles, bool removeDatabaseObjects)
+        {
+            var message = BuildUninstallConfirmationMessage(removeRuntimeFiles, removeDatabaseObjects);
+            var firstConfirmation = MessageBox.Show(
+                message,
+                "Confirm OpenModulePlatform uninstall",
+                MessageBoxButtons.YesNo,
+                removeDatabaseObjects ? MessageBoxIcon.Warning : MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+
+            if (firstConfirmation != DialogResult.Yes)
+            {
+                return false;
+            }
+
+            if (!removeDatabaseObjects)
+            {
+                return true;
+            }
+
+            var databaseConfirmation = MessageBox.Show(
+                $"This will remove all user objects from database '{_config.Sql.Database}' on '{_config.Sql.Server}'. The database itself will be kept. Continue?",
+                "Confirm database object cleanup",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            return databaseConfirmation == DialogResult.Yes;
+        }
+
+        private string BuildUninstallConfirmationMessage(bool removeRuntimeFiles, bool removeDatabaseObjects)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("The uninstall action will affect:");
+            builder.AppendLine();
+            builder.AppendLine($"Windows services: {ValueOrPlaceholder(_config.HostAgent.ServiceName)} and services under {ValueOrPlaceholder(_config.HostAgent.ServicesRoot)}");
+            builder.AppendLine($"IIS site: {ValueOrPlaceholder(_config.HostAgent.IisSiteName)}");
+            builder.AppendLine($"IIS app pools with prefix: {ValueOrPlaceholder(_config.HostAgent.IisAppPoolNamePrefix)}");
+
+            if (removeRuntimeFiles)
+            {
+                builder.AppendLine();
+                builder.AppendLine("Runtime folders will be removed:");
+                builder.AppendLine($"HostAgent: {ValueOrPlaceholder(_config.HostAgent.InstallPath)}");
+                builder.AppendLine($"Portal: {ValueOrPlaceholder(_config.HostAgent.PortalPhysicalPath)}");
+                builder.AppendLine($"Web apps: {ValueOrPlaceholder(_config.HostAgent.WebAppsRoot)}");
+                builder.AppendLine($"Services: {ValueOrPlaceholder(_config.HostAgent.ServicesRoot)}");
+                builder.AppendLine($"ArtifactStore: {ValueOrPlaceholder(_config.ArtifactStoreRoot)}");
+                builder.AppendLine($"Local artifact cache: {ValueOrPlaceholder(_config.HostAgent.LocalArtifactCacheRoot)}");
+            }
+            else
+            {
+                builder.AppendLine();
+                builder.AppendLine("Runtime files will be kept.");
+            }
+
+            builder.AppendLine();
+            if (removeDatabaseObjects)
+            {
+                builder.AppendLine($"Database objects will be removed from: {_config.Sql.Server}/{_config.Sql.Database}");
+                builder.AppendLine("The database itself will not be dropped.");
+            }
+            else
+            {
+                builder.AppendLine($"Database objects will be kept in: {_config.Sql.Server}/{_config.Sql.Database}");
+            }
+
+            builder.AppendLine();
+            builder.Append("Continue?");
+            return builder.ToString();
+        }
+
+        private static string ValueOrPlaceholder(string value)
+            => string.IsNullOrWhiteSpace(value) ? "(not configured)" : value.Trim();
+
+        private void SetActionButtonsEnabled(bool enabled)
+        {
+            _installButton.Enabled = enabled;
+            _uninstallRuntimeButton.Enabled = enabled;
+            _cleanUninstallButton.Enabled = enabled;
+            _fullUninstallButton.Enabled = enabled;
         }
 
         private void Set(string key, string value)
