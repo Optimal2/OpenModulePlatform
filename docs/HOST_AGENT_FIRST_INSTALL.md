@@ -102,7 +102,7 @@ install-hostagent-first.cmd
 
 Both entry points open the graphical installer. The EXE requests administrator
 rights, loads the package defaults, lets the operator review or change common
-SQL, path, HostAgent, and IIS settings, and then runs the same bootstrap steps.
+SQL, path, HostAgent, and IIS settings, and then runs the selected action.
 
 For non-interactive console installation, run:
 
@@ -119,21 +119,30 @@ tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --conf
 The bootstrapper intentionally prompts with `[Y/N, default N]` when `--yes` is
 not supplied.
 
-## Uninstalling Local Runtime Files
+## Uninstalling
 
-Folder packages also include uninstall helpers:
+The graphical installer also includes uninstall actions:
+
+- `Uninstall runtime` removes the HostAgent service, runtime services whose
+  executables live below the configured services root, the configured IIS site,
+  and IIS app pools that use the configured app-pool prefix. Runtime files and
+  database objects are kept.
+- `Clean uninstall` performs the runtime uninstall and also removes configured
+  runtime folders such as Portal, WebApps, Services, ArtifactStore,
+  ArtifactCache, DataProtectionKeys, and artifact import folders.
+- `Full uninstall` performs the clean uninstall and removes all user objects
+  from the configured SQL database. The database itself is never dropped.
+
+Folder packages still include script helpers for non-GUI runtime cleanup:
 
 ```text
 uninstall-hostagent-first.cmd
 uninstall-hostagent-first-clean.cmd
 ```
 
-The normal uninstall removes the HostAgent service, runtime services whose
-executables live below the configured services root, the configured IIS site,
-and IIS app pools that use the configured app-pool prefix. The clean variant
-also removes the configured runtime folders such as Portal, WebApps, Services,
-ArtifactStore, ArtifactCache, DataProtectionKeys, and artifact import folders.
-Neither helper removes SQL Server databases or database objects.
+Those helpers do not remove SQL Server databases or database objects. Use the
+GUI full-uninstall action when database objects should be removed as part of the
+same operator-confirmed uninstall.
 
 ## SQL Files
 

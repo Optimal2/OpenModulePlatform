@@ -126,6 +126,48 @@ internal static partial class Program
         }
     }
 
+    private static async Task<int> RunUninstallAsync(
+        BootstrapConfig config,
+        string configPath,
+        bool removeRuntimeFiles,
+        bool removeDatabaseObjects,
+        bool yes)
+    {
+        WriteUninstallPlan(config, configPath, removeRuntimeFiles, removeDatabaseObjects);
+        if (!yes && !Confirm("Continue with OpenModulePlatform uninstall?"))
+        {
+            Console.WriteLine("Uninstall cancelled.");
+            return 2;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("OpenModulePlatform runtime uninstall currently requires Windows.");
+        }
+
+        if (!IsWindowsAdministrator())
+        {
+            throw new InvalidOperationException("Run the bootstrapper as Administrator to uninstall Windows services or IIS settings.");
+        }
+
+        RemoveWindowsServices(config);
+        RemoveIisSiteAndAppPools(config.HostAgent);
+
+        if (removeDatabaseObjects)
+        {
+            await RemoveDatabaseObjectsAsync(config.Sql);
+        }
+
+        if (removeRuntimeFiles)
+        {
+            RemoveRuntimeDirectories(config);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("OpenModulePlatform uninstall completed.");
+        return 0;
+    }
+
     private static async Task<T> ReadJsonAsync<T>(string path)
         where T : new()
     {
@@ -157,6 +199,25 @@ internal static partial class Program
         Console.WriteLine($"SQL target:     {config.Sql.Server}/{config.Sql.Database}");
         Console.WriteLine($"Artifact store: {config.ArtifactStoreRoot}");
         Console.WriteLine($"HostAgent:      {config.HostAgent.ServiceName} -> {config.HostAgent.InstallPath}");
+        Console.WriteLine();
+    }
+
+    private static void WriteUninstallPlan(
+        BootstrapConfig config,
+        string configPath,
+        bool removeRuntimeFiles,
+        bool removeDatabaseObjects)
+    {
+        Console.WriteLine("OpenModulePlatform HostAgent-first uninstall");
+        Console.WriteLine($"Config:           {configPath}");
+        Console.WriteLine($"SQL target:       {config.Sql.Server}/{config.Sql.Database}");
+        Console.WriteLine($"IIS site:         {config.HostAgent.IisSiteName}");
+        Console.WriteLine($"HostAgent:        {config.HostAgent.ServiceName} -> {config.HostAgent.InstallPath}");
+        Console.WriteLine($"Services root:    {config.HostAgent.ServicesRoot}");
+        Console.WriteLine($"Web apps root:    {config.HostAgent.WebAppsRoot}");
+        Console.WriteLine($"Artifact store:   {config.ArtifactStoreRoot}");
+        Console.WriteLine($"Runtime files:    {(removeRuntimeFiles ? "remove" : "keep")}");
+        Console.WriteLine($"Database objects: {(removeDatabaseObjects ? "remove all user objects; keep database" : "keep")}");
         Console.WriteLine();
     }
 
@@ -488,6 +549,155 @@ END
 
         return builder.ConnectionString;
     }
+
+    private static async Task RemoveDatabaseObjectsAsync(SqlBootstrapOptions sql)
+    {
+        if (string.IsNullOrWhiteSpace(sql.Database))
+        {
+            throw new InvalidOperationException("Sql:Database must be configured before database object cleanup.");
+        }
+
+        Console.WriteLine($"> SQL remove all user objects from {sql.Server}/{sql.Database}");
+        await ExecuteSqlBatchesAsync(
+            sql,
+            sql.Database,
+            CreateDropDatabaseObjectsSql(),
+            "OpenModulePlatform database object cleanup");
+    }
+
+    private static string CreateDropDatabaseObjectsSql()
+        => """
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+
+-- Full uninstall removes user-created database objects but deliberately leaves
+-- the configured database itself in place so ownership, files, and SQL Server
+-- permissions remain under operator control.
+DECLARE @sql nvarchar(max);
+DECLARE @schemaName sysname;
+DECLARE @objectName sysname;
+DECLARE @constraintName sysname;
+DECLARE @type char(2);
+
+DECLARE foreign_key_cursor CURSOR LOCAL FAST_FORWARD FOR
+SELECT
+    SCHEMA_NAME(parent.schema_id),
+    parent.name,
+    fk.name
+FROM sys.foreign_keys AS fk
+JOIN sys.tables AS parent ON parent.object_id = fk.parent_object_id;
+
+OPEN foreign_key_cursor;
+FETCH NEXT FROM foreign_key_cursor INTO @schemaName, @objectName, @constraintName;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    EXEC(N'ALTER TABLE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N' DROP CONSTRAINT ' + QUOTENAME(@constraintName) + N';');
+    FETCH NEXT FROM foreign_key_cursor INTO @schemaName, @objectName, @constraintName;
+END
+CLOSE foreign_key_cursor;
+DEALLOCATE foreign_key_cursor;
+
+DECLARE module_cursor CURSOR LOCAL FAST_FORWARD FOR
+SELECT s.name, o.name, o.type
+FROM sys.objects AS o
+JOIN sys.schemas AS s ON s.schema_id = o.schema_id
+WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+  AND o.is_ms_shipped = 0
+  AND o.type IN ('V', 'P', 'FN', 'IF', 'TF')
+ORDER BY CASE o.type WHEN 'V' THEN 1 WHEN 'P' THEN 2 ELSE 3 END, s.name, o.name;
+
+OPEN module_cursor;
+FETCH NEXT FROM module_cursor INTO @schemaName, @objectName, @type;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @sql = CASE @type
+        WHEN 'V' THEN N'DROP VIEW '
+        WHEN 'P' THEN N'DROP PROCEDURE '
+        ELSE N'DROP FUNCTION '
+    END + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';';
+    EXEC(@sql);
+    FETCH NEXT FROM module_cursor INTO @schemaName, @objectName, @type;
+END
+CLOSE module_cursor;
+DEALLOCATE module_cursor;
+
+DECLARE table_cursor CURSOR LOCAL FAST_FORWARD FOR
+SELECT s.name, t.name
+FROM sys.tables AS t
+JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+  AND t.is_ms_shipped = 0
+ORDER BY s.name, t.name;
+
+OPEN table_cursor;
+FETCH NEXT FROM table_cursor INTO @schemaName, @objectName;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    EXEC(N'DROP TABLE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';');
+    FETCH NEXT FROM table_cursor INTO @schemaName, @objectName;
+END
+CLOSE table_cursor;
+DEALLOCATE table_cursor;
+
+DECLARE sequence_cursor CURSOR LOCAL FAST_FORWARD FOR
+SELECT s.name, seq.name
+FROM sys.sequences AS seq
+JOIN sys.schemas AS s ON s.schema_id = seq.schema_id
+WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+ORDER BY s.name, seq.name;
+
+OPEN sequence_cursor;
+FETCH NEXT FROM sequence_cursor INTO @schemaName, @objectName;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    EXEC(N'DROP SEQUENCE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';');
+    FETCH NEXT FROM sequence_cursor INTO @schemaName, @objectName;
+END
+CLOSE sequence_cursor;
+DEALLOCATE sequence_cursor;
+
+DECLARE synonym_cursor CURSOR LOCAL FAST_FORWARD FOR
+SELECT s.name, syn.name
+FROM sys.synonyms AS syn
+JOIN sys.schemas AS s ON s.schema_id = syn.schema_id
+WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+ORDER BY s.name, syn.name;
+
+OPEN synonym_cursor;
+FETCH NEXT FROM synonym_cursor INTO @schemaName, @objectName;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    EXEC(N'DROP SYNONYM ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';');
+    FETCH NEXT FROM synonym_cursor INTO @schemaName, @objectName;
+END
+CLOSE synonym_cursor;
+DEALLOCATE synonym_cursor;
+
+DECLARE schema_cursor CURSOR LOCAL FAST_FORWARD FOR
+SELECT s.name
+FROM sys.schemas AS s
+WHERE s.name NOT IN (N'dbo', N'guest', N'sys', N'INFORMATION_SCHEMA')
+  AND s.principal_id <> DATABASE_PRINCIPAL_ID(N'sys')
+ORDER BY s.name;
+
+OPEN schema_cursor;
+FETCH NEXT FROM schema_cursor INTO @schemaName;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM sys.objects
+        WHERE schema_id = SCHEMA_ID(@schemaName)
+    )
+    BEGIN
+        EXEC(N'DROP SCHEMA ' + QUOTENAME(@schemaName) + N';');
+    END
+
+    FETCH NEXT FROM schema_cursor INTO @schemaName;
+END
+CLOSE schema_cursor;
+DEALLOCATE schema_cursor;
+""";
 
     private static void PrepareArtifacts(BootstrapConfig config, string payloadRoot)
     {
@@ -924,6 +1134,309 @@ END
         => value.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
             || value.Equals("LocalService", StringComparison.OrdinalIgnoreCase)
             || value.Equals("NetworkService", StringComparison.OrdinalIgnoreCase);
+
+    private static void RemoveWindowsServices(BootstrapConfig config)
+    {
+        var serviceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(config.HostAgent.ServiceName))
+        {
+            serviceNames.Add(config.HostAgent.ServiceName.Trim());
+        }
+
+        var runtimeRoots = GetServiceRuntimeRoots(config.HostAgent);
+        if (runtimeRoots.Count > 0)
+        {
+            foreach (var serviceName in EnumerateWindowsServiceNames())
+            {
+                var executablePath = GetWindowsServiceExecutablePath(serviceName);
+                if (!string.IsNullOrWhiteSpace(executablePath)
+                    && runtimeRoots.Any(root => IsSameOrChildPath(root, executablePath)))
+                {
+                    serviceNames.Add(serviceName);
+                }
+            }
+        }
+
+        if (serviceNames.Count == 0)
+        {
+            Console.WriteLine("> No configured Windows services to remove.");
+            return;
+        }
+
+        Console.WriteLine("> Remove Windows services");
+        foreach (var serviceName in serviceNames)
+        {
+            DeleteWindowsService(serviceName);
+        }
+    }
+
+    private static List<string> GetServiceRuntimeRoots(HostAgentInstallOptions hostAgent)
+    {
+        var roots = new List<string>();
+        AddRuntimeRoot(roots, hostAgent.InstallPath);
+        AddRuntimeRoot(roots, hostAgent.ServicesRoot);
+        return roots;
+    }
+
+    private static void AddRuntimeRoot(List<string> roots, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var fullPath = Path.GetFullPath(path.Trim());
+        if (!roots.Any(root => root.Equals(fullPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            roots.Add(fullPath);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateWindowsServiceNames()
+    {
+        var result = RunProcess(GetScPath(), ["query", "state=", "all"], throwOnFailure: false);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"sc.exe failed with exit code {result.ExitCode} while listing Windows services: {result.StdOut}{result.StdErr}");
+        }
+
+        foreach (var rawLine in result.StdOut.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (!line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var serviceName = line["SERVICE_NAME:".Length..].Trim();
+            if (!string.IsNullOrWhiteSpace(serviceName))
+            {
+                yield return serviceName;
+            }
+        }
+    }
+
+    private static string GetWindowsServiceExecutablePath(string serviceName)
+    {
+        var result = RunProcess(GetScPath(), ["qc", serviceName], throwOnFailure: false);
+        if (result.ExitCode != 0)
+        {
+            return string.Empty;
+        }
+
+        foreach (var rawLine in result.StdOut.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (!line.StartsWith("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var separator = line.IndexOf(':', StringComparison.Ordinal);
+            if (separator < 0)
+            {
+                return string.Empty;
+            }
+
+            return ExtractExecutablePath(line[(separator + 1)..]);
+        }
+
+        return string.Empty;
+    }
+
+    private static string ExtractExecutablePath(string pathName)
+    {
+        var trimmed = pathName.Trim();
+        if (trimmed.StartsWith("\"", StringComparison.Ordinal))
+        {
+            var endQuote = trimmed.IndexOf('"', 1);
+            if (endQuote > 1)
+            {
+                return Path.GetFullPath(trimmed[1..endQuote]);
+            }
+        }
+
+        var exeIndex = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        if (exeIndex >= 0)
+        {
+            return Path.GetFullPath(trimmed[..(exeIndex + 4)]);
+        }
+
+        var firstToken = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return string.IsNullOrWhiteSpace(firstToken) ? string.Empty : Path.GetFullPath(firstToken);
+    }
+
+    private static void DeleteWindowsService(string serviceName)
+    {
+        if (!ServiceExists(serviceName))
+        {
+            return;
+        }
+
+        StopService(serviceName);
+        Console.WriteLine($"  delete service {serviceName}");
+        var result = RunProcess(GetScPath(), ["delete", serviceName], throwOnFailure: false);
+        if (result.ExitCode != 0 && !IsScServiceNotFound(result))
+        {
+            throw new InvalidOperationException(
+                $"sc.exe failed with exit code {result.ExitCode} while deleting Windows service '{serviceName}': {result.StdOut}{result.StdErr}");
+        }
+    }
+
+    private static bool IsScServiceNotFound(ProcessResult result)
+    {
+        var text = result.StdOut + Environment.NewLine + result.StdErr;
+        return result.ExitCode == 1060
+            || text.Contains("FAILED 1060", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void RemoveIisSiteAndAppPools(HostAgentInstallOptions hostAgent)
+    {
+        var appCmdPath = TryGetAppCmdPath();
+        if (string.IsNullOrWhiteSpace(appCmdPath))
+        {
+            Console.WriteLine("> IIS appcmd.exe was not found. Skipping IIS cleanup.");
+            return;
+        }
+
+        Console.WriteLine("> Remove IIS site and app pools");
+        var siteName = hostAgent.IisSiteName?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(siteName)
+            && RunProcess(appCmdPath, ["list", "site", $"/name:{siteName}"], throwOnFailure: false).ExitCode == 0)
+        {
+            Console.WriteLine($"  delete IIS site {siteName}");
+            RunProcess(appCmdPath, ["delete", "site", $"/site.name:{siteName}"]);
+        }
+
+        var appPoolPrefix = hostAgent.IisAppPoolNamePrefix?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(appPoolPrefix))
+        {
+            Console.WriteLine("  app pool prefix is empty; skipping app pool cleanup.");
+            return;
+        }
+
+        var appPoolsResult = RunProcess(appCmdPath, ["list", "apppool", "/text:name"], throwOnFailure: false);
+        if (appPoolsResult.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"appcmd.exe failed with exit code {appPoolsResult.ExitCode} while listing IIS app pools: {appPoolsResult.StdOut}{appPoolsResult.StdErr}");
+        }
+
+        foreach (var appPool in appPoolsResult.StdOut.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!appPool.StartsWith(appPoolPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            Console.WriteLine($"  delete IIS app pool {appPool}");
+            RunProcess(appCmdPath, ["delete", "apppool", $"/apppool.name:{appPool}"]);
+        }
+    }
+
+    private static string TryGetAppCmdPath()
+    {
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var appCmdPath = Path.Combine(windows, "System32", "inetsrv", "appcmd.exe");
+        return File.Exists(appCmdPath) ? appCmdPath : string.Empty;
+    }
+
+    private static void RemoveRuntimeDirectories(BootstrapConfig config)
+    {
+        Console.WriteLine("> Remove runtime directories");
+        var paths = GetRuntimeDirectories(config)
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(path => path.Length)
+            .ToArray();
+
+        foreach (var path in paths)
+        {
+            EnsureSafeRuntimeDeletePath(path);
+            if (!Directory.Exists(path))
+            {
+                continue;
+            }
+
+            Console.WriteLine($"  remove {path}");
+            TryDeleteDirectory(path);
+        }
+    }
+
+    private static IEnumerable<string> GetRuntimeDirectories(BootstrapConfig config)
+    {
+        var hostAgent = config.HostAgent;
+        foreach (var path in new[]
+        {
+            hostAgent.PortalPhysicalPath,
+            hostAgent.WebAppsRoot,
+            hostAgent.LocalArtifactCacheRoot,
+            config.ArtifactStoreRoot,
+            hostAgent.InstallPath,
+            hostAgent.ServicesRoot
+        })
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                yield return path.Trim();
+            }
+        }
+
+        var hostAgentSettings = GetJsonObjectProperty(hostAgent.AppSettings, "HostAgent");
+        var dataProtectionPath = GetJsonStringProperty(hostAgentSettings, "WebAppDataProtectionKeyPath");
+        if (!string.IsNullOrWhiteSpace(dataProtectionPath))
+        {
+            yield return dataProtectionPath;
+        }
+
+        var artifactZipImport = GetJsonObjectProperty(hostAgentSettings, "ArtifactZipImport");
+        foreach (var property in new[] { "ImportPath", "ProcessedPath", "FailedPath" })
+        {
+            var path = GetJsonStringProperty(artifactZipImport, property);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                yield return path;
+            }
+        }
+    }
+
+    private static JsonNode? GetJsonObjectProperty(JsonNode? node, string propertyName)
+    {
+        if (node is not JsonObject obj)
+        {
+            return null;
+        }
+
+        foreach (var property in obj)
+        {
+            if (property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string GetJsonStringProperty(JsonNode? node, string propertyName)
+    {
+        var value = GetJsonObjectProperty(node, propertyName);
+        return value is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var text)
+            ? text.Trim()
+            : string.Empty;
+    }
+
+    private static void EnsureSafeRuntimeDeletePath(string path)
+    {
+        var root = Path.GetPathRoot(path);
+        if (string.IsNullOrWhiteSpace(root)
+            || Path.TrimEndingDirectorySeparator(path).Equals(Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Refusing to remove unsafe runtime directory path: '{path}'.");
+        }
+    }
 
     private static bool ServiceExists(string serviceName)
     {
