@@ -592,10 +592,19 @@ $cmd = @'
 @echo off
 setlocal
 set ROOT=%~dp0
-"%ROOT%tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe" --config "%ROOT%bootstrap.local.sample.json"
+"%ROOT%tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe" --gui --config "%ROOT%bootstrap.local.sample.json"
 endlocal
 '@
 Set-Content -LiteralPath (Join-Path $packageRoot 'install-hostagent-first.cmd') -Value $cmd -Encoding ASCII
+
+$consoleCmd = @'
+@echo off
+setlocal
+set ROOT=%~dp0
+"%ROOT%tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe" --config "%ROOT%bootstrap.local.sample.json"
+endlocal
+'@
+Set-Content -LiteralPath (Join-Path $packageRoot 'install-hostagent-first-console.cmd') -Value $consoleCmd -Encoding ASCII
 
 $manifest = [ordered]@{
     schema = 'OpenModulePlatform.HostAgentFirstPackage.v1'

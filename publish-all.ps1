@@ -191,10 +191,17 @@ $publishItems = foreach ($project in $projects) {
     $projectName = [System.IO.Path]::GetFileNameWithoutExtension($fullProjectPath)
     $projectOutputPath = Join-Path $outputRootPath $projectName
     $logPath = Join-Path $outputRootPath ($projectName + '.publish.log')
+    $projectFramework = if ($projectName -eq 'OpenModulePlatform.Bootstrapper' -and $Framework -eq 'net10.0') {
+        'net10.0-windows'
+    }
+    else {
+        $Framework
+    }
 
     [pscustomobject]@{
         Name = $projectName
         Project = $fullProjectPath
+        Framework = $projectFramework
         OutputPath = $projectOutputPath
         LogPath = $logPath
     }
@@ -226,7 +233,7 @@ if ($Parallel) {
     foreach ($item in $publishItems) {
         Wait-ForJobSlot -Limit $MaxParallel
 
-        $args = New-PublishCommand -ProjectPath $item.Project -Configuration $Configuration -Framework $Framework -PublishDir $item.OutputPath -Runtime $Runtime -SelfContained $SelfContained -Restore $Restore.IsPresent
+        $args = New-PublishCommand -ProjectPath $item.Project -Configuration $Configuration -Framework $item.Framework -PublishDir $item.OutputPath -Runtime $Runtime -SelfContained $SelfContained -Restore $Restore.IsPresent
         $job = Start-Job -Name $item.Name -ArgumentList $dotnetCommand.Source, $args, $item.Name, $item.Project, $item.OutputPath, $item.LogPath, $rootPath -ScriptBlock {
             param($dotnetPath, $publishArgs, $name, $projectPath, $outputPath, $logPath, $workingRoot)
 
@@ -273,7 +280,7 @@ else {
     foreach ($item in $publishItems) {
         Write-Host "Publishing $($item.Name)..."
         New-Item -ItemType Directory -Path $item.OutputPath -Force | Out-Null
-        $args = New-PublishCommand -ProjectPath $item.Project -Configuration $Configuration -Framework $Framework -PublishDir $item.OutputPath -Runtime $Runtime -SelfContained $SelfContained -Restore $Restore.IsPresent
+        $args = New-PublishCommand -ProjectPath $item.Project -Configuration $Configuration -Framework $item.Framework -PublishDir $item.OutputPath -Runtime $Runtime -SelfContained $SelfContained -Restore $Restore.IsPresent
         $publishResult = Invoke-DotnetCommand -DotnetPath $dotnetCommand.Source -Arguments $args -WorkingDirectory $rootPath -LogPath $item.LogPath
 
         $script:results += [pscustomobject]@{
