@@ -184,6 +184,24 @@ Host-specific services and worker processes should use concrete hosts or worker
 instance metadata when placement matters. Their code must still handle
 multi-host execution according to the app's own runtime contract.
 
+Runtime identity is not the same thing as artifact identity. An artifact can be
+deployed to several hosts, but the runtime should identify itself with the
+concrete row that owns its state:
+
+- Host-neutral IIS apps normally use the same `AppInstanceId` on every web host.
+  Their deployment state is host-specific through
+  `omp.HostAppDeploymentStates(HostId, AppInstanceId)`, while their user-facing
+  content and portal entry remain one logical app.
+- Services that run concurrently on several hosts normally need one
+  host-specific `AppInstance` per host, because app runtime state and heartbeat
+  rows are keyed by `AppInstanceId`.
+- Worker plugins use `WorkerInstanceId` below `AppInstanceId` when several
+  independent processes must run for the same app, especially on the same host.
+
+Artifact configuration files may use HostAgent tokens such as
+`{{Omp.AppInstanceId}}` and `{{Omp.HostId}}` so a single artifact configuration
+template can write the correct runtime identity for each concrete deployment.
+
 ## Roadmap
 
 1. Keep this document as the shared contract for OMP and consumer module

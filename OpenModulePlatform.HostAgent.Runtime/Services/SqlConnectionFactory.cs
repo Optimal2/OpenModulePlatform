@@ -12,7 +12,7 @@ public sealed class SqlConnectionFactory
         _configuration = configuration;
     }
 
-    public SqlConnection Create()
+    public string GetConnectionString()
     {
         var connectionString = _configuration.GetConnectionString("OmpDb");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -20,6 +20,11 @@ public sealed class SqlConnectionFactory
             throw new InvalidOperationException("ConnectionStrings:OmpDb is not configured.");
         }
 
-        return new SqlConnection(connectionString);
+        return connectionString;
+    }
+
+    public SqlConnection Create()
+    {
+        return new SqlConnection(GetConnectionString());
     }
 }

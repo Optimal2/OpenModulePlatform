@@ -12,6 +12,9 @@ public sealed class OmpHostArtifactRepository
         _db = db;
     }
 
+    public string GetConfiguredConnectionString()
+        => _db.GetConnectionString();
+
     public async Task TouchHostHeartbeatAsync(string hostKey, CancellationToken ct)
     {
         const string sql = @"
@@ -453,6 +456,7 @@ IF @hostId IS NULL
 BEGIN
     SELECT TOP (0)
         CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS nvarchar(128)) AS HostKey,
         CAST(NULL AS uniqueidentifier) AS AppInstanceId,
         CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
         CAST(NULL AS nvarchar(200)) AS DisplayName,
@@ -474,6 +478,7 @@ END;
 
 SELECT TOP (@maxDeployments)
     @hostId AS HostId,
+    @hostKey AS HostKey,
     ai.AppInstanceId,
     ai.AppInstanceKey,
     ai.DisplayName,
@@ -526,22 +531,23 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
             result.Add(new WebAppDeploymentDescriptor
             {
                 HostId = rdr.GetGuid(0),
-                AppInstanceId = rdr.GetGuid(1),
-                AppInstanceKey = rdr.GetString(2),
-                DisplayName = rdr.GetString(3),
-                RoutePath = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                InstallPath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                InstallationName = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                ArtifactId = rdr.GetInt32(7),
-                Version = rdr.GetString(8),
-                TargetName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-                SourceLocalPath = rdr.GetString(10),
-                ContentSha256 = rdr.IsDBNull(11) ? null : rdr.GetString(11),
-                DeployedArtifactId = rdr.IsDBNull(12) ? null : rdr.GetInt32(12),
-                DeploymentState = rdr.IsDBNull(13) ? null : rdr.GetByte(13),
-                DeployedSourceLocalPath = rdr.IsDBNull(14) ? null : rdr.GetString(14),
-                DeployedTargetPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
-                DeployedRuntimeName = rdr.IsDBNull(16) ? null : rdr.GetString(16)
+                HostKey = rdr.GetString(1),
+                AppInstanceId = rdr.GetGuid(2),
+                AppInstanceKey = rdr.GetString(3),
+                DisplayName = rdr.GetString(4),
+                RoutePath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                InstallPath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                InstallationName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                ArtifactId = rdr.GetInt32(8),
+                Version = rdr.GetString(9),
+                TargetName = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                SourceLocalPath = rdr.GetString(11),
+                ContentSha256 = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                DeployedArtifactId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
+                DeploymentState = rdr.IsDBNull(14) ? null : rdr.GetByte(14),
+                DeployedSourceLocalPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+                DeployedTargetPath = rdr.IsDBNull(16) ? null : rdr.GetString(16),
+                DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17)
             });
         }
 
@@ -565,6 +571,7 @@ IF @hostId IS NULL
 BEGIN
     SELECT TOP (0)
         CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS nvarchar(128)) AS HostKey,
         CAST(NULL AS uniqueidentifier) AS AppInstanceId,
         CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
         CAST(NULL AS nvarchar(200)) AS DisplayName,
@@ -586,6 +593,7 @@ END;
 
 SELECT TOP (@maxDeployments)
     @hostId AS HostId,
+    @hostKey AS HostKey,
     ai.AppInstanceId,
     ai.AppInstanceKey,
     ai.DisplayName,
@@ -636,22 +644,23 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
             result.Add(new ServiceAppDeploymentDescriptor
             {
                 HostId = rdr.GetGuid(0),
-                AppInstanceId = rdr.GetGuid(1),
-                AppInstanceKey = rdr.GetString(2),
-                DisplayName = rdr.GetString(3),
-                Description = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                InstallPath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                InstallationName = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                ArtifactId = rdr.GetInt32(7),
-                Version = rdr.GetString(8),
-                TargetName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-                SourceLocalPath = rdr.GetString(10),
-                ContentSha256 = rdr.IsDBNull(11) ? null : rdr.GetString(11),
-                DeployedArtifactId = rdr.IsDBNull(12) ? null : rdr.GetInt32(12),
-                DeploymentState = rdr.IsDBNull(13) ? null : rdr.GetByte(13),
-                DeployedSourceLocalPath = rdr.IsDBNull(14) ? null : rdr.GetString(14),
-                DeployedTargetPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
-                DeployedRuntimeName = rdr.IsDBNull(16) ? null : rdr.GetString(16)
+                HostKey = rdr.GetString(1),
+                AppInstanceId = rdr.GetGuid(2),
+                AppInstanceKey = rdr.GetString(3),
+                DisplayName = rdr.GetString(4),
+                Description = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                InstallPath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                InstallationName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                ArtifactId = rdr.GetInt32(8),
+                Version = rdr.GetString(9),
+                TargetName = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                SourceLocalPath = rdr.GetString(11),
+                ContentSha256 = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                DeployedArtifactId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
+                DeploymentState = rdr.IsDBNull(14) ? null : rdr.GetByte(14),
+                DeployedSourceLocalPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+                DeployedTargetPath = rdr.IsDBNull(16) ? null : rdr.GetString(16),
+                DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17)
             });
         }
 
