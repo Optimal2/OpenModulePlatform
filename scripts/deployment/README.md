@@ -88,7 +88,7 @@ If OpenDocViewer needs customer-specific static files, set
 script then uses that zip as `payload\OpenDocViewer.dist.zip` instead of
 zipping `OpenDocViewer\dist` directly. This is useful when the ODV package must
 include site-local `help\site` manual content or other static assets.
-Deployment-owned runtime configuration such as `public\odv.site.config.js`
+Deployment-owned runtime configuration such as `odv.site.config.js`
 should normally be managed as an artifact configuration file in OMP so it can be
 edited without rebuilding the artifact zip.
 The package manifest records `openDocViewerVersion`, normally read from

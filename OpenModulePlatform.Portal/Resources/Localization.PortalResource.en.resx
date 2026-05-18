@@ -221,18 +221,32 @@
   <data name="Create artifact configuration file" xml:space="preserve"><value>Create artifact configuration file</value></data>
   <data name="Edit artifact configuration file" xml:space="preserve"><value>Edit artifact configuration file</value></data>
   <data name="HostAgent writes enabled configuration files after deploying the artifact so site-specific settings can change without rebuilding the zip package." xml:space="preserve"><value>HostAgent writes enabled configuration files after deploying the artifact so site-specific settings can change without rebuilding the zip package.</value></data>
-  <data name="Path relative to the deployed app root, for example public/odv.site.config.js." xml:space="preserve"><value>Path relative to the deployed app root, for example public/odv.site.config.js.</value></data>
+  <data name="Path relative to the deployed app root, for example odv.site.config.js." xml:space="preserve"><value>Path relative to the deployed app root, for example odv.site.config.js.</value></data>
   <data name="File content" xml:space="preserve"><value>File content</value></data>
   <data name="HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs." xml:space="preserve"><value>HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs.</value></data>
   <data name="Save configuration file" xml:space="preserve"><value>Save configuration file</value></data>
+  <data name="Save metadata" xml:space="preserve"><value>Save metadata</value></data>
+  <data name="Configuration file" xml:space="preserve"><value>Configuration file</value></data>
+  <data name="Upload file content" xml:space="preserve"><value>Upload file content</value></data>
+  <data name="Upload a text file to replace the stored configuration content without posting the file body as a textarea field." xml:space="preserve"><value>Upload a text file to replace the stored configuration content without posting the file body as a textarea field.</value></data>
+  <data name="HostAgent writes uploaded text as UTF-8 without BOM and overwrites the deployed file when the deployed copy differs." xml:space="preserve"><value>HostAgent writes uploaded text as UTF-8 without BOM and overwrites the deployed file when the deployed copy differs.</value></data>
+  <data name="Upload configuration file" xml:space="preserve"><value>Upload configuration file</value></data>
+  <data name="Manual text edit" xml:space="preserve"><value>Manual text edit</value></data>
+  <data name="Use this only when the environment allows posting this content as a form field. File upload is safer behind strict request filters." xml:space="preserve"><value>Use this only when the environment allows posting this content as a form field. File upload is safer behind strict request filters.</value></data>
+  <data name="Save text content" xml:space="preserve"><value>Save text content</value></data>
   <data name="Back to artifact" xml:space="preserve"><value>Back to artifact</value></data>
   <data name="Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed." xml:space="preserve"><value>Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed.</value></data>
   <data name="Deleting this row does not delete files that have already been written on hosts." xml:space="preserve"><value>Deleting this row does not delete files that have already been written on hosts.</value></data>
   <data name="Delete configuration file" xml:space="preserve"><value>Delete configuration file</value></data>
   <data name="Artifact configuration file created." xml:space="preserve"><value>Artifact configuration file created.</value></data>
   <data name="Artifact configuration file updated." xml:space="preserve"><value>Artifact configuration file updated.</value></data>
+  <data name="Artifact configuration file content updated." xml:space="preserve"><value>Artifact configuration file content updated.</value></data>
   <data name="Artifact configuration file deleted." xml:space="preserve"><value>Artifact configuration file deleted.</value></data>
+  <data name="Artifact configuration file was not found." xml:space="preserve"><value>Artifact configuration file was not found.</value></data>
   <data name="Artifact is required." xml:space="preserve"><value>Artifact is required.</value></data>
+  <data name="Select a file to upload." xml:space="preserve"><value>Select a file to upload.</value></data>
+  <data name="The uploaded configuration file is too large. The maximum size is 1048576 bytes." xml:space="preserve"><value>The uploaded configuration file is too large. The maximum size is 1048576 bytes.</value></data>
+  <data name="The uploaded configuration file must be valid UTF-8 text." xml:space="preserve"><value>The uploaded configuration file must be valid UTF-8 text.</value></data>
   <data name="Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments." xml:space="preserve"><value>Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments.</value></data>
   <data name="This artifact already has a configuration file with the same relative path." xml:space="preserve"><value>This artifact already has a configuration file with the same relative path.</value></data>
   <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>The artifact configuration file could not be saved.</value></data>

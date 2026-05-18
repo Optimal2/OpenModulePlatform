@@ -142,7 +142,7 @@
         SkipOpenDocViewerNpmInstall = $false
         # Optional path to a prebuilt OpenDocViewer zip. Use this for customer
         # packages that need site-local help/site manual files or other static
-        # assets. Deployment-owned runtime config such as public/odv.site.config.js
+        # assets. Deployment-owned runtime config such as odv.site.config.js
         # should usually be managed as an artifact configuration file in OMP.
         # When set, the package script uses this zip as payload/OpenDocViewer.dist.zip
         # instead of zipping OpenDocViewer\dist directly.

@@ -1655,18 +1655,32 @@
   <data name="Create artifact configuration file" xml:space="preserve"><value>Skapa artefaktens konfigurationsfil</value></data>
   <data name="Edit artifact configuration file" xml:space="preserve"><value>Redigera artefaktens konfigurationsfil</value></data>
   <data name="HostAgent writes enabled configuration files after deploying the artifact so site-specific settings can change without rebuilding the zip package." xml:space="preserve"><value>HostAgent skriver aktiverade konfigurationsfiler efter deployment av artefakten så att platsspecifika inställningar kan ändras utan att zip-paketet byggs om.</value></data>
-  <data name="Path relative to the deployed app root, for example public/odv.site.config.js." xml:space="preserve"><value>Sökväg relativt den deployade appens rot, till exempel public/odv.site.config.js.</value></data>
+  <data name="Path relative to the deployed app root, for example odv.site.config.js." xml:space="preserve"><value>Sökväg relativt den deployade appens rot, till exempel odv.site.config.js.</value></data>
   <data name="File content" xml:space="preserve"><value>Filinnehåll</value></data>
   <data name="HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs." xml:space="preserve"><value>HostAgent skriver den här texten som UTF-8 utan BOM och skriver över filen när den deployade kopian skiljer sig.</value></data>
   <data name="Save configuration file" xml:space="preserve"><value>Spara konfigurationsfil</value></data>
+  <data name="Save metadata" xml:space="preserve"><value>Spara metadata</value></data>
+  <data name="Configuration file" xml:space="preserve"><value>Konfigurationsfil</value></data>
+  <data name="Upload file content" xml:space="preserve"><value>Ladda upp filinnehåll</value></data>
+  <data name="Upload a text file to replace the stored configuration content without posting the file body as a textarea field." xml:space="preserve"><value>Ladda upp en textfil för att ersätta det sparade konfigurationsinnehållet utan att skicka filinnehållet som ett textfält.</value></data>
+  <data name="HostAgent writes uploaded text as UTF-8 without BOM and overwrites the deployed file when the deployed copy differs." xml:space="preserve"><value>HostAgent skriver uppladdad text som UTF-8 utan BOM och skriver över den deployade filen när kopian skiljer sig.</value></data>
+  <data name="Upload configuration file" xml:space="preserve"><value>Ladda upp konfigurationsfil</value></data>
+  <data name="Manual text edit" xml:space="preserve"><value>Manuell textredigering</value></data>
+  <data name="Use this only when the environment allows posting this content as a form field. File upload is safer behind strict request filters." xml:space="preserve"><value>Använd detta bara när miljön tillåter att innehållet skickas som ett formulärfält. Filuppladdning är säkrare bakom strikta request-filter.</value></data>
+  <data name="Save text content" xml:space="preserve"><value>Spara textinnehåll</value></data>
   <data name="Back to artifact" xml:space="preserve"><value>Tillbaka till artefakt</value></data>
   <data name="Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed." xml:space="preserve"><value>Ta bort den här konfigurationsfilen för artefakten? HostAgent slutar hantera filen, men befintliga deployade filer tas inte bort.</value></data>
   <data name="Deleting this row does not delete files that have already been written on hosts." xml:space="preserve"><value>Att ta bort den här raden tar inte bort filer som redan har skrivits på värdar.</value></data>
   <data name="Delete configuration file" xml:space="preserve"><value>Ta bort konfigurationsfil</value></data>
   <data name="Artifact configuration file created." xml:space="preserve"><value>Artefaktens konfigurationsfil har skapats.</value></data>
   <data name="Artifact configuration file updated." xml:space="preserve"><value>Artefaktens konfigurationsfil har uppdaterats.</value></data>
+  <data name="Artifact configuration file content updated." xml:space="preserve"><value>Artefaktens konfigurationsfilinnehåll har uppdaterats.</value></data>
   <data name="Artifact configuration file deleted." xml:space="preserve"><value>Artefaktens konfigurationsfil har tagits bort.</value></data>
+  <data name="Artifact configuration file was not found." xml:space="preserve"><value>Artefaktens konfigurationsfil hittades inte.</value></data>
   <data name="Artifact is required." xml:space="preserve"><value>Artefakt krävs.</value></data>
+  <data name="Select a file to upload." xml:space="preserve"><value>Välj en fil att ladda upp.</value></data>
+  <data name="The uploaded configuration file is too large. The maximum size is 1048576 bytes." xml:space="preserve"><value>Den uppladdade konfigurationsfilen är för stor. Maxstorleken är 1048576 byte.</value></data>
+  <data name="The uploaded configuration file must be valid UTF-8 text." xml:space="preserve"><value>Den uppladdade konfigurationsfilen måste vara giltig UTF-8-text.</value></data>
   <data name="Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments." xml:space="preserve"><value>Relativ sökväg måste ligga under den deployade appens rot och får inte innehålla rotade sökvägar eller överordnade katalogsegment.</value></data>
   <data name="This artifact already has a configuration file with the same relative path." xml:space="preserve"><value>Den här artefakten har redan en konfigurationsfil med samma relativa sökväg.</value></data>
   <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>Artefaktens konfigurationsfil kunde inte sparas.</value></data>
