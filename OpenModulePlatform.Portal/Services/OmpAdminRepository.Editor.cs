@@ -1501,6 +1501,87 @@ WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
             artifactConfigurationFileId,
             ct);
 
+    public async Task<ArtifactConfigurationFileCopyResult?> CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+        int artifactId,
+        int appId,
+        string packageType,
+        string? targetName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @SourceArtifactId int;
+DECLARE @SourceVersion nvarchar(50);
+DECLARE @CopiedCount int = 0;
+
+SELECT TOP (1)
+       @SourceArtifactId = source.ArtifactId,
+       @SourceVersion = source.Version
+FROM omp.Artifacts source
+WHERE source.ArtifactId <> @ArtifactId
+  AND source.AppId = @AppId
+  AND source.PackageType = @PackageType
+  AND ((source.TargetName = @TargetName) OR (source.TargetName IS NULL AND @TargetName IS NULL))
+  AND source.IsEnabled = 1
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.ArtifactConfigurationFiles sourceFile
+      WHERE sourceFile.ArtifactId = source.ArtifactId
+  )
+ORDER BY source.CreatedUtc DESC, source.ArtifactId DESC;
+
+IF @SourceArtifactId IS NOT NULL
+BEGIN
+    INSERT INTO omp.ArtifactConfigurationFiles
+    (
+        ArtifactId,
+        RelativePath,
+        FileContent,
+        IsEnabled
+    )
+    SELECT @ArtifactId,
+           sourceFile.RelativePath,
+           sourceFile.FileContent,
+           sourceFile.IsEnabled
+    FROM omp.ArtifactConfigurationFiles sourceFile
+    WHERE sourceFile.ArtifactId = @SourceArtifactId
+      AND NOT EXISTS
+      (
+          SELECT 1
+          FROM omp.ArtifactConfigurationFiles targetFile
+          WHERE targetFile.ArtifactId = @ArtifactId
+            AND targetFile.RelativePath = sourceFile.RelativePath
+      );
+
+    SET @CopiedCount = @@ROWCOUNT;
+END;
+
+SELECT @SourceArtifactId AS SourceArtifactId,
+       @SourceVersion AS SourceVersion,
+       @CopiedCount AS CopiedCount;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+        Add(cmd, "@AppId", appId);
+        Add(cmd, "@PackageType", packageType);
+        Add(cmd, "@TargetName", targetName);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct) || rdr.IsDBNull(0))
+        {
+            return null;
+        }
+
+        return new ArtifactConfigurationFileCopyResult
+        {
+            SourceArtifactId = rdr.GetInt32(0),
+            SourceVersion = rdr.GetString(1),
+            CopiedCount = rdr.GetInt32(2)
+        };
+    }
+
     public async Task<ArtifactDuplicateInfo?> FindArtifactBySha256Async(string sha256, CancellationToken ct)
     {
         const string sql = @"
