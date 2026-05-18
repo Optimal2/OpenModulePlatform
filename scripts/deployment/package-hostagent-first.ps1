@@ -644,6 +644,243 @@ endlocal
 '@
 Set-Content -LiteralPath (Join-Path $packageRoot 'install-hostagent-first-console.cmd') -Value $consoleCmd -Encoding ASCII
 
+$uninstallScript = @'
+param(
+    [string]$ConfigPath = '',
+    [switch]$RemoveRuntimeFiles,
+    [switch]$Yes
+)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$scriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $scriptRoot 'bootstrap.local.sample.json'
+}
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host ''
+    Write-Host "== $Message ==" -ForegroundColor Cyan
+}
+
+function Resolve-ConfiguredPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ''
+    }
+
+    return [System.IO.Path]::GetFullPath($Path)
+}
+
+function Confirm-Action {
+    param([string]$Prompt)
+
+    if ($Yes) {
+        return $true
+    }
+
+    Write-Host "$Prompt [Y/N, default N]: " -NoNewline
+    $answer = Read-Host
+    return [string]::Equals($answer.Trim(), 'Y', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-PropertyValue {
+    param(
+        $Object,
+        [string]$Name,
+        $DefaultValue = ''
+    )
+
+    if ($null -eq $Object) {
+        return $DefaultValue
+    }
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return $DefaultValue
+    }
+
+    return $property.Value
+}
+
+function Get-ServiceExecutablePath {
+    param([string]$PathName)
+
+    if ([string]::IsNullOrWhiteSpace($PathName)) {
+        return ''
+    }
+
+    $trimmed = $PathName.Trim()
+    if ($trimmed.StartsWith('"', [StringComparison]::Ordinal)) {
+        $endQuote = $trimmed.IndexOf('"', 1)
+        if ($endQuote -gt 1) {
+            return $trimmed.Substring(1, $endQuote - 1)
+        }
+    }
+
+    $exeIndex = $trimmed.IndexOf('.exe', [StringComparison]::OrdinalIgnoreCase)
+    if ($exeIndex -ge 0) {
+        return $trimmed.Substring(0, $exeIndex + 4)
+    }
+
+    return $trimmed
+}
+
+function Stop-AndDeleteService {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return
+    }
+
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($null -ne $service -and $service.Status -ne [System.ServiceProcess.ServiceControllerStatus]::Stopped) {
+        Write-Host "Stopping service $Name"
+        Stop-Service -Name $Name -Force -ErrorAction Stop
+        $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(60))
+    }
+
+    if ($null -ne (Get-Service -Name $Name -ErrorAction SilentlyContinue)) {
+        Write-Host "Deleting service $Name"
+        & sc.exe delete $Name | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to delete service '$Name'. sc.exe exit code: $LASTEXITCODE"
+        }
+    }
+}
+
+function Remove-ConfiguredDirectory {
+    param([string]$Path)
+
+    $resolved = Resolve-ConfiguredPath -Path $Path
+    if ([string]::IsNullOrWhiteSpace($resolved) -or -not (Test-Path -LiteralPath $resolved)) {
+        return
+    }
+
+    Write-Host "Removing $resolved"
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+
+if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
+    throw "Bootstrap config was not found: $ConfigPath"
+}
+
+$config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$hostAgent = $config.hostAgent
+$serviceName = [string](Get-PropertyValue -Object $hostAgent -Name 'serviceName')
+$servicesRoot = [string](Get-PropertyValue -Object $hostAgent -Name 'servicesRoot')
+$iisSiteName = [string](Get-PropertyValue -Object $hostAgent -Name 'iisSiteName')
+$appPoolPrefix = [string](Get-PropertyValue -Object $hostAgent -Name 'iisAppPoolNamePrefix' -DefaultValue 'OMP_')
+
+Write-Host 'OpenModulePlatform HostAgent-first uninstall'
+Write-Host "Config:              $ConfigPath"
+Write-Host "HostAgent service:   $serviceName"
+Write-Host "IIS site:            $iisSiteName"
+Write-Host "Remove runtime files: $RemoveRuntimeFiles"
+
+if (-not (Confirm-Action -Prompt 'Continue with uninstall')) {
+    Write-Host 'Uninstall cancelled.'
+    exit 2
+}
+
+Write-Step 'Removing Windows services'
+$serviceNames = [System.Collections.Generic.List[string]]::new()
+if (-not [string]::IsNullOrWhiteSpace($serviceName)) {
+    $serviceNames.Add($serviceName)
+}
+
+$resolvedServicesRoot = Resolve-ConfiguredPath -Path $servicesRoot
+if (-not [string]::IsNullOrWhiteSpace($resolvedServicesRoot)) {
+    $normalizedRoot = $resolvedServicesRoot.TrimEnd('\') + '\'
+    $runtimeServices = @(Get-CimInstance Win32_Service | Where-Object {
+            $servicePath = Get-ServiceExecutablePath -PathName $_.PathName
+            -not [string]::IsNullOrWhiteSpace($servicePath) -and
+            $servicePath.StartsWith($normalizedRoot, [StringComparison]::OrdinalIgnoreCase)
+        })
+    foreach ($runtimeService in $runtimeServices) {
+        if (-not $serviceNames.Contains([string]$runtimeService.Name)) {
+            $serviceNames.Add([string]$runtimeService.Name)
+        }
+    }
+}
+
+foreach ($name in @($serviceNames)) {
+    Stop-AndDeleteService -Name $name
+}
+
+Write-Step 'Removing IIS site and app pools'
+$appcmd = Join-Path $env:windir 'system32\inetsrv\appcmd.exe'
+if (Test-Path -LiteralPath $appcmd -PathType Leaf) {
+    if (-not [string]::IsNullOrWhiteSpace($iisSiteName)) {
+        & $appcmd list site /name:$iisSiteName | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Deleting IIS site $iisSiteName"
+            & $appcmd delete site /site.name:$iisSiteName | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to delete IIS site '$iisSiteName'. appcmd.exe exit code: $LASTEXITCODE"
+            }
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($appPoolPrefix)) {
+        $appPools = @(& $appcmd list apppool /text:name | Where-Object {
+                $_.StartsWith($appPoolPrefix, [StringComparison]::OrdinalIgnoreCase)
+            })
+        foreach ($appPool in $appPools) {
+            Write-Host "Deleting IIS app pool $appPool"
+            & $appcmd delete apppool /apppool.name:$appPool | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to delete IIS app pool '$appPool'. appcmd.exe exit code: $LASTEXITCODE"
+            }
+        }
+    }
+}
+else {
+    Write-Warning "IIS appcmd.exe was not found. Skipping IIS cleanup."
+}
+
+if ($RemoveRuntimeFiles) {
+    Write-Step 'Removing runtime folders'
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $hostAgent -Name 'portalPhysicalPath'))
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $hostAgent -Name 'webAppsRoot'))
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $hostAgent -Name 'localArtifactCacheRoot'))
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $config -Name 'artifactStoreRoot'))
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $hostAgent -Name 'servicesRoot'))
+
+    $hostAgentSettings = Get-PropertyValue -Object (Get-PropertyValue -Object $hostAgent -Name 'appSettings') -Name 'HostAgent' -DefaultValue $null
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $hostAgentSettings -Name 'WebAppDataProtectionKeyPath'))
+    $artifactZipImport = Get-PropertyValue -Object $hostAgentSettings -Name 'ArtifactZipImport' -DefaultValue $null
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $artifactZipImport -Name 'ImportPath'))
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $artifactZipImport -Name 'ProcessedPath'))
+    Remove-ConfiguredDirectory -Path ([string](Get-PropertyValue -Object $artifactZipImport -Name 'FailedPath'))
+}
+
+Write-Host ''
+Write-Host 'OpenModulePlatform local runtime uninstall completed.' -ForegroundColor Green
+'@
+Set-Content -LiteralPath (Join-Path $packageRoot 'uninstall-hostagent-first.ps1') -Value $uninstallScript -Encoding UTF8
+
+$uninstallCmd = @'
+@echo off
+setlocal
+set ROOT=%~dp0
+powershell.exe -NoLogo -NoProfile -File "%ROOT%uninstall-hostagent-first.ps1" -ConfigPath "%ROOT%bootstrap.local.sample.json"
+endlocal
+'@
+Set-Content -LiteralPath (Join-Path $packageRoot 'uninstall-hostagent-first.cmd') -Value $uninstallCmd -Encoding ASCII
+
+$uninstallCleanCmd = @'
+@echo off
+setlocal
+set ROOT=%~dp0
+powershell.exe -NoLogo -NoProfile -File "%ROOT%uninstall-hostagent-first.ps1" -ConfigPath "%ROOT%bootstrap.local.sample.json" -RemoveRuntimeFiles
+endlocal
+'@
+Set-Content -LiteralPath (Join-Path $packageRoot 'uninstall-hostagent-first-clean.cmd') -Value $uninstallCleanCmd -Encoding ASCII
+
 $manifest = [ordered]@{
     schema = 'OpenModulePlatform.HostAgentFirstPackage.v1'
     createdUtc = [DateTime]::UtcNow.ToString('o')

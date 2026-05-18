@@ -25,6 +25,9 @@ OpenModulePlatformHostAgentFirst-<version>/
   bootstrap.local.sample.json
   install-hostagent-first.cmd
   install-hostagent-first-console.cmd
+  uninstall-hostagent-first.cmd
+  uninstall-hostagent-first-clean.cmd
+  uninstall-hostagent-first.ps1
   manifest.json
   payload/
     OpenModulePlatform.Portal.zip
@@ -115,6 +118,22 @@ tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --conf
 
 The bootstrapper intentionally prompts with `[Y/N, default N]` when `--yes` is
 not supplied.
+
+## Uninstalling Local Runtime Files
+
+Folder packages also include uninstall helpers:
+
+```text
+uninstall-hostagent-first.cmd
+uninstall-hostagent-first-clean.cmd
+```
+
+The normal uninstall removes the HostAgent service, runtime services whose
+executables live below the configured services root, the configured IIS site,
+and IIS app pools that use the configured app-pool prefix. The clean variant
+also removes the configured runtime folders such as Portal, WebApps, Services,
+ArtifactStore, ArtifactCache, DataProtectionKeys, and artifact import folders.
+Neither helper removes SQL Server databases or database objects.
 
 ## SQL Files
 
