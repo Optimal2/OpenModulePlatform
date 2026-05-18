@@ -216,6 +216,19 @@ a {
     font-size: 1.1rem;
 }
 
+.content-file-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.content-file-summary h2 {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+}
+
 .toolbar {
     display: flex;
     align-items: center;
