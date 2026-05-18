@@ -63,7 +63,26 @@ internal static partial class Program
         private readonly string _configPath;
         private readonly string _payloadRoot;
         private readonly string _payloadZipPath;
-        private readonly TextBox _logBox = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+        private readonly TextBox _logBox = new()
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            WordWrap = false,
+            MinimumSize = new Size(0, 120)
+        };
+        private readonly Label _statusLabel = new()
+        {
+            AutoSize = true,
+            Text = "Ready."
+        };
+        private readonly ProgressBar _progressBar = new()
+        {
+            Dock = DockStyle.Fill,
+            Height = 18,
+            Style = ProgressBarStyle.Continuous
+        };
         private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
         private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
         private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
@@ -97,13 +116,14 @@ internal static partial class Program
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 7,
                 Padding = new Padding(12)
             };
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 54));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 46));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             Controls.Add(root);
@@ -111,10 +131,11 @@ internal static partial class Program
             root.Controls.Add(CreateHeader(), 0, 0);
             root.Controls.Add(CreateSettingsTabs(), 0, 1);
             root.Controls.Add(CreateActionPanel(), 0, 2);
+            root.Controls.Add(CreateStatusPanel(), 0, 3);
 
             _logBox.Font = new Font(FontFamily.GenericMonospace, 9);
             _logBox.Margin = new Padding(0, 10, 0, 6);
-            root.Controls.Add(_logBox, 0, 3);
+            root.Controls.Add(_logBox, 0, 4);
 
             var warning = new Label
             {
@@ -124,7 +145,7 @@ internal static partial class Program
                     ? "Review the settings and choose an action."
                     : "Run this installer as Administrator before installing Windows services or IIS settings."
             };
-            root.Controls.Add(warning, 0, 4);
+            root.Controls.Add(warning, 0, 5);
 
             var buttons = new FlowLayoutPanel
             {
@@ -133,7 +154,7 @@ internal static partial class Program
                 AutoSize = true
             };
             buttons.Controls.Add(_cancelButton);
-            root.Controls.Add(buttons, 0, 5);
+            root.Controls.Add(buttons, 0, 6);
 
             LoadValues();
             _installButton.Click += async (_, _) => await InstallAsync();
@@ -218,6 +239,25 @@ internal static partial class Program
 
             group.Controls.Add(grid);
             return group;
+        }
+
+        private Control CreateStatusPanel()
+        {
+            var panel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                ColumnCount = 2,
+                Margin = new Padding(0, 10, 0, 0)
+            };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
+
+            _statusLabel.Anchor = AnchorStyles.Left;
+            _progressBar.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            panel.Controls.Add(_statusLabel, 0, 0);
+            panel.Controls.Add(_progressBar, 1, 0);
+            return panel;
         }
 
         private static void AddActionRow(TableLayoutPanel grid, Button button, string description)
@@ -403,50 +443,18 @@ internal static partial class Program
 
         private async Task InstallAsync()
         {
-            SetActionButtonsEnabled(false);
-            _cancelButton.Enabled = false;
-            _logBox.Clear();
             ApplyValues();
-
-            var originalOut = Console.Out;
-            var originalError = Console.Error;
-            using var writer = new TextBoxWriter(_logBox);
-            Console.SetOut(writer);
-            Console.SetError(writer);
-
-            try
-            {
-                ExitCode = await Task.Run(() => RunBootstrapAsync(
+            await RunGuiOperationAsync(
+                "Installing or updating OpenModulePlatform...",
+                "Installation completed.",
+                "Installation did not complete.",
+                "Installation failed.",
+                () => RunBootstrapAsync(
                     _config,
                     _configPath,
                     _payloadRoot,
                     _payloadZipPath,
-                    yes: true).GetAwaiter().GetResult());
-
-                MessageBox.Show(
-                    ExitCode == 0 ? "Installation completed." : "Installation did not complete.",
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    ExitCode == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-            }
-            catch (Exception ex)
-            {
-                ExitCode = 1;
-                writer.WriteLine("Installation failed.");
-                writer.WriteLine(ex.Message);
-                MessageBox.Show(
-                    ex.Message,
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-                Console.SetError(originalError);
-                SetActionButtonsEnabled(true);
-                _cancelButton.Enabled = true;
-            }
+                    yes: true));
         }
 
         private async Task UninstallAsync(bool removeRuntimeFiles, bool removeDatabaseObjects)
@@ -457,9 +465,30 @@ internal static partial class Program
                 return;
             }
 
+            await RunGuiOperationAsync(
+                "Uninstalling OpenModulePlatform...",
+                "Uninstall completed.",
+                "Uninstall did not complete.",
+                "Uninstall failed.",
+                () => RunUninstallAsync(
+                    _config,
+                    _configPath,
+                    removeRuntimeFiles,
+                    removeDatabaseObjects,
+                    yes: true));
+        }
+
+        private async Task RunGuiOperationAsync(
+            string runningText,
+            string successText,
+            string incompleteText,
+            string failureText,
+            Func<Task<int>> operation)
+        {
             SetActionButtonsEnabled(false);
             _cancelButton.Enabled = false;
             _logBox.Clear();
+            SetBusyStatus(runningText);
 
             var originalOut = Console.Out;
             var originalError = Console.Error;
@@ -469,15 +498,11 @@ internal static partial class Program
 
             try
             {
-                ExitCode = await Task.Run(() => RunUninstallAsync(
-                    _config,
-                    _configPath,
-                    removeRuntimeFiles,
-                    removeDatabaseObjects,
-                    yes: true).GetAwaiter().GetResult());
+                ExitCode = await Task.Run(() => operation().GetAwaiter().GetResult());
+                SetReadyStatus(ExitCode == 0 ? successText : incompleteText);
 
                 MessageBox.Show(
-                    ExitCode == 0 ? "Uninstall completed." : "Uninstall did not complete.",
+                    ExitCode == 0 ? successText : incompleteText,
                     "OpenModulePlatform installer",
                     MessageBoxButtons.OK,
                     ExitCode == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -485,8 +510,9 @@ internal static partial class Program
             catch (Exception ex)
             {
                 ExitCode = 1;
-                writer.WriteLine("Uninstall failed.");
+                writer.WriteLine(failureText);
                 writer.WriteLine(ex.Message);
+                SetReadyStatus(failureText);
                 MessageBox.Show(
                     ex.Message,
                     "OpenModulePlatform installer",
@@ -499,6 +525,10 @@ internal static partial class Program
                 Console.SetError(originalError);
                 SetActionButtonsEnabled(true);
                 _cancelButton.Enabled = true;
+                if (ExitCode == 2)
+                {
+                    SetReadyStatus("Cancelled.");
+                }
             }
         }
 
@@ -583,6 +613,21 @@ internal static partial class Program
             _uninstallRuntimeButton.Enabled = enabled;
             _cleanUninstallButton.Enabled = enabled;
             _fullUninstallButton.Enabled = enabled;
+        }
+
+        private void SetBusyStatus(string text)
+        {
+            _statusLabel.Text = text;
+            _progressBar.Style = ProgressBarStyle.Marquee;
+            _progressBar.MarqueeAnimationSpeed = 35;
+        }
+
+        private void SetReadyStatus(string text)
+        {
+            _statusLabel.Text = text;
+            _progressBar.MarqueeAnimationSpeed = 0;
+            _progressBar.Style = ProgressBarStyle.Continuous;
+            _progressBar.Value = 0;
         }
 
         private void Set(string key, string value)
