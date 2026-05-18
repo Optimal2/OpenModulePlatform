@@ -25,3 +25,4 @@ the configured database, and injects the configured bootstrap portal admin.
 :r ..\examples\ServiceAppModule\Sql\2-initialize-example-serviceapp.sql
 :r ..\examples\WorkerAppModule\Sql\1-setup-example-workerapp.sql
 :r ..\examples\WorkerAppModule\Sql\2-initialize-example-workerapp.sql
+:r ..\OpenModulePlatform.Portal\sql\3-sync-omp-portal-entries.sql
