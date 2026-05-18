@@ -229,6 +229,7 @@
   <data name="Configuration file" xml:space="preserve"><value>Configuration file</value></data>
   <data name="Upload file content" xml:space="preserve"><value>Upload file content</value></data>
   <data name="Upload a text file to replace the stored configuration content without posting the file body as a textarea field." xml:space="preserve"><value>Upload a text file to replace the stored configuration content without posting the file body as a textarea field.</value></data>
+  <data name="Upload a text file or a zip file containing exactly one text file. Zip upload is useful when request filters block script-like text content." xml:space="preserve"><value>Upload a text file or a zip file containing exactly one text file. Zip upload is useful when request filters block script-like text content.</value></data>
   <data name="HostAgent writes uploaded text as UTF-8 without BOM and overwrites the deployed file when the deployed copy differs." xml:space="preserve"><value>HostAgent writes uploaded text as UTF-8 without BOM and overwrites the deployed file when the deployed copy differs.</value></data>
   <data name="Upload configuration file" xml:space="preserve"><value>Upload configuration file</value></data>
   <data name="Manual text edit" xml:space="preserve"><value>Manual text edit</value></data>
@@ -247,6 +248,7 @@
   <data name="Select a file to upload." xml:space="preserve"><value>Select a file to upload.</value></data>
   <data name="The uploaded configuration file is too large. The maximum size is 1048576 bytes." xml:space="preserve"><value>The uploaded configuration file is too large. The maximum size is 1048576 bytes.</value></data>
   <data name="The uploaded configuration file must be valid UTF-8 text." xml:space="preserve"><value>The uploaded configuration file must be valid UTF-8 text.</value></data>
+  <data name="The uploaded zip file must contain exactly one UTF-8 text file." xml:space="preserve"><value>The uploaded zip file must contain exactly one UTF-8 text file.</value></data>
   <data name="Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments." xml:space="preserve"><value>Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments.</value></data>
   <data name="This artifact already has a configuration file with the same relative path." xml:space="preserve"><value>This artifact already has a configuration file with the same relative path.</value></data>
   <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>The artifact configuration file could not be saved.</value></data>
