@@ -70,6 +70,7 @@ internal static partial class Program
         private readonly CheckBox _installHostAgent = new() { Text = "Install/update HostAgent" };
         private readonly CheckBox _deployWebApps = new() { Text = "Let HostAgent deploy web apps" };
         private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools" };
+        private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data" };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
 
         public InstallerForm(
@@ -86,8 +87,8 @@ internal static partial class Program
 
             Text = "OpenModulePlatform Installer";
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(900, 720);
-            Size = new Size(980, 780);
+            MinimumSize = new Size(960, 740);
+            Size = new Size(1080, 820);
 
             var root = new TableLayoutPanel
             {
@@ -107,6 +108,7 @@ internal static partial class Program
             root.Controls.Add(CreateSettingsTabs(), 0, 1);
 
             _logBox.Font = new Font(FontFamily.GenericMonospace, 9);
+            _logBox.Margin = new Padding(0, 10, 0, 6);
             root.Controls.Add(_logBox, 0, 2);
 
             var warning = new Label
@@ -142,7 +144,8 @@ internal static partial class Program
             {
                 Dock = DockStyle.Fill,
                 AutoSize = true,
-                ColumnCount = 1
+                ColumnCount = 1,
+                Padding = new Padding(0, 0, 0, 10)
             };
             panel.Controls.Add(new Label
             {
@@ -153,11 +156,18 @@ internal static partial class Program
             panel.Controls.Add(new Label
             {
                 AutoSize = true,
+                Text = "Review the installation settings before starting. Existing OMP artifacts can be upgraded later through HostAgent."
+            });
+            panel.Controls.Add(new Label
+            {
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
                 Text = $"Config: {_configPath}"
             });
             panel.Controls.Add(new Label
             {
                 AutoSize = true,
+                ForeColor = SystemColors.GrayText,
                 Text = $"Payload: {_payloadRoot}"
             });
             return panel;
@@ -197,11 +207,24 @@ internal static partial class Program
             ]));
 
             var optionsPage = new TabPage("Options") { Padding = new Padding(12) };
-            var options = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown };
+            var options = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                AutoScroll = true,
+                Padding = new Padding(0, 4, 0, 0)
+            };
+            options.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(820, 0),
+                Text = "Choose what the bootstrapper should prepare now. HostAgent can deploy app updates later from artifacts."
+            });
             options.Controls.Add(_runSql);
             options.Controls.Add(_installHostAgent);
             options.Controls.Add(_deployWebApps);
             options.Controls.Add(_ensureIisSite);
+            options.Controls.Add(_includeExampleApps);
             optionsPage.Controls.Add(options);
             tabs.TabPages.Add(optionsPage);
 
@@ -279,6 +302,7 @@ internal static partial class Program
             _installHostAgent.Checked = _config.HostAgent.Enabled;
             _deployWebApps.Checked = _config.HostAgent.DeployWebApps;
             _ensureIisSite.Checked = _config.HostAgent.EnsureIisSite;
+            _includeExampleApps.Checked = _config.IncludeExampleApps;
         }
 
         private void ApplyValues()
@@ -309,6 +333,7 @@ internal static partial class Program
             _config.HostAgent.Enabled = _installHostAgent.Checked;
             _config.HostAgent.DeployWebApps = _deployWebApps.Checked;
             _config.HostAgent.EnsureIisSite = _ensureIisSite.Checked;
+            _config.IncludeExampleApps = _includeExampleApps.Checked;
         }
 
         private async Task InstallAsync()
