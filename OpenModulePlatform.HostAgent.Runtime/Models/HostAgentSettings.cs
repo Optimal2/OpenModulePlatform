@@ -42,6 +42,8 @@ public sealed class HostAgentSettings
 
     public string IisAppPoolPassword { get; set; } = string.Empty;
 
+    public string WebAppDataProtectionKeyPath { get; set; } = string.Empty;
+
     public bool UseAppOfflineForWebAppDeployment { get; set; } = true;
 
     public int AppOfflineShutdownDelayMilliseconds { get; set; } = 1500;

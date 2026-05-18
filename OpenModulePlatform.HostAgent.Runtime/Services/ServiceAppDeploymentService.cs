@@ -82,7 +82,8 @@ public sealed class ServiceAppDeploymentService
                 cancellationToken);
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,
-                _repository.GetConfiguredConnectionString());
+                _repository.GetConfiguredConnectionString(),
+                settings);
 
             if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath))
             {

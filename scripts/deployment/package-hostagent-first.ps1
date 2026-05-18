@@ -363,6 +363,7 @@ $sqlFiles = @(
     @{ Source = 'sql\1-setup-openmoduleplatform.sql'; Destination = 'OpenModulePlatform\1-setup-openmoduleplatform.sql' },
     @{ Source = 'sql\2-initialize-openmoduleplatform.sql'; Destination = 'OpenModulePlatform\2-initialize-openmoduleplatform.sql' },
     @{ Source = 'sql\3-initialize-opendocviewer.sql'; Destination = 'OpenModulePlatform\3-initialize-opendocviewer.sql' },
+    @{ Source = 'OpenModulePlatform.Auth\sql\2-initialize-omp-auth.sql'; Destination = 'OpenModulePlatform.Auth\2-initialize-omp-auth.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\1-setup-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\2-initialize-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\1-setup-content-webapp.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql' },
@@ -421,6 +422,7 @@ bootstrap.local.sample.json.
 
 :r OpenModulePlatform\1-setup-openmoduleplatform.sql
 :r OpenModulePlatform\2-initialize-openmoduleplatform.sql
+:r OpenModulePlatform.Auth\2-initialize-omp-auth.sql
 :r OpenModulePlatform.Portal\1-setup-omp-portal.sql
 :r OpenModulePlatform.Portal\2-initialize-omp-portal.sql
 :r OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql
@@ -467,6 +469,7 @@ foreach ($component in $components) {
 Add-ArtifactEntry -Artifacts $artifacts -Source 'payload/OpenDocViewer.dist.zip' -Target "opendocviewer/web/$openDocViewerVersion"
 
 $versionOverrides = @{}
+Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Auth/2-initialize-omp-auth.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-auth-web' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Portal/2-initialize-omp-portal.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-portal-web' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Web.ContentWebAppModule/2-initialize-content-webapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'content-webapp' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Web.iFrameWebAppModule/2-initialize-iframe-webapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'iframe-webapp' } | Select-Object -First 1).version)
@@ -482,6 +485,7 @@ $webAppsRoot = [string](Get-ConfigValue -Config $config -Name 'WebAppsRoot' -Def
 $servicesRoot = [string](Get-ConfigValue -Config $config -Name 'ServicesRoot' -DefaultValue (Join-Path $runtimeRoot 'Services'))
 $artifactStoreRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactStoreRoot' -DefaultValue (Join-Path $runtimeRoot 'ArtifactStore'))
 $artifactCacheRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactCacheRoot' -DefaultValue (Join-Path $runtimeRoot 'ArtifactCache'))
+$webAppDataProtectionKeyPath = [string](Get-ConfigValue -Config $config -Name 'WebAppDataProtectionKeyPath' -DefaultValue (Join-Path $runtimeRoot 'DataProtectionKeys'))
 $portalPhysicalPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'PortalPhysicalPath' -DefaultValue '')
 if ([string]::IsNullOrWhiteSpace($portalPhysicalPath)) {
     $portalPhysicalPath = Join-Path $webRoot 'Portal'
@@ -577,6 +581,7 @@ $bootstrapConfig = [ordered]@{
                 IisAppPoolNamePrefix = 'OMP_'
                 IisAppPoolUserName = $runAsUser
                 IisAppPoolPassword = $runAsPassword
+                WebAppDataProtectionKeyPath = $webAppDataProtectionKeyPath
                 DeployServiceApps = $true
                 ServicesRoot = $servicesRoot
                 EnableRpc = $true

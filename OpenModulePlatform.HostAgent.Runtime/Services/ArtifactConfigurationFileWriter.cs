@@ -57,7 +57,8 @@ internal static class ArtifactConfigurationFileWriter
 
     public static IReadOnlyDictionary<string, string> CreateVariables(
         WebAppDeploymentDescriptor deployment,
-        string ompConnectionString)
+        string ompConnectionString,
+        HostAgentSettings settings)
         => CreateVariables(
             deployment.HostId,
             deployment.HostKey,
@@ -66,11 +67,13 @@ internal static class ArtifactConfigurationFileWriter
             deployment.ArtifactId,
             deployment.Version,
             deployment.TargetName,
-            ompConnectionString);
+            ompConnectionString,
+            settings);
 
     public static IReadOnlyDictionary<string, string> CreateVariables(
         ServiceAppDeploymentDescriptor deployment,
-        string ompConnectionString)
+        string ompConnectionString,
+        HostAgentSettings settings)
         => CreateVariables(
             deployment.HostId,
             deployment.HostKey,
@@ -79,7 +82,8 @@ internal static class ArtifactConfigurationFileWriter
             deployment.ArtifactId,
             deployment.Version,
             deployment.TargetName,
-            ompConnectionString);
+            ompConnectionString,
+            settings);
 
     private static string ResolveTargetPath(
         string targetRoot,
@@ -106,7 +110,8 @@ internal static class ArtifactConfigurationFileWriter
         int artifactId,
         string artifactVersion,
         string? targetName,
-        string ompConnectionString)
+        string ompConnectionString,
+        HostAgentSettings settings)
     {
         var variables = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -117,7 +122,13 @@ internal static class ArtifactConfigurationFileWriter
             ["Omp.ArtifactId"] = artifactId.ToString(CultureInfo.InvariantCulture),
             ["Omp.ArtifactVersion"] = artifactVersion,
             ["Omp.TargetName"] = targetName ?? string.Empty,
-            ["Omp.ConnectionStrings.OmpDb"] = ompConnectionString
+            ["Omp.ConnectionStrings.OmpDb"] = ompConnectionString,
+            ["Omp.HostAgent.CentralArtifactRoot"] = settings.CentralArtifactRoot,
+            ["Omp.HostAgent.LocalArtifactCacheRoot"] = settings.LocalArtifactCacheRoot,
+            ["Omp.HostAgent.WebAppsRoot"] = settings.WebAppsRoot,
+            ["Omp.HostAgent.PortalPhysicalPath"] = settings.PortalPhysicalPath,
+            ["Omp.HostAgent.ServicesRoot"] = settings.ServicesRoot,
+            ["Omp.HostAgent.WebAppDataProtectionKeyPath"] = settings.WebAppDataProtectionKeyPath
         };
 
         foreach (var item in variables.ToArray())
