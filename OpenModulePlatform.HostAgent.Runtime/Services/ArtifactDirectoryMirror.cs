@@ -11,7 +11,8 @@ internal static class ArtifactDirectoryMirror
         string sourceDirectory,
         string targetDirectory,
         IReadOnlyCollection<string> excludedEntries,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool deleteStaleTargetEntries = true)
     {
         if (!Directory.Exists(sourceDirectory))
         {
@@ -20,7 +21,10 @@ internal static class ArtifactDirectoryMirror
 
         Directory.CreateDirectory(targetDirectory);
         CopySourceFiles(sourceDirectory, targetDirectory, excludedEntries, cancellationToken);
-        DeleteStaleTargetEntries(sourceDirectory, targetDirectory, excludedEntries, cancellationToken);
+        if (deleteStaleTargetEntries)
+        {
+            DeleteStaleTargetEntries(sourceDirectory, targetDirectory, excludedEntries, cancellationToken);
+        }
     }
 
     public static void DeleteFileIfExistsWithRetry(
