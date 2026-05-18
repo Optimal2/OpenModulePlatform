@@ -202,7 +202,8 @@ function Add-ArtifactEntry {
     param(
         [System.Collections.ArrayList]$Artifacts,
         [string]$Source,
-        [string]$Target
+        [string]$Target,
+        [bool]$IsExample = $false
     )
 
     [void]$Artifacts.Add([ordered]@{
@@ -210,6 +211,7 @@ function Add-ArtifactEntry {
             target = $Target.Replace('\', '/')
             overwrite = $true
             removeRuntimeConfigurationFiles = $true
+            isExample = $IsExample
         })
 }
 
@@ -464,7 +466,8 @@ foreach ($component in $components) {
         continue
     }
 
-    Add-ArtifactEntry -Artifacts $artifacts -Source $packageTemplate -Target ($relativeTemplate.Replace('{version}', $componentVersion))
+    $isExample = $packageTemplate -like '*Example*' -or $relativeTemplate -like '*example-*'
+    Add-ArtifactEntry -Artifacts $artifacts -Source $packageTemplate -Target ($relativeTemplate.Replace('{version}', $componentVersion)) -IsExample $isExample
 }
 Add-ArtifactEntry -Artifacts $artifacts -Source 'payload/OpenDocViewer.dist.zip' -Target "opendocviewer/web/$openDocViewerVersion"
 
@@ -507,6 +510,7 @@ $sqlServer = [string](Get-ConfigValue -Config $config -Name 'SqlServer' -Default
 $database = [string](Get-ConfigValue -Config $config -Name 'Database' -DefaultValue 'OpenModulePlatform')
 $sqlAuthentication = [string](Get-ConfigValue -Config $config -Name 'SqlAuthentication' -DefaultValue 'Integrated')
 $sqlIntegrated = -not [string]::Equals($sqlAuthentication, 'SqlLogin', [StringComparison]::OrdinalIgnoreCase)
+$includeExampleApps = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallExamples' -DefaultValue $true)
 
 $bootstrapConfig = [ordered]@{
     schema = 'OpenModulePlatform.HostAgentFirstBootstrap.v1'
@@ -530,6 +534,7 @@ $bootstrapConfig = [ordered]@{
         artifactVersionOverrides = $versionOverrides
     }
     artifactStoreRoot = $artifactStoreRoot
+    includeExampleApps = $includeExampleApps
     artifacts = @($artifacts)
     hostAgent = [ordered]@{
         enabled = $true
