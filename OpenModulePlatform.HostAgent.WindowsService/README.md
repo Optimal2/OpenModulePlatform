@@ -5,6 +5,8 @@ HostAgent v1 is the host-local OMP service responsible for provisioning immutabl
 Implemented in v1:
 
 - runs as a Windows Service
+- supports `--run-once` for installers that need a deterministic first
+  provisioning/deployment cycle before starting the long-running service
 - materializes enabled instance-template topology for the local host when
   `HostAgent:MaterializeTemplates` is enabled
 - claims and completes pending host deployment requests when
