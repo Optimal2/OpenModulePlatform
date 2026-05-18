@@ -23,6 +23,11 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
     private const string FilenameFormat = "moduleKey__appKey__packageType__targetName__version.zip";
     private const int HashBufferSize = 1024 * 128;
 
+    private static readonly string[] RuntimeConfigurationFileNames =
+    [
+        "odv.site.config.js"
+    ];
+
     private static readonly Regex MetadataTokenPattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
         RegexOptions.Compiled);
@@ -361,6 +366,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 continue;
             }
 
+            ValidateArtifactEntryIsNotRuntimeConfiguration(entryName);
             Directory.CreateDirectory(Path.GetDirectoryName(entryPath)!);
             entry.ExtractToFile(entryPath, overwrite: false);
             fileCount++;
@@ -395,6 +401,33 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         }
 
         return string.Join('/', segments);
+    }
+
+    private static void ValidateArtifactEntryIsNotRuntimeConfiguration(string normalizedEntryName)
+    {
+        var fileName = normalizedEntryName.Split('/').LastOrDefault() ?? string.Empty;
+        if (IsRuntimeConfigurationFileName(fileName))
+        {
+            throw new InvalidOperationException(
+                $"The artifact zip contains runtime configuration file '{normalizedEntryName}'. Upload this file from the artifact edit page instead so HostAgent can manage it outside the immutable artifact.");
+        }
+    }
+
+    private static bool IsRuntimeConfigurationFileName(string fileName)
+    {
+        if (string.Equals(fileName, "appsettings.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (fileName.StartsWith("appsettings.", StringComparison.OrdinalIgnoreCase)
+            && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return RuntimeConfigurationFileNames.Any(
+            name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string ResolveZipEntryPath(string rootPath, string relativeEntryPath)

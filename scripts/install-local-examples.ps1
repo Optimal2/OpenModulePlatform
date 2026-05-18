@@ -224,6 +224,21 @@ function Invoke-RobocopyChecked {
     }
 }
 
+function Remove-ArtifactRuntimeConfigurationFiles {
+    param([Parameter(Mandatory = $true)][string]$Destination)
+
+    if (-not (Test-Path -LiteralPath $Destination -PathType Container)) {
+        return
+    }
+
+    Assert-PathUnderRoot -Root $RuntimeRoot -Path $Destination
+
+    foreach ($pattern in @('appsettings.json', 'appsettings.*.json', 'odv.site.config.js')) {
+        Get-ChildItem -LiteralPath $Destination -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+    }
+}
+
 function Assert-PathUnderRoot {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
@@ -509,6 +524,7 @@ function Deploy-PublishedOutputs {
 
         $destinationPath = Join-Path $RuntimeRoot $deployment.Destination
         Invoke-RobocopyChecked -Source $sourcePath -Destination $destinationPath
+        Remove-ArtifactRuntimeConfigurationFiles -Destination $destinationPath
     }
 
     $serviceArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Service.ExampleServiceAppModule'
@@ -518,6 +534,7 @@ function Deploy-PublishedOutputs {
 
     $serviceArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\example-serviceapp\service\1.0.0'
     Invoke-RobocopyChecked -Source $serviceArtifactSourcePath -Destination $serviceArtifactDestinationPath
+    Remove-ArtifactRuntimeConfigurationFiles -Destination $serviceArtifactDestinationPath
 
     $workerArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Worker.ExampleWorkerAppModule'
     if (-not (Test-Path -LiteralPath $workerArtifactSourcePath)) {
@@ -526,6 +543,7 @@ function Deploy-PublishedOutputs {
 
     $workerArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\example-workerapp\worker\1.0.0'
     Invoke-RobocopyChecked -Source $workerArtifactSourcePath -Destination $workerArtifactDestinationPath
+    Remove-ArtifactRuntimeConfigurationFiles -Destination $workerArtifactDestinationPath
 
     if (-not $SkipRuntimeServices) {
         Stop-WindowsServiceIfInstalled -Name $script:workerManagerServiceName
@@ -570,6 +588,7 @@ function Deploy-PublishedOutputs {
 
         $odvArtifactDestination = Join-Path $RuntimeRoot "ArtifactStore\opendocviewer\web\$($script:openDocViewerVersion)"
         Invoke-RobocopyChecked -Source $OpenDocViewerDistPath -Destination $odvArtifactDestination
+        Remove-ArtifactRuntimeConfigurationFiles -Destination $odvArtifactDestination
     }
 }
 

@@ -16,9 +16,9 @@ Prerequisites:
 USE [OpenModulePlatform];
 GO
 
-DECLARE @DefaultInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111111';
-DECLARE @DefaultPortalModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111112';
-DECLARE @DefaultPortalAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111113';
+DECLARE @DefaultInstanceId uniqueidentifier;
+DECLARE @DefaultPortalModuleInstanceId uniqueidentifier;
+DECLARE @DefaultPortalAppInstanceId uniqueidentifier;
 DECLARE @PortalModuleId int;
 DECLARE @PortalAppId int;
 DECLARE @PortalArtifactId int;
@@ -35,9 +35,10 @@ BEGIN
     THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. The parameter accepts multiple principals as an array.', 1;
 END
 
-SELECT @DefaultInstanceTemplateId = InstanceTemplateId
+SELECT @DefaultInstanceId = InstanceId,
+       @DefaultInstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
-WHERE InstanceId = @DefaultInstanceId;
+WHERE InstanceKey = N'default';
 
 IF @DefaultInstanceTemplateId IS NULL
     THROW 50000, 'Default OMP instance not found. Run the core SQL setup/init scripts first.', 1;
@@ -163,8 +164,15 @@ WHERE AppId = @PortalAppId
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @PortalAppId AND PermissionId = @PortalViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@PortalAppId, @PortalViewPermissionId, 0);
 
-IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @DefaultPortalModuleInstanceId)
+SELECT @DefaultPortalModuleInstanceId = ModuleInstanceId
+FROM omp.ModuleInstances
+WHERE InstanceId = @DefaultInstanceId
+  AND ModuleInstanceKey = N'omp_portal';
+
+IF @DefaultPortalModuleInstanceId IS NULL
 BEGIN
+    SET @DefaultPortalModuleInstanceId = NEWID();
+
     INSERT INTO omp.ModuleInstances(
         ModuleInstanceId,
         InstanceId,
@@ -227,8 +235,15 @@ FROM omp.InstanceTemplateModuleInstances
 WHERE InstanceTemplateId = @DefaultInstanceTemplateId
   AND ModuleInstanceKey = N'omp_portal';
 
-IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @DefaultPortalAppInstanceId)
+SELECT @DefaultPortalAppInstanceId = AppInstanceId
+FROM omp.AppInstances
+WHERE ModuleInstanceId = @DefaultPortalModuleInstanceId
+  AND AppInstanceKey = N'omp_portal';
+
+IF @DefaultPortalAppInstanceId IS NULL
 BEGIN
+    SET @DefaultPortalAppInstanceId = NEWID();
+
     INSERT INTO omp.AppInstances(
         AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description,
         RoutePath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)

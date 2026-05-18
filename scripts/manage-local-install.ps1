@@ -108,6 +108,19 @@ function Invoke-RobocopyChecked {
     $global:LASTEXITCODE = 0
 }
 
+function Remove-ArtifactRuntimeConfigurationFiles {
+    param([Parameter(Mandatory = $true)][string]$Destination)
+
+    if (-not (Test-Path -LiteralPath $Destination -PathType Container)) {
+        return
+    }
+
+    foreach ($pattern in @('appsettings.json', 'appsettings.*.json', 'odv.site.config.js')) {
+        Get-ChildItem -LiteralPath $Destination -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+    }
+}
+
 function Invoke-AppCmdChecked {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
 
@@ -531,14 +544,17 @@ function Build-And-Publish {
             $portalArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Portal'
             $portalArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\omp-portal\web\0.3.3'
             Invoke-RobocopyChecked -Source $portalArtifactSourcePath -Destination $portalArtifactDestinationPath
+            Remove-ArtifactRuntimeConfigurationFiles -Destination $portalArtifactDestinationPath
 
             $contentArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Web.ContentWebAppModule'
             $contentArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\content-webapp\web\0.3.3'
             Invoke-RobocopyChecked -Source $contentArtifactSourcePath -Destination $contentArtifactDestinationPath
+            Remove-ArtifactRuntimeConfigurationFiles -Destination $contentArtifactDestinationPath
 
             $iframeArtifactSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Web.iFrameWebAppModule'
             $iframeArtifactDestinationPath = Join-Path $RuntimeRoot 'ArtifactStore\iframe-webapp\web\0.3.3'
             Invoke-RobocopyChecked -Source $iframeArtifactSourcePath -Destination $iframeArtifactDestinationPath
+            Remove-ArtifactRuntimeConfigurationFiles -Destination $iframeArtifactDestinationPath
         }
     }
     finally {
