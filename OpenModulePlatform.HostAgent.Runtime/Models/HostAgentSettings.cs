@@ -24,9 +24,23 @@ public sealed class HostAgentSettings
 
     public string IisSiteName { get; set; } = string.Empty;
 
+    public bool EnsureIisSite { get; set; }
+
+    public string IisBindingProtocol { get; set; } = "http";
+
+    public int IisBindingPort { get; set; } = 80;
+
+    public string IisBindingHostHeader { get; set; } = string.Empty;
+
     public string WebAppsRoot { get; set; } = string.Empty;
 
     public string PortalPhysicalPath { get; set; } = string.Empty;
+
+    public string IisAppPoolNamePrefix { get; set; } = "OMP_";
+
+    public string IisAppPoolUserName { get; set; } = string.Empty;
+
+    public string IisAppPoolPassword { get; set; } = string.Empty;
 
     public bool UseAppOfflineForWebAppDeployment { get; set; } = true;
 
@@ -130,6 +144,24 @@ public sealed class HostAgentSettings
             if (string.IsNullOrWhiteSpace(WebAppsRoot) && string.IsNullOrWhiteSpace(PortalPhysicalPath))
             {
                 throw new InvalidOperationException("HostAgent:WebAppsRoot or HostAgent:PortalPhysicalPath must be configured when HostAgent:DeployWebApps is enabled.");
+            }
+
+            if (EnsureIisSite)
+            {
+                if (string.IsNullOrWhiteSpace(PortalPhysicalPath))
+                {
+                    throw new InvalidOperationException("HostAgent:PortalPhysicalPath must be configured when HostAgent:EnsureIisSite is enabled.");
+                }
+
+                if (string.IsNullOrWhiteSpace(IisBindingProtocol))
+                {
+                    throw new InvalidOperationException("HostAgent:IisBindingProtocol must be configured when HostAgent:EnsureIisSite is enabled.");
+                }
+
+                if (IisBindingPort is < 1 or > 65535)
+                {
+                    throw new InvalidOperationException("HostAgent:IisBindingPort must be between 1 and 65535 when HostAgent:EnsureIisSite is enabled.");
+                }
             }
 
             if (IisAppPoolStopTimeoutSeconds < 1)
