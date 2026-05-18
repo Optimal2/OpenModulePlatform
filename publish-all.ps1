@@ -178,7 +178,8 @@ $projects = @(
     'examples/WorkerAppModule/WorkerApp/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj',
     'OpenModulePlatform.WorkerManager.WindowsService/OpenModulePlatform.WorkerManager.WindowsService.csproj',
     'OpenModulePlatform.HostAgent.WindowsService/OpenModulePlatform.HostAgent.WindowsService.csproj',
-    'OpenModulePlatform.WorkerProcessHost/OpenModulePlatform.WorkerProcessHost.csproj'
+    'OpenModulePlatform.WorkerProcessHost/OpenModulePlatform.WorkerProcessHost.csproj',
+    'OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.csproj'
 )
 
 $publishItems = foreach ($project in $projects) {
