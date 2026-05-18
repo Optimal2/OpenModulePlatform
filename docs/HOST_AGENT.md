@@ -114,6 +114,13 @@ Runtime-local files are preserved through
 can update application binaries without overwriting local configuration or
 runtime data.
 
+Artifact packages should not contain runtime configuration files in the first
+place. The exclusions above are a safety net for existing runtime folders and
+older packages, while Portal artifact upload rejects known runtime config files
+such as `appsettings*.json` and `odv.site.config.js`. Environment-owned config
+is either written by the bootstrap/deployment layer or managed through
+`omp.ArtifactConfigurationFiles`.
+
 Enabled rows in `omp.ArtifactConfigurationFiles` are written after the artifact
 has been mirrored. Each row belongs to one artifact and contains a path relative
 to the deployed app root plus the exact text HostAgent should write. HostAgent

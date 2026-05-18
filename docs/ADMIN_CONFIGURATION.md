@@ -159,6 +159,15 @@ root. Subdirectories are allowed, but paths must stay relative to the zip root:
 - no `..` path segments
 - no empty zip packages
 - no wrapper-folder stripping
+- no runtime configuration files such as `appsettings.json`,
+  `appsettings.*.json`, or `odv.site.config.js`
+
+Runtime configuration is intentionally outside immutable artifacts. OMP-owned
+runtime files, such as database connection strings or app instance identity
+settings, are written by the bootstrap/deployment layer. App-specific files that
+must be deployment-owned, such as `odv.site.config.js`, belong in
+`omp.ArtifactConfigurationFiles` and can be copied from a previous artifact
+version during upload.
 
 The upload page blocks duplicate artifact content by comparing the extracted
 directory-content SHA-256 with existing artifact rows. Zip metadata such as

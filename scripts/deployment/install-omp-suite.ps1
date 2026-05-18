@@ -1139,6 +1139,29 @@ function Expand-PayloadZip {
     Expand-Archive -LiteralPath $zipPath -DestinationPath $Destination -Force
 }
 
+function Remove-ArtifactRuntimeConfigurationFiles {
+    param([Parameter(Mandatory = $true)][string]$Destination)
+
+    if (-not (Test-Path -LiteralPath $Destination -PathType Container)) {
+        return
+    }
+
+    foreach ($pattern in @('appsettings.json', 'appsettings.*.json', 'odv.site.config.js')) {
+        Get-ChildItem -LiteralPath $Destination -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+    }
+}
+
+function Expand-ArtifactPayloadZip {
+    param(
+        [Parameter(Mandatory = $true)][string]$ZipName,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    Expand-PayloadZip -ZipName $ZipName -Destination $Destination
+    Remove-ArtifactRuntimeConfigurationFiles -Destination $Destination
+}
+
 function Get-OmpConnectionString {
     if ([string]::Equals($script:SqlAuthentication, 'SqlLogin', [StringComparison]::OrdinalIgnoreCase)) {
         return "Server=$script:SqlServer;Database=$script:Database;User ID=$script:SqlUser;Password=$script:SqlPassword;TrustServerCertificate=True;"
@@ -1745,17 +1768,17 @@ function Deploy-Payloads {
     New-Item -ItemType Directory -Path $script:ArtifactCacheRoot -Force | Out-Null
 
     Expand-PayloadZip -ZipName 'OpenModulePlatform.Portal.zip' -Destination $script:PortalPath
-    Expand-PayloadZip -ZipName 'OpenModulePlatform.Portal.zip' -Destination (Join-Path $script:ArtifactStoreRoot "omp-portal\web\$($script:Version)")
+    Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Portal.zip' -Destination (Join-Path $script:ArtifactStoreRoot "omp-portal\web\$($script:Version)")
     Expand-PayloadZip -ZipName 'OpenModulePlatform.Auth.zip' -Destination (Join-Path $script:WebAppsRoot 'auth')
 
     if ($script:InstallOpenDocViewer) {
         Expand-PayloadZip -ZipName 'OpenDocViewer.dist.zip' -Destination (Join-Path $script:WebAppsRoot $script:OpenDocViewerAppPath)
-        Expand-PayloadZip -ZipName 'OpenDocViewer.dist.zip' -Destination (Join-Path $script:ArtifactStoreRoot "opendocviewer\web\$($script:OpenDocViewerVersion)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenDocViewer.dist.zip' -Destination (Join-Path $script:ArtifactStoreRoot "opendocviewer\web\$($script:OpenDocViewerVersion)")
     }
 
     if ($script:InstallContentWebApp) {
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ContentWebAppModule.zip' -Destination (Join-Path $script:WebAppsRoot $script:ContentWebAppPath)
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ContentWebAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "content-webapp\web\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Web.ContentWebAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "content-webapp\web\$($script:Version)")
     }
 
     if ($script:InstallExamples) {
@@ -1763,17 +1786,17 @@ function Deploy-Payloads {
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleWebAppBlazorModule')
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleServiceAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleServiceAppModule')
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWorkerAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'ExampleWorkerAppModule')
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-webapp\web\$($script:Version)")
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-webapp-blazor\web\$($script:Version)")
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleServiceAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-serviceapp\web\$($script:Version)")
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWorkerAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-workerapp\web\$($script:Version)")
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Service.ExampleServiceAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-serviceapp\service\$($script:Version)")
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Worker.ExampleWorkerAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-workerapp\worker\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-webapp\web\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-webapp-blazor\web\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Web.ExampleServiceAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-serviceapp\web\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Web.ExampleWorkerAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-workerapp\web\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Service.ExampleServiceAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-serviceapp\service\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Worker.ExampleWorkerAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "example-workerapp\worker\$($script:Version)")
     }
 
     if ($script:InstallIFrameWebApp) {
         Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.iFrameWebAppModule.zip' -Destination (Join-Path $script:WebAppsRoot 'iFrameWebAppModule')
-        Expand-PayloadZip -ZipName 'OpenModulePlatform.Web.iFrameWebAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "iframe-webapp\web\$($script:Version)")
+        Expand-ArtifactPayloadZip -ZipName 'OpenModulePlatform.Web.iFrameWebAppModule.zip' -Destination (Join-Path $script:ArtifactStoreRoot "iframe-webapp\web\$($script:Version)")
     }
 
     if ($script:InstallRuntimeServices) {
