@@ -8,6 +8,8 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
 public sealed partial class HtmlContentFileLoader
 {
     private const string PackagedHtmlFilesPath = "ContentPages";
+    private const string SharedDataRootDirectoryName = "Data";
+    private const string SharedDataHtmlFilesDirectoryName = "ContentPages";
 
     private readonly IWebHostEnvironment _environment;
     private readonly IOptions<ContentWebAppModuleOptions> _options;
@@ -83,11 +85,16 @@ public sealed partial class HtmlContentFileLoader
     {
         var configuredDirectory = GetConfiguredHtmlFilesDirectory();
         var packagedDirectory = Path.GetFullPath(Path.Join(_environment.ContentRootPath, PackagedHtmlFilesPath));
+        var sharedDataRootDirectory = TryGetSharedDataRootDirectory(configuredDirectory);
 
         // Runtime/shared files intentionally stay first. They can live on a
         // shared UNC path for multi-server deployments and override packaged
-        // HTML without changing the immutable app artifact.
-        return new[] { configuredDirectory, packagedDirectory }
+        // HTML without changing the immutable app artifact. The shared Data
+        // root fallback supports deployments that keep HTML and report JSON
+        // side by side under one shared directory.
+        return new[] { configuredDirectory, sharedDataRootDirectory, packagedDirectory }
+            .Where(static directory => !string.IsNullOrWhiteSpace(directory))
+            .Select(static directory => directory!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -106,6 +113,21 @@ public sealed partial class HtmlContentFileLoader
         }
 
         return Path.GetFullPath(Path.Join(_environment.ContentRootPath, configuredPath));
+    }
+
+    private static string? TryGetSharedDataRootDirectory(string configuredDirectory)
+    {
+        var directory = new DirectoryInfo(Path.GetFullPath(configuredDirectory));
+        if (!directory.Name.Equals(SharedDataHtmlFilesDirectoryName, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var parent = directory.Parent;
+        return parent is not null
+            && parent.Name.Equals(SharedDataRootDirectoryName, StringComparison.OrdinalIgnoreCase)
+            ? parent.FullName
+            : null;
     }
 
     private static string ResolveHtmlFilePath(string directory, string htmlFileKey, string extension)

@@ -18,12 +18,16 @@ public sealed class ContentWebAppModuleOptions
     /// <summary>
     /// Whitelisted server-side directory for JSON server report definitions.
     /// Relative paths are resolved from the web app content root.
+    /// If this points to a Data/ContentReports directory, the parent Data
+    /// directory is also searched for shared root-level report JSON files.
     /// </summary>
     public string ServerReportsPath { get; set; } = "App_Data/ContentReports";
 
     /// <summary>
     /// Whitelisted server-side directory for trusted HTML content files.
     /// Relative paths are resolved from the web app content root.
+    /// If this points to a Data/ContentPages directory, the parent Data
+    /// directory is also searched for shared root-level HTML files.
     /// </summary>
     public string HtmlFilesPath { get; set; } = "App_Data/ContentPages";
 
