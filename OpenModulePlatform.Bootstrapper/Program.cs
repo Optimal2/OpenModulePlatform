@@ -568,135 +568,197 @@ END
     private static string CreateDropDatabaseObjectsSql()
         => """
 SET NOCOUNT ON;
-SET XACT_ABORT ON;
 
 -- Full uninstall removes user-created database objects but deliberately leaves
 -- the configured database itself in place so ownership, files, and SQL Server
 -- permissions remain under operator control.
+DECLARE @MaxDropPasses int = 15;
+DECLARE @Pass int = 0;
+DECLARE @Remaining int = 1;
 DECLARE @sql nvarchar(max);
 DECLARE @schemaName sysname;
 DECLARE @objectName sysname;
 DECLARE @constraintName sysname;
 DECLARE @type char(2);
 
-DECLARE foreign_key_cursor CURSOR LOCAL FAST_FORWARD FOR
-SELECT
-    SCHEMA_NAME(parent.schema_id),
-    parent.name,
-    fk.name
-FROM sys.foreign_keys AS fk
-JOIN sys.tables AS parent ON parent.object_id = fk.parent_object_id;
-
-OPEN foreign_key_cursor;
-FETCH NEXT FROM foreign_key_cursor INTO @schemaName, @objectName, @constraintName;
-WHILE @@FETCH_STATUS = 0
+WHILE @Pass < @MaxDropPasses AND @Remaining > 0
 BEGIN
-    EXEC(N'ALTER TABLE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N' DROP CONSTRAINT ' + QUOTENAME(@constraintName) + N';');
+    SET @Pass += 1;
+
+    DECLARE foreign_key_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT
+        SCHEMA_NAME(parent.schema_id),
+        parent.name,
+        fk.name
+    FROM sys.foreign_keys AS fk
+    JOIN sys.tables AS parent ON parent.object_id = fk.parent_object_id;
+
+    OPEN foreign_key_cursor;
     FETCH NEXT FROM foreign_key_cursor INTO @schemaName, @objectName, @constraintName;
-END
-CLOSE foreign_key_cursor;
-DEALLOCATE foreign_key_cursor;
-
-DECLARE module_cursor CURSOR LOCAL FAST_FORWARD FOR
-SELECT s.name, o.name, o.type
-FROM sys.objects AS o
-JOIN sys.schemas AS s ON s.schema_id = o.schema_id
-WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
-  AND o.is_ms_shipped = 0
-  AND o.type IN ('V', 'P', 'FN', 'IF', 'TF')
-ORDER BY CASE o.type WHEN 'V' THEN 1 WHEN 'P' THEN 2 ELSE 3 END, s.name, o.name;
-
-OPEN module_cursor;
-FETCH NEXT FROM module_cursor INTO @schemaName, @objectName, @type;
-WHILE @@FETCH_STATUS = 0
-BEGIN
-    SET @sql = CASE @type
-        WHEN 'V' THEN N'DROP VIEW '
-        WHEN 'P' THEN N'DROP PROCEDURE '
-        ELSE N'DROP FUNCTION '
-    END + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';';
-    EXEC(@sql);
-    FETCH NEXT FROM module_cursor INTO @schemaName, @objectName, @type;
-END
-CLOSE module_cursor;
-DEALLOCATE module_cursor;
-
-DECLARE table_cursor CURSOR LOCAL FAST_FORWARD FOR
-SELECT s.name, t.name
-FROM sys.tables AS t
-JOIN sys.schemas AS s ON s.schema_id = t.schema_id
-WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
-  AND t.is_ms_shipped = 0
-ORDER BY s.name, t.name;
-
-OPEN table_cursor;
-FETCH NEXT FROM table_cursor INTO @schemaName, @objectName;
-WHILE @@FETCH_STATUS = 0
-BEGIN
-    EXEC(N'DROP TABLE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';');
-    FETCH NEXT FROM table_cursor INTO @schemaName, @objectName;
-END
-CLOSE table_cursor;
-DEALLOCATE table_cursor;
-
-DECLARE sequence_cursor CURSOR LOCAL FAST_FORWARD FOR
-SELECT s.name, seq.name
-FROM sys.sequences AS seq
-JOIN sys.schemas AS s ON s.schema_id = seq.schema_id
-WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
-ORDER BY s.name, seq.name;
-
-OPEN sequence_cursor;
-FETCH NEXT FROM sequence_cursor INTO @schemaName, @objectName;
-WHILE @@FETCH_STATUS = 0
-BEGIN
-    EXEC(N'DROP SEQUENCE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';');
-    FETCH NEXT FROM sequence_cursor INTO @schemaName, @objectName;
-END
-CLOSE sequence_cursor;
-DEALLOCATE sequence_cursor;
-
-DECLARE synonym_cursor CURSOR LOCAL FAST_FORWARD FOR
-SELECT s.name, syn.name
-FROM sys.synonyms AS syn
-JOIN sys.schemas AS s ON s.schema_id = syn.schema_id
-WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
-ORDER BY s.name, syn.name;
-
-OPEN synonym_cursor;
-FETCH NEXT FROM synonym_cursor INTO @schemaName, @objectName;
-WHILE @@FETCH_STATUS = 0
-BEGIN
-    EXEC(N'DROP SYNONYM ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';');
-    FETCH NEXT FROM synonym_cursor INTO @schemaName, @objectName;
-END
-CLOSE synonym_cursor;
-DEALLOCATE synonym_cursor;
-
-DECLARE schema_cursor CURSOR LOCAL FAST_FORWARD FOR
-SELECT s.name
-FROM sys.schemas AS s
-WHERE s.name NOT IN (N'dbo', N'guest', N'sys', N'INFORMATION_SCHEMA')
-  AND s.principal_id <> DATABASE_PRINCIPAL_ID(N'sys')
-ORDER BY s.name;
-
-OPEN schema_cursor;
-FETCH NEXT FROM schema_cursor INTO @schemaName;
-WHILE @@FETCH_STATUS = 0
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM sys.objects
-        WHERE schema_id = SCHEMA_ID(@schemaName)
-    )
+    WHILE @@FETCH_STATUS = 0
     BEGIN
-        EXEC(N'DROP SCHEMA ' + QUOTENAME(@schemaName) + N';');
-    END
+        BEGIN TRY
+            SET @sql = N'ALTER TABLE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName)
+                + N' DROP CONSTRAINT ' + QUOTENAME(@constraintName) + N';';
+            EXEC sys.sp_executesql @sql;
+        END TRY
+        BEGIN CATCH
+            -- Dependencies can disappear in later passes. The final check below
+            -- reports any remaining objects after all attempts have been made.
+        END CATCH;
 
+        FETCH NEXT FROM foreign_key_cursor INTO @schemaName, @objectName, @constraintName;
+    END
+    CLOSE foreign_key_cursor;
+    DEALLOCATE foreign_key_cursor;
+
+    DECLARE object_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT s.name, o.name, o.type
+    FROM sys.objects AS o
+    JOIN sys.schemas AS s ON s.schema_id = o.schema_id
+    WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+      AND o.is_ms_shipped = 0
+      AND o.type IN ('V', 'P', 'TR', 'FN', 'IF', 'TF', 'U')
+    ORDER BY CASE o.type
+        WHEN 'V' THEN 1
+        WHEN 'P' THEN 2
+        WHEN 'TR' THEN 3
+        WHEN 'FN' THEN 4
+        WHEN 'IF' THEN 5
+        WHEN 'TF' THEN 6
+        WHEN 'U' THEN 7
+        ELSE 8
+    END, s.name, o.name;
+
+    OPEN object_cursor;
+    FETCH NEXT FROM object_cursor INTO @schemaName, @objectName, @type;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        BEGIN TRY
+            SET @sql = CASE @type
+                WHEN 'V' THEN N'DROP VIEW '
+                WHEN 'P' THEN N'DROP PROCEDURE '
+                WHEN 'TR' THEN N'DROP TRIGGER '
+                WHEN 'U' THEN N'DROP TABLE '
+                ELSE N'DROP FUNCTION '
+            END + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';';
+            EXEC sys.sp_executesql @sql;
+        END TRY
+        BEGIN CATCH
+        END CATCH;
+
+        FETCH NEXT FROM object_cursor INTO @schemaName, @objectName, @type;
+    END
+    CLOSE object_cursor;
+    DEALLOCATE object_cursor;
+
+    DECLARE sequence_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT s.name, seq.name
+    FROM sys.sequences AS seq
+    JOIN sys.schemas AS s ON s.schema_id = seq.schema_id
+    WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+    ORDER BY s.name, seq.name;
+
+    OPEN sequence_cursor;
+    FETCH NEXT FROM sequence_cursor INTO @schemaName, @objectName;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        BEGIN TRY
+            SET @sql = N'DROP SEQUENCE ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';';
+            EXEC sys.sp_executesql @sql;
+        END TRY
+        BEGIN CATCH
+        END CATCH;
+
+        FETCH NEXT FROM sequence_cursor INTO @schemaName, @objectName;
+    END
+    CLOSE sequence_cursor;
+    DEALLOCATE sequence_cursor;
+
+    DECLARE synonym_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT s.name, syn.name
+    FROM sys.synonyms AS syn
+    JOIN sys.schemas AS s ON s.schema_id = syn.schema_id
+    WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+    ORDER BY s.name, syn.name;
+
+    OPEN synonym_cursor;
+    FETCH NEXT FROM synonym_cursor INTO @schemaName, @objectName;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        BEGIN TRY
+            SET @sql = N'DROP SYNONYM ' + QUOTENAME(@schemaName) + N'.' + QUOTENAME(@objectName) + N';';
+            EXEC sys.sp_executesql @sql;
+        END TRY
+        BEGIN CATCH
+        END CATCH;
+
+        FETCH NEXT FROM synonym_cursor INTO @schemaName, @objectName;
+    END
+    CLOSE synonym_cursor;
+    DEALLOCATE synonym_cursor;
+
+    DECLARE schema_cursor CURSOR LOCAL FAST_FORWARD FOR
+    SELECT s.name
+    FROM sys.schemas AS s
+    WHERE s.name NOT IN (N'dbo', N'guest', N'sys', N'INFORMATION_SCHEMA')
+      AND s.principal_id <> DATABASE_PRINCIPAL_ID(N'sys')
+    ORDER BY s.name;
+
+    OPEN schema_cursor;
     FETCH NEXT FROM schema_cursor INTO @schemaName;
-END
-CLOSE schema_cursor;
-DEALLOCATE schema_cursor;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        BEGIN TRY
+            IF NOT EXISTS (
+                SELECT 1
+                FROM sys.objects
+                WHERE schema_id = SCHEMA_ID(@schemaName)
+            )
+            BEGIN
+                SET @sql = N'DROP SCHEMA ' + QUOTENAME(@schemaName) + N';';
+                EXEC sys.sp_executesql @sql;
+            END
+        END TRY
+        BEGIN CATCH
+        END CATCH;
+
+        FETCH NEXT FROM schema_cursor INTO @schemaName;
+    END
+    CLOSE schema_cursor;
+    DEALLOCATE schema_cursor;
+
+    SELECT @Remaining =
+        (SELECT COUNT(*)
+         FROM sys.objects AS o
+         JOIN sys.schemas AS s ON s.schema_id = o.schema_id
+         WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
+           AND o.is_ms_shipped = 0)
+        +
+        (SELECT COUNT(*)
+         FROM sys.sequences AS seq
+         JOIN sys.schemas AS s ON s.schema_id = seq.schema_id
+         WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA'))
+        +
+        (SELECT COUNT(*)
+         FROM sys.synonyms AS syn
+         JOIN sys.schemas AS s ON s.schema_id = syn.schema_id
+         WHERE s.name NOT IN (N'sys', N'INFORMATION_SCHEMA'))
+        +
+        (SELECT COUNT(*)
+         FROM sys.schemas AS s
+         WHERE s.name NOT IN (N'dbo', N'guest', N'sys', N'INFORMATION_SCHEMA')
+           AND s.principal_id <> DATABASE_PRINCIPAL_ID(N'sys'));
+END;
+
+IF @Remaining > 0
+BEGIN
+    DECLARE @message nvarchar(2048) =
+        N'Database object cleanup did not remove every user object after '
+        + CONVERT(nvarchar(10), @MaxDropPasses)
+        + N' passes. Remove remaining dependencies manually and retry.';
+    THROW 53220, @message, 1;
+END;
 """;
 
     private static void PrepareArtifacts(BootstrapConfig config, string payloadRoot)
@@ -1547,6 +1609,7 @@ DEALLOCATE schema_cursor;
     {
         var info = new ProcessStartInfo(fileName)
         {
+            CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false
