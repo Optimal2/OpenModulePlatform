@@ -1697,6 +1697,7 @@
   <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>The artifact configuration file could not be saved.</value></data>
   <data name="The artifact configuration file could not be deleted." xml:space="preserve"><value>The artifact configuration file could not be deleted.</value></data>
   <data name="Artifact uploaded and registered." xml:space="preserve"><value>Artifact uploaded and registered.</value></data>
+  <data name="Do not include runtime configuration files such as appsettings*.json or odv.site.config.js in the artifact zip. HostAgent writes those from deployment configuration or artifact configuration file rows." xml:space="preserve"><value>Do not include runtime configuration files such as appsettings*.json or odv.site.config.js in the artifact zip. HostAgent writes those from deployment configuration or artifact configuration file rows.</value></data>
   <data name="Copy configuration files from previous version" xml:space="preserve"><value>Copy configuration files from previous version</value></data>
   <data name="Copies artifact configuration file rows from the latest previous artifact with the same app, package type, and target." xml:space="preserve"><value>Copies artifact configuration file rows from the latest previous artifact with the same app, package type, and target.</value></data>
   <data name="No previous artifact configuration files were found to copy." xml:space="preserve"><value>No previous artifact configuration files were found to copy.</value></data>

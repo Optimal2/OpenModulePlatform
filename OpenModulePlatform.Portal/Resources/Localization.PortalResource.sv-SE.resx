@@ -1688,6 +1688,7 @@
   <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>Artefaktens konfigurationsfil kunde inte sparas.</value></data>
   <data name="The artifact configuration file could not be deleted." xml:space="preserve"><value>Artefaktens konfigurationsfil kunde inte tas bort.</value></data>
   <data name="Artifact uploaded and registered." xml:space="preserve"><value>Artefakten har laddats upp och registrerats.</value></data>
+  <data name="Do not include runtime configuration files such as appsettings*.json or odv.site.config.js in the artifact zip. HostAgent writes those from deployment configuration or artifact configuration file rows." xml:space="preserve"><value>Ta inte med runtime-konfigurationsfiler som appsettings*.json eller odv.site.config.js i artefaktens zip-fil. HostAgent skriver dem från deployment-konfiguration eller från artefaktens konfigurationsfilsrader.</value></data>
   <data name="Copy configuration files from previous version" xml:space="preserve"><value>Kopiera konfigurationsfiler från föregående version</value></data>
   <data name="Copies artifact configuration file rows from the latest previous artifact with the same app, package type, and target." xml:space="preserve"><value>Kopierar artefaktens konfigurationsfiler från den senaste tidigare artefakten med samma app, pakettyp och mål.</value></data>
   <data name="No previous artifact configuration files were found to copy." xml:space="preserve"><value>Inga tidigare konfigurationsfiler för artefakten hittades att kopiera.</value></data>

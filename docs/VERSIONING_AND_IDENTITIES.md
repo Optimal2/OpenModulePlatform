@@ -37,6 +37,13 @@ new build of the same app creates a new artifact row. Existing artifact rows are
 kept for audit, rollback, and host-state comparison until a retention policy
 removes them.
 
+Artifact content is application code and static assets, not environment-owned
+runtime configuration. Do not package `appsettings*.json`, generated OMP
+identity files, database connection strings, passwords, or site-local files such
+as `odv.site.config.js` into deployable artifacts. Simple OMP runtime
+configuration is written by the bootstrap/deployment layer, and app-specific
+deployment-owned files belong in `omp.ArtifactConfigurationFiles`.
+
 `Desired artifact` is the artifact currently selected by an app instance,
 template app instance, worker instance, or host artifact requirement. HostAgent
 deploys that selected artifact. It does not choose the highest version on its
@@ -143,6 +150,11 @@ Do not copy obvious placeholder or test GUIDs into production-oriented module
 configuration. If a deployment needs a stable row across reruns, the stable text
 key should be used to find the row first; only a brand-new row should receive a
 new GUID.
+
+Source-controlled SQL initialization should therefore resolve existing rows by
+stable keys before inserting new rows with `NEWID()`. Hardcoded GUID literals are
+acceptable only for explicitly documented built-in seed rows where the GUID is a
+contract, not a convenience.
 
 Portal create pages and stored procedures should generate GUIDs for new rows
 when the caller does not provide one. Portal may expose a "generate" action for

@@ -36,8 +36,8 @@ SET NUMERIC_ROUNDABORT OFF;
 -------------------------------------------------------------------------------
 -- Seed baseline instance, templates, host, and structural placeholders
 -------------------------------------------------------------------------------
-DECLARE @DefaultInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111111';
-DECLARE @DefaultHostId uniqueidentifier = '11111111-1111-1111-1111-111111111121';
+DECLARE @DefaultInstanceId uniqueidentifier;
+DECLARE @DefaultHostId uniqueidentifier;
 -- The seeded host is a development/template placeholder for current Windows IIS
 -- deployments. Real hosts can override Architecture during environment setup.
 DECLARE @DefaultHostArchitecture nvarchar(20) = N'x64';
@@ -206,8 +206,14 @@ BEGIN
     THROW 51002, 'Unable to resolve the default host template id after seeding omp.HostTemplates.', 1;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.Instances WHERE InstanceId = @DefaultInstanceId)
+SELECT @DefaultInstanceId = InstanceId
+FROM omp.Instances
+WHERE InstanceKey = N'default';
+
+IF @DefaultInstanceId IS NULL
 BEGIN
+    SET @DefaultInstanceId = NEWID();
+
     INSERT INTO omp.Instances(
         InstanceId,
         InstanceKey,
@@ -233,8 +239,15 @@ BEGIN
     WHERE InstanceId = @DefaultInstanceId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.Hosts WHERE HostId = @DefaultHostId)
+SELECT @DefaultHostId = HostId
+FROM omp.Hosts
+WHERE InstanceId = @DefaultInstanceId
+  AND HostKey = N'sample-host';
+
+IF @DefaultHostId IS NULL
 BEGIN
+    SET @DefaultHostId = NEWID();
+
     INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture)
     VALUES(@DefaultHostId, @DefaultInstanceId, N'sample-host', N'Sample Host', NULL, N'Development', N'Windows', @DefaultHostArchitecture);
 END
