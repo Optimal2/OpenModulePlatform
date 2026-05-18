@@ -36,7 +36,7 @@
     </section>
 }
 
-<form method="post" class="card form-grid">
+<form method="post" asp-page-handler="Metadata" class="card form-grid">
     <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
     <input type="hidden" asp-for="Input.ArtifactId" />
 
@@ -44,7 +44,7 @@
         <div class="form-field">
             <label asp-for="Input.RelativePath"></label>
             <input asp-for="Input.RelativePath" />
-            <div class="field-help">@L["Path relative to the deployed app root, for example public/odv.site.config.js."]</div>
+            <div class="field-help">@L["Path relative to the deployed app root, for example odv.site.config.js."]</div>
             <span asp-validation-for="Input.RelativePath" class="field-validation-error"></span>
         </div>
 
@@ -54,20 +54,51 @@
         </div>
     </div>
 
-    <div class="form-field">
-        <label asp-for="Input.FileContent"></label>
-        <textarea asp-for="Input.FileContent" rows="22" spellcheck="false"></textarea>
-        <div class="field-help">@L["HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs."]</div>
-    </div>
-
     <div class="toolbar">
-        <button type="submit">@L["Save configuration file"]</button>
+        <button type="submit">@L["Save metadata"]</button>
         <a class="action-link" href="~/admin/artifactedit?id=@Model.Input.ArtifactId">@L["Back to artifact"]</a>
     </div>
 </form>
 
 @if (!Model.IsCreate)
 {
+    <form method="post" asp-page-handler="UploadContent" enctype="multipart/form-data" class="card form-grid">
+        <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
+        <input type="hidden" asp-for="Input.ArtifactId" />
+
+        <h3>@L["Upload file content"]</h3>
+        <p class="muted">@L["Upload a text file to replace the stored configuration content without posting the file body as a textarea field."]</p>
+
+        <div class="form-field">
+            <label asp-for="UploadedFile"></label>
+            <input asp-for="UploadedFile" type="file" />
+            <div class="field-help">@L["HostAgent writes uploaded text as UTF-8 without BOM and overwrites the deployed file when the deployed copy differs."]</div>
+            <span asp-validation-for="UploadedFile" class="field-validation-error"></span>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit">@L["Upload configuration file"]</button>
+        </div>
+    </form>
+
+    <form method="post" asp-page-handler="Content" class="card form-grid">
+        <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
+        <input type="hidden" asp-for="Input.ArtifactId" />
+
+        <h3>@L["Manual text edit"]</h3>
+        <p class="muted">@L["Use this only when the environment allows posting this content as a form field. File upload is safer behind strict request filters."]</p>
+
+        <div class="form-field">
+            <label asp-for="Input.FileContent"></label>
+            <textarea asp-for="Input.FileContent" rows="22" spellcheck="false"></textarea>
+            <div class="field-help">@L["HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs."]</div>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit">@L["Save text content"]</button>
+        </div>
+    </form>
+
     <form
         method="post"
         asp-page-handler="Delete"
