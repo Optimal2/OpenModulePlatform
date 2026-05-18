@@ -1254,6 +1254,22 @@ function Resolve-ContentWebAppHtmlFilesPath {
     return [System.IO.Path]::GetFullPath((Join-Path $contentRoot $configuredPath))
 }
 
+function Resolve-ContentWebAppSeedServerReportsPath {
+    if (-not [string]::IsNullOrWhiteSpace($script:ContentWebAppSharedServerReportsPath)) {
+        return [System.IO.Path]::GetFullPath($script:ContentWebAppSharedServerReportsPath)
+    }
+
+    return Resolve-ContentWebAppServerReportsPath
+}
+
+function Resolve-ContentWebAppSeedHtmlFilesPath {
+    if (-not [string]::IsNullOrWhiteSpace($script:ContentWebAppSharedHtmlFilesPath)) {
+        return [System.IO.Path]::GetFullPath($script:ContentWebAppSharedHtmlFilesPath)
+    }
+
+    return Resolve-ContentWebAppHtmlFilesPath
+}
+
 function Get-HostAgentFileMirrors {
     $mirrors = @()
 
@@ -1454,7 +1470,7 @@ function Copy-ContentWebAppSeedReports {
         return
     }
 
-    $targetRoot = Resolve-ContentWebAppServerReportsPath
+    $targetRoot = Resolve-ContentWebAppSeedServerReportsPath
     New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
 
     foreach ($reportFile in $reportFiles) {
@@ -1480,7 +1496,7 @@ function Copy-ContentWebAppSeedHtmlFiles {
         return
     }
 
-    $targetRoot = Resolve-ContentWebAppHtmlFilesPath
+    $targetRoot = Resolve-ContentWebAppSeedHtmlFilesPath
     New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
 
     foreach ($htmlFile in $htmlFiles) {

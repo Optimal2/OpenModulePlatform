@@ -90,6 +90,15 @@ function Resolve-DeploymentPath {
     return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
 }
 
+function Join-DeploymentPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Child
+    )
+
+    return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($Root, $Child))
+}
+
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -498,19 +507,19 @@ Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'examples/WorkerApp
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform/3-initialize-opendocviewer.sql' -Version $openDocViewerVersion
 
 $runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue 'E:\OMP')
-$webRoot = [string](Get-ConfigValue -Config $config -Name 'WebRoot' -DefaultValue (Join-Path $runtimeRoot 'Sites'))
-$webAppsRoot = [string](Get-ConfigValue -Config $config -Name 'WebAppsRoot' -DefaultValue (Join-Path $runtimeRoot 'WebApps'))
-$servicesRoot = [string](Get-ConfigValue -Config $config -Name 'ServicesRoot' -DefaultValue (Join-Path $runtimeRoot 'Services'))
-$artifactStoreRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactStoreRoot' -DefaultValue (Join-Path $runtimeRoot 'ArtifactStore'))
-$artifactCacheRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactCacheRoot' -DefaultValue (Join-Path $runtimeRoot 'ArtifactCache'))
+$webRoot = [string](Get-ConfigValue -Config $config -Name 'WebRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'Sites'))
+$webAppsRoot = [string](Get-ConfigValue -Config $config -Name 'WebAppsRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'WebApps'))
+$servicesRoot = [string](Get-ConfigValue -Config $config -Name 'ServicesRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'Services'))
+$artifactStoreRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactStoreRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'ArtifactStore'))
+$artifactCacheRoot = [string](Get-ConfigValue -Config $config -Name 'ArtifactCacheRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'ArtifactCache'))
 $artifactZipImportEnabled = [bool](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportEnabled' -DefaultValue $false)
-$artifactZipImportPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportPath' -DefaultValue (Join-Path $runtimeRoot 'ArtifactImports'))
+$artifactZipImportPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportPath' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'ArtifactImports'))
 $artifactZipImportProcessedPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportProcessedPath' -DefaultValue '')
 $artifactZipImportFailedPath = [string](Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'ArtifactZipImportFailedPath' -DefaultValue '')
-$webAppDataProtectionKeyPath = [string](Get-ConfigValue -Config $config -Name 'WebAppDataProtectionKeyPath' -DefaultValue (Join-Path $runtimeRoot 'DataProtectionKeys'))
+$webAppDataProtectionKeyPath = [string](Get-ConfigValue -Config $config -Name 'WebAppDataProtectionKeyPath' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'DataProtectionKeys'))
 $portalPhysicalPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'PortalPhysicalPath' -DefaultValue '')
 if ([string]::IsNullOrWhiteSpace($portalPhysicalPath)) {
-    $portalPhysicalPath = Join-Path $webRoot 'Portal'
+    $portalPhysicalPath = Join-DeploymentPath -Root $webRoot -Child 'Portal'
 }
 $iisSiteName = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'SiteName' -DefaultValue 'OpenModulePlatform')
 $iisProtocol = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'Protocol' -DefaultValue 'http')
@@ -558,7 +567,7 @@ $bootstrapConfig = [ordered]@{
         description = 'OpenModulePlatform artifact provisioning agent.'
         serviceAccountName = $runAsUser
         serviceAccountPassword = $runAsPassword
-        installPath = (Join-Path $servicesRoot 'HostAgent')
+        installPath = (Join-DeploymentPath -Root $servicesRoot -Child 'HostAgent')
         packagePath = 'payload/OpenModulePlatform.HostAgent.WindowsService.zip'
         backupExistingInstall = $true
         startService = $true

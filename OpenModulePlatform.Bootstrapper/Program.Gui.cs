@@ -87,7 +87,7 @@ internal static partial class Program
         private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
         private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
         private readonly Button _fullUninstallButton = new() { Text = "Full uninstall", AutoSize = true, ForeColor = Color.DarkRed };
-        private readonly Button _cancelButton = new() { Text = "Cancel", AutoSize = true };
+        private readonly Button _exitButton = new() { Text = "Exit", AutoSize = true };
         private readonly CheckBox _runSql = new() { Text = "Run SQL bootstrap" };
         private readonly CheckBox _installHostAgent = new() { Text = "Install/update HostAgent" };
         private readonly CheckBox _deployWebApps = new() { Text = "Let HostAgent deploy web apps" };
@@ -153,7 +153,7 @@ internal static partial class Program
                 Dock = DockStyle.Fill,
                 AutoSize = true
             };
-            buttons.Controls.Add(_cancelButton);
+            buttons.Controls.Add(_exitButton);
             root.Controls.Add(buttons, 0, 6);
 
             LoadValues();
@@ -161,7 +161,7 @@ internal static partial class Program
             _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
             _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
             _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
-            _cancelButton.Click += (_, _) => Close();
+            _exitButton.Click += (_, _) => Close();
         }
 
         public int ExitCode { get; private set; }
@@ -486,7 +486,7 @@ internal static partial class Program
             Func<Task<int>> operation)
         {
             SetActionButtonsEnabled(false);
-            _cancelButton.Enabled = false;
+            _exitButton.Enabled = false;
             _logBox.Clear();
             SetBusyStatus(runningText);
 
@@ -524,10 +524,10 @@ internal static partial class Program
                 Console.SetOut(originalOut);
                 Console.SetError(originalError);
                 SetActionButtonsEnabled(true);
-                _cancelButton.Enabled = true;
+                _exitButton.Enabled = true;
                 if (ExitCode == 2)
                 {
-                    SetReadyStatus("Cancelled.");
+                    SetReadyStatus("Operation did not complete.");
                 }
             }
         }
