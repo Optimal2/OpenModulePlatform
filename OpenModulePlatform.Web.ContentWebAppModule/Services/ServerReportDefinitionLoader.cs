@@ -10,6 +10,8 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
 public sealed partial class ServerReportDefinitionLoader
 {
     private const string PackagedReportsPath = "ContentReports";
+    private const string SharedDataRootDirectoryName = "Data";
+    private const string SharedDataReportsDirectoryName = "ContentReports";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -104,11 +106,15 @@ public sealed partial class ServerReportDefinitionLoader
     {
         var configuredDirectory = GetConfiguredReportsDirectory();
         var packagedDirectory = Path.GetFullPath(Path.Join(_environment.ContentRootPath, PackagedReportsPath));
+        var sharedDataRootDirectory = TryGetSharedDataRootDirectory(configuredDirectory);
 
-        // Runtime App_Data reports intentionally stay first. They are local data
-        // and can override a packaged report with the same key without editing
-        // the immutable app artifact.
-        return new[] { configuredDirectory, packagedDirectory }
+        // Runtime/shared reports intentionally stay first. They can override a
+        // packaged report with the same key without editing the immutable app
+        // artifact. The shared Data root fallback supports deployments that
+        // keep report JSON and HTML files side by side under one directory.
+        return new[] { configuredDirectory, sharedDataRootDirectory, packagedDirectory }
+            .Where(static directory => !string.IsNullOrWhiteSpace(directory))
+            .Select(static directory => directory!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -127,6 +133,21 @@ public sealed partial class ServerReportDefinitionLoader
         }
 
         return Path.GetFullPath(Path.Join(_environment.ContentRootPath, configuredPath));
+    }
+
+    private static string? TryGetSharedDataRootDirectory(string configuredDirectory)
+    {
+        var directory = new DirectoryInfo(Path.GetFullPath(configuredDirectory));
+        if (!directory.Name.Equals(SharedDataReportsDirectoryName, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var parent = directory.Parent;
+        return parent is not null
+            && parent.Name.Equals(SharedDataRootDirectoryName, StringComparison.OrdinalIgnoreCase)
+            ? parent.FullName
+            : null;
     }
 
     private static string ResolveReportPath(string directory, string reportKey)

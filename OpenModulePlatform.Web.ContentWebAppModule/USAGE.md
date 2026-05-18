@@ -122,6 +122,24 @@ When running several web servers behind a load balancer, set both
 `ServerReportsPath` and `HtmlFilesPath` to shared absolute paths so every server
 loads the same JSON and HTML files.
 
+Deployments may either keep files in separate folders:
+
+```text
+\\server\share\EMP\Data\ContentReports
+\\server\share\EMP\Data\ContentPages
+```
+
+or place JSON and HTML files directly in the shared `Data` folder:
+
+```text
+\\server\share\EMP\Data
+```
+
+When `ServerReportsPath` ends with `Data\ContentReports` or `HtmlFilesPath`
+ends with `Data\ContentPages`, the Content app also searches the parent `Data`
+folder. This supports a simple shared folder layout without changing existing
+subfolder-based configurations.
+
 Report keys map directly to JSON filenames:
 
 ```text
