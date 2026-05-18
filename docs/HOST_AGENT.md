@@ -114,6 +114,13 @@ Runtime-local files are preserved through
 can update application binaries without overwriting local configuration or
 runtime data.
 
+Enabled rows in `omp.ArtifactConfigurationFiles` are written after the artifact
+has been mirrored. Each row belongs to one artifact and contains a path relative
+to the deployed app root plus the exact text HostAgent should write. HostAgent
+uses this for deployment-owned runtime files, for example a site-local
+`odv.site.config.js`, without requiring a new artifact zip for every
+configuration change.
+
 ## Windows service app deployment
 
 HostAgent can also deploy service-backed app instances after their artifacts
@@ -155,6 +162,12 @@ Runtime-local files are preserved through
 `HostAgent:ServiceAppDeploymentExcludedEntries`. The default exclusions are the
 same as for web apps: `appsettings.json`, `appsettings.*.json`, `logs`, and
 `App_Data`.
+
+Service app deployment uses the same `omp.ArtifactConfigurationFiles` mechanism
+as web apps. If a configured file is missing or differs from the database value,
+HostAgent treats the app as needing deployment so it can stop the runtime,
+mirror the artifact, rewrite the configuration files, and start the service
+again.
 
 HostAgent does not currently rotate Windows service credentials. If a service
 already exists, its configured account is preserved. If HostAgent creates a new

@@ -165,6 +165,18 @@ directory-content SHA-256 with existing artifact rows. Zip metadata such as
 timestamps and compression settings is intentionally ignored; two zip files
 with the same deployable files count as the same artifact content.
 
+Artifact-owned configuration files are managed from the artifact edit page.
+These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them
+only for deployment-owned text files that should live beside the deployed app
+but should not be packaged into the artifact zip. HostAgent writes enabled rows
+after deployment and repairs files whose content differs from the database.
+
+Typical examples:
+
+- `public/odv.site.config.js` for OpenDocViewer site configuration
+- deployment-specific JSON/XML/text files that are not part of the immutable app
+  package
+
 ### 5. Create module instances
 
 This is where a module definition is placed into a concrete OMP instance.

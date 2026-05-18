@@ -1657,4 +1657,27 @@
   <data name="Desired app removed." xml:space="preserve"><value>Desired app removed.</value></data>
   <data name="The desired app could not be removed. Delete or update dependent rows first." xml:space="preserve"><value>The desired app could not be removed. Delete or update dependent rows first.</value></data>
   <data name="This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change." xml:space="preserve"><value>This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.</value></data>
+  <data name="Configuration files" xml:space="preserve"><value>Configuration files</value></data>
+  <data name="Optional files that HostAgent writes after deploying this artifact. Use this for site-specific runtime configuration that should not be packaged in the artifact zip." xml:space="preserve"><value>Optional files that HostAgent writes after deploying this artifact. Use this for site-specific runtime configuration that should not be packaged in the artifact zip.</value></data>
+  <data name="Add configuration file" xml:space="preserve"><value>Add configuration file</value></data>
+  <data name="No configuration files are defined for this artifact." xml:space="preserve"><value>No configuration files are defined for this artifact.</value></data>
+  <data name="Create artifact configuration file" xml:space="preserve"><value>Create artifact configuration file</value></data>
+  <data name="Edit artifact configuration file" xml:space="preserve"><value>Edit artifact configuration file</value></data>
+  <data name="HostAgent writes enabled configuration files after deploying the artifact so site-specific settings can change without rebuilding the zip package." xml:space="preserve"><value>HostAgent writes enabled configuration files after deploying the artifact so site-specific settings can change without rebuilding the zip package.</value></data>
+  <data name="Path relative to the deployed app root, for example public/odv.site.config.js." xml:space="preserve"><value>Path relative to the deployed app root, for example public/odv.site.config.js.</value></data>
+  <data name="File content" xml:space="preserve"><value>File content</value></data>
+  <data name="HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs." xml:space="preserve"><value>HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs.</value></data>
+  <data name="Save configuration file" xml:space="preserve"><value>Save configuration file</value></data>
+  <data name="Back to artifact" xml:space="preserve"><value>Back to artifact</value></data>
+  <data name="Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed." xml:space="preserve"><value>Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed.</value></data>
+  <data name="Deleting this row does not delete files that have already been written on hosts." xml:space="preserve"><value>Deleting this row does not delete files that have already been written on hosts.</value></data>
+  <data name="Delete configuration file" xml:space="preserve"><value>Delete configuration file</value></data>
+  <data name="Artifact configuration file created." xml:space="preserve"><value>Artifact configuration file created.</value></data>
+  <data name="Artifact configuration file updated." xml:space="preserve"><value>Artifact configuration file updated.</value></data>
+  <data name="Artifact configuration file deleted." xml:space="preserve"><value>Artifact configuration file deleted.</value></data>
+  <data name="Artifact is required." xml:space="preserve"><value>Artifact is required.</value></data>
+  <data name="Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments." xml:space="preserve"><value>Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments.</value></data>
+  <data name="This artifact already has a configuration file with the same relative path." xml:space="preserve"><value>This artifact already has a configuration file with the same relative path.</value></data>
+  <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>The artifact configuration file could not be saved.</value></data>
+  <data name="The artifact configuration file could not be deleted." xml:space="preserve"><value>The artifact configuration file could not be deleted.</value></data>
 </root>
