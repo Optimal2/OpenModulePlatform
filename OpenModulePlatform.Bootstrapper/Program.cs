@@ -23,6 +23,7 @@ internal static partial class Program
         WriteIndented = true
     };
 
+    [STAThread]
     public static async Task<int> Main(string[] args)
     {
         try
@@ -34,66 +35,86 @@ internal static partial class Program
                 return 0;
             }
 
+            if (cli.Gui)
+            {
+                return RunInstallerGui(cli);
+            }
+
             if (string.IsNullOrWhiteSpace(cli.ConfigPath))
             {
                 WriteUsage();
                 return 1;
             }
 
-            var configPath = Path.GetFullPath(cli.ConfigPath);
-            var config = await ReadJsonAsync<BootstrapConfig>(configPath);
-            var payloadRoot = ResolvePayloadRoot(cli, configPath);
-            var temporaryPayloadRoot = string.Empty;
-
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(cli.PayloadZipPath))
-                {
-                    temporaryPayloadRoot = Path.Combine(
-                        Path.GetTempPath(),
-                        "OpenModulePlatform.Bootstrapper",
-                        Guid.NewGuid().ToString("N"));
-                    Directory.CreateDirectory(temporaryPayloadRoot);
-                    ZipFile.ExtractToDirectory(Path.GetFullPath(cli.PayloadZipPath), temporaryPayloadRoot, overwriteFiles: true);
-                    payloadRoot = temporaryPayloadRoot;
-                }
-
-                WritePlan(config, configPath, payloadRoot);
-                if (!cli.Yes && !Confirm("Continue with OpenModulePlatform bootstrap?"))
-                {
-                    Console.WriteLine("Bootstrap cancelled.");
-                    return 2;
-                }
-
-                if (config.Sql.Enabled)
-                {
-                    await RunSqlAsync(config.Sql, payloadRoot);
-                }
-
-                PrepareArtifacts(config, payloadRoot);
-
-                if (config.HostAgent.Enabled)
-                {
-                    await InstallHostAgentAsync(config, payloadRoot);
-                }
-
-                Console.WriteLine();
-                Console.WriteLine("OpenModulePlatform bootstrap completed.");
-                return 0;
-            }
-            finally
-            {
-                if (!string.IsNullOrWhiteSpace(temporaryPayloadRoot))
-                {
-                    TryDeleteDirectory(temporaryPayloadRoot);
-                }
-            }
+            return await RunBootstrapAsync(cli);
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine("Bootstrap failed.");
             Console.Error.WriteLine(ex.Message);
             return 1;
+        }
+    }
+
+    private static async Task<int> RunBootstrapAsync(CliOptions cli)
+    {
+        var configPath = Path.GetFullPath(cli.ConfigPath);
+        var config = await ReadJsonAsync<BootstrapConfig>(configPath);
+        var payloadRoot = ResolvePayloadRoot(cli, configPath);
+        return await RunBootstrapAsync(config, configPath, payloadRoot, cli.PayloadZipPath, cli.Yes);
+    }
+
+    private static async Task<int> RunBootstrapAsync(
+        BootstrapConfig config,
+        string configPath,
+        string payloadRoot,
+        string payloadZipPath,
+        bool yes)
+    {
+        var temporaryPayloadRoot = string.Empty;
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(payloadZipPath))
+            {
+                temporaryPayloadRoot = Path.Combine(
+                    Path.GetTempPath(),
+                    "OpenModulePlatform.Bootstrapper",
+                    Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(temporaryPayloadRoot);
+                ZipFile.ExtractToDirectory(Path.GetFullPath(payloadZipPath), temporaryPayloadRoot, overwriteFiles: true);
+                payloadRoot = temporaryPayloadRoot;
+            }
+
+            WritePlan(config, configPath, payloadRoot);
+            if (!yes && !Confirm("Continue with OpenModulePlatform bootstrap?"))
+            {
+                Console.WriteLine("Bootstrap cancelled.");
+                return 2;
+            }
+
+            if (config.Sql.Enabled)
+            {
+                await RunSqlAsync(config.Sql, payloadRoot);
+            }
+
+            PrepareArtifacts(config, payloadRoot);
+
+            if (config.HostAgent.Enabled)
+            {
+                await InstallHostAgentAsync(config, payloadRoot);
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("OpenModulePlatform bootstrap completed.");
+            return 0;
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(temporaryPayloadRoot))
+            {
+                TryDeleteDirectory(temporaryPayloadRoot);
+            }
         }
     }
 
@@ -144,6 +165,7 @@ internal static partial class Program
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--yes]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>]");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
@@ -989,6 +1011,8 @@ internal sealed class CliOptions
 
     public bool Yes { get; private init; }
 
+    public bool Gui { get; private init; }
+
     public bool ShowHelp { get; private init; }
 
     public static CliOptions Parse(string[] args)
@@ -1016,6 +1040,9 @@ internal sealed class CliOptions
                 case "-y":
                 case "--yes":
                     options.Yes = true;
+                    break;
+                case "--gui":
+                    options.Gui = true;
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown argument: {arg}");
@@ -1046,6 +1073,8 @@ internal sealed class CliOptions
 
         public bool Yes { get; set; }
 
+        public bool Gui { get; set; }
+
         public bool ShowHelp { get; set; }
 
         public CliOptions ToOptions()
@@ -1055,6 +1084,7 @@ internal sealed class CliOptions
                 PayloadRoot = PayloadRoot,
                 PayloadZipPath = PayloadZipPath,
                 Yes = Yes,
+                Gui = Gui,
                 ShowHelp = ShowHelp
             };
     }
