@@ -71,7 +71,12 @@ public sealed class WebAppDeploymentService
                 ? GetIisAppPoolName(iisAppName)
                 : iisAppName;
 
-            if (IsAlreadyApplied(deployment, targetPath, runtimeName))
+            var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
+                deployment.ArtifactId,
+                cancellationToken);
+
+            if (IsAlreadyApplied(deployment, targetPath, runtimeName)
+                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles))
             {
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
@@ -92,7 +97,7 @@ public sealed class WebAppDeploymentService
                 appPoolStopped = StopAppPoolIfRunning(runtimeName, settings.IisAppPoolStopTimeoutSeconds);
             }
 
-            await MirrorWebAppAsync(settings, deployment, targetPath, cancellationToken);
+            await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, cancellationToken);
 
             if (useAppCmdAppPoolControl
                 && settings.StartIisAppPoolAfterWebAppDeployment
@@ -143,6 +148,7 @@ public sealed class WebAppDeploymentService
         HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment,
         string targetPath,
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> configurationFiles,
         CancellationToken cancellationToken)
     {
         string? appOfflinePath = null;
@@ -168,6 +174,8 @@ public sealed class WebAppDeploymentService
                 targetPath,
                 excludedEntries,
                 cancellationToken);
+
+            await ArtifactConfigurationFileWriter.ApplyAsync(targetPath, configurationFiles, cancellationToken);
         }
         finally
         {

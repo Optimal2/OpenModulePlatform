@@ -89,6 +89,45 @@
 
 @if (!Model.IsCreate)
 {
+    <section class="card">
+        <div class="section-header">
+            <div>
+                <h3>@L["Configuration files"]</h3>
+                <p class="muted">@L["Optional files that HostAgent writes after deploying this artifact. Use this for site-specific runtime configuration that should not be packaged in the artifact zip."]</p>
+            </div>
+            <a class="action-link" href="~/admin/artifactconfigfileedit?artifactId=@Model.Input.ArtifactId">@L["Add configuration file"]</a>
+        </div>
+
+        @if (Model.ConfigurationFiles.Count == 0)
+        {
+            <div class="empty-state">@L["No configuration files are defined for this artifact."]</div>
+        }
+        else
+        {
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Relative path"]</th>
+                        <th>@L["Enabled"]</th>
+                        <th>@L["Updated UTC"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.ConfigurationFiles)
+                {
+                    <tr>
+                        <td><code>@row.RelativePath</code></td>
+                        <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                        <td>@row.UpdatedUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td><a class="action-link" href="~/admin/artifactconfigfileedit?id=@row.ArtifactConfigurationFileId">@L["Edit"]</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
     <form
         method="post"
         asp-page-handler="Delete"

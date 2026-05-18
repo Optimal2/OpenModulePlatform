@@ -422,6 +422,22 @@ public sealed class ArtifactRow
 }
 
 /// <summary>
+/// Lightweight artifact configuration file row for admin lists.
+/// </summary>
+public sealed class ArtifactConfigurationFileRow
+{
+    public int ArtifactConfigurationFileId { get; set; }
+
+    public int ArtifactId { get; set; }
+
+    public string RelativePath { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; }
+
+    public DateTime UpdatedUtc { get; set; }
+}
+
+/// <summary>
 /// Lightweight host row for admin lists.
 /// </summary>
 public sealed class HostRow

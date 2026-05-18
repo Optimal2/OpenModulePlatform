@@ -37,6 +37,8 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AppOptions { get; private set; } = [];
 
+    public IReadOnlyList<ArtifactConfigurationFileRow> ConfigurationFiles { get; private set; } = [];
+
     public IReadOnlyList<OptionItem> PackageTypeOptions => ArtifactPackageTypes.CreateOptions(T);
 
     [TempData]
@@ -79,6 +81,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
             Sha256 = row.Sha256,
             IsEnabled = row.IsEnabled
         };
+        ConfigurationFiles = await _repo.GetArtifactConfigurationFilesAsync(row.ArtifactId, ct);
 
         return Page();
     }
@@ -158,6 +161,10 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
     private async Task LoadAsync(CancellationToken ct)
     {
         AppOptions = await _repo.GetAppOptionsAsync(ct);
+        if (Input.ArtifactId > 0)
+        {
+            ConfigurationFiles = await _repo.GetArtifactConfigurationFilesAsync(Input.ArtifactId, ct);
+        }
     }
 
     private void ValidateInput()

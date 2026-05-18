@@ -1656,4 +1656,27 @@
   <data name="Desired app removed." xml:space="preserve"><value>Den önskade appen har tagits bort.</value></data>
   <data name="The desired app could not be removed. Delete or update dependent rows first." xml:space="preserve"><value>Den önskade appen kunde inte tas bort. Ta bort eller ändra beroende rader först.</value></data>
   <data name="This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change." xml:space="preserve"><value>Den här appinstansen styrs av en instansmall. Ta bort eller inaktivera den önskade mallappen i stället och låt HostAgent materialisera ändringen.</value></data>
+  <data name="Configuration files" xml:space="preserve"><value>Konfigurationsfiler</value></data>
+  <data name="Optional files that HostAgent writes after deploying this artifact. Use this for site-specific runtime configuration that should not be packaged in the artifact zip." xml:space="preserve"><value>Valfria filer som HostAgent skriver efter deployment av artefakten. Använd detta för platsspecifik runtime-konfiguration som inte ska paketeras i artefaktens zip-fil.</value></data>
+  <data name="Add configuration file" xml:space="preserve"><value>Lägg till konfigurationsfil</value></data>
+  <data name="No configuration files are defined for this artifact." xml:space="preserve"><value>Inga konfigurationsfiler är definierade för den här artefakten.</value></data>
+  <data name="Create artifact configuration file" xml:space="preserve"><value>Skapa artefaktens konfigurationsfil</value></data>
+  <data name="Edit artifact configuration file" xml:space="preserve"><value>Redigera artefaktens konfigurationsfil</value></data>
+  <data name="HostAgent writes enabled configuration files after deploying the artifact so site-specific settings can change without rebuilding the zip package." xml:space="preserve"><value>HostAgent skriver aktiverade konfigurationsfiler efter deployment av artefakten så att platsspecifika inställningar kan ändras utan att zip-paketet byggs om.</value></data>
+  <data name="Path relative to the deployed app root, for example public/odv.site.config.js." xml:space="preserve"><value>Sökväg relativt den deployade appens rot, till exempel public/odv.site.config.js.</value></data>
+  <data name="File content" xml:space="preserve"><value>Filinnehåll</value></data>
+  <data name="HostAgent writes this text as UTF-8 without BOM and overwrites the file when the deployed copy differs." xml:space="preserve"><value>HostAgent skriver den här texten som UTF-8 utan BOM och skriver över filen när den deployade kopian skiljer sig.</value></data>
+  <data name="Save configuration file" xml:space="preserve"><value>Spara konfigurationsfil</value></data>
+  <data name="Back to artifact" xml:space="preserve"><value>Tillbaka till artefakt</value></data>
+  <data name="Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed." xml:space="preserve"><value>Ta bort den här konfigurationsfilen för artefakten? HostAgent slutar hantera filen, men befintliga deployade filer tas inte bort.</value></data>
+  <data name="Deleting this row does not delete files that have already been written on hosts." xml:space="preserve"><value>Att ta bort den här raden tar inte bort filer som redan har skrivits på värdar.</value></data>
+  <data name="Delete configuration file" xml:space="preserve"><value>Ta bort konfigurationsfil</value></data>
+  <data name="Artifact configuration file created." xml:space="preserve"><value>Artefaktens konfigurationsfil har skapats.</value></data>
+  <data name="Artifact configuration file updated." xml:space="preserve"><value>Artefaktens konfigurationsfil har uppdaterats.</value></data>
+  <data name="Artifact configuration file deleted." xml:space="preserve"><value>Artefaktens konfigurationsfil har tagits bort.</value></data>
+  <data name="Artifact is required." xml:space="preserve"><value>Artefakt krävs.</value></data>
+  <data name="Relative path must stay below the deployed app root and must not contain rooted paths or parent directory segments." xml:space="preserve"><value>Relativ sökväg måste ligga under den deployade appens rot och får inte innehålla rotade sökvägar eller överordnade katalogsegment.</value></data>
+  <data name="This artifact already has a configuration file with the same relative path." xml:space="preserve"><value>Den här artefakten har redan en konfigurationsfil med samma relativa sökväg.</value></data>
+  <data name="The artifact configuration file could not be saved." xml:space="preserve"><value>Artefaktens konfigurationsfil kunde inte sparas.</value></data>
+  <data name="The artifact configuration file could not be deleted." xml:space="preserve"><value>Artefaktens konfigurationsfil kunde inte tas bort.</value></data>
 </root>
