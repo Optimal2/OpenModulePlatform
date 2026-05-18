@@ -161,6 +161,63 @@ WHERE AppId = @PortalAppId
   AND PackageType = N'web-app'
   AND TargetName = N'omp-portal';
 
+MERGE omp.ArtifactConfigurationFiles AS target
+USING
+(
+    SELECT @PortalArtifactId AS ArtifactId,
+           N'appsettings.json' AS RelativePath,
+           N'{
+  "Portal": {
+    "Title": "OMP Portal",
+    "DefaultCulture": "sv-SE",
+    "SupportedCultures": [ "sv-SE", "en-US" ],
+    "PortalTopBar": {
+      "Enabled": true,
+      "PortalBaseUrl": "/"
+    },
+    "TopbarShortcuts": {
+      "Enabled": true,
+      "AllModules": "m",
+      "Favorites": "f"
+    },
+    "AllowAnonymous": false,
+    "UseForwardedHeaders": false,
+    "PermissionMode": "Any"
+  },
+  "ConnectionStrings": {
+    "OmpDb": "{{Omp.Json.ConnectionStrings.OmpDb}}"
+  },
+  "OmpAuth": {
+    "CookieName": ".OpenModulePlatform.Auth",
+    "LoginPath": "/auth/login",
+    "LogoutPath": "/auth/logout",
+    "AccessDeniedPath": "/status/403",
+    "ApplicationName": "OpenModulePlatform",
+    "DataProtectionKeyPath": "{{Omp.Json.HostAgent.WebAppDataProtectionKeyPath}}"
+  },
+  "ArtifactUpload": {
+    "ArtifactStoreRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}",
+    "MaxUploadBytes": 536870912
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+}' AS FileContent,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.ArtifactId = source.ArtifactId
+AND target.RelativePath = source.RelativePath
+WHEN MATCHED THEN
+    UPDATE SET FileContent = source.FileContent,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT (ArtifactId, RelativePath, FileContent, IsEnabled)
+    VALUES(source.ArtifactId, source.RelativePath, source.FileContent, source.IsEnabled);
+
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @PortalAppId AND PermissionId = @PortalViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@PortalAppId, @PortalViewPermissionId, 0);
 

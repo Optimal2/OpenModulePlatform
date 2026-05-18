@@ -83,7 +83,8 @@ public sealed class WebAppDeploymentService
                 cancellationToken);
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,
-                _repository.GetConfiguredConnectionString());
+                _repository.GetConfiguredConnectionString(),
+                settings);
 
             if (IsAlreadyApplied(deployment, targetPath, runtimeName)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
@@ -341,6 +342,7 @@ public sealed class WebAppDeploymentService
         }
 
         RunAppCmd("set", "app", $"/app.name:{siteName}/", $"/applicationPool:{appPoolName}");
+        EnsureIisAuthentication(siteName, anonymousEnabled: true, windowsEnabled: false);
     }
 
     private static void EnsureIisChildApplication(
@@ -365,7 +367,43 @@ public sealed class WebAppDeploymentService
             RunAppCmd("set", "vdir", $"/vdir.name:{iisAppName}/", $"/physicalPath:{physicalPath}");
             RunAppCmd("set", "app", $"/app.name:{iisAppName}", $"/applicationPool:{appPoolName}");
         }
+
+        EnsureIisAuthentication(
+            iisAppName,
+            anonymousEnabled: true,
+            windowsEnabled: IsOmpAuthenticationAppPath(appPath));
     }
+
+    private static void EnsureIisAuthentication(
+        string location,
+        bool anonymousEnabled,
+        bool windowsEnabled)
+    {
+        RunAppCmd(
+            "set",
+            "config",
+            location,
+            "/section:system.webServer/security/authentication/anonymousAuthentication",
+            $"/enabled:{FormatIisBoolean(anonymousEnabled)}",
+            "/commit:apphost");
+
+        RunAppCmd(
+            "set",
+            "config",
+            location,
+            "/section:system.webServer/security/authentication/windowsAuthentication",
+            $"/enabled:{FormatIisBoolean(windowsEnabled)}",
+            "/commit:apphost");
+    }
+
+    private static bool IsOmpAuthenticationAppPath(string appPath)
+        => string.Equals(
+            appPath.Trim().Trim('/', '\\').Replace('\\', '/'),
+            "auth",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatIisBoolean(bool value)
+        => value ? "true" : "false";
 
     private static void EnsureAppPool(HostAgentSettings settings, string appPoolName)
     {

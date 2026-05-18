@@ -8,6 +8,7 @@ the configured database, and injects the configured bootstrap portal admin.
 
 :r .\1-setup-openmoduleplatform.sql
 :r .\2-initialize-openmoduleplatform.sql
+:r ..\OpenModulePlatform.Auth\sql\2-initialize-omp-auth.sql
 :r ..\OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql
 :r ..\OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql
 :r ..\OpenModulePlatform.Web.ContentWebAppModule\Sql\1-setup-content-webapp.sql
