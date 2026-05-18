@@ -23,6 +23,7 @@ shape:
 OpenModulePlatformHostAgentFirst-<version>/
   bootstrap.local.sample.json
   install-hostagent-first.cmd
+  install-hostagent-first-console.cmd
   manifest.json
   payload/
     OpenModulePlatform.Portal.zip
@@ -74,6 +75,16 @@ version, but it is not forced onto every app artifact.
    - `hostAgent.portalPhysicalPath`
    - `hostAgent.servicesRoot`
 4. Run an elevated command prompt:
+
+```cmd
+install-hostagent-first.cmd
+```
+
+`install-hostagent-first.cmd` opens the graphical installer. The installer loads
+the package defaults, lets the operator review or change common SQL, path,
+HostAgent, and IIS settings, and then runs the same bootstrap steps.
+
+For non-interactive console installation, run:
 
 ```cmd
 tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --config bootstrap.local.sample.json
