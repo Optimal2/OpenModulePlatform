@@ -178,11 +178,18 @@ stable keys:
 
 Host-neutral web app instances use `HostId = NULL`. Each HostAgent deploys the
 same logical app locally, while host-specific deployment state remains keyed by
-the concrete host.
+the concrete host. Use this only when the web app is intentionally identical on
+all web hosts, for example behind one load-balanced public URL.
 
-Host-specific services and worker processes should use concrete hosts or worker
-instance metadata when placement matters. Their code must still handle
-multi-host execution according to the app's own runtime contract.
+Host-specific services, worker processes, and non-load-balanced web apps should
+use concrete hosts. For active desired rows, OMP allows only one app definition
+per module instance and host placement. This means one service app can run once
+on `host-a` and once on `host-b`, but those are two concrete `AppInstanceId`
+values. OMP also prevents mixing a host-neutral row and host-specific rows for
+the same app definition in the same module instance, because a HostAgent would
+otherwise see two desired deployments for the same app on a concrete host. Their
+code must still handle multi-host execution according to the app's own runtime
+contract.
 
 Runtime identity is not the same thing as artifact identity. An artifact can be
 deployed to several hosts, but the runtime should identify itself with the

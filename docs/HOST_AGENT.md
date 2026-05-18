@@ -94,6 +94,12 @@ host. First-party load-balanced IIS apps use this model so the portal menu
 contains one logical app entry even when two or more web servers serve the same
 public URL.
 
+Host-neutral placement is only for apps that are intentionally identical on each
+web host. Runtime apps and non-load-balanced web apps should use one concrete
+app instance per host so each runtime has its own `AppInstanceId`. Active
+desired rows cannot mix host-neutral and host-specific placement for the same
+module/app definition.
+
 Before copying files, HostAgent writes an `app_offline.htm` marker by default,
 waits briefly for ASP.NET Core to release loaded files, mirrors the provisioned
 artifact into the runtime folder, removes the marker, and records the result in

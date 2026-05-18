@@ -103,7 +103,7 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">@L["Choose a template host when the app belongs on one specific host role. Leave empty for host-neutral apps."]</div>
+            <div class="field-help">@L["Leave template host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one template host."]</div>
             <span asp-validation-for="Input.InstanceTemplateHostId" class="field-validation-error"></span>
         </div>
 
