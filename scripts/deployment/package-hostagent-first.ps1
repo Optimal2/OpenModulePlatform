@@ -10,6 +10,7 @@ param(
     [switch]$SkipRestore,
     [switch]$SkipOpenDocViewerBuild,
     [switch]$SkipOpenDocViewerNpmInstall,
+    [switch]$SkipZip,
     [switch]$KeepStaging
 )
 
@@ -282,6 +283,9 @@ if (-not $PSBoundParameters.ContainsKey('SkipOpenDocViewerBuild')) {
 if (-not $PSBoundParameters.ContainsKey('SkipOpenDocViewerNpmInstall')) {
     $SkipOpenDocViewerNpmInstall = [bool](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'SkipOpenDocViewerNpmInstall' -DefaultValue $false)
 }
+if (-not $PSBoundParameters.ContainsKey('SkipZip')) {
+    $SkipZip = [bool](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'SkipZip' -DefaultValue $false)
+}
 if (-not $PSBoundParameters.ContainsKey('KeepStaging')) {
     $KeepStaging = [bool](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'KeepStaging' -DefaultValue $false)
 }
@@ -454,7 +458,18 @@ Set-Content -LiteralPath (Join-Path $sqlRoot 'bootstrap-local.sql') -Value $boot
 Write-Step 'Copying bootstrapper'
 Compress-FolderToZip -Source (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $payloadRoot 'OpenModulePlatform.Bootstrapper.zip')
 Copy-Item -LiteralPath (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper') -Recurse -Force
-Copy-Item -Path (Join-Path (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') '*') -Destination $packageRoot -Recurse -Force
+
+$rootBootstrapperPublishRoot = Join-Path $buildRoot 'bootstrapper-root'
+Invoke-NativeChecked dotnet 'publish' (Join-Path $RepositoryRoot 'OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.csproj') `
+    '-c' $Configuration `
+    '-o' $rootBootstrapperPublishRoot `
+    '-r' 'win-x64' `
+    '--self-contained' 'false' `
+    '-p:PublishSingleFile=true' `
+    '-p:IncludeNativeLibrariesForSelfExtract=true' `
+    '-p:DebugType=None' `
+    '-p:DebugSymbols=false'
+Copy-Item -Path (Join-Path $rootBootstrapperPublishRoot '*') -Destination $packageRoot -Recurse -Force
 
 Write-Step 'Writing bootstrap manifest'
 $artifacts = [System.Collections.ArrayList]::new()
@@ -646,7 +661,14 @@ $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packa
 
 Copy-RequiredFile -Source (Join-Path $RepositoryRoot 'docs\HOST_AGENT_FIRST_INSTALL.md') -Destination (Join-Path $packageRoot 'INSTALLATION.md')
 
-Compress-PackageRootToZip -PackageRoot $packageRoot -Destination $zipPath
+if ($SkipZip) {
+    if (Test-Path -LiteralPath $zipPath -PathType Leaf) {
+        Remove-Item -LiteralPath $zipPath -Force
+    }
+}
+else {
+    Compress-PackageRootToZip -PackageRoot $packageRoot -Destination $zipPath
+}
 
 if (-not $KeepStaging) {
     Remove-Item -LiteralPath $buildRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -655,4 +677,9 @@ if (-not $KeepStaging) {
 Write-Host ''
 Write-Host 'OpenModulePlatform HostAgent-first package created.' -ForegroundColor Green
 Write-Host "Package root: $packageRoot"
-Write-Host "Package zip:  $zipPath"
+if ($SkipZip) {
+    Write-Host 'Package zip:  skipped'
+}
+else {
+    Write-Host "Package zip:  $zipPath"
+}

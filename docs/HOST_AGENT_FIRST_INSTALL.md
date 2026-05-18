@@ -40,8 +40,14 @@ OpenModulePlatformHostAgentFirst-<version>/
       OpenModulePlatform.Bootstrapper.exe
 ```
 
-The package can be zipped and copied as a single file. The expanded package is
-self-contained except for environment-specific values in
+The root bootstrapper is published separately with single-file settings so the
+operator entry point stays as small and obvious as the .NET runtime allows. The
+full bootstrapper publish output is still kept below `tools/` for scripted
+console usage and troubleshooting.
+
+The package can be zipped and copied as a single file, or generated as an
+expanded folder by setting `Package.SkipZip = $true` or passing `-SkipZip`.
+The expanded package is self-contained except for environment-specific values in
 `bootstrap.local.sample.json`.
 
 ## Building A Package
@@ -52,6 +58,15 @@ Local development example:
 .\scripts\deployment\package-hostagent-first.ps1 `
   -ConfigPath .\scripts\deployment\omp-suite.local.psd1 `
   -OutputRoot .\artifacts\hostagent-first
+```
+
+Folder-only local/private package example:
+
+```powershell
+.\scripts\deployment\package-hostagent-first.ps1 `
+  -ConfigPath .\scripts\deployment\omp-suite.local.psd1 `
+  -OutputRoot .\artifacts\hostagent-first `
+  -SkipZip
 ```
 
 The script reads `omp-components.json` so each deployable component keeps its own
