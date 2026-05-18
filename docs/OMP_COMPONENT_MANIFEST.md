@@ -34,6 +34,7 @@ Use `scripts/bump-component-version.ps1` to update manifest versions:
 .\scripts\bump-component-version.ps1 -All -Part minor
 ```
 
-The script updates `omp-components.json` only. Until package and installer
-scripts consume the manifest directly, keep existing package configuration
-version fields aligned with the manifest before building release artifacts.
+The script updates `omp-components.json` only. The HostAgent-first package script
+consumes the manifest directly when it prepares ArtifactStore payloads and SQL
+artifact-version overrides. Older suite scripts still have separate package
+version fields, so keep those aligned if you use the legacy installer.

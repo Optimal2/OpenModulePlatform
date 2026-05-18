@@ -19,6 +19,7 @@ Use these files as the main map:
 - `docs/ADMIN_CONFIGURATION.md` - manual Portal administration guidance.
 - `docs/VERSIONING_AND_IDENTITIES.md` - artifact versioning and stable identity policy.
 - `docs/OMP_COMPONENT_MANIFEST.md` - repository component manifest and version-bump helper usage.
+- `docs/HOST_AGENT_FIRST_INSTALL.md` - HostAgent-first package and bootstrapper flow.
 - `PUBLISH_README.md` - publish helper behavior and local runtime layout.
 - `sql/README.md` - SQL setup and initialization conventions.
 
