@@ -39,6 +39,21 @@ Use `html_file` when a deployment gateway blocks posting raw HTML or JavaScript
 through the admin form, or when the same content file should be shared by several
 web servers.
 
+## Loading File-Backed Pages
+
+The admin start page scans the configured HTML and server-report directories on
+each request and shows the number of available files. Use `Load content files`
+to create missing Content rows for discovered files.
+
+HTML files are imported first. If both `example.html` and `example.json` exist,
+the import creates one HTML file page for `example`; the JSON report can then be
+used from that HTML file through `[DB_JSON="example"]` or
+`[DB_JSON_SCRIPT="example"]`. JSON files without a matching HTML file are
+imported as direct server-report pages.
+
+The import only creates missing pages. It does not overwrite existing pages,
+change role access, or delete pages whose backing files were removed.
+
 ## Permissions And Roles
 
 Content visibility and editing rights use the shared OMP RBAC model. The
