@@ -565,9 +565,19 @@ internal static partial class Program
         private string BuildUninstallConfirmationMessage(bool removeRuntimeFiles, bool removeDatabaseObjects)
         {
             var builder = new StringBuilder();
+            var additionalServiceNames = (_config.HostAgent.AdditionalServiceNamesToRemove ?? [])
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             builder.AppendLine("The uninstall action will affect:");
             builder.AppendLine();
             builder.AppendLine($"Windows services: {ValueOrPlaceholder(_config.HostAgent.ServiceName)} and services under {ValueOrPlaceholder(_config.HostAgent.ServicesRoot)}");
+            if (additionalServiceNames.Length > 0)
+            {
+                builder.AppendLine($"Additional service names: {string.Join(", ", additionalServiceNames)}");
+            }
+
             builder.AppendLine($"IIS site: {ValueOrPlaceholder(_config.HostAgent.IisSiteName)}");
             builder.AppendLine($"IIS app pools with prefix: {ValueOrPlaceholder(_config.HostAgent.IisAppPoolNamePrefix)}");
 

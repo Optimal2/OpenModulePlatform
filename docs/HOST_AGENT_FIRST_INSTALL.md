@@ -72,6 +72,16 @@ Folder-only local/private package example:
   -SkipZip
 ```
 
+Neutral public package example:
+
+```cmd
+scripts\deployment\package-hostagent-first-public.cmd
+```
+
+This uses `scripts\deployment\omp-suite.config.sample.psd1` and writes a
+non-customer-specific package to `artifacts\hostagent-first-public`. Protected
+customer packages should use `.local.psd1` files outside source control.
+
 The script reads `omp-components.json` so each deployable component keeps its own
 artifact version. The repository version can still be used as the package
 version, but it is not forced onto every app artifact.
@@ -188,6 +198,13 @@ deployment config without committing them to the public repository:
 
 ```powershell
 HostAgentFirst = @{
+    # Optional cleanup list for legacy Windows services whose executable paths
+    # no longer live below the configured HostAgent/Services roots.
+    AdditionalServiceNamesToRemove = @(
+        'OpenModulePlatform.WorkerManager',
+        'OpenModulePlatform.Service.ExampleServiceAppModule'
+    )
+
     AdditionalSqlFiles = @(
         'vgr-test-bootstrap.sql',
         @{ Source = 'vgr-prod-bootstrap.sql'; Destination = 'Customer\vgr-prod-bootstrap.sql' }
@@ -201,6 +218,9 @@ them after the neutral OMP initialization scripts in `sql/bootstrap-local.sql`.
 For example, a protected VGR package can set:
 
 - `hostAgent.serviceName` to the actual service name used on the servers
+- `hostAgent.additionalServiceNamesToRemove` when uninstall packages must remove
+  older runtime services that are no longer discoverable from the current
+  runtime folder
 - `artifactStoreRoot` to the shared ArtifactStore UNC path
 - `hostAgent.ensureIisSite`, `hostAgent.iisBinding*`, and app pool identity
   settings when HostAgent should create or repair the IIS site and app pools

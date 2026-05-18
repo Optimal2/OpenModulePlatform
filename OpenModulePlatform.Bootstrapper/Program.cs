@@ -1200,9 +1200,10 @@ END;
     private static void RemoveWindowsServices(BootstrapConfig config)
     {
         var serviceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(config.HostAgent.ServiceName))
+        AddWindowsServiceName(serviceNames, config.HostAgent.ServiceName);
+        foreach (var serviceName in config.HostAgent.AdditionalServiceNamesToRemove ?? [])
         {
-            serviceNames.Add(config.HostAgent.ServiceName.Trim());
+            AddWindowsServiceName(serviceNames, serviceName);
         }
 
         var runtimeRoots = GetServiceRuntimeRoots(config.HostAgent);
@@ -1229,6 +1230,14 @@ END;
         foreach (var serviceName in serviceNames)
         {
             DeleteWindowsService(serviceName);
+        }
+    }
+
+    private static void AddWindowsServiceName(HashSet<string> serviceNames, string? serviceName)
+    {
+        if (!string.IsNullOrWhiteSpace(serviceName))
+        {
+            serviceNames.Add(serviceName.Trim());
         }
     }
 
@@ -1937,6 +1946,8 @@ internal sealed class HostAgentInstallOptions
     public bool Enabled { get; set; } = true;
 
     public string ServiceName { get; set; } = "OpenModulePlatform.HostAgent";
+
+    public List<string> AdditionalServiceNamesToRemove { get; set; } = [];
 
     public string DisplayName { get; set; } = "OpenModulePlatform HostAgent";
 
