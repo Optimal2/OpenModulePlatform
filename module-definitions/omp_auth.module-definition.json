@@ -25,8 +25,19 @@
       "appKey": "omp_auth",
       "packageType": "web-app",
       "targetName": "omp-auth",
+      "relativePathTemplate": "omp-auth/web/{version}",
       "minVersion": "0.3.3",
       "maxVersion": null
+    }
+  ],
+  "artifactConfigurationFiles": [
+    {
+      "appKey": "omp_auth",
+      "packageType": "web-app",
+      "targetName": "omp-auth",
+      "relativePath": "appsettings.json",
+      "contentSource": "host-agent-generated",
+      "purpose": "HostAgent-generated auth appsettings with OMP connection string and shared auth cookie settings."
     }
   ],
   "sqlScripts": [
@@ -52,23 +63,6 @@
       ],
       "apps": [
         { "appKey": "omp_auth", "moduleKey": "omp_auth", "appType": "WebApp" }
-      ],
-      "artifacts": [
-        {
-          "appKey": "omp_auth",
-          "packageType": "web-app",
-          "targetName": "omp-auth",
-          "relativePathTemplate": "omp-auth/web/{version}"
-        }
-      ],
-      "artifactConfigurationFiles": [
-        {
-          "appKey": "omp_auth",
-          "packageType": "web-app",
-          "targetName": "omp-auth",
-          "relativePath": "appsettings.json",
-          "purpose": "HostAgent-generated auth appsettings with OMP connection string and shared auth cookie settings."
-        }
       ],
       "moduleInstances": [
         { "moduleInstanceKey": "omp_auth", "instanceKey": "default" }

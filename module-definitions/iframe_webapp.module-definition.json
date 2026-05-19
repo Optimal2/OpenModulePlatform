@@ -25,6 +25,7 @@
       "appKey": "iframe_webapp_webapp",
       "packageType": "web-app",
       "targetName": "iframe-webapp",
+      "relativePathTemplate": "iframe-webapp/web/{version}",
       "minVersion": "0.3.4",
       "maxVersion": null
     }
@@ -76,14 +77,6 @@
       ],
       "apps": [
         { "moduleKey": "iframe_webapp", "appKey": "iframe_webapp_webapp", "appType": "WebApp" }
-      ],
-      "artifacts": [
-        {
-          "appKey": "iframe_webapp_webapp",
-          "packageType": "web-app",
-          "targetName": "iframe-webapp",
-          "relativePathTemplate": "iframe-webapp/web/{version}"
-        }
       ],
       "moduleInstances": [
         { "moduleInstanceKey": "iframe_webapp", "instanceKey": "default" }

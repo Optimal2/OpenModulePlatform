@@ -12,11 +12,17 @@ module version expects. It is separate from deployable artifacts because one
 module can contain several independently versioned apps, services, workers, or
 plugins.
 
+Applying a module definition must be useful even before runtime code has been
+uploaded. The definition should be able to register the module, its apps,
+permissions, setting definitions, portal entries, desired template rows, and
+artifact slots in OMP. The actual `omp.Artifacts` rows are created later when
+matching artifact zip files are imported.
+
 The document answers these questions:
 
 - which module key and apps are defined
-- which SQL scripts are required, and in what order
-- which artifact versions are compatible with this definition version
+- which SQL scripts are required, if any, and in what order
+- which artifact slots are valid for this definition version
 - which runtime configuration files are outside immutable artifacts
 - which permissions, portal entries, app worker definitions, and setting
   definitions the module owns
@@ -91,8 +97,19 @@ The document shape is versioned. Version 1 uses these top-level fields:
       "appKey": "example_module_web",
       "packageType": "web-app",
       "targetName": "example-module-web",
+      "relativePathTemplate": "example-module/web/{version}",
       "minVersion": "1.2.3",
       "maxVersion": null
+    }
+  ],
+  "artifactConfigurationFiles": [
+    {
+      "appKey": "example_module_web",
+      "packageType": "web-app",
+      "targetName": "example-module-web",
+      "relativePath": "appsettings.json",
+      "contentSource": "host-agent-generated",
+      "purpose": "Runtime configuration generated when a matching artifact is imported or deployed."
     }
   ],
   "sqlScripts": [
@@ -134,14 +151,6 @@ The document shape is versioned. Version 1 uses these top-level fields:
         {
           "appKey": "example_module_web",
           "appType": "WebApp"
-        }
-      ],
-      "artifacts": [
-        {
-          "appKey": "example_module_web",
-          "packageType": "web-app",
-          "targetName": "example-module-web",
-          "relativePathTemplate": "example-module/web/{version}"
         }
       ],
       "appPermissions": [
@@ -192,22 +201,42 @@ self-contained in one JSON file. Repository manifests should usually keep SQL in
 normal `.sql` files and reference them by path so SQL remains readable and
 reviewable.
 
+The `compatibleArtifacts` array defines artifact slots, not already-installed
+artifact rows. An artifact zip import uses these rows to validate
+`appKey`/`packageType`/`targetName`/version and to resolve
+`relativePathTemplate`. Applying only the module definition should not require
+the zip payload or create a fake artifact version.
+
+`artifactConfigurationFiles` describes runtime files that belong to an artifact
+slot but should not live inside the immutable zip. These descriptors are also
+applied when a concrete artifact exists; they are not proof that the artifact
+payload has already been imported.
+
+`sqlScripts` is optional. Autonomous modules can use an empty array when all
+they need is OMP metadata plus runtime configuration supplied through normal
+configuration-file mechanisms.
+
 The `integrity` object is declarative. It describes the minimum database
 contract that a later validator/repair tool can check without rereading every
 SQL script. It should not try to serialize every column definition or every
 environment-specific row. Keep it focused on durable requirements:
 
 - module-owned schemas and tables
-- OMP module, app, artifact, permission, worker definition, instance template,
-  and desired runtime rows that make the module deployable
+- OMP module, app, permission, worker definition, instance template, and desired
+  runtime rows that make the module deployable
 - module-owned setting definitions, channel type metadata, portal entry rows,
   or other seed rows that application code expects to exist
 - explicit exclusions for sample jobs, local-only channels, smoke-test pages,
   and other data that normal installations can safely omit
 
+Do not list `omp.Artifacts` rows as required integrity rows unless the specific
+artifact version has already been imported. Module definitions describe which
+artifact slots are allowed; artifact imports describe which immutable payloads
+are present.
+
 `relativePathTemplate` and similar template fields are preferred over fixed
-versions when installer scripts patch `@Version` or `@ArtifactVersion` before
-running SQL. This keeps the integrity contract stable across artifact patches.
+versions. This keeps the definition stable across artifact patches while still
+letting the artifact import resolve the concrete storage path.
 
 Platform core definitions may use `"definitionType": "platform-core"` and omit
 the `module` and `apps` sections when the document describes the neutral `omp`
@@ -227,6 +256,22 @@ operators and admin UI:
 The current Portal and HostAgent flows do not enforce all of this yet. Until the
 apply pipeline exists, any artifact update that depends on schema or metadata
 changes must be accompanied by the relevant SQL patch or setup script rerun.
+
+## Two-Step Installation Model
+
+The long-term installation model is intentionally split:
+
+1. Apply the module definition. This creates or repairs OMP metadata and runs
+   any required schema/module SQL, but it does not require runtime code to be
+   available yet.
+2. Import artifact zip files. The import validates each zip against the module
+   definition's artifact slots, creates or updates `omp.Artifacts`, and allows
+   desired app/template rows to point to the imported versions.
+
+With this split, a base OMP installation can be limited to the core `omp`
+schema, Portal, and HostAgent. Remaining modules can then be added from Portal,
+from a controlled installer, or from an import folder without coupling every
+module to the base installer.
 
 ## Current Example
 

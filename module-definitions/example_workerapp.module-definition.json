@@ -29,8 +29,8 @@
     }
   ],
   "compatibleArtifacts": [
-    { "appKey": "example_workerapp_webapp", "packageType": "web-app", "targetName": "example-workerapp-web", "minVersion": "0.3.4", "maxVersion": null },
-    { "appKey": "example_workerapp_worker", "packageType": "worker", "targetName": "example-workerapp", "minVersion": "0.3.3", "maxVersion": null }
+    { "appKey": "example_workerapp_webapp", "packageType": "web-app", "targetName": "example-workerapp-web", "relativePathTemplate": "example-workerapp/web/{version}", "minVersion": "0.3.4", "maxVersion": null },
+    { "appKey": "example_workerapp_worker", "packageType": "worker", "targetName": "example-workerapp", "relativePathTemplate": "example-workerapp/worker/{version}", "minVersion": "0.3.3", "maxVersion": null }
   ],
   "sqlScripts": [
     {
@@ -80,10 +80,6 @@
       "apps": [
         { "moduleKey": "example_workerapp", "appKey": "example_workerapp_webapp", "appType": "WebApp" },
         { "moduleKey": "example_workerapp", "appKey": "example_workerapp_worker", "appType": "ServiceApp" }
-      ],
-      "artifacts": [
-        { "appKey": "example_workerapp_webapp", "packageType": "web-app", "targetName": "example-workerapp-web", "relativePathTemplate": "example-workerapp/web/{version}" },
-        { "appKey": "example_workerapp_worker", "packageType": "worker", "targetName": "example-workerapp", "relativePathTemplate": "example-workerapp/worker/{version}" }
       ],
       "appWorkerDefinitions": [
         {

@@ -25,6 +25,7 @@
       "appKey": "example_webapp_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp",
+      "relativePathTemplate": "example-webapp/web/{version}",
       "minVersion": "0.3.4",
       "maxVersion": null
     }
@@ -74,9 +75,6 @@
       ],
       "apps": [
         { "moduleKey": "example_webapp", "appKey": "example_webapp_webapp", "appType": "WebApp" }
-      ],
-      "artifacts": [
-        { "appKey": "example_webapp_webapp", "packageType": "web-app", "targetName": "example-webapp", "relativePathTemplate": "example-webapp/web/{version}" }
       ],
       "moduleInstances": [
         { "moduleInstanceKey": "example_webapp", "instanceKey": "default" }
