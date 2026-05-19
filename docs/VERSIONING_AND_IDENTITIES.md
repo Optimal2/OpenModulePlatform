@@ -37,6 +37,13 @@ new build of the same app creates a new artifact row. Existing artifact rows are
 kept for audit, rollback, and host-state comparison until a retention policy
 removes them.
 
+Portal may offer an explicit same-version replacement action when an operator
+needs to correct a bad artifact registration whose app, package type, target,
+and version already exist but whose content hash differs. Treat that as a repair
+operation. Normal releases should still create a new component version and a new
+artifact row, and the automatic HostAgent import folder intentionally fails
+same-version conflicts instead of replacing existing content.
+
 Artifact content is application code and static assets, not environment-owned
 runtime configuration. Do not package `appsettings*.json`, generated OMP
 identity files, database connection strings, passwords, or site-local files such

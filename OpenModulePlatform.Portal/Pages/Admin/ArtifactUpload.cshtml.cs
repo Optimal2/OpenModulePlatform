@@ -84,8 +84,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         await LoadAsync(ct);
         SetTitles("Upload artifact");
 
-        ApplyFilenameMetadataIfUseful();
-        ValidateInput();
+        var filenameMetadata = ApplyFilenameMetadataIfUseful();
+        ValidateInput(filenameMetadata);
         if (!ModelState.IsValid)
         {
             return Page();
@@ -112,7 +112,9 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         var tempZipPath = Path.Combine(tempRoot, $"{Guid.NewGuid():N}.zip");
         var stagingPath = Path.Combine(tempRoot, $"artifact-{Guid.NewGuid():N}");
         var finalPath = ResolveUnderRoot(storeRoot, relativePath);
+        var backupPath = Path.Combine(tempRoot, $"artifact-backup-{Guid.NewGuid():N}");
         var movedToFinal = false;
+        var movedExistingToBackup = false;
 
         try
         {
@@ -120,16 +122,54 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             ExtractValidatedZip(tempZipPath, stagingPath);
 
             var contentHash = await ComputeDirectorySha256Async(stagingPath, ct);
-            var duplicate = await _repo.FindArtifactBySha256Async(contentHash, ct);
-            if (duplicate is not null)
+            var version = Input.Version.Trim();
+            var packageType = Input.PackageType.Trim();
+            var targetName = Clean(Input.TargetName);
+            var existingIdentity = await _repo.FindArtifactByIdentityAsync(
+                Input.AppId,
+                version,
+                packageType,
+                targetName,
+                ct);
+
+            if (existingIdentity is not null)
             {
-                ModelState.AddModelError(
-                    string.Empty,
-                    T($"An artifact with identical extracted content already exists: {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType})."));
-                return Page();
+                if (string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    ModelState.AddModelError(
+                        string.Empty,
+                        T("An artifact with the same app, package type, target, version, and content already exists. No upload is needed."));
+                    return Page();
+                }
+
+                if (!Input.ReplaceExistingArtifact)
+                {
+                    ModelState.AddModelError(
+                        nameof(Input.ReplaceExistingArtifact),
+                        T("An artifact with the same app, package type, target, and version already exists, but the uploaded content is different. Confirm replacement to overwrite the existing artifact content."));
+                    return Page();
+                }
+
+                relativePath = NormalizeRelativePath(existingIdentity.RelativePath) ?? relativePath;
+                finalPath = ResolveUnderRoot(storeRoot, relativePath);
+            }
+            else
+            {
+                var duplicate = await _repo.FindArtifactBySha256Async(contentHash, ct);
+                if (duplicate is not null)
+                {
+                    ModelState.AddModelError(
+                        string.Empty,
+                        string.Format(
+                            T("An artifact with identical extracted content already exists: {0} {1} ({2})."),
+                            duplicate.AppKey,
+                            duplicate.Version,
+                            duplicate.PackageType));
+                    return Page();
+                }
             }
 
-            if (Directory.Exists(finalPath) || System.IO.File.Exists(finalPath))
+            if (existingIdentity is null && (Directory.Exists(finalPath) || System.IO.File.Exists(finalPath)))
             {
                 ModelState.AddModelError(
                     nameof(Input.RelativePath),
@@ -138,15 +178,22 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+            if (existingIdentity is not null && (Directory.Exists(finalPath) || System.IO.File.Exists(finalPath)))
+            {
+                MoveExistingArtifactToBackup(finalPath, backupPath);
+                movedExistingToBackup = true;
+            }
+
             Directory.Move(stagingPath, finalPath);
             movedToFinal = true;
 
             var artifactData = new ArtifactEditData
             {
+                ArtifactId = existingIdentity?.ArtifactId ?? 0,
                 AppId = Input.AppId,
-                Version = Input.Version.Trim(),
-                PackageType = Input.PackageType.Trim(),
-                TargetName = Clean(Input.TargetName),
+                Version = version,
+                PackageType = packageType,
+                TargetName = targetName,
                 RelativePath = relativePath,
                 Sha256 = contentHash,
                 IsEnabled = true
@@ -160,11 +207,23 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             catch
             {
                 TryDelete(finalPath);
+                if (movedExistingToBackup)
+                {
+                    RestoreExistingArtifactBackup(backupPath, finalPath);
+                    movedExistingToBackup = false;
+                }
+
                 throw;
             }
 
+            if (movedExistingToBackup)
+            {
+                TryDelete(backupPath);
+                movedExistingToBackup = false;
+            }
+
             ArtifactConfigurationFileCopyResult? copyResult = null;
-            if (Input.CopyConfigurationFilesFromPreviousVersion)
+            if (Input.CopyConfigurationFilesFromPreviousVersion && existingIdentity is null)
             {
                 try
                 {
@@ -206,7 +265,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 copyResult,
                 Input.CopyConfigurationFilesFromPreviousVersion,
                 applicationResult,
-                Input.UseArtifactImmediately);
+                Input.UseArtifactImmediately,
+                existingIdentity is not null);
             return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
         }
         catch (InvalidDataException ex)
@@ -241,6 +301,11 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             {
                 TryDelete(stagingPath);
             }
+
+            if (movedExistingToBackup)
+            {
+                RestoreExistingArtifactBackup(backupPath, finalPath);
+            }
         }
     }
 
@@ -249,17 +314,17 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         AppOptions = await _repo.GetArtifactAppOptionsAsync(ct);
     }
 
-    private void ApplyFilenameMetadataIfUseful()
+    private FilenameMetadata? ApplyFilenameMetadataIfUseful()
     {
         if (Input.ZipFile is null)
         {
-            return;
+            return null;
         }
 
         var metadata = TryParseFilenameMetadata(Input.ZipFile.FileName);
         if (metadata is null)
         {
-            return;
+            return null;
         }
 
         var app = AppOptions.FirstOrDefault(
@@ -277,9 +342,11 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         Input.RelativePath = FillBlank(
             Input.RelativePath,
             BuildDefaultRelativePath(metadata.TargetName, metadata.PackageType, metadata.Version));
+
+        return metadata;
     }
 
-    private void ValidateInput()
+    private void ValidateInput(FilenameMetadata? filenameMetadata)
     {
         if (Input.ZipFile is null || Input.ZipFile.Length == 0)
         {
@@ -298,7 +365,19 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         if (Input.AppId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.AppId), T("Select an app."));
+            if (filenameMetadata is not null)
+            {
+                ModelState.AddModelError(
+                    nameof(Input.AppId),
+                    string.Format(
+                        T("The filename references module '{0}' and app '{1}', but that enabled app definition was not found. Register the module/app first or select an existing app."),
+                        filenameMetadata.ModuleKey,
+                        filenameMetadata.AppKey));
+            }
+            else
+            {
+                ModelState.AddModelError(nameof(Input.AppId), T("Select an app."));
+            }
         }
 
         if (string.IsNullOrWhiteSpace(Input.Version))
@@ -615,11 +694,18 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         ArtifactConfigurationFileCopyResult? copyResult,
         bool copyWasRequested,
         ArtifactApplicationResult? applicationResult,
-        bool applyWasRequested)
+        bool applyWasRequested,
+        bool replacedExistingArtifact)
     {
-        var message = T("Artifact uploaded and registered.");
+        var message = replacedExistingArtifact
+            ? T("Existing artifact content replaced and metadata updated.")
+            : T("Artifact uploaded and registered.");
 
-        if (copyWasRequested)
+        if (replacedExistingArtifact)
+        {
+            message += " " + T("Existing artifact configuration file rows were preserved.");
+        }
+        else if (copyWasRequested)
         {
             if (copyResult is null || copyResult.CopiedCount == 0)
             {
@@ -643,6 +729,53 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         }
 
         return message;
+    }
+
+    private static void MoveExistingArtifactToBackup(string finalPath, string backupPath)
+    {
+        TryDelete(backupPath);
+
+        if (Directory.Exists(finalPath))
+        {
+            Directory.Move(finalPath, backupPath);
+        }
+        else if (System.IO.File.Exists(finalPath))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
+            System.IO.File.Move(finalPath, backupPath);
+        }
+    }
+
+    private static void RestoreExistingArtifactBackup(string backupPath, string finalPath)
+    {
+        try
+        {
+            if (!Directory.Exists(backupPath) && !System.IO.File.Exists(backupPath))
+            {
+                return;
+            }
+
+            TryDelete(finalPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+            if (Directory.Exists(backupPath))
+            {
+                Directory.Move(backupPath, finalPath);
+            }
+            else
+            {
+                System.IO.File.Move(backupPath, finalPath);
+            }
+        }
+        catch (IOException)
+        {
+            // The database row is only updated after the new folder has been
+            // moved into place. Backup restoration is best effort if a later
+            // filesystem failure leaves the original content in staging.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best effort restoration after a failed replacement.
+        }
     }
 
     private long GetMaxUploadBytes()
@@ -714,5 +847,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         [Display(Name = "Use this version immediately")]
         public bool UseArtifactImmediately { get; set; } = true;
+
+        [Display(Name = "Replace existing artifact with same identity")]
+        public bool ReplaceExistingArtifact { get; set; }
     }
 }

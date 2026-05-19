@@ -192,6 +192,8 @@ public sealed class ArtifactDuplicateInfo
 {
     public int ArtifactId { get; set; }
 
+    public int AppId { get; set; }
+
     public string AppKey { get; set; } = string.Empty;
 
     public string Version { get; set; } = string.Empty;
@@ -199,6 +201,10 @@ public sealed class ArtifactDuplicateInfo
     public string PackageType { get; set; } = string.Empty;
 
     public string? TargetName { get; set; }
+
+    public string? RelativePath { get; set; }
+
+    public string? Sha256 { get; set; }
 }
 
 /// <summary>
