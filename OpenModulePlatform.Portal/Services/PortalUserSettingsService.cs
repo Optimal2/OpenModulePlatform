@@ -12,6 +12,7 @@ public sealed class PortalUserSettingsService
     private const string AdProviderDisplayName = "AD";
     private const string PortalSettingCategory = "Portal";
     private const string AdminMetricsCollapsedSetting = "AdminMetricsCollapsed";
+    private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
     private const byte IntValueKind = 1;
 
     private readonly SqlConnectionFactory _db;
@@ -25,16 +26,25 @@ public sealed class PortalUserSettingsService
     {
         const string sql = @"
 SELECT u.display_name,
-       CAST(COALESCE(v.setting_value, d.default_int_value, 0) AS bit)
+       CAST(COALESCE(admin_v.setting_value, admin_d.default_int_value, 0) AS bit),
+       CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit)
 FROM omp.users u
-LEFT JOIN omp_portal.user_setting_definitions d
-    ON d.setting_category = @setting_category
-   AND d.setting_name = @setting_name
-   AND d.value_kind = @value_kind
-   AND d.is_enabled = 1
-LEFT JOIN omp_portal.user_setting_int_values v
-    ON v.user_id = u.user_id
-   AND v.user_setting_definition_id = d.user_setting_definition_id
+LEFT JOIN omp_portal.user_setting_definitions admin_d
+    ON admin_d.setting_category = @setting_category
+   AND admin_d.setting_name = @admin_metrics_setting_name
+   AND admin_d.value_kind = @value_kind
+   AND admin_d.is_enabled = 1
+LEFT JOIN omp_portal.user_setting_int_values admin_v
+    ON admin_v.user_id = u.user_id
+   AND admin_v.user_setting_definition_id = admin_d.user_setting_definition_id
+LEFT JOIN omp_portal.user_setting_definitions hover_d
+    ON hover_d.setting_category = @setting_category
+   AND hover_d.setting_name = @topbar_dropdowns_setting_name
+   AND hover_d.value_kind = @value_kind
+   AND hover_d.is_enabled = 1
+LEFT JOIN omp_portal.user_setting_int_values hover_v
+    ON hover_v.user_id = u.user_id
+   AND hover_v.user_setting_definition_id = hover_d.user_setting_definition_id
 WHERE u.user_id = @user_id
   AND u.account_status = 1;";
 
@@ -42,7 +52,7 @@ WHERE u.user_id = @user_id
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         AddUserId(cmd, userId);
-        AddAdminMetricsSettingParameters(cmd);
+        AddPortalSettingParameters(cmd);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -52,30 +62,28 @@ WHERE u.user_id = @user_id
 
         return new PortalAccountSettings(
             rdr.GetString(0),
-            rdr.GetBoolean(1));
+            rdr.GetBoolean(1),
+            rdr.GetBoolean(2));
     }
 
     public async Task<PortalUserSettings> GetForUserAsync(int userId, CancellationToken ct)
     {
-        const string sql = @"
-SELECT CAST(COALESCE(v.setting_value, d.default_int_value, 0) AS bit)
-FROM omp_portal.user_setting_definitions d
-LEFT JOIN omp_portal.user_setting_int_values v
-    ON v.user_setting_definition_id = d.user_setting_definition_id
-   AND v.user_id = @user_id
-WHERE d.setting_category = @setting_category
-  AND d.setting_name = @setting_name
-  AND d.value_kind = @value_kind
-  AND d.is_enabled = 1;";
-
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        AddUserId(cmd, userId);
-        AddAdminMetricsSettingParameters(cmd);
+        var adminMetricsCollapsed = await GetPortalBoolSettingAsync(
+            conn,
+            userId,
+            AdminMetricsCollapsedSetting,
+            defaultValue: false,
+            ct);
+        var topbarDropdownsOpenOnHover = await GetPortalBoolSettingAsync(
+            conn,
+            userId,
+            TopbarDropdownsOpenOnHoverSetting,
+            defaultValue: true,
+            ct);
 
-        var result = await cmd.ExecuteScalarAsync(ct);
-        return new PortalUserSettings(result is bool collapsed && collapsed);
+        return new PortalUserSettings(adminMetricsCollapsed, topbarDropdownsOpenOnHover);
     }
 
     public async Task<bool> UpdateDisplayNameAsync(int userId, string displayName, CancellationToken ct)
@@ -204,13 +212,110 @@ END;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task UpsertTopbarDropdownsOpenOnHoverAsync(int userId, bool value, CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @definition_id int;
+DECLARE @default_value int;
+DECLARE @setting_value int = CASE WHEN @topbar_dropdowns_open_on_hover = 1 THEN 1 ELSE 0 END;
+
+SELECT @definition_id = user_setting_definition_id,
+       @default_value = ISNULL(default_int_value, 1)
+FROM omp_portal.user_setting_definitions
+WHERE setting_category = @setting_category
+  AND setting_name = @setting_name
+  AND value_kind = @value_kind
+  AND is_enabled = 1;
+
+IF @definition_id IS NULL
+BEGIN
+    THROW 52011, 'Portal user setting definition is missing: Portal/TopbarDropdownsOpenOnHover.', 1;
+END
+
+IF @setting_value = @default_value
+BEGIN
+    DELETE FROM omp_portal.user_setting_int_values
+    WHERE user_id = @user_id
+      AND user_setting_definition_id = @definition_id;
+END
+ELSE
+BEGIN
+    UPDATE omp_portal.user_setting_int_values
+    SET setting_value = @setting_value,
+        updated_at = SYSUTCDATETIME()
+    WHERE user_id = @user_id
+      AND user_setting_definition_id = @definition_id;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        INSERT INTO omp_portal.user_setting_int_values(user_id, user_setting_definition_id, setting_value)
+        VALUES(@user_id, @definition_id, @setting_value);
+    END
+END;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        AddUserId(cmd, userId);
+        cmd.Parameters.Add("@topbar_dropdowns_open_on_hover", SqlDbType.Bit).Value = value;
+        AddTopbarDropdownsOpenOnHoverSettingParameters(cmd);
+
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<bool> GetPortalBoolSettingAsync(
+        SqlConnection conn,
+        int userId,
+        string settingName,
+        bool defaultValue,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CAST(COALESCE(v.setting_value, d.default_int_value, @default_value) AS bit)
+FROM omp_portal.user_setting_definitions d
+LEFT JOIN omp_portal.user_setting_int_values v
+    ON v.user_setting_definition_id = d.user_setting_definition_id
+   AND v.user_id = @user_id
+WHERE d.setting_category = @setting_category
+  AND d.setting_name = @setting_name
+  AND d.value_kind = @value_kind
+  AND d.is_enabled = 1;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        AddUserId(cmd, userId);
+        cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
+        cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = settingName;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+        cmd.Parameters.Add("@default_value", SqlDbType.Int).Value = defaultValue ? 1 : 0;
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is bool boolValue
+            ? boolValue
+            : defaultValue;
+    }
+
     private static void AddUserId(SqlCommand cmd, int userId)
         => cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+
+    private static void AddPortalSettingParameters(SqlCommand cmd)
+    {
+        cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
+        cmd.Parameters.Add("@admin_metrics_setting_name", SqlDbType.NVarChar, 200).Value = AdminMetricsCollapsedSetting;
+        cmd.Parameters.Add("@topbar_dropdowns_setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+    }
 
     private static void AddAdminMetricsSettingParameters(SqlCommand cmd)
     {
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = AdminMetricsCollapsedSetting;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+    }
+
+    private static void AddTopbarDropdownsOpenOnHoverSettingParameters(SqlCommand cmd)
+    {
+        cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
+        cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
     }
 
@@ -307,9 +412,14 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), SYSUTCDATET
     private readonly record struct ExistingAuthLink(int UserAuthId, int UserId);
 }
 
-public sealed record PortalAccountSettings(string DisplayName, bool AdminMetricsCollapsed);
+public sealed record PortalAccountSettings(
+    string DisplayName,
+    bool AdminMetricsCollapsed,
+    bool TopbarDropdownsOpenOnHover);
 
-public sealed record PortalUserSettings(bool AdminMetricsCollapsed);
+public sealed record PortalUserSettings(
+    bool AdminMetricsCollapsed,
+    bool TopbarDropdownsOpenOnHover);
 
 public sealed record CreateSelfServiceAdAccountResult(
     CreateSelfServiceAdAccountStatus Status,

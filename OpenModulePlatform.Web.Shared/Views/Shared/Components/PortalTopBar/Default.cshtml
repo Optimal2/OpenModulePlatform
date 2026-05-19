@@ -44,7 +44,8 @@
          data-collapse-text="@L["Collapse"]"
          data-shortcuts-enabled="@Model.ShortcutsEnabled.ToString().ToLowerInvariant()"
          data-shortcut-all-modules="@Model.AllModulesShortcut"
-         data-shortcut-favorites="@Model.FavoritesShortcut">
+         data-shortcut-favorites="@Model.FavoritesShortcut"
+         data-open-on-hover="@Model.DropdownsOpenOnHover.ToString().ToLowerInvariant()">
         <nav class="portal-topbar__nav" aria-label="@Model.PortalLink.TextKey" data-portal-topbar>
             <a class="portal-topbar__portal-link" href="@Model.PortalLink.Href">@Model.PortalLink.TextKey</a>
 
