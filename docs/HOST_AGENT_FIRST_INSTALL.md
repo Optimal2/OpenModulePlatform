@@ -53,6 +53,26 @@ expanded folder by setting `Package.SkipZip = $true` or passing `-SkipZip`.
 The expanded package is self-contained except for environment-specific values in
 `bootstrap.local.sample.json`.
 
+## Environment Configuration Model
+
+Use one bootstrapper executable and one package layout for an environment type.
+Values that differ between machines, developers, test, production, and customer
+installations should live in configuration files or protected package payloads,
+not in separate source-code branches or hand-edited installer scripts.
+
+The public OMP repository should keep only neutral package generation and sample
+configuration. Private installation repositories can carry:
+
+- environment-specific bootstrap JSON files
+- protected `.psd1` package-build configuration
+- customer SQL extension files
+- customer or machine-specific payload files
+- local wrapper scripts that call public OMP helpers with private defaults
+
+This keeps the OMP repository focused on platform code while still letting each
+installation have its own service account, host keys, paths, artifact payloads,
+and Content file mirror settings.
+
 ## Building A Package
 
 Local development example:
@@ -214,6 +234,10 @@ folders on the same disk as the runtime. For a multi-server install, point the
 shared paths at the common file share and keep the target paths local on each
 web server. The Content app reads the local target paths, so both cases exercise
 the same runtime behavior.
+
+The Content module setup SQL intentionally creates no sample pages. For local
+smoke testing, use `scripts/dev/seed-content-webapp-test-pages.ps1`; it creates
+one page of each supported type and only queries OMP-owned tables.
 
 Customer-specific packages should keep customer-specific SQL values outside the
 public repository and inject them into the package configuration or generated

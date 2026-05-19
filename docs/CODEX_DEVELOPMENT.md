@@ -99,3 +99,8 @@ be safely validated inside the SQL script after substitution.
 OpenModulePlatform may reference IbsPackager only as an external consumer in
 documentation or local runbooks. Platform code, SQL, examples, and shared web
 components must stay neutral.
+
+Machine-specific developer packages, customer bootstrap values, credentials,
+and protected payloads belong in a private installation repository. Keep this
+repository limited to neutral code, sample configuration, and reusable package
+generation.
