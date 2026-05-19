@@ -122,8 +122,8 @@ function Resolve-ContentWebAppRuntimePath {
 
 function Get-ContentWebAppFileMirrors {
     param(
-        [Parameter(Mandatory = $true)][string]$SharedServerReportsPath,
-        [Parameter(Mandatory = $true)][string]$SharedHtmlFilesPath,
+        [string]$SharedServerReportsPath,
+        [string]$SharedHtmlFilesPath,
         [Parameter(Mandatory = $true)][string]$ServerReportsPath,
         [Parameter(Mandatory = $true)][string]$HtmlFilesPath,
         [Parameter(Mandatory = $true)][string]$WebAppsRoot,
