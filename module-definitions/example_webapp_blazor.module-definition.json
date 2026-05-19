@@ -25,6 +25,7 @@
       "appKey": "example_webapp_blazor_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp-blazor",
+      "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "minVersion": "0.3.4",
       "maxVersion": null
     }
@@ -74,9 +75,6 @@
       ],
       "apps": [
         { "moduleKey": "example_webapp_blazor", "appKey": "example_webapp_blazor_webapp", "appType": "WebApp" }
-      ],
-      "artifacts": [
-        { "appKey": "example_webapp_blazor_webapp", "packageType": "web-app", "targetName": "example-webapp-blazor", "relativePathTemplate": "example-webapp-blazor/web/{version}" }
       ],
       "moduleInstances": [
         { "moduleInstanceKey": "example_webapp_blazor", "instanceKey": "default" }
