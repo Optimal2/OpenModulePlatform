@@ -20,6 +20,9 @@ public sealed class PortalTopBarService
 {
     private const string PortalAdminPermission = "OMP.Portal.Admin";
     private const string ContentManagePermission = "ContentWebAppModule.Manage";
+    private const string PortalSettingCategory = "Portal";
+    private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
+    private const byte IntValueKind = 1;
     private const string AppEntryPrefix = "app:";
     private const string AppEntrySuffix = ":home";
     public const string ToggleFavoritePath = "/navigation/favorites/toggle";
@@ -88,9 +91,14 @@ public sealed class PortalTopBarService
                 GetPortalBasePath(options),
                 row => ResolvePortalEntryHref(request, row, accessibleApps));
             var userId = TryGetOmpUserId(user);
-            var favorites = userId is int resolvedUserId
-                ? await GetFavoriteRefsAsync(resolvedUserId, ct)
-                : [];
+            var dropdownsOpenOnHover = true;
+            IReadOnlyList<FavoriteRef> favorites = [];
+            if (userId is int resolvedUserId)
+            {
+                dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
+                favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
+            }
+
             ApplyFavorites(navigationGroups, favorites);
             var navigationEntries = FlattenNavigationGroups(navigationGroups);
 
@@ -106,6 +114,7 @@ public sealed class PortalTopBarService
                 BuildFavoriteEntries(navigationEntries),
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildRequestEndpointHref(request, ToggleFavoritePath),
+                dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl());
         }
@@ -261,9 +270,14 @@ public sealed class PortalTopBarService
                 GetPortalBasePath(options),
                 row => ResolvePortalEntryHref(currentUri, row, accessibleApps));
             var userId = TryGetOmpUserId(user);
-            var favorites = userId is int resolvedUserId
-                ? await GetFavoriteRefsAsync(resolvedUserId, ct)
-                : [];
+            var dropdownsOpenOnHover = true;
+            IReadOnlyList<FavoriteRef> favorites = [];
+            if (userId is int resolvedUserId)
+            {
+                dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
+                favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
+            }
+
             ApplyFavorites(navigationGroups, favorites);
             var navigationEntries = FlattenNavigationGroups(navigationGroups);
 
@@ -279,6 +293,7 @@ public sealed class PortalTopBarService
                 BuildFavoriteEntries(navigationEntries),
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildUriEndpointHref(currentUri, ToggleFavoritePath),
+                dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl());
         }
@@ -321,6 +336,7 @@ public sealed class PortalTopBarService
             favoriteEntries: Array.Empty<PortalTopBarNavigationEntry>(),
             canUsePersistentFavorites: false,
             favoriteToggleUrl: ToggleFavoritePath,
+            dropdownsOpenOnHover: true,
             options,
             logoutUrl);
 
@@ -336,6 +352,7 @@ public sealed class PortalTopBarService
         IReadOnlyList<PortalTopBarNavigationEntry> favoriteEntries,
         bool canUsePersistentFavorites,
         string favoriteToggleUrl,
+        bool dropdownsOpenOnHover,
         WebAppOptions options,
         string logoutUrl)
     {
@@ -381,7 +398,8 @@ public sealed class PortalTopBarService
             SettingsUrl = PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath),
             ShortcutsEnabled = options.TopbarShortcuts?.Enabled == true,
             AllModulesShortcut = options.TopbarShortcuts?.AllModules ?? "m",
-            FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f"
+            FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f",
+            DropdownsOpenOnHover = dropdownsOpenOnHover
         };
     }
 
@@ -752,6 +770,33 @@ public sealed class PortalTopBarService
         return int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var userId)
             ? userId
             : null;
+    }
+
+    private async Task<bool> GetTopbarDropdownsOpenOnHoverAsync(int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CAST(COALESCE(v.setting_value, d.default_int_value, 1) AS bit)
+FROM omp_portal.user_setting_definitions d
+LEFT JOIN omp_portal.user_setting_int_values v
+    ON v.user_setting_definition_id = d.user_setting_definition_id
+   AND v.user_id = @user_id
+WHERE d.setting_category = @setting_category
+  AND d.setting_name = @setting_name
+  AND d.value_kind = @value_kind
+  AND d.is_enabled = 1;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
+        cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is bool openOnHover
+            ? openOnHover
+            : true;
     }
 
     private string GetLogoutUrl()

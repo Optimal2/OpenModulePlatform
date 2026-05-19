@@ -64,7 +64,8 @@ public static class PortalTopBarModelFactory
             SettingsUrl = CombinePortalHref(topBarOptions.PortalBaseUrl, PortalTopBarModel.DefaultSettingsPath),
             ShortcutsEnabled = options.TopbarShortcuts?.Enabled == true,
             AllModulesShortcut = options.TopbarShortcuts?.AllModules ?? "m",
-            FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f"
+            FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f",
+            DropdownsOpenOnHover = true
         };
     }
 

@@ -35,7 +35,8 @@ public sealed class PortalTopBarModel
         EffectiveCultureDisplayText = "English",
         AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>(),
         LogoutUrl = OmpAuthDefaults.LogoutPath,
-        SettingsUrl = DefaultSettingsPath
+        SettingsUrl = DefaultSettingsPath,
+        DropdownsOpenOnHover = true
     };
 
     public bool IsVisible { get; init; }
@@ -112,4 +113,6 @@ public sealed class PortalTopBarModel
     public string AllModulesShortcut { get; init; } = "m";
 
     public string FavoritesShortcut { get; init; } = "f";
+
+    public bool DropdownsOpenOnHover { get; init; } = true;
 }
