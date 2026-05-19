@@ -28,6 +28,7 @@ public static class PortalAdminNavigation
                 "Modules",
                 [
                     new PortalAdminMenuItem("Definitions", hrefFactory("/admin/modules")),
+                    new PortalAdminMenuItem("Definition versions", hrefFactory("/admin/moduledefinitions")),
                     new PortalAdminMenuItem("Instances", hrefFactory("/admin/moduleinstances"))
                 ]),
             new(

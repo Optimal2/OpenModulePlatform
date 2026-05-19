@@ -279,6 +279,20 @@ schema, Portal, and HostAgent. Remaining modules can then be added from Portal,
 from a controlled installer, or from an import folder without coupling every
 module to the base installer.
 
+## Portal Administration
+
+Portal admins can upload module definition JSON files from
+`/admin/moduledefinitionupload`. Uploaded definitions are stored as versioned
+rows in `omp.ModuleDefinitionDocuments`; older versions remain available for
+review. Applying a definition makes it the active contract for that module,
+updates the module/app metadata described by the JSON, and refreshes the
+compatibility rows used by artifact import.
+
+Applying a definition can temporarily make currently selected artifacts
+incompatible. Portal blocks that by default and shows the affected references.
+The admin can explicitly allow the temporary mismatch when the next operational
+step is to upload or select the matching artifact versions.
+
 ## Compatibility Example
 
 Portal artifact `0.3.17` introduced the user preference

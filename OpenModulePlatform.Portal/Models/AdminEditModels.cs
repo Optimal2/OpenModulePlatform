@@ -208,6 +208,70 @@ public sealed class ArtifactCompatibilitySlot
 }
 
 /// <summary>
+/// Parsed module definition document ready to store in OMP.
+/// </summary>
+public sealed class ModuleDefinitionDocumentEditData
+{
+    public int ModuleDefinitionDocumentId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string DefinitionVersion { get; set; } = string.Empty;
+
+    public int FormatVersion { get; set; }
+
+    public string DefinitionJson { get; set; } = string.Empty;
+
+    public string DefinitionSha256 { get; set; } = string.Empty;
+
+    public string? SourceName { get; set; }
+
+    public IReadOnlyList<ModuleDefinitionCompatibilityEditData> CompatibleArtifacts { get; set; } = [];
+}
+
+/// <summary>
+/// Artifact compatibility row parsed from a module definition document.
+/// </summary>
+public sealed class ModuleDefinitionCompatibilityEditData
+{
+    public string AppKey { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public string? RelativePathTemplate { get; set; }
+
+    public string? MinArtifactVersion { get; set; }
+
+    public string? MaxArtifactVersion { get; set; }
+}
+
+/// <summary>
+/// Result from saving a module definition document.
+/// </summary>
+public sealed class ModuleDefinitionSaveResult
+{
+    public int ModuleDefinitionDocumentId { get; set; }
+
+    public bool Created { get; set; }
+
+    public bool Replaced { get; set; }
+
+    public bool WasIdentical { get; set; }
+}
+
+/// <summary>
+/// Result from applying a module definition document.
+/// </summary>
+public sealed class ModuleDefinitionApplyResult
+{
+    public bool Applied { get; set; }
+
+    public IReadOnlyList<ModuleDefinitionArtifactReferenceRow> IncompatibleReferences { get; set; } = [];
+}
+
+/// <summary>
 /// Existing artifact row used when duplicate content is detected during upload.
 /// </summary>
 public sealed class ArtifactDuplicateInfo
