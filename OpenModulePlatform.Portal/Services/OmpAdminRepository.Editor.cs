@@ -114,6 +114,116 @@ ORDER BY m.ModuleKey, a.SortOrder, a.AppKey;";
         return rows;
     }
 
+    public async Task<ArtifactCompatibilitySlot> RequireCompatibleArtifactSlotAsync(
+        int appId,
+        string version,
+        string packageType,
+        string? targetName,
+        CancellationToken ct)
+    {
+        const string contextSql = @"
+SELECT TOP (1)
+       m.ModuleKey,
+       a.AppKey,
+       d.ModuleDefinitionDocumentId,
+       d.DefinitionVersion
+FROM omp.Apps a
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+LEFT JOIN omp.ModuleDefinitionDocuments d
+    ON d.ModuleKey = m.ModuleKey
+   AND d.IsApplied = 1
+WHERE a.AppId = @AppId
+  AND a.IsEnabled = 1
+  AND m.IsEnabled = 1
+ORDER BY d.AppliedUtc DESC, d.UpdatedUtc DESC, d.ModuleDefinitionDocumentId DESC;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        string moduleKey;
+        string appKey;
+        int? moduleDefinitionDocumentId;
+        string? definitionVersion;
+
+        await using (var context = new SqlCommand(contextSql, conn))
+        {
+            Add(context, "@AppId", appId);
+            await using var rdr = await context.ExecuteReaderAsync(ct);
+            if (!await rdr.ReadAsync(ct))
+            {
+                throw new InvalidOperationException("The selected app was not found.");
+            }
+
+            moduleKey = rdr.GetString(0);
+            appKey = rdr.GetString(1);
+            moduleDefinitionDocumentId = rdr.IsDBNull(2) ? null : rdr.GetInt32(2);
+            definitionVersion = rdr.IsDBNull(3) ? null : rdr.GetString(3);
+        }
+
+        if (moduleDefinitionDocumentId is null || string.IsNullOrWhiteSpace(definitionVersion))
+        {
+            throw new InvalidOperationException(
+                $"Module '{moduleKey}' has no applied module definition. Apply the module definition before importing artifacts for app '{appKey}'.");
+        }
+
+        const string slotSql = @"
+SELECT AppKey,
+       PackageType,
+       TargetName,
+       RelativePathTemplate,
+       MinArtifactVersion,
+       MaxArtifactVersion
+FROM omp.ModuleDefinitionArtifactCompatibility
+WHERE ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId
+  AND AppKey = @AppKey
+  AND PackageType = @PackageType
+  AND ((TargetName = @TargetName) OR (TargetName IS NULL AND @TargetName IS NULL))
+ORDER BY ModuleDefinitionArtifactCompatibilityId;";
+
+        var slots = new List<ArtifactCompatibilitySlot>();
+        await using (var slotCommand = new SqlCommand(slotSql, conn))
+        {
+            Add(slotCommand, "@ModuleDefinitionDocumentId", moduleDefinitionDocumentId.Value);
+            Add(slotCommand, "@AppKey", appKey);
+            Add(slotCommand, "@PackageType", packageType);
+            Add(slotCommand, "@TargetName", string.IsNullOrWhiteSpace(targetName) ? null : targetName.Trim());
+
+            await using var rdr = await slotCommand.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                slots.Add(
+                    new ArtifactCompatibilitySlot
+                    {
+                        ModuleKey = moduleKey,
+                        DefinitionVersion = definitionVersion,
+                        AppKey = rdr.GetString(0),
+                        PackageType = rdr.GetString(1),
+                        TargetName = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                        RelativePathTemplate = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                        MinArtifactVersion = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                        MaxArtifactVersion = rdr.IsDBNull(5) ? null : rdr.GetString(5)
+                    });
+            }
+        }
+
+        if (slots.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Module definition '{moduleKey}' version {definitionVersion} does not allow artifacts for app '{appKey}', package type '{packageType}', and target '{targetName}'.");
+        }
+
+        var compatible = slots.FirstOrDefault(slot =>
+            IsVersionInRange(version, slot.MinArtifactVersion, slot.MaxArtifactVersion));
+        if (compatible is null)
+        {
+            throw new InvalidOperationException(
+                $"Artifact version {version} is not compatible with module definition '{moduleKey}' version {definitionVersion}. " +
+                $"Allowed range: {FormatArtifactVersionRanges(slots)}.");
+        }
+
+        return compatible;
+    }
+
     // -------------------------------------------------------------------------
     // App worker-definition editing
     // -------------------------------------------------------------------------
@@ -2550,6 +2660,59 @@ WHERE ai.AppInstanceId = @AppInstanceId;";
         Add(cmd, "@Id", id);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(minVersion)
+            && CompareArtifactVersions(version, minVersion) < 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(maxVersion)
+            && CompareArtifactVersions(version, maxVersion) > 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int CompareArtifactVersions(string left, string right)
+    {
+        if (TryParseComparableVersion(left, out var leftVersion)
+            && TryParseComparableVersion(right, out var rightVersion))
+        {
+            return leftVersion.CompareTo(rightVersion);
+        }
+
+        return string.Compare(
+            left?.Trim(),
+            right?.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseComparableVersion(string? value, out Version version)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        var suffixIndex = text.IndexOfAny(['-', '+']);
+        if (suffixIndex >= 0)
+        {
+            text = text[..suffixIndex];
+        }
+
+        return Version.TryParse(text, out version!);
+    }
+
+    private static string FormatArtifactVersionRanges(IEnumerable<ArtifactCompatibilitySlot> slots)
+        => string.Join(
+            ", ",
+            slots.Select(slot =>
+            {
+                var min = string.IsNullOrWhiteSpace(slot.MinArtifactVersion) ? "*" : slot.MinArtifactVersion;
+                var max = string.IsNullOrWhiteSpace(slot.MaxArtifactVersion) ? "*" : slot.MaxArtifactVersion;
+                return $"{min}..{max}";
+            }));
 
     private static void Add(SqlCommand cmd, string name, object? value)
     {

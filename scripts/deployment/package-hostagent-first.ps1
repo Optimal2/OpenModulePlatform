@@ -464,6 +464,37 @@ foreach ($file in $sqlFiles) {
     Copy-RequiredFile -Source (Join-Path $RepositoryRoot $file.Source) -Destination (Join-Path $sqlRoot $file.Destination)
 }
 
+Write-Step 'Copying module definitions'
+$moduleDefinitionsSource = Join-Path $RepositoryRoot 'module-definitions'
+$moduleDefinitionsDestination = Join-Path $packageRoot 'module-definitions'
+if (Test-Path -LiteralPath $moduleDefinitionsSource) {
+    Copy-Item -LiteralPath $moduleDefinitionsSource -Destination $moduleDefinitionsDestination -Recurse -Force
+}
+New-Item -ItemType Directory -Path $moduleDefinitionsDestination -Force | Out-Null
+$additionalModuleDefinitionFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalModuleDefinitionFiles' -DefaultValue @()))
+foreach ($entry in $additionalModuleDefinitionFiles) {
+    $sourcePath = ''
+    $destinationName = ''
+    if ($entry -is [hashtable]) {
+        $sourcePath = [string]$entry.Source
+        $destinationName = [string]$entry.Destination
+    }
+    else {
+        $sourcePath = [string]$entry
+    }
+
+    if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+        continue
+    }
+
+    $resolvedSource = Resolve-DeploymentPath -Path $sourcePath -BasePath $configDirectory
+    if ([string]::IsNullOrWhiteSpace($destinationName)) {
+        $destinationName = [System.IO.Path]::GetFileName($resolvedSource)
+    }
+
+    Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $moduleDefinitionsDestination $destinationName)
+}
+
 $additionalSqlIncludes = @()
 $additionalSqlFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalSqlFiles' -DefaultValue @()))
 foreach ($entry in $additionalSqlFiles) {

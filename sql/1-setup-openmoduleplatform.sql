@@ -341,6 +341,7 @@ BEGIN
         AppKey nvarchar(100) NOT NULL,
         PackageType nvarchar(50) NOT NULL,
         TargetName nvarchar(100) NULL,
+        RelativePathTemplate nvarchar(400) NULL,
         MinArtifactVersion nvarchar(50) NULL,
         MaxArtifactVersion nvarchar(50) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleDefinitionArtifactCompatibility_CreatedUtc DEFAULT SYSUTCDATETIME(),
@@ -351,6 +352,13 @@ BEGIN
         CONSTRAINT UQ_omp_ModuleDefinitionArtifactCompatibility_Target
             UNIQUE(ModuleDefinitionDocumentId, AppKey, PackageType, TargetName)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.ModuleDefinitionArtifactCompatibility', N'RelativePathTemplate') IS NULL
+BEGIN
+    ALTER TABLE omp.ModuleDefinitionArtifactCompatibility
+        ADD RelativePathTemplate nvarchar(400) NULL;
 END
 GO
 
