@@ -1,0 +1,127 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "example_serviceapp",
+  "definitionVersion": "0.3.4",
+  "module": {
+    "displayName": "Example ServiceApp",
+    "moduleType": "HostAppModule",
+    "schemaName": "omp_example_serviceapp",
+    "description": "Combined web app and service app example for OpenModulePlatform.",
+    "sortOrder": 400,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "example_serviceapp_webapp",
+      "displayName": "Example ServiceApp",
+      "appType": "WebApp",
+      "description": "Web app definition for the example HostAppModule.",
+      "sortOrder": 400,
+      "isEnabled": true
+    },
+    {
+      "appKey": "example_serviceapp_service",
+      "displayName": "Example Service Worker",
+      "appType": "ServiceApp",
+      "description": "Service app definition for the example HostAppModule.",
+      "sortOrder": 401,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    { "appKey": "example_serviceapp_webapp", "packageType": "web-app", "targetName": "example-serviceapp-web", "minVersion": "0.3.4", "maxVersion": null },
+    { "appKey": "example_serviceapp_service", "packageType": "service-app", "targetName": "example-serviceapp-service", "minVersion": "0.3.3", "maxVersion": null }
+  ],
+  "sqlScripts": [
+    {
+      "key": "setup-example-serviceapp-schema",
+      "phase": "setup",
+      "scope": "module",
+      "order": 10,
+      "path": "examples/ServiceAppModule/Sql/1-setup-example-serviceapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-example-serviceapp-metadata",
+      "phase": "initialize",
+      "scope": "mixed",
+      "order": 20,
+      "path": "examples/ServiceAppModule/Sql/2-initialize-example-serviceapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from examples/ServiceAppModule/Sql/*.sql.",
+    "requiredSchemas": [
+      "omp_example_serviceapp"
+    ],
+    "requiredTables": [
+      { "schema": "omp_example_serviceapp", "name": "Configurations", "source": "examples/ServiceAppModule/Sql/1-setup-example-serviceapp.sql", "purpose": "Service example configuration history." },
+      { "schema": "omp_example_serviceapp", "name": "Jobs", "source": "examples/ServiceAppModule/Sql/1-setup-example-serviceapp.sql", "purpose": "Queued service work." },
+      { "schema": "omp_example_serviceapp", "name": "JobExecutions", "source": "examples/ServiceAppModule/Sql/1-setup-example-serviceapp.sql", "purpose": "Service job execution history." }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        { "name": "ExampleServiceAppModule.View" },
+        { "name": "ExampleServiceAppModule.Admin" }
+      ],
+      "rolePermissions": [
+        { "roleName": "PortalAdmins", "permissionName": "ExampleServiceAppModule.View", "scope": "example-bootstrap" },
+        { "roleName": "PortalAdmins", "permissionName": "ExampleServiceAppModule.Admin", "scope": "example-bootstrap" }
+      ],
+      "appPermissions": [
+        { "appKey": "example_serviceapp_webapp", "permissionName": "ExampleServiceAppModule.View", "requireAll": false }
+      ],
+      "modules": [
+        { "moduleKey": "example_serviceapp", "schemaName": "omp_example_serviceapp" }
+      ],
+      "apps": [
+        { "moduleKey": "example_serviceapp", "appKey": "example_serviceapp_webapp", "appType": "WebApp" },
+        { "moduleKey": "example_serviceapp", "appKey": "example_serviceapp_service", "appType": "ServiceApp" }
+      ],
+      "artifacts": [
+        { "appKey": "example_serviceapp_webapp", "packageType": "web-app", "targetName": "example-serviceapp-web", "relativePathTemplate": "example-serviceapp/web/{version}" },
+        { "appKey": "example_serviceapp_service", "packageType": "service-app", "targetName": "example-serviceapp-service", "relativePathTemplate": "example-serviceapp/service/{version}" }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "example_serviceapp", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        { "appInstanceKey": "example_serviceapp_webapp", "moduleInstanceKey": "example_serviceapp", "routePath": "ExampleServiceAppModule", "installationName": "webapp", "hostBinding": "host-bound-sample" },
+        { "appInstanceKey": "example_serviceapp_service", "moduleInstanceKey": "example_serviceapp", "installationName": "OpenModulePlatform.Service.ExampleServiceAppModule", "hostBinding": "host-bound-sample" }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "example_serviceapp", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        { "appInstanceKey": "example_serviceapp_webapp", "moduleInstanceKey": "example_serviceapp", "routePath": "ExampleServiceAppModule", "installationName": "webapp", "hostBinding": "host-bound-sample" },
+        { "appInstanceKey": "example_serviceapp_service", "moduleInstanceKey": "example_serviceapp", "installationName": "OpenModulePlatform.Service.ExampleServiceAppModule", "hostBinding": "host-bound-sample" }
+      ]
+    },
+    "requiredModuleRows": {
+      "configurationRows": [
+        { "table": "omp_example_serviceapp.Configurations", "versionNo": 0, "purpose": "Default example service configuration." }
+      ],
+      "portalEntries": [
+        { "entryKey": "example-serviceapp:app-instances", "targetUrl": "/ExampleServiceAppModule/appinstances" },
+        { "entryKey": "example-serviceapp:configurations", "targetUrl": "/ExampleServiceAppModule/configurations" },
+        { "entryKey": "example-serviceapp:jobs", "targetUrl": "/ExampleServiceAppModule/jobs" },
+        { "entryKey": "example-serviceapp:opendocviewer-demo", "targetUrl": "/ExampleServiceAppModule/opendocviewer-demo" }
+      ]
+    },
+    "excludedSeedData": [
+      {
+        "key": "sample service jobs",
+        "source": "examples/ServiceAppModule/Sql/2-initialize-example-serviceapp.sql",
+        "reason": "Seeded sample jobs are demonstration data and must not be recreated by integrity repair."
+      },
+      {
+        "key": "example identity placeholders",
+        "source": "examples/ServiceAppModule/Sql/2-initialize-example-serviceapp.sql",
+        "reason": "ExpectedLogin, host name, and IP placeholder values document the shape only and must be replaced by environment-specific values before real service use."
+      }
+    ]
+  }
+}

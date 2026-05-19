@@ -1,0 +1,121 @@
+{
+  "formatVersion": 1,
+  "definitionType": "platform-core",
+  "moduleKey": "omp_core",
+  "definitionVersion": "0.3.9",
+  "module": null,
+  "apps": [],
+  "compatibleArtifacts": [],
+  "sqlScripts": [
+    {
+      "key": "setup-core-schema",
+      "phase": "setup",
+      "scope": "omp",
+      "order": 10,
+      "path": "sql/1-setup-openmoduleplatform.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-core-baseline",
+      "phase": "initialize",
+      "scope": "omp",
+      "order": 20,
+      "path": "sql/2-initialize-openmoduleplatform.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from sql/1-setup-openmoduleplatform.sql and sql/2-initialize-openmoduleplatform.sql.",
+    "requiredSchemas": [
+      "omp"
+    ],
+    "requiredTables": [
+      { "schema": "omp", "name": "Permissions", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "RBAC permission definitions." },
+      { "schema": "omp", "name": "Roles", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "RBAC role definitions." },
+      { "schema": "omp", "name": "RolePermissions", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Role-to-permission grants." },
+      { "schema": "omp", "name": "RolePrincipals", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Role-to-principal bindings." },
+      { "schema": "omp", "name": "AuditLog", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Administrative audit history." },
+      { "schema": "omp", "name": "InstanceTemplates", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Desired-state template roots." },
+      { "schema": "omp", "name": "HostTemplates", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Reusable host template definitions." },
+      { "schema": "omp", "name": "Instances", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "OMP installation instances." },
+      { "schema": "omp", "name": "Hosts", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Runtime host records." },
+      { "schema": "omp", "name": "Modules", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Installed module definitions." },
+      { "schema": "omp", "name": "ModuleInstances", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Module instances inside an OMP instance." },
+      { "schema": "omp", "name": "Apps", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Application definitions owned by modules." },
+      { "schema": "omp", "name": "AppPermissions", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Permissions required by apps." },
+      { "schema": "omp", "name": "Artifacts", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Immutable deployable artifact records." },
+      { "schema": "omp", "name": "ArtifactConfigurationFiles", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Mutable config files generated beside artifacts." },
+      { "schema": "omp", "name": "AppInstances", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Actual deployed app instances." },
+      { "schema": "omp", "name": "AppWorkerDefinitions", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Worker plugin runtime metadata." },
+      { "schema": "omp", "name": "WorkerInstances", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Desired worker runtime rows." },
+      { "schema": "omp", "name": "InstanceTemplateHosts", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Desired template hosts." },
+      { "schema": "omp", "name": "InstanceTemplateModuleInstances", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Desired template module instances." },
+      { "schema": "omp", "name": "InstanceTemplateAppInstances", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Desired template app instances." },
+      { "schema": "omp", "name": "HostDeploymentAssignments", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Host-to-template assignments." },
+      { "schema": "omp", "name": "HostDeployments", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "HostAgent deployment history." },
+      { "schema": "omp", "name": "HostArtifactRequirements", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Additional host artifact requirements." },
+      { "schema": "omp", "name": "HostArtifactStates", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Host-local artifact state." },
+      { "schema": "omp", "name": "HostAppDeploymentStates", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Host-local app deployment state." },
+      { "schema": "omp", "name": "AppInstanceRuntimeStates", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Runtime heartbeat/state for app instances." },
+      { "schema": "omp", "name": "WorkerInstanceRuntimeStates", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Runtime heartbeat/state for worker instances." },
+      { "schema": "omp", "name": "users", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "OMP user identities." },
+      { "schema": "omp", "name": "auth_providers", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Authentication provider catalog." },
+      { "schema": "omp", "name": "user_auth", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "User-to-auth-provider links." },
+      { "schema": "omp", "name": "auth_provider_lpwd", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Local password credentials." },
+      { "schema": "omp", "name": "config_setting_definitions", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Allowed OMP configuration keys." },
+      { "schema": "omp", "name": "config_settings", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Scoped OMP configuration values." },
+      { "schema": "omp", "name": "ModuleDefinitionDocuments", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Versioned module definition documents." },
+      { "schema": "omp", "name": "ModuleDefinitionArtifactCompatibility", "source": "sql/1-setup-openmoduleplatform.sql", "purpose": "Queryable module-definition artifact compatibility." }
+    ],
+    "requiredOmpRows": {
+      "roles": [
+        { "name": "PortalAdmins", "description": "Administrative bootstrap role for OMP modules and portal." },
+        { "name": "Everyone", "description": "Built-in baseline role available to every signed-in OMP principal." },
+        { "name": "AuthenticatedUsers", "description": "Built-in baseline role for authenticated OMP users." }
+      ],
+      "rolePrincipals": [
+        { "roleName": "Everyone", "principalType": "OMPSystem", "principal": "Everyone" },
+        { "roleName": "AuthenticatedUsers", "principalType": "OMPSystem", "principal": "AuthenticatedUsers" }
+      ],
+      "authProviders": [
+        { "displayName": "AD", "isEnabled": true },
+        { "displayName": "lpwd", "isEnabled": true }
+      ],
+      "configSettingDefinitions": [
+        { "configCategory": "branding", "configSetting": "platformName" },
+        { "configCategory": "branding", "configSetting": "portalName" },
+        { "configCategory": "rbac", "configSetting": "authenticatedUsersWindowsDomains" }
+      ],
+      "instanceTemplates": [
+        { "templateKey": "default", "source": "sql/2-initialize-openmoduleplatform.sql" }
+      ],
+      "hostTemplates": [
+        { "templateKey": "default-host", "source": "sql/2-initialize-openmoduleplatform.sql" }
+      ],
+      "instances": [
+        { "instanceKey": "default", "source": "sql/2-initialize-openmoduleplatform.sql" }
+      ],
+      "bootstrapRequirements": [
+        {
+          "name": "PortalAdmins principal",
+          "description": "At least one environment-specific ADUser or ADGroup principal must be bound to PortalAdmins during bootstrap."
+        }
+      ]
+    },
+    "requiredModuleRows": {},
+    "excludedSeedData": [
+      {
+        "key": "sample-host",
+        "source": "sql/2-initialize-openmoduleplatform.sql",
+        "reason": "The seeded sample host is a local bootstrap placeholder. Production/test installations should replace it with real host rows instead of treating sample-host as an integrity requirement."
+      },
+      {
+        "key": "default branding values",
+        "source": "sql/2-initialize-openmoduleplatform.sql",
+        "reason": "Default branding values are only inserted when no installation-specific value exists and must not overwrite customer configuration during repair."
+      }
+    ]
+  }
+}

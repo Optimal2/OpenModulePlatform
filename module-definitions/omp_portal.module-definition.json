@@ -66,5 +66,104 @@
       "execution": "idempotent",
       "inlineSql": null
     }
-  ]
+  ],
+  "integrity": {
+    "source": "Derived from OpenModulePlatform.Portal/sql/*.sql.",
+    "requiredSchemas": [
+      "omp_portal"
+    ],
+    "requiredTables": [
+      { "schema": "omp_portal", "name": "user_setting_definitions", "source": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql", "purpose": "Allowed Portal user preference keys." },
+      { "schema": "omp_portal", "name": "user_setting_int_values", "source": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql", "purpose": "Per-user numeric and boolean Portal preferences." },
+      { "schema": "omp_portal", "name": "user_setting_string_values", "source": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql", "purpose": "Per-user string Portal preferences." },
+      { "schema": "omp_portal", "name": "user_navigation_favorites", "source": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql", "purpose": "Per-user favorite Portal navigation entries." },
+      { "schema": "omp_portal", "name": "portal_entries", "source": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql", "purpose": "Global Portal navigation entry catalog." },
+      { "schema": "omp_portal", "name": "portal_user_entry_state", "source": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql", "purpose": "Per-user Portal entry pin/hide/sort state." }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        { "name": "OMP.Portal.View", "description": "Read access to the OMP Portal." },
+        { "name": "OMP.Portal.Admin", "description": "Administrative access to the OMP Portal." }
+      ],
+      "rolePermissions": [
+        { "roleName": "PortalAdmins", "permissionName": "OMP.Portal.View", "scope": "bootstrap-default-admin" },
+        { "roleName": "PortalAdmins", "permissionName": "OMP.Portal.Admin", "scope": "bootstrap-default-admin" }
+      ],
+      "modules": [
+        { "moduleKey": "omp_portal", "schemaName": "omp_portal" }
+      ],
+      "apps": [
+        { "moduleKey": "omp_portal", "appKey": "omp_portal", "appType": "Portal" }
+      ],
+      "artifacts": [
+        {
+          "appKey": "omp_portal",
+          "packageType": "web-app",
+          "targetName": "omp-portal",
+          "relativePathTemplate": "omp-portal/web/{version}"
+        }
+      ],
+      "artifactConfigurationFiles": [
+        {
+          "appKey": "omp_portal",
+          "packageType": "web-app",
+          "targetName": "omp-portal",
+          "relativePath": "appsettings.json",
+          "purpose": "HostAgent-generated Portal appsettings with OMP connection string, auth, topbar, and artifact upload settings."
+        }
+      ],
+      "appPermissions": [
+        { "appKey": "omp_portal", "permissionName": "OMP.Portal.View", "requireAll": false }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "omp_portal", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        {
+          "appInstanceKey": "omp_portal",
+          "moduleInstanceKey": "omp_portal",
+          "routePath": "",
+          "installationName": "portal",
+          "hostBinding": "host-neutral"
+        }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "omp_portal", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        {
+          "appInstanceKey": "omp_portal",
+          "moduleInstanceKey": "omp_portal",
+          "routePath": "",
+          "installationName": "portal",
+          "hostBinding": "host-neutral"
+        }
+      ]
+    },
+    "requiredModuleRows": {
+      "userSettingDefinitions": [
+        { "settingCategory": "Portal", "settingName": "AdminMetricsCollapsed", "valueKind": "int", "defaultIntValue": 0 },
+        { "settingCategory": "Portal", "settingName": "TopbarDropdownsOpenOnHover", "valueKind": "int", "defaultIntValue": 1 }
+      ],
+      "portalEntries": [
+        { "entryKey": "portal:admin-overview", "targetUrl": "/admin/overview" },
+        { "entryKey": "portal:admin-portal-entries", "targetUrl": "/admin/portalentries" },
+        { "entryKey": "portal:admin-users", "targetUrl": "/admin/users" },
+        { "entryKey": "portal:admin-security", "targetUrl": "/admin/security" },
+        { "entryKey": "portal:admin-config-settings", "targetUrl": "/admin/configsettings" }
+      ]
+    },
+    "excludedSeedData": [
+      {
+        "key": "dynamic app home entries",
+        "source": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql and 3-sync-omp-portal-entries.sql",
+        "reason": "Home entries are derived from currently enabled Portal/WebApp app instances, not fixed rows that should be repaired by literal key."
+      },
+      {
+        "key": "module-specific child portal entries",
+        "source": "OpenModulePlatform.Portal/sql/3-sync-omp-portal-entries.sql",
+        "reason": "Child entries for content and example modules are documented on their owning module definitions."
+      }
+    ]
+  }
 }

@@ -1,0 +1,110 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "example_webapp_blazor",
+  "definitionVersion": "0.3.4",
+  "module": {
+    "displayName": "Example WebApp Blazor Module",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp_example_webapp_blazor",
+    "description": "Blazor Server web-only example module for OpenModulePlatform.",
+    "sortOrder": 310,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "example_webapp_blazor_webapp",
+      "displayName": "Example WebApp Blazor Module",
+      "appType": "WebApp",
+      "description": "Web app definition for the Blazor web-only example module.",
+      "sortOrder": 310,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "example_webapp_blazor_webapp",
+      "packageType": "web-app",
+      "targetName": "example-webapp-blazor",
+      "minVersion": "0.3.4",
+      "maxVersion": null
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "setup-example-webapp-blazor-schema",
+      "phase": "setup",
+      "scope": "module",
+      "order": 10,
+      "path": "examples/WebAppBlazorModule/Sql/1-setup-example-webapp-blazor.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-example-webapp-blazor-metadata",
+      "phase": "initialize",
+      "scope": "mixed",
+      "order": 20,
+      "path": "examples/WebAppBlazorModule/Sql/2-initialize-example-webapp-blazor.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from examples/WebAppBlazorModule/Sql/*.sql.",
+    "requiredSchemas": [
+      "omp_example_webapp_blazor"
+    ],
+    "requiredTables": [
+      { "schema": "omp_example_webapp_blazor", "name": "Configurations", "source": "examples/WebAppBlazorModule/Sql/1-setup-example-webapp-blazor.sql", "purpose": "Example Blazor module configuration history." }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        { "name": "ExampleWebAppBlazorModule.View" },
+        { "name": "ExampleWebAppBlazorModule.Admin" }
+      ],
+      "rolePermissions": [
+        { "roleName": "PortalAdmins", "permissionName": "ExampleWebAppBlazorModule.View", "scope": "example-bootstrap" },
+        { "roleName": "PortalAdmins", "permissionName": "ExampleWebAppBlazorModule.Admin", "scope": "example-bootstrap" }
+      ],
+      "appPermissions": [
+        { "appKey": "example_webapp_blazor_webapp", "permissionName": "ExampleWebAppBlazorModule.View", "requireAll": false }
+      ],
+      "modules": [
+        { "moduleKey": "example_webapp_blazor", "schemaName": "omp_example_webapp_blazor" }
+      ],
+      "apps": [
+        { "moduleKey": "example_webapp_blazor", "appKey": "example_webapp_blazor_webapp", "appType": "WebApp" }
+      ],
+      "artifacts": [
+        { "appKey": "example_webapp_blazor_webapp", "packageType": "web-app", "targetName": "example-webapp-blazor", "relativePathTemplate": "example-webapp-blazor/web/{version}" }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "example_webapp_blazor", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        { "appInstanceKey": "example_webapp_blazor_webapp", "moduleInstanceKey": "example_webapp_blazor", "routePath": "ExampleWebAppBlazorModule", "installationName": "webapp", "hostBinding": "host-bound-sample" }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "example_webapp_blazor", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        { "appInstanceKey": "example_webapp_blazor_webapp", "moduleInstanceKey": "example_webapp_blazor", "routePath": "ExampleWebAppBlazorModule", "installationName": "webapp", "hostBinding": "host-bound-sample" }
+      ]
+    },
+    "requiredModuleRows": {
+      "configurationRows": [
+        { "table": "omp_example_webapp_blazor.Configurations", "versionNo": 0, "purpose": "Default example Blazor web configuration." }
+      ],
+      "portalEntries": [
+        { "entryKey": "example-webapp-blazor:configurations", "targetUrl": "/ExampleWebAppBlazorModule/configurations" },
+        { "entryKey": "example-webapp-blazor:opendocviewer-demo", "targetUrl": "/ExampleWebAppBlazorModule/opendocviewer-demo" }
+      ]
+    },
+    "excludedSeedData": [
+      {
+        "key": "example module installation",
+        "reason": "Example modules are optional. Their integrity contract applies only when examples are intentionally installed."
+      }
+    ]
+  }
+}
