@@ -13,6 +13,9 @@ own `version`, and that value is the version that belongs in
 - `repositoryKey` identifies the source repository.
 - `repositoryVersion` is an optional coordinated release version for the whole
   repository.
+- `moduleDefinitions` optionally lists versioned module definition documents
+  included in the repository. These are database/metadata contracts, not
+  deployable artifact zips.
 - `componentKey` is the stable key used by scripts and release tooling.
 - `moduleKey`, `appKey`, `packageType`, and `targetName` identify the OMP
   artifact target.

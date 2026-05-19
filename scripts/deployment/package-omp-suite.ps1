@@ -331,6 +331,7 @@ $sqlFiles = @(
     @{ Source = 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\1-setup-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\2-initialize-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\3-sync-omp-portal-entries.sql'; Destination = 'OpenModulePlatform.Portal\3-sync-omp-portal-entries.sql' },
+    @{ Source = 'OpenModulePlatform.Portal\sql\4-ensure-topbar-hover-user-setting.sql'; Destination = 'OpenModulePlatform.Portal\4-ensure-topbar-hover-user-setting.sql' },
     @{ Source = 'examples\WebAppModule\Sql\1-setup-example-webapp.sql'; Destination = 'examples\WebAppModule\1-setup-example-webapp.sql' },
     @{ Source = 'examples\WebAppModule\Sql\2-initialize-example-webapp.sql'; Destination = 'examples\WebAppModule\2-initialize-example-webapp.sql' },
     @{ Source = 'examples\WebAppBlazorModule\Sql\1-setup-example-webapp-blazor.sql'; Destination = 'examples\WebAppBlazorModule\1-setup-example-webapp-blazor.sql' },

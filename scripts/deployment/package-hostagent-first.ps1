@@ -444,6 +444,7 @@ $sqlFiles = @(
     @{ Source = 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\1-setup-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\2-initialize-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\3-sync-omp-portal-entries.sql'; Destination = 'OpenModulePlatform.Portal\3-sync-omp-portal-entries.sql' },
+    @{ Source = 'OpenModulePlatform.Portal\sql\4-ensure-topbar-hover-user-setting.sql'; Destination = 'OpenModulePlatform.Portal\4-ensure-topbar-hover-user-setting.sql' },
     @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\1-setup-content-webapp.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql' },
     @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\2-initialize-content-webapp.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\2-initialize-content-webapp.sql' },
     @{ Source = 'OpenModulePlatform.Web.ContentWebAppModule\Sql\3-add-server-report-support.sql'; Destination = 'OpenModulePlatform.Web.ContentWebAppModule\3-add-server-report-support.sql' },

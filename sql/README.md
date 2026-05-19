@@ -102,3 +102,10 @@ Portal user preferences are intentionally row-based. The Portal schema uses:
 Default values should normally live on the definition row. User value tables
 should store only values that differ from the default, so common defaults do not
 create unnecessary rows for every OMP user.
+
+## Module definition documents
+
+`omp.ModuleDefinitionDocuments` stores versioned JSON documents that describe a
+module's metadata and SQL contract. `omp.ModuleDefinitionArtifactCompatibility`
+stores queryable app/package/version compatibility extracted from those
+documents. See `docs/MODULE_DEFINITIONS.md`.
