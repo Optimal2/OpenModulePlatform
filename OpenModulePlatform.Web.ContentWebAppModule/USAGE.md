@@ -137,6 +137,12 @@ When running several web servers behind a load balancer, set both
 `ServerReportsPath` and `HtmlFilesPath` to shared absolute paths so every server
 loads the same JSON and HTML files.
 
+For HostAgent-managed installations, prefer keeping `ServerReportsPath` and
+`HtmlFilesPath` as local `App_Data` folders and configure HostAgent file mirrors
+from the shared source folder into those local folders. This keeps the Content
+app fast and local at runtime, while editors can still maintain one common copy
+of the HTML and JSON files.
+
 Deployments may either keep files in separate folders:
 
 ```text
@@ -154,6 +160,40 @@ When `ServerReportsPath` ends with `Data\ContentReports` or `HtmlFilesPath`
 ends with `Data\ContentPages`, the Content app also searches the parent `Data`
 folder. This supports a simple shared folder layout without changing existing
 subfolder-based configurations.
+
+## HostAgent File Mirror Flow
+
+Use this flow when Content files should be shared by several web servers or kept
+outside the web-app artifact:
+
+1. Put report JSON files in a shared `ContentReports` folder.
+2. Put HTML files in a shared `ContentPages` folder.
+3. Configure HostAgent `FileMirrors` to copy those folders to the local Content
+   web app `App_Data` folders.
+4. Open `/content/admin` and use `Load content files` to create missing content
+   rows for the discovered files.
+
+The local development equivalent uses the same layout with ordinary local
+folders, for example:
+
+```text
+E:\OMP\Data\ContentReports -> E:\OMP\WebApps\content\App_Data\ContentReports
+E:\OMP\Data\ContentPages   -> E:\OMP\WebApps\content\App_Data\ContentPages
+```
+
+Another developer machine should use its own equivalent runtime root and Windows
+account values. The public OMP repository should only contain neutral defaults;
+private installer packages can carry machine- or environment-specific values.
+
+For a local smoke test, the repository includes a development helper:
+
+```powershell
+.\scripts\dev\seed-content-webapp-test-pages.ps1 -RunHostAgentOnce
+```
+
+The script writes one report JSON file, one HTML file, configures the local
+HostAgent file mirrors, runs HostAgent once, and creates one Content page of
+each supported type: Markdown, inline HTML, HTML file, and server report.
 
 Report keys map directly to JSON filenames:
 
