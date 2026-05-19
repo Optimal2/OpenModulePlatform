@@ -1,5 +1,10 @@
 // File: OpenModulePlatform.Portal/Services/OmpAdminRepository.Editor.cs
 using System.Data;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Portal.Models;
 
@@ -1751,6 +1756,203 @@ WHERE ModuleKey = @ModuleKey;";
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ModuleDefinitionSqlCheckRow>> GetModuleDefinitionSqlChecksAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        var definition = await GetModuleDefinitionDocumentAsync(moduleDefinitionDocumentId, ct)
+            ?? throw new InvalidOperationException("Module definition document was not found.");
+        if (string.IsNullOrWhiteSpace(definition.DefinitionJson))
+        {
+            return [];
+        }
+
+        var scripts = ReadPortableSqlScripts(definition.DefinitionJson);
+        if (scripts.Count == 0)
+        {
+            return [];
+        }
+
+        var requiredObjects = ReadRequiredDatabaseObjects(definition.DefinitionJson);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var missingByScriptKey = await GetMissingRequiredObjectsByScriptKeyAsync(
+            conn,
+            scripts,
+            requiredObjects,
+            ct);
+        var latestExecutions = await GetLatestModuleDefinitionSqlExecutionsAsync(
+            conn,
+            moduleDefinitionDocumentId,
+            ct);
+
+        var rows = new List<ModuleDefinitionSqlCheckRow>(scripts.Count);
+        foreach (var script in scripts.OrderBy(static item => item.Order).ThenBy(static item => item.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var sqlText = ResolvePortableSqlText(script);
+            var scriptSha256 = ComputeTextSha256(sqlText ?? string.Empty);
+            var suppliedSha256 = NullIfWhiteSpace(script.Sha256);
+            var hasInlineSql = !string.IsNullOrWhiteSpace(sqlText);
+            var hashMatches = suppliedSha256 is null || string.Equals(suppliedSha256, scriptSha256, StringComparison.OrdinalIgnoreCase);
+            var isIdempotent = string.Equals(script.Execution, "idempotent", StringComparison.OrdinalIgnoreCase);
+            var safety = hasInlineSql ? ValidateSafeModuleDefinitionSql(sqlText!) : "The script has no embedded SQL content.";
+            var isSafe = safety is null;
+            var latest = latestExecutions.GetValueOrDefault((script.Key, scriptSha256));
+            var missing = missingByScriptKey.GetValueOrDefault(script.Key) ?? [];
+            var hasSuccessfulExecution = string.Equals(latest?.Status, "Succeeded", StringComparison.OrdinalIgnoreCase);
+
+            string status;
+            string message;
+            var needsExecution = false;
+            if (!hasInlineSql)
+            {
+                status = "Not executable";
+                message = "The module definition only references an external SQL file. Embed SQL content before Portal can execute repairs.";
+            }
+            else if (!hashMatches)
+            {
+                status = "Invalid content hash";
+                message = "The embedded SQL content does not match the declared SHA-256 hash.";
+            }
+            else if (!isIdempotent)
+            {
+                status = "Blocked";
+                message = "Only idempotent module definition SQL scripts can be executed from Portal.";
+            }
+            else if (!isSafe)
+            {
+                status = "Blocked";
+                message = safety!;
+            }
+            else if (missing.Count > 0)
+            {
+                status = "Needs repair";
+                message = "One or more required database objects for this script are missing.";
+                needsExecution = true;
+            }
+            else if (string.Equals(latest?.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+            {
+                status = "Failed";
+                message = latest?.ErrorMessage ?? "The last execution failed.";
+                needsExecution = true;
+            }
+            else if (!hasSuccessfulExecution)
+            {
+                status = "Not recorded";
+                message = "No successful execution has been recorded for this script content.";
+                needsExecution = true;
+            }
+            else
+            {
+                status = "OK";
+                message = "The script content has a successful execution record and declared objects are present.";
+            }
+
+            rows.Add(new ModuleDefinitionSqlCheckRow
+            {
+                Key = script.Key,
+                Phase = script.Phase,
+                Scope = script.Scope,
+                Order = script.Order,
+                Execution = script.Execution,
+                Path = script.Path,
+                Source = script.Source,
+                ScriptSha256 = scriptSha256,
+                HasInlineSql = hasInlineSql,
+                IsSafe = isSafe && isIdempotent && hashMatches,
+                HasSuccessfulExecution = hasSuccessfulExecution,
+                NeedsExecution = needsExecution,
+                CanExecute = needsExecution && hasInlineSql && isSafe && isIdempotent && hashMatches,
+                Status = status,
+                StatusMessage = message,
+                LastCompletedUtc = latest?.CompletedUtc,
+                LastExecutionStatus = latest?.Status,
+                LastErrorMessage = latest?.ErrorMessage,
+                MissingRequiredObjects = missing
+            });
+        }
+
+        return rows;
+    }
+
+    public async Task<ModuleDefinitionSqlRepairResult> ExecuteModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        var definition = await GetModuleDefinitionDocumentAsync(moduleDefinitionDocumentId, ct)
+            ?? throw new InvalidOperationException("Module definition document was not found.");
+        if (string.IsNullOrWhiteSpace(definition.DefinitionJson))
+        {
+            return new ModuleDefinitionSqlRepairResult();
+        }
+
+        var scripts = ReadPortableSqlScripts(definition.DefinitionJson)
+            .OrderBy(static item => item.Order)
+            .ThenBy(static item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var checks = await GetModuleDefinitionSqlChecksAsync(moduleDefinitionDocumentId, ct);
+        var repairableKeys = checks
+            .Where(static item => item.NeedsExecution && item.CanExecute)
+            .Select(static item => item.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (repairableKeys.Count == 0)
+        {
+            return new ModuleDefinitionSqlRepairResult
+            {
+                RemainingProblems = checks.Where(static item => item.NeedsExecution).ToList()
+            };
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
+
+        var executed = 0;
+        foreach (var script in scripts.Where(script => repairableKeys.Contains(script.Key)))
+        {
+            var sqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(sqlText))
+            {
+                continue;
+            }
+
+            var scriptSha256 = ComputeTextSha256(sqlText);
+            var safety = ValidateSafeModuleDefinitionSql(sqlText);
+            if (safety is not null)
+            {
+                throw new InvalidOperationException($"Script '{script.Key}' was blocked: {safety}");
+            }
+
+            var executionId = await InsertModuleDefinitionSqlExecutionAsync(
+                conn,
+                moduleDefinitionDocumentId,
+                script,
+                scriptSha256,
+                ct);
+
+            try
+            {
+                await ExecuteSqlBatchesAsync(conn, sqlText, ct);
+                await CompleteModuleDefinitionSqlExecutionAsync(conn, executionId, "Succeeded", null, ct);
+                executed++;
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+            {
+                await CompleteModuleDefinitionSqlExecutionAsync(conn, executionId, "Failed", ex.Message, ct);
+                throw new InvalidOperationException($"Module definition SQL script '{script.Key}' failed: {ex.Message}", ex);
+            }
+        }
+
+        var refreshed = await GetModuleDefinitionSqlChecksAsync(moduleDefinitionDocumentId, ct);
+        return new ModuleDefinitionSqlRepairResult
+        {
+            ExecutedCount = executed,
+            RemainingProblems = refreshed.Where(static item => item.NeedsExecution).ToList()
+        };
+    }
+
     public async Task<ArtifactConfigurationFileEditData?> GetArtifactConfigurationFileAsync(
         int artifactConfigurationFileId,
         CancellationToken ct)
@@ -3071,6 +3273,440 @@ VALUES
                 var max = string.IsNullOrWhiteSpace(slot.MaxArtifactVersion) ? "*" : slot.MaxArtifactVersion;
                 return $"{min}..{max}";
             }));
+
+    private static IReadOnlyList<PortableModuleDefinitionSqlScript> ReadPortableSqlScripts(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson);
+        if (root?["sqlScripts"] is not JsonArray items)
+        {
+            return [];
+        }
+
+        var scripts = new List<PortableModuleDefinitionSqlScript>();
+        foreach (var item in items)
+        {
+            if (item is not JsonObject obj)
+            {
+                continue;
+            }
+
+            var key = GetJsonString(obj, "key");
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            scripts.Add(new PortableModuleDefinitionSqlScript(
+                key,
+                GetJsonString(obj, "phase", "setup"),
+                GetJsonString(obj, "scope", "module"),
+                GetJsonInt(obj, "order", 0),
+                GetJsonString(obj, "execution", "idempotent"),
+                NullIfWhiteSpace(GetJsonString(obj, "path")),
+                NullIfWhiteSpace(GetJsonString(obj, "source")),
+                NullIfWhiteSpace(GetJsonString(obj, "inlineSql")),
+                NullIfWhiteSpace(GetJsonString(obj, "contentEncoding")),
+                NullIfWhiteSpace(GetJsonString(obj, "content")),
+                NullIfWhiteSpace(GetJsonString(obj, "sha256"))));
+        }
+
+        return scripts;
+    }
+
+    private static IReadOnlyList<RequiredDatabaseObject> ReadRequiredDatabaseObjects(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson);
+        var integrity = root?["integrity"] as JsonObject;
+        if (integrity is null)
+        {
+            return [];
+        }
+
+        var required = new List<RequiredDatabaseObject>();
+        if (integrity["requiredSchemas"] is JsonArray schemas)
+        {
+            foreach (var item in schemas)
+            {
+                var schema = item?.GetValue<string>();
+                if (!string.IsNullOrWhiteSpace(schema))
+                {
+                    required.Add(new RequiredDatabaseObject("schema", schema.Trim(), null, null));
+                }
+            }
+        }
+
+        if (integrity["requiredTables"] is JsonArray tables)
+        {
+            foreach (var item in tables.OfType<JsonObject>())
+            {
+                var schema = GetJsonString(item, "schema");
+                var name = GetJsonString(item, "name");
+                if (!string.IsNullOrWhiteSpace(schema) && !string.IsNullOrWhiteSpace(name))
+                {
+                    required.Add(new RequiredDatabaseObject(
+                        "table",
+                        schema,
+                        name,
+                        NullIfWhiteSpace(GetJsonString(item, "source"))));
+                }
+            }
+        }
+
+        return required;
+    }
+
+    private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)
+    {
+        if (!string.IsNullOrWhiteSpace(script.InlineSql))
+        {
+            return script.InlineSql;
+        }
+
+        if (string.IsNullOrWhiteSpace(script.Content))
+        {
+            return null;
+        }
+
+        if (string.Equals(script.ContentEncoding, "base64-utf8", StringComparison.OrdinalIgnoreCase))
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(script.Content));
+        }
+
+        return script.Content;
+    }
+
+    private static async Task<Dictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
+        SqlConnection conn,
+        IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
+        IReadOnlyList<RequiredDatabaseObject> requiredObjects,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var fallbackScript = scripts
+            .OrderBy(static item => string.Equals(item.Phase, "setup", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(static item => item.Order)
+            .FirstOrDefault();
+
+        foreach (var required in requiredObjects)
+        {
+            var exists = required.Kind switch
+            {
+                "schema" => await SchemaExistsAsync(conn, required.Schema, ct),
+                "table" when required.Name is not null => await TableExistsAsync(conn, required.Schema, required.Name, ct),
+                _ => true
+            };
+            if (exists)
+            {
+                continue;
+            }
+
+            var owningScript = scripts.FirstOrDefault(script => RequiredObjectMatchesScriptSource(required, script))
+                ?? fallbackScript;
+            if (owningScript is null)
+            {
+                continue;
+            }
+
+            var list = result.GetValueOrDefault(owningScript.Key);
+            if (list is null)
+            {
+                list = [];
+                result[owningScript.Key] = list;
+            }
+
+            list.Add(required.Kind == "schema"
+                ? $"schema {required.Schema}"
+                : $"table {required.Schema}.{required.Name}");
+        }
+
+        return result.ToDictionary(
+            static item => item.Key,
+            static item => (IReadOnlyList<string>)item.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static async Task<bool> SchemaExistsAsync(SqlConnection conn, string schema, CancellationToken ct)
+    {
+        const string sql = "SELECT 1 FROM sys.schemas WHERE name = @schema;";
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static async Task<bool> TableExistsAsync(SqlConnection conn, string schema, string table, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT 1
+FROM sys.tables t
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+WHERE s.name = @schema
+  AND t.name = @table;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        Add(cmd, "@table", table);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static bool RequiredObjectMatchesScriptSource(
+        RequiredDatabaseObject required,
+        PortableModuleDefinitionSqlScript script)
+    {
+        if (string.IsNullOrWhiteSpace(required.Source))
+        {
+            return false;
+        }
+
+        return string.Equals(required.Source, script.Path, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(required.Source, script.Source, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(required.Source, script.Key, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<Dictionary<(string ScriptKey, string ScriptSha256), ModuleDefinitionSqlExecutionInfo>> GetLatestModuleDefinitionSqlExecutionsAsync(
+        SqlConnection conn,
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+WITH Latest AS
+(
+    SELECT ScriptKey,
+           ScriptSha256,
+           ExecutionStatus,
+           CompletedUtc,
+           ErrorMessage,
+           ROW_NUMBER() OVER
+           (
+               PARTITION BY ScriptKey, ScriptSha256
+               ORDER BY StartedUtc DESC, ModuleDefinitionSqlExecutionId DESC
+           ) AS RowNumber
+    FROM omp.ModuleDefinitionSqlExecutions
+    WHERE ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId
+)
+SELECT ScriptKey,
+       ScriptSha256,
+       ExecutionStatus,
+       CompletedUtc,
+       ErrorMessage
+FROM Latest
+WHERE RowNumber = 1;";
+
+        var executions = new Dictionary<(string ScriptKey, string ScriptSha256), ModuleDefinitionSqlExecutionInfo>();
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ModuleDefinitionDocumentId", moduleDefinitionDocumentId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            executions[(rdr.GetString(0), rdr.GetString(1))] = new ModuleDefinitionSqlExecutionInfo(
+                rdr.GetString(2),
+                rdr.IsDBNull(3) ? null : rdr.GetDateTime(3),
+                rdr.IsDBNull(4) ? null : rdr.GetString(4));
+        }
+
+        return executions;
+    }
+
+    private static async Task AcquireModuleDefinitionSqlExecutionLockAsync(SqlConnection conn, CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @Result int;
+EXEC @Result = sys.sp_getapplock
+    @Resource = N'omp.module-definition-sql-repair',
+    @LockMode = N'Exclusive',
+    @LockOwner = N'Session',
+    @LockTimeout = 0;
+SELECT @Result;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        var result = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        if (result < 0)
+        {
+            throw new InvalidOperationException("Another module definition SQL repair is already running.");
+        }
+    }
+
+    private static async Task<long> InsertModuleDefinitionSqlExecutionAsync(
+        SqlConnection conn,
+        int moduleDefinitionDocumentId,
+        PortableModuleDefinitionSqlScript script,
+        string scriptSha256,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.ModuleDefinitionSqlExecutions
+(
+    ModuleDefinitionDocumentId,
+    ScriptKey,
+    ScriptPhase,
+    ScriptOrder,
+    ScriptSha256,
+    ExecutionStatus
+)
+VALUES
+(
+    @ModuleDefinitionDocumentId,
+    @ScriptKey,
+    @ScriptPhase,
+    @ScriptOrder,
+    @ScriptSha256,
+    N'Running'
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ModuleDefinitionDocumentId", moduleDefinitionDocumentId);
+        Add(cmd, "@ScriptKey", script.Key);
+        Add(cmd, "@ScriptPhase", script.Phase);
+        Add(cmd, "@ScriptOrder", script.Order);
+        Add(cmd, "@ScriptSha256", scriptSha256);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task CompleteModuleDefinitionSqlExecutionAsync(
+        SqlConnection conn,
+        long executionId,
+        string status,
+        string? errorMessage,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.ModuleDefinitionSqlExecutions
+SET ExecutionStatus = @ExecutionStatus,
+    CompletedUtc = SYSUTCDATETIME(),
+    ErrorMessage = @ErrorMessage
+WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ModuleDefinitionSqlExecutionId", executionId);
+        Add(cmd, "@ExecutionStatus", status);
+        Add(cmd, "@ErrorMessage", Truncate(errorMessage, 4000));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ExecuteSqlBatchesAsync(SqlConnection conn, string sqlText, CancellationToken ct)
+    {
+        foreach (var batch in SplitSqlBatches(sqlText))
+        {
+            if (string.IsNullOrWhiteSpace(batch))
+            {
+                continue;
+            }
+
+            await using var cmd = new SqlCommand(batch, conn)
+            {
+                CommandTimeout = 3600
+            };
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static IEnumerable<string> SplitSqlBatches(string sqlText)
+    {
+        var batch = new StringBuilder();
+        using var reader = new StringReader(sqlText);
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (Regex.IsMatch(line, @"^\s*GO\s*(?:--.*)?$", RegexOptions.IgnoreCase))
+            {
+                yield return batch.ToString();
+                batch.Clear();
+                continue;
+            }
+
+            batch.AppendLine(line);
+        }
+
+        yield return batch.ToString();
+    }
+
+    private static string? ValidateSafeModuleDefinitionSql(string sqlText)
+    {
+        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b"))
+        {
+            return "The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE, which is not allowed for Portal repair.";
+        }
+
+        if (Regex.IsMatch(sqlText, @"(?is)\bTRUNCATE\s+TABLE\b"))
+        {
+            return "The script contains TRUNCATE TABLE, which is not allowed for Portal repair.";
+        }
+
+        foreach (Match match in Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)"))
+        {
+            var statement = match.Groups["statement"].Value;
+            if (!Regex.IsMatch(statement, @"(?is)\bWHERE\b"))
+            {
+                return "The script contains DELETE FROM without a WHERE clause, which is not allowed for Portal repair.";
+            }
+        }
+
+        return null;
+    }
+
+    private static string ComputeTextSha256(string text)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    private static string? Truncate(string? value, int maxLength)
+        => value is not null && value.Length > maxLength ? value[..maxLength] : value;
+
+    private static string GetJsonString(JsonObject obj, string propertyName, string defaultValue = "")
+    {
+        if (!obj.TryGetPropertyValue(propertyName, out var node) || node is null)
+        {
+            return defaultValue;
+        }
+
+        return node is JsonValue value && value.TryGetValue<string>(out var text)
+            ? text.Trim()
+            : defaultValue;
+    }
+
+    private static int GetJsonInt(JsonObject obj, string propertyName, int defaultValue)
+    {
+        if (!obj.TryGetPropertyValue(propertyName, out var node) || node is not JsonValue value)
+        {
+            return defaultValue;
+        }
+
+        if (value.TryGetValue<int>(out var number))
+        {
+            return number;
+        }
+
+        return value.TryGetValue<string>(out var text)
+            && int.TryParse(text, out var parsed)
+            ? parsed
+            : defaultValue;
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed record PortableModuleDefinitionSqlScript(
+        string Key,
+        string Phase,
+        string Scope,
+        int Order,
+        string Execution,
+        string? Path,
+        string? Source,
+        string? InlineSql,
+        string? ContentEncoding,
+        string? Content,
+        string? Sha256);
+
+    private sealed record RequiredDatabaseObject(
+        string Kind,
+        string Schema,
+        string? Name,
+        string? Source);
+
+    private sealed record ModuleDefinitionSqlExecutionInfo(
+        string Status,
+        DateTime? CompletedUtc,
+        string? ErrorMessage);
 
     private static void Add(SqlCommand cmd, string name, object? value)
     {

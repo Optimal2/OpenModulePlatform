@@ -1930,6 +1930,7 @@ WHERE AppInstanceKey = N'example_serviceapp_service';
         }
     }
 
+    Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\4-ensure-topbar-hover-user-setting.sql')
     Invoke-SqlFile -TargetDatabase $script:Database -Path (Join-Path $script:PackageRoot 'sql\OpenModulePlatform.Portal\3-sync-omp-portal-entries.sql')
 
     Ensure-ConfiguredConfigSettings

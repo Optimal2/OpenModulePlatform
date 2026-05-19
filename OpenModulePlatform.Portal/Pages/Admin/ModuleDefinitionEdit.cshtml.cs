@@ -34,6 +34,8 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
 
     public IReadOnlyList<ModuleDefinitionArtifactReferenceRow> IncompatibleReferences { get; private set; } = [];
 
+    public IReadOnlyList<ModuleDefinitionSqlCheckRow> SqlCheckRows { get; private set; } = [];
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -108,6 +110,51 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
         return RedirectToPage("/Admin/ModuleDefinitionEdit", new { id = Input.ModuleDefinitionDocumentId });
     }
 
+    public async Task<IActionResult> OnPostRepairSql(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var result = await LoadAsync(Input.ModuleDefinitionDocumentId, ct);
+        if (result is not null)
+        {
+            return result;
+        }
+
+        SetTitles("Module definition");
+
+        ModuleDefinitionSqlRepairResult repairResult;
+        try
+        {
+            repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                Input.ModuleDefinitionDocumentId,
+                ct);
+        }
+        catch (SqlException ex)
+        {
+            ModelState.AddModelError(string.Empty, T($"The module definition SQL repair failed: {ex.Message}"));
+            SqlCheckRows = await _repo.GetModuleDefinitionSqlChecksAsync(Input.ModuleDefinitionDocumentId, ct);
+            return Page();
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            SqlCheckRows = await _repo.GetModuleDefinitionSqlChecksAsync(Input.ModuleDefinitionDocumentId, ct);
+            return Page();
+        }
+
+        StatusMessage = repairResult.ExecutedCount == 0
+            ? T("No executable module definition SQL repairs were needed.")
+            : string.Format(
+                T("Executed {0} module definition SQL repair scripts."),
+                repairResult.ExecutedCount);
+
+        return RedirectToPage("/Admin/ModuleDefinitionEdit", new { id = Input.ModuleDefinitionDocumentId });
+    }
+
     private async Task<IActionResult?> LoadAsync(int id, CancellationToken ct)
     {
         Definition = await _repo.GetModuleDefinitionDocumentAsync(id, ct);
@@ -119,6 +166,7 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
         Input.ModuleDefinitionDocumentId = Definition.ModuleDefinitionDocumentId;
         CompatibilityRows = await _repo.GetModuleDefinitionCompatibilityAsync(id, ct);
         IncompatibleReferences = await _repo.GetIncompatibleArtifactReferencesForModuleDefinitionAsync(id, ct);
+        SqlCheckRows = await _repo.GetModuleDefinitionSqlChecksAsync(id, ct);
         return null;
     }
 
