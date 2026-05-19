@@ -438,6 +438,76 @@ public sealed class ArtifactConfigurationFileRow
 }
 
 /// <summary>
+/// Versioned module definition document shown in admin lists.
+/// </summary>
+public sealed class ModuleDefinitionDocumentRow
+{
+    public int ModuleDefinitionDocumentId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string DefinitionVersion { get; set; } = string.Empty;
+
+    public int FormatVersion { get; set; }
+
+    public string DefinitionSha256 { get; set; } = string.Empty;
+
+    public string? DefinitionJson { get; set; }
+
+    public string? SourceName { get; set; }
+
+    public bool IsApplied { get; set; }
+
+    public DateTime? AppliedUtc { get; set; }
+
+    public DateTime CreatedUtc { get; set; }
+
+    public DateTime UpdatedUtc { get; set; }
+
+    public int CompatibleArtifactSlotCount { get; set; }
+}
+
+/// <summary>
+/// Artifact slot stored from a module definition document.
+/// </summary>
+public sealed class ModuleDefinitionCompatibilityRow
+{
+    public int ModuleDefinitionArtifactCompatibilityId { get; set; }
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public string? RelativePathTemplate { get; set; }
+
+    public string? MinArtifactVersion { get; set; }
+
+    public string? MaxArtifactVersion { get; set; }
+}
+
+/// <summary>
+/// Current desired/runtime artifact reference checked before a module definition is applied.
+/// </summary>
+public sealed class ModuleDefinitionArtifactReferenceRow
+{
+    public string ReferenceKind { get; set; } = string.Empty;
+
+    public string ReferenceKey { get; set; } = string.Empty;
+
+    public int ArtifactId { get; set; }
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string Version { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+}
+
+/// <summary>
 /// Lightweight host row for admin lists.
 /// </summary>
 public sealed class HostRow

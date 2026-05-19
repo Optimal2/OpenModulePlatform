@@ -1,0 +1,147 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ModuleDefinitionEditModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Module definitions"]</div>
+        <h2>@Model.Definition?.ModuleKey @Model.Definition?.DefinitionVersion</h2>
+        <p class="lede">@L["Review the stored definition, its artifact compatibility slots, and the current artifact selections before applying it."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+@if (Model.Definition is not null)
+{
+    <section class="card details-list">
+        <div>
+            <span>@L["Module key"]</span>
+            <strong><code>@Model.Definition.ModuleKey</code></strong>
+        </div>
+        <div>
+            <span>@L["Definition version"]</span>
+            <strong>@Model.Definition.DefinitionVersion</strong>
+        </div>
+        <div>
+            <span>@L["State"]</span>
+            <strong><span class="pill">@(Model.Definition.IsApplied ? L["Applied"] : L["Stored"])</span></strong>
+        </div>
+        <div>
+            <span>@L["SHA-256"]</span>
+            <strong><code>@Model.Definition.DefinitionSha256</code></strong>
+        </div>
+        <div>
+            <span>@L["Source"]</span>
+            <strong>@(Model.Definition.SourceName ?? L["Unknown"].Value)</strong>
+        </div>
+        <div>
+            <span>@L["Updated UTC"]</span>
+            <strong>@Model.Definition.UpdatedUtc.ToString("u")</strong>
+        </div>
+    </section>
+
+    <form method="post" asp-page-handler="Apply" class="card form-grid">
+        <input type="hidden" asp-for="Input.ModuleDefinitionDocumentId" />
+
+        @if (Model.IncompatibleReferences.Count > 0)
+        {
+            <div class="status-banner">
+                @string.Format(
+                    L["This definition does not match {0} current artifact references."].Value,
+                    Model.IncompatibleReferences.Count)
+            </div>
+        }
+
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="Input.AllowTemporaryIncompatibleArtifacts" type="checkbox" />
+            <div>
+                <label asp-for="Input.AllowTemporaryIncompatibleArtifacts">@L["Allow temporary incompatible artifact selections"]</label>
+                <div class="field-help">@L["Use this only when the matching artifact upload or desired-version change will be done immediately after applying the module definition."]</div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit">@L["Apply module definition"]</button>
+            <a class="action-link" href="~/admin/moduledefinitions">@L["Back to module definitions"]</a>
+        </div>
+    </form>
+
+    @if (Model.IncompatibleReferences.Count > 0)
+    {
+        <section class="card">
+            <h3>@L["Current incompatible artifact references"]</h3>
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Reference"]</th>
+                        <th>@L["App key"]</th>
+                        <th>@L["Version"]</th>
+                        <th>@L["Package type"]</th>
+                        <th>@L["Target"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.IncompatibleReferences)
+                {
+                    <tr>
+                        <td>@row.ReferenceKind <code>@row.ReferenceKey</code></td>
+                        <td><code>@row.AppKey</code></td>
+                        <td>@row.Version</td>
+                        <td>@row.PackageType</td>
+                        <td>@row.TargetName</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    <section class="card">
+        <h3>@L["Compatible artifact slots"]</h3>
+        @if (Model.CompatibilityRows.Count == 0)
+        {
+            <div class="empty-state">@L["This definition does not declare artifact slots."]</div>
+        }
+        else
+        {
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["App key"]</th>
+                        <th>@L["Package type"]</th>
+                        <th>@L["Target"]</th>
+                        <th>@L["Version range"]</th>
+                        <th>@L["Relative path template"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.CompatibilityRows)
+                {
+                    <tr>
+                        <td><code>@row.AppKey</code></td>
+                        <td>@row.PackageType</td>
+                        <td>@row.TargetName</td>
+                        <td>@(row.MinArtifactVersion ?? "*")..@(row.MaxArtifactVersion ?? "*")</td>
+                        <td><code>@row.RelativePathTemplate</code></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="card form-grid">
+        <div class="form-field">
+            <label>@L["Definition JSON"]</label>
+            <textarea readonly rows="18">@Model.Definition.DefinitionJson</textarea>
+        </div>
+    </section>
+}

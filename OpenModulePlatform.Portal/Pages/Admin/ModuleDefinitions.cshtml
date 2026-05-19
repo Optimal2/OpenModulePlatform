@@ -1,0 +1,50 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ModuleDefinitionsModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Modules"]</div>
+        <h2>@L["Module definition versions"]</h2>
+        <p class="lede">@L["Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review."]</p>
+    </div>
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/moduledefinitionupload">@L["Upload module definition"]</a>
+    <a class="action-link" href="~/admin/modules">@L["Back to modules"]</a>
+</div>
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="empty-state">@L["No module definitions found."]</div>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>@L["Module key"]</th>
+                <th>@L["Definition version"]</th>
+                <th>@L["Format"]</th>
+                <th>@L["Artifact slots"]</th>
+                <th>@L["State"]</th>
+                <th>@L["Updated UTC"]</th>
+                <th>@L["Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.ModuleKey</code></td>
+                <td>@row.DefinitionVersion</td>
+                <td>@row.FormatVersion</td>
+                <td>@row.CompatibleArtifactSlotCount</td>
+                <td><span class="pill">@(row.IsApplied ? L["Applied"] : L["Stored"])</span></td>
+                <td>@row.UpdatedUtc.ToString("u")</td>
+                <td><a class="action-link" href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId">@L["View"]</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

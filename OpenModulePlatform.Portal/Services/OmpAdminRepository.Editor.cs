@@ -1523,6 +1523,234 @@ WHERE ArtifactId = @ArtifactId;";
     public Task DeleteArtifactAsync(int artifactId, CancellationToken ct)
         => DeleteAsync("DELETE FROM omp.Artifacts WHERE ArtifactId = @Id;", artifactId, ct);
 
+    // -------------------------------------------------------------------------
+    // Module definition document editing
+    // -------------------------------------------------------------------------
+
+    public async Task<ModuleDefinitionSaveResult> SaveModuleDefinitionDocumentAsync(
+        ModuleDefinitionDocumentEditData input,
+        bool replaceExisting,
+        CancellationToken ct)
+    {
+        const string findSql = @"
+SELECT ModuleDefinitionDocumentId,
+       DefinitionSha256
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleKey = @ModuleKey
+  AND DefinitionVersion = @DefinitionVersion;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            int? existingId = null;
+            string? existingSha256 = null;
+            await using (var find = new SqlCommand(findSql, conn, tx))
+            {
+                Add(find, "@ModuleKey", input.ModuleKey);
+                Add(find, "@DefinitionVersion", input.DefinitionVersion);
+                await using var rdr = await find.ExecuteReaderAsync(ct);
+                if (await rdr.ReadAsync(ct))
+                {
+                    existingId = rdr.GetInt32(0);
+                    existingSha256 = rdr.GetString(1);
+                }
+            }
+
+            var isIdentical = existingId.HasValue
+                && string.Equals(existingSha256, input.DefinitionSha256, StringComparison.OrdinalIgnoreCase);
+
+            if (existingId.HasValue && !replaceExisting && !isIdentical)
+            {
+                throw new InvalidOperationException(
+                    "A module definition with the same module key and version already exists, but the uploaded JSON is different. Confirm replacement or use a new definition version.");
+            }
+
+            var documentId = existingId ?? await InsertModuleDefinitionDocumentAsync(conn, tx, input, ct);
+            if (existingId.HasValue && (replaceExisting || !isIdentical))
+            {
+                await UpdateModuleDefinitionDocumentAsync(conn, tx, documentId, input, ct);
+            }
+
+            await ReplaceModuleDefinitionCompatibilityAsync(conn, tx, documentId, input.CompatibleArtifacts, ct);
+            await tx.CommitAsync(ct);
+
+            return new ModuleDefinitionSaveResult
+            {
+                ModuleDefinitionDocumentId = documentId,
+                Created = !existingId.HasValue,
+                Replaced = existingId.HasValue && replaceExisting && !isIdentical,
+                WasIdentical = existingId.HasValue && isIdentical
+            };
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<ModuleDefinitionApplyResult> ApplyModuleDefinitionDocumentAsync(
+        int moduleDefinitionDocumentId,
+        bool allowTemporaryIncompatibleArtifacts,
+        CancellationToken ct)
+    {
+        var incompatibleReferences = await GetIncompatibleArtifactReferencesForModuleDefinitionAsync(
+            moduleDefinitionDocumentId,
+            ct);
+
+        if (incompatibleReferences.Count > 0 && !allowTemporaryIncompatibleArtifacts)
+        {
+            return new ModuleDefinitionApplyResult
+            {
+                Applied = false,
+                IncompatibleReferences = incompatibleReferences
+            };
+        }
+
+        const string sql = @"
+DECLARE @DefinitionJson nvarchar(max);
+DECLARE @ModuleKey nvarchar(100);
+DECLARE @ModuleDisplayName nvarchar(200);
+DECLARE @ModuleType nvarchar(50);
+DECLARE @SchemaName nvarchar(128);
+DECLARE @Description nvarchar(500);
+DECLARE @SortOrder int;
+DECLARE @IsEnabled bit;
+DECLARE @ModuleId int;
+
+SELECT @DefinitionJson = DefinitionJson,
+       @ModuleKey = ModuleKey
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId;
+
+IF @DefinitionJson IS NULL
+BEGIN
+    THROW 53230, N'Module definition document was not found.', 1;
+END;
+
+SELECT @ModuleDisplayName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.displayName'), N''),
+       @ModuleType = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.moduleType'), N''),
+       @SchemaName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.schemaName'), N''),
+       @Description = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.description'), N''),
+       @SortOrder = TRY_CONVERT(int, JSON_VALUE(@DefinitionJson, N'$.module.sortOrder')),
+       @IsEnabled = TRY_CONVERT(bit, JSON_VALUE(@DefinitionJson, N'$.module.isEnabled'));
+
+IF @ModuleDisplayName IS NOT NULL
+BEGIN
+    MERGE omp.Modules AS target
+    USING
+    (
+        SELECT @ModuleKey AS ModuleKey,
+               @ModuleDisplayName AS DisplayName,
+               COALESCE(@ModuleType, N'WebAppModule') AS ModuleType,
+               COALESCE(@SchemaName, @ModuleKey) AS SchemaName,
+               @Description AS Description,
+               COALESCE(@SortOrder, 0) AS SortOrder,
+               COALESCE(@IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+    ) AS source
+    ON target.ModuleKey = source.ModuleKey
+    WHEN MATCHED THEN
+        UPDATE SET DisplayName = source.DisplayName,
+                   ModuleType = source.ModuleType,
+                   SchemaName = source.SchemaName,
+                   Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ModuleKey, DisplayName, ModuleType, SchemaName, Description, SortOrder, IsEnabled)
+        VALUES(source.ModuleKey, source.DisplayName, source.ModuleType, source.SchemaName, source.Description, source.SortOrder, source.IsEnabled);
+END;
+
+SELECT @ModuleId = ModuleId
+FROM omp.Modules
+WHERE ModuleKey = @ModuleKey;
+
+IF @ModuleId IS NOT NULL
+BEGIN
+    ;WITH AppRows AS
+    (
+        SELECT AppKey,
+               COALESCE(NULLIF(DisplayName, N''), AppKey) AS DisplayName,
+               COALESCE(NULLIF(AppType, N''), N'WebApp') AS AppType,
+               NULLIF(Description, N'') AS Description,
+               COALESCE(SortOrder, 0) AS SortOrder,
+               COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+        FROM OPENJSON(@DefinitionJson, N'$.apps')
+        WITH
+        (
+            AppKey nvarchar(100) N'$.appKey',
+            DisplayName nvarchar(200) N'$.displayName',
+            AppType nvarchar(50) N'$.appType',
+            Description nvarchar(500) N'$.description',
+            SortOrder int N'$.sortOrder',
+            IsEnabled bit N'$.isEnabled'
+        )
+        WHERE AppKey IS NOT NULL
+    )
+    MERGE omp.Apps AS target
+    USING AppRows AS source
+    ON target.ModuleId = @ModuleId
+    AND target.AppKey = source.AppKey
+    WHEN MATCHED THEN
+        UPDATE SET DisplayName = source.DisplayName,
+                   AppType = source.AppType,
+                   Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ModuleId, AppKey, DisplayName, AppType, Description, SortOrder, IsEnabled)
+        VALUES(@ModuleId, source.AppKey, source.DisplayName, source.AppType, source.Description, source.SortOrder, source.IsEnabled);
+END;
+
+UPDATE omp.ModuleDefinitionDocuments
+SET IsApplied = CASE WHEN ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId THEN 1 ELSE 0 END,
+    AppliedUtc = CASE WHEN ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId THEN SYSUTCDATETIME() ELSE AppliedUtc END,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ModuleKey = @ModuleKey;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            Add(cmd, "@ModuleDefinitionDocumentId", moduleDefinitionDocumentId);
+            await cmd.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        return new ModuleDefinitionApplyResult
+        {
+            Applied = true,
+            IncompatibleReferences = incompatibleReferences
+        };
+    }
+
+    public async Task<IReadOnlyList<ModuleDefinitionArtifactReferenceRow>> GetIncompatibleArtifactReferencesForModuleDefinitionAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        var definition = await GetModuleDefinitionDocumentAsync(moduleDefinitionDocumentId, ct)
+            ?? throw new InvalidOperationException("Module definition document was not found.");
+        var slots = await GetModuleDefinitionCompatibilityAsync(moduleDefinitionDocumentId, ct);
+        var references = await GetCurrentArtifactReferencesForModuleAsync(definition.ModuleKey, ct);
+
+        return references
+            .Where(reference => !slots.Any(slot => IsCompatibleArtifactReference(reference, slot)))
+            .ToList();
+    }
+
     public async Task<ArtifactConfigurationFileEditData?> GetArtifactConfigurationFileAsync(
         int artifactConfigurationFileId,
         CancellationToken ct)
@@ -2476,6 +2704,136 @@ WHERE ai.AppInstanceId = @AppInstanceId;";
         Add(cmd, "@IsEnabled", input.IsEnabled);
         Add(cmd, "@SortOrder", input.SortOrder);
     }
+
+    private static async Task<int> InsertModuleDefinitionDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        ModuleDefinitionDocumentEditData input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.ModuleDefinitionDocuments
+(
+    ModuleKey,
+    DefinitionVersion,
+    FormatVersion,
+    DefinitionJson,
+    DefinitionSha256,
+    SourceName,
+    IsApplied
+)
+VALUES
+(
+    @ModuleKey,
+    @DefinitionVersion,
+    @FormatVersion,
+    @DefinitionJson,
+    @DefinitionSha256,
+    @SourceName,
+    0
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        BindModuleDefinitionDocument(cmd, input);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task UpdateModuleDefinitionDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        ModuleDefinitionDocumentEditData input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.ModuleDefinitionDocuments
+SET FormatVersion = @FormatVersion,
+    DefinitionJson = @DefinitionJson,
+    DefinitionSha256 = @DefinitionSha256,
+    SourceName = @SourceName,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@ModuleDefinitionDocumentId", documentId);
+        BindModuleDefinitionDocument(cmd, input);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ReplaceModuleDefinitionCompatibilityAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        IReadOnlyList<ModuleDefinitionCompatibilityEditData> entries,
+        CancellationToken ct)
+    {
+        const string deleteSql = @"
+DELETE FROM omp.ModuleDefinitionArtifactCompatibility
+WHERE ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId;";
+
+        await using (var delete = new SqlCommand(deleteSql, conn, tx))
+        {
+            Add(delete, "@ModuleDefinitionDocumentId", documentId);
+            await delete.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSql = @"
+INSERT INTO omp.ModuleDefinitionArtifactCompatibility
+(
+    ModuleDefinitionDocumentId,
+    AppKey,
+    PackageType,
+    TargetName,
+    RelativePathTemplate,
+    MinArtifactVersion,
+    MaxArtifactVersion
+)
+VALUES
+(
+    @ModuleDefinitionDocumentId,
+    @AppKey,
+    @PackageType,
+    @TargetName,
+    @RelativePathTemplate,
+    @MinArtifactVersion,
+    @MaxArtifactVersion
+);";
+
+        foreach (var entry in entries)
+        {
+            await using var insert = new SqlCommand(insertSql, conn, tx);
+            Add(insert, "@ModuleDefinitionDocumentId", documentId);
+            Add(insert, "@AppKey", entry.AppKey);
+            Add(insert, "@PackageType", entry.PackageType);
+            Add(insert, "@TargetName", entry.TargetName);
+            Add(insert, "@RelativePathTemplate", entry.RelativePathTemplate);
+            Add(insert, "@MinArtifactVersion", entry.MinArtifactVersion);
+            Add(insert, "@MaxArtifactVersion", entry.MaxArtifactVersion);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static void BindModuleDefinitionDocument(
+        SqlCommand cmd,
+        ModuleDefinitionDocumentEditData input)
+    {
+        Add(cmd, "@ModuleKey", input.ModuleKey);
+        Add(cmd, "@DefinitionVersion", input.DefinitionVersion);
+        Add(cmd, "@FormatVersion", input.FormatVersion);
+        Add(cmd, "@DefinitionJson", input.DefinitionJson);
+        Add(cmd, "@DefinitionSha256", input.DefinitionSha256);
+        Add(cmd, "@SourceName", input.SourceName);
+    }
+
+    private static bool IsCompatibleArtifactReference(
+        ModuleDefinitionArtifactReferenceRow reference,
+        ModuleDefinitionCompatibilityRow slot)
+        => string.Equals(reference.AppKey, slot.AppKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(reference.PackageType, slot.PackageType, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(reference.TargetName ?? string.Empty, slot.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            && IsVersionInRange(reference.Version, slot.MinArtifactVersion, slot.MaxArtifactVersion);
 
     private static void BindArtifact(SqlCommand cmd, ArtifactEditData input, bool includePrimaryKey)
     {

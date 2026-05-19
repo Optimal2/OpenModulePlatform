@@ -386,6 +386,195 @@ ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
         return rows;
     }
 
+    public async Task<IReadOnlyList<ModuleDefinitionDocumentRow>> GetModuleDefinitionDocumentsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT d.ModuleDefinitionDocumentId,
+       d.ModuleKey,
+       d.DefinitionVersion,
+       d.FormatVersion,
+       d.DefinitionSha256,
+       d.SourceName,
+       d.IsApplied,
+       d.AppliedUtc,
+       d.CreatedUtc,
+       d.UpdatedUtc,
+       COUNT(c.ModuleDefinitionArtifactCompatibilityId) AS CompatibleArtifactSlotCount
+FROM omp.ModuleDefinitionDocuments d
+LEFT JOIN omp.ModuleDefinitionArtifactCompatibility c
+    ON c.ModuleDefinitionDocumentId = d.ModuleDefinitionDocumentId
+GROUP BY d.ModuleDefinitionDocumentId,
+         d.ModuleKey,
+         d.DefinitionVersion,
+         d.FormatVersion,
+         d.DefinitionSha256,
+         d.SourceName,
+         d.IsApplied,
+         d.AppliedUtc,
+         d.CreatedUtc,
+         d.UpdatedUtc
+ORDER BY d.ModuleKey,
+         d.IsApplied DESC,
+         d.AppliedUtc DESC,
+         d.UpdatedUtc DESC,
+         d.ModuleDefinitionDocumentId DESC;";
+
+        var rows = new List<ModuleDefinitionDocumentRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(ReadModuleDefinitionDocumentRow(rdr, includeJson: false));
+        }
+
+        return rows;
+    }
+
+    public async Task<ModuleDefinitionDocumentRow?> GetModuleDefinitionDocumentAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT d.ModuleDefinitionDocumentId,
+       d.ModuleKey,
+       d.DefinitionVersion,
+       d.FormatVersion,
+       d.DefinitionSha256,
+       d.DefinitionJson,
+       d.SourceName,
+       d.IsApplied,
+       d.AppliedUtc,
+       d.CreatedUtc,
+       d.UpdatedUtc,
+       (
+           SELECT COUNT(1)
+           FROM omp.ModuleDefinitionArtifactCompatibility c
+           WHERE c.ModuleDefinitionDocumentId = d.ModuleDefinitionDocumentId
+       ) AS CompatibleArtifactSlotCount
+FROM omp.ModuleDefinitionDocuments d
+WHERE d.ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ModuleDefinitionDocumentId", moduleDefinitionDocumentId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return ReadModuleDefinitionDocumentRow(rdr, includeJson: true);
+    }
+
+    public async Task<IReadOnlyList<ModuleDefinitionCompatibilityRow>> GetModuleDefinitionCompatibilityAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ModuleDefinitionArtifactCompatibilityId,
+       AppKey,
+       PackageType,
+       TargetName,
+       RelativePathTemplate,
+       MinArtifactVersion,
+       MaxArtifactVersion
+FROM omp.ModuleDefinitionArtifactCompatibility
+WHERE ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId
+ORDER BY AppKey, PackageType, TargetName, ModuleDefinitionArtifactCompatibilityId;";
+
+        var rows = new List<ModuleDefinitionCompatibilityRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ModuleDefinitionDocumentId", moduleDefinitionDocumentId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ModuleDefinitionCompatibilityRow
+            {
+                ModuleDefinitionArtifactCompatibilityId = rdr.GetInt32(0),
+                AppKey = rdr.GetString(1),
+                PackageType = rdr.GetString(2),
+                TargetName = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                RelativePathTemplate = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                MinArtifactVersion = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                MaxArtifactVersion = rdr.IsDBNull(6) ? null : rdr.GetString(6)
+            });
+        }
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<ModuleDefinitionArtifactReferenceRow>> GetCurrentArtifactReferencesForModuleAsync(
+        string moduleKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+WITH CurrentReferences AS
+(
+    SELECT N'Installation template' AS ReferenceKind,
+           CONVERT(nvarchar(100), tai.InstanceTemplateAppInstanceId) AS ReferenceKey,
+           tai.DesiredArtifactId AS ArtifactId
+    FROM omp.InstanceTemplateAppInstances tai
+    WHERE tai.DesiredArtifactId IS NOT NULL
+
+    UNION ALL
+
+    SELECT N'App instance',
+           CONVERT(nvarchar(100), ai.AppInstanceId),
+           ai.ArtifactId
+    FROM omp.AppInstances ai
+    WHERE ai.ArtifactId IS NOT NULL
+
+    UNION ALL
+
+    SELECT N'Worker runtime',
+           CONVERT(nvarchar(100), wi.WorkerInstanceId),
+           wi.ArtifactId
+    FROM omp.WorkerInstances wi
+    WHERE wi.ArtifactId IS NOT NULL
+)
+SELECT DISTINCT
+       r.ReferenceKind,
+       r.ReferenceKey,
+       ar.ArtifactId,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName
+FROM CurrentReferences r
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = r.ArtifactId
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = @ModuleKey
+ORDER BY a.AppKey, ar.Version, r.ReferenceKind, r.ReferenceKey;";
+
+        var rows = new List<ModuleDefinitionArtifactReferenceRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ModuleKey", moduleKey);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ModuleDefinitionArtifactReferenceRow
+            {
+                ReferenceKind = rdr.GetString(0),
+                ReferenceKey = rdr.GetString(1),
+                ArtifactId = rdr.GetInt32(2),
+                AppKey = rdr.GetString(3),
+                Version = rdr.GetString(4),
+                PackageType = rdr.GetString(5),
+                TargetName = rdr.IsDBNull(6) ? null : rdr.GetString(6)
+            });
+        }
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<ArtifactConfigurationFileRow>> GetArtifactConfigurationFilesAsync(
         int artifactId,
         CancellationToken ct)
@@ -470,6 +659,26 @@ ORDER BY i.InstanceKey, h.HostKey;";
             });
         }
         return rows;
+    }
+
+    private static ModuleDefinitionDocumentRow ReadModuleDefinitionDocumentRow(SqlDataReader rdr, bool includeJson)
+    {
+        var sourceOffset = includeJson ? 1 : 0;
+        return new ModuleDefinitionDocumentRow
+        {
+            ModuleDefinitionDocumentId = rdr.GetInt32(0),
+            ModuleKey = rdr.GetString(1),
+            DefinitionVersion = rdr.GetString(2),
+            FormatVersion = rdr.GetInt32(3),
+            DefinitionSha256 = rdr.GetString(4),
+            DefinitionJson = includeJson && !rdr.IsDBNull(5) ? rdr.GetString(5) : null,
+            SourceName = rdr.IsDBNull(5 + sourceOffset) ? null : rdr.GetString(5 + sourceOffset),
+            IsApplied = rdr.GetBoolean(6 + sourceOffset),
+            AppliedUtc = rdr.IsDBNull(7 + sourceOffset) ? null : rdr.GetDateTime(7 + sourceOffset),
+            CreatedUtc = rdr.GetDateTime(8 + sourceOffset),
+            UpdatedUtc = rdr.GetDateTime(9 + sourceOffset),
+            CompatibleArtifactSlotCount = rdr.GetInt32(10 + sourceOffset)
+        };
     }
 
     public async Task<IReadOnlyList<InstanceTemplateRow>> GetInstanceTemplatesAsync(CancellationToken ct)
