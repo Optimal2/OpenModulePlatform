@@ -99,6 +99,68 @@ function Join-DeploymentPath {
     return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($Root, $Child))
 }
 
+function Resolve-ContentWebAppRuntimePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfiguredPath,
+        [Parameter(Mandatory = $true)][string]$DefaultRelativePath,
+        [Parameter(Mandatory = $true)][string]$WebAppsRoot,
+        [Parameter(Mandatory = $true)][string]$ContentWebAppPath
+    )
+
+    $path = $ConfiguredPath
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        $path = $DefaultRelativePath
+    }
+
+    if ([System.IO.Path]::IsPathRooted($path)) {
+        return [System.IO.Path]::GetFullPath($path)
+    }
+
+    $contentRoot = Join-DeploymentPath -Root $WebAppsRoot -Child $ContentWebAppPath
+    return [System.IO.Path]::GetFullPath((Join-Path $contentRoot $path))
+}
+
+function Get-ContentWebAppFileMirrors {
+    param(
+        [Parameter(Mandatory = $true)][string]$SharedServerReportsPath,
+        [Parameter(Mandatory = $true)][string]$SharedHtmlFilesPath,
+        [Parameter(Mandatory = $true)][string]$ServerReportsPath,
+        [Parameter(Mandatory = $true)][string]$HtmlFilesPath,
+        [Parameter(Mandatory = $true)][string]$WebAppsRoot,
+        [Parameter(Mandatory = $true)][string]$ContentWebAppPath
+    )
+
+    $mirrors = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($SharedServerReportsPath)) {
+        $mirrors += [ordered]@{
+            SourcePath = [System.IO.Path]::GetFullPath($SharedServerReportsPath)
+            TargetPath = Resolve-ContentWebAppRuntimePath `
+                -ConfiguredPath $ServerReportsPath `
+                -DefaultRelativePath 'App_Data/ContentReports' `
+                -WebAppsRoot $WebAppsRoot `
+                -ContentWebAppPath $ContentWebAppPath
+            DeleteStaleTargetEntries = $true
+            ExcludedEntries = @()
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($SharedHtmlFilesPath)) {
+        $mirrors += [ordered]@{
+            SourcePath = [System.IO.Path]::GetFullPath($SharedHtmlFilesPath)
+            TargetPath = Resolve-ContentWebAppRuntimePath `
+                -ConfiguredPath $HtmlFilesPath `
+                -DefaultRelativePath 'App_Data/ContentPages' `
+                -WebAppsRoot $WebAppsRoot `
+                -ContentWebAppPath $ContentWebAppPath
+            DeleteStaleTargetEntries = $true
+            ExcludedEntries = @()
+        }
+    }
+
+    return $mirrors
+}
+
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -531,6 +593,18 @@ $iisSiteName = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Na
 $iisProtocol = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'Protocol' -DefaultValue 'http')
 $iisPort = [int](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'Port' -DefaultValue 80)
 $iisHostHeader = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'HostHeader' -DefaultValue '')
+$contentWebAppPath = [string](Get-NestedConfigValue -Config $config -Section 'Iis' -Name 'ContentWebAppPath' -DefaultValue 'content')
+$contentWebAppServerReportsPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'ServerReportsPath' -DefaultValue 'App_Data/ContentReports')
+$contentWebAppHtmlFilesPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'HtmlFilesPath' -DefaultValue 'App_Data/ContentPages')
+$contentWebAppSharedServerReportsPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'SharedServerReportsPath' -DefaultValue '')
+$contentWebAppSharedHtmlFilesPath = [string](Get-NestedConfigValue -Config $config -Section 'ContentWebApp' -Name 'SharedHtmlFilesPath' -DefaultValue '')
+$contentWebAppFileMirrors = Get-ContentWebAppFileMirrors `
+    -SharedServerReportsPath $contentWebAppSharedServerReportsPath `
+    -SharedHtmlFilesPath $contentWebAppSharedHtmlFilesPath `
+    -ServerReportsPath $contentWebAppServerReportsPath `
+    -HtmlFilesPath $contentWebAppHtmlFilesPath `
+    -WebAppsRoot $webAppsRoot `
+    -ContentWebAppPath $contentWebAppPath
 $hostAgentServiceName = [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'HostAgent' -DefaultValue 'OpenModulePlatform.HostAgent')
 $additionalServiceNamesToRemove = [System.Collections.Generic.List[string]]::new()
 foreach ($name in @(
@@ -647,6 +721,7 @@ $bootstrapConfig = [ordered]@{
                 WebAppDataProtectionKeyPath = $webAppDataProtectionKeyPath
                 DeployServiceApps = $true
                 ServicesRoot = $servicesRoot
+                FileMirrors = @($contentWebAppFileMirrors)
                 EnableRpc = $true
                 RpcPipeName = ''
                 RpcRequestTimeoutSeconds = 60

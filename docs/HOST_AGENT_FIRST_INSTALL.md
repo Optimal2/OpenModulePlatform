@@ -182,6 +182,39 @@ modeled as a normal web-app artifact so HostAgent can create the IIS child
 application and keep its runtime configuration in
 `omp.ArtifactConfigurationFiles` like other deployable apps.
 
+## Content File Mirroring
+
+Content pages can be backed by HTML files and server-report JSON files. In
+HostAgent-managed installations those files should usually live outside the
+immutable web-app artifact and be mirrored into the local Content web app
+runtime folder.
+
+Use these `ContentWebApp` settings in the deployment config when a shared source
+folder should be mirrored to the local IIS runtime:
+
+```powershell
+ContentWebApp = @{
+    ServerReportsPath = 'App_Data/ContentReports'
+    HtmlFilesPath = 'App_Data/ContentPages'
+    SharedServerReportsPath = 'D:\Shared\OMP\Data\ContentReports'
+    SharedHtmlFilesPath = 'D:\Shared\OMP\Data\ContentPages'
+}
+```
+
+`package-hostagent-first.ps1` converts the two shared paths into
+`HostAgent:FileMirrors` in the generated bootstrap JSON. HostAgent then mirrors:
+
+```text
+SharedServerReportsPath -> <WebAppsRoot>\<ContentWebAppPath>\App_Data\ContentReports
+SharedHtmlFilesPath     -> <WebAppsRoot>\<ContentWebAppPath>\App_Data\ContentPages
+```
+
+For a single-machine development install, the shared paths can simply be two
+folders on the same disk as the runtime. For a multi-server install, point the
+shared paths at the common file share and keep the target paths local on each
+web server. The Content app reads the local target paths, so both cases exercise
+the same runtime behavior.
+
 Customer-specific packages should keep customer-specific SQL values outside the
 public repository and inject them into the package configuration or generated
 SQL during protected package creation.
