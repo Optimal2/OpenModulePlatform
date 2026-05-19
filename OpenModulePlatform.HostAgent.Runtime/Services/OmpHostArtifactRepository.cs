@@ -86,6 +86,50 @@ ORDER BY ar.ArtifactId;";
             rdr.IsDBNull(4) ? null : rdr.GetString(4));
     }
 
+    public async Task<ArtifactZipImportDuplicateInfo?> FindImportedArtifactByIdentityAsync(
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       ar.ArtifactId,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+WHERE ar.AppId = @appId
+  AND ar.Version = @version
+  AND ar.PackageType = @packageType
+  AND ((ar.TargetName = @targetName) OR (ar.TargetName IS NULL AND @targetName IS NULL))
+ORDER BY ar.ArtifactId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@appId", appId);
+        cmd.Parameters.AddWithValue("@version", version);
+        cmd.Parameters.AddWithValue("@packageType", packageType);
+        cmd.Parameters.AddWithValue("@targetName", targetName);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactZipImportDuplicateInfo(
+            rdr.GetInt32(0),
+            rdr.GetString(1),
+            rdr.GetString(2),
+            rdr.GetString(3),
+            rdr.IsDBNull(4) ? null : rdr.GetString(4));
+    }
+
     public async Task<int> RegisterImportedArtifactAsync(
         int appId,
         string version,
