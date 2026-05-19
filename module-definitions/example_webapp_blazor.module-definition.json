@@ -27,7 +27,7 @@
       "targetName": "example-webapp-blazor",
       "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": null
+      "maxVersion": "0.3.4"
     }
   ],
   "sqlScripts": [

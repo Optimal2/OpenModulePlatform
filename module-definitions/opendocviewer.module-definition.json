@@ -27,7 +27,7 @@
       "targetName": "opendocviewer",
       "relativePathTemplate": "opendocviewer/web/{version}",
       "minVersion": "2.0.3",
-      "maxVersion": null
+      "maxVersion": "2.0.3"
     }
   ],
   "sqlScripts": [

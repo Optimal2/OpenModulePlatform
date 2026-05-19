@@ -250,8 +250,9 @@ packages should generate their own protected `bootstrap.<environment>.json` and,
 when needed, customer SQL files that seed hosts, templates, shared content
 mirrors, service names, and paths for that environment.
 
-`package-hostagent-first.ps1` can include protected customer SQL files from the
-deployment config without committing them to the public repository:
+`package-hostagent-first.ps1` can include protected customer SQL files and
+module-definition JSON files from the deployment config without committing them
+to the public repository:
 
 ```powershell
 HostAgentFirst = @{
@@ -266,11 +267,20 @@ HostAgentFirst = @{
         'vgr-test-bootstrap.sql',
         @{ Source = 'vgr-prod-bootstrap.sql'; Destination = 'Customer\vgr-prod-bootstrap.sql' }
     )
+
+    AdditionalModuleDefinitionFiles = @(
+        '..\IbsPackager\module-definitions\ibs_packager.module-definition.json',
+        '..\iKrock2\module-definitions\ikrock.module-definition.json',
+        '..\VajSkrivare\module-definitions\vajskrivare.module-definition.json'
+    )
 }
 ```
 
 The package script copies those files into `sql/Customer` by default and appends
-them after the neutral OMP initialization scripts in `sql/bootstrap-local.sql`.
+the SQL files after the neutral OMP initialization scripts in
+`sql/bootstrap-local.sql`. Module-definition files are copied into
+`module-definitions` and imported by the bootstrapper after SQL initialization
+so artifact import can validate versions against the applied definitions.
 
 For example, a protected VGR package can set:
 

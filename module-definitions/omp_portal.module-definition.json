@@ -26,8 +26,8 @@
       "packageType": "web-app",
       "targetName": "omp-portal",
       "relativePathTemplate": "omp-portal/web/{version}",
-      "minVersion": "0.3.17",
-      "maxVersion": null
+      "minVersion": "0.3.18",
+      "maxVersion": "0.3.18"
     }
   ],
   "artifactConfigurationFiles": [

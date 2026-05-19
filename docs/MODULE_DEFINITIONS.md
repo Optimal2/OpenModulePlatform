@@ -38,8 +38,8 @@ OMP stores uploaded or generated definition documents in:
 
 `ModuleDefinitionDocuments.DefinitionJson` stores the normalized JSON document
 and `DefinitionSha256` stores the SHA-256 hash of that normalized JSON. The
-compatibility table stores the artifact-version ranges that need to be queried
-without parsing JSON.
+compatibility table stores the artifact-version ranges and relative artifact
+path templates that Portal and HostAgent need to query without parsing JSON.
 
 The first table is intentionally keyed by `ModuleKey` and `DefinitionVersion`
 instead of `ModuleId`. A definition document may be uploaded before the module
@@ -60,6 +60,11 @@ Preferred ownership:
 2. A single central apply step runs the SQL scripts with a database identity that
    is allowed to change schema and metadata.
 3. HostAgent consumes the resulting desired state and deploys artifacts.
+
+The HostAgent-first bootstrap package imports JSON files from its
+`module-definitions` folder after SQL initialization. Protected/customer package
+configs can add module-definition files from module repositories through
+`HostAgentFirst.AdditionalModuleDefinitionFiles`.
 
 HostAgent may later help move module definition files into the database, but SQL
 execution should still be guarded by a database lock or a central controller so
@@ -253,9 +258,10 @@ operators and admin UI:
 - Selecting a desired artifact should be allowed only when its module definition
   version is present and marked applied.
 
-The current Portal and HostAgent flows do not enforce all of this yet. Until the
-apply pipeline exists, any artifact update that depends on schema or metadata
-changes must be accompanied by the relevant SQL patch or setup script rerun.
+Portal artifact upload and HostAgent import-folder processing both validate
+incoming artifact metadata against the latest applied definition for the module.
+An artifact version that needs newer module SQL or metadata should therefore be
+rejected until that module definition has been imported and marked applied.
 
 ## Two-Step Installation Model
 
@@ -273,11 +279,11 @@ schema, Portal, and HostAgent. Remaining modules can then be added from Portal,
 from a controlled installer, or from an import folder without coupling every
 module to the base installer.
 
-## Current Example
+## Compatibility Example
 
 Portal artifact `0.3.17` introduced the user preference
-`Portal/TopbarDropdownsOpenOnHover`. Installing only the Portal artifact zip
-updates application code but does not seed `omp_portal.user_setting_definitions`.
-Run `OpenModulePlatform.Portal/sql/4-ensure-topbar-hover-user-setting.sql` on
-installations that received the Portal artifact without rerunning Portal setup
-SQL.
+`Portal/TopbarDropdownsOpenOnHover`. Installing only that Portal artifact zip
+updated application code but did not seed `omp_portal.user_setting_definitions`.
+With module-definition compatibility in place, a Portal artifact that requires
+that setting should be accepted only after the matching Portal module definition
+has been imported and marked applied.

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
@@ -104,6 +105,7 @@ internal static partial class Program
             if (config.Sql.Enabled)
             {
                 await RunSqlAsync(config, payloadRoot);
+                await ImportModuleDefinitionsAsync(config, payloadRoot);
             }
 
             PrepareArtifacts(config, payloadRoot);
@@ -263,6 +265,244 @@ internal static partial class Program
             Console.WriteLine($"> SQL {scriptPath}");
             var sqlText = ReadSqlFile(scriptPath, sql, payloadRoot, config.IncludeExampleApps, []);
             await ExecuteSqlBatchesAsync(sql, sql.Database, sqlText, scriptPath);
+        }
+    }
+
+    private static async Task ImportModuleDefinitionsAsync(BootstrapConfig config, string payloadRoot)
+    {
+        var definitionsRoot = Path.Combine(payloadRoot, "module-definitions");
+        if (!Directory.Exists(definitionsRoot))
+        {
+            return;
+        }
+
+        var definitionPaths = Directory.EnumerateFiles(definitionsRoot, "*.json", SearchOption.TopDirectoryOnly)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (definitionPaths.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine("> Module definitions");
+
+        await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
+        await connection.OpenAsync();
+
+        foreach (var definitionPath in definitionPaths)
+        {
+            var definition = await ReadModuleDefinitionAsync(definitionPath);
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                var documentId = await UpsertModuleDefinitionDocumentAsync(
+                    connection,
+                    transaction,
+                    definition,
+                    Path.GetFileName(definitionPath),
+                    config.Sql.CommandTimeoutSeconds);
+
+                await ReplaceModuleDefinitionCompatibilityAsync(
+                    connection,
+                    transaction,
+                    documentId,
+                    definition.CompatibleArtifacts,
+                    config.Sql.CommandTimeoutSeconds);
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+
+            Console.WriteLine($"  {definition.ModuleKey} {definition.DefinitionVersion}");
+        }
+    }
+
+    private static async Task<ModuleDefinitionDocument> ReadModuleDefinitionAsync(string path)
+    {
+        var jsonText = await File.ReadAllTextAsync(path, Encoding.UTF8);
+        var root = JsonNode.Parse(jsonText)
+            ?? throw new InvalidOperationException($"Module definition file '{path}' is empty.");
+
+        var moduleKey = GetJsonStringProperty(root, "moduleKey");
+        var definitionVersion = GetJsonStringProperty(root, "definitionVersion");
+        if (string.IsNullOrWhiteSpace(moduleKey) || string.IsNullOrWhiteSpace(definitionVersion))
+        {
+            throw new InvalidOperationException(
+                $"Module definition file '{path}' must contain moduleKey and definitionVersion.");
+        }
+
+        var normalizedJson = root.ToJsonString(JsonOptions);
+        var sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedJson))).ToLowerInvariant();
+        var compatibleArtifacts = ReadCompatibleArtifacts(root);
+
+        return new ModuleDefinitionDocument(
+            moduleKey,
+            definitionVersion,
+            GetJsonIntProperty(root, "formatVersion", 1),
+            normalizedJson,
+            sha256,
+            compatibleArtifacts);
+    }
+
+    private static IReadOnlyList<ModuleDefinitionCompatibilityEntry> ReadCompatibleArtifacts(JsonNode root)
+    {
+        if (GetJsonObjectProperty(root, "compatibleArtifacts") is not JsonArray items)
+        {
+            return [];
+        }
+
+        var entries = new List<ModuleDefinitionCompatibilityEntry>();
+        foreach (var item in items)
+        {
+            if (item is not JsonObject)
+            {
+                continue;
+            }
+
+            var appKey = GetJsonStringProperty(item, "appKey");
+            var packageType = GetJsonStringProperty(item, "packageType");
+            if (string.IsNullOrWhiteSpace(appKey) || string.IsNullOrWhiteSpace(packageType))
+            {
+                throw new InvalidOperationException("Each compatibleArtifacts item must contain appKey and packageType.");
+            }
+
+            entries.Add(
+                new ModuleDefinitionCompatibilityEntry(
+                    appKey,
+                    packageType,
+                    NullIfWhiteSpace(GetJsonStringProperty(item, "targetName")),
+                    NullIfWhiteSpace(GetJsonStringProperty(item, "relativePathTemplate")),
+                    NullIfWhiteSpace(GetJsonStringProperty(item, "minVersion")),
+                    NullIfWhiteSpace(GetJsonStringProperty(item, "maxVersion"))));
+        }
+
+        return entries;
+    }
+
+    private static async Task<int> UpsertModuleDefinitionDocumentAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        ModuleDefinitionDocument definition,
+        string sourceName,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+DECLARE @now datetime2(3) = SYSUTCDATETIME();
+
+UPDATE omp.ModuleDefinitionDocuments
+SET FormatVersion = @formatVersion,
+    DefinitionJson = @definitionJson,
+    DefinitionSha256 = @definitionSha256,
+    SourceName = @sourceName,
+    IsApplied = 1,
+    AppliedUtc = @now,
+    UpdatedUtc = @now
+WHERE ModuleKey = @moduleKey
+  AND DefinitionVersion = @definitionVersion;
+
+IF @@ROWCOUNT = 0
+BEGIN
+    INSERT INTO omp.ModuleDefinitionDocuments
+    (
+        ModuleKey,
+        DefinitionVersion,
+        FormatVersion,
+        DefinitionJson,
+        DefinitionSha256,
+        SourceName,
+        IsApplied,
+        AppliedUtc
+    )
+    VALUES
+    (
+        @moduleKey,
+        @definitionVersion,
+        @formatVersion,
+        @definitionJson,
+        @definitionSha256,
+        @sourceName,
+        1,
+        @now
+    );
+
+    SELECT CAST(SCOPE_IDENTITY() AS int);
+    RETURN;
+END;
+
+SELECT ModuleDefinitionDocumentId
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleKey = @moduleKey
+  AND DefinitionVersion = @definitionVersion;";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@moduleKey", definition.ModuleKey);
+        command.Parameters.AddWithValue("@definitionVersion", definition.DefinitionVersion);
+        command.Parameters.AddWithValue("@formatVersion", definition.FormatVersion);
+        command.Parameters.AddWithValue("@definitionJson", definition.DefinitionJson);
+        command.Parameters.AddWithValue("@definitionSha256", definition.DefinitionSha256);
+        command.Parameters.AddWithValue("@sourceName", sourceName);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task ReplaceModuleDefinitionCompatibilityAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        int documentId,
+        IReadOnlyList<ModuleDefinitionCompatibilityEntry> entries,
+        int commandTimeoutSeconds)
+    {
+        const string deleteSql = @"
+DELETE FROM omp.ModuleDefinitionArtifactCompatibility
+WHERE ModuleDefinitionDocumentId = @documentId;";
+
+        await using (var delete = new SqlCommand(deleteSql, connection, transaction))
+        {
+            delete.CommandTimeout = commandTimeoutSeconds;
+            delete.Parameters.AddWithValue("@documentId", documentId);
+            await delete.ExecuteNonQueryAsync();
+        }
+
+        const string insertSql = @"
+INSERT INTO omp.ModuleDefinitionArtifactCompatibility
+(
+    ModuleDefinitionDocumentId,
+    AppKey,
+    PackageType,
+    TargetName,
+    RelativePathTemplate,
+    MinArtifactVersion,
+    MaxArtifactVersion
+)
+VALUES
+(
+    @documentId,
+    @appKey,
+    @packageType,
+    @targetName,
+    @relativePathTemplate,
+    @minArtifactVersion,
+    @maxArtifactVersion
+);";
+
+        foreach (var entry in entries)
+        {
+            await using var insert = new SqlCommand(insertSql, connection, transaction);
+            insert.CommandTimeout = commandTimeoutSeconds;
+            insert.Parameters.AddWithValue("@documentId", documentId);
+            insert.Parameters.AddWithValue("@appKey", entry.AppKey);
+            insert.Parameters.AddWithValue("@packageType", entry.PackageType);
+            insert.Parameters.AddWithValue("@targetName", entry.TargetName is null ? DBNull.Value : entry.TargetName);
+            insert.Parameters.AddWithValue("@relativePathTemplate", entry.RelativePathTemplate is null ? DBNull.Value : entry.RelativePathTemplate);
+            insert.Parameters.AddWithValue("@minArtifactVersion", entry.MinArtifactVersion is null ? DBNull.Value : entry.MinArtifactVersion);
+            insert.Parameters.AddWithValue("@maxArtifactVersion", entry.MaxArtifactVersion is null ? DBNull.Value : entry.MaxArtifactVersion);
+            await insert.ExecuteNonQueryAsync();
         }
     }
 
@@ -1574,6 +1814,28 @@ END;
             : string.Empty;
     }
 
+    private static int GetJsonIntProperty(JsonNode? node, string propertyName, int defaultValue)
+    {
+        var value = GetJsonObjectProperty(node, propertyName);
+        if (value is not JsonValue jsonValue)
+        {
+            return defaultValue;
+        }
+
+        if (jsonValue.TryGetValue<int>(out var number))
+        {
+            return number;
+        }
+
+        return jsonValue.TryGetValue<string>(out var text)
+            && int.TryParse(text, out var parsed)
+            ? parsed
+            : defaultValue;
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private static void EnsureSafeRuntimeDeletePath(string path)
     {
         var root = Path.GetPathRoot(path);
@@ -1960,6 +2222,22 @@ internal sealed class CliOptions
             };
     }
 }
+
+internal sealed record ModuleDefinitionDocument(
+    string ModuleKey,
+    string DefinitionVersion,
+    int FormatVersion,
+    string DefinitionJson,
+    string DefinitionSha256,
+    IReadOnlyList<ModuleDefinitionCompatibilityEntry> CompatibleArtifacts);
+
+internal sealed record ModuleDefinitionCompatibilityEntry(
+    string AppKey,
+    string PackageType,
+    string? TargetName,
+    string? RelativePathTemplate,
+    string? MinArtifactVersion,
+    string? MaxArtifactVersion);
 
 internal sealed class BootstrapConfig
 {

@@ -160,6 +160,11 @@
         )
 
         AdditionalSqlFiles = @()
+
+        # Optional module definition JSON files from customer/module repositories.
+        # They are copied to the package-local module-definitions folder and
+        # imported by the bootstrapper after SQL initialization.
+        AdditionalModuleDefinitionFiles = @()
     }
 
     Package = @{
