@@ -25,6 +25,7 @@
       "appKey": "opendocviewer_webapp",
       "packageType": "web-app",
       "targetName": "opendocviewer",
+      "relativePathTemplate": "opendocviewer/web/{version}",
       "minVersion": "2.0.3",
       "maxVersion": null
     }
@@ -52,14 +53,6 @@
       ],
       "apps": [
         { "moduleKey": "opendocviewer", "appKey": "opendocviewer_webapp", "appType": "WebApp" }
-      ],
-      "artifacts": [
-        {
-          "appKey": "opendocviewer_webapp",
-          "packageType": "web-app",
-          "targetName": "opendocviewer",
-          "relativePathTemplate": "opendocviewer/web/{version}"
-        }
       ],
       "moduleInstances": [
         { "moduleInstanceKey": "opendocviewer", "instanceKey": "default" }

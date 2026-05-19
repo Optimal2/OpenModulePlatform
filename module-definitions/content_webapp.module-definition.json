@@ -25,6 +25,7 @@
       "appKey": "content_webapp_webapp",
       "packageType": "web-app",
       "targetName": "content-webapp",
+      "relativePathTemplate": "content-webapp/web/{version}",
       "minVersion": "0.3.12",
       "maxVersion": null
     }
@@ -79,14 +80,6 @@
       ],
       "apps": [
         { "moduleKey": "content_webapp", "appKey": "content_webapp_webapp", "appType": "WebApp" }
-      ],
-      "artifacts": [
-        {
-          "appKey": "content_webapp_webapp",
-          "packageType": "web-app",
-          "targetName": "content-webapp",
-          "relativePathTemplate": "content-webapp/web/{version}"
-        }
       ],
       "moduleInstances": [
         { "moduleInstanceKey": "content_webapp", "instanceKey": "default" }
