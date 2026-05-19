@@ -1710,4 +1710,6 @@
   <data name="A desired app with the same key or active host placement already exists." xml:space="preserve"><value>A desired app with the same key or active host placement already exists.</value></data>
   <data name="Leave host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one host." xml:space="preserve"><value>Leave host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one host.</value></data>
   <data name="Leave template host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one template host." xml:space="preserve"><value>Leave template host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one template host.</value></data>
+  <data name="Open topbar menus on hover" xml:space="preserve"><value>Open topbar menus on hover</value></data>
+  <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>When this is turned off, menus open only by click or keyboard shortcut.</value></data>
 </root>

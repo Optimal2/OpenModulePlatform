@@ -71,24 +71,27 @@
 }
 else
 {
-    @if (Model.IsPortalAdmin)
-    {
-        <form method="post" asp-page-handler="Portal" class="card form-grid settings-panel">
+    <form method="post" asp-page-handler="Portal" class="card form-grid settings-panel">
+        <h3>@ompBranding.PortalName</h3>
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="PortalInput.TopbarDropdownsOpenOnHover" type="checkbox" />
+            <label for="PortalInput_TopbarDropdownsOpenOnHover">@L["Open topbar menus on hover"]</label>
+        </div>
+        <p class="muted">@L["When this is turned off, menus open only by click or keyboard shortcut."]</p>
+
+        @if (Model.IsPortalAdmin)
+        {
             <h3>@L["Admin"]</h3>
             <div class="form-field checkbox-row checkbox-row--boxed">
                 <input asp-for="PortalInput.AdminMetricsCollapsed" type="checkbox" />
                 <label for="PortalInput_AdminMetricsCollapsed">@L["Collapse admin overview by default"]</label>
             </div>
+        }
 
-            <div class="toolbar">
-                <button type="submit">@L["Save"]</button>
-            </div>
-        </form>
-    }
-    else
-    {
-        <div class="card empty-state settings-panel">@ompBranding.ApplyTerms(L["No portal settings are available."].Value)</div>
-    }
+        <div class="toolbar">
+            <button type="submit">@L["Save"]</button>
+        </div>
+    </form>
 }
 
 @section Scripts {

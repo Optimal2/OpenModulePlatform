@@ -7,6 +7,15 @@
         return !!(canHoverMedia && canHoverMedia.matches);
     }
 
+    function openOnHoverEnabled() {
+        var topbar = document.querySelector("[data-portal-topbar-root]");
+        return !topbar || topbar.getAttribute("data-open-on-hover") !== "false";
+    }
+
+    function canOpenOnHover() {
+        return canHover() && openOnHoverEnabled();
+    }
+
     function getDropdowns() {
         return Array.from(document.querySelectorAll(".nav-dropdown"));
     }
@@ -71,7 +80,7 @@
         });
 
         dropdown.addEventListener("mouseenter", function () {
-            if (!canHover() || isPinned(dropdown)) {
+            if (!canOpenOnHover() || isPinned(dropdown)) {
                 return;
             }
 
@@ -79,7 +88,7 @@
         });
 
         dropdown.addEventListener("mouseleave", function () {
-            if (!canHover() || isPinned(dropdown)) {
+            if (!canOpenOnHover() || isPinned(dropdown)) {
                 return;
             }
 

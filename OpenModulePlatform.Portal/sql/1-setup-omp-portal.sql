@@ -95,6 +95,15 @@ USING
            N'Controls whether the Portal admin metrics panel starts collapsed for the signed-in user.' AS description,
            10 AS sort_order,
            CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Portal' AS setting_category,
+           N'TopbarDropdownsOpenOnHover' AS setting_name,
+           CAST(1 AS tinyint) AS value_kind,
+           CAST(1 AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           N'Controls whether top bar dropdown menus open on hover for the signed-in user.' AS description,
+           20 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
 ) AS source
 ON target.setting_category = source.setting_category
 AND target.setting_name = source.setting_name

@@ -1713,4 +1713,6 @@
   <data name="Updates matching desired app rows so HostAgent starts deploying this artifact on its next cycle." xml:space="preserve"><value>Uppdaterar matchande önskade appar så att HostAgent börjar deploya artefakten vid nästa körning.</value></data>
   <data name="Selected this artifact as desired version for {0} matching app row(s)." xml:space="preserve"><value>Valde den här artefakten som önskad version för {0} matchande apprad(er).</value></data>
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>Artefakten kunde inte väljas som önskad version automatiskt. Välj den från installationsmallens sida.</value></data>
+  <data name="Open topbar menus on hover" xml:space="preserve"><value>Öppna topbar-menyer vid hovring</value></data>
+  <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>När detta är avstängt öppnas menyer bara med klick eller kortkommando.</value></data>
 </root>

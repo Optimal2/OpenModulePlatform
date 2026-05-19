@@ -23,6 +23,15 @@
         return !!(canHoverMedia && canHoverMedia.matches);
     }
 
+    function openOnHoverEnabled(element) {
+        var root = element ? element.closest('[data-portal-topbar-root]') : null;
+        return !root || root.getAttribute('data-open-on-hover') !== 'false';
+    }
+
+    function canOpenOnHover(element) {
+        return canHover() && openOnHoverEnabled(element);
+    }
+
     function sortByIndex(nodes) {
         return Array.from(nodes).sort(function (left, right) {
             return Number(left.dataset.index) - Number(right.dataset.index);
@@ -625,7 +634,7 @@
         });
 
         submenu.addEventListener('mouseenter', function () {
-            if (!canHover() || isPinned(submenu)) {
+            if (!canOpenOnHover(submenu) || isPinned(submenu)) {
                 return;
             }
 
@@ -633,7 +642,7 @@
         });
 
         submenu.addEventListener('mouseleave', function () {
-            if (!canHover() || isPinned(submenu)) {
+            if (!canOpenOnHover(submenu) || isPinned(submenu)) {
                 return;
             }
 
@@ -666,7 +675,7 @@
         });
 
         menu.addEventListener('mouseenter', function () {
-            if (!canHover() || isPinned(menu)) {
+            if (!canOpenOnHover(menu) || isPinned(menu)) {
                 return;
             }
 
@@ -674,7 +683,7 @@
         });
 
         menu.addEventListener('mouseleave', function () {
-            if (!canHover() || isPinned(menu)) {
+            if (!canOpenOnHover(menu) || isPinned(menu)) {
                 return;
             }
 

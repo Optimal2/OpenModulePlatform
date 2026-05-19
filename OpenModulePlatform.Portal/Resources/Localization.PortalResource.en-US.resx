@@ -271,4 +271,6 @@
   <data name="Updates matching desired app rows so HostAgent starts deploying this artifact on its next cycle." xml:space="preserve"><value>Updates matching desired app rows so HostAgent starts deploying this artifact on its next cycle.</value></data>
   <data name="Selected this artifact as desired version for {0} matching app row(s)." xml:space="preserve"><value>Selected this artifact as desired version for {0} matching app row(s).</value></data>
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>The artifact could not be selected as the desired version automatically. Choose it from the installation template page.</value></data>
+  <data name="Open topbar menus on hover" xml:space="preserve"><value>Open topbar menus on hover</value></data>
+  <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>When this is turned off, menus open only by click or keyboard shortcut.</value></data>
 </root>
