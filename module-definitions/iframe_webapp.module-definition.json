@@ -27,7 +27,7 @@
       "targetName": "iframe-webapp",
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": null
+      "maxVersion": "0.3.4"
     }
   ],
   "sqlScripts": [

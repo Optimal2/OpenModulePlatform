@@ -101,7 +101,15 @@ public sealed class ArtifactZipImportService
                 ?? throw new InvalidOperationException(
                     $"No enabled app was found for module '{metadata.ModuleKey}' and app '{metadata.AppKey}'.");
 
-            var relativePath = BuildDefaultRelativePath(
+            var compatibility = await _repository.RequireCompatibleArtifactSlotAsync(
+                app.AppId,
+                metadata.Version,
+                metadata.PackageType,
+                metadata.TargetName,
+                cancellationToken);
+
+            var relativePath = BuildRelativePath(
+                compatibility,
                 metadata.TargetName,
                 metadata.PackageType,
                 metadata.Version);
@@ -388,6 +396,25 @@ public sealed class ArtifactZipImportService
         }
 
         return $"{rootSegment}/{packageSegment}/{SanitizePathSegment(version)}";
+    }
+
+    private static string BuildRelativePath(
+        ArtifactCompatibilitySlot compatibility,
+        string targetName,
+        string packageType,
+        string version)
+    {
+        if (string.IsNullOrWhiteSpace(compatibility.RelativePathTemplate))
+        {
+            return BuildDefaultRelativePath(targetName, packageType, version);
+        }
+
+        return compatibility.RelativePathTemplate.Trim()
+            .Replace("{moduleKey}", SanitizePathSegment(compatibility.ModuleKey), StringComparison.OrdinalIgnoreCase)
+            .Replace("{appKey}", SanitizePathSegment(compatibility.AppKey), StringComparison.OrdinalIgnoreCase)
+            .Replace("{targetName}", SanitizePathSegment(targetName), StringComparison.OrdinalIgnoreCase)
+            .Replace("{packageType}", GetPackagePathSegment(packageType), StringComparison.OrdinalIgnoreCase)
+            .Replace("{version}", SanitizePathSegment(version), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetPackagePathSegment(string packageType)

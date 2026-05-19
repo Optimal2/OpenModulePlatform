@@ -29,8 +29,8 @@
     }
   ],
   "compatibleArtifacts": [
-    { "appKey": "example_serviceapp_webapp", "packageType": "web-app", "targetName": "example-serviceapp-web", "relativePathTemplate": "example-serviceapp/web/{version}", "minVersion": "0.3.4", "maxVersion": null },
-    { "appKey": "example_serviceapp_service", "packageType": "service-app", "targetName": "example-serviceapp-service", "relativePathTemplate": "example-serviceapp/service/{version}", "minVersion": "0.3.3", "maxVersion": null }
+    { "appKey": "example_serviceapp_webapp", "packageType": "web-app", "targetName": "example-serviceapp-web", "relativePathTemplate": "example-serviceapp/web/{version}", "minVersion": "0.3.4", "maxVersion": "0.3.4" },
+    { "appKey": "example_serviceapp_service", "packageType": "service-app", "targetName": "example-serviceapp-service", "relativePathTemplate": "example-serviceapp/service/{version}", "minVersion": "0.3.3", "maxVersion": "0.3.3" }
   ],
   "sqlScripts": [
     {

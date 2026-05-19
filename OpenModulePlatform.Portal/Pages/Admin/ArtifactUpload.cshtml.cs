@@ -97,7 +97,29 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             return Page();
         }
 
-        var relativePath = NormalizeRelativePath(Input.RelativePath);
+        var version = Input.Version.Trim();
+        var packageType = Input.PackageType.Trim();
+        var targetName = Clean(Input.TargetName);
+        ArtifactCompatibilitySlot compatibility;
+        try
+        {
+            compatibility = await _repo.RequireCompatibleArtifactSlotAsync(
+                Input.AppId,
+                version,
+                packageType,
+                targetName,
+                ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            return Page();
+        }
+
+        var relativePathSource = string.IsNullOrWhiteSpace(compatibility.RelativePathTemplate)
+            ? FillBlank(Input.RelativePath, BuildRelativePath(compatibility, targetName ?? string.Empty, packageType, version))
+            : BuildRelativePath(compatibility, targetName ?? string.Empty, packageType, version);
+        var relativePath = NormalizeRelativePath(relativePathSource);
         if (relativePath is null)
         {
             ModelState.AddModelError(
@@ -122,9 +144,6 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             ExtractValidatedZip(tempZipPath, stagingPath);
 
             var contentHash = await ComputeDirectorySha256Async(stagingPath, ct);
-            var version = Input.Version.Trim();
-            var packageType = Input.PackageType.Trim();
-            var targetName = Clean(Input.TargetName);
             var existingIdentity = await _repo.FindArtifactByIdentityAsync(
                 Input.AppId,
                 version,
@@ -394,11 +413,6 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         {
             ModelState.AddModelError(nameof(Input.TargetName), T("Target name is required."));
         }
-
-        if (string.IsNullOrWhiteSpace(Input.RelativePath))
-        {
-            ModelState.AddModelError(nameof(Input.RelativePath), T("Relative path is required."));
-        }
     }
 
     private string? ResolveArtifactStoreRoot()
@@ -660,6 +674,25 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         }
 
         return $"{rootSegment}/{packageSegment}/{SanitizePathSegment(version)}";
+    }
+
+    private static string BuildRelativePath(
+        ArtifactCompatibilitySlot compatibility,
+        string targetName,
+        string packageType,
+        string version)
+    {
+        if (string.IsNullOrWhiteSpace(compatibility.RelativePathTemplate))
+        {
+            return BuildDefaultRelativePath(targetName, packageType, version);
+        }
+
+        return compatibility.RelativePathTemplate.Trim()
+            .Replace("{moduleKey}", SanitizePathSegment(compatibility.ModuleKey), StringComparison.OrdinalIgnoreCase)
+            .Replace("{appKey}", SanitizePathSegment(compatibility.AppKey), StringComparison.OrdinalIgnoreCase)
+            .Replace("{targetName}", SanitizePathSegment(targetName), StringComparison.OrdinalIgnoreCase)
+            .Replace("{packageType}", GetPackagePathSegment(packageType), StringComparison.OrdinalIgnoreCase)
+            .Replace("{version}", SanitizePathSegment(version), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetPackagePathSegment(string packageType)

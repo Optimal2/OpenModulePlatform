@@ -5,6 +5,16 @@ public sealed record ArtifactZipImportAppDescriptor(
     string ModuleKey,
     string AppKey);
 
+public sealed record ArtifactCompatibilitySlot(
+    string ModuleKey,
+    string DefinitionVersion,
+    string AppKey,
+    string PackageType,
+    string? TargetName,
+    string? RelativePathTemplate,
+    string? MinArtifactVersion,
+    string? MaxArtifactVersion);
+
 public sealed record ArtifactZipImportResult(
     int ArtifactId,
     string Version,

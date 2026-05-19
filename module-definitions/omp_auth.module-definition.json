@@ -27,7 +27,7 @@
       "targetName": "omp-auth",
       "relativePathTemplate": "omp-auth/web/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": null
+      "maxVersion": "0.3.3"
     }
   ],
   "artifactConfigurationFiles": [

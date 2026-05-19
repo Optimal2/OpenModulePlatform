@@ -186,6 +186,28 @@ public sealed class ArtifactAppOption
 }
 
 /// <summary>
+/// Artifact slot allowed by the currently applied module definition.
+/// </summary>
+public sealed class ArtifactCompatibilitySlot
+{
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string DefinitionVersion { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public string? RelativePathTemplate { get; set; }
+
+    public string? MinArtifactVersion { get; set; }
+
+    public string? MaxArtifactVersion { get; set; }
+}
+
+/// <summary>
 /// Existing artifact row used when duplicate content is detected during upload.
 /// </summary>
 public sealed class ArtifactDuplicateInfo
