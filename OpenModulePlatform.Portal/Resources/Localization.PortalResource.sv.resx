@@ -1791,4 +1791,37 @@
   <data name="The last execution failed." xml:space="preserve"><value>Den senaste körningen misslyckades.</value></data>
   <data name="No successful execution has been recorded for this script content." xml:space="preserve"><value>Ingen lyckad körning har registrerats för det här skriptinnehållet.</value></data>
   <data name="The script content has a successful execution record and declared objects are present." xml:space="preserve"><value>Skriptinnehållet har en lyckad körningspost och deklarerade objekt finns.</value></data>
+  <data name="Module integrity matrix" xml:space="preserve"><value>Modulintegritetsmatris</value></data>
+  <data name="The matrix checks active module definitions against current OMP metadata, required database objects, declared module dependencies, and current artifact selections." xml:space="preserve"><value>Matrisen kontrollerar aktiva moduldefinitioner mot aktuell OMP-metadata, obligatoriska databasobjekt, deklarerade modulberoenden och nuvarande artefaktval.</value></data>
+  <data name="Execute detected SQL repairs for all modules" xml:space="preserve"><value>Kör detekterade SQL-rättningar för alla moduler</value></data>
+  <data name="Executed {0} module definition SQL repair scripts across active module definitions." xml:space="preserve"><value>Körde {0} SQL-rättningsskript för aktiva moduldefinitioner.</value></data>
+  <data name="No active module definitions found." xml:space="preserve"><value>Inga aktiva moduldefinitioner hittades.</value></data>
+  <data name="Overall" xml:space="preserve"><value>Helhet</value></data>
+  <data name="Metadata" xml:space="preserve"><value>Metadata</value></data>
+  <data name="Database" xml:space="preserve"><value>Databas</value></data>
+  <data name="Dependencies" xml:space="preserve"><value>Beroenden</value></data>
+  <data name="Summary" xml:space="preserve"><value>Sammanfattning</value></data>
+  <data name="Needs attention" xml:space="preserve"><value>Behöver åtgärdas</value></data>
+  <data name="Review" xml:space="preserve"><value>Granska</value></data>
+  <data name="Current" xml:space="preserve"><value>Aktuell</value></data>
+  <data name="Stored definition" xml:space="preserve"><value>Lagrad definition</value></data>
+  <data name="Stored definitions are kept for review and are not included in active integrity checks." xml:space="preserve"><value>Lagrade definitioner sparas för granskning och ingår inte i aktiva integritetskontroller.</value></data>
+  <data name="Not checked" xml:space="preserve"><value>Inte kontrollerad</value></data>
+  <data name="No SQL" xml:space="preserve"><value>Ingen SQL</value></data>
+  <data name="Repair available" xml:space="preserve"><value>Rättning finns</value></data>
+  <data name="No dependencies" xml:space="preserve"><value>Inga beroenden</value></data>
+  <data name="Incompatible" xml:space="preserve"><value>Inkompatibel</value></data>
+  <data name="Repairable" xml:space="preserve"><value>Kan rättas</value></data>
+  <data name="Issues" xml:space="preserve"><value>Problem</value></data>
+  <data name="The module or app metadata declared by this definition is missing." xml:space="preserve"><value>Modul- eller appmetadata som deklareras av definitionen saknas.</value></data>
+  <data name="Required database objects are missing." xml:space="preserve"><value>Obligatoriska databasobjekt saknas.</value></data>
+  <data name="Some SQL scripts need review before Portal can execute them." xml:space="preserve"><value>Vissa SQL-skript måste granskas innan Portal kan köra dem.</value></data>
+  <data name="One or more SQL scripts have no successful execution record for their current content." xml:space="preserve"><value>Ett eller flera SQL-skript saknar lyckad körningspost för sitt aktuella innehåll.</value></data>
+  <data name="Declared module dependencies are missing or incompatible." xml:space="preserve"><value>Deklarerade modulberoenden saknas eller är inkompatibla.</value></data>
+  <data name="Current artifact selections are not compatible with this definition." xml:space="preserve"><value>Nuvarande artefaktval är inte kompatibla med den här definitionen.</value></data>
+  <data name="Current database state satisfies the declared checks." xml:space="preserve"><value>Aktuellt databastillstånd uppfyller de deklarerade kontrollerna.</value></data>
+  <data name="Managed by installer" xml:space="preserve"><value>Hanteras av installeraren</value></data>
+  <data name="Installer repair required" xml:space="preserve"><value>Installerarreparation krävs</value></data>
+  <data name="Core platform SQL is owned by the bootstrap installer. Run the installer repair if core objects are missing." xml:space="preserve"><value>Kärnplattformens SQL ägs av bootstrap-installeraren. Kör installerarreparation om kärnobjekt saknas.</value></data>
+  <data name="Core platform SQL is validated from declared objects and is not executed from Portal." xml:space="preserve"><value>Kärnplattformens SQL valideras via deklarerade objekt och körs inte från Portal.</value></data>
 </root>
