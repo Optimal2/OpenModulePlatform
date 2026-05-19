@@ -129,18 +129,7 @@
                 data-markdown-source-label="@L["Markdown source"]"
                 aria-selected="false">@L["Markdown source"]</button>
         </div>
-        <div class="rich-editor-toolbar" data-html-toolbar hidden>
-            <button type="button" data-html-command="bold">@L["Bold"]</button>
-            <button type="button" data-html-command="italic">@L["Italic"]</button>
-            <button type="button" data-html-command="formatBlock" data-command-value="H2">@L["Heading 2"]</button>
-            <button type="button" data-html-command="formatBlock" data-command-value="H3">@L["Heading 3"]</button>
-            <button type="button" data-html-command="insertUnorderedList">@L["Bulleted list"]</button>
-            <button type="button" data-html-command="insertOrderedList">@L["Numbered list"]</button>
-            <button type="button" data-html-command="createLink">@L["Link"]</button>
-            <button type="button" data-html-command="removeFormat">@L["Clear formatting"]</button>
-        </div>
         <div id="content-editor" class="content-editor" hidden></div>
-        <div id="html-visual-editor" class="html-visual-editor" contenteditable="true" hidden></div>
         <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
         <span class="field-hint" data-editor-hint="markdown">@L["Write Markdown content. Server report shortcodes such as DB_JSON are supported."]</span>
         <span class="field-hint" data-editor-hint="html" hidden>@L["Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported."]</span>
@@ -254,12 +243,9 @@
         (() => {
             const source = document.getElementById('Input_Body');
             const host = document.getElementById('content-editor');
-            const htmlVisual = document.getElementById('html-visual-editor');
             const editorTabs = document.querySelector('[data-editor-tabs]');
             const editorTabButtons = Array.from(document.querySelectorAll('[data-editor-mode]'));
             const sourceTab = document.querySelector('[data-editor-mode="source"]');
-            const htmlToolbar = document.querySelector('[data-html-toolbar]');
-            const htmlToolbarButtons = Array.from(document.querySelectorAll('[data-html-command]'));
             const form = document.getElementById('content-edit-form');
             const contentType = document.getElementById('Input_ContentType');
             const editorField = document.querySelector('[data-content-editor-field]');
@@ -267,40 +253,62 @@
             const reportField = document.querySelector('[data-server-report-field]');
             const markdownHint = document.querySelector('[data-editor-hint="markdown"]');
             const htmlHint = document.querySelector('[data-editor-hint="html"]');
-            const linkPromptText = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(L["Enter link URL"].Value));
-            let markdownEditor = null;
+            let toastEditor = null;
+            let toastEditorContentType = null;
             let editorMode = 'visual';
             let previousType = null;
 
-            const pullMarkdownEditorValue = () => {
-                if (markdownEditor) {
-                    source.value = markdownEditor.getMarkdown();
+            const getToastEditorValue = (type) => {
+                if (!toastEditor) {
+                    return source?.value || '';
+                }
+
+                if (type === 'html' && typeof toastEditor.getHTML === 'function') {
+                    return toastEditor.getHTML();
+                }
+
+                return toastEditor.getMarkdown();
+            };
+
+            const setToastEditorValue = (type, value) => {
+                if (!toastEditor) {
+                    return;
+                }
+
+                if (type === 'html' && typeof toastEditor.setHTML === 'function') {
+                    toastEditor.setHTML(value || '');
+                }
+                else {
+                    toastEditor.setMarkdown(value || '');
+                }
+
+                toastEditorContentType = type;
+            };
+
+            const pullVisualEditorValue = (type = contentType?.value || 'markdown') => {
+                if (source && toastEditor && editorMode === 'visual') {
+                    source.value = getToastEditorValue(type);
                 }
             };
 
-            const pullVisualHtmlValue = () => {
-                if (source && htmlVisual && editorMode === 'visual') {
-                    source.value = htmlVisual.innerHTML;
-                }
-            };
-
-            const ensureMarkdownEditor = () => {
+            const ensureToastEditor = (type, forceValueSync = false) => {
                 if (!source || !host || !window.toastui?.Editor) {
                     return;
                 }
 
-                if (!markdownEditor) {
-                    markdownEditor = new toastui.Editor({
+                if (!toastEditor) {
+                    toastEditor = new toastui.Editor({
                         el: host,
                         height: '520px',
                         initialEditType: 'wysiwyg',
                         previewStyle: 'tab',
                         hideModeSwitch: true,
-                        initialValue: source.value || ''
+                        initialValue: ''
                     });
                 }
-                else if (previousType !== 'markdown') {
-                    markdownEditor.setMarkdown(source.value || '');
+
+                if (forceValueSync || toastEditorContentType !== type) {
+                    setToastEditorValue(type, source.value || '');
                 }
 
                 if (editorMode === 'visual') {
@@ -331,37 +339,30 @@
                 const type = contentType?.value || 'markdown';
                 const nextMode = mode === 'source' ? 'source' : 'visual';
 
-                if (type === 'markdown') {
-                    if (editorMode === 'visual' && nextMode === 'source') {
-                        pullMarkdownEditorValue();
-                    }
+                if ((type === 'markdown' || type === 'html') && editorMode === 'visual' && nextMode === 'source') {
+                    pullVisualEditorValue();
+                }
 
-                    editorMode = nextMode;
-                    if (editorMode === 'visual') {
-                        ensureMarkdownEditor();
-                        markdownEditor?.setMarkdown(source.value || '');
+                editorMode = nextMode;
+                if (editorMode === 'visual') {
+                    ensureToastEditor(type, true);
+                    if (toastEditor && host) {
                         host.hidden = false;
                         source.classList.add('is-enhanced');
                     }
-                    else {
+                    else if (host) {
                         host.hidden = true;
                         source.classList.remove('is-enhanced');
                     }
                 }
-                else if (type === 'html' && htmlVisual) {
-                    if (editorMode === 'visual' && nextMode === 'source') {
-                        source.value = htmlVisual.innerHTML;
-                    }
-                    else if (editorMode === 'source' && nextMode === 'visual') {
-                        htmlVisual.innerHTML = source.value || '';
+                else {
+                    if (host) {
+                        host.hidden = true;
                     }
 
-                    editorMode = nextMode;
-                    htmlVisual.hidden = editorMode !== 'visual';
-                    source.classList.toggle('is-enhanced', editorMode === 'visual');
+                    source.classList.remove('is-enhanced');
                 }
 
-                htmlToolbar.hidden = !(type === 'html' && editorMode === 'visual');
                 updateEditorTabs(type);
             };
 
@@ -369,45 +370,15 @@
                 button.addEventListener('click', () => setEditorMode(button.dataset.editorMode));
             }
 
-            for (const button of htmlToolbarButtons) {
-                button.addEventListener('click', () => {
-                    htmlVisual?.focus();
-                    const command = button.dataset.htmlCommand;
-                    let value = button.dataset.commandValue || null;
-                    if (command === 'createLink') {
-                        value = window.prompt(linkPromptText) || null;
-                        if (!value) {
-                            return;
-                        }
-                    }
-
-                    document.execCommand(command, false, value);
-                    pullVisualHtmlValue();
-                });
-            }
-
             const hideEnhancedEditors = () => {
-                if (previousType === 'markdown') {
-                    pullMarkdownEditorValue();
-                }
-                else if (previousType === 'html') {
-                    pullVisualHtmlValue();
-                }
+                pullVisualEditorValue(previousType || contentType?.value || 'markdown');
 
                 if (host) {
                     host.hidden = true;
                 }
 
-                if (htmlVisual) {
-                    htmlVisual.hidden = true;
-                }
-
                 if (editorTabs) {
                     editorTabs.hidden = true;
-                }
-
-                if (htmlToolbar) {
-                    htmlToolbar.hidden = true;
                 }
 
                 source?.classList.remove('is-enhanced');
@@ -449,43 +420,28 @@
                 }
                 else if (isHtml) {
                     if (previousType === 'markdown') {
-                        pullMarkdownEditorValue();
-                    }
-
-                    if (host) {
-                        host.hidden = true;
+                        pullVisualEditorValue(previousType);
                     }
 
                     if (editorTabs) {
                         editorTabs.hidden = false;
                     }
 
-                    if (htmlVisual && previousType !== 'html') {
-                        htmlVisual.innerHTML = source?.value || '';
-                    }
-
                     source?.classList.add('content-editor__source--html');
+                    ensureToastEditor(type, typeChanged);
                     setEditorMode(editorMode);
                 }
                 else {
                     if (previousType === 'html') {
-                        pullVisualHtmlValue();
+                        pullVisualEditorValue(previousType);
                     }
 
                     if (editorTabs) {
                         editorTabs.hidden = false;
                     }
 
-                    if (htmlVisual) {
-                        htmlVisual.hidden = true;
-                    }
-
-                    if (htmlToolbar) {
-                        htmlToolbar.hidden = true;
-                    }
-
                     source?.classList.remove('content-editor__source--html');
-                    ensureMarkdownEditor();
+                    ensureToastEditor(type, typeChanged);
                     setEditorMode(editorMode);
                 }
 
@@ -505,11 +461,8 @@
                     return;
                 }
 
-                if (contentType.value === 'markdown') {
-                    pullMarkdownEditorValue();
-                }
-                else if (contentType.value === 'html') {
-                    pullVisualHtmlValue();
+                if (contentType.value === 'markdown' || contentType.value === 'html') {
+                    pullVisualEditorValue();
                 }
             });
         })();
