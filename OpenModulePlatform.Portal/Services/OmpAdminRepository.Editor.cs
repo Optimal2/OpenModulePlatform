@@ -1742,6 +1742,73 @@ WHERE ModuleKey = @ModuleKey;";
         };
     }
 
+    public async Task<IReadOnlyList<ModuleDefinitionIntegritySummaryRow>> GetModuleDefinitionIntegritySummariesAsync(
+        CancellationToken ct)
+    {
+        var rows = await GetModuleDefinitionDocumentsAsync(ct);
+        var appliedRows = rows
+            .Where(static row => row.IsApplied)
+            .ToList();
+
+        var summaries = new List<ModuleDefinitionIntegritySummaryRow>(rows.Count);
+        foreach (var row in rows)
+        {
+            if (!row.IsApplied)
+            {
+                summaries.Add(new ModuleDefinitionIntegritySummaryRow
+                {
+                    ModuleDefinitionDocumentId = row.ModuleDefinitionDocumentId,
+                    ModuleKey = row.ModuleKey,
+                    DefinitionVersion = row.DefinitionVersion,
+                    IsApplied = false,
+                    OverallStatus = "neutral",
+                    OverallStatusLabel = "Stored",
+                    SummaryLabel = "Stored definition",
+                    Messages = ["Stored definitions are kept for review and are not included in active integrity checks."]
+                });
+                continue;
+            }
+
+            var definition = await GetModuleDefinitionDocumentAsync(row.ModuleDefinitionDocumentId, ct)
+                ?? throw new InvalidOperationException("Module definition document was not found.");
+            var missingMetadata = await GetMissingModuleDefinitionMetadataAsync(definition, ct);
+            var sqlChecks = await GetModuleDefinitionSqlChecksAsync(row.ModuleDefinitionDocumentId, ct);
+            var dependencyChecks = GetModuleDefinitionDependencyChecks(definition, appliedRows);
+            var incompatibleReferences = await GetIncompatibleArtifactReferencesForModuleDefinitionAsync(
+                row.ModuleDefinitionDocumentId,
+                ct);
+
+            summaries.Add(BuildModuleDefinitionIntegritySummary(
+                definition,
+                missingMetadata,
+                sqlChecks,
+                dependencyChecks,
+                incompatibleReferences));
+        }
+
+        return summaries;
+    }
+
+    public async Task<ModuleDefinitionSqlRepairResult> ExecuteAppliedModuleDefinitionSqlRepairsAsync(CancellationToken ct)
+    {
+        var rows = await GetModuleDefinitionDocumentsAsync(ct);
+        var executed = 0;
+        var remainingProblems = new List<ModuleDefinitionSqlCheckRow>();
+
+        foreach (var row in rows.Where(static item => item.IsApplied))
+        {
+            var result = await ExecuteModuleDefinitionSqlRepairsAsync(row.ModuleDefinitionDocumentId, ct);
+            executed += result.ExecutedCount;
+            remainingProblems.AddRange(result.RemainingProblems);
+        }
+
+        return new ModuleDefinitionSqlRepairResult
+        {
+            ExecutedCount = executed,
+            RemainingProblems = remainingProblems
+        };
+    }
+
     public async Task<IReadOnlyList<ModuleDefinitionArtifactReferenceRow>> GetIncompatibleArtifactReferencesForModuleDefinitionAsync(
         int moduleDefinitionDocumentId,
         CancellationToken ct)
@@ -1774,6 +1841,7 @@ WHERE ModuleKey = @ModuleKey;";
         }
 
         var requiredObjects = ReadRequiredDatabaseObjects(definition.DefinitionJson);
+        var isInstallerManagedDefinition = IsInstallerManagedModuleDefinitionSql(definition.DefinitionJson);
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -1826,6 +1894,16 @@ WHERE ModuleKey = @ModuleKey;";
                 status = "Blocked";
                 message = safety!;
             }
+            else if (isInstallerManagedDefinition && missing.Count > 0)
+            {
+                status = "Installer repair required";
+                message = "Core platform SQL is owned by the bootstrap installer. Run the installer repair if core objects are missing.";
+            }
+            else if (isInstallerManagedDefinition)
+            {
+                status = "Managed by installer";
+                message = "Core platform SQL is validated from declared objects and is not executed from Portal.";
+            }
             else if (missing.Count > 0)
             {
                 status = "Needs repair";
@@ -1842,7 +1920,6 @@ WHERE ModuleKey = @ModuleKey;";
             {
                 status = "Not recorded";
                 message = "No successful execution has been recorded for this script content.";
-                needsExecution = true;
             }
             else
             {
@@ -3037,6 +3114,302 @@ VALUES
             && string.Equals(reference.TargetName ?? string.Empty, slot.TargetName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
             && IsVersionInRange(reference.Version, slot.MinArtifactVersion, slot.MaxArtifactVersion);
 
+    private async Task<IReadOnlyList<string>> GetMissingModuleDefinitionMetadataAsync(
+        ModuleDefinitionDocumentRow definition,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(definition.DefinitionJson))
+        {
+            return [];
+        }
+
+        var expected = ReadExpectedModuleMetadata(definition.DefinitionJson, definition.ModuleKey);
+        if (!expected.ExpectsModule && expected.AppKeys.Count == 0)
+        {
+            return [];
+        }
+
+        var missing = new List<string>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        int? moduleId = null;
+        await using (var moduleCmd = new SqlCommand("SELECT ModuleId FROM omp.Modules WHERE ModuleKey = @ModuleKey;", conn))
+        {
+            Add(moduleCmd, "@ModuleKey", expected.ModuleKey);
+            var result = await moduleCmd.ExecuteScalarAsync(ct);
+            if (result is not null && result is not DBNull)
+            {
+                moduleId = Convert.ToInt32(result);
+            }
+        }
+
+        if (moduleId is null)
+        {
+            missing.Add($"module {expected.ModuleKey}");
+            return missing;
+        }
+
+        foreach (var appKey in expected.AppKeys)
+        {
+            await using var appCmd = new SqlCommand(
+                "SELECT 1 FROM omp.Apps WHERE ModuleId = @ModuleId AND AppKey = @AppKey;",
+                conn);
+            Add(appCmd, "@ModuleId", moduleId.Value);
+            Add(appCmd, "@AppKey", appKey);
+            if (await appCmd.ExecuteScalarAsync(ct) is null)
+            {
+                missing.Add($"app {expected.ModuleKey}.{appKey}");
+            }
+        }
+
+        return missing;
+    }
+
+    private static ModuleDefinitionIntegritySummaryRow BuildModuleDefinitionIntegritySummary(
+        ModuleDefinitionDocumentRow definition,
+        IReadOnlyList<string> missingMetadata,
+        IReadOnlyList<ModuleDefinitionSqlCheckRow> sqlChecks,
+        IReadOnlyList<ModuleDefinitionDependencyCheckRow> dependencyChecks,
+        IReadOnlyList<ModuleDefinitionArtifactReferenceRow> incompatibleReferences)
+    {
+        var missingRequiredObjects = sqlChecks.Sum(static row => row.MissingRequiredObjects.Count);
+        var repairableSqlScripts = sqlChecks.Count(static row => row.CanExecute
+            && !string.Equals(row.Status, "Not recorded", StringComparison.OrdinalIgnoreCase));
+        var notRecordedSqlScripts = sqlChecks.Count(static row => string.Equals(row.Status, "Not recorded", StringComparison.OrdinalIgnoreCase));
+        var sqlReviewCount = sqlChecks.Count(static row => ModuleDefinitionSqlNeedsReview(row.Status));
+        var requiredDependencyIssues = dependencyChecks.Count(static row => row.IsRequired && !string.Equals(row.Status, "ok", StringComparison.OrdinalIgnoreCase));
+        var optionalDependencyIssues = dependencyChecks.Count(static row => !row.IsRequired && !string.Equals(row.Status, "ok", StringComparison.OrdinalIgnoreCase));
+
+        var hasError = missingMetadata.Count > 0
+            || missingRequiredObjects > 0
+            || sqlReviewCount > 0
+            || requiredDependencyIssues > 0
+            || incompatibleReferences.Count > 0;
+        var hasWarning = repairableSqlScripts > 0
+            || optionalDependencyIssues > 0;
+
+        var messages = new List<string>();
+        if (missingMetadata.Count > 0)
+        {
+            messages.Add("The module or app metadata declared by this definition is missing.");
+        }
+
+        if (missingRequiredObjects > 0)
+        {
+            messages.Add("Required database objects are missing.");
+        }
+
+        if (sqlReviewCount > 0)
+        {
+            messages.Add("Some SQL scripts need review before Portal can execute them.");
+        }
+
+        if (notRecordedSqlScripts > 0)
+        {
+            messages.Add("One or more SQL scripts have no successful execution record for their current content.");
+        }
+
+        if (requiredDependencyIssues > 0 || optionalDependencyIssues > 0)
+        {
+            messages.Add("Declared module dependencies are missing or incompatible.");
+        }
+
+        if (incompatibleReferences.Count > 0)
+        {
+            messages.Add("Current artifact selections are not compatible with this definition.");
+        }
+
+        if (messages.Count == 0)
+        {
+            messages.Add("Current database state satisfies the declared checks.");
+        }
+
+        return new ModuleDefinitionIntegritySummaryRow
+        {
+            ModuleDefinitionDocumentId = definition.ModuleDefinitionDocumentId,
+            ModuleKey = definition.ModuleKey,
+            DefinitionVersion = definition.DefinitionVersion,
+            IsApplied = definition.IsApplied,
+            OverallStatus = hasError ? "error" : hasWarning ? "warning" : "ok",
+            OverallStatusLabel = hasError ? "Needs attention" : hasWarning ? "Review" : "OK",
+            MetadataStatus = missingMetadata.Count > 0 ? "error" : "ok",
+            MetadataStatusLabel = missingMetadata.Count > 0 ? "Missing" : "OK",
+            DatabaseStatus = missingRequiredObjects > 0 ? "error" : "ok",
+            DatabaseStatusLabel = missingRequiredObjects > 0 ? "Missing" : "OK",
+            SqlStatus = GetSqlSummaryStatus(sqlChecks, sqlReviewCount, repairableSqlScripts, notRecordedSqlScripts),
+            SqlStatusLabel = GetSqlSummaryStatusLabel(sqlChecks, sqlReviewCount, repairableSqlScripts, notRecordedSqlScripts),
+            DependencyStatus = GetDependencySummaryStatus(dependencyChecks, requiredDependencyIssues, optionalDependencyIssues),
+            DependencyStatusLabel = GetDependencySummaryStatusLabel(dependencyChecks, requiredDependencyIssues, optionalDependencyIssues),
+            ArtifactStatus = incompatibleReferences.Count > 0 ? "error" : "ok",
+            ArtifactStatusLabel = incompatibleReferences.Count > 0 ? "Incompatible" : "OK",
+            SummaryLabel = hasError ? "Needs attention" : hasWarning ? "Review" : "Current",
+            MissingMetadataCount = missingMetadata.Count,
+            MissingRequiredObjectCount = missingRequiredObjects,
+            RepairableSqlScriptCount = repairableSqlScripts,
+            NotRecordedSqlScriptCount = notRecordedSqlScripts,
+            SqlReviewCount = sqlReviewCount,
+            RequiredDependencyIssueCount = requiredDependencyIssues,
+            OptionalDependencyIssueCount = optionalDependencyIssues,
+            IncompatibleArtifactReferenceCount = incompatibleReferences.Count,
+            Messages = messages
+        };
+    }
+
+    private static string GetSqlSummaryStatus(
+        IReadOnlyList<ModuleDefinitionSqlCheckRow> sqlChecks,
+        int sqlReviewCount,
+        int repairableSqlScripts,
+        int notRecordedSqlScripts)
+    {
+        if (sqlChecks.Count == 0)
+        {
+            return "ok";
+        }
+
+        if (sqlReviewCount > 0)
+        {
+            return "error";
+        }
+
+        if (repairableSqlScripts > 0)
+        {
+            return "warning";
+        }
+
+        return notRecordedSqlScripts > 0
+            ? "neutral"
+            : "ok";
+    }
+
+    private static string GetSqlSummaryStatusLabel(
+        IReadOnlyList<ModuleDefinitionSqlCheckRow> sqlChecks,
+        int sqlReviewCount,
+        int repairableSqlScripts,
+        int notRecordedSqlScripts)
+    {
+        if (sqlChecks.Count == 0)
+        {
+            return "No SQL";
+        }
+
+        if (sqlReviewCount > 0)
+        {
+            return "Needs attention";
+        }
+
+        if (repairableSqlScripts > 0)
+        {
+            return "Repair available";
+        }
+
+        return notRecordedSqlScripts > 0
+            ? "Not recorded"
+            : "OK";
+    }
+
+    private static string GetDependencySummaryStatus(
+        IReadOnlyList<ModuleDefinitionDependencyCheckRow> dependencyChecks,
+        int requiredDependencyIssues,
+        int optionalDependencyIssues)
+    {
+        if (requiredDependencyIssues > 0)
+        {
+            return "error";
+        }
+
+        return optionalDependencyIssues > 0
+            ? "warning"
+            : "ok";
+    }
+
+    private static string GetDependencySummaryStatusLabel(
+        IReadOnlyList<ModuleDefinitionDependencyCheckRow> dependencyChecks,
+        int requiredDependencyIssues,
+        int optionalDependencyIssues)
+    {
+        if (dependencyChecks.Count == 0)
+        {
+            return "No dependencies";
+        }
+
+        if (requiredDependencyIssues > 0)
+        {
+            return "Needs attention";
+        }
+
+        return optionalDependencyIssues > 0
+            ? "Review"
+            : "OK";
+    }
+
+    private static bool ModuleDefinitionSqlNeedsReview(string status)
+        => string.Equals(status, "Invalid content hash", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Blocked", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Not executable", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "Installer repair required", StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<ModuleDefinitionDependencyCheckRow> GetModuleDefinitionDependencyChecks(
+        ModuleDefinitionDocumentRow definition,
+        IReadOnlyList<ModuleDefinitionDocumentRow> appliedDefinitions)
+    {
+        if (string.IsNullOrWhiteSpace(definition.DefinitionJson))
+        {
+            return [];
+        }
+
+        var dependencies = ReadModuleDefinitionDependencies(definition.DefinitionJson);
+        if (dependencies.Count == 0)
+        {
+            return [];
+        }
+
+        var checks = new List<ModuleDefinitionDependencyCheckRow>(dependencies.Count);
+        foreach (var dependency in dependencies)
+        {
+            var applied = appliedDefinitions
+                .Where(row => string.Equals(row.ModuleKey, dependency.ModuleKey, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(static row => row.AppliedUtc)
+                .ThenByDescending(static row => row.UpdatedUtc)
+                .FirstOrDefault();
+
+            if (applied is null)
+            {
+                checks.Add(new ModuleDefinitionDependencyCheckRow
+                {
+                    ModuleKey = dependency.ModuleKey,
+                    MinDefinitionVersion = dependency.MinDefinitionVersion,
+                    MaxDefinitionVersion = dependency.MaxDefinitionVersion,
+                    IsRequired = dependency.IsRequired,
+                    Status = dependency.IsRequired ? "error" : "warning",
+                    StatusLabel = dependency.IsRequired ? "Missing" : "Optional missing",
+                    Reason = dependency.Reason
+                });
+                continue;
+            }
+
+            var isCompatible = IsVersionInRange(
+                applied.DefinitionVersion,
+                dependency.MinDefinitionVersion,
+                dependency.MaxDefinitionVersion);
+
+            checks.Add(new ModuleDefinitionDependencyCheckRow
+            {
+                ModuleKey = dependency.ModuleKey,
+                MinDefinitionVersion = dependency.MinDefinitionVersion,
+                MaxDefinitionVersion = dependency.MaxDefinitionVersion,
+                IsRequired = dependency.IsRequired,
+                AppliedDefinitionVersion = applied.DefinitionVersion,
+                Status = isCompatible ? "ok" : dependency.IsRequired ? "error" : "warning",
+                StatusLabel = isCompatible ? "OK" : "Incompatible",
+                Reason = dependency.Reason
+            });
+        }
+
+        return checks;
+    }
+
     private static void BindArtifact(SqlCommand cmd, ArtifactEditData input, bool includePrimaryKey)
     {
         if (includePrimaryKey)
@@ -3353,6 +3726,67 @@ VALUES
         }
 
         return required;
+    }
+
+    private static ExpectedModuleMetadata ReadExpectedModuleMetadata(string definitionJson, string fallbackModuleKey)
+    {
+        var root = JsonNode.Parse(definitionJson) as JsonObject;
+        if (root is null)
+        {
+            return new ExpectedModuleMetadata(fallbackModuleKey, false, []);
+        }
+
+        var moduleKey = NullIfWhiteSpace(GetJsonString(root, "moduleKey")) ?? fallbackModuleKey;
+        var appKeys = new List<string>();
+        if (root["apps"] is JsonArray apps)
+        {
+            foreach (var item in apps.OfType<JsonObject>())
+            {
+                var appKey = NullIfWhiteSpace(GetJsonString(item, "appKey"));
+                if (appKey is not null)
+                {
+                    appKeys.Add(appKey);
+                }
+            }
+        }
+
+        var expectsModule = root["module"] is JsonObject || appKeys.Count > 0;
+        return new ExpectedModuleMetadata(moduleKey, expectsModule, appKeys);
+    }
+
+    private static IReadOnlyList<ModuleDefinitionDependencySpec> ReadModuleDefinitionDependencies(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson) as JsonObject;
+        if (root?["moduleDependencies"] is not JsonArray dependencies)
+        {
+            return [];
+        }
+
+        var result = new List<ModuleDefinitionDependencySpec>();
+        foreach (var item in dependencies.OfType<JsonObject>())
+        {
+            var moduleKey = NullIfWhiteSpace(GetJsonString(item, "moduleKey"));
+            if (moduleKey is null)
+            {
+                continue;
+            }
+
+            result.Add(new ModuleDefinitionDependencySpec(
+                moduleKey,
+                NullIfWhiteSpace(GetJsonString(item, "minDefinitionVersion")),
+                NullIfWhiteSpace(GetJsonString(item, "maxDefinitionVersion")),
+                GetJsonBool(item, "required", true),
+                NullIfWhiteSpace(GetJsonString(item, "reason"))));
+        }
+
+        return result;
+    }
+
+    private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson) as JsonObject;
+        return root is not null
+            && string.Equals(GetJsonString(root, "definitionType"), "platform-core", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)
@@ -3681,6 +4115,24 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
             : defaultValue;
     }
 
+    private static bool GetJsonBool(JsonObject obj, string propertyName, bool defaultValue)
+    {
+        if (!obj.TryGetPropertyValue(propertyName, out var node) || node is not JsonValue value)
+        {
+            return defaultValue;
+        }
+
+        if (value.TryGetValue<bool>(out var flag))
+        {
+            return flag;
+        }
+
+        return value.TryGetValue<string>(out var text)
+            && bool.TryParse(text, out var parsed)
+            ? parsed
+            : defaultValue;
+    }
+
     private static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -3702,6 +4154,18 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         string Schema,
         string? Name,
         string? Source);
+
+    private sealed record ExpectedModuleMetadata(
+        string ModuleKey,
+        bool ExpectsModule,
+        IReadOnlyList<string> AppKeys);
+
+    private sealed record ModuleDefinitionDependencySpec(
+        string ModuleKey,
+        string? MinDefinitionVersion,
+        string? MaxDefinitionVersion,
+        bool IsRequired,
+        string? Reason);
 
     private sealed record ModuleDefinitionSqlExecutionInfo(
         string Status,

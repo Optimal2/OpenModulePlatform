@@ -326,6 +326,86 @@ public sealed class ModuleDefinitionSqlRepairResult
 }
 
 /// <summary>
+/// Aggregated integrity state for one module definition document.
+/// </summary>
+public sealed class ModuleDefinitionIntegritySummaryRow
+{
+    public int ModuleDefinitionDocumentId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string DefinitionVersion { get; set; } = string.Empty;
+
+    public bool IsApplied { get; set; }
+
+    public string OverallStatus { get; set; } = "neutral";
+
+    public string OverallStatusLabel { get; set; } = "Stored";
+
+    public string MetadataStatus { get; set; } = "neutral";
+
+    public string MetadataStatusLabel { get; set; } = "Not checked";
+
+    public string DatabaseStatus { get; set; } = "neutral";
+
+    public string DatabaseStatusLabel { get; set; } = "Not checked";
+
+    public string SqlStatus { get; set; } = "neutral";
+
+    public string SqlStatusLabel { get; set; } = "Not checked";
+
+    public string DependencyStatus { get; set; } = "neutral";
+
+    public string DependencyStatusLabel { get; set; } = "Not checked";
+
+    public string ArtifactStatus { get; set; } = "neutral";
+
+    public string ArtifactStatusLabel { get; set; } = "Not checked";
+
+    public string SummaryLabel { get; set; } = "Stored definition";
+
+    public int MissingMetadataCount { get; set; }
+
+    public int MissingRequiredObjectCount { get; set; }
+
+    public int RepairableSqlScriptCount { get; set; }
+
+    public int NotRecordedSqlScriptCount { get; set; }
+
+    public int SqlReviewCount { get; set; }
+
+    public int RequiredDependencyIssueCount { get; set; }
+
+    public int OptionalDependencyIssueCount { get; set; }
+
+    public int IncompatibleArtifactReferenceCount { get; set; }
+
+    public IReadOnlyList<string> Messages { get; set; } = [];
+}
+
+/// <summary>
+/// Result from checking one declared module-definition dependency.
+/// </summary>
+public sealed class ModuleDefinitionDependencyCheckRow
+{
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string? MinDefinitionVersion { get; set; }
+
+    public string? MaxDefinitionVersion { get; set; }
+
+    public bool IsRequired { get; set; }
+
+    public string? AppliedDefinitionVersion { get; set; }
+
+    public string Status { get; set; } = "neutral";
+
+    public string StatusLabel { get; set; } = "Not checked";
+
+    public string? Reason { get; set; }
+}
+
+/// <summary>
 /// Existing artifact row used when duplicate content is detected during upload.
 /// </summary>
 public sealed class ArtifactDuplicateInfo

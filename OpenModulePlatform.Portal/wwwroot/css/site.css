@@ -391,6 +391,45 @@ a:hover {
     white-space: nowrap;
 }
 
+.integrity-pill {
+    display: inline-flex;
+    align-items: center;
+    min-width: 84px;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-muted);
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.integrity-pill--ok {
+    border-color: #87bf9b;
+    background: #e8f6ed;
+    color: #17643a;
+}
+
+.integrity-pill--warning {
+    border-color: #e3bc66;
+    background: #fff7df;
+    color: #7a4c00;
+}
+
+.integrity-pill--error {
+    border-color: #e49a9a;
+    background: #fff0f0;
+    color: #9a1f1f;
+}
+
+.integrity-pill--neutral {
+    border-color: var(--border-strong);
+    background: var(--surface-muted);
+    color: var(--text-muted);
+}
+
 .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -511,6 +550,15 @@ button[aria-disabled=true]:hover,
 
 .portal-apps-grid code {
     white-space: normal;
+}
+
+.integrity-grid td {
+    min-width: 112px;
+}
+
+.integrity-grid td:first-child,
+.integrity-grid td:nth-child(9) {
+    min-width: 220px;
 }
 
 .app-instances-grid {
