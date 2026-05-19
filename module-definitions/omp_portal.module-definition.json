@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_portal",
-  "definitionVersion": "0.3.20",
+  "definitionVersion": "0.3.22",
   "module": {
     "displayName": "OpenModulePlatform Portal",
     "moduleType": "Portal",
@@ -20,14 +20,30 @@
       "isEnabled": true
     }
   ],
+  "moduleDependencies": [
+    {
+      "moduleKey": "omp_core",
+      "minDefinitionVersion": "0.3.9",
+      "maxDefinitionVersion": null,
+      "required": true,
+      "reason": "Portal administration pages rely on the core OMP schema, module definition tables, RBAC model, artifacts, and host deployment tables."
+    },
+    {
+      "moduleKey": "omp_auth",
+      "minDefinitionVersion": "0.3.3",
+      "maxDefinitionVersion": null,
+      "required": true,
+      "reason": "Portal sign-in is backed by the OMP authentication module in HostAgent-first installations."
+    }
+  ],
   "compatibleArtifacts": [
     {
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
       "relativePathTemplate": "omp-portal/web/{version}",
-      "minVersion": "0.3.20",
-      "maxVersion": "0.3.20"
+      "minVersion": "0.3.22",
+      "maxVersion": "0.3.22"
     }
   ],
   "artifactConfigurationFiles": [

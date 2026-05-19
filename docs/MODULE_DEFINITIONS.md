@@ -26,6 +26,8 @@ The document answers these questions:
 - which runtime configuration files are outside immutable artifacts
 - which permissions, portal entries, app worker definitions, and setting
   definitions the module owns
+- which other module definition versions must already be applied for this
+  module to be valid
 - which schemas, tables, and seed rows are required for integrity, and which
   SQL seed data is intentionally only sample/demo data
 
@@ -60,12 +62,16 @@ Current ownership:
 2. Portal can validate the embedded SQL scripts and display which scripts have
    missing database objects, failed execution history, or no successful
    execution record for the current script hash.
-3. A Portal administrator can then explicitly run the detected repairs. Portal
+3. The module-definition list shows an integrity matrix across all active
+   definitions. The matrix checks OMP module/app metadata, required database
+   objects, SQL execution/repair state, declared module dependencies, and
+   current artifact compatibility.
+4. A Portal administrator can then explicitly run the detected repairs. Portal
    only runs embedded scripts marked as `idempotent`, records the result in
    `omp.ModuleDefinitionSqlExecutions`, and blocks scripts that contain broad
    destructive operations such as `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`,
    `TRUNCATE TABLE`, or `DELETE FROM` without a `WHERE` clause.
-4. HostAgent consumes the resulting desired state and deploys artifacts.
+5. HostAgent consumes the resulting desired state and deploys artifacts.
 
 The HostAgent-first bootstrap package imports JSON files from its
 `module-definitions` folder after SQL initialization. Protected/customer package
@@ -102,6 +108,15 @@ The document shape is versioned. Version 1 uses these top-level fields:
       "description": "Example web app.",
       "sortOrder": 10,
       "isEnabled": true
+    }
+  ],
+  "moduleDependencies": [
+    {
+      "moduleKey": "opendocviewer",
+      "minDefinitionVersion": "2.0.3",
+      "maxDefinitionVersion": null,
+      "required": true,
+      "reason": "This module consumes OpenDocViewer integration metadata."
     }
   ],
   "compatibleArtifacts": [
@@ -230,6 +245,13 @@ the zip payload or create a fake artifact version.
 slot but should not live inside the immutable zip. These descriptors are also
 applied when a concrete artifact exists; they are not proof that the artifact
 payload has already been imported.
+
+`moduleDependencies` is optional. Use it when a module needs another module's
+metadata, schemas, or runtime integration contract to be present. For example,
+a document packaging module can require an OpenDocViewer definition version
+when it produces links or payloads that the viewer must understand. Dependencies
+are directional: the dependent module lists what it needs; the referenced module
+does not need to list its consumers.
 
 `sqlScripts` is optional. Autonomous modules can use an empty array when all
 they need is OMP metadata plus runtime configuration supplied through normal
