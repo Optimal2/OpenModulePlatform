@@ -1,0 +1,135 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "content_webapp",
+  "definitionVersion": "0.3.12",
+  "module": {
+    "displayName": "Content Web App",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp_content",
+    "description": "First-party OMP module for database-backed HTML, Markdown, and server report content pages.",
+    "sortOrder": 330,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "content_webapp_webapp",
+      "displayName": "Content",
+      "appType": "WebApp",
+      "description": "Web app definition for database-backed OMP content pages.",
+      "sortOrder": 330,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "content_webapp_webapp",
+      "packageType": "web-app",
+      "targetName": "content-webapp",
+      "minVersion": "0.3.12",
+      "maxVersion": null
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "setup-content-schema",
+      "phase": "setup",
+      "scope": "module",
+      "order": 10,
+      "path": "OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-content-metadata",
+      "phase": "initialize",
+      "scope": "omp",
+      "order": 20,
+      "path": "OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "add-server-report-support",
+      "phase": "patch",
+      "scope": "module",
+      "order": 30,
+      "path": "OpenModulePlatform.Web.ContentWebAppModule/Sql/3-add-server-report-support.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from OpenModulePlatform.Web.ContentWebAppModule/Sql/*.sql.",
+    "requiredSchemas": [
+      "omp_content"
+    ],
+    "requiredTables": [
+      { "schema": "omp_content", "name": "contents", "source": "OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql", "purpose": "Stores content pages and server report page definitions." },
+      { "schema": "omp_content", "name": "content_role_access", "source": "OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql", "purpose": "Page-level read/write role access." }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        { "name": "ContentWebAppModule.Manage", "description": "Create and edit Content Web App pages." }
+      ],
+      "rolePermissions": [
+        { "roleName": "PortalAdmins", "permissionName": "ContentWebAppModule.Manage", "scope": "bootstrap-default-admin" }
+      ],
+      "modules": [
+        { "moduleKey": "content_webapp", "schemaName": "omp_content" }
+      ],
+      "apps": [
+        { "moduleKey": "content_webapp", "appKey": "content_webapp_webapp", "appType": "WebApp" }
+      ],
+      "artifacts": [
+        {
+          "appKey": "content_webapp_webapp",
+          "packageType": "web-app",
+          "targetName": "content-webapp",
+          "relativePathTemplate": "content-webapp/web/{version}"
+        }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "content_webapp", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        {
+          "appInstanceKey": "content_webapp_webapp",
+          "moduleInstanceKey": "content_webapp",
+          "routePath": "content",
+          "installationName": "content-webapp",
+          "hostBinding": "host-neutral"
+        }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "content_webapp", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        {
+          "appInstanceKey": "content_webapp_webapp",
+          "moduleInstanceKey": "content_webapp",
+          "routePath": "content",
+          "installationName": "content-webapp",
+          "hostBinding": "host-neutral"
+        }
+      ]
+    },
+    "requiredModuleRows": {
+      "portalEntries": [
+        { "entryKey": "content:admin", "targetUrl": "/content/admin" },
+        { "entryKey": "content:create", "targetUrl": "/content/admin/create" }
+      ]
+    },
+    "excludedSeedData": [
+      {
+        "key": "content pages",
+        "source": "OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql",
+        "reason": "The Content module intentionally starts without built-in pages. Local smoke-test pages are seeded by scripts/dev/seed-content-webapp-test-pages.ps1, not by normal module integrity repair."
+      },
+      {
+        "key": "ContentWebAppModule.View",
+        "source": "OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql",
+        "reason": "The legacy broad read permission is explicitly no longer an integrity requirement; read access is page-level through omp_content.content_role_access."
+      }
+    ]
+  }
+}

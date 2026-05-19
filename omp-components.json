@@ -4,9 +4,54 @@
   "repositoryVersion": "0.3.3",
   "moduleDefinitions": [
     {
+      "moduleKey": "omp_core",
+      "definitionVersion": "0.3.9",
+      "path": "module-definitions/omp_core.module-definition.json"
+    },
+    {
+      "moduleKey": "omp_auth",
+      "definitionVersion": "0.3.3",
+      "path": "module-definitions/omp_auth.module-definition.json"
+    },
+    {
       "moduleKey": "omp_portal",
       "definitionVersion": "0.3.18",
       "path": "module-definitions/omp_portal.module-definition.json"
+    },
+    {
+      "moduleKey": "opendocviewer",
+      "definitionVersion": "2.0.3",
+      "path": "module-definitions/opendocviewer.module-definition.json"
+    },
+    {
+      "moduleKey": "iframe_webapp",
+      "definitionVersion": "0.3.4",
+      "path": "module-definitions/iframe_webapp.module-definition.json"
+    },
+    {
+      "moduleKey": "content_webapp",
+      "definitionVersion": "0.3.12",
+      "path": "module-definitions/content_webapp.module-definition.json"
+    },
+    {
+      "moduleKey": "example_webapp",
+      "definitionVersion": "0.3.4",
+      "path": "module-definitions/example_webapp.module-definition.json"
+    },
+    {
+      "moduleKey": "example_webapp_blazor",
+      "definitionVersion": "0.3.4",
+      "path": "module-definitions/example_webapp_blazor.module-definition.json"
+    },
+    {
+      "moduleKey": "example_serviceapp",
+      "definitionVersion": "0.3.4",
+      "path": "module-definitions/example_serviceapp.module-definition.json"
+    },
+    {
+      "moduleKey": "example_workerapp",
+      "definitionVersion": "0.3.4",
+      "path": "module-definitions/example_workerapp.module-definition.json"
     }
   ],
   "components": [

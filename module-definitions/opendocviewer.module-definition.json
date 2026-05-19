@@ -1,0 +1,97 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "opendocviewer",
+  "definitionVersion": "2.0.3",
+  "module": {
+    "displayName": "OpenDocViewer",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp_opendocviewer",
+    "description": "First-party OMP registration for the OpenDocViewer static web application.",
+    "sortOrder": 310,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "opendocviewer_webapp",
+      "displayName": "OpenDocViewer",
+      "appType": "WebApp",
+      "description": "Static web application definition for OpenDocViewer.",
+      "sortOrder": 310,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "opendocviewer_webapp",
+      "packageType": "web-app",
+      "targetName": "opendocviewer",
+      "minVersion": "2.0.3",
+      "maxVersion": null
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "initialize-opendocviewer-metadata",
+      "phase": "initialize",
+      "scope": "omp",
+      "order": 20,
+      "path": "sql/3-initialize-opendocviewer.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from sql/3-initialize-opendocviewer.sql.",
+    "requiredSchemas": [
+      "omp_opendocviewer"
+    ],
+    "requiredTables": [],
+    "requiredOmpRows": {
+      "modules": [
+        { "moduleKey": "opendocviewer", "schemaName": "omp_opendocviewer" }
+      ],
+      "apps": [
+        { "moduleKey": "opendocviewer", "appKey": "opendocviewer_webapp", "appType": "WebApp" }
+      ],
+      "artifacts": [
+        {
+          "appKey": "opendocviewer_webapp",
+          "packageType": "web-app",
+          "targetName": "opendocviewer",
+          "relativePathTemplate": "opendocviewer/web/{version}"
+        }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "opendocviewer", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        {
+          "appInstanceKey": "opendocviewer_webapp",
+          "moduleInstanceKey": "opendocviewer",
+          "routePath": "opendocviewer",
+          "installationName": "opendocviewer",
+          "hostBinding": "host-neutral"
+        }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "opendocviewer", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        {
+          "appInstanceKey": "opendocviewer_webapp",
+          "moduleInstanceKey": "opendocviewer",
+          "routePath": "opendocviewer",
+          "installationName": "opendocviewer",
+          "hostBinding": "host-neutral"
+        }
+      ]
+    },
+    "requiredModuleRows": {},
+    "excludedSeedData": [
+      {
+        "key": "site runtime configuration",
+        "reason": "OpenDocViewer site configuration belongs in artifact configuration files or site-local deployment data, not in the immutable artifact zip or SQL seed data."
+      }
+    ]
+  }
+}

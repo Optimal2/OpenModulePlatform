@@ -1,0 +1,101 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "omp_auth",
+  "definitionVersion": "0.3.3",
+  "module": {
+    "displayName": "OMP Auth",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp",
+    "description": "Shared OpenModulePlatform authentication web application.",
+    "sortOrder": 90,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "omp_auth",
+      "displayName": "OMP Auth",
+      "appType": "WebApp",
+      "description": "Authentication web application for OMP cookie sign-in.",
+      "sortOrder": 90,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "omp_auth",
+      "packageType": "web-app",
+      "targetName": "omp-auth",
+      "minVersion": "0.3.3",
+      "maxVersion": null
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "initialize-auth-metadata",
+      "phase": "initialize",
+      "scope": "omp",
+      "order": 20,
+      "path": "OpenModulePlatform.Auth/sql/2-initialize-omp-auth.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from OpenModulePlatform.Auth/sql/2-initialize-omp-auth.sql.",
+    "requiredSchemas": [
+      "omp"
+    ],
+    "requiredTables": [],
+    "requiredOmpRows": {
+      "modules": [
+        { "moduleKey": "omp_auth", "schemaName": "omp" }
+      ],
+      "apps": [
+        { "appKey": "omp_auth", "moduleKey": "omp_auth", "appType": "WebApp" }
+      ],
+      "artifacts": [
+        {
+          "appKey": "omp_auth",
+          "packageType": "web-app",
+          "targetName": "omp-auth",
+          "relativePathTemplate": "omp-auth/web/{version}"
+        }
+      ],
+      "artifactConfigurationFiles": [
+        {
+          "appKey": "omp_auth",
+          "packageType": "web-app",
+          "targetName": "omp-auth",
+          "relativePath": "appsettings.json",
+          "purpose": "HostAgent-generated auth appsettings with OMP connection string and shared auth cookie settings."
+        }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "omp_auth", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        {
+          "appInstanceKey": "omp_auth",
+          "moduleInstanceKey": "omp_auth",
+          "routePath": "auth",
+          "installationName": "auth",
+          "hostBinding": "host-neutral"
+        }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "omp_auth", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        {
+          "appInstanceKey": "omp_auth",
+          "moduleInstanceKey": "omp_auth",
+          "routePath": "auth",
+          "installationName": "auth",
+          "hostBinding": "host-neutral"
+        }
+      ]
+    },
+    "requiredModuleRows": {},
+    "excludedSeedData": []
+  }
+}

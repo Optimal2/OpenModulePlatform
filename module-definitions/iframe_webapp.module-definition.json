@@ -1,0 +1,131 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "iframe_webapp",
+  "definitionVersion": "0.3.4",
+  "module": {
+    "displayName": "iFrame Web App",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp_iframe",
+    "description": "Razor wrapper app that renders database-backed iframe targets inside an OMP shell.",
+    "sortOrder": 320,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "iframe_webapp_webapp",
+      "displayName": "iFrame Web App",
+      "appType": "WebApp",
+      "description": "Web app definition for the first-party iFrame wrapper module.",
+      "sortOrder": 320,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "iframe_webapp_webapp",
+      "packageType": "web-app",
+      "targetName": "iframe-webapp",
+      "minVersion": "0.3.4",
+      "maxVersion": null
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "setup-iframe-schema",
+      "phase": "setup",
+      "scope": "module",
+      "order": 10,
+      "path": "OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-iframe-metadata",
+      "phase": "initialize",
+      "scope": "mixed",
+      "order": 20,
+      "path": "OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from OpenModulePlatform.Web.iFrameWebAppModule/Sql/*.sql.",
+    "requiredSchemas": [
+      "omp_iframe"
+    ],
+    "requiredTables": [
+      { "schema": "omp_iframe", "name": "urls", "source": "OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql", "purpose": "Configured iframe target URLs." },
+      { "schema": "omp_iframe", "name": "url_sets", "source": "OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql", "purpose": "Named iframe target groups." },
+      { "schema": "omp_iframe", "name": "url_set_urls", "source": "OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql", "purpose": "Ordered URL membership per iframe target group." }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        { "name": "IFrameWebAppModule.View", "description": "Read access to the iFrame Web App." },
+        { "name": "IFrameWebAppModule.Admin", "description": "Administrative access to the iFrame Web App." }
+      ],
+      "rolePermissions": [
+        { "roleName": "PortalAdmins", "permissionName": "IFrameWebAppModule.View", "scope": "bootstrap-default-admin" },
+        { "roleName": "PortalAdmins", "permissionName": "IFrameWebAppModule.Admin", "scope": "bootstrap-default-admin" }
+      ],
+      "appPermissions": [
+        { "appKey": "iframe_webapp_webapp", "permissionName": "IFrameWebAppModule.View", "requireAll": false }
+      ],
+      "modules": [
+        { "moduleKey": "iframe_webapp", "schemaName": "omp_iframe" }
+      ],
+      "apps": [
+        { "moduleKey": "iframe_webapp", "appKey": "iframe_webapp_webapp", "appType": "WebApp" }
+      ],
+      "artifacts": [
+        {
+          "appKey": "iframe_webapp_webapp",
+          "packageType": "web-app",
+          "targetName": "iframe-webapp",
+          "relativePathTemplate": "iframe-webapp/web/{version}"
+        }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "iframe_webapp", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        {
+          "appInstanceKey": "iframe_webapp_webapp",
+          "moduleInstanceKey": "iframe_webapp",
+          "routePath": "iFrameWebAppModule",
+          "installationName": "iframe-webapp",
+          "hostBinding": "host-neutral"
+        }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "iframe_webapp", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        {
+          "appInstanceKey": "iframe_webapp_webapp",
+          "moduleInstanceKey": "iframe_webapp",
+          "routePath": "iFrameWebAppModule",
+          "installationName": "iframe-webapp",
+          "hostBinding": "host-neutral"
+        }
+      ]
+    },
+    "requiredModuleRows": {
+      "urlSets": [
+        { "setKey": "default" },
+        { "setKey": "portal" },
+        { "setKey": "examples" }
+      ],
+      "urls": [
+        { "id": 1, "url": "/" }
+      ]
+    },
+    "excludedSeedData": [
+      {
+        "key": "Example module iframe targets",
+        "source": "OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql",
+        "reason": "The example WebApp and ServiceApp iframe URLs are useful when examples are installed, but they are not required for the iframe module to function in production."
+      }
+    ]
+  }
+}

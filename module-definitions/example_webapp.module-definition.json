@@ -1,0 +1,110 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "example_webapp",
+  "definitionVersion": "0.3.4",
+  "module": {
+    "displayName": "Example WebApp",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp_example_webapp",
+    "description": "Web-only example app for OpenModulePlatform.",
+    "sortOrder": 300,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "example_webapp_webapp",
+      "displayName": "Example WebApp",
+      "appType": "WebApp",
+      "description": "Web app definition for the web-only example module.",
+      "sortOrder": 300,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "example_webapp_webapp",
+      "packageType": "web-app",
+      "targetName": "example-webapp",
+      "minVersion": "0.3.4",
+      "maxVersion": null
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "setup-example-webapp-schema",
+      "phase": "setup",
+      "scope": "module",
+      "order": 10,
+      "path": "examples/WebAppModule/Sql/1-setup-example-webapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-example-webapp-metadata",
+      "phase": "initialize",
+      "scope": "mixed",
+      "order": 20,
+      "path": "examples/WebAppModule/Sql/2-initialize-example-webapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from examples/WebAppModule/Sql/*.sql.",
+    "requiredSchemas": [
+      "omp_example_webapp"
+    ],
+    "requiredTables": [
+      { "schema": "omp_example_webapp", "name": "Configurations", "source": "examples/WebAppModule/Sql/1-setup-example-webapp.sql", "purpose": "Example module configuration history." }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        { "name": "ExampleWebAppModule.View" },
+        { "name": "ExampleWebAppModule.Admin" }
+      ],
+      "rolePermissions": [
+        { "roleName": "PortalAdmins", "permissionName": "ExampleWebAppModule.View", "scope": "example-bootstrap" },
+        { "roleName": "PortalAdmins", "permissionName": "ExampleWebAppModule.Admin", "scope": "example-bootstrap" }
+      ],
+      "appPermissions": [
+        { "appKey": "example_webapp_webapp", "permissionName": "ExampleWebAppModule.View", "requireAll": false }
+      ],
+      "modules": [
+        { "moduleKey": "example_webapp", "schemaName": "omp_example_webapp" }
+      ],
+      "apps": [
+        { "moduleKey": "example_webapp", "appKey": "example_webapp_webapp", "appType": "WebApp" }
+      ],
+      "artifacts": [
+        { "appKey": "example_webapp_webapp", "packageType": "web-app", "targetName": "example-webapp", "relativePathTemplate": "example-webapp/web/{version}" }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "example_webapp", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        { "appInstanceKey": "example_webapp_webapp", "moduleInstanceKey": "example_webapp", "routePath": "ExampleWebAppModule", "installationName": "webapp", "hostBinding": "host-bound-sample" }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "example_webapp", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        { "appInstanceKey": "example_webapp_webapp", "moduleInstanceKey": "example_webapp", "routePath": "ExampleWebAppModule", "installationName": "webapp", "hostBinding": "host-bound-sample" }
+      ]
+    },
+    "requiredModuleRows": {
+      "configurationRows": [
+        { "table": "omp_example_webapp.Configurations", "versionNo": 0, "purpose": "Default example web configuration." }
+      ],
+      "portalEntries": [
+        { "entryKey": "example-webapp:configurations", "targetUrl": "/ExampleWebAppModule/configurations" },
+        { "entryKey": "example-webapp:opendocviewer-demo", "targetUrl": "/ExampleWebAppModule/opendocviewer-demo" }
+      ]
+    },
+    "excludedSeedData": [
+      {
+        "key": "example module installation",
+        "reason": "Example modules are optional. Their integrity contract applies only when examples are intentionally installed."
+      }
+    ]
+  }
+}

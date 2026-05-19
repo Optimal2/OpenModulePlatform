@@ -20,6 +20,8 @@ The document answers these questions:
 - which runtime configuration files are outside immutable artifacts
 - which permissions, portal entries, app worker definitions, and setting
   definitions the module owns
+- which schemas, tables, and seed rows are required for integrity, and which
+  SQL seed data is intentionally only sample/demo data
 
 ## Storage
 
@@ -103,7 +105,85 @@ The document shape is versioned. Version 1 uses these top-level fields:
       "execution": "idempotent",
       "inlineSql": null
     }
-  ]
+  ],
+  "integrity": {
+    "source": "Derived from the repository SQL scripts listed in sqlScripts.",
+    "requiredSchemas": [ "example_module" ],
+    "requiredTables": [
+      {
+        "schema": "example_module",
+        "name": "Configurations",
+        "source": "ExampleModule/Sql/1-setup-example-module.sql",
+        "purpose": "Stores versioned module configuration."
+      }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        {
+          "name": "ExampleModule.Admin",
+          "description": "Administrative access to the example module."
+        }
+      ],
+      "modules": [
+        {
+          "moduleKey": "example_module",
+          "schemaName": "example_module"
+        }
+      ],
+      "apps": [
+        {
+          "appKey": "example_module_web",
+          "appType": "WebApp"
+        }
+      ],
+      "artifacts": [
+        {
+          "appKey": "example_module_web",
+          "packageType": "web-app",
+          "targetName": "example-module-web",
+          "relativePathTemplate": "example-module/web/{version}"
+        }
+      ],
+      "appPermissions": [
+        {
+          "appKey": "example_module_web",
+          "permissionName": "ExampleModule.Admin",
+          "requireAll": false
+        }
+      ],
+      "rolePermissions": [
+        {
+          "roleName": "PortalAdmins",
+          "permissionName": "ExampleModule.Admin",
+          "scope": "bootstrap-default-admin"
+        }
+      ],
+      "moduleInstances": [
+        {
+          "moduleInstanceKey": "example_module",
+          "instanceKey": "default"
+        }
+      ],
+      "appInstances": [
+        {
+          "appInstanceKey": "example_module_web",
+          "moduleInstanceKey": "example_module",
+          "routePath": "example",
+          "installationName": "example-module"
+        }
+      ]
+    },
+    "requiredModuleRows": {
+      "configurationDefinitions": [],
+      "portalEntries": []
+    },
+    "excludedSeedData": [
+      {
+        "source": "ExampleModule/Sql/2-initialize-example-module.sql",
+        "reason": "Demo rows are useful for local smoke tests but are not required for module integrity."
+      }
+    ]
+  }
 }
 ```
 
@@ -111,6 +191,27 @@ The document shape is versioned. Version 1 uses these top-level fields:
 self-contained in one JSON file. Repository manifests should usually keep SQL in
 normal `.sql` files and reference them by path so SQL remains readable and
 reviewable.
+
+The `integrity` object is declarative. It describes the minimum database
+contract that a later validator/repair tool can check without rereading every
+SQL script. It should not try to serialize every column definition or every
+environment-specific row. Keep it focused on durable requirements:
+
+- module-owned schemas and tables
+- OMP module, app, artifact, permission, worker definition, instance template,
+  and desired runtime rows that make the module deployable
+- module-owned setting definitions, channel type metadata, portal entry rows,
+  or other seed rows that application code expects to exist
+- explicit exclusions for sample jobs, local-only channels, smoke-test pages,
+  and other data that normal installations can safely omit
+
+`relativePathTemplate` and similar template fields are preferred over fixed
+versions when installer scripts patch `@Version` or `@ArtifactVersion` before
+running SQL. This keeps the integrity contract stable across artifact patches.
+
+Platform core definitions may use `"definitionType": "platform-core"` and omit
+the `module` and `apps` sections when the document describes the neutral `omp`
+schema itself rather than an installable module row.
 
 ## Compatibility Policy
 
