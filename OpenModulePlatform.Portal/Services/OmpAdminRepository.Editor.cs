@@ -1588,10 +1588,13 @@ SELECT @SourceArtifactId AS SourceArtifactId,
         const string sql = @"
 SELECT TOP (1)
        ar.ArtifactId,
+       ar.AppId,
        a.AppKey,
        ar.Version,
        ar.PackageType,
-       ar.TargetName
+       ar.TargetName,
+       ar.RelativePath,
+       ar.Sha256
 FROM omp.Artifacts ar
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
 WHERE ar.Sha256 = @Sha256
@@ -1611,10 +1614,65 @@ ORDER BY ar.ArtifactId;";
         return new ArtifactDuplicateInfo
         {
             ArtifactId = rdr.GetInt32(0),
-            AppKey = rdr.GetString(1),
-            Version = rdr.GetString(2),
-            PackageType = rdr.GetString(3),
-            TargetName = rdr.IsDBNull(4) ? null : rdr.GetString(4)
+            AppId = rdr.GetInt32(1),
+            AppKey = rdr.GetString(2),
+            Version = rdr.GetString(3),
+            PackageType = rdr.GetString(4),
+            TargetName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            RelativePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            Sha256 = rdr.IsDBNull(7) ? null : rdr.GetString(7)
+        };
+    }
+
+    public async Task<ArtifactDuplicateInfo?> FindArtifactByIdentityAsync(
+        int appId,
+        string version,
+        string packageType,
+        string? targetName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       ar.ArtifactId,
+       ar.AppId,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName,
+       ar.RelativePath,
+       ar.Sha256
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+WHERE ar.AppId = @AppId
+  AND ar.Version = @Version
+  AND ar.PackageType = @PackageType
+  AND ((ar.TargetName = @TargetName) OR (ar.TargetName IS NULL AND @TargetName IS NULL))
+ORDER BY ar.ArtifactId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@AppId", appId);
+        Add(cmd, "@Version", version);
+        Add(cmd, "@PackageType", packageType);
+        Add(cmd, "@TargetName", targetName);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactDuplicateInfo
+        {
+            ArtifactId = rdr.GetInt32(0),
+            AppId = rdr.GetInt32(1),
+            AppKey = rdr.GetString(2),
+            Version = rdr.GetString(3),
+            PackageType = rdr.GetString(4),
+            TargetName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            RelativePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            Sha256 = rdr.IsDBNull(7) ? null : rdr.GetString(7)
         };
     }
 

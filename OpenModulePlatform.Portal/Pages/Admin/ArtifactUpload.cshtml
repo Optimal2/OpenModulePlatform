@@ -95,6 +95,14 @@
         </div>
     </div>
 
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.ReplaceExistingArtifact" type="checkbox" />
+        <div>
+            <label for="Input_ReplaceExistingArtifact">@L["Replace existing artifact with same identity"]</label>
+            <div class="field-help">@L["Only use this when the same app, package type, target, and version already exists and the uploaded content should intentionally replace it. Automatic import never performs this replacement."]</div>
+        </div>
+    </div>
+
     <div class="toolbar">
         <button type="submit">@L["Upload artifact"]</button>
         <a class="action-link" href="~/admin/artifacts">@L["Back to artifacts"]</a>

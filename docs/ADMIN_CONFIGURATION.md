@@ -174,6 +174,14 @@ directory-content SHA-256 with existing artifact rows. Zip metadata such as
 timestamps and compression settings is intentionally ignored; two zip files
 with the same deployable files count as the same artifact content.
 
+If an uploaded zip targets the same app, package type, target, and version as
+an existing artifact but the extracted content hash differs, the Portal upload
+page requires an explicit replacement confirmation. That path is intended for
+operator-controlled repair or correction of a bad artifact registration, not for
+normal version progression. The automatic HostAgent import folder remains
+stricter: invalid filenames, unknown app definitions, duplicate versions, and
+content conflicts are moved to `failed` instead of asking questions.
+
 When uploading a new version, the form can copy artifact-owned configuration
 file rows from the latest previous artifact with the same app, package type and
 target. This is intended for site-local runtime files such as ODV site config
