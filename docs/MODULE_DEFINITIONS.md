@@ -54,12 +54,18 @@ execute module SQL. In a multi-host installation that creates race conditions,
 unclear audit trails, and unnecessary database DDL privileges for host-local
 agents.
 
-Preferred ownership:
+Current ownership:
 
 1. Portal or the bootstrapper uploads and validates the module definition.
-2. A single central apply step runs the SQL scripts with a database identity that
-   is allowed to change schema and metadata.
-3. HostAgent consumes the resulting desired state and deploys artifacts.
+2. Portal can validate the embedded SQL scripts and display which scripts have
+   missing database objects, failed execution history, or no successful
+   execution record for the current script hash.
+3. A Portal administrator can then explicitly run the detected repairs. Portal
+   only runs embedded scripts marked as `idempotent`, records the result in
+   `omp.ModuleDefinitionSqlExecutions`, and blocks scripts that contain broad
+   destructive operations such as `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`,
+   `TRUNCATE TABLE`, or `DELETE FROM` without a `WHERE` clause.
+4. HostAgent consumes the resulting desired state and deploys artifacts.
 
 The HostAgent-first bootstrap package imports JSON files from its
 `module-definitions` folder after SQL initialization. Protected/customer package
@@ -68,7 +74,8 @@ configs can add module-definition files from module repositories through
 
 HostAgent may later help move module definition files into the database, but SQL
 execution should still be guarded by a database lock or a central controller so
-only one applier can run a definition version.
+only one applier can run a definition version. Portal currently uses
+`sp_getapplock` before executing module-definition repair SQL.
 
 ## JSON Shape
 
@@ -125,7 +132,10 @@ The document shape is versioned. Version 1 uses these top-level fields:
       "order": 10,
       "path": "ExampleModule/Sql/1-setup-example-module.sql",
       "execution": "idempotent",
-      "inlineSql": null
+      "inlineSql": null,
+      "contentEncoding": "base64-utf8",
+      "content": "...",
+      "sha256": "..."
     }
   ],
   "integrity": {
@@ -201,10 +211,14 @@ The document shape is versioned. Version 1 uses these top-level fields:
 }
 ```
 
-`inlineSql` may be used when the definition document must be fully
-self-contained in one JSON file. Repository manifests should usually keep SQL in
-normal `.sql` files and reference them by path so SQL remains readable and
-reviewable.
+Module definition documents should be portable. Keep normal `.sql` files in the
+repository for reviewability, but embed the same script content in the JSON
+document before it is uploaded or packaged. The recommended portable form is
+`contentEncoding: "base64-utf8"` plus `content` and `sha256`. `path` remains as
+traceability back to the source repository file.
+
+Use `scripts/dev/embed-module-definition-sql.ps1` to refresh embedded SQL from
+the source `.sql` files.
 
 The `compatibleArtifacts` array defines artifact slots, not already-installed
 artifact rows. An artifact zip import uses these rows to validate

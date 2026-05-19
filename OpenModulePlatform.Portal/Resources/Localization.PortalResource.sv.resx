@@ -1765,4 +1765,30 @@
   <data name="Module definition applied with {0} temporarily incompatible artifact references." xml:space="preserve"><value>Moduldefinitionen applicerades med {0} tillfälligt inkompatibla artefaktreferenser.</value></data>
   <data name="The definition is not compatible with one or more currently selected artifacts. Confirm temporary incompatibility if the matching artifact update is the next step." xml:space="preserve"><value>Definitionen är inte kompatibel med en eller flera nu valda artefakter. Bekräfta tillfällig inkompatibilitet om matchande artefaktuppdatering är nästa steg.</value></data>
   <data name="A module definition with the same module key and version already exists, but the uploaded JSON is different. Confirm replacement or use a new definition version." xml:space="preserve"><value>En moduldefinition med samma modulnyckel och version finns redan, men uppladdad JSON skiljer sig. Bekräfta ersättning eller använd en ny definitionsversion.</value></data>
+  <data name="SQL integrity check" xml:space="preserve"><value>SQL-integritetskontroll</value></data>
+  <data name="Portal checks the portable SQL scripts embedded in this module definition before any repair is executed." xml:space="preserve"><value>Portal kontrollerar de portabla SQL-skript som är inbäddade i moduldefinitionen innan någon rättning körs.</value></data>
+  <data name="Execute detected SQL repairs" xml:space="preserve"><value>Kör detekterade SQL-rättningar</value></data>
+  <data name="This definition does not contain SQL scripts." xml:space="preserve"><value>Den här definitionen innehåller inga SQL-skript.</value></data>
+  <data name="Script" xml:space="preserve"><value>Skript</value></data>
+  <data name="Phase" xml:space="preserve"><value>Fas</value></data>
+  <data name="Last execution" xml:space="preserve"><value>Senaste körning</value></data>
+  <data name="Missing" xml:space="preserve"><value>Saknas</value></data>
+  <data name="OK" xml:space="preserve"><value>OK</value></data>
+  <data name="Not executable" xml:space="preserve"><value>Kan inte köras</value></data>
+  <data name="Invalid content hash" xml:space="preserve"><value>Ogiltig innehållshash</value></data>
+  <data name="Needs repair" xml:space="preserve"><value>Behöver rättas</value></data>
+  <data name="Not recorded" xml:space="preserve"><value>Inte registrerad</value></data>
+  <data name="Details" xml:space="preserve"><value>Detaljer</value></data>
+  <data name="No executable module definition SQL repairs were needed." xml:space="preserve"><value>Inga körbara SQL-rättningar behövdes för moduldefinitionen.</value></data>
+  <data name="Executed {0} module definition SQL repair scripts." xml:space="preserve"><value>Körde {0} SQL-rättningsskript för moduldefinitionen.</value></data>
+  <data name="The module definition only references an external SQL file. Embed SQL content before Portal can execute repairs." xml:space="preserve"><value>Moduldefinitionen refererar bara till en extern SQL-fil. Bädda in SQL-innehåll innan Portal kan köra rättningar.</value></data>
+  <data name="The embedded SQL content does not match the declared SHA-256 hash." xml:space="preserve"><value>Det inbäddade SQL-innehållet matchar inte deklarerad SHA-256-hash.</value></data>
+  <data name="Only idempotent module definition SQL scripts can be executed from Portal." xml:space="preserve"><value>Endast idempotenta SQL-skript för moduldefinitioner kan köras från Portal.</value></data>
+  <data name="The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE, which is not allowed for Portal repair." xml:space="preserve"><value>Skriptet innehåller DROP DATABASE, DROP SCHEMA eller DROP TABLE, vilket inte tillåts vid Portal-rättning.</value></data>
+  <data name="The script contains TRUNCATE TABLE, which is not allowed for Portal repair." xml:space="preserve"><value>Skriptet innehåller TRUNCATE TABLE, vilket inte tillåts vid Portal-rättning.</value></data>
+  <data name="The script contains DELETE FROM without a WHERE clause, which is not allowed for Portal repair." xml:space="preserve"><value>Skriptet innehåller DELETE FROM utan WHERE-villkor, vilket inte tillåts vid Portal-rättning.</value></data>
+  <data name="One or more required database objects for this script are missing." xml:space="preserve"><value>Ett eller flera databasobjekt som krävs för skriptet saknas.</value></data>
+  <data name="The last execution failed." xml:space="preserve"><value>Den senaste körningen misslyckades.</value></data>
+  <data name="No successful execution has been recorded for this script content." xml:space="preserve"><value>Ingen lyckad körning har registrerats för det här skriptinnehållet.</value></data>
+  <data name="The script content has a successful execution record and declared objects are present." xml:space="preserve"><value>Skriptinnehållet har en lyckad körningspost och deklarerade objekt finns.</value></data>
 </root>

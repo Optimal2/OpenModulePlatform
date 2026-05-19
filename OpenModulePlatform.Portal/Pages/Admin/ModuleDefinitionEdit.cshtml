@@ -74,6 +74,73 @@
         </div>
     </form>
 
+    <section class="card">
+        <div class="section-heading-row">
+            <div>
+                <h3>@L["SQL integrity check"]</h3>
+                <p class="lede">@L["Portal checks the portable SQL scripts embedded in this module definition before any repair is executed."]</p>
+            </div>
+            <form method="post" asp-page-handler="RepairSql">
+                <input type="hidden" asp-for="Input.ModuleDefinitionDocumentId" />
+                <button type="submit" disabled="@(Model.SqlCheckRows.All(row => !row.CanExecute) ? "disabled" : null)">
+                    @L["Execute detected SQL repairs"]
+                </button>
+            </form>
+        </div>
+
+        @if (Model.SqlCheckRows.Count == 0)
+        {
+            <div class="empty-state">@L["This definition does not contain SQL scripts."]</div>
+        }
+        else
+        {
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Script"]</th>
+                        <th>@L["Phase"]</th>
+                        <th>@L["Status"]</th>
+                        <th>@L["Last execution"]</th>
+                        <th>@L["Details"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.SqlCheckRows)
+                {
+                    <tr>
+                        <td>
+                            <code>@row.Key</code>
+                            <div class="muted">@row.Path</div>
+                        </td>
+                        <td>@row.Phase #@row.Order</td>
+                        <td>
+                            <span class="pill">@L[row.Status]</span>
+                        </td>
+                        <td>
+                            @(row.LastCompletedUtc?.ToString("u") ?? L["Never"].Value)
+                        </td>
+                        <td>
+                            <div>@L[row.StatusMessage]</div>
+                            @if (row.MissingRequiredObjects.Count > 0)
+                            {
+                                <div class="muted">
+                                    @L["Missing"]:
+                                    @string.Join(", ", row.MissingRequiredObjects)
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(row.LastErrorMessage))
+                            {
+                                <div class="muted">@row.LastErrorMessage</div>
+                            }
+                            <div class="muted"><code>@row.ScriptSha256</code></div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
     @if (Model.IncompatibleReferences.Count > 0)
     {
         <section class="card">

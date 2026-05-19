@@ -153,11 +153,8 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID(N'omp_portal.user_settings', N'U') IS NOT NULL
-BEGIN
-    DROP TABLE omp_portal.user_settings;
-END
-GO
+-- Keep the legacy table after copying values so module-definition repair can stay non-destructive.
+-- It can be removed manually during a planned database cleanup if no older Portal version is in use.
 
 IF OBJECT_ID(N'omp_portal.user_navigation_favorites', N'U') IS NULL
 BEGIN

@@ -575,6 +575,7 @@ function Run-SqlInstall {
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.ContentWebAppModule\Sql\2-initialize-content-webapp.sql') -TargetDatabase $Database
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.iFrameWebAppModule\Sql\1-setup-iframe-webapp.sql') -TargetDatabase $Database
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Web.iFrameWebAppModule\Sql\2-initialize-iframe-webapp.sql') -TargetDatabase $Database
+    Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\4-ensure-topbar-hover-user-setting.sql') -TargetDatabase $Database
     Invoke-SqlFile -Path (Join-Path $RepositoryRoot 'OpenModulePlatform.Portal\sql\3-sync-omp-portal-entries.sql') -TargetDatabase $Database
     Ensure-BootstrapPortalAdminPrincipals
 }

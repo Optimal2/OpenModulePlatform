@@ -535,6 +535,7 @@ bootstrap.local.sample.json.
 :r OpenModulePlatform.Auth\2-initialize-omp-auth.sql
 :r OpenModulePlatform.Portal\1-setup-omp-portal.sql
 :r OpenModulePlatform.Portal\2-initialize-omp-portal.sql
+:r OpenModulePlatform.Portal\4-ensure-topbar-hover-user-setting.sql
 :r OpenModulePlatform.Web.ContentWebAppModule\1-setup-content-webapp.sql
 :r OpenModulePlatform.Web.ContentWebAppModule\3-add-server-report-support.sql
 :r OpenModulePlatform.Web.ContentWebAppModule\2-initialize-content-webapp.sql
