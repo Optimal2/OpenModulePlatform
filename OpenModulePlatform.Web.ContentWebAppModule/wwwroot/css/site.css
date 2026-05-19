@@ -404,30 +404,6 @@ textarea {
     display: none !important;
 }
 
-.rich-editor-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin-top: 0.55rem;
-    padding: 0.45rem;
-    border: 1px solid #c8d1dc;
-    border-bottom: 0;
-    border-radius: 8px 8px 0 0;
-    background: #fff;
-}
-
-.rich-editor-toolbar[hidden] {
-    display: none !important;
-}
-
-.rich-editor-toolbar button {
-    min-height: 2rem;
-    padding: 0.25rem 0.55rem;
-    border-radius: 5px;
-    background: #f8fafc;
-    font-size: 0.9rem;
-}
-
 .editor-tab {
     min-height: 2rem;
     border: 0;
@@ -440,21 +416,6 @@ textarea {
     background: var(--panel);
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
     color: var(--text);
-}
-
-.html-visual-editor {
-    min-height: 520px;
-    overflow: auto;
-    padding: 0.85rem;
-    border: 1px solid #c8d1dc;
-    border-radius: 0 0 8px 8px;
-    background: #fff;
-    line-height: 1.65;
-}
-
-.html-visual-editor:focus {
-    outline: 2px solid rgba(31, 111, 235, 0.25);
-    outline-offset: 2px;
 }
 
 .content-editor__source.is-enhanced {
