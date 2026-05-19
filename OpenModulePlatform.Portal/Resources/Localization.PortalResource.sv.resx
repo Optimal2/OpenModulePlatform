@@ -1723,4 +1723,46 @@
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>Artefakten kunde inte väljas som önskad version automatiskt. Välj den från installationsmallens sida.</value></data>
   <data name="Open topbar menus on hover" xml:space="preserve"><value>Öppna topbar-menyer vid hovring</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>När detta är avstängt öppnas menyer bara med klick eller kortkommando.</value></data>
+  <data name="Definition versions" xml:space="preserve"><value>Definitionsversioner</value></data>
+  <data name="Module definition versions" xml:space="preserve"><value>Moduldefinitionsversioner</value></data>
+  <data name="Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review." xml:space="preserve"><value>Moduldefinitioner beskriver databas- och metadatakontraktet som artefaktversioner valideras mot. Äldre definitionsversioner finns kvar för granskning.</value></data>
+  <data name="Upload module definition" xml:space="preserve"><value>Ladda upp moduldefinition</value></data>
+  <data name="No module definitions found." xml:space="preserve"><value>Inga moduldefinitioner hittades.</value></data>
+  <data name="Definition version" xml:space="preserve"><value>Definitionsversion</value></data>
+  <data name="Artifact slots" xml:space="preserve"><value>Artefaktplatser</value></data>
+  <data name="Applied" xml:space="preserve"><value>Applicerad</value></data>
+  <data name="Stored" xml:space="preserve"><value>Sparad</value></data>
+  <data name="Back to module definitions" xml:space="preserve"><value>Tillbaka till moduldefinitioner</value></data>
+  <data name="Upload one versioned module definition JSON document. The definition can be stored first or applied immediately so future artifact imports are validated against it." xml:space="preserve"><value>Ladda upp ett versionerat JSON-dokument för moduldefinitionen. Definitionen kan sparas först eller appliceras direkt så att framtida artefaktimporter valideras mot den.</value></data>
+  <data name="Module definition JSON" xml:space="preserve"><value>Moduldefinition JSON</value></data>
+  <data name="The JSON must contain moduleKey, definitionVersion, and compatibleArtifacts when the module has deployable artifacts." xml:space="preserve"><value>JSON måste innehålla moduleKey, definitionVersion och compatibleArtifacts när modulen har deploybara artefakter.</value></data>
+  <data name="Apply immediately" xml:space="preserve"><value>Applicera direkt</value></data>
+  <data name="Applying the definition makes it the active contract for the module and updates the module/app metadata described by the JSON." xml:space="preserve"><value>När definitionen appliceras blir den modulens aktiva kontrakt och modul-/appmetadata från JSON-dokumentet uppdateras.</value></data>
+  <data name="Allow temporary incompatible artifact selections" xml:space="preserve"><value>Tillåt tillfälligt inkompatibla artefaktval</value></data>
+  <data name="Use this only when the matching artifact versions will be uploaded or selected next. During that short window the active definition and selected artifacts may not match." xml:space="preserve"><value>Använd detta bara när matchande artefaktversioner ska laddas upp eller väljas direkt efteråt. Under det korta fönstret kan aktiv definition och valda artefakter skilja sig åt.</value></data>
+  <data name="Replace existing definition with same module key and version" xml:space="preserve"><value>Ersätt befintlig definition med samma modulnyckel och version</value></data>
+  <data name="Normally a changed definition should get a new version. Replacement is only for correcting a document that was uploaded with the same module key and definition version." xml:space="preserve"><value>Normalt ska en ändrad definition få en ny version. Ersättning är bara för att rätta ett dokument som laddats upp med samma modulnyckel och definitionsversion.</value></data>
+  <data name="Select one module definition JSON file." xml:space="preserve"><value>Välj en JSON-fil med moduldefinition.</value></data>
+  <data name="The uploaded module definition must be a .json file." xml:space="preserve"><value>Den uppladdade moduldefinitionen måste vara en .json-fil.</value></data>
+  <data name="Module definition JSON must contain moduleKey and definitionVersion." xml:space="preserve"><value>Moduldefinitionens JSON måste innehålla moduleKey och definitionVersion.</value></data>
+  <data name="Module definition uploaded." xml:space="preserve"><value>Moduldefinitionen laddades upp.</value></data>
+  <data name="The same module definition already exists." xml:space="preserve"><value>Samma moduldefinition finns redan.</value></data>
+  <data name="Module definition uploaded and applied." xml:space="preserve"><value>Moduldefinitionen laddades upp och applicerades.</value></data>
+  <data name="Module definition uploaded but not applied because current artifact selections are incompatible. Review and confirm temporary incompatibility if this is intentional." xml:space="preserve"><value>Moduldefinitionen laddades upp men applicerades inte eftersom nuvarande artefaktval är inkompatibla. Granska och bekräfta tillfällig inkompatibilitet om detta är avsiktligt.</value></data>
+  <data name="Module definition uploaded and applied with {0} temporarily incompatible artifact references." xml:space="preserve"><value>Moduldefinitionen laddades upp och applicerades med {0} tillfälligt inkompatibla artefaktreferenser.</value></data>
+  <data name="Review the stored definition, its artifact compatibility slots, and the current artifact selections before applying it." xml:space="preserve"><value>Granska den sparade definitionen, dess kompatibla artefaktplatser och nuvarande artefaktval innan du applicerar den.</value></data>
+  <data name="This definition does not match {0} current artifact references." xml:space="preserve"><value>Den här definitionen matchar inte {0} nuvarande artefaktreferenser.</value></data>
+  <data name="Use this only when the matching artifact upload or desired-version change will be done immediately after applying the module definition." xml:space="preserve"><value>Använd detta bara när matchande artefaktuppladdning eller ändring av önskad version görs direkt efter att moduldefinitionen appliceras.</value></data>
+  <data name="Apply module definition" xml:space="preserve"><value>Applicera moduldefinition</value></data>
+  <data name="Current incompatible artifact references" xml:space="preserve"><value>Nuvarande inkompatibla artefaktreferenser</value></data>
+  <data name="Reference" xml:space="preserve"><value>Referens</value></data>
+  <data name="Compatible artifact slots" xml:space="preserve"><value>Kompatibla artefaktplatser</value></data>
+  <data name="This definition does not declare artifact slots." xml:space="preserve"><value>Den här definitionen deklarerar inga artefaktplatser.</value></data>
+  <data name="Version range" xml:space="preserve"><value>Versionsintervall</value></data>
+  <data name="Relative path template" xml:space="preserve"><value>Relativ sökvägsmall</value></data>
+  <data name="Definition JSON" xml:space="preserve"><value>Definitionens JSON</value></data>
+  <data name="Module definition applied." xml:space="preserve"><value>Moduldefinitionen applicerades.</value></data>
+  <data name="Module definition applied with {0} temporarily incompatible artifact references." xml:space="preserve"><value>Moduldefinitionen applicerades med {0} tillfälligt inkompatibla artefaktreferenser.</value></data>
+  <data name="The definition is not compatible with one or more currently selected artifacts. Confirm temporary incompatibility if the matching artifact update is the next step." xml:space="preserve"><value>Definitionen är inte kompatibel med en eller flera nu valda artefakter. Bekräfta tillfällig inkompatibilitet om matchande artefaktuppdatering är nästa steg.</value></data>
+  <data name="A module definition with the same module key and version already exists, but the uploaded JSON is different. Confirm replacement or use a new definition version." xml:space="preserve"><value>En moduldefinition med samma modulnyckel och version finns redan, men uppladdad JSON skiljer sig. Bekräfta ersättning eller använd en ny definitionsversion.</value></data>
 </root>

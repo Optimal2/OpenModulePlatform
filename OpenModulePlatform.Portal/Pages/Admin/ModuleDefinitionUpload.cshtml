@@ -1,0 +1,53 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ModuleDefinitionUploadModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Module definitions"]</div>
+        <h2>@L["Upload module definition"]</h2>
+        <p class="lede">@L["Upload one versioned module definition JSON document. The definition can be stored first or applied immediately so future artifact imports are validated against it."]</p>
+    </div>
+</section>
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<form method="post" enctype="multipart/form-data" class="card form-grid">
+    <div class="form-field">
+        <label asp-for="Input.JsonFile"></label>
+        <input asp-for="Input.JsonFile" type="file" accept=".json,application/json" />
+        <div class="field-help">@L["The JSON must contain moduleKey, definitionVersion, and compatibleArtifacts when the module has deployable artifacts."]</div>
+        <span asp-validation-for="Input.JsonFile" class="field-validation-error"></span>
+    </div>
+
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.ApplyImmediately" type="checkbox" />
+        <div>
+            <label asp-for="Input.ApplyImmediately"></label>
+            <div class="field-help">@L["Applying the definition makes it the active contract for the module and updates the module/app metadata described by the JSON."]</div>
+        </div>
+    </div>
+
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.AllowTemporaryIncompatibleArtifacts" type="checkbox" />
+        <div>
+            <label asp-for="Input.AllowTemporaryIncompatibleArtifacts"></label>
+            <div class="field-help">@L["Use this only when the matching artifact versions will be uploaded or selected next. During that short window the active definition and selected artifacts may not match."]</div>
+        </div>
+    </div>
+
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.ReplaceExistingDefinition" type="checkbox" />
+        <div>
+            <label asp-for="Input.ReplaceExistingDefinition"></label>
+            <div class="field-help">@L["Normally a changed definition should get a new version. Replacement is only for correcting a document that was uploaded with the same module key and definition version."]</div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button type="submit">@L["Upload module definition"]</button>
+        <a class="action-link" href="~/admin/moduledefinitions">@L["Back to module definitions"]</a>
+    </div>
+</form>
