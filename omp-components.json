@@ -32,7 +32,7 @@
       "registrationMode": "bootstrap",
       "packageType": "service-app",
       "targetName": "omp-hostagent",
-      "version": "0.3.8",
+      "version": "0.3.9",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
