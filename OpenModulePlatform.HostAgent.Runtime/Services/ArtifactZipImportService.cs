@@ -106,6 +106,20 @@ public sealed class ArtifactZipImportService
                 metadata.PackageType,
                 metadata.Version);
 
+            var existingIdentity = await _repository.FindImportedArtifactByIdentityAsync(
+                app.AppId,
+                metadata.Version,
+                metadata.PackageType,
+                metadata.TargetName,
+                cancellationToken);
+            if (existingIdentity is not null)
+            {
+                throw new InvalidOperationException(
+                    "An artifact for this app, package type, target, and version already exists: " +
+                    $"{existingIdentity.AppKey} {existingIdentity.Version} ({existingIdentity.PackageType}). " +
+                    "Use a new version number for changed artifact content.");
+            }
+
             finalPath = ResolveUnderRoot(storeRoot, relativePath);
 
             ExtractValidatedZip(tempZipPath, stagingPath);
