@@ -309,6 +309,51 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.ModuleDefinitionDocuments', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ModuleDefinitionDocuments
+    (
+        ModuleDefinitionDocumentId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ModuleDefinitionDocuments PRIMARY KEY,
+        ModuleKey nvarchar(100) NOT NULL,
+        DefinitionVersion nvarchar(50) NOT NULL,
+        FormatVersion int NOT NULL CONSTRAINT DF_omp_ModuleDefinitionDocuments_FormatVersion DEFAULT(1),
+        DefinitionJson nvarchar(max) NOT NULL,
+        DefinitionSha256 nvarchar(128) NOT NULL,
+        SourceName nvarchar(400) NULL,
+        IsApplied bit NOT NULL CONSTRAINT DF_omp_ModuleDefinitionDocuments_IsApplied DEFAULT(0),
+        AppliedUtc datetime2(3) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleDefinitionDocuments_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleDefinitionDocuments_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UQ_omp_ModuleDefinitionDocuments_Module_Version UNIQUE(ModuleKey, DefinitionVersion),
+        CONSTRAINT CK_omp_ModuleDefinitionDocuments_DefinitionJson CHECK(ISJSON(DefinitionJson) = 1)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.ModuleDefinitionArtifactCompatibility', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ModuleDefinitionArtifactCompatibility
+    (
+        ModuleDefinitionArtifactCompatibilityId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ModuleDefinitionArtifactCompatibility PRIMARY KEY,
+        ModuleDefinitionDocumentId int NOT NULL,
+        AppKey nvarchar(100) NOT NULL,
+        PackageType nvarchar(50) NOT NULL,
+        TargetName nvarchar(100) NULL,
+        MinArtifactVersion nvarchar(50) NULL,
+        MaxArtifactVersion nvarchar(50) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleDefinitionArtifactCompatibility_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_ModuleDefinitionArtifactCompatibility_Document
+            FOREIGN KEY(ModuleDefinitionDocumentId)
+            REFERENCES omp.ModuleDefinitionDocuments(ModuleDefinitionDocumentId)
+            ON DELETE CASCADE,
+        CONSTRAINT UQ_omp_ModuleDefinitionArtifactCompatibility_Target
+            UNIQUE(ModuleDefinitionDocumentId, AppKey, PackageType, TargetName)
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp.Artifacts', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.Artifacts
