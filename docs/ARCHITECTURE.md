@@ -79,8 +79,12 @@ It shows how a module can use the same platform model while moving background pr
 - `omp.Modules`
 - `omp.Apps`
 - `omp.Artifacts`
+- `omp.ModuleDefinitionDocuments`
+- `omp.ModuleDefinitionArtifactCompatibility`
 
 Definitions should not hold runtime-specific values such as route, install path, or host placement.
+Module definition documents describe the schema and metadata contract that must
+exist before compatible artifact versions are selected for deployment.
 
 ### Instances
 

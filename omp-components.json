@@ -2,6 +2,13 @@
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
   "repositoryVersion": "0.3.3",
+  "moduleDefinitions": [
+    {
+      "moduleKey": "omp_portal",
+      "definitionVersion": "0.3.18",
+      "path": "module-definitions/omp_portal.module-definition.json"
+    }
+  ],
   "components": [
     {
       "componentKey": "omp-portal-web",

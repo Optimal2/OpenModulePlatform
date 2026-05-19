@@ -1,0 +1,70 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "omp_portal",
+  "definitionVersion": "0.3.18",
+  "module": {
+    "displayName": "OpenModulePlatform Portal",
+    "moduleType": "Portal",
+    "schemaName": "omp_portal",
+    "description": "The OpenModulePlatform portal and administration UI.",
+    "sortOrder": 0,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "omp_portal",
+      "displayName": "Portal",
+      "appType": "web",
+      "description": "The OpenModulePlatform portal web application.",
+      "sortOrder": 0,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "omp_portal",
+      "packageType": "web-app",
+      "targetName": "omp-portal",
+      "minVersion": "0.3.17",
+      "maxVersion": null
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "setup-portal-schema",
+      "phase": "setup",
+      "scope": "module",
+      "order": 10,
+      "path": "OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-portal-metadata",
+      "phase": "initialize",
+      "scope": "omp",
+      "order": 20,
+      "path": "OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "sync-portal-entries",
+      "phase": "initialize",
+      "scope": "omp",
+      "order": 30,
+      "path": "OpenModulePlatform.Portal/sql/3-sync-omp-portal-entries.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "ensure-topbar-hover-user-setting",
+      "phase": "patch",
+      "scope": "module",
+      "order": 40,
+      "path": "OpenModulePlatform.Portal/sql/4-ensure-topbar-hover-user-setting.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ]
+}
