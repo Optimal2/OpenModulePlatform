@@ -1,0 +1,133 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "example_workerapp",
+  "definitionVersion": "0.3.4",
+  "module": {
+    "displayName": "Example WorkerApp",
+    "moduleType": "HostAppModule",
+    "schemaName": "omp_example_workerapp",
+    "description": "Combined web app and manager-driven worker example module for OpenModulePlatform.",
+    "sortOrder": 410,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "example_workerapp_webapp",
+      "displayName": "Example WorkerApp",
+      "appType": "WebApp",
+      "description": "Web app definition for the example manager-driven worker module.",
+      "sortOrder": 410,
+      "isEnabled": true
+    },
+    {
+      "appKey": "example_workerapp_worker",
+      "displayName": "Example Managed Worker",
+      "appType": "ServiceApp",
+      "description": "Manager-driven worker app definition for the example worker module.",
+      "sortOrder": 411,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    { "appKey": "example_workerapp_webapp", "packageType": "web-app", "targetName": "example-workerapp-web", "minVersion": "0.3.4", "maxVersion": null },
+    { "appKey": "example_workerapp_worker", "packageType": "worker", "targetName": "example-workerapp", "minVersion": "0.3.3", "maxVersion": null }
+  ],
+  "sqlScripts": [
+    {
+      "key": "setup-example-workerapp-schema",
+      "phase": "setup",
+      "scope": "module",
+      "order": 10,
+      "path": "examples/WorkerAppModule/Sql/1-setup-example-workerapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    },
+    {
+      "key": "initialize-example-workerapp-metadata",
+      "phase": "initialize",
+      "scope": "mixed",
+      "order": 20,
+      "path": "examples/WorkerAppModule/Sql/2-initialize-example-workerapp.sql",
+      "execution": "idempotent",
+      "inlineSql": null
+    }
+  ],
+  "integrity": {
+    "source": "Derived from examples/WorkerAppModule/Sql/*.sql.",
+    "requiredSchemas": [
+      "omp_example_workerapp"
+    ],
+    "requiredTables": [
+      { "schema": "omp_example_workerapp", "name": "Configurations", "source": "examples/WorkerAppModule/Sql/1-setup-example-workerapp.sql", "purpose": "Worker example configuration history." },
+      { "schema": "omp_example_workerapp", "name": "Jobs", "source": "examples/WorkerAppModule/Sql/1-setup-example-workerapp.sql", "purpose": "Queued worker work." },
+      { "schema": "omp_example_workerapp", "name": "JobExecutions", "source": "examples/WorkerAppModule/Sql/1-setup-example-workerapp.sql", "purpose": "Worker job execution history." }
+    ],
+    "requiredOmpRows": {
+      "permissions": [
+        { "name": "ExampleWorkerAppModule.View" },
+        { "name": "ExampleWorkerAppModule.Admin" }
+      ],
+      "rolePermissions": [
+        { "roleName": "PortalAdmins", "permissionName": "ExampleWorkerAppModule.View", "scope": "example-bootstrap" },
+        { "roleName": "PortalAdmins", "permissionName": "ExampleWorkerAppModule.Admin", "scope": "example-bootstrap" }
+      ],
+      "appPermissions": [
+        { "appKey": "example_workerapp_webapp", "permissionName": "ExampleWorkerAppModule.View", "requireAll": false }
+      ],
+      "modules": [
+        { "moduleKey": "example_workerapp", "schemaName": "omp_example_workerapp" }
+      ],
+      "apps": [
+        { "moduleKey": "example_workerapp", "appKey": "example_workerapp_webapp", "appType": "WebApp" },
+        { "moduleKey": "example_workerapp", "appKey": "example_workerapp_worker", "appType": "ServiceApp" }
+      ],
+      "artifacts": [
+        { "appKey": "example_workerapp_webapp", "packageType": "web-app", "targetName": "example-workerapp-web", "relativePathTemplate": "example-workerapp/web/{version}" },
+        { "appKey": "example_workerapp_worker", "packageType": "worker", "targetName": "example-workerapp", "relativePathTemplate": "example-workerapp/worker/{version}" }
+      ],
+      "appWorkerDefinitions": [
+        {
+          "appKey": "example_workerapp_worker",
+          "runtimeKind": "windows-worker-plugin",
+          "workerTypeKey": "omp.example.workerapp_module",
+          "pluginRelativePath": "OpenModulePlatform.Worker.ExampleWorkerAppModule.dll"
+        }
+      ],
+      "moduleInstances": [
+        { "moduleInstanceKey": "example_workerapp", "instanceKey": "default" }
+      ],
+      "appInstances": [
+        { "appInstanceKey": "example_workerapp_webapp", "moduleInstanceKey": "example_workerapp", "routePath": "ExampleWorkerAppModule", "installationName": "webapp", "hostBinding": "host-bound-sample" },
+        { "appInstanceKey": "example_workerapp_worker", "moduleInstanceKey": "example_workerapp", "installationName": "default", "hostBinding": "host-bound-sample" }
+      ],
+      "workerInstances": [
+        { "workerInstanceKey": "example_workerapp_worker_default", "appInstanceKey": "example_workerapp_worker", "hostBinding": "host-bound-sample" }
+      ],
+      "instanceTemplateModuleInstances": [
+        { "moduleInstanceKey": "example_workerapp", "instanceTemplateKey": "default" }
+      ],
+      "instanceTemplateAppInstances": [
+        { "appInstanceKey": "example_workerapp_webapp", "moduleInstanceKey": "example_workerapp", "routePath": "ExampleWorkerAppModule", "installationName": "webapp", "hostBinding": "host-bound-sample" },
+        { "appInstanceKey": "example_workerapp_worker", "moduleInstanceKey": "example_workerapp", "installationName": "default", "hostBinding": "host-bound-sample" }
+      ]
+    },
+    "requiredModuleRows": {
+      "configurationRows": [
+        { "table": "omp_example_workerapp.Configurations", "versionNo": 0, "purpose": "Default example worker configuration." }
+      ],
+      "portalEntries": [
+        { "entryKey": "example-workerapp:app-instances", "targetUrl": "/ExampleWorkerAppModule/appinstances" },
+        { "entryKey": "example-workerapp:configurations", "targetUrl": "/ExampleWorkerAppModule/configurations" },
+        { "entryKey": "example-workerapp:jobs", "targetUrl": "/ExampleWorkerAppModule/jobs" },
+        { "entryKey": "example-workerapp:opendocviewer-demo", "targetUrl": "/ExampleWorkerAppModule/opendocviewer-demo" }
+      ]
+    },
+    "excludedSeedData": [
+      {
+        "key": "sample worker jobs",
+        "source": "examples/WorkerAppModule/Sql/2-initialize-example-workerapp.sql",
+        "reason": "Seeded sample jobs are demonstration data and must not be recreated by integrity repair."
+      }
+    ]
+  }
+}
