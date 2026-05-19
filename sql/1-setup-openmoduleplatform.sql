@@ -362,6 +362,46 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.ModuleDefinitionSqlExecutions', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ModuleDefinitionSqlExecutions
+    (
+        ModuleDefinitionSqlExecutionId bigint IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ModuleDefinitionSqlExecutions PRIMARY KEY,
+        ModuleDefinitionDocumentId int NOT NULL,
+        ScriptKey nvarchar(100) NOT NULL,
+        ScriptPhase nvarchar(50) NOT NULL,
+        ScriptOrder int NOT NULL,
+        ScriptSha256 nvarchar(128) NOT NULL,
+        ExecutionStatus nvarchar(30) NOT NULL,
+        StartedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleDefinitionSqlExecutions_StartedUtc DEFAULT SYSUTCDATETIME(),
+        CompletedUtc datetime2(3) NULL,
+        ErrorMessage nvarchar(max) NULL,
+        ExecutedBy nvarchar(256) NULL CONSTRAINT DF_omp_ModuleDefinitionSqlExecutions_ExecutedBy DEFAULT SUSER_SNAME(),
+        CONSTRAINT FK_omp_ModuleDefinitionSqlExecutions_Document
+            FOREIGN KEY(ModuleDefinitionDocumentId)
+            REFERENCES omp.ModuleDefinitionDocuments(ModuleDefinitionDocumentId)
+            ON DELETE CASCADE,
+        CONSTRAINT CK_omp_ModuleDefinitionSqlExecutions_Status
+            CHECK(ExecutionStatus IN (N'Running', N'Succeeded', N'Failed'))
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.ModuleDefinitionSqlExecutions')
+      AND name = N'IX_omp_ModuleDefinitionSqlExecutions_Latest'
+)
+BEGIN
+    CREATE INDEX IX_omp_ModuleDefinitionSqlExecutions_Latest
+        ON omp.ModuleDefinitionSqlExecutions(ModuleDefinitionDocumentId, ScriptKey, ScriptSha256, StartedUtc DESC)
+        INCLUDE(ExecutionStatus, CompletedUtc);
+END
+GO
+
 IF OBJECT_ID(N'omp.Artifacts', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.Artifacts

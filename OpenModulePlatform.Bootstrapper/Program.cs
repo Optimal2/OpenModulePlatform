@@ -310,6 +310,13 @@ internal static partial class Program
                     definition.CompatibleArtifacts,
                     config.Sql.CommandTimeoutSeconds);
 
+                await MarkOnlyModuleDefinitionAppliedAsync(
+                    connection,
+                    transaction,
+                    definition.ModuleKey,
+                    documentId,
+                    config.Sql.CommandTimeoutSeconds);
+
                 transaction.Commit();
             }
             catch
@@ -449,6 +456,27 @@ WHERE ModuleKey = @moduleKey
         command.Parameters.AddWithValue("@sourceName", sourceName);
 
         return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task MarkOnlyModuleDefinitionAppliedAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        string moduleKey,
+        int documentId,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+UPDATE omp.ModuleDefinitionDocuments
+SET IsApplied = CASE WHEN ModuleDefinitionDocumentId = @documentId THEN CONVERT(bit, 1) ELSE CONVERT(bit, 0) END,
+    AppliedUtc = CASE WHEN ModuleDefinitionDocumentId = @documentId THEN COALESCE(AppliedUtc, SYSUTCDATETIME()) ELSE AppliedUtc END,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ModuleKey = @moduleKey;";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@moduleKey", moduleKey);
+        command.Parameters.AddWithValue("@documentId", documentId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task ReplaceModuleDefinitionCompatibilityAsync(

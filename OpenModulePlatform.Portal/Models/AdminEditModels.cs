@@ -272,6 +272,60 @@ public sealed class ModuleDefinitionApplyResult
 }
 
 /// <summary>
+/// Validation state for one portable SQL script in a module definition document.
+/// </summary>
+public sealed class ModuleDefinitionSqlCheckRow
+{
+    public string Key { get; set; } = string.Empty;
+
+    public string Phase { get; set; } = string.Empty;
+
+    public string Scope { get; set; } = string.Empty;
+
+    public int Order { get; set; }
+
+    public string Execution { get; set; } = string.Empty;
+
+    public string? Path { get; set; }
+
+    public string? Source { get; set; }
+
+    public string ScriptSha256 { get; set; } = string.Empty;
+
+    public bool HasInlineSql { get; set; }
+
+    public bool IsSafe { get; set; }
+
+    public bool HasSuccessfulExecution { get; set; }
+
+    public bool NeedsExecution { get; set; }
+
+    public bool CanExecute { get; set; }
+
+    public string Status { get; set; } = string.Empty;
+
+    public string StatusMessage { get; set; } = string.Empty;
+
+    public DateTime? LastCompletedUtc { get; set; }
+
+    public string? LastExecutionStatus { get; set; }
+
+    public string? LastErrorMessage { get; set; }
+
+    public IReadOnlyList<string> MissingRequiredObjects { get; set; } = [];
+}
+
+/// <summary>
+/// Summary returned after executing module definition repair SQL.
+/// </summary>
+public sealed class ModuleDefinitionSqlRepairResult
+{
+    public int ExecutedCount { get; set; }
+
+    public IReadOnlyList<ModuleDefinitionSqlCheckRow> RemainingProblems { get; set; } = [];
+}
+
+/// <summary>
 /// Existing artifact row used when duplicate content is detected during upload.
 /// </summary>
 public sealed class ArtifactDuplicateInfo
