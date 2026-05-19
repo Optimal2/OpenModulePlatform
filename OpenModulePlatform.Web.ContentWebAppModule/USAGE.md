@@ -195,6 +195,10 @@ The script writes one report JSON file, one HTML file, configures the local
 HostAgent file mirrors, runs HostAgent once, and creates one Content page of
 each supported type: Markdown, inline HTML, HTML file, and server report.
 
+Normal module initialization does not create sample pages. Keep test/demo
+content explicit by running this helper only in development or test
+environments.
+
 Report keys map directly to JSON filenames:
 
 ```text

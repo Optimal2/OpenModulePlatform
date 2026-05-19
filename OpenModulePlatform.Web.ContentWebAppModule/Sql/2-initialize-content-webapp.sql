@@ -19,9 +19,6 @@ DECLARE @ContentTemplateModuleInstanceId int;
 DECLARE @ContentAppId int;
 DECLARE @ContentAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111232';
 DECLARE @ContentArtifactId int;
-DECLARE @SeedHomeContentId uniqueidentifier = '11111111-1111-1111-1111-111111111233';
-DECLARE @SeedModuleStatusContentId uniqueidentifier = '11111111-1111-1111-1111-111111111234';
-DECLARE @HomeContentId uniqueidentifier;
 DECLARE @ContentViewPermissionId int;
 DECLARE @ContentManagePermissionId int;
 DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
@@ -341,99 +338,9 @@ BEGIN
       AND AppInstanceKey = N'content_webapp_webapp';
 END
 
-SELECT @HomeContentId = content_id
-FROM omp_content.contents
-WHERE app_instance_id = @ContentAppInstanceId
-  AND slug = N'home';
-
-IF @HomeContentId IS NOT NULL
-BEGIN
-    UPDATE omp_content.contents
-    SET is_enabled = 1,
-        sort_order = COALESCE(sort_order, 10),
-        updated_by = N'install-script',
-        updated_at = SYSUTCDATETIME()
-    WHERE content_id = @HomeContentId;
-END
-ELSE IF EXISTS
-(
-    SELECT 1
-    FROM omp_content.contents
-    WHERE content_id = @SeedHomeContentId
-)
-BEGIN
-    SET @HomeContentId = @SeedHomeContentId;
-
-    UPDATE omp_content.contents
-    SET app_instance_id = @ContentAppInstanceId,
-        slug = N'home',
-        is_enabled = 1,
-        sort_order = COALESCE(sort_order, 10),
-        updated_by = N'install-script',
-        updated_at = SYSUTCDATETIME()
-    WHERE content_id = @HomeContentId;
-END
-ELSE
-BEGIN
-    INSERT INTO omp_content.contents(
-        content_id,
-        app_instance_id,
-        slug,
-        title,
-        content_type,
-        body,
-        is_enabled,
-        sort_order,
-        created_by,
-        updated_by)
-    VALUES(
-        @SeedHomeContentId,
-        @ContentAppInstanceId,
-        N'home',
-        N'Content home',
-        N'markdown',
-        N'# Content home' + CHAR(13) + CHAR(10) + CHAR(13) + CHAR(10) + N'This page is managed by the Content Web App module.',
-        1,
-        10,
-        N'install-script',
-        N'install-script');
-
-    SET @HomeContentId = @SeedHomeContentId;
-END
-
-IF NOT EXISTS
-(
-    SELECT 1
-    FROM omp_content.contents
-    WHERE app_instance_id = @ContentAppInstanceId
-      AND slug = N'module-status'
-)
-BEGIN
-    INSERT INTO omp_content.contents(
-        content_id,
-        app_instance_id,
-        slug,
-        title,
-        content_type,
-        body,
-        server_report_key,
-        is_enabled,
-        sort_order,
-        created_by,
-        updated_by)
-    VALUES(
-        @SeedModuleStatusContentId,
-        @ContentAppInstanceId,
-        N'module-status',
-        N'Module status',
-        N'server_report',
-        N'',
-        N'module-status',
-        1,
-        20,
-        N'install-script',
-        N'install-script');
-END
+-- The Content app intentionally starts without built-in pages. Use
+-- scripts/dev/seed-content-webapp-test-pages.ps1 for explicit local smoke-test
+-- content instead of mixing sample pages into normal installations.
 
 IF @PortalAdminsRoleId IS NOT NULL
 BEGIN

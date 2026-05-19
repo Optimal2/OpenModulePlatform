@@ -29,6 +29,11 @@ HTML content can also embed a report as JavaScript data with `[DB_JSON_SCRIPT="m
 
 The web application must be configured with `ContentWebAppModule:AppInstanceId`. The default setup script seeds a standard app instance at route path `content`.
 
+The setup script intentionally does not create default content pages. Use
+`scripts/dev/seed-content-webapp-test-pages.ps1` when a local environment needs
+sample pages for testing editors, shortcodes, HTML files, server reports, and
+HostAgent file mirroring.
+
 Permissions:
 
 - `ContentWebAppModule.Manage` allows full content administration, including creating pages, changing role access, enabling, and disabling pages.

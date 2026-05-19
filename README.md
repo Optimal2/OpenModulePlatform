@@ -39,7 +39,7 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `examples/WorkerAppModule/WorkerApp` - plugin-based worker reference example
 - `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - neutral core schema, RBAC, default instance, host, and bootstrap data
 - `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` and `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-owned schema and Portal registration data
-- `OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql` and `OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql` - content module schema and registration data
+- `OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql` and `OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql` - content module schema and registration data, without default content pages
 - `OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql` and `OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql` - iframe module schema and registration data
 - `examples/**/sql/1-setup-*.sql` and `examples/**/sql/2-initialize-*.sql` - optional example-module setup and initialization scripts
 - `docs/` - architecture, terminology, release notes, and practical guides
@@ -125,8 +125,10 @@ OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql
 
 The local installer `scripts/manage-local-install.ps1` installs the Portal plus
 the first-party Content and iFrame modules, including their template metadata
-and web artifacts. Use `scripts/install-local-examples.ps1` only when you also
-want the optional example modules.
+and web artifacts. Content starts without sample pages; run
+`scripts/dev/seed-content-webapp-test-pages.ps1` only when you want explicit
+local Content smoke-test pages. Use `scripts/install-local-examples.ps1` only
+when you also want the optional example modules.
 
 Each example module owns its own SQL folder and follows the same two-file pattern:
 
