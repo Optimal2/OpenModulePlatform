@@ -1764,6 +1764,7 @@
   <data name="The definition was stored but not applied." xml:space="preserve"><value>The definition was stored but not applied.</value></data>
   <data name="Executed {0} SQL repair script(s)." xml:space="preserve"><value>Executed {0} SQL repair script(s).</value></data>
   <data name="Artifacts imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artifacts imported or replaced: {0}. Failed: {1}.</value></data>
+  <data name="Artifact import details:" xml:space="preserve"><value>Artifact import details:</value></data>
   <data name="Select one available module definition." xml:space="preserve"><value>Select one available module definition.</value></data>
   <data name="Installed same version" xml:space="preserve"><value>Installed same version</value></data>
   <data name="Installed other version" xml:space="preserve"><value>Installed other version</value></data>

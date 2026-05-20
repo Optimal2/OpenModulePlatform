@@ -1868,6 +1868,7 @@
   <data name="The definition was stored but not applied." xml:space="preserve"><value>Definitionen sparades men applicerades inte.</value></data>
   <data name="Executed {0} SQL repair script(s)." xml:space="preserve"><value>Körde {0} SQL-rättningsskript.</value></data>
   <data name="Artifacts imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artefakter importerade eller ersatta: {0}. Misslyckade: {1}.</value></data>
+  <data name="Artifact import details:" xml:space="preserve"><value>Detaljer för artefaktimport:</value></data>
   <data name="Select one available module definition." xml:space="preserve"><value>Välj en tillgänglig moduldefinition.</value></data>
   <data name="Installed same version" xml:space="preserve"><value>Samma version installerad</value></data>
   <data name="Installed other version" xml:space="preserve"><value>Annan version installerad</value></data>

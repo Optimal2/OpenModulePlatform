@@ -205,6 +205,19 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             result.ImportedArtifactCount,
             result.FailedArtifactCount);
 
+        var detailRows = result.Artifacts
+            .Where(static item =>
+                string.Equals(item.Status, "Failed", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrWhiteSpace(item.Message))
+            .Select(static item => string.IsNullOrWhiteSpace(item.Message)
+                ? $"{item.FileName}: {item.Status}"
+                : $"{item.FileName}: {item.Status} - {item.Message}")
+            .ToArray();
+        if (detailRows.Length > 0)
+        {
+            message += " " + T("Artifact import details:") + " " + string.Join(" | ", detailRows);
+        }
+
         return message;
     }
 
