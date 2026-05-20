@@ -167,6 +167,18 @@
         # package-local module-definitions import folder and imported by the
         # bootstrapper after SQL initialization.
         AdditionalModuleDefinitionFiles = @()
+
+        # Optional prebuilt artifact zip files from external module repositories.
+        # Source is resolved relative to this config file. Payload is the package
+        # relative path used by bootstrap.local.sample.json. Target is the
+        # ArtifactStore relative folder where the extracted artifact is copied.
+        AdditionalArtifactFiles = @(
+            # @{
+            #     Source = '..\SomeModule\artifacts\SomeModule.Web.zip'
+            #     Payload = 'payload\some_module__some_app__web-app__some-target__1.0.0.zip'
+            #     Target = 'some-module/web/1.0.0'
+            # }
+        )
     }
 
     Package = @{
