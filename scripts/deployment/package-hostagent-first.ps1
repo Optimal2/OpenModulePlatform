@@ -1158,9 +1158,17 @@ if ([string]::IsNullOrWhiteSpace($hostAgentHostKey)) {
     $hostAgentHostKey = 'sample-host'
 }
 $hostAgentHostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -DefaultValue '')
+$developerSourceRoot = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'SourceRoot' -DefaultValue $RepositoryRoot)
+$developerPackageConfigPath = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageConfigPath' -DefaultValue $ConfigPath)
+$developerPackageOutputRoot = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageOutputRoot' -DefaultValue $OutputRoot)
 
 $bootstrapConfig = [ordered]@{
     schema = 'OpenModulePlatform.HostAgentFirstBootstrap.v1'
+    developerSource = [ordered]@{
+        sourceRoot = $developerSourceRoot
+        packageConfigPath = $developerPackageConfigPath
+        packageOutputRoot = $developerPackageOutputRoot
+    }
     sql = [ordered]@{
         enabled = $true
         server = $sqlServer
