@@ -176,6 +176,8 @@
         # Source is resolved relative to this config file. Payload is the package
         # relative path used by bootstrap.local.sample.json. Target is the
         # ArtifactStore relative folder where the extracted artifact is copied.
+        # These artifacts are also copied to available-artifacts so they remain
+        # available for later Portal-driven module installation.
         AdditionalArtifactFiles = @(
             # @{
             #     Source = '..\SomeModule\artifacts\SomeModule.Web.zip'
@@ -183,6 +185,13 @@
             #     Target = 'some-module/web/1.0.0'
             # }
         )
+
+        # Optional folders containing standard OMP artifact package zips for
+        # modules that should be available in the package but not necessarily
+        # installed during the initial bootstrap. RuntimeRoot\ArtifactArchive is
+        # also scanned automatically when it exists, as are artifacts folders
+        # below configured DeveloperSource repository roots.
+        AvailableArtifactArchiveRoots = @()
     }
 
     Package = @{

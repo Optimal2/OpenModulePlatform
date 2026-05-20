@@ -219,6 +219,141 @@ function Copy-ModuleDefinitionsFromManifest {
     }
 }
 
+function Add-UniqueResolvedPath {
+    param(
+        [System.Collections.Generic.List[string]]$Paths,
+        [string]$Path,
+        [string]$BasePath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return
+    }
+
+    $resolved = Resolve-DeploymentPath -Path $Path -BasePath $BasePath
+    if (-not (Test-Path -LiteralPath (Join-Path $resolved 'omp-components.json') -PathType Leaf)) {
+        return
+    }
+
+    if (-not ($Paths | Where-Object { [string]::Equals($_, $resolved, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)) {
+        $Paths.Add($resolved) | Out-Null
+    }
+}
+
+function Get-DeveloperSourceRoots {
+    param(
+        [string]$ConfiguredRootsText,
+        [string]$ConfigDirectory,
+        [string]$RepositoryRoot,
+        [string]$OpenDocViewerRoot
+    )
+
+    $roots = [System.Collections.Generic.List[string]]::new()
+    Add-UniqueResolvedPath -Paths $roots -Path $RepositoryRoot -BasePath $ConfigDirectory
+    Add-UniqueResolvedPath -Paths $roots -Path $OpenDocViewerRoot -BasePath $ConfigDirectory
+
+    foreach ($entry in $ConfiguredRootsText.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries)) {
+        Add-UniqueResolvedPath -Paths $roots -Path $entry.Trim() -BasePath $ConfigDirectory
+    }
+
+    return @($roots)
+}
+
+function Get-ArtifactArchiveRoots {
+    param(
+        [object[]]$ConfiguredRoots,
+        [string]$ConfigDirectory,
+        [string]$RuntimeRoot,
+        [string[]]$SourceRoots
+    )
+
+    $roots = [System.Collections.Generic.List[string]]::new()
+    foreach ($entry in @($ConfiguredRoots)) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $resolved = Resolve-DeploymentPath -Path ([string]$entry) -BasePath $ConfigDirectory
+        if (Test-Path -LiteralPath $resolved -PathType Container) {
+            if (-not ($roots | Where-Object { [string]::Equals($_, $resolved, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)) {
+                $roots.Add($resolved) | Out-Null
+            }
+        }
+    }
+
+    $defaultArchiveRoot = Join-DeploymentPath -Root $RuntimeRoot -Child 'ArtifactArchive'
+    if (Test-Path -LiteralPath $defaultArchiveRoot -PathType Container) {
+        if (-not ($roots | Where-Object { [string]::Equals($_, $defaultArchiveRoot, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)) {
+            $roots.Add($defaultArchiveRoot) | Out-Null
+        }
+    }
+
+    foreach ($sourceRoot in @($SourceRoots)) {
+        $sourceArtifactRoot = Join-Path $sourceRoot 'artifacts'
+        if (Test-Path -LiteralPath $sourceArtifactRoot -PathType Container) {
+            if (-not ($roots | Where-Object { [string]::Equals($_, $sourceArtifactRoot, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)) {
+                $roots.Add($sourceArtifactRoot) | Out-Null
+            }
+        }
+    }
+
+    return @($roots)
+}
+
+function Copy-AvailableArtifactPackage {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot,
+        [Parameter(Mandatory = $true)][hashtable]$CopiedFiles
+    )
+
+    if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
+        return
+    }
+
+    $fileName = [System.IO.Path]::GetFileName($Source)
+    if ($CopiedFiles.ContainsKey($fileName)) {
+        return
+    }
+
+    Copy-RequiredFile -Source $Source -Destination (Join-Path $DestinationRoot $fileName)
+    $CopiedFiles[$fileName] = $true
+}
+
+function Copy-AvailableArtifactPackagesFromManifest {
+    param(
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][string[]]$ArchiveRoots,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot,
+        [Parameter(Mandatory = $true)][hashtable]$CopiedFiles
+    )
+
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
+        return
+    }
+
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($component in @($manifest.components)) {
+        if ($null -eq $component -or -not (Test-ComponentHasArtifactIdentity -Component $component)) {
+            continue
+        }
+
+        $packageName = Get-ArtifactPackageFileName `
+            -ModuleKey ([string]$component.moduleKey) `
+            -AppKey ([string]$component.appKey) `
+            -PackageType ([string]$component.packageType) `
+            -TargetName ([string]$component.targetName) `
+            -Version ([string]$component.version)
+        foreach ($archiveRoot in $ArchiveRoots) {
+            $candidate = Join-Path $archiveRoot $packageName
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                Copy-AvailableArtifactPackage -Source $candidate -DestinationRoot $DestinationRoot -CopiedFiles $CopiedFiles
+                break
+            }
+        }
+    }
+}
+
 function Compress-FolderToZip {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -521,7 +656,9 @@ function Copy-AdditionalArtifactFiles {
         [object[]]$Entries,
         [Parameter(Mandatory = $true)][string]$ConfigDirectory,
         [Parameter(Mandatory = $true)][string]$PayloadRoot,
-        [Parameter(Mandatory = $true)][System.Collections.ArrayList]$Artifacts
+        [Parameter(Mandatory = $true)][System.Collections.ArrayList]$Artifacts,
+        [Parameter(Mandatory = $true)][string]$AvailableArtifactsRoot,
+        [Parameter(Mandatory = $true)][hashtable]$AvailableArtifactPackageFiles
     )
 
     foreach ($entry in $Entries) {
@@ -576,6 +713,10 @@ function Copy-AdditionalArtifactFiles {
             -IsExample $isExample `
             -Overwrite $overwrite `
             -RemoveRuntimeConfigurationFiles $removeRuntimeConfigurationFiles
+        Copy-AvailableArtifactPackage `
+            -Source $destination `
+            -DestinationRoot $AvailableArtifactsRoot `
+            -CopiedFiles $AvailableArtifactPackageFiles
     }
 }
 
@@ -634,6 +775,20 @@ if ([string]::IsNullOrWhiteSpace($OpenDocViewerRoot)) {
 }
 $OpenDocViewerRoot = Resolve-DeploymentPath -Path $OpenDocViewerRoot -BasePath $configDirectory
 
+$developerSourceRootText = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'SourceRoot' -DefaultValue $RepositoryRoot)
+$developerSourceRoots = Get-DeveloperSourceRoots `
+    -ConfiguredRootsText $developerSourceRootText `
+    -ConfigDirectory $configDirectory `
+    -RepositoryRoot $RepositoryRoot `
+    -OpenDocViewerRoot $OpenDocViewerRoot
+$runtimeRootForArtifactArchive = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue 'C:\OMP')
+$runtimeRootForArtifactArchive = Resolve-DeploymentPath -Path $runtimeRootForArtifactArchive -BasePath $configDirectory
+$artifactArchiveRoots = Get-ArtifactArchiveRoots `
+    -ConfiguredRoots @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AvailableArtifactArchiveRoots' -DefaultValue @())) `
+    -ConfigDirectory $configDirectory `
+    -RuntimeRoot $runtimeRootForArtifactArchive `
+    -SourceRoots $developerSourceRoots
+
 $componentManifestPath = Join-Path $RepositoryRoot 'omp-components.json'
 if (-not (Test-Path -LiteralPath $componentManifestPath -PathType Leaf)) {
     throw "Component manifest was not found: $componentManifestPath"
@@ -678,6 +833,9 @@ $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version
 $payloadRoot = Join-Path $packageRoot 'payload'
 $sqlRoot = Join-Path $packageRoot 'sql'
 $toolsRoot = Join-Path $packageRoot 'tools'
+$availableModuleDefinitionsRoot = Join-Path $packageRoot 'available-module-definitions'
+$availableArtifactsRoot = Join-Path $packageRoot 'available-artifacts'
+$availableArtifactPackageFiles = @{}
 $buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-hostagent-first-build-' + [Guid]::NewGuid().ToString('N'))
 $zipPath = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version.zip")
 
@@ -687,6 +845,8 @@ if (Test-Path -LiteralPath $packageRoot) {
 New-Item -ItemType Directory -Path $payloadRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $sqlRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $toolsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $availableModuleDefinitionsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $availableArtifactsRoot -Force | Out-Null
 
 Write-Step 'Publishing OpenModulePlatform'
 $publishScript = Join-Path $RepositoryRoot 'publish-all.ps1'
@@ -836,6 +996,7 @@ foreach ($component in $components) {
         }
 
         New-ArtifactPackage -PayloadZip $artifactPayloadZip -Destination $destination -BuildRoot $buildRoot -ConfigurationFiles $configurationFiles
+        Copy-AvailableArtifactPackage -Source $destination -DestinationRoot $availableArtifactsRoot -CopiedFiles $availableArtifactPackageFiles
         $componentPayloadSources[$componentKey] = "payload/$artifactPackageName"
 
         if ([string]::Equals($componentKey, 'omp-hostagent-service', [StringComparison]::OrdinalIgnoreCase)) {
@@ -906,6 +1067,7 @@ else {
         -SiteConfigPath $openDocViewerSiteConfigPath `
         -BuildRoot $buildRoot
 }
+Copy-AvailableArtifactPackage -Source $openDocViewerArtifactPackagePath -DestinationRoot $availableArtifactsRoot -CopiedFiles $availableArtifactPackageFiles
 
 Write-Step 'Copying SQL scripts'
 $sqlFiles = @(
@@ -941,6 +1103,13 @@ $moduleDefinitionsDestination = Join-Path $packageRoot 'module-definitions'
 New-Item -ItemType Directory -Path $moduleDefinitionsDestination -Force | Out-Null
 Copy-ModuleDefinitionsFromManifest -ManifestPath $componentManifestPath -RepositoryRoot $RepositoryRoot -Destination $moduleDefinitionsDestination
 Copy-ModuleDefinitionsFromManifest -ManifestPath (Join-Path $OpenDocViewerRoot 'omp-components.json') -RepositoryRoot $OpenDocViewerRoot -Destination $moduleDefinitionsDestination
+foreach ($sourceRoot in $developerSourceRoots) {
+    Copy-ModuleDefinitionsFromManifest `
+        -ManifestPath (Join-Path $sourceRoot 'omp-components.json') `
+        -RepositoryRoot $sourceRoot `
+        -Destination $availableModuleDefinitionsRoot
+}
+
 $additionalModuleDefinitionFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalModuleDefinitionFiles' -DefaultValue @()))
 foreach ($entry in $additionalModuleDefinitionFiles) {
     $sourcePath = ''
@@ -963,6 +1132,7 @@ foreach ($entry in $additionalModuleDefinitionFiles) {
     }
 
     Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $moduleDefinitionsDestination $destinationName)
+    Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $availableModuleDefinitionsRoot $destinationName)
 }
 
 $additionalSqlIncludes = @()
@@ -1077,7 +1247,17 @@ Copy-AdditionalArtifactFiles `
     -Entries $additionalArtifactFiles `
     -ConfigDirectory $configDirectory `
     -PayloadRoot $payloadRoot `
-    -Artifacts $artifacts
+    -Artifacts $artifacts `
+    -AvailableArtifactsRoot $availableArtifactsRoot `
+    -AvailableArtifactPackageFiles $availableArtifactPackageFiles
+
+foreach ($sourceRoot in $developerSourceRoots) {
+    Copy-AvailableArtifactPackagesFromManifest `
+        -ManifestPath (Join-Path $sourceRoot 'omp-components.json') `
+        -ArchiveRoots $artifactArchiveRoots `
+        -DestinationRoot $availableArtifactsRoot `
+        -CopiedFiles $availableArtifactPackageFiles
+}
 
 $versionOverrides = @{}
 $versionVariableOverrides = @{}
@@ -1158,7 +1338,7 @@ if ([string]::IsNullOrWhiteSpace($hostAgentHostKey)) {
     $hostAgentHostKey = 'sample-host'
 }
 $hostAgentHostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -DefaultValue '')
-$developerSourceRoot = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'SourceRoot' -DefaultValue $RepositoryRoot)
+$developerSourceRoot = if ([string]::IsNullOrWhiteSpace($developerSourceRootText)) { $RepositoryRoot } else { $developerSourceRootText }
 $developerPackageConfigPath = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageConfigPath' -DefaultValue $ConfigPath)
 $developerPackageOutputRoot = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageOutputRoot' -DefaultValue $OutputRoot)
 
@@ -1555,6 +1735,16 @@ $manifest = [ordered]@{
     bootstrapConfig = 'bootstrap.local.sample.json'
     bootstrapper = 'tools/OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.exe'
     payloads = @($artifacts | ForEach-Object { $_.source })
+    availableModuleDefinitions = @(
+        Get-ChildItem -LiteralPath $availableModuleDefinitionsRoot -Filter '*.json' -File |
+            Sort-Object Name |
+            ForEach-Object { 'available-module-definitions/' + $_.Name }
+    )
+    availableArtifactPackages = @(
+        Get-ChildItem -LiteralPath $availableArtifactsRoot -Filter '*.zip' -File |
+            Sort-Object Name |
+            ForEach-Object { 'available-artifacts/' + $_.Name }
+    )
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'manifest.json') -Encoding UTF8
 

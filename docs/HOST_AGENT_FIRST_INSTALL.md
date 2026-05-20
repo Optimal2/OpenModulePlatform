@@ -176,6 +176,20 @@ be included in the source comparison. This developer workflow is intentionally
 local; production updates should still use controlled artifact/module-definition
 packages.
 
+HostAgent-first packages keep two sets of portable objects:
+
+- `module-definitions` and `payload` contain the module definitions and artifact
+  packages that the bootstrapper imports or copies during the initial
+  installation.
+- `available-module-definitions` and `available-artifacts` contain module
+  definitions and artifact packages that are packaged for later Portal-driven
+  installation. These files are not consumed by the bootstrapper and remain in
+  the expanded package after installation. External module artifacts are copied
+  here from `HostAgentFirst.AvailableArtifactArchiveRoots` and from
+  `RuntimeRoot\ArtifactArchive`. The package builder also scans `artifacts`
+  folders below the configured source repositories. Matching standard
+  artifact-package file names are copied when found.
+
 For non-interactive console installation, run:
 
 ```cmd
