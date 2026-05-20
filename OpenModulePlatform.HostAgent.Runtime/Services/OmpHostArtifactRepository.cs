@@ -16,6 +16,306 @@ public sealed class OmpHostArtifactRepository
     public string GetConfiguredConnectionString()
         => _db.GetConnectionString();
 
+    public async Task<HostAgentLeaseResult> TryAcquireHostAgentLeaseAsync(
+        string hostKey,
+        string serviceName,
+        string runtimeMode,
+        bool forceTakeover,
+        int leaseSeconds,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+DECLARE @leaseUntilUtc datetime2(3) = DATEADD(second, @leaseSeconds, @nowUtc);
+DECLARE @hostId uniqueidentifier;
+DECLARE @existingServiceName nvarchar(200);
+DECLARE @existingLeaseUntilUtc datetime2(3);
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT
+        CAST(0 AS bit) AS Acquired,
+        CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS uniqueidentifier) AS LeaseToken,
+        CAST(NULL AS nvarchar(200)) AS ActiveServiceName;
+    RETURN;
+END;
+
+SELECT
+    @existingServiceName = ServiceName,
+    @existingLeaseUntilUtc = LeaseUntilUtc
+FROM omp.HostAgentLeases WITH (UPDLOCK, HOLDLOCK)
+WHERE HostId = @hostId;
+
+IF @existingServiceName IS NULL
+BEGIN
+    INSERT INTO omp.HostAgentLeases(HostId, ServiceName, LeaseToken, RuntimeMode, LeaseUntilUtc)
+    VALUES(@hostId, @serviceName, @leaseToken, @runtimeMode, @leaseUntilUtc);
+
+    SELECT CAST(1 AS bit) AS Acquired, @hostId AS HostId, @leaseToken AS LeaseToken, @serviceName AS ActiveServiceName;
+    RETURN;
+END;
+
+IF @forceTakeover = 1
+   OR @existingServiceName = @serviceName
+   OR @existingLeaseUntilUtc < @nowUtc
+BEGIN
+    UPDATE omp.HostAgentLeases
+    SET ServiceName = @serviceName,
+        LeaseToken = @leaseToken,
+        RuntimeMode = @runtimeMode,
+        LeaseUntilUtc = @leaseUntilUtc,
+        UpdatedUtc = @nowUtc
+    WHERE HostId = @hostId;
+
+    SELECT CAST(1 AS bit) AS Acquired, @hostId AS HostId, @leaseToken AS LeaseToken, @serviceName AS ActiveServiceName;
+    RETURN;
+END;
+
+SELECT CAST(0 AS bit) AS Acquired, @hostId AS HostId, CAST(NULL AS uniqueidentifier) AS LeaseToken, @existingServiceName AS ActiveServiceName;";
+
+        var token = Guid.NewGuid();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        cmd.Parameters.AddWithValue("@runtimeMode", runtimeMode);
+        cmd.Parameters.AddWithValue("@forceTakeover", forceTakeover);
+        cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(5, leaseSeconds));
+        cmd.Parameters.AddWithValue("@leaseToken", token);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return new HostAgentLeaseResult(false, null, null, null);
+        }
+
+        return new HostAgentLeaseResult(
+            rdr.GetBoolean(0),
+            rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
+            rdr.IsDBNull(2) ? null : rdr.GetGuid(2),
+            rdr.IsDBNull(3) ? null : rdr.GetString(3));
+    }
+
+    public async Task PublishHostAgentRuntimeStateAsync(
+        Guid hostId,
+        HostAgentProcessContext process,
+        string runtimeMode,
+        int? artifactId,
+        string? installPath,
+        bool isActive,
+        string? statusMessage,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+
+IF @isActive = 1
+BEGIN
+    UPDATE omp.HostAgentRuntimeStates
+    SET IsActive = 0,
+        UpdatedUtc = @nowUtc
+    WHERE HostId = @hostId
+      AND ServiceName <> @serviceName
+      AND IsActive = 1;
+END;
+
+MERGE omp.HostAgentRuntimeStates AS target
+USING (SELECT @hostId AS HostId, @serviceName AS ServiceName) AS source
+ON target.HostId = source.HostId
+AND target.ServiceName = source.ServiceName
+WHEN MATCHED THEN
+    UPDATE SET
+        Version = @version,
+        ArtifactId = @artifactId,
+        InstallPath = @installPath,
+        ProcessId = @processId,
+        RuntimeMode = @runtimeMode,
+        IsActive = @isActive,
+        TakeoverFromServiceName = @takeoverFromServiceName,
+        LastSeenUtc = @nowUtc,
+        StatusMessage = @statusMessage,
+        UpdatedUtc = @nowUtc
+WHEN NOT MATCHED THEN
+    INSERT
+    (
+        HostId,
+        ServiceName,
+        Version,
+        ArtifactId,
+        InstallPath,
+        ProcessId,
+        RuntimeMode,
+        IsActive,
+        TakeoverFromServiceName,
+        LastSeenUtc,
+        StatusMessage,
+        CreatedUtc,
+        UpdatedUtc
+    )
+    VALUES
+    (
+        @hostId,
+        @serviceName,
+        @version,
+        @artifactId,
+        @installPath,
+        @processId,
+        @runtimeMode,
+        @isActive,
+        @takeoverFromServiceName,
+        @nowUtc,
+        @statusMessage,
+        @nowUtc,
+        @nowUtc
+    );";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@serviceName", process.ServiceName);
+        cmd.Parameters.AddWithValue("@version", string.IsNullOrWhiteSpace(process.Version) ? DBNull.Value : process.Version);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId.HasValue ? artifactId.Value : DBNull.Value);
+        cmd.Parameters.AddWithValue("@installPath", string.IsNullOrWhiteSpace(installPath) ? DBNull.Value : installPath);
+        cmd.Parameters.AddWithValue("@processId", process.ProcessId);
+        cmd.Parameters.AddWithValue("@runtimeMode", runtimeMode);
+        cmd.Parameters.AddWithValue("@isActive", isActive);
+        cmd.Parameters.AddWithValue("@takeoverFromServiceName", string.IsNullOrWhiteSpace(process.TakeoverFromServiceName) ? DBNull.Value : process.TakeoverFromServiceName);
+        cmd.Parameters.AddWithValue("@statusMessage", string.IsNullOrWhiteSpace(statusMessage) ? DBNull.Value : Truncate(statusMessage, 1000));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task MarkHostAgentQuiescedAsync(
+        Guid hostId,
+        string serviceName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.HostAgentRuntimeStates
+SET RuntimeMode = N'Quiesced',
+    IsActive = 0,
+    QuiescedUtc = SYSUTCDATETIME(),
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostId = @hostId
+  AND ServiceName = @serviceName;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task RequestHostAgentQuiesceAsync(
+        Guid hostId,
+        string serviceName,
+        string requestedBy,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.HostAgentRuntimeStates
+SET RuntimeMode = N'Quiescing',
+    QuiesceRequestedUtc = SYSUTCDATETIME(),
+    StatusMessage = @requestedBy,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostId = @hostId
+  AND ServiceName = @serviceName;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        cmd.Parameters.AddWithValue("@requestedBy", Truncate(requestedBy, 1000));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<HostAgentUpgradeDescriptor?> GetDesiredHostAgentUpgradeAsync(
+        string hostKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS int) AS ArtifactId,
+        CAST(NULL AS nvarchar(50)) AS Version,
+        CAST(NULL AS nvarchar(50)) AS PackageType,
+        CAST(NULL AS nvarchar(100)) AS TargetName,
+        CAST(NULL AS nvarchar(400)) AS RelativePath,
+        CAST(NULL AS nvarchar(128)) AS Sha256,
+        CAST(NULL AS nvarchar(160)) AS ServiceNamePrefix,
+        CAST(NULL AS nvarchar(500)) AS InstallRoot,
+        CAST(NULL AS nvarchar(500)) AS SourceLocalPath,
+        CAST(NULL AS nvarchar(128)) AS ContentSha256;
+    RETURN;
+END;
+
+SELECT TOP (1)
+    @hostId AS HostId,
+    ar.ArtifactId,
+    ar.Version,
+    ar.PackageType,
+    ar.TargetName,
+    ar.RelativePath,
+    ar.Sha256,
+    desired.ServiceNamePrefix,
+    desired.InstallRoot,
+    has.LocalPath AS SourceLocalPath,
+    has.ContentSha256
+FROM omp.HostAgentDesiredStates desired
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = desired.ArtifactId
+LEFT JOIN omp.HostArtifactStates has
+    ON has.HostId = @hostId
+   AND has.ArtifactId = ar.ArtifactId
+WHERE desired.HostId = @hostId
+  AND desired.IsEnabled = 1
+  AND ar.IsEnabled = 1
+ORDER BY desired.UpdatedUtc DESC;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new HostAgentUpgradeDescriptor
+        {
+            HostId = rdr.GetGuid(0),
+            ArtifactId = rdr.GetInt32(1),
+            Version = rdr.GetString(2),
+            PackageType = rdr.GetString(3),
+            TargetName = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            RelativePath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            Sha256 = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            ServiceNamePrefix = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+            InstallRoot = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+            SourceLocalPath = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+            ContentSha256 = rdr.IsDBNull(10) ? null : rdr.GetString(10)
+        };
+    }
+
     public async Task<ArtifactCompatibilitySlot> RequireCompatibleArtifactSlotAsync(
         int appId,
         string version,
@@ -462,6 +762,83 @@ SELECT @TemplateAppRowsUpdated,
         }
 
         return (rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetInt32(2));
+    }
+
+    public async Task<int> ApplyImportedHostAgentArtifactToCurrentHostAsync(
+        int artifactId,
+        string hostKey,
+        string? serviceNamePrefix,
+        string? installRoot,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+DECLARE @changes table(ActionName nvarchar(10) NOT NULL);
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT 0;
+    RETURN;
+END;
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.Artifacts
+    WHERE ArtifactId = @artifactId
+      AND PackageType = N'host-agent'
+      AND IsEnabled = 1
+)
+BEGIN
+    SELECT 0;
+    RETURN;
+END;
+
+MERGE omp.HostAgentDesiredStates AS target
+USING
+(
+    SELECT
+        @hostId AS HostId,
+        @artifactId AS ArtifactId,
+        NULLIF(@serviceNamePrefix, N'') AS ServiceNamePrefix,
+        NULLIF(@installRoot, N'') AS InstallRoot
+) AS source
+ON target.HostId = source.HostId
+WHEN MATCHED AND
+(
+       target.ArtifactId <> source.ArtifactId
+    OR (source.ServiceNamePrefix IS NOT NULL AND ISNULL(target.ServiceNamePrefix, N'') <> source.ServiceNamePrefix)
+    OR (source.InstallRoot IS NOT NULL AND ISNULL(target.InstallRoot, N'') <> source.InstallRoot)
+    OR target.IsEnabled = 0
+)
+    THEN UPDATE SET
+        ArtifactId = source.ArtifactId,
+        ServiceNamePrefix = COALESCE(source.ServiceNamePrefix, target.ServiceNamePrefix),
+        InstallRoot = COALESCE(source.InstallRoot, target.InstallRoot),
+        IsEnabled = 1,
+        UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(HostId, ArtifactId, ServiceNamePrefix, InstallRoot, IsEnabled)
+    VALUES(source.HostId, source.ArtifactId, source.ServiceNamePrefix, source.InstallRoot, 1)
+OUTPUT $action INTO @changes;
+
+SELECT COUNT(1) FROM @changes;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@serviceNamePrefix", string.IsNullOrWhiteSpace(serviceNamePrefix) ? string.Empty : serviceNamePrefix.Trim());
+        cmd.Parameters.AddWithValue("@installRoot", string.IsNullOrWhiteSpace(installRoot) ? string.Empty : installRoot.Trim());
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is int count ? count : 0;
     }
 
     public async Task TouchHostHeartbeatAsync(string hostKey, CancellationToken ct)
@@ -1287,6 +1664,12 @@ WHEN NOT MATCHED THEN
         cmd.Parameters.AddWithValue("@applied", result.Applied);
         cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
     }
 
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)

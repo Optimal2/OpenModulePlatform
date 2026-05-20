@@ -82,10 +82,10 @@ for the same app definition.
    template.
 4. Add rollback and rollout policy metadata: desired artifact version, canary or
    per-host sequencing, maintenance windows, and restart behavior.
-5. Add a bootstrap/update story for HostAgent itself. A running HostAgent can
-   safely update normal web apps and service apps, but replacing the HostAgent
-   service requires an external bootstrapper, paired updater service, or
-   controlled maintenance script.
+5. Extend the HostAgent self-upgrade baseline with Portal controls and rollout
+   policy. The runtime can now prepare a versioned HostAgent service and hand
+   over through the `host-agent` artifact path, but operators still need a
+   friendlier admin surface for selecting desired HostAgent versions per host.
 6. Extend Portal admin pages with preview/apply actions for instance templates,
    host template assignments, and host deployments.
 

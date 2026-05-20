@@ -5,7 +5,7 @@
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.9",
+      "definitionVersion": "0.3.10",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -78,12 +78,13 @@
     {
       "componentKey": "omp-hostagent-service",
       "displayName": "OMP HostAgent",
-      "registrationMode": "bootstrap",
-      "packageType": "service-app",
+      "moduleKey": "omp_core",
+      "appKey": "omp_hostagent",
+      "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.9",
+      "version": "0.3.10",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
-      "relativePathTemplate": "omp-hostagent/service/{version}",
+      "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
     },
     {

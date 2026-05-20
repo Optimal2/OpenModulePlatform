@@ -46,6 +46,7 @@ DECLARE @DefaultHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
+DECLARE @ArtifactVersion nvarchar(50) = N'0.3.10';
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
 -- automation should patch it from a protected environment-specific value; the
@@ -277,6 +278,107 @@ BEGIN
     INSERT INTO omp.HostDeploymentAssignments(HostId, HostTemplateId, AssignedBy, IsActive)
     VALUES(@DefaultHostId, @DefaultHostTemplateId, N'install-script', 1);
 END
+
+-------------------------------------------------------------------------------
+-- Seed core module metadata
+-------------------------------------------------------------------------------
+DECLARE @CoreModuleId int;
+DECLARE @HostAgentAppId int;
+
+IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'omp_core')
+BEGIN
+    UPDATE omp.Modules
+    SET DisplayName = N'OpenModulePlatform Core',
+        ModuleType = N'PlatformCore',
+        SchemaName = N'omp',
+        Description = N'Core OMP schema, bootstrap data, and host-local infrastructure metadata.',
+        IsEnabled = 1,
+        SortOrder = 0,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleKey = N'omp_core';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Modules(
+        ModuleKey,
+        DisplayName,
+        ModuleType,
+        SchemaName,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        N'omp_core',
+        N'OpenModulePlatform Core',
+        N'PlatformCore',
+        N'omp',
+        N'Core OMP schema, bootstrap data, and host-local infrastructure metadata.',
+        1,
+        0);
+END
+
+SELECT @CoreModuleId = ModuleId
+FROM omp.Modules
+WHERE ModuleKey = N'omp_core';
+
+IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @CoreModuleId AND AppKey = N'omp_hostagent')
+BEGIN
+    UPDATE omp.Apps
+    SET DisplayName = N'OMP HostAgent',
+        AppType = N'HostAgent',
+        Description = N'Host-local OMP deployment agent that can prepare versioned self-upgrades.',
+        IsEnabled = 1,
+        SortOrder = 10,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE ModuleId = @CoreModuleId
+      AND AppKey = N'omp_hostagent';
+END
+ELSE
+BEGIN
+    INSERT INTO omp.Apps(
+        ModuleId,
+        AppKey,
+        DisplayName,
+        AppType,
+        Description,
+        IsEnabled,
+        SortOrder)
+    VALUES(
+        @CoreModuleId,
+        N'omp_hostagent',
+        N'OMP HostAgent',
+        N'HostAgent',
+        N'Host-local OMP deployment agent that can prepare versioned self-upgrades.',
+        1,
+        10);
+END
+
+SELECT @HostAgentAppId = AppId
+FROM omp.Apps
+WHERE ModuleId = @CoreModuleId
+  AND AppKey = N'omp_hostagent';
+
+MERGE omp.Artifacts AS target
+USING
+(
+    SELECT @HostAgentAppId AS AppId,
+           @ArtifactVersion AS Version,
+           N'host-agent' AS PackageType,
+           N'omp-hostagent' AS TargetName,
+           N'omp-hostagent/hostagent/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.AppId = source.AppId
+AND target.Version = source.Version
+AND target.PackageType = source.PackageType
+AND target.TargetName = source.TargetName
+WHEN MATCHED THEN
+    UPDATE SET RelativePath = source.RelativePath,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
 -------------------------------------------------------------------------------
 -- Seed baseline administrative placeholder role

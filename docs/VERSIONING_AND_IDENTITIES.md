@@ -132,6 +132,9 @@ runtime component should execute. Use stable values such as:
 
 - `web-app` for IIS-hosted web applications.
 - `service-app` for Windows services.
+- `host-agent` for HostAgent self-upgrade packages. These are Windows service
+  binaries, but they use a dedicated takeover contract instead of the normal
+  service-app stop/copy/start handler.
 - `worker-plugin` for worker plugins consumed by WorkerManager.
 
 Archive or transport format should be modeled separately if OMP later supports

@@ -13,7 +13,9 @@ public sealed class HostAgentEngine
     private readonly ArtifactZipImportService _artifactZipImportService;
     private readonly WebAppDeploymentService _webAppDeploymentService;
     private readonly ServiceAppDeploymentService _serviceAppDeploymentService;
+    private readonly HostAgentSelfUpgradeService _selfUpgradeService;
     private readonly HostAgentFileMirrorService _fileMirrorService;
+    private readonly HostAgentProcessContext _process;
     private readonly ILogger<HostAgentEngine> _logger;
 
     public HostAgentEngine(
@@ -23,7 +25,9 @@ public sealed class HostAgentEngine
         ArtifactZipImportService artifactZipImportService,
         WebAppDeploymentService webAppDeploymentService,
         ServiceAppDeploymentService serviceAppDeploymentService,
+        HostAgentSelfUpgradeService selfUpgradeService,
         HostAgentFileMirrorService fileMirrorService,
+        HostAgentProcessContext process,
         ILogger<HostAgentEngine> logger)
     {
         _settings = settings;
@@ -32,7 +36,9 @@ public sealed class HostAgentEngine
         _artifactZipImportService = artifactZipImportService;
         _webAppDeploymentService = webAppDeploymentService;
         _serviceAppDeploymentService = serviceAppDeploymentService;
+        _selfUpgradeService = selfUpgradeService;
         _fileMirrorService = fileMirrorService;
+        _process = process;
         _logger = logger;
     }
 
@@ -42,6 +48,48 @@ public sealed class HostAgentEngine
         settings.Validate();
 
         var hostKey = settings.ResolveHostKey();
+        var runtimeMode = _process.RuntimeMode;
+        var lease = await _repository.TryAcquireHostAgentLeaseAsync(
+            hostKey,
+            _process.ServiceName,
+            runtimeMode,
+            forceTakeover: runtimeMode == HostAgentRuntimeMode.Takeover,
+            leaseSeconds: Math.Max(30, settings.RefreshSeconds * 3),
+            cancellationToken);
+
+        if (!lease.Acquired || lease.HostId is null)
+        {
+            _logger.LogInformation(
+                "HostAgent skipped cycle because another service owns the host lease. HostKey={HostKey}, CurrentService={CurrentService}, ActiveService={ActiveService}",
+                hostKey,
+                _process.ServiceName,
+                lease.ActiveServiceName);
+            return;
+        }
+
+        await _repository.PublishHostAgentRuntimeStateAsync(
+            lease.HostId.Value,
+            _process,
+            runtimeMode,
+            artifactId: null,
+            AppContext.BaseDirectory,
+            isActive: true,
+            statusMessage: null,
+            cancellationToken);
+
+        if (runtimeMode == HostAgentRuntimeMode.Takeover)
+        {
+            await _selfUpgradeService.CompleteTakeoverAsync(hostKey, lease.HostId.Value, cancellationToken);
+        }
+
+        if (_process.IsQuiesceRequested)
+        {
+            _process.MarkQuiesced();
+            await _repository.MarkHostAgentQuiescedAsync(lease.HostId.Value, _process.ServiceName, cancellationToken);
+            _logger.LogInformation("HostAgent is quiesced. HostKey={HostKey}, ServiceName={ServiceName}", hostKey, _process.ServiceName);
+            return;
+        }
+
         await _repository.TouchHostHeartbeatAsync(hostKey, cancellationToken);
 
         await _artifactZipImportService.ImportPendingAsync(cancellationToken);
@@ -84,6 +132,7 @@ public sealed class HostAgentEngine
 
         await _webAppDeploymentService.DeployDesiredWebAppsAsync(hostKey, cancellationToken);
         await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(hostKey, cancellationToken);
+        await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, cancellationToken);
         await _fileMirrorService.MirrorConfiguredFilesAsync(cancellationToken);
     }
 
