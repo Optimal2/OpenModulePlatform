@@ -108,8 +108,10 @@ The script reads `omp-components.json` so each deployable component keeps its ow
 artifact version. The repository version can still be used as the package
 version, but it is not forced onto every app artifact. Components with normal
 OMP module/app metadata are packaged as manifest-based artifact package objects.
-Bootstrap infrastructure without module/app metadata, such as HostAgent itself,
-remains as direct installer payload.
+HostAgent is included twice by design: once as a direct installer payload for
+the first manual service bootstrap, and once as a manifest-based `host-agent`
+artifact package that later HostAgent self-upgrade can consume. Bootstrap
+infrastructure without module/app metadata remains as direct installer payload.
 
 OpenDocViewer is also packaged as a manifest-based OMP artifact package. The
 deployable `dist` output is stored as the package payload, while

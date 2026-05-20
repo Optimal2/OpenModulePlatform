@@ -33,4 +33,14 @@ public sealed class HostAgentRpcResponse
             ErrorMessage = message
         };
     }
+
+    public static HostAgentRpcResponse Succeeded(string? message = null)
+    {
+        return new HostAgentRpcResponse
+        {
+            Success = true,
+            State = ArtifactProvisioningState.Succeeded,
+            ErrorMessage = message
+        };
+    }
 }

@@ -23,9 +23,12 @@ OMP metadata; it does not infer the latest version from file or folder names.
   `HostAgent:DeployWebApps` is enabled
 - Windows service deployment for provisioned `service-app` artifacts when
   `HostAgent:DeployServiceApps` is enabled
+- HostAgent self-upgrade preparation and takeover for desired
+  `host-agent` artifacts registered in `omp.HostAgentDesiredStates`
 - Web app deployment state in `omp.HostAppDeploymentStates`
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
+  - operation: `quiesce`
   - request fields: `artifactId`, optional `desiredLocalPath`
   - response fields: `success`, `state`, `localPath`, `contentSha256`, `errorMessage`
 
@@ -34,6 +37,9 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - `omp.HostArtifactRequirements`
 - `omp.HostArtifactStates`
 - `omp.HostAppDeploymentStates`
+- `omp.HostAgentDesiredStates`
+- `omp.HostAgentRuntimeStates`
+- `omp.HostAgentLeases`
 - `omp.WorkerInstances`
 - `omp.WorkerInstanceRuntimeStates`
 
@@ -282,6 +288,75 @@ service, it uses the Windows default service account. Environment-specific
 service accounts should therefore be bootstrapped before HostAgent owns regular
 version updates, or added through a future local credential provider.
 
+## HostAgent self-upgrade
+
+HostAgent can prepare and hand over to a newer HostAgent artifact without using
+the generic `service-app` deployment handler against the running service.
+HostAgent artifacts use `PackageType = 'host-agent'` and are selected per host
+through `omp.HostAgentDesiredStates`.
+
+The active service publishes runtime information to
+`omp.HostAgentRuntimeStates` and acquires a short lease in
+`omp.HostAgentLeases` before each cycle. A normal HostAgent skips work when
+another service currently owns that host lease. A HostAgent started in takeover
+mode may take the lease so the new service can become the only active agent for
+the host.
+
+When the current HostAgent sees an enabled desired state with a different
+artifact version, it provisions that artifact, copies it to a versioned folder
+below `HostAgent:SelfUpgrade:InstallRoot`, writes a takeover appsettings file,
+creates or updates a versioned Windows service, and starts it with:
+
+```text
+--service-name=<new service> --runtime-mode=Takeover --takeover-from=<old service>
+```
+
+The takeover service then records the old service as quiescing, stops it,
+optionally deletes it, reconfigures its own Windows service command line back to
+normal mode, and continues as the active HostAgent.
+
+Minimal configuration:
+
+```json
+{
+  "HostAgent": {
+    "ServiceName": "OpenModulePlatform.HostAgent",
+    "Version": "0.3.10",
+    "SelfUpgrade": {
+      "IsEnabled": true,
+      "InstallRoot": "D:\\OMP\\Services",
+      "ServiceNamePrefix": "OpenModulePlatform.HostAgent",
+      "ServiceAccountName": "",
+      "ServiceAccountPassword": "",
+      "TakeoverStopTimeoutSeconds": 45,
+      "DeletePreviousServiceAfterTakeover": true,
+      "StartPreparedService": true
+    }
+  }
+}
+```
+
+`ServiceAccountName` and `ServiceAccountPassword` are optional. Leave them empty
+for built-in service accounts. If HostAgent runs as a Windows or AD account and
+needs that identity for IIS, SQL, or artifact-store access, the bootstrapper
+should write those values into the protected local HostAgent appsettings file so
+the replacement service is created with the same account.
+
+For a desired upgrade, insert or update one row in
+`omp.HostAgentDesiredStates` for the concrete host and point it at the desired
+`host-agent` artifact. The artifact must already be present in
+`omp.Artifacts`, and its files must exist below `HostAgent:CentralArtifactRoot`.
+When the artifact zip import folder is enabled and a valid `host-agent` artifact
+zip is imported by a HostAgent, the importer also points
+`omp.HostAgentDesiredStates` at that artifact for the importing host. This makes
+the file-drop import path self-contained: a new HostAgent zip can be dropped
+into the import folder and the local HostAgent will prepare the versioned
+replacement service on its next cycles.
+
+The HostAgent-first package builder emits a normal bootstrap HostAgent zip for
+first install and a standard `host-agent` artifact package for later
+self-upgrades.
+
 ## Artifact layout
 
 Recommended central layout:
@@ -312,7 +387,6 @@ The named-pipe RPC response writer uses an `async Task` method and awaits `Strea
 - signing/certificate verification
 - remote HostAgent management API
 - service credential provisioning and rotation
-- HostAgent self-update orchestration
 
 ## v2.2 stabilization note
 

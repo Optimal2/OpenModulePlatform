@@ -1388,6 +1388,7 @@ VALUES
         connectionStrings["OmpDb"] = BuildConnectionString(config.Sql, config.Sql.Database);
 
         var hostAgentSettings = GetOrCreateJsonObject(root, "HostAgent");
+        hostAgentSettings["ServiceName"] = hostAgent.ServiceName;
         hostAgentSettings["HostKey"] = hostAgent.HostKey;
         hostAgentSettings["HostName"] = hostAgent.HostName;
         hostAgentSettings["RefreshSeconds"] = hostAgent.RefreshSeconds;
@@ -1406,6 +1407,12 @@ VALUES
         hostAgentSettings["IisAppPoolPassword"] = hostAgent.IisAppPoolPassword;
         hostAgentSettings["DeployServiceApps"] = hostAgent.DeployServiceApps;
         hostAgentSettings["ServicesRoot"] = hostAgent.ServicesRoot;
+
+        var selfUpgrade = GetOrCreateJsonObject(hostAgentSettings, "SelfUpgrade");
+        selfUpgrade["InstallRoot"] = hostAgent.ServicesRoot;
+        selfUpgrade["ServiceNamePrefix"] = hostAgent.ServiceName;
+        selfUpgrade["ServiceAccountName"] = hostAgent.ServiceAccountName;
+        selfUpgrade["ServiceAccountPassword"] = hostAgent.ServiceAccountPassword;
     }
 
     private static JsonObject GetOrCreateJsonObject(JsonObject parent, string propertyName)
@@ -1448,6 +1455,7 @@ VALUES
                     },
                     HostAgent = new
                     {
+                        hostAgent.ServiceName,
                         hostAgent.HostKey,
                         hostAgent.HostName,
                         RefreshSeconds = hostAgent.RefreshSeconds,
@@ -1479,6 +1487,17 @@ VALUES
                         IisAppPoolPassword = hostAgent.IisAppPoolPassword,
                         DeployServiceApps = hostAgent.DeployServiceApps,
                         ServicesRoot = hostAgent.ServicesRoot,
+                        SelfUpgrade = new
+                        {
+                            IsEnabled = true,
+                            InstallRoot = hostAgent.ServicesRoot,
+                            ServiceNamePrefix = hostAgent.ServiceName,
+                            ServiceAccountName = hostAgent.ServiceAccountName,
+                            ServiceAccountPassword = hostAgent.ServiceAccountPassword,
+                            TakeoverStopTimeoutSeconds = 45,
+                            DeletePreviousServiceAfterTakeover = true,
+                            StartPreparedService = true
+                        },
                         EnableRpc = true
                     }
                 },

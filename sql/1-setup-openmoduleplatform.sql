@@ -611,6 +611,68 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.HostAgentDesiredStates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostAgentDesiredStates
+    (
+        HostId uniqueidentifier NOT NULL
+            CONSTRAINT PK_omp_HostAgentDesiredStates PRIMARY KEY,
+        ArtifactId int NOT NULL,
+        ServiceNamePrefix nvarchar(160) NULL,
+        InstallRoot nvarchar(500) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_HostAgentDesiredStates_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentDesiredStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentDesiredStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_HostAgentDesiredStates_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_HostAgentDesiredStates_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.HostAgentRuntimeStates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostAgentRuntimeStates
+    (
+        HostId uniqueidentifier NOT NULL,
+        ServiceName nvarchar(200) NOT NULL,
+        Version nvarchar(50) NULL,
+        ArtifactId int NULL,
+        InstallPath nvarchar(500) NULL,
+        ProcessId int NULL,
+        RuntimeMode nvarchar(40) NOT NULL CONSTRAINT DF_omp_HostAgentRuntimeStates_RuntimeMode DEFAULT(N'Normal'),
+        IsActive bit NOT NULL CONSTRAINT DF_omp_HostAgentRuntimeStates_IsActive DEFAULT(0),
+        TakeoverFromServiceName nvarchar(200) NULL,
+        LastSeenUtc datetime2(3) NULL,
+        QuiesceRequestedUtc datetime2(3) NULL,
+        QuiescedUtc datetime2(3) NULL,
+        StatusMessage nvarchar(1000) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentRuntimeStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentRuntimeStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_omp_HostAgentRuntimeStates PRIMARY KEY(HostId, ServiceName),
+        CONSTRAINT FK_omp_HostAgentRuntimeStates_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_HostAgentRuntimeStates_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId),
+        CONSTRAINT CK_omp_HostAgentRuntimeStates_Mode CHECK(RuntimeMode IN (N'Normal', N'Takeover', N'Quiescing', N'Quiesced', N'Failed'))
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.HostAgentLeases', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostAgentLeases
+    (
+        HostId uniqueidentifier NOT NULL
+            CONSTRAINT PK_omp_HostAgentLeases PRIMARY KEY,
+        ServiceName nvarchar(200) NOT NULL,
+        LeaseToken uniqueidentifier NOT NULL,
+        RuntimeMode nvarchar(40) NOT NULL,
+        LeaseUntilUtc datetime2(3) NOT NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentLeases_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentLeases_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_HostAgentLeases_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId)
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.WorkerInstances

@@ -2,6 +2,14 @@ namespace OpenModulePlatform.HostAgent.Runtime.Models;
 
 public sealed class HostAgentSettings
 {
+    public string ServiceName { get; set; } = string.Empty;
+
+    public string Version { get; set; } = string.Empty;
+
+    public string RuntimeMode { get; set; } = HostAgentRuntimeMode.Normal;
+
+    public string TakeoverFromServiceName { get; set; } = string.Empty;
+
     public string? HostKey { get; set; }
 
     public string? HostName { get; set; }
@@ -85,6 +93,8 @@ public sealed class HostAgentSettings
     public HostAgentFileMirrorSettings[] FileMirrors { get; set; } = [];
 
     public HostAgentArtifactZipImportSettings ArtifactZipImport { get; set; } = new();
+
+    public HostAgentUpgradeSettings SelfUpgrade { get; set; } = new();
 
     public int MaxArtifactsPerCycle { get; set; } = 100;
 
@@ -208,6 +218,7 @@ public sealed class HostAgentSettings
         }
 
         ArtifactZipImport.Validate();
+        SelfUpgrade.Validate();
     }
 }
 

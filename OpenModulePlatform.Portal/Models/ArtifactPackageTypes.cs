@@ -11,6 +11,7 @@ public static class ArtifactPackageTypes
         [
             Opt("web-app", localize("Web app")),
             Opt("service-app", localize("Service app")),
+            Opt("host-agent", localize("HostAgent")),
             Opt("worker", localize("Worker")),
             Opt("worker-plugin", localize("Worker plugin")),
             Opt("channel-type", localize("Channel type")),

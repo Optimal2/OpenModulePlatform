@@ -11,15 +11,18 @@ public sealed class HostAgentHostedService : BackgroundService
 {
     private readonly HostAgentEngine _engine;
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
+    private readonly HostAgentProcessContext _process;
     private readonly ILogger<HostAgentHostedService> _logger;
 
     public HostAgentHostedService(
         HostAgentEngine engine,
         IOptionsMonitor<HostAgentSettings> settings,
+        HostAgentProcessContext process,
         ILogger<HostAgentHostedService> logger)
     {
         _engine = engine;
         _settings = settings;
+        _process = process;
         _logger = logger;
     }
 
@@ -27,7 +30,12 @@ public sealed class HostAgentHostedService : BackgroundService
     {
         var hostKey = _settings.CurrentValue.ResolveHostKey();
 
-        _logger.LogInformation("HostAgent started. HostKey={HostKey}", hostKey);
+        _logger.LogInformation(
+            "HostAgent started. HostKey={HostKey}, ServiceName={ServiceName}, Version={Version}, RuntimeMode={RuntimeMode}",
+            hostKey,
+            _process.ServiceName,
+            _process.Version,
+            _process.RuntimeMode);
 
         try
         {
@@ -35,6 +43,14 @@ public sealed class HostAgentHostedService : BackgroundService
 
             while (!stoppingToken.IsCancellationRequested)
             {
+                if (_process.IsQuiesceRequested)
+                {
+                    _logger.LogInformation(
+                        "HostAgent quiesce requested. ServiceName={ServiceName}",
+                        _process.ServiceName);
+                    break;
+                }
+
                 var refreshSeconds = Math.Max(1, _settings.CurrentValue.RefreshSeconds);
                 await Task.Delay(TimeSpan.FromSeconds(refreshSeconds), stoppingToken);
                 await RunCycleSafelyAsync(stoppingToken);
