@@ -80,9 +80,9 @@ directory prefixes.
 
 ## Runtime Behavior
 
-For a legacy zip, Portal and HostAgent extract the whole zip as the immutable
-artifact content and continue to block runtime configuration files such as
-`appsettings*.json` and `odv.site.config.js`.
+For a legacy zip, Portal and HostAgent folder import extract the whole zip as
+the immutable artifact content and continue to block runtime configuration files
+such as `appsettings*.json` and `odv.site.config.js`.
 
 For a manifest envelope:
 
@@ -112,3 +112,8 @@ are rejected.
 5. Once all module builders produce package envelopes, a complete installation
    should be representable by module-definition documents plus artifact package
    zips.
+
+The HostAgent-first bootstrapper also understands the manifest envelope when it
+prepares the initial ArtifactStore. It extracts only the payload to the artifact
+path and registers declared configuration files against the matching
+`omp.Artifacts.RelativePath` row after the bootstrap SQL has created it.

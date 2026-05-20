@@ -32,6 +32,7 @@ OpenModulePlatformHostAgentFirst-<version>/
   payload/
     OpenModulePlatform.Portal.zip
     OpenModulePlatform.HostAgent.WindowsService.zip
+    opendocviewer__opendocviewer_webapp__web-app__opendocviewer__<version>.zip
     ...
   sql/
     bootstrap-local.sql
@@ -105,6 +106,13 @@ customer packages should use `.local.psd1` files outside source control.
 The script reads `omp-components.json` so each deployable component keeps its own
 artifact version. The repository version can still be used as the package
 version, but it is not forced onto every app artifact.
+
+OpenDocViewer is packaged as a manifest-based OMP artifact package. The
+deployable `dist` output is stored as the package payload, while
+`odv.site.config.js` is registered as an artifact configuration file. Set
+`OpenDocViewer.SiteConfigPath` in the package config to include a site-specific
+file; when it is left empty the package includes a neutral config file that can
+be edited later through Portal.
 
 ## Installing
 

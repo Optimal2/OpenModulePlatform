@@ -13,4 +13,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenModulePlatform.Artifacts\OpenModulePlatform.Artifacts.csproj" />
+  </ItemGroup>
 </Project>
