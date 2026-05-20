@@ -66,6 +66,8 @@
       "componentKey": "omp-auth-web",
       "displayName": "OMP Auth",
       "registrationMode": "bootstrap",
+      "moduleKey": "omp_auth",
+      "appKey": "omp_auth",
       "packageType": "web-app",
       "targetName": "omp-auth",
       "version": "0.3.3",

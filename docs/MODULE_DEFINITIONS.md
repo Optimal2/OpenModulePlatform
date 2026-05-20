@@ -242,7 +242,9 @@ traceability back to the source repository file. The standalone module
 definition editor in `tools/module-definition-editor/index.html` decodes those
 SQL entries to clear text for editing and writes them back as base64 when the
 JSON is exported. Portal exposes the same client-side editor for
-administrators from `/admin/moduledefinitioneditor`.
+administrators from `/admin/moduledefinitioneditor`. Portal can also download
+the stored normalized JSON from each module-definition edit page so an applied
+definition can be moved from one OMP installation to another.
 
 Use `scripts/dev/embed-module-definition-sql.ps1` to refresh embedded SQL from
 the source `.sql` files.

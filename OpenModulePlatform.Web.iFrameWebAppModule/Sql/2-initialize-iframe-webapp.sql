@@ -10,6 +10,14 @@ Prerequisites:
 USE [OpenModulePlatform];
 GO
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+
 -- Seed default iframe targets and sets
 -------------------------------------------------------------------------------
 SET IDENTITY_INSERT omp_iframe.urls ON;

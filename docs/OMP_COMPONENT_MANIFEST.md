@@ -23,7 +23,10 @@ own `version`, and that value is the version that belongs in
   artifact target.
 - `registrationMode` may be `bootstrap` for deployable infrastructure
   components that are packaged by the repository but are not yet represented by
-  normal OMP app metadata. Omit it for normal OMP artifact components.
+  normal OMP app metadata. Omit it for normal OMP artifact components. A
+  bootstrap component can still be emitted as a standard artifact package when
+  it has `moduleKey` and `appKey`; Auth uses this so HostAgent can deploy it as
+  the `/auth` web app while the installer still treats it as bootstrap-required.
 - `relativePathTemplate` describes the artifact-store path. Replace
   `{version}` with the component version.
 - `packageFileTemplate` describes the expected package payload path when a
@@ -43,3 +46,9 @@ The script updates `omp-components.json` only. The HostAgent-first package scrip
 consumes the manifest directly when it prepares ArtifactStore payloads and SQL
 artifact-version overrides. Older suite scripts still have separate package
 version fields, so keep those aligned if you use the legacy installer.
+
+Components with a complete artifact identity (`moduleKey`, `appKey`,
+`packageType`, `targetName`, and `version`) are packaged as manifest-based OMP
+artifact package objects. Infrastructure components without module/app metadata,
+such as HostAgent itself, remain direct installer payload zips because they are
+needed before normal OMP deployment exists.

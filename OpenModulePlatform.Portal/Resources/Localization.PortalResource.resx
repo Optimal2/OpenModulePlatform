@@ -1731,4 +1731,9 @@
   <data name="Artifact package editor" xml:space="preserve"><value>Artifact package editor</value></data>
   <data name="Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files." xml:space="preserve"><value>Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files.</value></data>
   <data name="Open package editor" xml:space="preserve"><value>Open package editor</value></data>
+  <data name="Download artifact package" xml:space="preserve"><value>Download artifact package</value></data>
+  <data name="Artifact metadata is incomplete and cannot be exported as a standard package." xml:space="preserve"><value>Artifact metadata is incomplete and cannot be exported as a standard package.</value></data>
+  <data name="Artifact relative path is invalid." xml:space="preserve"><value>Artifact relative path is invalid.</value></data>
+  <data name="Artifact payload folder was not found in the artifact store." xml:space="preserve"><value>Artifact payload folder was not found in the artifact store.</value></data>
+  <data name="Download module definition" xml:space="preserve"><value>Download module definition</value></data>
 </root>

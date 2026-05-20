@@ -10,6 +10,14 @@ the target from HostAgent:WebAppsRoot and the app RoutePath.
 USE [OpenModulePlatform];
 GO
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_opendocviewer')
 BEGIN
     EXEC(N'CREATE SCHEMA [omp_opendocviewer]');
