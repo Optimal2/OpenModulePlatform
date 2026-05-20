@@ -152,8 +152,10 @@ the root folder. Service targets ending in `-backend` use `backend` as the
 package-kind folder, so a target such as `ikrock2-backend` defaults to
 `ikrock2/backend/<version>`.
 
-The first upload version expects a deployment-ready zip with files at the zip
-root. Subdirectories are allowed, but paths must stay relative to the zip root:
+The upload page accepts both legacy artifact zips and the manifest-based OMP
+artifact package format documented in [`ARTIFACT_PACKAGES.md`](ARTIFACT_PACKAGES.md).
+Legacy zips are deployment-ready zips with files at the zip root. Subdirectories
+are allowed, but paths must stay relative to the zip root:
 
 - no rooted paths
 - no `..` path segments
@@ -162,12 +164,15 @@ root. Subdirectories are allowed, but paths must stay relative to the zip root:
 - no runtime configuration files such as `appsettings.json`,
   `appsettings.*.json`, or `odv.site.config.js`
 
-Runtime configuration is intentionally outside immutable artifacts. OMP-owned
-runtime files, such as database connection strings or app instance identity
-settings, are written by the bootstrap/deployment layer. App-specific files that
-must be deployment-owned, such as `odv.site.config.js`, belong in
-`omp.ArtifactConfigurationFiles` and can be copied from a previous artifact
-version during upload.
+Runtime configuration is intentionally outside immutable artifact payloads.
+OMP-owned runtime files, such as database connection strings or app instance
+identity settings, are written by the bootstrap/deployment layer. App-specific
+files that must be deployment-owned, such as `odv.site.config.js`, belong in
+`omp.ArtifactConfigurationFiles`. For normal releases, prefer an OMP artifact
+package envelope with `omp-artifact-package.json`; it can carry both the
+deployable payload and the configuration files with their relative deployment
+paths. Manual configuration-file editing remains available for repair and
+inspection.
 
 The upload page blocks duplicate artifact content by comparing the extracted
 directory-content SHA-256 with existing artifact rows. Zip metadata such as
@@ -186,6 +191,8 @@ When uploading a new version, the form can copy artifact-owned configuration
 file rows from the latest previous artifact with the same app, package type and
 target. This is intended for site-local runtime files such as ODV site config
 that should normally follow the app across immutable artifact versions.
+If the uploaded artifact package declares configuration files, those packaged
+files are registered for the artifact and the previous-version copy is skipped.
 
 The upload form also has an enabled-by-default option to use the uploaded
 artifact immediately. When selected, Portal updates matching desired template
@@ -198,8 +205,9 @@ shared folder without a Portal upload. Configure this under
 must use the same `moduleKey__appKey__packageType__targetName__version.zip`
 filename format. Successful imports are moved to `processed`, failed imports
 are moved to `failed` with an adjacent `.error.txt` file, previous artifact
-configuration file rows are copied when available, and matching apps are always
-set to use the imported artifact.
+configuration file rows are copied when available, packaged configuration files
+are registered when the zip contains `omp-artifact-package.json`, and matching
+apps are always set to use the imported artifact.
 
 Artifact-owned configuration files are managed from the artifact edit page.
 These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them

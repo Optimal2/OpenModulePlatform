@@ -1,12 +1,12 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/ArtifactUpload.cshtml.cs
 using System.ComponentModel.DataAnnotations;
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
@@ -135,15 +135,15 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         var stagingPath = Path.Combine(tempRoot, $"artifact-{Guid.NewGuid():N}");
         var finalPath = ResolveUnderRoot(storeRoot, relativePath);
         var backupPath = Path.Combine(tempRoot, $"artifact-backup-{Guid.NewGuid():N}");
-        var movedToFinal = false;
         var movedExistingToBackup = false;
 
         try
         {
             await CopyUploadToTempZipAsync(Input.ZipFile!, tempZipPath, ct);
-            ExtractValidatedZip(tempZipPath, stagingPath);
+            var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
+                .Extract(tempZipPath, stagingPath);
 
-            var contentHash = await ComputeDirectorySha256Async(stagingPath, ct);
+            var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, ct);
             var existingIdentity = await _repo.FindArtifactByIdentityAsync(
                 Input.AppId,
                 version,
@@ -203,8 +203,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 movedExistingToBackup = true;
             }
 
-            Directory.Move(stagingPath, finalPath);
-            movedToFinal = true;
+            Directory.Move(package.ArtifactContentPath, finalPath);
 
             var artifactData = new ArtifactEditData
             {
@@ -235,6 +234,26 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 throw;
             }
 
+            var packagedConfigurationFileCount = 0;
+            if (package.ConfigurationFiles.Count > 0)
+            {
+                try
+                {
+                    packagedConfigurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
+                        artifactId,
+                        package.ConfigurationFiles,
+                        ct);
+                }
+                catch (SqlException)
+                {
+                    StatusMessage = T("Artifact uploaded and registered.")
+                        + " "
+                        + T("Configuration files from the artifact package could not be saved. Review the artifact edit page before deploying this version.");
+
+                    return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
+                }
+            }
+
             if (movedExistingToBackup)
             {
                 TryDelete(backupPath);
@@ -242,7 +261,9 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             }
 
             ArtifactConfigurationFileCopyResult? copyResult = null;
-            if (Input.CopyConfigurationFilesFromPreviousVersion && existingIdentity is null)
+            if (Input.CopyConfigurationFilesFromPreviousVersion
+                && existingIdentity is null
+                && package.ConfigurationFiles.Count == 0)
             {
                 try
                 {
@@ -283,6 +304,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             StatusMessage = BuildUploadStatusMessage(
                 copyResult,
                 Input.CopyConfigurationFilesFromPreviousVersion,
+                packagedConfigurationFileCount,
                 applicationResult,
                 Input.UseArtifactImmediately,
                 existingIdentity is not null);
@@ -316,10 +338,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         finally
         {
             TryDelete(tempZipPath);
-            if (!movedToFinal)
-            {
-                TryDelete(stagingPath);
-            }
+            TryDelete(stagingPath);
 
             if (movedExistingToBackup)
             {
@@ -462,61 +481,6 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         }
     }
 
-    private static void ExtractValidatedZip(string zipPath, string stagingPath)
-    {
-        using var archive = ZipFile.OpenRead(zipPath);
-        var fileCount = 0;
-
-        Directory.CreateDirectory(stagingPath);
-
-        foreach (var entry in archive.Entries)
-        {
-            var entryName = NormalizeZipEntryName(entry.FullName);
-            var entryPath = ResolveZipEntryPath(stagingPath, entryName);
-
-            if (string.IsNullOrEmpty(entry.Name))
-            {
-                Directory.CreateDirectory(entryPath);
-                continue;
-            }
-
-            ValidateArtifactEntryIsNotRuntimeConfiguration(entryName);
-            Directory.CreateDirectory(Path.GetDirectoryName(entryPath)!);
-            entry.ExtractToFile(entryPath, overwrite: false);
-            fileCount++;
-        }
-
-        if (fileCount == 0)
-        {
-            throw new InvalidOperationException("The uploaded zip must contain at least one file.");
-        }
-    }
-
-    private static string NormalizeZipEntryName(string fullName)
-    {
-        var normalized = fullName.Replace('\\', '/').Trim();
-        if (normalized.Length == 0 || normalized.StartsWith("/", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("The uploaded zip contains an invalid entry path.");
-        }
-
-        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var invalidFileNameChars = Path.GetInvalidFileNameChars();
-        if (segments.Length == 0
-            || segments.Any(segment => segment is "." or "..")
-            || segments.Any(segment => segment.IndexOfAny(invalidFileNameChars) >= 0))
-        {
-            throw new InvalidOperationException("The uploaded zip contains a path that escapes the artifact root.");
-        }
-
-        if (normalized.Contains(':', StringComparison.Ordinal) || normalized.IndexOf('\0') >= 0)
-        {
-            throw new InvalidOperationException("The uploaded zip contains a rooted or invalid entry path.");
-        }
-
-        return string.Join('/', segments);
-    }
-
     private static void ValidateArtifactEntryIsNotRuntimeConfiguration(string normalizedEntryName)
     {
         var fileName = normalizedEntryName.Split('/').LastOrDefault() ?? string.Empty;
@@ -542,12 +506,6 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         return RuntimeConfigurationFileNames.Any(
             name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string ResolveZipEntryPath(string rootPath, string relativeEntryPath)
-    {
-        var localRelativePath = relativeEntryPath.Replace('/', Path.DirectorySeparatorChar);
-        return ResolveUnderRoot(rootPath, localRelativePath);
     }
 
     private static async Task<string> ComputeDirectorySha256Async(string path, CancellationToken ct)
@@ -726,6 +684,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
     private string BuildUploadStatusMessage(
         ArtifactConfigurationFileCopyResult? copyResult,
         bool copyWasRequested,
+        int packagedConfigurationFileCount,
         ArtifactApplicationResult? applicationResult,
         bool applyWasRequested,
         bool replacedExistingArtifact)
@@ -736,7 +695,22 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         if (replacedExistingArtifact)
         {
-            message += " " + T("Existing artifact configuration file rows were preserved.");
+            if (packagedConfigurationFileCount > 0)
+            {
+                message += " " + string.Format(
+                    T("Registered {0} configuration file(s) from the artifact package."),
+                    packagedConfigurationFileCount);
+            }
+            else
+            {
+                message += " " + T("Existing artifact configuration file rows were preserved.");
+            }
+        }
+        else if (packagedConfigurationFileCount > 0)
+        {
+            message += " " + string.Format(
+                T("Registered {0} configuration file(s) from the artifact package."),
+                packagedConfigurationFileCount);
         }
         else if (copyWasRequested)
         {
