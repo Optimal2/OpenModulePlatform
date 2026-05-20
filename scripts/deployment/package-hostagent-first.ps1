@@ -238,6 +238,24 @@ function Compress-FolderToZip {
     Compress-Archive -Path (Join-Path $Source '*') -DestinationPath $Destination -Force
 }
 
+function Get-ManifestPropertyValue {
+    param(
+        [object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return ''
+    }
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return ''
+    }
+
+    return [string]$property.Value
+}
+
 function Get-ArtifactPackageFileName {
     param(
         [Parameter(Mandatory = $true)][string]$ModuleKey,
@@ -253,11 +271,11 @@ function Get-ArtifactPackageFileName {
 function Test-ComponentHasArtifactIdentity {
     param([object]$Component)
 
-    return -not [string]::IsNullOrWhiteSpace([string]$Component.moduleKey) `
-        -and -not [string]::IsNullOrWhiteSpace([string]$Component.appKey) `
-        -and -not [string]::IsNullOrWhiteSpace([string]$Component.packageType) `
-        -and -not [string]::IsNullOrWhiteSpace([string]$Component.targetName) `
-        -and -not [string]::IsNullOrWhiteSpace([string]$Component.version)
+    return -not [string]::IsNullOrWhiteSpace((Get-ManifestPropertyValue -Object $Component -Name 'moduleKey')) `
+        -and -not [string]::IsNullOrWhiteSpace((Get-ManifestPropertyValue -Object $Component -Name 'appKey')) `
+        -and -not [string]::IsNullOrWhiteSpace((Get-ManifestPropertyValue -Object $Component -Name 'packageType')) `
+        -and -not [string]::IsNullOrWhiteSpace((Get-ManifestPropertyValue -Object $Component -Name 'targetName')) `
+        -and -not [string]::IsNullOrWhiteSpace((Get-ManifestPropertyValue -Object $Component -Name 'version'))
 }
 
 function New-ArtifactPackage {
