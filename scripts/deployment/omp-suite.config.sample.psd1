@@ -162,8 +162,10 @@
         AdditionalSqlFiles = @()
 
         # Optional module definition JSON files from customer/module repositories.
-        # They are copied to the package-local module-definitions folder and
-        # imported by the bootstrapper after SQL initialization.
+        # The source file should live at the module root and be listed in that
+        # repository's omp-components.json. These extra files are copied to the
+        # package-local module-definitions import folder and imported by the
+        # bootstrapper after SQL initialization.
         AdditionalModuleDefinitionFiles = @()
     }
 

@@ -1720,4 +1720,8 @@
   <data name="Leave template host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one template host." xml:space="preserve"><value>Leave template host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one template host.</value></data>
   <data name="Open topbar menus on hover" xml:space="preserve"><value>Open topbar menus on hover</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>When this is turned off, menus open only by click or keyboard shortcut.</value></data>
+  <data name="Definition editor" xml:space="preserve"><value>Definition editor</value></data>
+  <data name="Module definition editor" xml:space="preserve"><value>Module definition editor</value></data>
+  <data name="Use this editor to create or update portable module-definition JSON files. SQL scripts are shown as clear text here and exported as base64 content in the JSON file." xml:space="preserve"><value>Use this editor to create or update portable module-definition JSON files. SQL scripts are shown as clear text here and exported as base64 content in the JSON file.</value></data>
+  <data name="Open editor" xml:space="preserve"><value>Open editor</value></data>
 </root>

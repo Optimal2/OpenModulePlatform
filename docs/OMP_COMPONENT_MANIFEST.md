@@ -15,7 +15,9 @@ own `version`, and that value is the version that belongs in
   repository.
 - `moduleDefinitions` optionally lists versioned module definition documents
   included in the repository. These are database/metadata contracts, not
-  deployable artifact zips.
+  deployable artifact zips. Each path should point at the module root definition
+  file, such as `content_webapp.module-definition.json` next to the module
+  project or `my_module.module-definition.json` in a standalone module repo.
 - `componentKey` is the stable key used by scripts and release tooling.
 - `moduleKey`, `appKey`, `packageType`, and `targetName` identify the OMP
   artifact target.

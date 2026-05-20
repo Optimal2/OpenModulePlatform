@@ -73,10 +73,18 @@ Current ownership:
    `TRUNCATE TABLE`, or `DELETE FROM` without a `WHERE` clause.
 5. HostAgent consumes the resulting desired state and deploys artifacts.
 
-The HostAgent-first bootstrap package imports JSON files from its
-`module-definitions` folder after SQL initialization. Protected/customer package
-configs can add module-definition files from module repositories through
-`HostAgentFirst.AdditionalModuleDefinitionFiles`.
+Each module definition file lives at the module root and is listed in that
+repository's `omp-components.json`. For example, the Content web app module owns
+`OpenModulePlatform.Web.ContentWebAppModule/content_webapp.module-definition.json`
+next to its module source, and a standalone module repository can keep
+`my_module.module-definition.json` directly in the repository root.
+
+The HostAgent-first bootstrap package still imports JSON files from its
+package-local `module-definitions` folder after SQL initialization. That folder
+is a generated import payload, not the source layout. The package script copies
+definition files from `omp-components.json` into the package-local folder.
+Protected/customer package configs can add module-definition files from module
+repositories through `HostAgentFirst.AdditionalModuleDefinitionFiles`.
 
 HostAgent may later help move module definition files into the database, but SQL
 execution should still be guarded by a database lock or a central controller so
@@ -230,7 +238,11 @@ Module definition documents should be portable. Keep normal `.sql` files in the
 repository for reviewability, but embed the same script content in the JSON
 document before it is uploaded or packaged. The recommended portable form is
 `contentEncoding: "base64-utf8"` plus `content` and `sha256`. `path` remains as
-traceability back to the source repository file.
+traceability back to the source repository file. The standalone module
+definition editor in `tools/module-definition-editor/index.html` decodes those
+SQL entries to clear text for editing and writes them back as base64 when the
+JSON is exported. Portal exposes the same client-side editor for
+administrators from `/admin/moduledefinitioneditor`.
 
 Use `scripts/dev/embed-module-definition-sql.ps1` to refresh embedded SQL from
 the source `.sql` files.

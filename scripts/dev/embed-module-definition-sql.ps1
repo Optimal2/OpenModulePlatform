@@ -13,14 +13,46 @@ function Get-Sha256Hex {
     return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
 }
 
-$definitionRoot = Join-Path $RepositoryRoot 'module-definitions'
-if (-not (Test-Path -LiteralPath $definitionRoot)) {
-    throw "Module definition folder was not found: $definitionRoot"
+function Resolve-RepositoryPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$BasePath
+    )
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
 }
 
 $jsonDepth = 100
-$definitionFiles = Get-ChildItem -LiteralPath $definitionRoot -Filter '*.json' -File |
-    Sort-Object Name
+$manifestPath = Join-Path $RepositoryRoot 'omp-components.json'
+if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw "Component manifest was not found: $manifestPath"
+}
+
+$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$definitionFiles = @()
+foreach ($definition in @($manifest.moduleDefinitions)) {
+    if ($null -eq $definition) {
+        continue
+    }
+
+    $relativePath = [string]$definition.path
+    if ([string]::IsNullOrWhiteSpace($relativePath)) {
+        throw "Module definition entry in '$manifestPath' is missing path."
+    }
+
+    $definitionPath = Resolve-RepositoryPath -Path $relativePath -BasePath $RepositoryRoot
+    if (-not (Test-Path -LiteralPath $definitionPath -PathType Leaf)) {
+        throw "Module definition file was not found: $definitionPath"
+    }
+
+    $definitionFiles += Get-Item -LiteralPath $definitionPath
+}
+
+$definitionFiles = $definitionFiles | Sort-Object FullName
 
 foreach ($definitionFile in $definitionFiles) {
     $jsonText = Get-Content -LiteralPath $definitionFile.FullName -Raw -Encoding UTF8

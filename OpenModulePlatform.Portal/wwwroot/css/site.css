@@ -1342,6 +1342,15 @@ button {
     white-space: nowrap;
 }
 
+.module-definition-editor-frame {
+    display: block;
+    width: 100%;
+    min-height: 78vh;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+}
+
 @media (max-width: 720px) {
     .workers-grid th:last-child,
     .workers-grid td:last-child {

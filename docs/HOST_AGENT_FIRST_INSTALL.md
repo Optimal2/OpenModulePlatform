@@ -269,18 +269,20 @@ HostAgentFirst = @{
     )
 
     AdditionalModuleDefinitionFiles = @(
-        '..\IbsPackager\module-definitions\ibs_packager.module-definition.json',
-        '..\iKrock2\module-definitions\ikrock.module-definition.json',
-        '..\VajSkrivare\module-definitions\vajskrivare.module-definition.json'
+        '..\IbsPackager\ibs_packager.module-definition.json',
+        '..\iKrock2\ikrock.module-definition.json',
+        '..\VajSkrivare\vajskrivare.module-definition.json'
     )
 }
 ```
 
 The package script copies those files into `sql/Customer` by default and appends
 the SQL files after the neutral OMP initialization scripts in
-`sql/bootstrap-local.sql`. Module-definition files are copied into
-`module-definitions` and imported by the bootstrapper after SQL initialization
-so artifact import can validate versions against the applied definitions.
+`sql/bootstrap-local.sql`. Module-definition source files normally live at each
+module root and are listed in `omp-components.json`; the package script copies
+them into the package-local `module-definitions` import folder and imports them
+after SQL initialization so artifact import can validate versions against the
+applied definitions.
 
 For example, a protected VGR package can set:
 
