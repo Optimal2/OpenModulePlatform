@@ -1824,4 +1824,8 @@
   <data name="Installer repair required" xml:space="preserve"><value>Installerarreparation krävs</value></data>
   <data name="Core platform SQL is owned by the bootstrap installer. Run the installer repair if core objects are missing." xml:space="preserve"><value>Kärnplattformens SQL ägs av bootstrap-installeraren. Kör installerarreparation om kärnobjekt saknas.</value></data>
   <data name="Core platform SQL is validated from declared objects and is not executed from Portal." xml:space="preserve"><value>Kärnplattformens SQL valideras via deklarerade objekt och körs inte från Portal.</value></data>
+  <data name="Definition editor" xml:space="preserve"><value>Definitionseditor</value></data>
+  <data name="Module definition editor" xml:space="preserve"><value>Moduldefinitionseditor</value></data>
+  <data name="Use this editor to create or update portable module-definition JSON files. SQL scripts are shown as clear text here and exported as base64 content in the JSON file." xml:space="preserve"><value>Använd editorn för att skapa eller uppdatera portabla JSON-filer för moduldefinitioner. SQL-skript visas som klartext här och exporteras som base64-innehåll i JSON-filen.</value></data>
+  <data name="Open editor" xml:space="preserve"><value>Öppna editor</value></data>
 </root>
