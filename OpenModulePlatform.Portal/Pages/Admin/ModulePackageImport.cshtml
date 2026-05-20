@@ -142,6 +142,7 @@
                         <th>@L["Module key"]</th>
                         <th>@L["Definition version"]</th>
                         <th>@L["Module definition"]</th>
+                        <th>@L["Status"]</th>
                         <th>@L["Artifacts"]</th>
                         <th>@L["Actions"]</th>
                     </tr>
@@ -153,6 +154,28 @@
                         <td><code>@package.ModuleKey</code></td>
                         <td>@package.DefinitionVersion</td>
                         <td><code>@package.ModuleDefinitionFileName</code></td>
+                        <td>
+                            <span class="integrity-pill @package.StatusClass">@L[package.StatusLabel]</span>
+                            <div class="muted small-text top-gap">
+                                @L["Installed definition"]:
+                                <strong>@(package.InstalledDefinitionVersion ?? L["None"].Value)</strong>
+                            </div>
+                            @if (package.ArtifactFiles.Count > 0)
+                            {
+                                <div class="muted small-text">
+                                    @string.Format(
+                                        L["Artifacts: {0} same, {1} other, {2} missing."].Value,
+                                        package.SameArtifactVersionCount,
+                                        package.OtherArtifactVersionCount,
+                                        package.MissingArtifactCount)
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="muted small-text">@L["No artifact packages are available for this module package."]</div>
+                            }
+                            <div class="field-help">@L[package.ImportGuidance]</div>
+                        </td>
                         <td>
                             <strong>@package.ArtifactFiles.Count</strong>
                             @if (package.ArtifactFiles.Count > 0)
