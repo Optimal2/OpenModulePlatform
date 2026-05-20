@@ -162,7 +162,7 @@ public sealed class ArtifactZipImportService
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-                Directory.Move(package.ArtifactContentPath, finalPath);
+                MoveDirectory(package.ArtifactContentPath, finalPath);
                 movedToFinal = true;
             }
 
@@ -450,7 +450,7 @@ public sealed class ArtifactZipImportService
 
             if (File.Exists(zipPath))
             {
-                File.Move(zipPath, destination, overwrite: false);
+                MoveFile(zipPath, destination);
             }
 
             if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -479,6 +479,70 @@ public sealed class ArtifactZipImportService
             or IOException
             or SqlException
             or UnauthorizedAccessException;
+
+    private static void MoveDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        if (HaveSameRoot(source, destination))
+        {
+            Directory.Move(source, destination);
+            return;
+        }
+
+        try
+        {
+            CopyDirectory(source, destination);
+            Directory.Delete(source, recursive: true);
+        }
+        catch
+        {
+            TryDelete(destination);
+            throw;
+        }
+    }
+
+    private static void MoveFile(string source, string destination)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        if (HaveSameRoot(source, destination))
+        {
+            File.Move(source, destination, overwrite: false);
+            return;
+        }
+
+        File.Copy(source, destination, overwrite: false);
+        File.Delete(source);
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            var relativeDirectory = Path.GetRelativePath(source, directory);
+            Directory.CreateDirectory(Path.Combine(destination, relativeDirectory));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var relativeFile = Path.GetRelativePath(source, file);
+            var targetFile = Path.Combine(destination, relativeFile);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+            File.Copy(file, targetFile, overwrite: false);
+        }
+    }
+
+    private static bool HaveSameRoot(string first, string second)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        return string.Equals(
+            Path.GetPathRoot(Path.GetFullPath(first)),
+            Path.GetPathRoot(Path.GetFullPath(second)),
+            comparison);
+    }
 
     private static void TryDelete(string path)
     {
