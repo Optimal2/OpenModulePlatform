@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Drawing;
 using System.Text;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -17,91 +18,18 @@ internal static partial class Program
             Path.GetTempPath(),
             "omp-installer-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + ".log");
 
+        if (OperatingSystem.IsWindows() && Environment.UserInteractive && cli.RestartGui)
+        {
+            return RunInstallerPackageRefreshWithProgress(cli, logPath);
+        }
+
         await using var log = new StreamWriter(logPath, append: false, Encoding.UTF8);
         Console.SetOut(log);
         Console.SetError(log);
 
         try
         {
-            if (string.IsNullOrWhiteSpace(cli.ConfigPath))
-            {
-                throw new InvalidOperationException("--config is required for installer package refresh.");
-            }
-
-            var configPath = Path.GetFullPath(cli.ConfigPath);
-            var payloadRoot = ResolvePayloadRoot(cli, configPath);
-            WaitForParentProcess(cli.ParentProcessId);
-
-            var config = await ReadJsonAsync<BootstrapConfig>(configPath);
-            var sourceRoot = ResolvePrimaryDeveloperSourceRoot(config, payloadRoot, configPath);
-            var packageConfigPath = ResolveDeveloperPackageConfigPath(config, sourceRoot);
-            var packageOutputRoot = ResolveSafeInstallerRefreshOutputRoot(config, sourceRoot, payloadRoot);
-
-            Console.WriteLine("OpenModulePlatform installer package refresh");
-            Console.WriteLine($"Config:         {configPath}");
-            Console.WriteLine($"Package root:   {payloadRoot}");
-            Console.WriteLine($"Source root:    {sourceRoot}");
-            Console.WriteLine($"Package config: {packageConfigPath}");
-            Console.WriteLine($"Output root:    {packageOutputRoot}");
-            Console.WriteLine();
-
-            foreach (var root in ResolveDeveloperSourceRoots(config, payloadRoot, configPath))
-            {
-                var embedScript = Path.Combine(root, "scripts", "dev", "embed-module-definition-sql.ps1");
-                if (!File.Exists(embedScript))
-                {
-                    continue;
-                }
-
-                Console.WriteLine($"> Refresh embedded SQL in module definitions: {root}");
-                RunProcess(
-                    "powershell",
-                    [
-                        "-NoProfile",
-                        "-File",
-                        embedScript,
-                        "-RepositoryRoot",
-                        root
-                    ],
-                    workingDirectory: root);
-            }
-
-            Console.WriteLine("> Build HostAgent-first package from source");
-            RunProcess(
-                "powershell",
-                [
-                    "-NoProfile",
-                    "-File",
-                    Path.Combine(sourceRoot, "scripts", "deployment", "package-hostagent-first.ps1"),
-                    "-ConfigPath",
-                    packageConfigPath,
-                    "-OutputRoot",
-                    packageOutputRoot,
-                    "-SkipZip"
-                ],
-                workingDirectory: sourceRoot);
-
-            var generatedPackageRoot = Directory
-                .EnumerateDirectories(packageOutputRoot, "OpenModulePlatformHostAgentFirst-*", SearchOption.TopDirectoryOnly)
-                .Select(path => new DirectoryInfo(path))
-                .OrderByDescending(directory => directory.LastWriteTimeUtc)
-                .FirstOrDefault()
-                ?.FullName
-                ?? throw new InvalidOperationException($"No generated HostAgent-first package was found below {packageOutputRoot}.");
-
-            Console.WriteLine($"Generated package: {generatedPackageRoot}");
-            await MergeCurrentBootstrapConfigAsync(config, generatedPackageRoot);
-            ReplaceDirectory(generatedPackageRoot, payloadRoot);
-
-            var destinationLogPath = Path.Combine(payloadRoot, "installer-refresh.log");
-            await log.FlushAsync();
-            File.Copy(logPath, destinationLogPath, overwrite: true);
-
-            if (cli.RestartGui)
-            {
-                StartInstallerGui(payloadRoot);
-            }
-
+            await RunInstallerPackageRefreshCoreAsync(cli, logPath);
             return 0;
         }
         catch (Exception ex)
@@ -120,6 +48,185 @@ internal static partial class Program
             }
 
             return 1;
+        }
+    }
+
+    private static int RunInstallerPackageRefreshWithProgress(CliOptions cli, string logPath)
+    {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(defaultValue: false);
+
+        using var form = new InstallerRefreshProgressForm(logPath);
+        form.Shown += async (_, _) =>
+        {
+            var exitCode = 1;
+            await using var log = new StreamWriter(logPath, append: false, Encoding.UTF8);
+            var writer = new InstallerRefreshProgressWriter(log, form.AppendLogLine);
+            Console.SetOut(writer);
+            Console.SetError(writer);
+
+            try
+            {
+                form.SetStatus("Building updated installer package...");
+                await RunInstallerPackageRefreshCoreAsync(cli, logPath);
+                exitCode = 0;
+                form.SetStatus("Updated installer package created. Starting installer...");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Installer package refresh failed.");
+                Console.Error.WriteLine(ex);
+                form.SetStatus("Installer package refresh failed.");
+                MessageBox.Show(
+                    form,
+                    $"Installer package refresh failed. Details were written to:{Environment.NewLine}{logPath}{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                await writer.FlushAsync();
+                form.ExitCode = exitCode;
+                form.BeginInvoke(new Action(form.Close));
+            }
+        };
+
+        Application.Run(form);
+        return form.ExitCode;
+    }
+
+    private static async Task RunInstallerPackageRefreshCoreAsync(CliOptions cli, string logPath)
+    {
+        if (string.IsNullOrWhiteSpace(cli.ConfigPath))
+        {
+            throw new InvalidOperationException("--config is required for installer package refresh.");
+        }
+
+        var configPath = Path.GetFullPath(cli.ConfigPath);
+        var payloadRoot = ResolvePayloadRoot(cli, configPath);
+        WaitForParentProcess(cli.ParentProcessId);
+
+        var config = await ReadJsonAsync<BootstrapConfig>(configPath);
+        var sourceRoot = ResolvePrimaryDeveloperSourceRoot(config, payloadRoot, configPath);
+        var packageConfigPath = ResolveDeveloperPackageConfigPath(config, sourceRoot);
+        var packageOutputRoot = ResolveSafeInstallerRefreshOutputRoot(config, sourceRoot, payloadRoot);
+
+        Console.WriteLine("OpenModulePlatform installer package refresh");
+        Console.WriteLine($"Config:         {configPath}");
+        Console.WriteLine($"Package root:   {payloadRoot}");
+        Console.WriteLine($"Source root:    {sourceRoot}");
+        Console.WriteLine($"Package config: {packageConfigPath}");
+        Console.WriteLine($"Output root:    {packageOutputRoot}");
+        Console.WriteLine($"Log file:       {logPath}");
+        Console.WriteLine();
+
+        foreach (var root in ResolveDeveloperSourceRoots(config, payloadRoot, configPath))
+        {
+            var embedScript = Path.Combine(root, "scripts", "dev", "embed-module-definition-sql.ps1");
+            if (!File.Exists(embedScript))
+            {
+                continue;
+            }
+
+            Console.WriteLine($"> Refresh embedded SQL in module definitions: {root}");
+            RunProcessStreaming(
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-File",
+                    embedScript,
+                    "-RepositoryRoot",
+                    root
+                ],
+                workingDirectory: root);
+        }
+
+        Console.WriteLine("> Build HostAgent-first package from source");
+        RunProcessStreaming(
+            "powershell",
+            [
+                "-NoProfile",
+                "-File",
+                Path.Combine(sourceRoot, "scripts", "deployment", "package-hostagent-first.ps1"),
+                "-ConfigPath",
+                packageConfigPath,
+                "-OutputRoot",
+                packageOutputRoot,
+                "-SkipZip"
+            ],
+            workingDirectory: sourceRoot);
+
+        var generatedPackageRoot = Directory
+            .EnumerateDirectories(packageOutputRoot, "OpenModulePlatformHostAgentFirst-*", SearchOption.TopDirectoryOnly)
+            .Select(path => new DirectoryInfo(path))
+            .OrderByDescending(directory => directory.LastWriteTimeUtc)
+            .FirstOrDefault()
+            ?.FullName
+            ?? throw new InvalidOperationException($"No generated HostAgent-first package was found below {packageOutputRoot}.");
+
+        Console.WriteLine($"Generated package: {generatedPackageRoot}");
+        await MergeCurrentBootstrapConfigAsync(config, generatedPackageRoot);
+        ReplaceDirectory(generatedPackageRoot, payloadRoot);
+
+        var destinationLogPath = Path.Combine(payloadRoot, "installer-refresh.log");
+        Console.Out.Flush();
+        File.Copy(logPath, destinationLogPath, overwrite: true);
+
+        if (cli.RestartGui)
+        {
+            StartInstallerGui(payloadRoot);
+        }
+    }
+
+    private static void RunProcessStreaming(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string? workingDirectory = null)
+    {
+        var info = new ProcessStartInfo(fileName)
+        {
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            info.WorkingDirectory = workingDirectory;
+        }
+
+        foreach (var argument in arguments)
+        {
+            info.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(info)
+            ?? throw new InvalidOperationException($"Could not start process: {fileName}");
+        process.OutputDataReceived += (_, args) =>
+        {
+            if (args.Data is not null)
+            {
+                Console.WriteLine(args.Data);
+            }
+        };
+        process.ErrorDataReceived += (_, args) =>
+        {
+            if (args.Data is not null)
+            {
+                Console.Error.WriteLine(args.Data);
+            }
+        };
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        process.WaitForExit();
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(fileName)} failed with exit code {process.ExitCode}. See the installer refresh log for details.");
         }
     }
 
@@ -401,4 +508,202 @@ internal static partial class Program
         => path.EndsWith(Path.DirectorySeparatorChar)
             ? path
             : path + Path.DirectorySeparatorChar;
+
+    private sealed class InstallerRefreshProgressForm : Form
+    {
+        private readonly Label _statusLabel = new()
+        {
+            AutoSize = true,
+            Text = "Preparing installer refresh..."
+        };
+
+        private readonly TextBox _logBox = new()
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            WordWrap = false
+        };
+
+        private readonly ProgressBar _progressBar = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 18,
+            Style = ProgressBarStyle.Marquee,
+            MarqueeAnimationSpeed = 30
+        };
+
+        public InstallerRefreshProgressForm(string logPath)
+        {
+            ExitCode = 1;
+            Text = "OpenModulePlatform installer refresh";
+            StartPosition = FormStartPosition.CenterScreen;
+            MinimumSize = new Size(760, 520);
+            Size = new Size(920, 640);
+
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                Padding = new Padding(12)
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            root.Controls.Add(new Label
+            {
+                AutoSize = true,
+                Font = new Font(Font, FontStyle.Bold),
+                Text = "Creating updated installer package"
+            }, 0, 0);
+
+            var statusPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0, 10, 0, 8)
+            };
+            statusPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            statusPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            statusPanel.Controls.Add(_statusLabel, 0, 0);
+            statusPanel.Controls.Add(_progressBar, 0, 1);
+            root.Controls.Add(statusPanel, 0, 1);
+
+            root.Controls.Add(_logBox, 0, 2);
+            root.Controls.Add(new Label
+            {
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
+                Text = $"Log file: {logPath}"
+            }, 0, 3);
+
+            Controls.Add(root);
+        }
+
+        [System.ComponentModel.Browsable(false)]
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public int ExitCode { get; set; }
+
+        public void SetStatus(string text)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => SetStatus(text)));
+                return;
+            }
+
+            _statusLabel.Text = text;
+        }
+
+        public void AppendLogLine(string line)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => AppendLogLine(line)));
+                return;
+            }
+
+            _logBox.AppendText(line + Environment.NewLine);
+        }
+    }
+
+    private sealed class InstallerRefreshProgressWriter : TextWriter
+    {
+        private readonly TextWriter _inner;
+        private readonly Action<string> _appendLine;
+        private readonly StringBuilder _line = new();
+        private readonly object _gate = new();
+
+        public InstallerRefreshProgressWriter(TextWriter inner, Action<string> appendLine)
+        {
+            _inner = inner;
+            _appendLine = appendLine;
+        }
+
+        public override Encoding Encoding => _inner.Encoding;
+
+        public override void Write(char value)
+        {
+            lock (_gate)
+            {
+                _inner.Write(value);
+                if (value == '\r')
+                {
+                    return;
+                }
+
+                if (value == '\n')
+                {
+                    FlushBufferedLine();
+                    return;
+                }
+
+                _line.Append(value);
+            }
+        }
+
+        public override void Write(string? value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return;
+            }
+
+            foreach (var character in value)
+            {
+                Write(character);
+            }
+        }
+
+        public override void WriteLine(string? value)
+        {
+            Write(value);
+            Write(Environment.NewLine);
+        }
+
+        public override void Flush()
+        {
+            lock (_gate)
+            {
+                _inner.Flush();
+            }
+        }
+
+        public override async Task FlushAsync()
+        {
+            string? pendingLine = null;
+            lock (_gate)
+            {
+                if (_line.Length > 0)
+                {
+                    pendingLine = _line.ToString();
+                    _line.Clear();
+                }
+            }
+
+            if (pendingLine is not null)
+            {
+                _appendLine(pendingLine);
+            }
+
+            await _inner.FlushAsync();
+        }
+
+        private void FlushBufferedLine()
+        {
+            var text = _line.ToString();
+            _line.Clear();
+            _appendLine(text);
+        }
+    }
 }

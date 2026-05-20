@@ -598,7 +598,6 @@ internal static partial class Program
             var lines = new List<string>();
             var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
             var primarySourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
-            var payloadDefinitionsRoot = Path.Combine(_payloadRoot, "module-definitions");
 
             lines.Add($"Primary source root: {primarySourceRoot}");
             lines.Add("Source roots:");
@@ -632,7 +631,7 @@ internal static partial class Program
             {
                 var sourcePath = Path.Combine(definition.SourceRoot, definition.Path);
                 var sourceDocument = await ReadModuleDefinitionAsync(sourcePath);
-                var packagePath = Path.Combine(payloadDefinitionsRoot, Path.GetFileName(definition.Path));
+                var packagePath = FindPackageModuleDefinitionPath(definition);
                 if (!File.Exists(packagePath))
                 {
                     lines.Add($"  UPDATE  {definition.ModuleKey}: package file is missing ({Path.GetFileName(definition.Path)}).");
@@ -659,7 +658,8 @@ internal static partial class Program
                 }
                 else
                 {
-                    lines.Add($"  OK      {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
+                    var location = IsAvailablePackagePath(packagePath) ? "available" : "initial";
+                    lines.Add($"  OK      {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion} ({location}).");
                 }
             }
 
@@ -671,7 +671,14 @@ internal static partial class Program
                 var current = FindConfiguredArtifact(component);
                 if (current is null)
                 {
-                    lines.Add($"  UPDATE  {component.ComponentKey}: package config has no artifact entry for {component.ModuleKey}/{component.AppKey}/{component.PackageType}/{component.TargetName}.");
+                    var availablePath = FindAvailableArtifactPackage(component);
+                    if (!string.IsNullOrWhiteSpace(availablePath))
+                    {
+                        lines.Add($"  OK      {component.ComponentKey}: available for later install ({Path.GetFileName(availablePath)}).");
+                        continue;
+                    }
+
+                    lines.Add($"  UPDATE  {component.ComponentKey}: package has no initial or available artifact for {component.ModuleKey}/{component.AppKey}/{component.PackageType}/{component.TargetName}.");
                     hasUpdates = true;
                     continue;
                 }
@@ -798,6 +805,45 @@ ORDER BY ar.ArtifactId DESC;
                     && string.Equals(identity.TargetName, component.TargetName, StringComparison.OrdinalIgnoreCase);
             });
         }
+
+        private string FindPackageModuleDefinitionPath(ManifestModuleDefinition definition)
+        {
+            var fileName = Path.GetFileName(definition.Path);
+            var initialPath = Path.Combine(_payloadRoot, "module-definitions", fileName);
+            if (File.Exists(initialPath))
+            {
+                return initialPath;
+            }
+
+            return Path.Combine(_payloadRoot, "available-module-definitions", fileName);
+        }
+
+        private string? FindAvailableArtifactPackage(ManifestComponent component)
+        {
+            var packageName = GetArtifactPackageFileName(component);
+            var availablePath = Path.Combine(_payloadRoot, "available-artifacts", packageName);
+            if (File.Exists(availablePath))
+            {
+                return availablePath;
+            }
+
+            var payloadPath = Path.Combine(_payloadRoot, "payload", packageName);
+            return File.Exists(payloadPath) ? payloadPath : null;
+        }
+
+        private static string GetArtifactPackageFileName(ManifestComponent component)
+            => string.Join(
+                "__",
+                component.ModuleKey,
+                component.AppKey,
+                component.PackageType,
+                component.TargetName,
+                component.Version) + ".zip";
+
+        private bool IsAvailablePackagePath(string path)
+            => Path.GetFullPath(path).StartsWith(
+                Path.GetFullPath(Path.Combine(_payloadRoot, "available-module-definitions")) + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
 
         private static ArtifactPackageIdentity? ParseArtifactPackageIdentity(string source)
         {
