@@ -238,6 +238,77 @@ function Compress-FolderToZip {
     Compress-Archive -Path (Join-Path $Source '*') -DestinationPath $Destination -Force
 }
 
+function Get-ArtifactPackageFileName {
+    param(
+        [Parameter(Mandatory = $true)][string]$ModuleKey,
+        [Parameter(Mandatory = $true)][string]$AppKey,
+        [Parameter(Mandatory = $true)][string]$PackageType,
+        [Parameter(Mandatory = $true)][string]$TargetName,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    return "$ModuleKey`__$AppKey`__$PackageType`__$TargetName`__$Version.zip"
+}
+
+function Test-ComponentHasArtifactIdentity {
+    param([object]$Component)
+
+    return -not [string]::IsNullOrWhiteSpace([string]$Component.moduleKey) `
+        -and -not [string]::IsNullOrWhiteSpace([string]$Component.appKey) `
+        -and -not [string]::IsNullOrWhiteSpace([string]$Component.packageType) `
+        -and -not [string]::IsNullOrWhiteSpace([string]$Component.targetName) `
+        -and -not [string]::IsNullOrWhiteSpace([string]$Component.version)
+}
+
+function New-ArtifactPackage {
+    param(
+        [Parameter(Mandatory = $true)][string]$PayloadZip,
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][string]$BuildRoot,
+        [object[]]$ConfigurationFiles = @()
+    )
+
+    $stagingRoot = Join-Path $BuildRoot ('artifact-package-' + [Guid]::NewGuid().ToString('N'))
+    $payloadDestination = Join-Path $stagingRoot 'payload\artifact.zip'
+
+    try {
+        Copy-RequiredFile -Source $PayloadZip -Destination $payloadDestination
+
+        $manifestConfigurationFiles = @()
+        foreach ($configurationFile in $ConfigurationFiles) {
+            $relativePath = [string]$configurationFile.RelativePath
+            $sourcePath = [string]$configurationFile.SourcePath
+            $packageSourcePath = [string]$configurationFile.PackageSourcePath
+
+            if ([string]::IsNullOrWhiteSpace($relativePath) -or [string]::IsNullOrWhiteSpace($sourcePath) -or [string]::IsNullOrWhiteSpace($packageSourcePath)) {
+                throw "Artifact configuration file entries require RelativePath, SourcePath, and PackageSourcePath."
+            }
+
+            $configurationDestination = Join-Path $stagingRoot $packageSourcePath.Replace('/', '\')
+            Copy-RequiredFile -Source $sourcePath -Destination $configurationDestination
+            $manifestConfigurationFiles += [ordered]@{
+                relativePath = $relativePath.Replace('\', '/').Trim('/')
+                source = $packageSourcePath.Replace('\', '/').Trim('/')
+            }
+        }
+
+        $manifest = [ordered]@{
+            formatVersion = 1
+            payload = [ordered]@{
+                type = 'zip'
+                path = 'payload/artifact.zip'
+            }
+            configurationFiles = @($manifestConfigurationFiles)
+        }
+
+        $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stagingRoot 'omp-artifact-package.json') -Encoding UTF8
+        Compress-FolderToZip -Source $stagingRoot -Destination $Destination
+    }
+    finally {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Compress-PackageRootToZip {
     param(
         [Parameter(Mandatory = $true)][string]$PackageRoot,
@@ -566,16 +637,40 @@ if (-not $SkipRestore) {
 & $publishScript @publishArgs
 
 Write-Step 'Copying component payloads'
+$componentPayloadSources = @{}
+$componentPayloadRoot = Join-Path $buildRoot 'component-payloads'
+New-Item -ItemType Directory -Path $componentPayloadRoot -Force | Out-Null
+
 foreach ($component in $components) {
     $packageTemplate = [string]$component.packageFileTemplate
     if ([string]::IsNullOrWhiteSpace($packageTemplate)) {
         continue
     }
 
+    $componentKey = [string]$component.componentKey
     $projectName = Get-ProjectNameFromComponent -RepositoryRoot $RepositoryRoot -Component $component
     $source = Join-Path $publishRoot $projectName
-    $destination = Join-Path $packageRoot $packageTemplate
-    Compress-FolderToZip -Source $source -Destination $destination
+    $payloadZip = Join-Path $componentPayloadRoot "$componentKey.zip"
+    Compress-FolderToZip -Source $source -Destination $payloadZip
+
+    if (Test-ComponentHasArtifactIdentity -Component $component) {
+        $artifactPackageName = Get-ArtifactPackageFileName `
+            -ModuleKey ([string]$component.moduleKey) `
+            -AppKey ([string]$component.appKey) `
+            -PackageType ([string]$component.packageType) `
+            -TargetName ([string]$component.targetName) `
+            -Version ([string]$component.version)
+        $destination = Join-Path $payloadRoot $artifactPackageName
+        New-ArtifactPackage -PayloadZip $payloadZip -Destination $destination -BuildRoot $buildRoot
+        $componentPayloadSources[$componentKey] = "payload/$artifactPackageName"
+    }
+    else {
+        # Bootstrap infrastructure that is not represented by normal OMP app
+        # metadata remains a direct payload zip for the installer itself.
+        $destination = Join-Path $packageRoot $packageTemplate
+        Copy-RequiredFile -Source $payloadZip -Destination $destination
+        $componentPayloadSources[$componentKey] = $packageTemplate.Replace('\', '/')
+    }
 }
 
 $openDocViewerPackageZip = [string](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'OpenDocViewerPackageZip' -DefaultValue '')
@@ -777,6 +872,7 @@ Copy-Item -Path (Join-Path $rootBootstrapperPublishRoot '*') -Destination $packa
 Write-Step 'Writing bootstrap manifest'
 $artifacts = [System.Collections.ArrayList]::new()
 foreach ($component in $components) {
+    $componentKey = [string]$component.componentKey
     $packageTemplate = [string]$component.packageFileTemplate
     $relativeTemplate = [string]$component.relativePathTemplate
     $componentVersion = [string]$component.version
@@ -784,8 +880,13 @@ foreach ($component in $components) {
         continue
     }
 
+    $artifactSource = [string]$componentPayloadSources[$componentKey]
+    if ([string]::IsNullOrWhiteSpace($artifactSource)) {
+        $artifactSource = $packageTemplate.Replace('\', '/')
+    }
+
     $isExample = $packageTemplate -like '*Example*' -or $relativeTemplate -like '*example-*'
-    Add-ArtifactEntry -Artifacts $artifacts -Source $packageTemplate -Target ($relativeTemplate.Replace('{version}', $componentVersion)) -IsExample $isExample
+    Add-ArtifactEntry -Artifacts $artifacts -Source $artifactSource -Target ($relativeTemplate.Replace('{version}', $componentVersion)) -IsExample $isExample
 }
 Add-ArtifactEntry -Artifacts $artifacts -Source "payload/$openDocViewerArtifactPackageName" -Target "opendocviewer/web/$openDocViewerVersion"
 

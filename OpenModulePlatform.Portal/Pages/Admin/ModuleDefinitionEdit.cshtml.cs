@@ -6,6 +6,7 @@ using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using System.Text;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -55,6 +56,25 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
 
         SetTitles("Module definition");
         return Page();
+    }
+
+    public async Task<IActionResult> OnGetDownload(int id, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var definition = await _repo.GetModuleDefinitionDocumentAsync(id, ct);
+        if (definition is null || string.IsNullOrWhiteSpace(definition.DefinitionJson))
+        {
+            return NotFound();
+        }
+
+        var fileName = CreateDefinitionFileName(definition.ModuleKey, definition.DefinitionVersion);
+        var bytes = Encoding.UTF8.GetBytes(definition.DefinitionJson + Environment.NewLine);
+        return File(bytes, "application/json", fileName);
     }
 
     public async Task<IActionResult> OnPostApply(CancellationToken ct)
@@ -168,6 +188,24 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
         IncompatibleReferences = await _repo.GetIncompatibleArtifactReferencesForModuleDefinitionAsync(id, ct);
         SqlCheckRows = await _repo.GetModuleDefinitionSqlChecksAsync(id, ct);
         return null;
+    }
+
+    private static string CreateDefinitionFileName(string moduleKey, string definitionVersion)
+    {
+        var safeModuleKey = SanitizeFileNamePart(moduleKey);
+        var safeVersion = SanitizeFileNamePart(definitionVersion);
+        return $"{safeModuleKey}-{safeVersion}.module-definition.json";
+    }
+
+    private static string SanitizeFileNamePart(string value)
+    {
+        var sanitized = value.Trim();
+        foreach (var invalid in Path.GetInvalidFileNameChars())
+        {
+            sanitized = sanitized.Replace(invalid, '-');
+        }
+
+        return string.IsNullOrWhiteSpace(sanitized) ? "module" : sanitized;
     }
 
     public sealed class InputModel

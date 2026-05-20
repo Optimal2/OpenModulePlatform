@@ -36,6 +36,24 @@ that creates the manifest and can build the complete outer package zip from a
 payload zip plus optional configuration files. Portal administrators can open
 the same tool from `/admin/artifactpackageeditor`.
 
+For automated builds, use:
+
+```powershell
+.\scripts\deployment\new-omp-artifact-package.ps1 `
+  -ModuleKey example_module `
+  -AppKey example_module_web `
+  -PackageType web-app `
+  -TargetName example-module-web `
+  -Version 1.2.3 `
+  -PayloadPath .\publish\ExampleWeb `
+  -OutputPath .\artifacts `
+  -ConfigurationFile 'appsettings.json=.\config\appsettings.example.json'
+```
+
+Portal can also export an already imported artifact from the artifact edit page.
+The exported package uses the artifact store payload and the current enabled
+`omp.ArtifactConfigurationFiles` rows.
+
 Recommended layout:
 
 ```text
@@ -121,4 +139,9 @@ are rejected.
 The HostAgent-first bootstrapper also understands the manifest envelope when it
 prepares the initial ArtifactStore. It extracts only the payload to the artifact
 path and registers declared configuration files against the matching
-`omp.Artifacts.RelativePath` row after the bootstrap SQL has created it.
+`omp.Artifacts.RelativePath` row after the bootstrap SQL has created it. The
+HostAgent-first package builder emits this envelope for every component in
+`omp-components.json` that has a complete OMP artifact identity
+(`moduleKey`, `appKey`, `packageType`, `targetName`, and `version`). Bootstrap
+infrastructure without normal OMP app metadata, such as HostAgent itself, stays
+as direct installer payload.

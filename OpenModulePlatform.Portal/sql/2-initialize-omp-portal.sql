@@ -16,6 +16,14 @@ Prerequisites:
 USE [OpenModulePlatform];
 GO
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+
 DECLARE @DefaultInstanceId uniqueidentifier;
 DECLARE @DefaultPortalModuleInstanceId uniqueidentifier;
 DECLARE @DefaultPortalAppInstanceId uniqueidentifier;

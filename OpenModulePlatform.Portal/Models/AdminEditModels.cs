@@ -130,6 +130,10 @@ public sealed class ArtifactEditData
 
     public int AppId { get; set; }
 
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
     public string Version { get; set; } = string.Empty;
 
     public string PackageType { get; set; } = string.Empty;

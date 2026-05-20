@@ -30,8 +30,9 @@ OpenModulePlatformHostAgentFirst-<version>/
   uninstall-hostagent-first.ps1
   manifest.json
   payload/
-    OpenModulePlatform.Portal.zip
     OpenModulePlatform.HostAgent.WindowsService.zip
+    omp_portal__omp_portal__web-app__omp-portal__<version>.zip
+    content_webapp__content_webapp_webapp__web-app__content-webapp__<version>.zip
     opendocviewer__opendocviewer_webapp__web-app__opendocviewer__<version>.zip
     ...
   sql/
@@ -105,9 +106,12 @@ customer packages should use `.local.psd1` files outside source control.
 
 The script reads `omp-components.json` so each deployable component keeps its own
 artifact version. The repository version can still be used as the package
-version, but it is not forced onto every app artifact.
+version, but it is not forced onto every app artifact. Components with normal
+OMP module/app metadata are packaged as manifest-based artifact package objects.
+Bootstrap infrastructure without module/app metadata, such as HostAgent itself,
+remains as direct installer payload.
 
-OpenDocViewer is packaged as a manifest-based OMP artifact package. The
+OpenDocViewer is also packaged as a manifest-based OMP artifact package. The
 deployable `dist` output is stored as the package payload, while
 `odv.site.config.js` is registered as an artifact configuration file. Set
 `OpenDocViewer.SiteConfigPath` in the package config to include a site-specific

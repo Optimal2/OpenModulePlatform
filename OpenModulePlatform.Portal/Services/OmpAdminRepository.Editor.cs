@@ -1437,16 +1437,20 @@ WHERE AppId = @AppId;";
     public async Task<ArtifactEditData?> GetArtifactAsync(int artifactId, CancellationToken ct)
     {
         const string sql = @"
-SELECT ArtifactId,
-       AppId,
-       Version,
-       PackageType,
-       TargetName,
-       RelativePath,
-       Sha256,
-       IsEnabled
-FROM omp.Artifacts
-WHERE ArtifactId = @ArtifactId;";
+SELECT ar.ArtifactId,
+       ar.AppId,
+       m.ModuleKey,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName,
+       ar.RelativePath,
+       ar.Sha256,
+       ar.IsEnabled
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE ar.ArtifactId = @ArtifactId;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -1463,12 +1467,14 @@ WHERE ArtifactId = @ArtifactId;";
         {
             ArtifactId = rdr.GetInt32(0),
             AppId = rdr.GetInt32(1),
-            Version = rdr.GetString(2),
-            PackageType = rdr.GetString(3),
-            TargetName = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-            RelativePath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-            Sha256 = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-            IsEnabled = rdr.GetBoolean(7)
+            ModuleKey = rdr.GetString(2),
+            AppKey = rdr.GetString(3),
+            Version = rdr.GetString(4),
+            PackageType = rdr.GetString(5),
+            TargetName = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            RelativePath = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+            Sha256 = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+            IsEnabled = rdr.GetBoolean(9)
         };
     }
 
@@ -2063,6 +2069,43 @@ WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
             FileContent = rdr.GetString(3),
             IsEnabled = rdr.GetBoolean(4)
         };
+    }
+
+    public async Task<IReadOnlyList<ArtifactConfigurationFileEditData>> GetArtifactConfigurationFileContentsAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ArtifactConfigurationFileId,
+       ArtifactId,
+       RelativePath,
+       FileContent,
+       IsEnabled
+FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @ArtifactId
+  AND IsEnabled = 1
+ORDER BY RelativePath, ArtifactConfigurationFileId;";
+
+        var rows = new List<ArtifactConfigurationFileEditData>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ArtifactConfigurationFileEditData
+            {
+                ArtifactConfigurationFileId = rdr.GetInt32(0),
+                ArtifactId = rdr.GetInt32(1),
+                RelativePath = rdr.GetString(2),
+                FileContent = rdr.GetString(3),
+                IsEnabled = rdr.GetBoolean(4)
+            });
+        }
+
+        return rows;
     }
 
     public async Task<int> SaveArtifactConfigurationFileAsync(

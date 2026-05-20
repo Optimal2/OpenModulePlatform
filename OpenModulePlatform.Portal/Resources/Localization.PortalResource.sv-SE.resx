@@ -1827,4 +1827,9 @@
   <data name="Artifact package editor" xml:space="preserve"><value>Artefaktpaketseditor</value></data>
   <data name="Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files." xml:space="preserve"><value>Använd editorn för att skapa manifestbaserade artefaktpaket med deploybar payload och deployment-ägda konfigurationsfiler.</value></data>
   <data name="Open package editor" xml:space="preserve"><value>Öppna paketeditor</value></data>
+  <data name="Download artifact package" xml:space="preserve"><value>Ladda ned artefaktpaket</value></data>
+  <data name="Artifact metadata is incomplete and cannot be exported as a standard package." xml:space="preserve"><value>Artefaktens metadata är ofullständig och kan inte exporteras som ett standardpaket.</value></data>
+  <data name="Artifact relative path is invalid." xml:space="preserve"><value>Artefaktens relativa sökväg är ogiltig.</value></data>
+  <data name="Artifact payload folder was not found in the artifact store." xml:space="preserve"><value>Artefaktens payload-mapp hittades inte i artefaktlagret.</value></data>
+  <data name="Download module definition" xml:space="preserve"><value>Ladda ned moduldefinition</value></data>
 </root>

@@ -83,6 +83,10 @@
 
     <div class="toolbar">
         <button type="submit">@L["Save artifact"]</button>
+        @if (!Model.IsCreate)
+        {
+            <a class="action-link" asp-page-handler="DownloadPackage" asp-route-id="@Model.Input.ArtifactId">@L["Download artifact package"]</a>
+        }
         <a class="action-link" href="~/admin/artifacts">@L["Back to artifacts"]</a>
     </div>
 </form>

@@ -18,6 +18,7 @@ Use these files as the main map:
 - `docs/AUTHENTICATION_AND_RBAC.md` - shared OMP authentication, users, role principals, and RBAC.
 - `docs/ADMIN_CONFIGURATION.md` - manual Portal administration guidance.
 - `docs/VERSIONING_AND_IDENTITIES.md` - artifact versioning and stable identity policy.
+- `docs/PORTABLE_DEPLOYMENT_OBJECTS.md` - module-definition and artifact-package object standards.
 - `docs/MODULE_DEFINITIONS.md` - versioned module definition documents and SQL ownership.
 - `docs/ARTIFACT_PACKAGES.md` - manifest-based artifact package envelope and configuration-file packaging.
 - `docs/OMP_COMPONENT_MANIFEST.md` - repository component manifest and version-bump helper usage.
