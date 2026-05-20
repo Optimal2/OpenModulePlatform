@@ -181,6 +181,16 @@ public sealed class ArtifactZipImportService
             var application = await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(
                 artifactId,
                 cancellationToken);
+            var hostAgentDesiredRows = 0;
+            if (string.Equals(metadata.PackageType, "host-agent", StringComparison.OrdinalIgnoreCase))
+            {
+                hostAgentDesiredRows = await _repository.ApplyImportedHostAgentArtifactToCurrentHostAsync(
+                    artifactId,
+                    settings.ResolveHostKey(),
+                    settings.SelfUpgrade.ServiceNamePrefix,
+                    settings.SelfUpgrade.InstallRoot,
+                    cancellationToken);
+            }
 
             var result = new ArtifactZipImportResult(
                 artifactId,
@@ -189,11 +199,12 @@ public sealed class ArtifactZipImportService
                 copiedConfigurationFiles,
                 application.TemplateAppRowsUpdated,
                 application.AppInstanceRowsUpdated,
-                application.WorkerInstanceRowsUpdated);
+                application.WorkerInstanceRowsUpdated,
+                hostAgentDesiredRows);
 
             MoveImportZip(zipPath, processedPath, null);
             _logger.LogInformation(
-                "Imported artifact zip. Zip={ZipPath}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}",
+                "Imported artifact zip. Zip={ZipPath}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}",
                 zipPath,
                 result.ArtifactId,
                 result.Version,
@@ -201,7 +212,8 @@ public sealed class ArtifactZipImportService
                 result.CopiedConfigurationFileCount,
                 result.TemplateAppRowsUpdated,
                 result.AppInstanceRowsUpdated,
-                result.WorkerInstanceRowsUpdated);
+                result.WorkerInstanceRowsUpdated,
+                result.HostAgentDesiredRowsUpdated);
         }
         catch (Exception ex) when (IsExpectedImportFailure(ex))
         {
@@ -366,6 +378,7 @@ public sealed class ArtifactZipImportService
         {
             "web-app" => "web",
             "service-app" => "service",
+            "host-agent" => "hostagent",
             "worker" => "worker",
             "worker-plugin" => "worker",
             "channel-type" => "channel-type",

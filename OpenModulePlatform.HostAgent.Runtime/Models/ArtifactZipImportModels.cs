@@ -22,7 +22,8 @@ public sealed record ArtifactZipImportResult(
     int CopiedConfigurationFileCount,
     int TemplateAppRowsUpdated,
     int AppInstanceRowsUpdated,
-    int WorkerInstanceRowsUpdated);
+    int WorkerInstanceRowsUpdated,
+    int HostAgentDesiredRowsUpdated);
 
 public sealed record ArtifactZipImportDuplicateInfo(
     int ArtifactId,

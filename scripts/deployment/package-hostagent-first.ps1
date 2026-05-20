@@ -238,6 +238,34 @@ function Compress-FolderToZip {
     Compress-Archive -Path (Join-Path $Source '*') -DestinationPath $Destination -Force
 }
 
+function Remove-RuntimeConfigurationFilesFromFolder {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    Get-ChildItem -LiteralPath $Path -File -Recurse | Where-Object {
+        [string]::Equals($_.Name, 'appsettings.json', [StringComparison]::OrdinalIgnoreCase) -or
+        ($_.Name.StartsWith('appsettings.', [StringComparison]::OrdinalIgnoreCase) -and $_.Name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase))
+    } | Remove-Item -Force
+}
+
+function Compress-ArtifactPayloadFolderToZip {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][string]$BuildRoot
+    )
+
+    $stagingRoot = Join-Path $BuildRoot ('artifact-payload-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+        Get-ChildItem -LiteralPath $Source -Force | Copy-Item -Destination $stagingRoot -Recurse -Force
+        Remove-RuntimeConfigurationFilesFromFolder -Path $stagingRoot
+        Compress-FolderToZip -Source $stagingRoot -Destination $Destination
+    }
+    finally {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-ManifestPropertyValue {
     param(
         [object]$Object,
@@ -672,6 +700,8 @@ foreach ($component in $components) {
     Compress-FolderToZip -Source $source -Destination $payloadZip
 
     if (Test-ComponentHasArtifactIdentity -Component $component) {
+        $artifactPayloadZip = Join-Path $componentPayloadRoot "$componentKey.artifact.zip"
+        Compress-ArtifactPayloadFolderToZip -Source $source -Destination $artifactPayloadZip -BuildRoot $buildRoot
         $artifactPackageName = Get-ArtifactPackageFileName `
             -ModuleKey ([string]$component.moduleKey) `
             -AppKey ([string]$component.appKey) `
@@ -679,8 +709,16 @@ foreach ($component in $components) {
             -TargetName ([string]$component.targetName) `
             -Version ([string]$component.version)
         $destination = Join-Path $payloadRoot $artifactPackageName
-        New-ArtifactPackage -PayloadZip $payloadZip -Destination $destination -BuildRoot $buildRoot
+        New-ArtifactPackage -PayloadZip $artifactPayloadZip -Destination $destination -BuildRoot $buildRoot
         $componentPayloadSources[$componentKey] = "payload/$artifactPackageName"
+
+        if ([string]::Equals($componentKey, 'omp-hostagent-service', [StringComparison]::OrdinalIgnoreCase)) {
+            # The bootstrapper itself still needs a direct HostAgent service zip
+            # for first install/repair. The manifest artifact package above is
+            # what OMP stores for later HostAgent self-upgrade.
+            $bootstrapDestination = Join-Path $packageRoot $packageTemplate
+            Copy-RequiredFile -Source $payloadZip -Destination $bootstrapDestination
+        }
     }
     else {
         # Bootstrap infrastructure that is not represented by normal OMP app
@@ -916,6 +954,8 @@ Copy-AdditionalArtifactFiles `
     -Artifacts $artifacts
 
 $versionOverrides = @{}
+$hostAgentVersion = [string]($components | Where-Object { $_.componentKey -eq 'omp-hostagent-service' } | Select-Object -First 1).version
+Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -Version $hostAgentVersion
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Auth/2-initialize-omp-auth.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-auth-web' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Portal/2-initialize-omp-portal.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-portal-web' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Web.ContentWebAppModule/2-initialize-content-webapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'content-webapp' } | Select-Object -First 1).version)
@@ -1042,6 +1082,8 @@ $bootstrapConfig = [ordered]@{
                 OmpDb = '{SqlConnectionString}'
             }
             HostAgent = [ordered]@{
+                ServiceName = $hostAgentServiceName
+                Version = $hostAgentVersion
                 HostKey = '{HostAgent.HostKey}'
                 HostName = '{HostAgent.HostName}'
                 RefreshSeconds = 30
@@ -1074,6 +1116,16 @@ $bootstrapConfig = [ordered]@{
                 DeployServiceApps = $true
                 ServicesRoot = $servicesRoot
                 FileMirrors = @($contentWebAppFileMirrors)
+                SelfUpgrade = [ordered]@{
+                    IsEnabled = $true
+                    InstallRoot = $servicesRoot
+                    ServiceNamePrefix = $hostAgentServiceName
+                    ServiceAccountName = $runAsUser
+                    ServiceAccountPassword = $runAsPassword
+                    TakeoverStopTimeoutSeconds = 45
+                    DeletePreviousServiceAfterTakeover = $true
+                    StartPreparedService = $true
+                }
                 EnableRpc = $true
                 RpcPipeName = ''
                 RpcRequestTimeoutSeconds = 60

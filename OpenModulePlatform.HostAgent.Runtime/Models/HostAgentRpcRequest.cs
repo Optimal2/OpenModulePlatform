@@ -7,4 +7,6 @@ public sealed class HostAgentRpcRequest
     public int ArtifactId { get; set; }
 
     public string? DesiredLocalPath { get; set; }
+
+    public string? RequestedBy { get; set; }
 }

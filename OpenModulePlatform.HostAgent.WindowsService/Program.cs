@@ -8,14 +8,21 @@ using OpenModulePlatform.HostAgent.Runtime.Services;
 using OpenModulePlatform.HostAgent.WindowsService.Services;
 
 var runOnce = args.Any(static arg => string.Equals(arg, "--run-once", StringComparison.OrdinalIgnoreCase));
+var startupServiceName = GetArgumentValue(args, "--service-name");
 var hostArgs = args
     .Where(static arg => !string.Equals(arg, "--run-once", StringComparison.OrdinalIgnoreCase))
+    .Where(static arg => !arg.StartsWith("--service-name=", StringComparison.OrdinalIgnoreCase))
+    .Where(static arg => !arg.StartsWith("--runtime-mode=", StringComparison.OrdinalIgnoreCase))
+    .Where(static arg => !arg.StartsWith("--takeover-from=", StringComparison.OrdinalIgnoreCase))
+    .Where(static arg => !string.Equals(arg, "--takeover", StringComparison.OrdinalIgnoreCase))
     .ToArray();
 
 var builder = Host.CreateDefaultBuilder(hostArgs)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "OpenModulePlatform.HostAgent.WindowsService";
+        options.ServiceName = string.IsNullOrWhiteSpace(startupServiceName)
+            ? "OpenModulePlatform.HostAgent.WindowsService"
+            : startupServiceName.Trim();
     })
     .ConfigureLogging(logging =>
     {
@@ -26,12 +33,14 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
     .ConfigureServices((context, services) =>
     {
         services.Configure<HostAgentSettings>(context.Configuration.GetSection("HostAgent"));
+        services.AddSingleton(_ => CreateProcessContext(args, context.Configuration.GetSection("HostAgent").Get<HostAgentSettings>()));
         services.AddSingleton<SqlConnectionFactory>();
         services.AddSingleton<OmpHostArtifactRepository>();
         services.AddSingleton<ArtifactProvisioner>();
         services.AddSingleton<ArtifactZipImportService>();
         services.AddSingleton<WebAppDeploymentService>();
         services.AddSingleton<ServiceAppDeploymentService>();
+        services.AddSingleton<HostAgentSelfUpgradeService>();
         services.AddSingleton<HostAgentFileMirrorService>();
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
@@ -47,3 +56,27 @@ if (runOnce)
 }
 
 await host.RunAsync();
+
+static HostAgentProcessContext CreateProcessContext(string[] args, HostAgentSettings? settings)
+{
+    var serviceName = GetArgumentValue(args, "--service-name")
+        ?? settings?.ServiceName
+        ?? "OpenModulePlatform.HostAgent";
+    var version = settings?.Version ?? string.Empty;
+    var runtimeMode = GetArgumentValue(args, "--runtime-mode")
+        ?? (args.Any(static arg => string.Equals(arg, "--takeover", StringComparison.OrdinalIgnoreCase))
+            ? HostAgentRuntimeMode.Takeover
+            : settings?.RuntimeMode)
+        ?? HostAgentRuntimeMode.Normal;
+    var takeoverFrom = GetArgumentValue(args, "--takeover-from")
+        ?? settings?.TakeoverFromServiceName;
+
+    return new HostAgentProcessContext(serviceName, version, runtimeMode, takeoverFrom);
+}
+
+static string? GetArgumentValue(string[] args, string name)
+{
+    var prefix = name + "=";
+    var match = args.FirstOrDefault(arg => arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    return match is null ? null : match[prefix.Length..];
+}

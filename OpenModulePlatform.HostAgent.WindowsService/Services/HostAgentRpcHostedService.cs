@@ -15,15 +15,18 @@ public sealed class HostAgentRpcHostedService : BackgroundService
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly HostAgentEngine _engine;
+    private readonly HostAgentProcessContext _process;
     private readonly ILogger<HostAgentRpcHostedService> _logger;
 
     public HostAgentRpcHostedService(
         IOptionsMonitor<HostAgentSettings> settings,
         HostAgentEngine engine,
+        HostAgentProcessContext process,
         ILogger<HostAgentRpcHostedService> logger)
     {
         _settings = settings;
         _engine = engine;
+        _process = process;
         _logger = logger;
     }
 
@@ -146,6 +149,12 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         HostAgentRpcRequest request,
         CancellationToken cancellationToken)
     {
+        if (string.Equals(request.Operation, "quiesce", StringComparison.OrdinalIgnoreCase))
+        {
+            _process.RequestQuiesce();
+            return HostAgentRpcResponse.Succeeded($"Quiesce accepted by {_process.ServiceName}.");
+        }
+
         if (!string.Equals(request.Operation, "ensureArtifact", StringComparison.OrdinalIgnoreCase))
         {
             return HostAgentRpcResponse.Failed($"Unsupported HostAgent RPC operation '{request.Operation}'.");
