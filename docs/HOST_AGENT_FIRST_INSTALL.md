@@ -194,6 +194,16 @@ HostAgent-first packages keep two sets of portable objects:
   folders below the configured source repositories. Matching standard
   artifact-package file names are copied when found.
 
+The GUI action `Sync package objects` is the lightweight alternative to
+`Create updated installer package`. It uses the same source manifest comparison
+as `Check source objects`, then updates module-definition JSON files and copies
+already-built standard artifact packages into `payload` or
+`available-artifacts` as needed. It does not publish .NET projects, run npm
+builds, or create binary artifact packages from source code. If a required
+artifact package is not present in the package, `ArtifactStoreRoot\_available`,
+`RuntimeRoot\ArtifactArchive`, or a source repository `artifacts` folder, use
+`Create updated installer package` or build the missing artifact first.
+
 For non-interactive console installation, run:
 
 ```cmd
