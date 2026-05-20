@@ -1869,4 +1869,15 @@
   <data name="Executed {0} SQL repair script(s)." xml:space="preserve"><value>Körde {0} SQL-rättningsskript.</value></data>
   <data name="Artifacts imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artefakter importerade eller ersatta: {0}. Misslyckade: {1}.</value></data>
   <data name="Select one available module definition." xml:space="preserve"><value>Välj en tillgänglig moduldefinition.</value></data>
+  <data name="Installed same version" xml:space="preserve"><value>Samma version installerad</value></data>
+  <data name="Installed other version" xml:space="preserve"><value>Annan version installerad</value></data>
+  <data name="Not installed" xml:space="preserve"><value>Inte installerad</value></data>
+  <data name="Partially installed" xml:space="preserve"><value>Delvis installerad</value></data>
+  <data name="Installed definition" xml:space="preserve"><value>Installerad definition</value></data>
+  <data name="Artifacts: {0} same, {1} other, {2} missing." xml:space="preserve"><value>Artefakter: {0} samma, {1} andra, {2} saknas.</value></data>
+  <data name="No artifact packages are available for this module package." xml:space="preserve"><value>Inga artefaktpaket är tillgängliga för detta modulpaket.</value></data>
+  <data name="Importing again should keep unchanged content and skip artifact packages that already exist with identical content." xml:space="preserve"><value>Import igen bör behålla oförändrat innehåll och hoppa över artefaktpaket som redan finns med identiskt innehåll.</value></data>
+  <data name="Importing will apply this module definition version and can move matching app instances to the package artifact versions." xml:space="preserve"><value>Import applicerar denna moduldefinitionsversion och kan flytta matchande appinstanser till paketets artefaktversioner.</value></data>
+  <data name="Importing will fill in missing pieces and may update desired artifact versions for matching app instances." xml:space="preserve"><value>Import kompletterar saknade delar och kan uppdatera önskade artefaktversioner för matchande appinstanser.</value></data>
+  <data name="Importing will add this module definition and register the package artifacts so HostAgent can deploy them." xml:space="preserve"><value>Import lägger till moduldefinitionen och registrerar paketets artefakter så att HostAgent kan deploya dem.</value></data>
 </root>

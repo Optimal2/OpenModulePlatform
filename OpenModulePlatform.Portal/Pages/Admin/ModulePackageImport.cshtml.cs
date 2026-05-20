@@ -36,7 +36,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     [BindProperty]
     public ImportInputModel ImportInput { get; set; } = new();
 
-    public IReadOnlyList<AvailablePortableModulePackage> AvailablePackages { get; private set; } = [];
+    public IReadOnlyList<AvailablePackageRowModel> AvailablePackages { get; private set; } = [];
 
     public IReadOnlyList<ModuleDefinitionDocumentRow> AppliedDefinitions { get; private set; } = [];
 
@@ -156,8 +156,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     private async Task LoadAsync(CancellationToken ct)
     {
-        AvailablePackages = _packages.GetAvailablePackages();
-        AppliedDefinitions = (await _repo.GetModuleDefinitionDocumentsAsync(ct))
+        var availablePackages = _packages.GetAvailablePackages();
+        var definitions = await _repo.GetModuleDefinitionDocumentsAsync(ct);
+        AppliedDefinitions = definitions
             .Where(static row => row.IsApplied)
             .GroupBy(static row => row.ModuleKey, StringComparer.OrdinalIgnoreCase)
             .Select(static group => group
@@ -165,6 +166,19 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 .ThenByDescending(row => row.UpdatedUtc)
                 .First())
             .OrderBy(static row => row.ModuleKey, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var appliedDefinitionsByModule = AppliedDefinitions.ToDictionary(
+            static row => row.ModuleKey,
+            StringComparer.OrdinalIgnoreCase);
+        var installedArtifacts = await _repo.GetArtifactsAsync(ct);
+        AvailablePackages = availablePackages
+            .Select(package => AvailablePackageRowModel.Create(
+                package,
+                appliedDefinitionsByModule.TryGetValue(package.ModuleKey, out var appliedDefinition)
+                    ? appliedDefinition
+                    : null,
+                installedArtifacts))
             .ToList();
     }
 
@@ -254,5 +268,134 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
 
         public bool UseArtifactsImmediately { get; set; } = true;
+    }
+
+    public sealed class AvailablePackageRowModel
+    {
+        public required string ModuleKey { get; init; }
+
+        public required string DefinitionVersion { get; init; }
+
+        public required string ModuleDefinitionFileName { get; init; }
+
+        public required IReadOnlyList<ArtifactPackageFile> ArtifactFiles { get; init; }
+
+        public string? InstalledDefinitionVersion { get; init; }
+
+        public int SameArtifactVersionCount { get; init; }
+
+        public int OtherArtifactVersionCount { get; init; }
+
+        public int MissingArtifactCount { get; init; }
+
+        public AvailablePackageInstallState InstallState { get; init; }
+
+        public string StatusLabel => InstallState switch
+        {
+            AvailablePackageInstallState.SameVersion => "Installed same version",
+            AvailablePackageInstallState.OtherVersion => "Installed other version",
+            AvailablePackageInstallState.Partial => "Partially installed",
+            _ => "Not installed"
+        };
+
+        public string StatusClass => InstallState switch
+        {
+            AvailablePackageInstallState.SameVersion => "integrity-pill--ok",
+            AvailablePackageInstallState.OtherVersion => "integrity-pill--warning",
+            AvailablePackageInstallState.Partial => "integrity-pill--warning",
+            _ => "integrity-pill--neutral"
+        };
+
+        public string ImportGuidance => InstallState switch
+        {
+            AvailablePackageInstallState.SameVersion =>
+                "Importing again should keep unchanged content and skip artifact packages that already exist with identical content.",
+            AvailablePackageInstallState.OtherVersion =>
+                "Importing will apply this module definition version and can move matching app instances to the package artifact versions.",
+            AvailablePackageInstallState.Partial =>
+                "Importing will fill in missing pieces and may update desired artifact versions for matching app instances.",
+            _ =>
+                "Importing will add this module definition and register the package artifacts so HostAgent can deploy them."
+        };
+
+        public static AvailablePackageRowModel Create(
+            AvailablePortableModulePackage package,
+            ModuleDefinitionDocumentRow? appliedDefinition,
+            IReadOnlyList<ArtifactRow> installedArtifacts)
+        {
+            var installedDefinitionVersion = appliedDefinition?.DefinitionVersion;
+            var definitionSame = string.Equals(
+                installedDefinitionVersion,
+                package.DefinitionVersion,
+                StringComparison.OrdinalIgnoreCase);
+            var definitionInstalled = !string.IsNullOrWhiteSpace(installedDefinitionVersion);
+            var installedArtifactsBySlot = installedArtifacts.ToLookup(
+                artifact => BuildArtifactSlotKey(
+                    artifact.ModuleKey,
+                    artifact.AppKey,
+                    artifact.PackageType,
+                    artifact.TargetName),
+                StringComparer.OrdinalIgnoreCase);
+
+            var sameArtifacts = 0;
+            var otherArtifacts = 0;
+            var missingArtifacts = 0;
+            foreach (var file in package.ArtifactFiles)
+            {
+                var matches = installedArtifactsBySlot[
+                    BuildArtifactSlotKey(file.ModuleKey, file.AppKey, file.PackageType, file.TargetName)];
+
+                if (matches.Any(artifact => artifact.Version.Equals(file.Version, StringComparison.OrdinalIgnoreCase)))
+                {
+                    sameArtifacts++;
+                }
+                else if (matches.Any())
+                {
+                    otherArtifacts++;
+                }
+                else
+                {
+                    missingArtifacts++;
+                }
+            }
+
+            var allArtifactsSame = package.ArtifactFiles.Count == sameArtifacts;
+            var noArtifactsInstalled = sameArtifacts == 0 && otherArtifacts == 0;
+            var installState = (definitionInstalled, definitionSame, allArtifactsSame, noArtifactsInstalled) switch
+            {
+                (true, true, true, _) => AvailablePackageInstallState.SameVersion,
+                (false, _, _, true) => AvailablePackageInstallState.NotInstalled,
+                (true, false, _, _) => AvailablePackageInstallState.OtherVersion,
+                _ => AvailablePackageInstallState.Partial
+            };
+
+            return new AvailablePackageRowModel
+            {
+                ModuleKey = package.ModuleKey,
+                DefinitionVersion = package.DefinitionVersion,
+                ModuleDefinitionFileName = package.ModuleDefinitionFileName,
+                ArtifactFiles = package.ArtifactFiles,
+                InstalledDefinitionVersion = installedDefinitionVersion,
+                SameArtifactVersionCount = sameArtifacts,
+                OtherArtifactVersionCount = otherArtifacts,
+                MissingArtifactCount = missingArtifacts,
+                InstallState = installState
+            };
+        }
+
+        private static string BuildArtifactSlotKey(
+            string moduleKey,
+            string appKey,
+            string packageType,
+            string? targetName)
+            => string.Join('\u001f', moduleKey, appKey, packageType, targetName ?? string.Empty);
+    }
+
+    public enum AvailablePackageInstallState
+    {
+        NotInstalled,
+        SameVersion,
+        OtherVersion,
+        Partial
     }
 }
