@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="OpenModulePlatform.Artifacts/OpenModulePlatform.Artifacts.csproj" />
   <Project Path="OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj" />
   <Project Path="OpenModulePlatform.Auth/OpenModulePlatform.Auth.csproj" />
   <Project Path="OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj" />

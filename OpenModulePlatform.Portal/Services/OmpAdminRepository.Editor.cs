@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 
 namespace OpenModulePlatform.Portal.Services;
@@ -2198,6 +2199,53 @@ SELECT @SourceArtifactId AS SourceArtifactId,
             SourceVersion = rdr.GetString(1),
             CopiedCount = rdr.GetInt32(2)
         };
+    }
+
+    public async Task<int> ReplaceArtifactConfigurationFilesAsync(
+        int artifactId,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        await using (var delete = new SqlCommand(
+            "DELETE FROM omp.ArtifactConfigurationFiles WHERE ArtifactId = @ArtifactId;",
+            conn,
+            tx))
+        {
+            Add(delete, "@ArtifactId", artifactId);
+            await delete.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSql = @"
+INSERT INTO omp.ArtifactConfigurationFiles
+(
+    ArtifactId,
+    RelativePath,
+    FileContent,
+    IsEnabled
+)
+VALUES
+(
+    @ArtifactId,
+    @RelativePath,
+    @FileContent,
+    1
+);";
+
+        foreach (var configurationFile in configurationFiles)
+        {
+            await using var insert = new SqlCommand(insertSql, conn, tx);
+            Add(insert, "@ArtifactId", artifactId);
+            Add(insert, "@RelativePath", configurationFile.RelativePath);
+            Add(insert, "@FileContent", configurationFile.FileContent);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return configurationFiles.Count;
     }
 
     public async Task<ArtifactDuplicateInfo?> FindArtifactBySha256Async(string sha256, CancellationToken ct)

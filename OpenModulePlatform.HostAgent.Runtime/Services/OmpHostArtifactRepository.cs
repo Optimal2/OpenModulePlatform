@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -348,6 +349,53 @@ SELECT @@ROWCOUNT;";
         cmd.Parameters.AddWithValue("@targetName", targetName);
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    public async Task<int> ReplaceArtifactConfigurationFilesAsync(
+        int artifactId,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        await using (var delete = new SqlCommand(
+            "DELETE FROM omp.ArtifactConfigurationFiles WHERE ArtifactId = @artifactId;",
+            conn,
+            tx))
+        {
+            delete.Parameters.AddWithValue("@artifactId", artifactId);
+            await delete.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSql = @"
+INSERT INTO omp.ArtifactConfigurationFiles
+(
+    ArtifactId,
+    RelativePath,
+    FileContent,
+    IsEnabled
+)
+VALUES
+(
+    @artifactId,
+    @relativePath,
+    @fileContent,
+    1
+);";
+
+        foreach (var configurationFile in configurationFiles)
+        {
+            await using var insert = new SqlCommand(insertSql, conn, tx);
+            insert.Parameters.AddWithValue("@artifactId", artifactId);
+            insert.Parameters.AddWithValue("@relativePath", configurationFile.RelativePath);
+            insert.Parameters.AddWithValue("@fileContent", configurationFile.FileContent);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return configurationFiles.Count;
     }
 
     public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyImportedArtifactToMatchingApplicationsAsync(
