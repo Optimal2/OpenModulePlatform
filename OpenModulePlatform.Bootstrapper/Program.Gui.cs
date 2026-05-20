@@ -624,7 +624,7 @@ internal static partial class Program
             var sourceComponents = manifests
                 .SelectMany(manifest => ReadManifestComponents(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
                 .ToArray();
-            var hasUpdates = false;
+            var hasPackageUpdates = false;
 
             lines.Add("Module definitions:");
             foreach (var definition in sourceDefinitions)
@@ -635,7 +635,7 @@ internal static partial class Program
                 if (!File.Exists(packagePath))
                 {
                     lines.Add($"  UPDATE  {definition.ModuleKey}: package file is missing ({Path.GetFileName(definition.Path)}).");
-                    hasUpdates = true;
+                    hasPackageUpdates = true;
                     continue;
                 }
 
@@ -644,17 +644,17 @@ internal static partial class Program
                 if (versionComparison > 0)
                 {
                     lines.Add($"  UPDATE  {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
-                    hasUpdates = true;
+                    hasPackageUpdates = true;
                 }
                 else if (versionComparison < 0)
                 {
                     lines.Add($"  DIFF    {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
-                    hasUpdates = true;
+                    hasPackageUpdates = true;
                 }
                 else if (versionComparison == 0 && !string.Equals(sourceDocument.DefinitionSha256, packageDocument.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
                 {
                     lines.Add($"  UPDATE  {definition.ModuleKey}: same version {sourceDocument.DefinitionVersion}, different content hash.");
-                    hasUpdates = true;
+                    hasPackageUpdates = true;
                 }
                 else
                 {
@@ -679,14 +679,14 @@ internal static partial class Program
                     }
 
                     lines.Add($"  UPDATE  {component.ComponentKey}: package has no initial or available artifact for {component.ModuleKey}/{component.AppKey}/{component.PackageType}/{component.TargetName}.");
-                    hasUpdates = true;
+                    hasPackageUpdates = true;
                     continue;
                 }
 
                 if (!string.Equals(NormalizePathForMatch(current.Target), NormalizePathForMatch(expectedTarget), StringComparison.OrdinalIgnoreCase))
                 {
                     lines.Add($"  UPDATE  {component.ComponentKey}: package target {current.Target}, source target {expectedTarget}.");
-                    hasUpdates = true;
+                    hasPackageUpdates = true;
                 }
                 else
                 {
@@ -695,14 +695,16 @@ internal static partial class Program
             }
 
             lines.Add(string.Empty);
-            hasUpdates |= await AppendDatabaseStatusAsync(sourceDefinitions, sourceComponents, lines);
+            var hasInstalledUpdates = await AppendDatabaseStatusAsync(sourceDefinitions, sourceComponents, lines);
 
             lines.Add(string.Empty);
-            lines.Add(hasUpdates
+            lines.Add(hasPackageUpdates
                 ? "Result: source contains module definitions or artifact entries that are newer/different than this installer package."
-                : "Result: this installer package matches the source manifest for OMP module definitions and artifacts.");
+                : hasInstalledUpdates
+                    ? "Result: this installer package matches the source manifest. The installed database has pending updates for initial modules or artifacts."
+                    : "Result: this installer package matches the source manifest. Installed initial modules and artifacts are up to date.");
 
-            return new DeveloperSourceCheckResult(hasUpdates, lines);
+            return new DeveloperSourceCheckResult(hasPackageUpdates || hasInstalledUpdates, lines);
         }
 
         private async Task<bool> AppendDatabaseStatusAsync(
@@ -719,6 +721,8 @@ internal static partial class Program
 
                 foreach (var definition in sourceDefinitions)
                 {
+                    var packagePath = FindPackageModuleDefinitionPath(definition);
+                    var isAvailableOnly = File.Exists(packagePath) && IsAvailablePackagePath(packagePath);
                     var installedVersion = await QueryScalarStringAsync(
                         connection,
                         """
@@ -730,12 +734,21 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;
 """,
                         command => command.Parameters.AddWithValue("@moduleKey", definition.ModuleKey));
                     var status = CompareInstalledVersion(installedVersion, definition.DefinitionVersion);
-                    hasUpdates |= IsDeveloperUpdateStatus(status);
-                    lines.Add($"  {status,-7} module {definition.ModuleKey}: installed {installedVersion ?? "(missing)"}, source {definition.DefinitionVersion}.");
+                    if (string.IsNullOrWhiteSpace(installedVersion) && isAvailableOnly)
+                    {
+                        lines.Add($"  INFO    module {definition.ModuleKey}: not installed, source {definition.DefinitionVersion} is available for later import.");
+                    }
+                    else
+                    {
+                        hasUpdates |= IsDeveloperUpdateStatus(status);
+                        lines.Add($"  {status,-7} module {definition.ModuleKey}: installed {installedVersion ?? "(missing)"}, source {definition.DefinitionVersion}.");
+                    }
                 }
 
                 foreach (var component in sourceComponents)
                 {
+                    var isAvailableOnly = FindConfiguredArtifact(component) is null
+                        && !string.IsNullOrWhiteSpace(FindAvailableArtifactPackage(component));
                     var installedVersion = await QueryScalarStringAsync(
                         connection,
                         """
@@ -757,8 +770,15 @@ ORDER BY ar.ArtifactId DESC;
                             command.Parameters.AddWithValue("@targetName", component.TargetName);
                         });
                     var status = CompareInstalledVersion(installedVersion, component.Version);
-                    hasUpdates |= IsDeveloperUpdateStatus(status);
-                    lines.Add($"  {status,-7} artifact {component.ComponentKey}: installed {installedVersion ?? "(missing)"}, source {component.Version}.");
+                    if (string.IsNullOrWhiteSpace(installedVersion) && isAvailableOnly)
+                    {
+                        lines.Add($"  INFO    artifact {component.ComponentKey}: not installed, source {component.Version} is available for later import.");
+                    }
+                    else
+                    {
+                        hasUpdates |= IsDeveloperUpdateStatus(status);
+                        lines.Add($"  {status,-7} artifact {component.ComponentKey}: installed {installedVersion ?? "(missing)"}, source {component.Version}.");
+                    }
                 }
             }
             catch (Exception ex) when (ex is SqlException or InvalidOperationException)
