@@ -203,7 +203,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 movedExistingToBackup = true;
             }
 
-            Directory.Move(package.ArtifactContentPath, finalPath);
+            MoveFileOrDirectory(package.ArtifactContentPath, finalPath);
 
             var artifactData = new ArtifactEditData
             {
@@ -746,12 +746,11 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         if (Directory.Exists(finalPath))
         {
-            Directory.Move(finalPath, backupPath);
+            MoveFileOrDirectory(finalPath, backupPath);
         }
         else if (System.IO.File.Exists(finalPath))
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
-            System.IO.File.Move(finalPath, backupPath);
+            MoveFileOrDirectory(finalPath, backupPath);
         }
     }
 
@@ -768,11 +767,11 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
             if (Directory.Exists(backupPath))
             {
-                Directory.Move(backupPath, finalPath);
+                MoveFileOrDirectory(backupPath, finalPath);
             }
             else
             {
-                System.IO.File.Move(backupPath, finalPath);
+                MoveFileOrDirectory(backupPath, finalPath);
             }
         }
         catch (IOException)
@@ -791,6 +790,81 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         => _uploadOptions.MaxUploadBytes > 0
             ? _uploadOptions.MaxUploadBytes
             : ArtifactUploadOptions.DefaultMaxUploadBytes;
+
+    private static void MoveFileOrDirectory(string source, string destination)
+    {
+        if (System.IO.File.Exists(source))
+        {
+            MoveFile(source, destination);
+            return;
+        }
+
+        if (!Directory.Exists(source))
+        {
+            throw new DirectoryNotFoundException($"Source path was not found: {source}");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        if (HaveSameRoot(source, destination))
+        {
+            Directory.Move(source, destination);
+            return;
+        }
+
+        try
+        {
+            CopyDirectory(source, destination);
+            Directory.Delete(source, recursive: true);
+        }
+        catch
+        {
+            TryDelete(destination);
+            throw;
+        }
+    }
+
+    private static void MoveFile(string source, string destination)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        if (HaveSameRoot(source, destination))
+        {
+            System.IO.File.Move(source, destination);
+            return;
+        }
+
+        System.IO.File.Copy(source, destination, overwrite: false);
+        System.IO.File.Delete(source);
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            var relativeDirectory = Path.GetRelativePath(source, directory);
+            Directory.CreateDirectory(Path.Combine(destination, relativeDirectory));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var relativeFile = Path.GetRelativePath(source, file);
+            var targetFile = Path.Combine(destination, relativeFile);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
+            System.IO.File.Copy(file, targetFile, overwrite: false);
+        }
+    }
+
+    private static bool HaveSameRoot(string first, string second)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        return string.Equals(
+            Path.GetPathRoot(Path.GetFullPath(first)),
+            Path.GetPathRoot(Path.GetFullPath(second)),
+            comparison);
+    }
 
     private static void TryDelete(string path)
     {
