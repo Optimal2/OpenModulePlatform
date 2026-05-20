@@ -112,7 +112,7 @@ The document shape is versioned. Version 1 uses these top-level fields:
     {
       "appKey": "example_module_web",
       "displayName": "Example Module Web",
-      "appType": "web",
+      "appType": "WebApp",
       "description": "Example web app.",
       "sortOrder": 10,
       "isEnabled": true
@@ -239,9 +239,10 @@ repository for reviewability, but embed the same script content in the JSON
 document before it is uploaded or packaged. The recommended portable form is
 `contentEncoding: "base64-utf8"` plus `content` and `sha256`. `path` remains as
 traceability back to the source repository file. The standalone module
-definition editor in `tools/module-definition-editor/index.html` decodes those
-SQL entries to clear text for editing and writes them back as base64 when the
-JSON is exported. Portal exposes the same client-side editor for
+definition editor in `tools/module-definition-editor/index.html` exposes the
+module app list and decodes SQL entries to clear text for editing. It writes
+SQL back as base64 when the JSON is exported. Portal exposes the same
+client-side editor for
 administrators from `/admin/moduledefinitioneditor`. Portal can also download
 the stored normalized JSON from each module-definition edit page so an applied
 definition can be moved from one OMP installation to another.

@@ -48,30 +48,87 @@
         </section>
 
         <section class="layout">
-            <section class="panel">
-                <div class="section-heading">
-                    <div>
-                        <h2>SQL scripts</h2>
-                        <p>Only idempotent scripts should be executable repairs in Portal.</p>
+            <div class="editor-column">
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
+                            <h2>Apps</h2>
+                            <p>Define the apps that belong to this module. Artifact compatibility rules refer to these app keys.</p>
+                        </div>
+                        <button id="addAppButton" type="button" class="button button-secondary">Add app</button>
                     </div>
-                    <button id="addScriptButton" type="button" class="button button-secondary">Add script</button>
-                </div>
-                <div id="scripts" class="script-list"></div>
-            </section>
+                    <div id="apps" class="app-list"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
+                            <h2>SQL scripts</h2>
+                            <p>Only idempotent scripts should be executable repairs in Portal.</p>
+                        </div>
+                        <button id="addScriptButton" type="button" class="button button-secondary">Add script</button>
+                    </div>
+                    <div id="scripts" class="script-list"></div>
+                </section>
+            </div>
 
             <section class="panel">
                 <div class="section-heading">
-                <div>
-                    <h2>JSON preview</h2>
-                    <p>The preview can be edited directly. Apply it to decode SQL back into the form.</p>
+                    <div>
+                        <h2>JSON preview</h2>
+                        <p>The preview can be edited directly. Apply it to decode SQL back into the form.</p>
+                    </div>
+                    <button id="applyPreviewButton" type="button" class="button button-secondary">Apply preview JSON</button>
+                    <button id="refreshPreviewButton" type="button" class="button button-secondary">Refresh</button>
                 </div>
-                <button id="applyPreviewButton" type="button" class="button button-secondary">Apply preview JSON</button>
-                <button id="refreshPreviewButton" type="button" class="button button-secondary">Refresh</button>
-            </div>
                 <textarea id="preview" class="preview" spellcheck="false"></textarea>
             </section>
         </section>
     </main>
+
+    <datalist id="appTypeOptions">
+        <option value="WebApp"></option>
+        <option value="ServiceApp"></option>
+        <option value="Worker"></option>
+        <option value="HostAgent"></option>
+    </datalist>
+
+    <template id="appTemplate">
+        <article class="app-card">
+            <div class="app-toolbar">
+                <strong class="app-title"></strong>
+                <button type="button" class="button button-danger remove-app">Remove</button>
+            </div>
+            <div class="grid-fields compact">
+                <label>
+                    App key
+                    <input class="app-key" autocomplete="off" spellcheck="false">
+                </label>
+                <label>
+                    Display name
+                    <input class="app-display-name" autocomplete="off" spellcheck="false">
+                </label>
+                <label>
+                    App type
+                    <input class="app-type" list="appTypeOptions" autocomplete="off" spellcheck="false">
+                </label>
+                <label>
+                    Sort order
+                    <input class="app-sort-order" type="number" step="1">
+                </label>
+                <label class="checkbox-field">
+                    Enabled
+                    <span>
+                        <input class="app-is-enabled" type="checkbox">
+                    </span>
+                </label>
+                <label class="wide">
+                    Description
+                    <textarea class="app-description" spellcheck="false"></textarea>
+                </label>
+            </div>
+        </article>
+    </template>
 
     <template id="scriptTemplate">
         <article class="script-card">

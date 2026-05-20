@@ -20,6 +20,8 @@ internal static partial class Program
     private const int SqlDeadlockRetryCount = 3;
     private const int ServiceStopTimeoutSeconds = 60;
     private const int AttachParentProcess = -1;
+    private static readonly IReadOnlyDictionary<string, string> EmptyStringDictionary =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = true,
@@ -629,6 +631,11 @@ END
                 1);
         }
 
+        foreach (var item in ResolveArtifactVersionVariableOverrides(options, scriptPath, payloadRoot))
+        {
+            result = PatchSqlNVarCharDeclaration(result, item.Key, item.Value);
+        }
+
         return result;
     }
 
@@ -690,6 +697,48 @@ END
         }
 
         return null;
+    }
+
+    private static IReadOnlyDictionary<string, string> ResolveArtifactVersionVariableOverrides(
+        SqlBootstrapOptions options,
+        string scriptPath,
+        string payloadRoot)
+    {
+        if (options.ArtifactVersionVariableOverrides.Count == 0)
+        {
+            return EmptyStringDictionary;
+        }
+
+        var relative = NormalizePathForMatch(Path.GetRelativePath(payloadRoot, scriptPath));
+        foreach (var item in options.ArtifactVersionVariableOverrides)
+        {
+            var key = NormalizePathForMatch(item.Key);
+            if (relative.Equals(key, StringComparison.OrdinalIgnoreCase)
+                || relative.EndsWith("/" + key, StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(relative).Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                return item.Value;
+            }
+        }
+
+        return EmptyStringDictionary;
+    }
+
+    private static string PatchSqlNVarCharDeclaration(
+        string sqlText,
+        string variableName,
+        string value)
+    {
+        if (string.IsNullOrWhiteSpace(variableName) || string.IsNullOrWhiteSpace(value))
+        {
+            return sqlText;
+        }
+
+        var sanitizedVariableName = variableName.Trim().TrimStart('@');
+        var pattern = @"(?im)^\s*DECLARE\s+@" + Regex.Escape(sanitizedVariableName) + @"\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';\s*$";
+        var replacement = $"DECLARE @{sanitizedVariableName} nvarchar(50) = {ConvertToSqlUnicodeLiteral(value)};";
+
+        return Regex.Replace(sqlText, pattern, replacement, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
     }
 
     private static async Task ExecuteSqlBatchesAsync(
@@ -2488,6 +2537,8 @@ internal sealed class SqlBootstrapOptions
     public List<SqlScriptOptions> Scripts { get; set; } = [];
 
     public Dictionary<string, string> ArtifactVersionOverrides { get; set; } = new();
+
+    public Dictionary<string, Dictionary<string, string>> ArtifactVersionVariableOverrides { get; set; } = new();
 }
 
 internal sealed class SqlScriptOptions

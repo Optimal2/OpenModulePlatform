@@ -48,7 +48,8 @@ DECLARE @ServiceViewPermissionId int;
 DECLARE @ServiceAdminPermissionId int;
 DECLARE @InitialServiceConfigId int;
 DECLARE @ServiceArtifactId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'1.0.0';
+DECLARE @WebArtifactVersion nvarchar(50) = N'0.3.4';
+DECLARE @ServiceArtifactVersion nvarchar(50) = N'0.3.3';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -196,17 +197,17 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @ServiceWebAppId AS AppId,
-           @ArtifactVersion AS Version,
+           @WebArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'example-serviceapp-web' AS TargetName,
-           N'example-serviceapp/web/' + @ArtifactVersion AS RelativePath,
+           N'example-serviceapp/web/' + @WebArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
     UNION ALL
     SELECT @ServiceAppId,
-           @ArtifactVersion,
+           @ServiceArtifactVersion,
            N'service-app',
            N'example-serviceapp-service',
-           N'example-serviceapp/service/' + @ArtifactVersion,
+           N'example-serviceapp/service/' + @ServiceArtifactVersion,
            CAST(1 AS bit)
 ) AS source
 ON target.AppId = source.AppId
@@ -224,14 +225,14 @@ WHEN NOT MATCHED THEN
 SELECT @ServiceWebArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @ServiceWebAppId
-  AND Version = @ArtifactVersion
+  AND Version = @WebArtifactVersion
   AND PackageType = N'web-app'
   AND TargetName = N'example-serviceapp-web';
 
 SELECT @ServiceArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @ServiceAppId
-  AND Version = @ArtifactVersion
+  AND Version = @ServiceArtifactVersion
   AND PackageType = N'service-app'
   AND TargetName = N'example-serviceapp-service';
 
