@@ -117,7 +117,7 @@ function Resolve-ContentWebAppRuntimePath {
     }
 
     $contentRoot = Join-DeploymentPath -Root $WebAppsRoot -Child $ContentWebAppPath
-    return [System.IO.Path]::GetFullPath((Join-Path $contentRoot $path))
+    return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($contentRoot, $path))
 }
 
 function Get-ContentWebAppFileMirrors {
@@ -303,16 +303,81 @@ function Add-ArtifactEntry {
         [System.Collections.ArrayList]$Artifacts,
         [string]$Source,
         [string]$Target,
-        [bool]$IsExample = $false
+        [bool]$IsExample = $false,
+        [bool]$Overwrite = $true,
+        [bool]$RemoveRuntimeConfigurationFiles = $true
     )
 
     [void]$Artifacts.Add([ordered]@{
             source = $Source.Replace('\', '/')
             target = $Target.Replace('\', '/')
-            overwrite = $true
-            removeRuntimeConfigurationFiles = $true
+            overwrite = $Overwrite
+            removeRuntimeConfigurationFiles = $RemoveRuntimeConfigurationFiles
             isExample = $IsExample
         })
+}
+
+function Copy-AdditionalArtifactFiles {
+    param(
+        [object[]]$Entries,
+        [Parameter(Mandatory = $true)][string]$ConfigDirectory,
+        [Parameter(Mandatory = $true)][string]$PayloadRoot,
+        [Parameter(Mandatory = $true)][System.Collections.ArrayList]$Artifacts
+    )
+
+    foreach ($entry in $Entries) {
+        $sourcePath = ''
+        $payloadPath = ''
+        $targetPath = ''
+        $isExample = $false
+        $overwrite = $true
+        $removeRuntimeConfigurationFiles = $true
+
+        if ($entry -is [hashtable]) {
+            $sourcePath = [string]$entry.Source
+            $payloadPath = [string]$entry.Payload
+            $targetPath = [string]$entry.Target
+            if ($entry.ContainsKey('IsExample')) {
+                $isExample = [bool]$entry.IsExample
+            }
+            if ($entry.ContainsKey('Overwrite')) {
+                $overwrite = [bool]$entry.Overwrite
+            }
+            if ($entry.ContainsKey('RemoveRuntimeConfigurationFiles')) {
+                $removeRuntimeConfigurationFiles = [bool]$entry.RemoveRuntimeConfigurationFiles
+            }
+        }
+        else {
+            $sourcePath = [string]$entry
+        }
+
+        if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($targetPath)) {
+            throw "Additional artifact entry '$sourcePath' is missing Target."
+        }
+
+        $resolvedSource = Resolve-DeploymentPath -Path $sourcePath -BasePath $ConfigDirectory
+        if ([string]::IsNullOrWhiteSpace($payloadPath)) {
+            $payloadPath = 'payload/' + [System.IO.Path]::GetFileName($resolvedSource)
+        }
+
+        $payloadPath = $payloadPath.Replace('\', '/')
+        if ([System.IO.Path]::IsPathRooted($payloadPath) -or $payloadPath.Contains('../') -or $payloadPath.Contains('..\', [StringComparison]::Ordinal)) {
+            throw "Additional artifact payload path must be relative and stay inside the package: $payloadPath"
+        }
+
+        $destination = Join-Path (Split-Path -Parent $PayloadRoot) $payloadPath
+        Copy-RequiredFile -Source $resolvedSource -Destination $destination
+        Add-ArtifactEntry `
+            -Artifacts $Artifacts `
+            -Source $payloadPath `
+            -Target $targetPath `
+            -IsExample $isExample `
+            -Overwrite $overwrite `
+            -RemoveRuntimeConfigurationFiles $removeRuntimeConfigurationFiles
+    }
 }
 
 function Add-VersionOverride {
@@ -621,6 +686,13 @@ foreach ($component in $components) {
     Add-ArtifactEntry -Artifacts $artifacts -Source $packageTemplate -Target ($relativeTemplate.Replace('{version}', $componentVersion)) -IsExample $isExample
 }
 Add-ArtifactEntry -Artifacts $artifacts -Source 'payload/OpenDocViewer.dist.zip' -Target "opendocviewer/web/$openDocViewerVersion"
+
+$additionalArtifactFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalArtifactFiles' -DefaultValue @()))
+Copy-AdditionalArtifactFiles `
+    -Entries $additionalArtifactFiles `
+    -ConfigDirectory $configDirectory `
+    -PayloadRoot $payloadRoot `
+    -Artifacts $artifacts
 
 $versionOverrides = @{}
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Auth/2-initialize-omp-auth.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-auth-web' } | Select-Object -First 1).version)

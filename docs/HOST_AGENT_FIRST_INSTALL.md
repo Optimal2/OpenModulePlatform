@@ -273,6 +273,14 @@ HostAgentFirst = @{
         '..\iKrock2\ikrock.module-definition.json',
         '..\VajSkrivare\vajskrivare.module-definition.json'
     )
+
+    AdditionalArtifactFiles = @(
+        @{
+            Source = '..\IbsPackager\artifacts\archive\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
+            Payload = 'payload\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
+            Target = 'ibs-packager/web/0.3.3'
+        }
+    )
 }
 ```
 
@@ -282,7 +290,9 @@ the SQL files after the neutral OMP initialization scripts in
 module root and are listed in `omp-components.json`; the package script copies
 them into the package-local `module-definitions` import folder and imports them
 after SQL initialization so artifact import can validate versions against the
-applied definitions.
+applied definitions. Additional artifact files are copied into the same package
+payload and listed in `bootstrap.local.sample.json`; the installer executable is
+unchanged and only the payload/config differs between environments.
 
 For example, a protected VGR package can set:
 
