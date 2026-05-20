@@ -43,8 +43,13 @@ else
                         <span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span>
                     </td>
                     <td>@row.Description</td>
-                    <td>
-                        <a class="action-link" href="~/admin/appedit?id=@row.AppId">@L["Edit"]</a>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/appedit?id=@row.AppId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
                     </td>
                 </tr>
             }
