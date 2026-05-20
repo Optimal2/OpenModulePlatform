@@ -31,6 +31,11 @@ A manifest-based package contains `omp-artifact-package.json` at the zip root.
 When that file is present, the zip is treated as an OMP artifact package
 envelope instead of a legacy artifact zip.
 
+Use `tools/artifact-package-editor/index.html` for a standalone browser editor
+that creates the manifest and can build the complete outer package zip from a
+payload zip plus optional configuration files. Portal administrators can open
+the same tool from `/admin/artifactpackageeditor`.
+
 Recommended layout:
 
 ```text

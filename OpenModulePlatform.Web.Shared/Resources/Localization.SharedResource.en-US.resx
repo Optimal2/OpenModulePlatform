@@ -23,4 +23,5 @@
   <data name="Expand" xml:space="preserve"><value>Expand</value></data>
   <data name="Collapse" xml:space="preserve"><value>Collapse</value></data>
   <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
+  <data name="Artifact package editor" xml:space="preserve"><value>Artifact package editor</value></data>
 </root>
