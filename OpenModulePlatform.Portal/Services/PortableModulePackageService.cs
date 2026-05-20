@@ -372,6 +372,7 @@ public sealed class PortableModulePackageService
         var backupPath = Path.Combine(tempRoot, "backup");
         var movedExistingToBackup = false;
         var movedArtifactToFinal = false;
+        var adoptedExistingContent = false;
         var finalPath = string.Empty;
 
         try
@@ -406,19 +407,6 @@ public sealed class PortableModulePackageService
                     existingIdentity.ArtifactId);
             }
 
-            if (existingIdentity is null)
-            {
-                var duplicate = await _repo.FindArtifactBySha256Async(contentHash, ct);
-                if (duplicate is not null)
-                {
-                    return new PortableModulePackageArtifactImportResult(
-                        identity.FileName,
-                        "Skipped",
-                        $"Identical extracted content already exists as artifact {duplicate.ArtifactId}.",
-                        duplicate.ArtifactId);
-                }
-            }
-
             var relativePathSource = existingIdentity?.RelativePath
                 ?? BuildRelativePath(compatibility, identity.TargetName, identity.PackageType, identity.Version);
             var relativePath = NormalizeRelativePath(relativePathSource)
@@ -427,22 +415,53 @@ public sealed class PortableModulePackageService
 
             if (existingIdentity is null && (Directory.Exists(finalPath) || File.Exists(finalPath)))
             {
-                return new PortableModulePackageArtifactImportResult(
-                    identity.FileName,
-                    "Failed",
-                    $"The target artifact path already exists: {relativePath}",
-                    null);
+                if (File.Exists(finalPath))
+                {
+                    return new PortableModulePackageArtifactImportResult(
+                        identity.FileName,
+                        "Failed",
+                        $"The target artifact path already exists as a file: {relativePath}",
+                        null);
+                }
+
+                var existingContentHash = await ComputeDirectorySha256Async(finalPath, ct);
+                if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new PortableModulePackageArtifactImportResult(
+                        identity.FileName,
+                        "Failed",
+                        $"The target artifact path already exists with different content: {relativePath}",
+                        null);
+                }
+
+                adoptedExistingContent = true;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-            if (existingIdentity is not null && (Directory.Exists(finalPath) || File.Exists(finalPath)))
+            if (!adoptedExistingContent)
             {
-                MoveExistingArtifactToBackup(finalPath, backupPath);
-                movedExistingToBackup = true;
-            }
+                if (existingIdentity is null)
+                {
+                    var duplicate = await _repo.FindArtifactBySha256Async(contentHash, ct);
+                    if (duplicate is not null)
+                    {
+                        return new PortableModulePackageArtifactImportResult(
+                            identity.FileName,
+                            "Skipped",
+                            $"Identical extracted content already exists as artifact {duplicate.ArtifactId}.",
+                            duplicate.ArtifactId);
+                    }
+                }
 
-            Directory.Move(package.ArtifactContentPath, finalPath);
-            movedArtifactToFinal = true;
+                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                if (existingIdentity is not null && (Directory.Exists(finalPath) || File.Exists(finalPath)))
+                {
+                    MoveExistingArtifactToBackup(finalPath, backupPath);
+                    movedExistingToBackup = true;
+                }
+
+                Directory.Move(package.ArtifactContentPath, finalPath);
+                movedArtifactToFinal = true;
+            }
 
             int artifactId;
             try
@@ -468,7 +487,7 @@ public sealed class PortableModulePackageService
                     RestoreExistingArtifactBackup(backupPath, finalPath);
                     movedExistingToBackup = false;
                 }
-                else
+                else if (movedArtifactToFinal)
                 {
                     TryDelete(finalPath);
                 }
@@ -481,7 +500,9 @@ public sealed class PortableModulePackageService
                     null);
             }
 
-            var warning = string.Empty;
+            var warning = adoptedExistingContent
+                ? "Existing artifact files were adopted because the target path already contained identical content."
+                : string.Empty;
             if (package.ConfigurationFiles.Count > 0)
             {
                 try
