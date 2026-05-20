@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -88,7 +89,7 @@ internal static partial class Program
         };
         private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
-        private readonly Button _upgradeFromSourceButton = new() { Text = "Upgrade from source", AutoSize = true };
+        private readonly Button _createUpdatedInstallerPackageButton = new() { Text = "Create updated installer package", AutoSize = true };
         private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
         private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
         private readonly Button _fullUninstallButton = new() { Text = "Full uninstall", AutoSize = true, ForeColor = Color.DarkRed };
@@ -99,8 +100,6 @@ internal static partial class Program
         private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools" };
         private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data" };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
-        private const int LegacyWindowsPathLimitSafetyMargin = 240;
-        private const int ExpectedDeepPackagePathSuffixLength = 190;
 
         public InstallerForm(
             BootstrapConfig config,
@@ -166,7 +165,7 @@ internal static partial class Program
             LoadValues();
             _installButton.Click += async (_, _) => await InstallAsync();
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
-            _upgradeFromSourceButton.Click += async (_, _) => await UpgradeFromDeveloperSourceAsync();
+            _createUpdatedInstallerPackageButton.Click += async (_, _) => await CreateUpdatedInstallerPackageAsync();
             _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
             _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
             _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
@@ -226,7 +225,7 @@ internal static partial class Program
                 AutoSize = true,
                 ColumnCount = 2
             };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             AddActionRow(
@@ -239,8 +238,8 @@ internal static partial class Program
                 "On a development machine, compares the installed/package module definitions and artifacts with the source repository manifest.");
             AddActionRow(
                 grid,
-                _upgradeFromSourceButton,
-                "On a development machine, rebuilds module definitions and artifact packages from source, refreshes this package payload, and runs install/update.");
+                _createUpdatedInstallerPackageButton,
+                "On a development machine, starts a separate refresh process that rebuilds this installer package from source and restarts the updated installer.");
             AddActionRow(
                 grid,
                 _uninstallRuntimeButton,
@@ -282,7 +281,7 @@ internal static partial class Program
             var row = grid.RowCount++;
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            button.Width = 150;
+            button.Width = 240;
             button.Margin = new Padding(0, 4, 12, 4);
             grid.Controls.Add(button, 0, row);
             grid.Controls.Add(new Label
@@ -328,7 +327,7 @@ internal static partial class Program
                 ("hostAgent.iisAppPoolPassword", "App pool password")
             ]));
             tabs.TabPages.Add(CreateTab("Developer", [
-                ("developerSource.sourceRoot", "Source repository root"),
+                ("developerSource.sourceRoot", "Source repository roots (; separated)"),
                 ("developerSource.packageConfigPath", "Package config path"),
                 ("developerSource.packageOutputRoot", "Temporary package output root")
             ]));
@@ -424,7 +423,11 @@ internal static partial class Program
             Set("hostAgent.iisAppPoolUserName", _config.HostAgent.IisAppPoolUserName);
             Set("hostAgent.iisAppPoolPassword", _config.HostAgent.IisAppPoolPassword);
             Set("hostAgent.servicesRoot", _config.HostAgent.ServicesRoot);
-            Set("developerSource.sourceRoot", ResolveDeveloperSourceRoot(throwIfMissing: false) ?? _config.DeveloperSource.SourceRoot);
+            Set(
+                "developerSource.sourceRoot",
+                string.IsNullOrWhiteSpace(_config.DeveloperSource.SourceRoot)
+                    ? ResolveDeveloperSourceRoot(throwIfMissing: false) ?? string.Empty
+                    : _config.DeveloperSource.SourceRoot);
             Set("developerSource.packageConfigPath", _config.DeveloperSource.PackageConfigPath);
             Set("developerSource.packageOutputRoot", _config.DeveloperSource.PackageOutputRoot);
 
@@ -505,12 +508,12 @@ internal static partial class Program
                 });
         }
 
-        private async Task UpgradeFromDeveloperSourceAsync()
+        private async Task CreateUpdatedInstallerPackageAsync()
         {
             ApplyValues();
             var confirmation = MessageBox.Show(
-                "This will build a fresh HostAgent-first package from the source repository, copy the generated module definitions and artifact packages into the current installer package, save the refreshed artifact list to the bootstrap config, and then run Install or update. Continue?",
-                "Upgrade from developer source",
+                "This will close the installer, build a fresh HostAgent-first package from the configured source repository, replace this installer package when the running EXE is no longer locked, and then start the updated installer. Continue?",
+                "Create updated installer package",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2);
@@ -519,36 +522,95 @@ internal static partial class Program
                 return;
             }
 
-            await RunGuiOperationAsync(
-                "Upgrading module definitions and artifacts from source...",
-                "Developer source upgrade completed.",
-                "Developer source upgrade did not complete.",
-                "Developer source upgrade failed.",
-                async () =>
-                {
-                    await RefreshCurrentPackageFromDeveloperSourceAsync();
-                    return await RunBootstrapAsync(
-                        _config,
-                        _configPath,
-                        _payloadRoot,
-                        _payloadZipPath,
-                        yes: true);
-                });
+            try
+            {
+                await SaveCurrentConfigAsync();
+                StartDetachedInstallerPackageRefresh();
+                ExitCode = 0;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
 
-            LoadValues();
+        private void StartDetachedInstallerPackageRefresh()
+        {
+            var currentExecutable = Environment.ProcessPath
+                ?? throw new InvalidOperationException("Could not resolve the running installer executable path.");
+            var runnerRoot = Path.Combine(
+                Path.GetTempPath(),
+                "omp-installer-refresh-runner-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(runnerRoot);
+
+            var runnerExecutable = Path.Combine(runnerRoot, Path.GetFileName(currentExecutable));
+            CopyInstallerRunnerFiles(currentExecutable, runnerRoot);
+
+            var process = Process.Start(new ProcessStartInfo(runnerExecutable)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = runnerRoot,
+                ArgumentList =
+                {
+                    "--refresh-installer-package",
+                    "--config",
+                    _configPath,
+                    "--payload-root",
+                    _payloadRoot,
+                    "--parent-process-id",
+                    Environment.ProcessId.ToString(),
+                    "--restart-gui"
+                }
+            });
+
+            if (process is null)
+            {
+                throw new InvalidOperationException("Could not start the installer package refresh process.");
+            }
+        }
+
+        private static void CopyInstallerRunnerFiles(string currentExecutable, string runnerRoot)
+        {
+            var executableDirectory = Path.GetDirectoryName(currentExecutable)
+                ?? throw new InvalidOperationException("Could not resolve the running installer directory.");
+            var baseName = Path.GetFileNameWithoutExtension(currentExecutable);
+            var hasFrameworkDependentFiles =
+                File.Exists(Path.Combine(executableDirectory, baseName + ".deps.json"))
+                || File.Exists(Path.Combine(executableDirectory, baseName + ".runtimeconfig.json"));
+
+            if (!hasFrameworkDependentFiles)
+            {
+                File.Copy(currentExecutable, Path.Combine(runnerRoot, Path.GetFileName(currentExecutable)), overwrite: true);
+                return;
+            }
+
+            CopyDirectoryRecursive(executableDirectory, runnerRoot);
         }
 
         private async Task<DeveloperSourceCheckResult> CheckDeveloperSourceStatusAsync()
         {
             var lines = new List<string>();
-            var sourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
+            var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
+            var primarySourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
             var payloadDefinitionsRoot = Path.Combine(_payloadRoot, "module-definitions");
 
-            lines.Add($"Source root: {sourceRoot}");
+            lines.Add($"Primary source root: {primarySourceRoot}");
+            lines.Add("Source roots:");
+            foreach (var sourceRoot in sourceRoots)
+            {
+                lines.Add($"  {sourceRoot}");
+            }
+
             lines.Add($"Installer package: {_payloadRoot}");
             lines.Add(string.Empty);
 
-            var manifests = await ReadDeveloperManifestsAsync(sourceRoot);
+            var manifests = await ReadDeveloperManifestsAsync(sourceRoots);
             lines.Add("Source manifests:");
             foreach (var manifest in manifests)
             {
@@ -634,76 +696,6 @@ internal static partial class Program
                 : "Result: this installer package matches the source manifest for OMP module definitions and artifacts.");
 
             return new DeveloperSourceCheckResult(hasUpdates, lines);
-        }
-
-        private async Task RefreshCurrentPackageFromDeveloperSourceAsync()
-        {
-            var sourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
-            var packageScript = Path.Combine(sourceRoot, "scripts", "deployment", "package-hostagent-first.ps1");
-            var packageConfigPath = ResolveDeveloperPackageConfigPath(sourceRoot);
-            var packageOutputRoot = ResolveSafeDeveloperPackageOutputRoot(sourceRoot);
-
-            Console.WriteLine($"Source root: {sourceRoot}");
-            Console.WriteLine($"Package config: {packageConfigPath}");
-            Console.WriteLine($"Temporary package output: {packageOutputRoot}");
-            Console.WriteLine("> Refresh embedded SQL in module definitions");
-            RunProcess(
-                "powershell",
-                [
-                    "-NoProfile",
-                    "-File",
-                    Path.Combine(sourceRoot, "scripts", "dev", "embed-module-definition-sql.ps1"),
-                    "-RepositoryRoot",
-                    sourceRoot
-                ],
-                workingDirectory: sourceRoot);
-
-            Console.WriteLine("> Build HostAgent-first package from source");
-            RunProcess(
-                "powershell",
-                [
-                    "-NoProfile",
-                    "-File",
-                    packageScript,
-                    "-ConfigPath",
-                    packageConfigPath,
-                    "-OutputRoot",
-                    packageOutputRoot,
-                    "-SkipZip"
-                ],
-                workingDirectory: sourceRoot);
-
-            var generatedPackageRoot = Directory
-                .EnumerateDirectories(packageOutputRoot, "OpenModulePlatformHostAgentFirst-*", SearchOption.TopDirectoryOnly)
-                .Select(path => new DirectoryInfo(path))
-                .OrderByDescending(directory => directory.LastWriteTimeUtc)
-                .FirstOrDefault()
-                ?.FullName
-                ?? throw new InvalidOperationException($"No generated HostAgent-first package was found below {packageOutputRoot}.");
-
-            Console.WriteLine($"Generated package: {generatedPackageRoot}");
-            CopyDirectoryContents(
-                Path.Combine(generatedPackageRoot, "payload"),
-                Path.Combine(_payloadRoot, "payload"),
-                "*.zip");
-            CopyDirectoryContents(
-                Path.Combine(generatedPackageRoot, "module-definitions"),
-                Path.Combine(_payloadRoot, "module-definitions"),
-                "*.json");
-
-            var generatedManifest = Path.Combine(generatedPackageRoot, "manifest.json");
-            if (File.Exists(generatedManifest))
-            {
-                File.Copy(generatedManifest, Path.Combine(_payloadRoot, "manifest.json"), overwrite: true);
-            }
-
-            var generatedConfig = await ReadJsonAsync<BootstrapConfig>(Path.Combine(generatedPackageRoot, "bootstrap.local.sample.json"));
-            _config.Artifacts = generatedConfig.Artifacts;
-            _config.Sql.ArtifactVersionOverrides = generatedConfig.Sql.ArtifactVersionOverrides;
-            _config.Sql.ArtifactVersionVariableOverrides = generatedConfig.Sql.ArtifactVersionVariableOverrides;
-
-            await SaveCurrentConfigAsync();
-            Console.WriteLine("Updated current installer payload, module definitions, artifact entries, and SQL version overrides.");
         }
 
         private async Task<bool> AppendDatabaseStatusAsync(
@@ -834,10 +826,10 @@ ORDER BY ar.ArtifactId DESC;
                 ?? throw new InvalidOperationException($"JSON file is empty: {path}");
         }
 
-        private static async Task<IReadOnlyList<DeveloperManifest>> ReadDeveloperManifestsAsync(string sourceRoot)
+        private static async Task<IReadOnlyList<DeveloperManifest>> ReadDeveloperManifestsAsync(IReadOnlyList<string> sourceRoots)
         {
             var manifests = new List<DeveloperManifest>();
-            foreach (var root in EnumerateDeveloperManifestRoots(sourceRoot))
+            foreach (var root in EnumerateDeveloperManifestRoots(sourceRoots))
             {
                 var manifestPath = Path.Combine(root, "omp-components.json");
                 var json = await ReadJsonNodeAsync(manifestPath);
@@ -852,18 +844,31 @@ ORDER BY ar.ArtifactId DESC;
             return manifests;
         }
 
-        private static IEnumerable<string> EnumerateDeveloperManifestRoots(string sourceRoot)
+        private static IEnumerable<string> EnumerateDeveloperManifestRoots(IReadOnlyList<string> sourceRoots)
         {
-            yield return sourceRoot;
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var sourceRoot in sourceRoots)
+            {
+                if (emitted.Add(sourceRoot))
+                {
+                    yield return sourceRoot;
+                }
+            }
 
-            var workspaceRoot = Directory.GetParent(sourceRoot)?.FullName;
+            var primarySourceRoot = sourceRoots.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(primarySourceRoot))
+            {
+                yield break;
+            }
+
+            var workspaceRoot = Directory.GetParent(primarySourceRoot)?.FullName;
             if (string.IsNullOrWhiteSpace(workspaceRoot))
             {
                 yield break;
             }
 
             var openDocViewerRoot = Path.Combine(workspaceRoot, "OpenDocViewer");
-            if (File.Exists(Path.Combine(openDocViewerRoot, "omp-components.json")))
+            if (File.Exists(Path.Combine(openDocViewerRoot, "omp-components.json")) && emitted.Add(openDocViewerRoot))
             {
                 yield return openDocViewerRoot;
             }
@@ -921,18 +926,12 @@ ORDER BY ar.ArtifactId DESC;
 
         private string? ResolveDeveloperSourceRoot(bool throwIfMissing)
         {
-            var configured = _config.DeveloperSource.SourceRoot;
-            if (!string.IsNullOrWhiteSpace(configured))
+            foreach (var sourceRoot in ParseConfiguredDeveloperSourceRoots(_config.DeveloperSource.SourceRoot))
             {
-                var resolved = Path.GetFullPath(configured);
+                var resolved = Path.GetFullPath(sourceRoot);
                 if (IsDeveloperSourceRoot(resolved))
                 {
                     return resolved;
-                }
-
-                if (throwIfMissing)
-                {
-                    throw new DirectoryNotFoundException($"Configured developer source root is not an OpenModulePlatform source repository: {resolved}");
                 }
             }
 
@@ -954,6 +953,39 @@ ORDER BY ar.ArtifactId DESC;
 
             return null;
         }
+
+        private IReadOnlyList<string> ResolveDeveloperSourceRoots(bool throwIfMissing)
+        {
+            var configuredRoots = ParseConfiguredDeveloperSourceRoots(_config.DeveloperSource.SourceRoot)
+                .Select(Path.GetFullPath)
+                .ToArray();
+            if (configuredRoots.Length > 0)
+            {
+                var validRoots = configuredRoots
+                    .Where(root => File.Exists(Path.Combine(root, "omp-components.json")))
+                    .ToArray();
+                if (validRoots.Any(root => IsDeveloperSourceRoot(root)))
+                {
+                    return validRoots;
+                }
+
+                if (throwIfMissing)
+                {
+                    throw new DirectoryNotFoundException(
+                        "Configured developer source roots must include an OpenModulePlatform source repository and may include additional repositories with omp-components.json.");
+                }
+            }
+
+            var primarySourceRoot = ResolveDeveloperSourceRoot(throwIfMissing);
+            return string.IsNullOrWhiteSpace(primarySourceRoot)
+                ? []
+                : [primarySourceRoot];
+        }
+
+        private static IEnumerable<string> ParseConfiguredDeveloperSourceRoots(string value)
+            => value
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(static item => !string.IsNullOrWhiteSpace(item));
 
         private IEnumerable<string> GetDeveloperSourceSearchStarts()
         {
@@ -979,123 +1011,6 @@ ORDER BY ar.ArtifactId DESC;
             => File.Exists(Path.Combine(path, "omp-components.json"))
                 && File.Exists(Path.Combine(path, "OpenModulePlatform.slnx"))
                 && File.Exists(Path.Combine(path, "scripts", "deployment", "package-hostagent-first.ps1"));
-
-        private string ResolveDeveloperPackageConfigPath(string sourceRoot)
-        {
-            if (!string.IsNullOrWhiteSpace(_config.DeveloperSource.PackageConfigPath))
-            {
-                var configured = Path.GetFullPath(_config.DeveloperSource.PackageConfigPath);
-                if (!File.Exists(configured))
-                {
-                    throw new FileNotFoundException("Configured package config was not found.", configured);
-                }
-
-                return configured;
-            }
-
-            var local = Path.Combine(sourceRoot, "scripts", "deployment", "omp-suite.local.psd1");
-            if (File.Exists(local))
-            {
-                return local;
-            }
-
-            var sample = Path.Combine(sourceRoot, "scripts", "deployment", "omp-suite.config.sample.psd1");
-            if (File.Exists(sample))
-            {
-                return sample;
-            }
-
-            throw new FileNotFoundException("No package config was found below the source repository.");
-        }
-
-        private string ResolveDeveloperPackageOutputRoot(string sourceRoot)
-        {
-            if (!string.IsNullOrWhiteSpace(_config.DeveloperSource.PackageOutputRoot))
-            {
-                return Path.GetFullPath(_config.DeveloperSource.PackageOutputRoot);
-            }
-
-            return Path.Combine(Path.GetTempPath(), "omp-developer-package-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
-        }
-
-        private string ResolveSafeDeveloperPackageOutputRoot(string sourceRoot)
-        {
-            var packageOutputRoot = ResolveDeveloperPackageOutputRoot(sourceRoot);
-            var overlapsRunningPackage = PathOverlaps(packageOutputRoot, _payloadRoot);
-            var risksLongPackagePaths = RisksLegacyWindowsPathLimit(packageOutputRoot);
-            if (!overlapsRunningPackage && !risksLongPackagePaths)
-            {
-                return packageOutputRoot;
-            }
-
-            var isolatedOutputRoot = CreateShortDeveloperPackageOutputRoot(sourceRoot);
-            Console.WriteLine(overlapsRunningPackage
-                ? "Configured temporary package output overlaps the running installer package."
-                : "Configured temporary package output is too deep for legacy Windows PowerShell zip handling.");
-            Console.WriteLine($"Configured output: {packageOutputRoot}");
-            Console.WriteLine($"Running package:   {_payloadRoot}");
-            Console.WriteLine($"Using short isolated output instead: {isolatedOutputRoot}");
-            return isolatedOutputRoot;
-        }
-
-        private string CreateShortDeveloperPackageOutputRoot(string sourceRoot)
-        {
-            var baseRoot = ResolveShortPackageRefreshBaseRoot(sourceRoot);
-            return Path.Combine(
-                baseRoot,
-                "PackageRefresh",
-                DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
-        }
-
-        private string ResolveShortPackageRefreshBaseRoot(string sourceRoot)
-        {
-            if (!string.IsNullOrWhiteSpace(_config.ArtifactStoreRoot))
-            {
-                var artifactStoreRoot = Path.GetFullPath(_config.ArtifactStoreRoot);
-                var artifactStoreParent = Directory.GetParent(artifactStoreRoot)?.FullName;
-                if (!string.IsNullOrWhiteSpace(artifactStoreParent))
-                {
-                    return artifactStoreParent;
-                }
-            }
-
-            var sourceDrive = Path.GetPathRoot(Path.GetFullPath(sourceRoot));
-            return Path.Combine(
-                string.IsNullOrWhiteSpace(sourceDrive) ? Path.GetPathRoot(Path.GetTempPath()) ?? Path.GetTempPath() : sourceDrive,
-                "OMP");
-        }
-
-        private static bool RisksLegacyWindowsPathLimit(string path)
-            => Path.GetFullPath(path).Length + ExpectedDeepPackagePathSuffixLength > LegacyWindowsPathLimitSafetyMargin;
-
-        private static bool PathOverlaps(string left, string right)
-            => IsSameOrParentPath(left, right) || IsSameOrParentPath(right, left);
-
-        private static bool IsSameOrParentPath(string parentPath, string childPath)
-        {
-            var parent = WithTrailingDirectorySeparator(Path.GetFullPath(parentPath));
-            var child = WithTrailingDirectorySeparator(Path.GetFullPath(childPath));
-            return child.StartsWith(parent, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string WithTrailingDirectorySeparator(string path)
-            => path.EndsWith(Path.DirectorySeparatorChar)
-                ? path
-                : path + Path.DirectorySeparatorChar;
-
-        private static void CopyDirectoryContents(string source, string destination, string searchPattern)
-        {
-            if (!Directory.Exists(source))
-            {
-                throw new DirectoryNotFoundException($"Generated package directory was not found: {source}");
-            }
-
-            Directory.CreateDirectory(destination);
-            foreach (var file in Directory.EnumerateFiles(source, searchPattern, SearchOption.TopDirectoryOnly))
-            {
-                File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
-            }
-        }
 
         private async Task SaveCurrentConfigAsync()
         {
