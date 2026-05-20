@@ -536,6 +536,90 @@ button[aria-disabled=true]:hover,
     overflow-x: auto;
 }
 
+.portal-entries-admin-scroll {
+    overflow-x: hidden;
+}
+
+.portal-entries-admin-grid {
+    table-layout: fixed;
+    font-size: 0.86rem;
+}
+
+.portal-entries-admin-grid th,
+.portal-entries-admin-grid td,
+.portal-entries-admin-grid a,
+.portal-entries-admin-grid code,
+.portal-entries-admin-grid .small-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.portal-entries-admin-grid code {
+    white-space: normal;
+}
+
+.portal-entries-admin-grid th,
+.portal-entries-admin-grid td {
+    padding: 8px 9px;
+}
+
+.portal-entries-admin-grid__name {
+    width: 20%;
+}
+
+.portal-entries-admin-grid__parent {
+    width: 14%;
+}
+
+.portal-entries-admin-grid__key {
+    width: 19%;
+}
+
+.portal-entries-admin-grid__target {
+    width: 27%;
+}
+
+.portal-entries-admin-grid__enabled {
+    width: 7%;
+}
+
+.portal-entries-admin-grid__sort {
+    width: 6%;
+}
+
+.portal-entries-admin-grid__actions {
+    width: 7%;
+}
+
+.portal-entry-icon-button {
+    --portal-entry-action-icon: url("/icons/edit.svg");
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border-radius: 10px;
+    flex: 0 0 auto;
+}
+
+.portal-entry-icon-button::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask: var(--portal-entry-action-icon) center / contain no-repeat;
+    mask: var(--portal-entry-action-icon) center / contain no-repeat;
+}
+
+.portal-entry-icon-button--edit {
+    --portal-entry-action-icon: url("/icons/edit.svg");
+}
+
+.portal-entry-icon-button--delete {
+    --portal-entry-action-icon: url("/icons/delete.svg");
+}
+
 .portal-apps-grid {
     max-width: 100%;
 }
