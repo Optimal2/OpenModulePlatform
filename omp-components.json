@@ -5,7 +5,7 @@
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.10",
+      "definitionVersion": "0.3.11",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -90,7 +90,8 @@
     {
       "componentKey": "omp-workermanager-service",
       "displayName": "OMP WorkerManager",
-      "registrationMode": "bootstrap",
+      "moduleKey": "omp_core",
+      "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
       "version": "0.3.3",
@@ -101,7 +102,8 @@
     {
       "componentKey": "omp-workerprocesshost",
       "displayName": "OMP Worker Process Host",
-      "registrationMode": "bootstrap",
+      "moduleKey": "omp_core",
+      "appKey": "omp_workerprocesshost",
       "packageType": "worker-host",
       "targetName": "omp-workerprocesshost",
       "version": "0.3.3",

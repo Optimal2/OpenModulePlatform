@@ -106,11 +106,12 @@ The combination of `module key`, `app key`, `package type`, and `target name`
 identifies which deployable component the version belongs to. `component
 version` identifies the specific build output for that component.
 
-Repositories may also list bootstrap infrastructure components that are
-deployable but not yet modeled as normal OMP app artifacts. Those components
-should use `registrationMode = bootstrap` in the manifest so they remain visible
-to release tooling without pretending that HostAgent can already update them as
-ordinary app instances.
+Repositories should avoid `registrationMode = bootstrap` for runtime code. The
+only remaining bootstrap exception is the HostAgent binary used by the installer
+for the first service installation or repair before HostAgent can manage its own
+upgrades. Other compiled runtime components, including WorkerManager and
+WorkerProcessHost, must be represented as ordinary OMP apps with compatible
+artifacts.
 
 When a new version is produced:
 
@@ -135,6 +136,8 @@ runtime component should execute. Use stable values such as:
 - `host-agent` for HostAgent self-upgrade packages. These are Windows service
   binaries, but they use a dedicated takeover contract instead of the normal
   service-app stop/copy/start handler.
+- `worker-host` for the WorkerProcessHost runtime executable consumed by
+  WorkerManager.
 - `worker-plugin` for worker plugins consumed by WorkerManager.
 
 Archive or transport format should be modeled separately if OMP later supports

@@ -12,6 +12,7 @@ Implemented as a Windows Service manager that:
 
 - discovers desired worker app instances from configuration or from OMP
 - supervises one child process per `AppInstanceId`
+- is deployed as the `omp_core` `service-app` artifact `omp_workermanager`
 - applies a basic restart policy
 - requests graceful shutdown through named OS events
 - publishes host heartbeat and observed runtime state back to OMP in database-backed mode
@@ -25,6 +26,7 @@ Implemented as a general child host that:
 - resolves a matching `IWorkerModuleFactory`
 - creates a minimal execution context
 - runs the worker module and returns a process exit code
+- is provisioned as the `omp_core` `worker-host` artifact `omp_workerprocesshost`
 
 ### OpenModulePlatform.Worker.Abstractions
 
@@ -47,6 +49,8 @@ The current OMP-backed Windows implementation uses:
 - `omp.AppWorkerDefinitions` as minimal plugin-runtime metadata
 - `omp.AppInstanceRuntimeStates` as manager-owned observed runtime state
 - `omp.Hosts.LastSeenUtc` and `omp.AppInstances.LastSeenUtc` for heartbeat compatibility
+- HostAgent artifact provisioning for WorkerManager, WorkerProcessHost, and
+  worker plugin packages
 
 ## Portal administration status
 
@@ -61,5 +65,4 @@ These pages are schema-aware and degrade to empty lists until the database has b
 
 The public repository still does not implement:
 
-- artifact download or installation by the worker manager
 - a non-Windows worker manager

@@ -996,6 +996,9 @@
   <data name="Service app" xml:space="preserve">
     <value>Tjänsteapp</value>
   </data>
+  <data name="Worker host" xml:space="preserve">
+    <value>Worker-värd</value>
+  </data>
   <data name="Folder" xml:space="preserve">
     <value>Mapp</value>
   </data>
