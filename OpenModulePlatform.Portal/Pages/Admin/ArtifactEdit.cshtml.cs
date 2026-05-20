@@ -2,7 +2,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
@@ -22,14 +24,17 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         RegexOptions.Compiled);
 
     private readonly OmpAdminRepository _repo;
+    private readonly ArtifactUploadOptions _uploadOptions;
 
     public ArtifactEditModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        OmpAdminRepository repo)
+        OmpAdminRepository repo,
+        IOptions<ArtifactUploadOptions> uploadOptions)
         : base(options, rbac)
     {
         _repo = repo;
+        _uploadOptions = uploadOptions.Value;
     }
 
     [BindProperty]
@@ -158,6 +163,79 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnGetDownloadPackage(int id, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var row = await _repo.GetArtifactAsync(id, ct);
+        if (row is null)
+        {
+            return NotFound();
+        }
+
+        if (string.IsNullOrWhiteSpace(row.ModuleKey)
+            || string.IsNullOrWhiteSpace(row.AppKey)
+            || string.IsNullOrWhiteSpace(row.TargetName)
+            || string.IsNullOrWhiteSpace(row.RelativePath))
+        {
+            return BadRequest(T("Artifact metadata is incomplete and cannot be exported as a standard package."));
+        }
+
+        var storeRoot = ResolveArtifactStoreRoot();
+        if (storeRoot is null)
+        {
+            return BadRequest(T("ArtifactUpload:ArtifactStoreRoot is not configured. Set it to the same root used by HostAgent:CentralArtifactRoot."));
+        }
+
+        var relativePath = NormalizeRelativePath(row.RelativePath);
+        if (relativePath is null)
+        {
+            return BadRequest(T("Artifact relative path is invalid."));
+        }
+
+        var payloadPath = ResolveUnderRoot(storeRoot, relativePath);
+        if (!Directory.Exists(payloadPath))
+        {
+            return NotFound(T("Artifact payload folder was not found in the artifact store."));
+        }
+
+        var configurationFiles = await _repo.GetArtifactConfigurationFileContentsAsync(row.ArtifactId, ct);
+        var packageFileName = CreateArtifactPackageFileName(
+            row.ModuleKey,
+            row.AppKey,
+            row.PackageType,
+            row.TargetName,
+            row.Version);
+        var tempPackagePath = Path.Combine(
+            Path.GetTempPath(),
+            "OpenModulePlatform",
+            "ArtifactPackageExports",
+            $"{Guid.NewGuid():N}.zip");
+
+        var packageConfigurationFiles = configurationFiles
+            .Select(file => new ArtifactPackageConfigurationFile(file.RelativePath, file.FileContent))
+            .ToArray();
+
+        new ArtifactPackageWriter().CreateFromPayloadDirectory(
+            payloadPath,
+            tempPackagePath,
+            packageConfigurationFiles);
+
+        var stream = new FileStream(
+            tempPackagePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 1024 * 128,
+            FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+
+        return File(stream, "application/zip", packageFileName);
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         AppOptions = await _repo.GetAppOptionsAsync(ct);
@@ -188,6 +266,70 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private string? ResolveArtifactStoreRoot()
+    {
+        if (string.IsNullOrWhiteSpace(_uploadOptions.ArtifactStoreRoot))
+        {
+            return null;
+        }
+
+        return Path.GetFullPath(_uploadOptions.ArtifactStoreRoot.Trim());
+    }
+
+    private static string? NormalizeRelativePath(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return null;
+        }
+
+        var normalized = relativePath.Trim().Replace('\\', '/').Trim('/');
+        if (normalized.Length == 0
+            || normalized.Contains(':', StringComparison.Ordinal)
+            || normalized.IndexOf('\0') >= 0)
+        {
+            return null;
+        }
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var invalidFileNameChars = Path.GetInvalidFileNameChars();
+        if (segments.Length == 0
+            || segments.Any(segment => segment is "." or "..")
+            || segments.Any(segment => segment.IndexOfAny(invalidFileNameChars) >= 0))
+        {
+            return null;
+        }
+
+        return string.Join('/', segments);
+    }
+
+    private static string ResolveUnderRoot(string rootPath, string relativePath)
+    {
+        var fullRoot = Path.GetFullPath(rootPath);
+        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var normalizedRoot = Path.EndsInDirectorySeparator(fullRoot)
+            ? fullRoot
+            : fullRoot + Path.DirectorySeparatorChar;
+
+        if (!fullPath.StartsWith(normalizedRoot, comparison))
+        {
+            throw new InvalidOperationException("The artifact path escapes the configured artifact store root.");
+        }
+
+        return fullPath;
+    }
+
+    private static string CreateArtifactPackageFileName(
+        string moduleKey,
+        string appKey,
+        string packageType,
+        string targetName,
+        string version)
+        => $"{moduleKey}__{appKey}__{packageType}__{targetName}__{version}.zip";
 
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
         => ex.Number == 547
