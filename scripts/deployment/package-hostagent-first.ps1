@@ -678,7 +678,7 @@ $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version
 $payloadRoot = Join-Path $packageRoot 'payload'
 $sqlRoot = Join-Path $packageRoot 'sql'
 $toolsRoot = Join-Path $packageRoot 'tools'
-$buildRoot = Join-Path $packageRoot '.build'
+$buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-hostagent-first-build-' + [Guid]::NewGuid().ToString('N'))
 $zipPath = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version.zip")
 
 if (Test-Path -LiteralPath $packageRoot) {

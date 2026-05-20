@@ -99,6 +99,8 @@ internal static partial class Program
         private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools" };
         private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data" };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
+        private const int LegacyWindowsPathLimitSafetyMargin = 240;
+        private const int ExpectedDeepPackagePathSuffixLength = 190;
 
         public InstallerForm(
             BootstrapConfig config,
@@ -1019,20 +1021,52 @@ ORDER BY ar.ArtifactId DESC;
         private string ResolveSafeDeveloperPackageOutputRoot(string sourceRoot)
         {
             var packageOutputRoot = ResolveDeveloperPackageOutputRoot(sourceRoot);
-            if (!PathOverlaps(packageOutputRoot, _payloadRoot))
+            var overlapsRunningPackage = PathOverlaps(packageOutputRoot, _payloadRoot);
+            var risksLongPackagePaths = RisksLegacyWindowsPathLimit(packageOutputRoot);
+            if (!overlapsRunningPackage && !risksLongPackagePaths)
             {
                 return packageOutputRoot;
             }
 
-            var isolatedOutputRoot = Path.Combine(
-                Path.GetTempPath(),
-                "omp-developer-package-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
-            Console.WriteLine("Configured temporary package output overlaps the running installer package.");
+            var isolatedOutputRoot = CreateShortDeveloperPackageOutputRoot(sourceRoot);
+            Console.WriteLine(overlapsRunningPackage
+                ? "Configured temporary package output overlaps the running installer package."
+                : "Configured temporary package output is too deep for legacy Windows PowerShell zip handling.");
             Console.WriteLine($"Configured output: {packageOutputRoot}");
             Console.WriteLine($"Running package:   {_payloadRoot}");
-            Console.WriteLine($"Using isolated output instead: {isolatedOutputRoot}");
+            Console.WriteLine($"Using short isolated output instead: {isolatedOutputRoot}");
             return isolatedOutputRoot;
         }
+
+        private string CreateShortDeveloperPackageOutputRoot(string sourceRoot)
+        {
+            var baseRoot = ResolveShortPackageRefreshBaseRoot(sourceRoot);
+            return Path.Combine(
+                baseRoot,
+                "PackageRefresh",
+                DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
+        }
+
+        private string ResolveShortPackageRefreshBaseRoot(string sourceRoot)
+        {
+            if (!string.IsNullOrWhiteSpace(_config.ArtifactStoreRoot))
+            {
+                var artifactStoreRoot = Path.GetFullPath(_config.ArtifactStoreRoot);
+                var artifactStoreParent = Directory.GetParent(artifactStoreRoot)?.FullName;
+                if (!string.IsNullOrWhiteSpace(artifactStoreParent))
+                {
+                    return artifactStoreParent;
+                }
+            }
+
+            var sourceDrive = Path.GetPathRoot(Path.GetFullPath(sourceRoot));
+            return Path.Combine(
+                string.IsNullOrWhiteSpace(sourceDrive) ? Path.GetPathRoot(Path.GetTempPath()) ?? Path.GetTempPath() : sourceDrive,
+                "OMP");
+        }
+
+        private static bool RisksLegacyWindowsPathLimit(string path)
+            => Path.GetFullPath(path).Length + ExpectedDeepPackagePathSuffixLength > LegacyWindowsPathLimitSafetyMargin;
 
         private static bool PathOverlaps(string left, string right)
             => IsSameOrParentPath(left, right) || IsSameOrParentPath(right, left);
