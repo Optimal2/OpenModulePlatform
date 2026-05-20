@@ -46,7 +46,7 @@ DECLARE @DefaultHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.10';
+DECLARE @ArtifactVersion nvarchar(50) = N'0.3.11';
 DECLARE @WorkerManagerArtifactVersion nvarchar(50) = N'0.3.3';
 DECLARE @WorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
