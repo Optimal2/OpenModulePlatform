@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.Bootstrapper;
 
@@ -108,7 +109,8 @@ internal static partial class Program
                 await ImportModuleDefinitionsAsync(config, payloadRoot);
             }
 
-            PrepareArtifacts(config, payloadRoot);
+            var preparedArtifactConfigurationFiles = PrepareArtifacts(config, payloadRoot);
+            await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
 
             if (config.HostAgent.Enabled)
             {
@@ -1029,7 +1031,9 @@ BEGIN
 END;
 """;
 
-    private static void PrepareArtifacts(BootstrapConfig config, string payloadRoot)
+    private static IReadOnlyList<PreparedArtifactConfigurationFiles> PrepareArtifacts(
+        BootstrapConfig config,
+        string payloadRoot)
     {
         if (string.IsNullOrWhiteSpace(config.ArtifactStoreRoot))
         {
@@ -1038,6 +1042,7 @@ END;
 
         var artifactStoreRoot = Path.GetFullPath(config.ArtifactStoreRoot.Trim());
         Directory.CreateDirectory(artifactStoreRoot);
+        var preparedConfigurationFiles = new List<PreparedArtifactConfigurationFiles>();
 
         foreach (var artifact in config.Artifacts.Where(static item => item.Enabled))
         {
@@ -1055,22 +1060,54 @@ END;
             var target = CombineUnderRoot(artifactStoreRoot, artifact.Target);
             Console.WriteLine($"> Artifact {artifact.Target}");
 
-            if (artifact.Overwrite && (File.Exists(target) || Directory.Exists(target)))
-            {
-                TryDeleteFileOrDirectory(target);
-            }
-
             if (Directory.Exists(source))
             {
+                if (artifact.Overwrite && (File.Exists(target) || Directory.Exists(target)))
+                {
+                    TryDeleteFileOrDirectory(target);
+                }
+
                 CopyDirectory(source, target);
             }
             else if (File.Exists(source) && source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                Directory.CreateDirectory(target);
-                ZipFile.ExtractToDirectory(source, target, overwriteFiles: true);
+                var stagingPath = Path.Combine(
+                    artifactStoreRoot,
+                    ".bootstrapper-artifact-staging",
+                    Guid.NewGuid().ToString("N"));
+
+                try
+                {
+                    var package = new ArtifactPackageExtractor()
+                        .Extract(source, stagingPath);
+
+                    if (artifact.Overwrite && (File.Exists(target) || Directory.Exists(target)))
+                    {
+                        TryDeleteFileOrDirectory(target);
+                    }
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    Directory.Move(package.ArtifactContentPath, target);
+
+                    if (package.ConfigurationFiles.Count > 0)
+                    {
+                        preparedConfigurationFiles.Add(new PreparedArtifactConfigurationFiles(
+                            artifact.Target,
+                            package.ConfigurationFiles));
+                    }
+                }
+                finally
+                {
+                    TryDeleteDirectory(stagingPath);
+                }
             }
             else if (File.Exists(source))
             {
+                if (artifact.Overwrite && (File.Exists(target) || Directory.Exists(target)))
+                {
+                    TryDeleteFileOrDirectory(target);
+                }
+
                 Directory.CreateDirectory(target);
                 File.Copy(source, Path.Combine(target, Path.GetFileName(source)), overwrite: true);
             }
@@ -1083,6 +1120,127 @@ END;
             {
                 RemoveRuntimeConfigurationFiles(target);
             }
+        }
+
+        return preparedConfigurationFiles;
+    }
+
+    private static async Task RegisterPreparedArtifactConfigurationFilesAsync(
+        BootstrapConfig config,
+        IReadOnlyList<PreparedArtifactConfigurationFiles> preparedConfigurationFiles)
+    {
+        if (preparedConfigurationFiles.Count == 0)
+        {
+            return;
+        }
+
+        if (!config.Sql.Enabled)
+        {
+            Console.WriteLine("> SQL disabled; skipping artifact configuration file registration.");
+            return;
+        }
+
+        await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
+        await connection.OpenAsync();
+
+        foreach (var prepared in preparedConfigurationFiles)
+        {
+            var artifactId = await ResolveArtifactIdByRelativePathAsync(
+                connection,
+                prepared.ArtifactRelativePath);
+
+            await ReplaceArtifactConfigurationFilesAsync(
+                connection,
+                artifactId,
+                prepared.ConfigurationFiles);
+
+            Console.WriteLine(
+                $"> Artifact config files {prepared.ArtifactRelativePath}: {prepared.ConfigurationFiles.Count}");
+        }
+    }
+
+    private static async Task<int> ResolveArtifactIdByRelativePathAsync(
+        SqlConnection connection,
+        string artifactRelativePath)
+    {
+        const string sql = """
+SELECT ArtifactId
+FROM omp.Artifacts
+WHERE RelativePath = @relativePath
+  AND IsEnabled = 1
+ORDER BY ArtifactId;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@relativePath", NormalizePathForMatch(artifactRelativePath));
+
+        var artifactIds = new List<int>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            artifactIds.Add(reader.GetInt32(0));
+        }
+
+        return artifactIds.Count switch
+        {
+            1 => artifactIds[0],
+            0 => throw new InvalidOperationException(
+                $"Cannot register artifact configuration files because no enabled artifact row has RelativePath '{artifactRelativePath}'."),
+            _ => throw new InvalidOperationException(
+                $"Cannot register artifact configuration files because multiple enabled artifact rows have RelativePath '{artifactRelativePath}'.")
+        };
+    }
+
+    private static async Task ReplaceArtifactConfigurationFilesAsync(
+        SqlConnection connection,
+        int artifactId,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles)
+    {
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+
+        try
+        {
+            await using (var delete = new SqlCommand(
+                "DELETE FROM omp.ArtifactConfigurationFiles WHERE ArtifactId = @artifactId;",
+                connection,
+                transaction))
+            {
+                delete.Parameters.AddWithValue("@artifactId", artifactId);
+                await delete.ExecuteNonQueryAsync();
+            }
+
+            const string insertSql = """
+INSERT INTO omp.ArtifactConfigurationFiles
+(
+    ArtifactId,
+    RelativePath,
+    FileContent,
+    IsEnabled
+)
+VALUES
+(
+    @artifactId,
+    @relativePath,
+    @fileContent,
+    1
+);
+""";
+
+            foreach (var configurationFile in configurationFiles)
+            {
+                await using var insert = new SqlCommand(insertSql, connection, transaction);
+                insert.Parameters.AddWithValue("@artifactId", artifactId);
+                insert.Parameters.AddWithValue("@relativePath", configurationFile.RelativePath);
+                insert.Parameters.AddWithValue("@fileContent", configurationFile.FileContent);
+                await insert.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
         }
     }
 
@@ -2161,6 +2319,10 @@ END;
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool AllocConsole();
 }
+
+internal sealed record PreparedArtifactConfigurationFiles(
+    string ArtifactRelativePath,
+    IReadOnlyList<ArtifactPackageConfigurationFile> ConfigurationFiles);
 
 internal sealed class CliOptions
 {
