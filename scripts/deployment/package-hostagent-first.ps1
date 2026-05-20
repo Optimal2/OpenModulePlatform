@@ -256,6 +256,13 @@ function Get-DeveloperSourceRoots {
         Add-UniqueResolvedPath -Paths $roots -Path $entry.Trim() -BasePath $ConfigDirectory
     }
 
+    $workspaceRoot = Split-Path -Parent (Resolve-DeploymentPath -Path $RepositoryRoot -BasePath $ConfigDirectory)
+    if (-not [string]::IsNullOrWhiteSpace($workspaceRoot) -and (Test-Path -LiteralPath $workspaceRoot -PathType Container)) {
+        foreach ($candidate in Get-ChildItem -LiteralPath $workspaceRoot -Directory) {
+            Add-UniqueResolvedPath -Paths $roots -Path $candidate.FullName -BasePath $ConfigDirectory
+        }
+    }
+
     return @($roots)
 }
 
