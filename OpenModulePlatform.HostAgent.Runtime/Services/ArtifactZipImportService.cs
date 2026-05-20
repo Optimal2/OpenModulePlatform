@@ -82,6 +82,7 @@ public sealed class ArtifactZipImportService
         string? finalPath = null;
         var movedToFinal = false;
         var artifactRegistered = false;
+        var adoptedExistingContent = false;
 
         try
         {
@@ -133,22 +134,37 @@ public sealed class ArtifactZipImportService
             var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
                 .Extract(tempZipPath, stagingPath);
             var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
-            var duplicate = await _repository.FindImportedArtifactBySha256Async(contentHash, cancellationToken);
-            if (duplicate is not null)
-            {
-                throw new InvalidOperationException(
-                    $"An artifact with identical extracted content already exists: {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType}).");
-            }
-
             if (Directory.Exists(finalPath) || File.Exists(finalPath))
             {
-                throw new InvalidOperationException(
-                    $"The target artifact path already exists below the artifact store: {relativePath}.");
+                if (File.Exists(finalPath))
+                {
+                    throw new InvalidOperationException(
+                        $"The target artifact path already exists as a file below the artifact store: {relativePath}.");
+                }
+
+                var existingContentHash = await ComputeDirectorySha256Async(finalPath, cancellationToken);
+                if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The target artifact path already exists with different content below the artifact store: {relativePath}.");
+                }
+
+                adoptedExistingContent = true;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-            Directory.Move(package.ArtifactContentPath, finalPath);
-            movedToFinal = true;
+            if (!adoptedExistingContent)
+            {
+                var duplicate = await _repository.FindImportedArtifactBySha256Async(contentHash, cancellationToken);
+                if (duplicate is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"An artifact with identical extracted content already exists: {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType}).");
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                Directory.Move(package.ArtifactContentPath, finalPath);
+                movedToFinal = true;
+            }
 
             var artifactId = await _repository.RegisterImportedArtifactAsync(
                 app.AppId,
@@ -204,11 +220,12 @@ public sealed class ArtifactZipImportService
 
             MoveImportZip(zipPath, processedPath, null);
             _logger.LogInformation(
-                "Imported artifact zip. Zip={ZipPath}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}",
+                "Imported artifact zip. Zip={ZipPath}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, AdoptedExistingContent={AdoptedExistingContent}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}",
                 zipPath,
                 result.ArtifactId,
                 result.Version,
                 result.RelativePath,
+                adoptedExistingContent,
                 result.CopiedConfigurationFileCount,
                 result.TemplateAppRowsUpdated,
                 result.AppInstanceRowsUpdated,
