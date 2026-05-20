@@ -16,5 +16,9 @@
              Link="wwwroot\tools\module-definition-editor\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\tools\artifact-package-editor\**\*.*"
+             Link="wwwroot\tools\artifact-package-editor\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

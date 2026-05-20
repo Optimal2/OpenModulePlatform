@@ -1832,4 +1832,7 @@
   <data name="Module definition editor" xml:space="preserve"><value>Moduldefinitionseditor</value></data>
   <data name="Use this editor to create or update portable module-definition JSON files. SQL scripts are shown as clear text here and exported as base64 content in the JSON file." xml:space="preserve"><value>Använd editorn för att skapa eller uppdatera portabla JSON-filer för moduldefinitioner. SQL-skript visas som klartext här och exporteras som base64-innehåll i JSON-filen.</value></data>
   <data name="Open editor" xml:space="preserve"><value>Öppna editor</value></data>
+  <data name="Artifact package editor" xml:space="preserve"><value>Artefaktpaketseditor</value></data>
+  <data name="Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files." xml:space="preserve"><value>Använd editorn för att skapa manifestbaserade artefaktpaket med deploybar payload och deployment-ägda konfigurationsfiler.</value></data>
+  <data name="Open package editor" xml:space="preserve"><value>Öppna paketeditor</value></data>
 </root>
