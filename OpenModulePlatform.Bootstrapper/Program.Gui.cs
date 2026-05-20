@@ -1,6 +1,9 @@
 using System.Drawing;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows.Forms;
+using Microsoft.Data.SqlClient;
 
 namespace OpenModulePlatform.Bootstrapper;
 
@@ -84,6 +87,8 @@ internal static partial class Program
             Style = ProgressBarStyle.Continuous
         };
         private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
+        private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
+        private readonly Button _upgradeFromSourceButton = new() { Text = "Upgrade from source", AutoSize = true };
         private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
         private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
         private readonly Button _fullUninstallButton = new() { Text = "Full uninstall", AutoSize = true, ForeColor = Color.DarkRed };
@@ -158,6 +163,8 @@ internal static partial class Program
 
             LoadValues();
             _installButton.Click += async (_, _) => await InstallAsync();
+            _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
+            _upgradeFromSourceButton.Click += async (_, _) => await UpgradeFromDeveloperSourceAsync();
             _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
             _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
             _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
@@ -224,6 +231,14 @@ internal static partial class Program
                 grid,
                 _installButton,
                 "Runs the SQL bootstrap, prepares ArtifactStore, and installs or updates HostAgent using the settings above.");
+            AddActionRow(
+                grid,
+                _checkSourceButton,
+                "On a development machine, compares the installed/package module definitions and artifacts with the source repository manifest.");
+            AddActionRow(
+                grid,
+                _upgradeFromSourceButton,
+                "On a development machine, rebuilds module definitions and artifact packages from source, refreshes this package payload, and runs install/update.");
             AddActionRow(
                 grid,
                 _uninstallRuntimeButton,
@@ -309,6 +324,11 @@ internal static partial class Program
                 ("hostAgent.iisAppPoolNamePrefix", "App pool name prefix"),
                 ("hostAgent.iisAppPoolUserName", "App pool account"),
                 ("hostAgent.iisAppPoolPassword", "App pool password")
+            ]));
+            tabs.TabPages.Add(CreateTab("Developer", [
+                ("developerSource.sourceRoot", "Source repository root"),
+                ("developerSource.packageConfigPath", "Package config path"),
+                ("developerSource.packageOutputRoot", "Temporary package output root")
             ]));
 
             var optionsPage = new TabPage("Options") { Padding = new Padding(12) };
@@ -402,6 +422,9 @@ internal static partial class Program
             Set("hostAgent.iisAppPoolUserName", _config.HostAgent.IisAppPoolUserName);
             Set("hostAgent.iisAppPoolPassword", _config.HostAgent.IisAppPoolPassword);
             Set("hostAgent.servicesRoot", _config.HostAgent.ServicesRoot);
+            Set("developerSource.sourceRoot", ResolveDeveloperSourceRoot(throwIfMissing: false) ?? _config.DeveloperSource.SourceRoot);
+            Set("developerSource.packageConfigPath", _config.DeveloperSource.PackageConfigPath);
+            Set("developerSource.packageOutputRoot", _config.DeveloperSource.PackageOutputRoot);
 
             _runSql.Checked = _config.Sql.Enabled;
             _installHostAgent.Checked = _config.HostAgent.Enabled;
@@ -433,6 +456,9 @@ internal static partial class Program
             _config.HostAgent.IisAppPoolUserName = Get("hostAgent.iisAppPoolUserName");
             _config.HostAgent.IisAppPoolPassword = Get("hostAgent.iisAppPoolPassword");
             _config.HostAgent.ServicesRoot = Get("hostAgent.servicesRoot");
+            _config.DeveloperSource.SourceRoot = Get("developerSource.sourceRoot");
+            _config.DeveloperSource.PackageConfigPath = Get("developerSource.packageConfigPath");
+            _config.DeveloperSource.PackageOutputRoot = Get("developerSource.packageOutputRoot");
 
             _config.Sql.Enabled = _runSql.Checked;
             _config.HostAgent.Enabled = _installHostAgent.Checked;
@@ -455,6 +481,594 @@ internal static partial class Program
                     _payloadRoot,
                     _payloadZipPath,
                     yes: true));
+        }
+
+        private async Task CheckDeveloperSourceAsync()
+        {
+            ApplyValues();
+            await RunGuiOperationAsync(
+                "Checking developer source objects...",
+                "Developer source check completed. Review the log for details.",
+                "Developer source check did not complete.",
+                "Developer source check failed.",
+                async () =>
+                {
+                    var result = await CheckDeveloperSourceStatusAsync();
+                    foreach (var line in result.Lines)
+                    {
+                        Console.WriteLine(line);
+                    }
+
+                    return 0;
+                });
+        }
+
+        private async Task UpgradeFromDeveloperSourceAsync()
+        {
+            ApplyValues();
+            var confirmation = MessageBox.Show(
+                "This will build a fresh HostAgent-first package from the source repository, copy the generated module definitions and artifact packages into the current installer package, save the refreshed artifact list to the bootstrap config, and then run Install or update. Continue?",
+                "Upgrade from developer source",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            await RunGuiOperationAsync(
+                "Upgrading module definitions and artifacts from source...",
+                "Developer source upgrade completed.",
+                "Developer source upgrade did not complete.",
+                "Developer source upgrade failed.",
+                async () =>
+                {
+                    await RefreshCurrentPackageFromDeveloperSourceAsync();
+                    return await RunBootstrapAsync(
+                        _config,
+                        _configPath,
+                        _payloadRoot,
+                        _payloadZipPath,
+                        yes: true);
+                });
+
+            LoadValues();
+        }
+
+        private async Task<DeveloperSourceCheckResult> CheckDeveloperSourceStatusAsync()
+        {
+            var lines = new List<string>();
+            var sourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
+            var payloadDefinitionsRoot = Path.Combine(_payloadRoot, "module-definitions");
+
+            lines.Add($"Source root: {sourceRoot}");
+            lines.Add($"Installer package: {_payloadRoot}");
+            lines.Add(string.Empty);
+
+            var manifests = await ReadDeveloperManifestsAsync(sourceRoot);
+            lines.Add("Source manifests:");
+            foreach (var manifest in manifests)
+            {
+                lines.Add($"  {manifest.RepositoryKey}: {manifest.ManifestPath}");
+            }
+
+            lines.Add(string.Empty);
+
+            var sourceDefinitions = manifests
+                .SelectMany(manifest => ReadManifestModuleDefinitions(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                .ToArray();
+            var sourceComponents = manifests
+                .SelectMany(manifest => ReadManifestComponents(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                .ToArray();
+            var hasUpdates = false;
+
+            lines.Add("Module definitions:");
+            foreach (var definition in sourceDefinitions)
+            {
+                var sourcePath = Path.Combine(definition.SourceRoot, definition.Path);
+                var sourceDocument = await ReadModuleDefinitionAsync(sourcePath);
+                var packagePath = Path.Combine(payloadDefinitionsRoot, Path.GetFileName(definition.Path));
+                if (!File.Exists(packagePath))
+                {
+                    lines.Add($"  UPDATE  {definition.ModuleKey}: package file is missing ({Path.GetFileName(definition.Path)}).");
+                    hasUpdates = true;
+                    continue;
+                }
+
+                var packageDocument = await ReadModuleDefinitionAsync(packagePath);
+                var versionComparison = CompareVersionText(sourceDocument.DefinitionVersion, packageDocument.DefinitionVersion);
+                if (versionComparison > 0)
+                {
+                    lines.Add($"  UPDATE  {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
+                    hasUpdates = true;
+                }
+                else if (versionComparison < 0)
+                {
+                    lines.Add($"  DIFF    {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
+                    hasUpdates = true;
+                }
+                else if (versionComparison == 0 && !string.Equals(sourceDocument.DefinitionSha256, packageDocument.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    lines.Add($"  UPDATE  {definition.ModuleKey}: same version {sourceDocument.DefinitionVersion}, different content hash.");
+                    hasUpdates = true;
+                }
+                else
+                {
+                    lines.Add($"  OK      {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
+                }
+            }
+
+            lines.Add(string.Empty);
+            lines.Add("Artifact package entries:");
+            foreach (var component in sourceComponents)
+            {
+                var expectedTarget = component.RelativePathTemplate.Replace("{version}", component.Version, StringComparison.OrdinalIgnoreCase);
+                var current = FindConfiguredArtifact(component);
+                if (current is null)
+                {
+                    lines.Add($"  UPDATE  {component.ComponentKey}: package config has no artifact entry for {component.ModuleKey}/{component.AppKey}/{component.PackageType}/{component.TargetName}.");
+                    hasUpdates = true;
+                    continue;
+                }
+
+                if (!string.Equals(NormalizePathForMatch(current.Target), NormalizePathForMatch(expectedTarget), StringComparison.OrdinalIgnoreCase))
+                {
+                    lines.Add($"  UPDATE  {component.ComponentKey}: package target {current.Target}, source target {expectedTarget}.");
+                    hasUpdates = true;
+                }
+                else
+                {
+                    lines.Add($"  OK      {component.ComponentKey}: {expectedTarget}.");
+                }
+            }
+
+            lines.Add(string.Empty);
+            hasUpdates |= await AppendDatabaseStatusAsync(sourceDefinitions, sourceComponents, lines);
+
+            lines.Add(string.Empty);
+            lines.Add(hasUpdates
+                ? "Result: source contains module definitions or artifact entries that are newer/different than this installer package."
+                : "Result: this installer package matches the source manifest for OMP module definitions and artifacts.");
+
+            return new DeveloperSourceCheckResult(hasUpdates, lines);
+        }
+
+        private async Task RefreshCurrentPackageFromDeveloperSourceAsync()
+        {
+            var sourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
+            var packageScript = Path.Combine(sourceRoot, "scripts", "deployment", "package-hostagent-first.ps1");
+            var packageConfigPath = ResolveDeveloperPackageConfigPath(sourceRoot);
+            var packageOutputRoot = ResolveDeveloperPackageOutputRoot(sourceRoot);
+
+            Console.WriteLine($"Source root: {sourceRoot}");
+            Console.WriteLine($"Package config: {packageConfigPath}");
+            Console.WriteLine($"Temporary package output: {packageOutputRoot}");
+            Console.WriteLine("> Refresh embedded SQL in module definitions");
+            RunProcess(
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-File",
+                    Path.Combine(sourceRoot, "scripts", "dev", "embed-module-definition-sql.ps1"),
+                    "-RepositoryRoot",
+                    sourceRoot
+                ],
+                workingDirectory: sourceRoot);
+
+            Console.WriteLine("> Build HostAgent-first package from source");
+            RunProcess(
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-File",
+                    packageScript,
+                    "-ConfigPath",
+                    packageConfigPath,
+                    "-OutputRoot",
+                    packageOutputRoot,
+                    "-SkipZip"
+                ],
+                workingDirectory: sourceRoot);
+
+            var generatedPackageRoot = Directory
+                .EnumerateDirectories(packageOutputRoot, "OpenModulePlatformHostAgentFirst-*", SearchOption.TopDirectoryOnly)
+                .Select(path => new DirectoryInfo(path))
+                .OrderByDescending(directory => directory.LastWriteTimeUtc)
+                .FirstOrDefault()
+                ?.FullName
+                ?? throw new InvalidOperationException($"No generated HostAgent-first package was found below {packageOutputRoot}.");
+
+            Console.WriteLine($"Generated package: {generatedPackageRoot}");
+            CopyDirectoryContents(
+                Path.Combine(generatedPackageRoot, "payload"),
+                Path.Combine(_payloadRoot, "payload"),
+                "*.zip");
+            CopyDirectoryContents(
+                Path.Combine(generatedPackageRoot, "module-definitions"),
+                Path.Combine(_payloadRoot, "module-definitions"),
+                "*.json");
+
+            var generatedManifest = Path.Combine(generatedPackageRoot, "manifest.json");
+            if (File.Exists(generatedManifest))
+            {
+                File.Copy(generatedManifest, Path.Combine(_payloadRoot, "manifest.json"), overwrite: true);
+            }
+
+            var generatedConfig = await ReadJsonAsync<BootstrapConfig>(Path.Combine(generatedPackageRoot, "bootstrap.local.sample.json"));
+            _config.Artifacts = generatedConfig.Artifacts;
+            _config.Sql.ArtifactVersionOverrides = generatedConfig.Sql.ArtifactVersionOverrides;
+            _config.Sql.ArtifactVersionVariableOverrides = generatedConfig.Sql.ArtifactVersionVariableOverrides;
+
+            await SaveCurrentConfigAsync();
+            Console.WriteLine("Updated current installer payload, module definitions, artifact entries, and SQL version overrides.");
+        }
+
+        private async Task<bool> AppendDatabaseStatusAsync(
+            IReadOnlyList<ManifestModuleDefinition> sourceDefinitions,
+            IReadOnlyList<ManifestComponent> sourceComponents,
+            List<string> lines)
+        {
+            lines.Add("Installed database state:");
+            var hasUpdates = false;
+            try
+            {
+                await using var connection = new SqlConnection(BuildConnectionString(_config.Sql, _config.Sql.Database));
+                await connection.OpenAsync();
+
+                foreach (var definition in sourceDefinitions)
+                {
+                    var installedVersion = await QueryScalarStringAsync(
+                        connection,
+                        """
+SELECT TOP (1) DefinitionVersion
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleKey = @moduleKey
+  AND IsApplied = 1
+ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;
+""",
+                        command => command.Parameters.AddWithValue("@moduleKey", definition.ModuleKey));
+                    var status = CompareInstalledVersion(installedVersion, definition.DefinitionVersion);
+                    hasUpdates |= IsDeveloperUpdateStatus(status);
+                    lines.Add($"  {status,-7} module {definition.ModuleKey}: installed {installedVersion ?? "(missing)"}, source {definition.DefinitionVersion}.");
+                }
+
+                foreach (var component in sourceComponents)
+                {
+                    var installedVersion = await QueryScalarStringAsync(
+                        connection,
+                        """
+SELECT TOP (1) ar.Version
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = @moduleKey
+  AND a.AppKey = @appKey
+  AND ar.PackageType = @packageType
+  AND ISNULL(ar.TargetName, N'') = @targetName
+ORDER BY ar.ArtifactId DESC;
+""",
+                        command =>
+                        {
+                            command.Parameters.AddWithValue("@moduleKey", component.ModuleKey);
+                            command.Parameters.AddWithValue("@appKey", component.AppKey);
+                            command.Parameters.AddWithValue("@packageType", component.PackageType);
+                            command.Parameters.AddWithValue("@targetName", component.TargetName);
+                        });
+                    var status = CompareInstalledVersion(installedVersion, component.Version);
+                    hasUpdates |= IsDeveloperUpdateStatus(status);
+                    lines.Add($"  {status,-7} artifact {component.ComponentKey}: installed {installedVersion ?? "(missing)"}, source {component.Version}.");
+                }
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+            {
+                lines.Add($"  SKIP    database check failed: {ex.Message}");
+            }
+
+            return hasUpdates;
+        }
+
+        private static string CompareInstalledVersion(string? installedVersion, string sourceVersion)
+        {
+            if (string.IsNullOrWhiteSpace(installedVersion))
+            {
+                return "UPDATE";
+            }
+
+            var comparison = CompareVersionText(sourceVersion, installedVersion);
+            if (comparison == 0)
+            {
+                return "OK";
+            }
+
+            return comparison > 0 ? "UPDATE" : "DIFF";
+        }
+
+        private static bool IsDeveloperUpdateStatus(string status)
+            => status is "UPDATE" or "DIFF";
+
+        private ArtifactPayloadOptions? FindConfiguredArtifact(ManifestComponent component)
+        {
+            var expectedPrefix = NormalizePathForMatch(component.RelativePathTemplate)
+                .Replace("{version}", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .TrimEnd('/');
+
+            return _config.Artifacts.FirstOrDefault(artifact =>
+            {
+                var target = NormalizePathForMatch(artifact.Target);
+                return target.StartsWith(expectedPrefix + "/", StringComparison.OrdinalIgnoreCase)
+                    || ParseArtifactPackageIdentity(artifact.Source) is { } identity
+                    && string.Equals(identity.ModuleKey, component.ModuleKey, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(identity.AppKey, component.AppKey, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(identity.PackageType, component.PackageType, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(identity.TargetName, component.TargetName, StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
+        private static ArtifactPackageIdentity? ParseArtifactPackageIdentity(string source)
+        {
+            var fileName = Path.GetFileNameWithoutExtension(source);
+            var parts = fileName.Split(["__"], StringSplitOptions.None);
+            return parts.Length == 5
+                ? new ArtifactPackageIdentity(parts[0], parts[1], parts[2], parts[3], parts[4])
+                : null;
+        }
+
+        private static async Task<string?> QueryScalarStringAsync(
+            SqlConnection connection,
+            string sql,
+            Action<SqlCommand> bind)
+        {
+            await using var command = new SqlCommand(sql, connection);
+            bind(command);
+            var value = await command.ExecuteScalarAsync();
+            return value is null or DBNull ? null : Convert.ToString(value);
+        }
+
+        private static async Task<JsonNode> ReadJsonNodeAsync(string path)
+        {
+            var text = await File.ReadAllTextAsync(path, Encoding.UTF8);
+            return JsonNode.Parse(text)
+                ?? throw new InvalidOperationException($"JSON file is empty: {path}");
+        }
+
+        private static async Task<IReadOnlyList<DeveloperManifest>> ReadDeveloperManifestsAsync(string sourceRoot)
+        {
+            var manifests = new List<DeveloperManifest>();
+            foreach (var root in EnumerateDeveloperManifestRoots(sourceRoot))
+            {
+                var manifestPath = Path.Combine(root, "omp-components.json");
+                var json = await ReadJsonNodeAsync(manifestPath);
+                var repositoryKey = GetJsonStringProperty(json, "repositoryKey");
+                manifests.Add(new DeveloperManifest(
+                    root,
+                    manifestPath,
+                    string.IsNullOrWhiteSpace(repositoryKey) ? Path.GetFileName(root) : repositoryKey,
+                    json));
+            }
+
+            return manifests;
+        }
+
+        private static IEnumerable<string> EnumerateDeveloperManifestRoots(string sourceRoot)
+        {
+            yield return sourceRoot;
+
+            var workspaceRoot = Directory.GetParent(sourceRoot)?.FullName;
+            if (string.IsNullOrWhiteSpace(workspaceRoot))
+            {
+                yield break;
+            }
+
+            var openDocViewerRoot = Path.Combine(workspaceRoot, "OpenDocViewer");
+            if (File.Exists(Path.Combine(openDocViewerRoot, "omp-components.json")))
+            {
+                yield return openDocViewerRoot;
+            }
+        }
+
+        private static IReadOnlyList<ManifestModuleDefinition> ReadManifestModuleDefinitions(
+            JsonNode manifest,
+            string sourceRoot,
+            string repositoryKey)
+        {
+            if (GetJsonObjectProperty(manifest, "moduleDefinitions") is not JsonArray items)
+            {
+                return [];
+            }
+
+            return items
+                .OfType<JsonObject>()
+                .Select(item => new ManifestModuleDefinition(
+                    sourceRoot,
+                    repositoryKey,
+                    GetJsonStringProperty(item, "moduleKey"),
+                    GetJsonStringProperty(item, "definitionVersion"),
+                    GetJsonStringProperty(item, "path")))
+                .Where(item => !string.IsNullOrWhiteSpace(item.ModuleKey)
+                    && !string.IsNullOrWhiteSpace(item.DefinitionVersion)
+                    && !string.IsNullOrWhiteSpace(item.Path))
+                .ToArray();
+        }
+
+        private static IReadOnlyList<ManifestComponent> ReadManifestComponents(
+            JsonNode manifest,
+            string sourceRoot,
+            string repositoryKey)
+        {
+            if (GetJsonObjectProperty(manifest, "components") is not JsonArray items)
+            {
+                return [];
+            }
+
+            return items
+                .OfType<JsonObject>()
+                .Select(item => new ManifestComponent(
+                    sourceRoot,
+                    repositoryKey,
+                    GetJsonStringProperty(item, "componentKey"),
+                    GetJsonStringProperty(item, "moduleKey"),
+                    GetJsonStringProperty(item, "appKey"),
+                    GetJsonStringProperty(item, "packageType"),
+                    GetJsonStringProperty(item, "targetName"),
+                    GetJsonStringProperty(item, "version"),
+                    GetJsonStringProperty(item, "relativePathTemplate")))
+                .Where(static item => item.HasCompleteArtifactIdentity)
+                .ToArray();
+        }
+
+        private string? ResolveDeveloperSourceRoot(bool throwIfMissing)
+        {
+            var configured = _config.DeveloperSource.SourceRoot;
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                var resolved = Path.GetFullPath(configured);
+                if (IsDeveloperSourceRoot(resolved))
+                {
+                    return resolved;
+                }
+
+                if (throwIfMissing)
+                {
+                    throw new DirectoryNotFoundException($"Configured developer source root is not an OpenModulePlatform source repository: {resolved}");
+                }
+            }
+
+            foreach (var start in GetDeveloperSourceSearchStarts())
+            {
+                foreach (var candidate in EnumerateSelfAndParents(start))
+                {
+                    if (IsDeveloperSourceRoot(candidate))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            if (throwIfMissing)
+            {
+                throw new DirectoryNotFoundException("No OpenModulePlatform source repository was found. Set Developer / Source repository root in the installer before using this action.");
+            }
+
+            return null;
+        }
+
+        private IEnumerable<string> GetDeveloperSourceSearchStarts()
+        {
+            yield return _payloadRoot;
+            yield return Path.GetDirectoryName(_configPath) ?? Environment.CurrentDirectory;
+            yield return AppContext.BaseDirectory;
+            yield return Environment.CurrentDirectory;
+        }
+
+        private static IEnumerable<string> EnumerateSelfAndParents(string path)
+        {
+            var directory = Directory.Exists(path)
+                ? new DirectoryInfo(path)
+                : new DirectoryInfo(Path.GetDirectoryName(path) ?? Environment.CurrentDirectory);
+            while (directory is not null)
+            {
+                yield return directory.FullName;
+                directory = directory.Parent;
+            }
+        }
+
+        private static bool IsDeveloperSourceRoot(string path)
+            => File.Exists(Path.Combine(path, "omp-components.json"))
+                && File.Exists(Path.Combine(path, "OpenModulePlatform.slnx"))
+                && File.Exists(Path.Combine(path, "scripts", "deployment", "package-hostagent-first.ps1"));
+
+        private string ResolveDeveloperPackageConfigPath(string sourceRoot)
+        {
+            if (!string.IsNullOrWhiteSpace(_config.DeveloperSource.PackageConfigPath))
+            {
+                var configured = Path.GetFullPath(_config.DeveloperSource.PackageConfigPath);
+                if (!File.Exists(configured))
+                {
+                    throw new FileNotFoundException("Configured package config was not found.", configured);
+                }
+
+                return configured;
+            }
+
+            var local = Path.Combine(sourceRoot, "scripts", "deployment", "omp-suite.local.psd1");
+            if (File.Exists(local))
+            {
+                return local;
+            }
+
+            var sample = Path.Combine(sourceRoot, "scripts", "deployment", "omp-suite.config.sample.psd1");
+            if (File.Exists(sample))
+            {
+                return sample;
+            }
+
+            throw new FileNotFoundException("No package config was found below the source repository.");
+        }
+
+        private string ResolveDeveloperPackageOutputRoot(string sourceRoot)
+        {
+            if (!string.IsNullOrWhiteSpace(_config.DeveloperSource.PackageOutputRoot))
+            {
+                return Path.GetFullPath(_config.DeveloperSource.PackageOutputRoot);
+            }
+
+            return Path.Combine(Path.GetTempPath(), "omp-developer-package-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
+        }
+
+        private static void CopyDirectoryContents(string source, string destination, string searchPattern)
+        {
+            if (!Directory.Exists(source))
+            {
+                throw new DirectoryNotFoundException($"Generated package directory was not found: {source}");
+            }
+
+            Directory.CreateDirectory(destination);
+            foreach (var file in Directory.EnumerateFiles(source, searchPattern, SearchOption.TopDirectoryOnly))
+            {
+                File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
+            }
+        }
+
+        private async Task SaveCurrentConfigAsync()
+        {
+            var json = JsonSerializer.Serialize(_config, JsonOptions);
+            await File.WriteAllTextAsync(_configPath, json + Environment.NewLine, Encoding.UTF8);
+        }
+
+        private static int CompareVersionText(string left, string right)
+        {
+            if (Version.TryParse(left, out var leftVersion) && Version.TryParse(right, out var rightVersion))
+            {
+                return leftVersion.CompareTo(rightVersion);
+            }
+
+            var leftParts = left.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
+            var rightParts = right.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
+            var count = Math.Max(leftParts.Length, rightParts.Length);
+            for (var index = 0; index < count; index++)
+            {
+                var leftPart = index < leftParts.Length ? leftParts[index] : "0";
+                var rightPart = index < rightParts.Length ? rightParts[index] : "0";
+                if (int.TryParse(leftPart, out var leftNumber) && int.TryParse(rightPart, out var rightNumber))
+                {
+                    var numberComparison = leftNumber.CompareTo(rightNumber);
+                    if (numberComparison != 0)
+                    {
+                        return numberComparison;
+                    }
+
+                    continue;
+                }
+
+                var textComparison = string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
+                if (textComparison != 0)
+                {
+                    return textComparison;
+                }
+            }
+
+            return 0;
         }
 
         private async Task UninstallAsync(bool removeRuntimeFiles, bool removeDatabaseObjects)
@@ -688,4 +1302,49 @@ internal static partial class Program
             _target.AppendText(text);
         }
     }
+
+    private sealed record DeveloperSourceCheckResult(
+        bool HasUpdates,
+        IReadOnlyList<string> Lines);
+
+    private sealed record DeveloperManifest(
+        string SourceRoot,
+        string ManifestPath,
+        string RepositoryKey,
+        JsonNode Json);
+
+    private sealed record ManifestModuleDefinition(
+        string SourceRoot,
+        string RepositoryKey,
+        string ModuleKey,
+        string DefinitionVersion,
+        string Path);
+
+    private sealed record ManifestComponent(
+        string SourceRoot,
+        string RepositoryKey,
+        string ComponentKey,
+        string ModuleKey,
+        string AppKey,
+        string PackageType,
+        string TargetName,
+        string Version,
+        string RelativePathTemplate)
+    {
+        public bool HasCompleteArtifactIdentity
+            => !string.IsNullOrWhiteSpace(ComponentKey)
+                && !string.IsNullOrWhiteSpace(ModuleKey)
+                && !string.IsNullOrWhiteSpace(AppKey)
+                && !string.IsNullOrWhiteSpace(PackageType)
+                && !string.IsNullOrWhiteSpace(TargetName)
+                && !string.IsNullOrWhiteSpace(Version)
+                && !string.IsNullOrWhiteSpace(RelativePathTemplate);
+    }
+
+    private sealed record ArtifactPackageIdentity(
+        string ModuleKey,
+        string AppKey,
+        string PackageType,
+        string TargetName,
+        string Version);
 }

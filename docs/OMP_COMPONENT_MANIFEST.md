@@ -52,3 +52,17 @@ Components with a complete artifact identity (`moduleKey`, `appKey`,
 artifact package objects. Infrastructure components without module/app metadata,
 such as HostAgent itself, remain direct installer payload zips because they are
 needed before normal OMP deployment exists.
+
+## Generating Current Objects
+
+Module definitions and artifact packages are generated from this manifest rather
+than from one script per module or artifact. Keeping generation manifest-driven
+avoids a second list of component names that can drift from the actual OMP
+identity fields. The HostAgent-first package builder consumes
+`omp-components.json`, embeds current SQL into module-definition JSON, publishes
+component projects, and emits standard artifact package zips.
+
+The graphical bootstrapper exposes the same workflow for development machines:
+`Check source objects` compares the current package and database with the source
+manifests, and `Upgrade from source` rebuilds the package objects from the
+manifest before running the normal install/update path.
