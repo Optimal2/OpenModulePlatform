@@ -176,7 +176,7 @@
                         </div>
                         <div class="portal-entry-layout-row__actions">
                             <button type="button" class="button secondary" data-portal-entry-clear-parent>@L["Make top-level"]</button>
-                            <a class="action-link portal-entry-icon-button portal-entry-icon-button--edit"
+                            <a class="action-link admin-icon-button admin-icon-button--edit"
                                asp-page="/Admin/PortalEntryEdit"
                                asp-route-portalEntryId="@row.PortalEntryId"
                                title="@L["Edit"]"
@@ -184,7 +184,7 @@
                                 <span class="visually-hidden">@L["Edit"]</span>
                             </a>
                             <button type="submit"
-                                    class="btn-danger-subtle portal-entry-icon-button portal-entry-icon-button--delete"
+                                    class="btn-danger-subtle admin-icon-button admin-icon-button--delete"
                                     asp-page-handler="Delete"
                                     asp-route-portalEntryId="@row.PortalEntryId"
                                     data-confirm="@L["Remove this Portal Entry?"]"
@@ -273,7 +273,7 @@
                         <td><span class="pill">@(row.IsEnabled ? L["Yes"] : L["No"])</span></td>
                         <td>@row.DefaultSortOrder</td>
                         <td>
-                            <a class="action-link portal-entry-icon-button portal-entry-icon-button--edit"
+                            <a class="action-link admin-icon-button admin-icon-button--edit"
                                asp-page="/Admin/PortalEntryEdit"
                                asp-route-portalEntryId="@row.PortalEntryId"
                                title="@L["Edit"]"

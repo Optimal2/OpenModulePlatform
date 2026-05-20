@@ -48,8 +48,8 @@
     }
     else
     {
-        <div class="table-scroll">
-            <table class="grid integrity-grid">
+        <div class="table-scroll module-definitions-scroll">
+            <table class="grid integrity-grid module-integrity-grid">
                 <thead>
                     <tr>
                         <th>@L["Module key"]</th>
@@ -117,7 +117,14 @@
                                 <div class="muted">@L[message]</div>
                             }
                         </td>
-                        <td><a class="action-link" href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId">@L["View"]</a></td>
+                        <td class="admin-action-cell">
+                            <a class="action-link admin-icon-button admin-icon-button--clarify"
+                               href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId"
+                               title="@L["View"]"
+                               aria-label="@L["View"]">
+                                <span class="visually-hidden">@L["View"]</span>
+                            </a>
+                        </td>
                     </tr>
                 }
                 </tbody>
@@ -132,7 +139,8 @@
 }
 else
 {
-    <table class="grid">
+    <div class="table-scroll module-definitions-scroll">
+    <table class="grid module-definitions-grid">
         <thead>
             <tr>
                 <th>@L["Module key"]</th>
@@ -154,9 +162,17 @@ else
                 <td>@row.CompatibleArtifactSlotCount</td>
                 <td><span class="pill">@(row.IsApplied ? L["Applied"] : L["Stored"])</span></td>
                 <td>@row.UpdatedUtc.ToString("u")</td>
-                <td><a class="action-link" href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId">@L["View"]</a></td>
+                <td class="admin-action-cell">
+                    <a class="action-link admin-icon-button admin-icon-button--clarify"
+                       href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId"
+                       title="@L["View"]"
+                       aria-label="@L["View"]">
+                        <span class="visually-hidden">@L["View"]</span>
+                    </a>
+                </td>
             </tr>
         }
         </tbody>
     </table>
+    </div>
 }

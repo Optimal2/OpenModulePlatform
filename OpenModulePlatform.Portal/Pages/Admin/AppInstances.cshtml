@@ -27,7 +27,7 @@
 }
 else
 {
-    <div class="table-scroll">
+    <div class="table-scroll app-instances-scroll">
         <table class="grid app-instances-grid">
         <thead>
             <tr>
@@ -41,7 +41,7 @@ else
                 <th>@L["Artifact"]</th>
                 <th>@L["Allowed"]</th>
                 <th>@L["Last seen"]</th>
-                            <th>@L["Actions"]</th>
+                <th>@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -59,14 +59,24 @@ else
                 <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
                 <td>@row.LastSeenUtc?.ToString("u")</td>
                 <td>
-                    <div class="stacked-actions">
-                        <a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["View"]</a>
+                    <div class="admin-icon-actions">
+                        <a class="action-link admin-icon-button admin-icon-button--clarify"
+                           href="~/admin/appinstanceedit?id=@row.AppInstanceId"
+                           title="@L["View"]"
+                           aria-label="@L["View"]">
+                            <span class="visually-hidden">@L["View"]</span>
+                        </a>
                         <form method="post"
                               asp-page-handler="DeleteRuntime"
                               asp-route-appInstanceId="@row.AppInstanceId"
                               class="inline-form"
                               onsubmit="return confirm('@L["Delete this runtime row? If the instance template still expects it, HostAgent may recreate it."]');">
-                            <button type="submit" class="btn btn-link-danger">@L["Delete runtime row"]</button>
+                            <button type="submit"
+                                    class="btn btn-link-danger admin-icon-button admin-icon-button--delete"
+                                    title="@L["Delete runtime row"]"
+                                    aria-label="@L["Delete runtime row"]">
+                                <span class="visually-hidden">@L["Delete runtime row"]</span>
+                            </button>
                         </form>
                     </div>
                 </td>

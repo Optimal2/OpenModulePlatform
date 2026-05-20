@@ -38,8 +38,13 @@ else
                     <td>@row.Description</td>
                     <td><span class="pill">@row.PermissionCount</span></td>
                     <td><span class="pill">@row.PrincipalCount</span></td>
-                    <td>
-                        <a class="action-link" href="~/admin/security/role?roleId=@row.RoleId">@L["Edit"]</a>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/security/role?roleId=@row.RoleId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
                     </td>
                 </tr>
             }

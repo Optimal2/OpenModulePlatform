@@ -42,7 +42,14 @@ else
                 <td><code>@row.ModuleInstanceKey</code></td>
                 <td>@row.DisplayName</td>
                 <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
-                <td><a class="action-link" href="~/admin/moduleinstanceedit?id=@row.ModuleInstanceId">@L["Edit"]</a></td>
+                <td class="admin-action-cell">
+                    <a class="action-link admin-icon-button admin-icon-button--edit"
+                       href="~/admin/moduleinstanceedit?id=@row.ModuleInstanceId"
+                       title="@L["Edit"]"
+                       aria-label="@L["Edit"]">
+                        <span class="visually-hidden">@L["Edit"]</span>
+                    </a>
+                </td>
             </tr>
         }
         </tbody>

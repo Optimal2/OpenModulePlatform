@@ -66,7 +66,14 @@
                     <td><code>@row.WorkerTypeKey</code></td>
                     <td><code>@row.PluginRelativePath</code></td>
                     <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
-                    <td><a class="action-link" href="~/admin/appworkeredit?id=@row.AppId">@L["Edit"]</a></td>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/appworkeredit?id=@row.AppId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
+                    </td>
                 </tr>
             }
             </tbody>
@@ -155,12 +162,29 @@
                         <div class="stacked-actions">
                             @if (row.InstanceTemplateAppInstanceId.HasValue)
                             {
-                                <a class="action-link" href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId.Value">@L["Edit desired state"]</a>
-                                <a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["View runtime row"]</a>
+                                <div class="admin-icon-actions">
+                                    <a class="action-link admin-icon-button admin-icon-button--edit"
+                                       href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId.Value"
+                                       title="@L["Edit desired state"]"
+                                       aria-label="@L["Edit desired state"]">
+                                        <span class="visually-hidden">@L["Edit desired state"]</span>
+                                    </a>
+                                    <a class="action-link admin-icon-button admin-icon-button--clarify"
+                                       href="~/admin/appinstanceedit?id=@row.AppInstanceId"
+                                       title="@L["View runtime row"]"
+                                       aria-label="@L["View runtime row"]">
+                                        <span class="visually-hidden">@L["View runtime row"]</span>
+                                    </a>
+                                </div>
                             }
                             else
                             {
-                                <a class="action-link" href="~/admin/appinstanceedit?id=@row.AppInstanceId">@L["Edit manual runtime row"]</a>
+                                <a class="action-link admin-icon-button admin-icon-button--edit"
+                                   href="~/admin/appinstanceedit?id=@row.AppInstanceId"
+                                   title="@L["Edit manual runtime row"]"
+                                   aria-label="@L["Edit manual runtime row"]">
+                                    <span class="visually-hidden">@L["Edit manual runtime row"]</span>
+                                </a>
                                 <form
                                     method="post"
                                     asp-page-handler="DeleteRuntime"

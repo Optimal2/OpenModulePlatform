@@ -148,14 +148,24 @@
                         <td>@row.ConfigPriority</td>
                         <td><code>@Model.ValuePreview(row.ConfigValue)</code></td>
                         <td>
-                            <div class="toolbar">
-                                <a class="action-link" href="~/admin/configsettings?configId=@row.ConfigId">@L["Edit"]</a>
+                            <div class="admin-icon-actions">
+                                <a class="action-link admin-icon-button admin-icon-button--edit"
+                                   href="~/admin/configsettings?configId=@row.ConfigId"
+                                   title="@L["Edit"]"
+                                   aria-label="@L["Edit"]">
+                                    <span class="visually-hidden">@L["Edit"]</span>
+                                </a>
                                 <form
                                     method="post"
                                     asp-page-handler="Delete"
                                     asp-route-configId="@row.ConfigId"
                                     onsubmit="return confirm('@L["Delete this config setting value?"]');">
-                                    <button type="submit" class="btn btn-danger">@L["Delete"]</button>
+                                    <button type="submit"
+                                            class="btn btn-danger admin-icon-button admin-icon-button--delete"
+                                            title="@L["Delete"]"
+                                            aria-label="@L["Delete"]">
+                                        <span class="visually-hidden">@L["Delete"]</span>
+                                    </button>
                                 </form>
                             </div>
                         </td>

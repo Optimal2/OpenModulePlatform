@@ -592,34 +592,6 @@ button[aria-disabled=true]:hover,
     width: 7%;
 }
 
-.portal-entry-icon-button {
-    --portal-entry-action-icon: url("/icons/edit.svg");
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    min-height: 34px;
-    padding: 0;
-    border-radius: 10px;
-    flex: 0 0 auto;
-}
-
-.portal-entry-icon-button::before {
-    content: "";
-    width: 18px;
-    height: 18px;
-    background: currentColor;
-    -webkit-mask: var(--portal-entry-action-icon) center / contain no-repeat;
-    mask: var(--portal-entry-action-icon) center / contain no-repeat;
-}
-
-.portal-entry-icon-button--edit {
-    --portal-entry-action-icon: url("/icons/edit.svg");
-}
-
-.portal-entry-icon-button--delete {
-    --portal-entry-action-icon: url("/icons/delete.svg");
-}
-
 .portal-apps-grid {
     max-width: 100%;
 }
@@ -647,6 +619,7 @@ button[aria-disabled=true]:hover,
 
 .app-instances-grid {
     table-layout: fixed;
+    font-size: 0.82rem;
 }
 
 .app-instances-grid th,
@@ -659,6 +632,26 @@ button[aria-disabled=true]:hover,
 
 .app-instances-grid code {
     white-space: normal;
+}
+
+.app-instances-grid th,
+.app-instances-grid td {
+    padding: 8px 9px;
+}
+
+.app-instances-grid th:first-child,
+.app-instances-grid td:first-child {
+    padding-left: 14px;
+}
+
+.app-instances-grid th:last-child,
+.app-instances-grid td:last-child {
+    width: 96px;
+    padding-right: 14px;
+}
+
+.app-instances-scroll {
+    overflow-x: hidden;
 }
 
 .workers-grid {
@@ -1419,11 +1412,114 @@ button {
     color: #7a271a;
 }
 
+.admin-icon-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.admin-icon-actions form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.admin-icon-button {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/edit.svg");
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border-radius: 10px;
+    flex: 0 0 auto;
+}
+
+.admin-icon-button::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask: var(--admin-action-icon) center / contain no-repeat;
+    mask: var(--admin-action-icon) center / contain no-repeat;
+}
+
+.admin-icon-button--edit {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/edit.svg");
+}
+
+.admin-icon-button--clarify {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/clarify.svg");
+}
+
+.admin-icon-button--delete {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/delete.svg");
+}
+
+.btn-link-danger.admin-icon-button {
+    border: 1px solid #f0c2c2;
+    background: #fff7f7;
+    color: #8a1f1f;
+    font-size: 0;
+    padding: 0;
+    text-decoration: none;
+}
+
+.btn-link-danger.admin-icon-button:hover {
+    border-color: #d36f6f;
+    color: #7a1111;
+}
+
+.admin-action-cell {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.module-definitions-grid,
+.module-integrity-grid {
+    table-layout: fixed;
+    font-size: 0.84rem;
+}
+
+.module-definitions-grid th,
+.module-definitions-grid td,
+.module-definitions-grid code,
+.module-integrity-grid th,
+.module-integrity-grid td,
+.module-integrity-grid code,
+.module-integrity-grid .muted {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.module-definitions-grid code,
+.module-integrity-grid code {
+    white-space: normal;
+}
+
+.module-definitions-grid th,
+.module-definitions-grid td,
+.module-integrity-grid th,
+.module-integrity-grid td {
+    padding: 8px 9px;
+}
+
 .workers-grid th:last-child,
 .workers-grid td:last-child {
     width: 10.5rem;
     max-width: 10.5rem;
     white-space: nowrap;
+}
+
+.workers-grid .admin-icon-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    font-size: 1rem;
 }
 
 .module-definition-editor-frame {

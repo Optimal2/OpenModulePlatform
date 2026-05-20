@@ -34,8 +34,13 @@ else
                     <td>@row.Name</td>
                     <td>@row.Description</td>
                     <td><span class="pill">@row.RoleCount</span></td>
-                    <td>
-                        <a class="action-link" href="~/admin/security/permissionedit?id=@row.PermissionId">@L["Edit"]</a>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/security/permissionedit?id=@row.PermissionId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
                     </td>
                 </tr>
             }
