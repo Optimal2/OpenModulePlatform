@@ -639,7 +639,7 @@ internal static partial class Program
             var sourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
             var packageScript = Path.Combine(sourceRoot, "scripts", "deployment", "package-hostagent-first.ps1");
             var packageConfigPath = ResolveDeveloperPackageConfigPath(sourceRoot);
-            var packageOutputRoot = ResolveDeveloperPackageOutputRoot(sourceRoot);
+            var packageOutputRoot = ResolveSafeDeveloperPackageOutputRoot(sourceRoot);
 
             Console.WriteLine($"Source root: {sourceRoot}");
             Console.WriteLine($"Package config: {packageConfigPath}");
@@ -1015,6 +1015,39 @@ ORDER BY ar.ArtifactId DESC;
 
             return Path.Combine(Path.GetTempPath(), "omp-developer-package-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
         }
+
+        private string ResolveSafeDeveloperPackageOutputRoot(string sourceRoot)
+        {
+            var packageOutputRoot = ResolveDeveloperPackageOutputRoot(sourceRoot);
+            if (!PathOverlaps(packageOutputRoot, _payloadRoot))
+            {
+                return packageOutputRoot;
+            }
+
+            var isolatedOutputRoot = Path.Combine(
+                Path.GetTempPath(),
+                "omp-developer-package-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
+            Console.WriteLine("Configured temporary package output overlaps the running installer package.");
+            Console.WriteLine($"Configured output: {packageOutputRoot}");
+            Console.WriteLine($"Running package:   {_payloadRoot}");
+            Console.WriteLine($"Using isolated output instead: {isolatedOutputRoot}");
+            return isolatedOutputRoot;
+        }
+
+        private static bool PathOverlaps(string left, string right)
+            => IsSameOrParentPath(left, right) || IsSameOrParentPath(right, left);
+
+        private static bool IsSameOrParentPath(string parentPath, string childPath)
+        {
+            var parent = WithTrailingDirectorySeparator(Path.GetFullPath(parentPath));
+            var child = WithTrailingDirectorySeparator(Path.GetFullPath(childPath));
+            return child.StartsWith(parent, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string WithTrailingDirectorySeparator(string path)
+            => path.EndsWith(Path.DirectorySeparatorChar)
+                ? path
+                : path + Path.DirectorySeparatorChar;
 
         private static void CopyDirectoryContents(string source, string destination, string searchPattern)
         {
