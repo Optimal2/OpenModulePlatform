@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows.Forms;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.Bootstrapper;
 
@@ -519,7 +520,7 @@ internal static partial class Program
         {
             ApplyValues();
             var confirmation = MessageBox.Show(
-                "This updates this installer package with newer or missing module definition JSON files and artifact package zips that already exist in the package, ArtifactStore _available library, RuntimeRoot\\ArtifactArchive, or source artifacts folders. It does not compile source projects. If a binary artifact package is missing everywhere, use Create updated installer package instead. Continue?",
+                "This updates this installer package with newer or missing module definition JSON files and artifact package zips. Existing package zips are reused first. If a .NET artifact package is missing, only that component project is published and packaged. Non-.NET packages still need to exist in ArtifactArchive or the source artifacts folder. Continue?",
                 "Sync package objects",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
@@ -766,6 +767,7 @@ internal static partial class Program
             var unchanged = 0;
             var warnings = 0;
             var configUpdated = false;
+            var builtPackages = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
             lines.Add($"Installer package: {_payloadRoot}");
             lines.Add("Artifact package search roots:");
@@ -822,9 +824,18 @@ internal static partial class Program
                     {
                         if (sourcePackage is null)
                         {
-                            lines.Add($"  WARN    {component.ComponentKey}: package target is {current.Target}, source expects {expectedTarget}, but {packageName} was not found in any artifact package search root.");
-                            warnings++;
-                            continue;
+                            sourcePackage = ResolveOrBuildSourceArtifactPackage(
+                                component,
+                                packageName,
+                                artifactSearchRoots,
+                                builtPackages,
+                                lines);
+                            if (sourcePackage is null)
+                            {
+                                lines.Add($"  WARN    {component.ComponentKey}: package target is {current.Target}, source expects {expectedTarget}, but {packageName} was not found and could not be selectively built.");
+                                warnings++;
+                                continue;
+                            }
                         }
 
                         CopyFileIfDifferent(sourcePackage, payloadPath);
@@ -868,9 +879,18 @@ internal static partial class Program
 
                     if (sourcePackage is null)
                     {
-                        lines.Add($"  WARN    {component.ComponentKey}: configured artifact source is missing and {packageName} was not found in any artifact package search root.");
-                        warnings++;
-                        continue;
+                        sourcePackage = ResolveOrBuildSourceArtifactPackage(
+                            component,
+                            packageName,
+                            artifactSearchRoots,
+                            builtPackages,
+                            lines);
+                        if (sourcePackage is null)
+                        {
+                            lines.Add($"  WARN    {component.ComponentKey}: configured artifact source is missing and {packageName} was not found and could not be selectively built.");
+                            warnings++;
+                            continue;
+                        }
                     }
 
                     CopyFileIfDifferent(sourcePackage, payloadPath);
@@ -902,9 +922,18 @@ internal static partial class Program
 
                 if (sourcePackage is null)
                 {
-                    lines.Add($"  WARN    {component.ComponentKey}: {packageName} was not found. Build the artifact first or use Create updated installer package.");
-                    warnings++;
-                    continue;
+                    sourcePackage = ResolveOrBuildSourceArtifactPackage(
+                        component,
+                        packageName,
+                        artifactSearchRoots,
+                        builtPackages,
+                        lines);
+                    if (sourcePackage is null)
+                    {
+                        lines.Add($"  WARN    {component.ComponentKey}: {packageName} was not found and could not be selectively built. Build the artifact first or use Create updated installer package.");
+                        warnings++;
+                        continue;
+                    }
                 }
 
                 CopyFileIfDifferent(sourcePackage, availablePath);
@@ -968,6 +997,169 @@ internal static partial class Program
             }
 
             return null;
+        }
+
+        private string? ResolveOrBuildSourceArtifactPackage(
+            ManifestComponent component,
+            string packageName,
+            IReadOnlyList<string> artifactSearchRoots,
+            Dictionary<string, string?> builtPackages,
+            List<string> lines)
+        {
+            var sourcePackage = FindSourceArtifactPackage(packageName, artifactSearchRoots);
+            if (sourcePackage is not null)
+            {
+                return sourcePackage;
+            }
+
+            if (builtPackages.TryGetValue(packageName, out var builtPackage))
+            {
+                return builtPackage;
+            }
+
+            builtPackage = TryBuildSourceArtifactPackage(component, packageName, lines);
+            builtPackages[packageName] = builtPackage;
+            return builtPackage;
+        }
+
+        private string? TryBuildSourceArtifactPackage(
+            ManifestComponent component,
+            string packageName,
+            List<string> lines)
+        {
+            if (string.IsNullOrWhiteSpace(component.ProjectPath))
+            {
+                lines.Add($"  BUILD   {component.ComponentKey}: skipped selective build because the component manifest has no projectPath.");
+                return null;
+            }
+
+            string? projectFile;
+            try
+            {
+                projectFile = ResolveComponentProjectFile(component);
+            }
+            catch (InvalidOperationException ex)
+            {
+                lines.Add($"  BUILD   {component.ComponentKey}: skipped selective build because {ex.Message}");
+                return null;
+            }
+
+            if (projectFile is null)
+            {
+                lines.Add($"  BUILD   {component.ComponentKey}: skipped selective build because projectPath '{component.ProjectPath}' does not resolve to one .NET project file.");
+                return null;
+            }
+
+            var outputRoot = ResolveSelectiveArtifactOutputRoot(component);
+            var destination = Path.Combine(outputRoot, packageName);
+            var tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "omp-selective-artifact-build-" + Guid.NewGuid().ToString("N"));
+            var publishRoot = Path.Combine(tempRoot, "publish");
+
+            try
+            {
+                Directory.CreateDirectory(publishRoot);
+                lines.Add($"  BUILD   {component.ComponentKey}: publishing {GetDisplayPath(component.SourceRoot, projectFile)}.");
+                RunProcess(
+                    "dotnet",
+                    [
+                        "publish",
+                        projectFile,
+                        "-c",
+                        "Release",
+                        "-o",
+                        publishRoot,
+                        "--nologo",
+                        "--verbosity",
+                        "minimal"
+                    ],
+                    workingDirectory: component.SourceRoot);
+
+                RemoveRuntimeConfigurationFiles(publishRoot);
+                new ArtifactPackageWriter().CreateFromPayloadDirectory(
+                    publishRoot,
+                    destination,
+                    []);
+
+                lines.Add($"  BUILD   {component.ComponentKey}: created {destination}.");
+                return destination;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                lines.Add($"  BUILD   {component.ComponentKey}: selective build failed: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                DeleteDirectoryBestEffort(tempRoot);
+            }
+        }
+
+        private string ResolveSelectiveArtifactOutputRoot(ManifestComponent component)
+        {
+            if (!string.IsNullOrWhiteSpace(_config.ArtifactStoreRoot))
+            {
+                var artifactStoreRoot = Path.GetFullPath(_config.ArtifactStoreRoot);
+                var runtimeRoot = Directory.GetParent(artifactStoreRoot)?.FullName;
+                if (!string.IsNullOrWhiteSpace(runtimeRoot))
+                {
+                    return Path.Combine(runtimeRoot, "ArtifactArchive");
+                }
+            }
+
+            return Path.Combine(component.SourceRoot, "artifacts");
+        }
+
+        private static string? ResolveComponentProjectFile(ManifestComponent component)
+        {
+            var projectPath = Path.GetFullPath(Path.Combine(
+                component.SourceRoot,
+                component.ProjectPath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!IsSameOrChildPath(component.SourceRoot, projectPath))
+            {
+                throw new InvalidOperationException(
+                    $"Component projectPath '{component.ProjectPath}' escapes source root '{component.SourceRoot}'.");
+            }
+
+            if (File.Exists(projectPath)
+                && projectPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            {
+                return projectPath;
+            }
+
+            if (!Directory.Exists(projectPath))
+            {
+                return null;
+            }
+
+            var directoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(projectPath));
+            if (!string.IsNullOrWhiteSpace(directoryName))
+            {
+                var preferredProject = Path.Combine(projectPath, directoryName + ".csproj");
+                if (File.Exists(preferredProject))
+                {
+                    return preferredProject;
+                }
+            }
+
+            var projects = Directory.EnumerateFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
+                .ToArray();
+            return projects.Length == 1 ? projects[0] : null;
+        }
+
+        private static string GetDisplayPath(string root, string path)
+        {
+            try
+            {
+                return Path.GetRelativePath(root, path);
+            }
+            catch (ArgumentException)
+            {
+                return path;
+            }
         }
 
         private string ResolvePackagePath(string packageRelativePath)
@@ -1289,7 +1481,9 @@ ORDER BY ar.ArtifactId DESC;
                     GetJsonStringProperty(item, "packageType"),
                     GetJsonStringProperty(item, "targetName"),
                     GetJsonStringProperty(item, "version"),
-                    GetJsonStringProperty(item, "relativePathTemplate")))
+                    GetJsonStringProperty(item, "relativePathTemplate"),
+                    GetJsonStringProperty(item, "projectPath"),
+                    GetJsonStringProperty(item, "packageFileTemplate")))
                 .Where(static item => item.HasCompleteArtifactIdentity)
                 .ToArray();
         }
@@ -1689,7 +1883,9 @@ ORDER BY ar.ArtifactId DESC;
         string PackageType,
         string TargetName,
         string Version,
-        string RelativePathTemplate)
+        string RelativePathTemplate,
+        string ProjectPath,
+        string PackageFileTemplate)
     {
         public bool HasCompleteArtifactIdentity
             => !string.IsNullOrWhiteSpace(ComponentKey)
