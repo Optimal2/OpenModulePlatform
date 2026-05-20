@@ -33,6 +33,20 @@ function ConvertFrom-JsonDocument {
     return $Json | ConvertFrom-Json
 }
 
+function Get-OptionalPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)][object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return $property.Value
+}
+
 function Resolve-RepositoryPath {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -95,9 +109,19 @@ foreach ($definitionFile in $definitionFiles) {
         }
 
         $sqlText = Get-Content -LiteralPath $sqlPath -Raw -Encoding UTF8
+        $contentEncoding = 'base64-utf8'
+        $content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($sqlText))
+        $sha256 = Get-Sha256Hex -Text $sqlText
+
+        if ([string](Get-OptionalPropertyValue -Object $script -Name 'contentEncoding') -eq $contentEncoding `
+            -and [string](Get-OptionalPropertyValue -Object $script -Name 'content') -eq $content `
+            -and [string](Get-OptionalPropertyValue -Object $script -Name 'sha256') -eq $sha256) {
+            continue
+        }
+
         $script | Add-Member -NotePropertyName contentEncoding -NotePropertyValue 'base64-utf8' -Force
-        $script | Add-Member -NotePropertyName content -NotePropertyValue ([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($sqlText))) -Force
-        $script | Add-Member -NotePropertyName sha256 -NotePropertyValue (Get-Sha256Hex -Text $sqlText) -Force
+        $script | Add-Member -NotePropertyName content -NotePropertyValue $content -Force
+        $script | Add-Member -NotePropertyName sha256 -NotePropertyValue $sha256 -Force
         $changed = $true
     }
 

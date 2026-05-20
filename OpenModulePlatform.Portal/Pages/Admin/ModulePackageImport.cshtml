@@ -1,0 +1,190 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.ModulePackageImportModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Modules"]</div>
+        <h2>@L["Module packages"]</h2>
+        <p class="lede">@L["Import or export a portable module package containing one module definition JSON and the compatible artifact package zips."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<div class="section-grid section-grid--wide top-gap">
+    <section class="card section-card">
+        <h3>@L["Upload module package"]</h3>
+        <p class="muted">@L["Upload either one package zip containing a module definition JSON and artifact zips, or upload the JSON and artifact zips separately."]</p>
+
+        <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="form-grid">
+            <div class="form-field">
+                <label asp-for="UploadInput.BundleFile">@L["Package zip"]</label>
+                <input asp-for="UploadInput.BundleFile" type="file" accept=".zip,application/zip" />
+                <div class="field-help">@L["Use this when the JSON and artifact packages are bundled in one zip."]</div>
+            </div>
+
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="UploadInput.ModuleDefinitionJson">@L["Module definition JSON"]</label>
+                    <input asp-for="UploadInput.ModuleDefinitionJson" type="file" accept=".json,application/json" />
+                </div>
+
+                <div class="form-field">
+                    <label asp-for="UploadInput.ArtifactPackages">@L["Artifact packages"]</label>
+                    <input asp-for="UploadInput.ArtifactPackages" type="file" accept=".zip,application/zip" multiple />
+                    <div class="field-help">@L["Artifact filenames must follow module__app__packageType__target__version.zip."]</div>
+                </div>
+            </div>
+
+            <div class="field-grid field-grid--2">
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ApplyModuleDefinition" type="checkbox" />
+                    <span>@L["Apply module definition"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ExecuteSqlRepairs" type="checkbox" />
+                    <span>@L["Execute detected SQL repairs"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.AllowTemporaryIncompatibleArtifacts" type="checkbox" />
+                    <span>@L["Allow temporary incompatible artifact selections"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.UseArtifactsImmediately" type="checkbox" />
+                    <span>@L["Use imported artifacts immediately"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.CopyConfigurationFilesFromPreviousVersion" type="checkbox" />
+                    <span>@L["Copy configuration files from previous version"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ReplaceExistingModuleDefinition" type="checkbox" />
+                    <span>@L["Replace existing definition with same module key and version"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ReplaceExistingArtifacts" type="checkbox" />
+                    <span>@L["Replace existing artifacts with same identity"]</span>
+                </label>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Import uploaded package"]</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card section-card">
+        <h3>@L["Export module package"]</h3>
+        <p class="muted">@L["Export the active module definition together with the artifact packages currently referenced by the installation template and runtime rows."]</p>
+
+        @if (Model.AppliedDefinitions.Count == 0)
+        {
+            <div class="empty-state">@L["No active module definitions found."]</div>
+        }
+        else
+        {
+            <form method="get" asp-page-handler="Export" class="form-grid">
+                <div class="form-field">
+                    <label for="moduleKey">@L["Module key"]</label>
+                    <select id="moduleKey" name="moduleKey">
+                        @foreach (var definition in Model.AppliedDefinitions)
+                        {
+                            <option value="@definition.ModuleKey">@definition.ModuleKey (@definition.DefinitionVersion)</option>
+                        }
+                    </select>
+                </div>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input name="includeAllVersions" type="checkbox" value="true" />
+                    <span>@L["Include all historical artifact versions"]</span>
+                </label>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Export module package"]</button>
+                </div>
+            </form>
+        }
+    </section>
+</div>
+
+<section class="card top-gap">
+    <div class="section-heading-row">
+        <div>
+            <h3>@L["Available package library"]</h3>
+            <p class="lede">@L["These module definitions and artifact packages were installed into the shared artifact store for later import."]</p>
+        </div>
+    </div>
+
+    @if (Model.AvailablePackages.Count == 0)
+    {
+        <div class="empty-state">@L["No available module packages found."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Module key"]</th>
+                        <th>@L["Definition version"]</th>
+                        <th>@L["Module definition"]</th>
+                        <th>@L["Artifacts"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var package in Model.AvailablePackages)
+                {
+                    <tr>
+                        <td><code>@package.ModuleKey</code></td>
+                        <td>@package.DefinitionVersion</td>
+                        <td><code>@package.ModuleDefinitionFileName</code></td>
+                        <td>
+                            <strong>@package.ArtifactFiles.Count</strong>
+                            @if (package.ArtifactFiles.Count > 0)
+                            {
+                                <div class="muted">
+                                    @string.Join(", ", package.ArtifactFiles
+                                        .Take(4)
+                                        .Select(file => $"{file.AppKey} {file.Version}"))
+                                    @(package.ArtifactFiles.Count > 4 ? " ..." : string.Empty)
+                                </div>
+                            }
+                        </td>
+                        <td>
+                            <form method="post" asp-page-handler="ImportAvailable" class="inline-form">
+                                <input type="hidden" name="ImportInput.ModuleDefinitionFileName" value="@package.ModuleDefinitionFileName" />
+                                <input type="hidden" name="ImportInput.ApplyModuleDefinition" value="true" />
+                                <input type="hidden" name="ImportInput.ExecuteSqlRepairs" value="true" />
+                                <input type="hidden" name="ImportInput.AllowTemporaryIncompatibleArtifacts" value="true" />
+                                <input type="hidden" name="ImportInput.CopyConfigurationFilesFromPreviousVersion" value="true" />
+                                <input type="hidden" name="ImportInput.UseArtifactsImmediately" value="true" />
+                                <button type="submit">@L["Import"]</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/moduledefinitions">@L["Back to module definitions"]</a>
+    <a class="action-link" href="~/admin/artifacts">@L["Back to artifacts"]</a>
+</div>

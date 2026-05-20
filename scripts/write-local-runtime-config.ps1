@@ -124,6 +124,8 @@ $portalConfig = [ordered]@{
     OmpAuth = $ompAuthConfig
     ArtifactUpload = [ordered]@{
         ArtifactStoreRoot = $artifactStoreRoot
+        AvailableModuleDefinitionsRoot = Join-Path $artifactStoreRoot '_available\module-definitions'
+        AvailableArtifactsRoot = Join-Path $artifactStoreRoot '_available\artifacts'
         MaxUploadBytes = 536870912
     }
     Logging = [ordered]@{

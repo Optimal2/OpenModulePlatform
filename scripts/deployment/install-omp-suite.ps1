@@ -1678,6 +1678,8 @@ function Write-RuntimeConfiguration {
             $settings.Portal['PermissionMode'] = $script:PortalPermissionMode
             $settings.ArtifactUpload = [ordered]@{
                 ArtifactStoreRoot = $script:ArtifactStoreRoot
+                AvailableModuleDefinitionsRoot = Join-Path $script:ArtifactStoreRoot '_available\module-definitions'
+                AvailableArtifactsRoot = Join-Path $script:ArtifactStoreRoot '_available\artifacts'
                 MaxUploadBytes = 536870912
             }
         }

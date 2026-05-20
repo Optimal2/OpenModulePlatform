@@ -48,6 +48,7 @@ GO
         (N'omp_portal', N'portal:admin-users', N'Users', N'Manage OMP users and auth links.', N'/admin/users', 30),
         (N'omp_portal', N'portal:admin-security', N'Security', N'Manage roles and permissions.', N'/admin/security', 40),
         (N'omp_portal', N'portal:admin-config-settings', N'Config settings', N'Manage OMP configuration settings.', N'/admin/configsettings', 50),
+        (N'omp_portal', N'portal:admin-module-packages', N'Module packages', N'Import and export portable module packages.', N'/admin/modulepackageimport', 60),
 
         (N'content_webapp_webapp', N'content:admin', N'Admin', N'Manage content pages.', N'/content/admin', 10),
         (N'content_webapp_webapp', N'content:create', N'Create page', N'Create a new content page.', N'/content/admin/create', 20),

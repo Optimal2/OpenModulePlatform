@@ -183,8 +183,12 @@ HostAgent-first packages keep two sets of portable objects:
   installation.
 - `available-module-definitions` and `available-artifacts` contain module
   definitions and artifact packages that are packaged for later Portal-driven
-  installation. These files are not consumed by the bootstrapper and remain in
-  the expanded package after installation. External module artifacts are copied
+  installation. During bootstrap these files are copied, without deleting older
+  files, into `ArtifactStoreRoot\_available\module-definitions` and
+  `ArtifactStoreRoot\_available\artifacts`. Portal reads those folders from the
+  `ArtifactUpload:AvailableModuleDefinitionsRoot` and
+  `ArtifactUpload:AvailableArtifactsRoot` settings so admins can import modules
+  after the base installation is complete. External module artifacts are copied
   here from `HostAgentFirst.AvailableArtifactArchiveRoots` and from
   `RuntimeRoot\ArtifactArchive`. The package builder also scans `artifacts`
   folders below the configured source repositories. Matching standard
