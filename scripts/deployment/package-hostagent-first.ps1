@@ -706,6 +706,101 @@ Write-Step 'Copying component payloads'
 $componentPayloadSources = @{}
 $componentPayloadRoot = Join-Path $buildRoot 'component-payloads'
 New-Item -ItemType Directory -Path $componentPayloadRoot -Force | Out-Null
+$workerProcessHostComponent = $components | Where-Object { $_.componentKey -eq 'omp-workerprocesshost' } | Select-Object -First 1
+
+function New-WorkerManagerArtifactConfigurationFile {
+    param(
+        [Parameter(Mandatory = $true)][object]$WorkerProcessHostComponent,
+        [Parameter(Mandatory = $true)][string]$BuildRoot
+    )
+
+    $workerProcessHostCacheRelativePath = [string]::Join(
+        '/',
+        @(
+            [string]$WorkerProcessHostComponent.packageType,
+            [string]$WorkerProcessHostComponent.targetName,
+            [string]$WorkerProcessHostComponent.version
+        ))
+    $workerProcessExecutablePath = "{{Omp.Json.HostAgent.LocalArtifactCacheRoot}}/$workerProcessHostCacheRelativePath/OpenModulePlatform.WorkerProcessHost.exe"
+    $configurationPath = Join-Path $BuildRoot 'worker-manager-appsettings.json'
+    $configuration = [ordered]@{
+        ConnectionStrings = [ordered]@{
+            OmpDb = '{{Omp.Json.ConnectionStrings.OmpDb}}'
+        }
+        WorkerManager = [ordered]@{
+            CatalogMode = 'OmpDatabase'
+            HostKey = '{{Omp.Json.HostKey}}'
+            HostName = ''
+            RefreshSeconds = 15
+            WorkerProcessPath = $workerProcessExecutablePath
+            StopTimeoutSeconds = 15
+            RestartDelaySeconds = 5
+            RestartWindowSeconds = 300
+            MaxRestartsPerWindow = 5
+            OmpDatabase = [ordered]@{
+                RuntimeKind = 'windows-worker-plugin'
+                RunningDesiredState = 1
+                UseHostArtifactCache = $true
+            }
+            HostAgentRpc = [ordered]@{
+                Enabled = $true
+                PipeName = ''
+                TimeoutSeconds = 60
+            }
+            Workers = @()
+        }
+        Logging = [ordered]@{
+            LogLevel = [ordered]@{
+                Default = 'Information'
+                'Microsoft.Hosting.Lifetime' = 'Information'
+            }
+        }
+        NLog = [ordered]@{
+            autoReload = $true
+            throwConfigExceptions = $true
+            variables = [ordered]@{
+                appName = 'OpenModulePlatform.WorkerManager.WindowsService'
+                logDirectory = '${basedir}/logs'
+            }
+            targets = [ordered]@{
+                logfile = [ordered]@{
+                    type = 'File'
+                    fileName = '${var:logDirectory}/${var:appName}-${shortdate}.log'
+                    layout = '${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}'
+                }
+                console = [ordered]@{
+                    type = 'Console'
+                    layout = '${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}'
+                }
+            }
+            rules = @(
+                [ordered]@{
+                    logger = 'Microsoft.Hosting.Lifetime'
+                    minLevel = 'Info'
+                    writeTo = 'console,logfile'
+                    final = $true
+                },
+                [ordered]@{
+                    logger = 'Microsoft.*'
+                    maxLevel = 'Info'
+                    final = $true
+                },
+                [ordered]@{
+                    logger = '*'
+                    minLevel = 'Info'
+                    writeTo = 'console,logfile'
+                }
+            )
+        }
+    }
+
+    $configuration | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $configurationPath -Encoding UTF8
+    return [ordered]@{
+        RelativePath = 'appsettings.json'
+        SourcePath = $configurationPath
+        PackageSourcePath = 'configuration/appsettings.json'
+    }
+}
 
 foreach ($component in $components) {
     $packageTemplate = [string]$component.packageFileTemplate
@@ -729,7 +824,18 @@ foreach ($component in $components) {
             -TargetName ([string]$component.targetName) `
             -Version ([string]$component.version)
         $destination = Join-Path $payloadRoot $artifactPackageName
-        New-ArtifactPackage -PayloadZip $artifactPayloadZip -Destination $destination -BuildRoot $buildRoot
+        $configurationFiles = @()
+        if ([string]::Equals($componentKey, 'omp-workermanager-service', [StringComparison]::OrdinalIgnoreCase)) {
+            if ($null -eq $workerProcessHostComponent) {
+                throw "Component manifest must include omp-workerprocesshost before packaging omp-workermanager-service."
+            }
+
+            $configurationFiles += New-WorkerManagerArtifactConfigurationFile `
+                -WorkerProcessHostComponent $workerProcessHostComponent `
+                -BuildRoot $buildRoot
+        }
+
+        New-ArtifactPackage -PayloadZip $artifactPayloadZip -Destination $destination -BuildRoot $buildRoot -ConfigurationFiles $configurationFiles
         $componentPayloadSources[$componentKey] = "payload/$artifactPackageName"
 
         if ([string]::Equals($componentKey, 'omp-hostagent-service', [StringComparison]::OrdinalIgnoreCase)) {
@@ -977,6 +1083,8 @@ $versionOverrides = @{}
 $versionVariableOverrides = @{}
 $hostAgentVersion = [string]($components | Where-Object { $_.componentKey -eq 'omp-hostagent-service' } | Select-Object -First 1).version
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -Version $hostAgentVersion
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -VariableName 'WorkerManagerArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-workermanager-service' } | Select-Object -First 1).version)
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -VariableName 'WorkerProcessHostArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-workerprocesshost' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Auth/2-initialize-omp-auth.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-auth-web' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Portal/2-initialize-omp-portal.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-portal-web' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Web.ContentWebAppModule/2-initialize-content-webapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'content-webapp' } | Select-Object -First 1).version)
@@ -1045,6 +1153,11 @@ $database = [string](Get-ConfigValue -Config $config -Name 'Database' -DefaultVa
 $sqlAuthentication = [string](Get-ConfigValue -Config $config -Name 'SqlAuthentication' -DefaultValue 'Integrated')
 $sqlIntegrated = -not [string]::Equals($sqlAuthentication, 'SqlLogin', [StringComparison]::OrdinalIgnoreCase)
 $includeExampleApps = [bool](Get-NestedConfigValue -Config $config -Section 'Options' -Name 'InstallExamples' -DefaultValue $true)
+$hostAgentHostKey = [string](Get-ConfigValue -Config $config -Name 'HostKey' -DefaultValue '')
+if ([string]::IsNullOrWhiteSpace($hostAgentHostKey)) {
+    $hostAgentHostKey = 'sample-host'
+}
+$hostAgentHostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -DefaultValue '')
 
 $bootstrapConfig = [ordered]@{
     schema = 'OpenModulePlatform.HostAgentFirstBootstrap.v1'
@@ -1085,8 +1198,8 @@ $bootstrapConfig = [ordered]@{
         startService = $true
         settingsFileName = 'appsettings.Production.json'
         localArtifactCacheRoot = $artifactCacheRoot
-        hostKey = [string](Get-ConfigValue -Config $config -Name 'HostKey' -DefaultValue '')
-        hostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -DefaultValue '')
+        hostKey = $hostAgentHostKey
+        hostName = $hostAgentHostName
         refreshSeconds = 30
         deployWebApps = $true
         iisSiteName = $iisSiteName

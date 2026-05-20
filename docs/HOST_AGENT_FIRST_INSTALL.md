@@ -110,8 +110,9 @@ version, but it is not forced onto every app artifact. Components with normal
 OMP module/app metadata are packaged as manifest-based artifact package objects.
 HostAgent is included twice by design: once as a direct installer payload for
 the first manual service bootstrap, and once as a manifest-based `host-agent`
-artifact package that later HostAgent self-upgrade can consume. Bootstrap
-infrastructure without module/app metadata remains as direct installer payload.
+artifact package that later HostAgent self-upgrade can consume. Other compiled
+runtime components, including WorkerManager and WorkerProcessHost, are packaged
+only as OMP artifact packages with module/app metadata.
 
 OpenDocViewer is also packaged as a manifest-based OMP artifact package. The
 deployable `dist` output is stored as the package payload, while
@@ -134,6 +135,8 @@ be edited later through Portal.
    - `hostAgent.serviceAccountName`, when HostAgent must run as a specific
      Windows account instead of LocalSystem
    - `hostAgent.installPath`
+   - `hostAgent.hostKey`, when the environment should use a real host key
+     instead of the neutral `sample-host` bootstrap default
    - `hostAgent.webAppsRoot`
    - `hostAgent.portalPhysicalPath`
    - `hostAgent.servicesRoot`

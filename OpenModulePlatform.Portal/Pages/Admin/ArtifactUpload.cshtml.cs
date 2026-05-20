@@ -659,6 +659,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             "web-app" => "web",
             "service-app" => "service",
             "host-agent" => "hostagent",
+            "worker-host" => "host",
             "worker" => "worker",
             "worker-plugin" => "worker",
             "channel-type" => "channel-type",

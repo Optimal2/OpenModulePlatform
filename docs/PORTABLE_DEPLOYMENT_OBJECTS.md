@@ -29,9 +29,11 @@ HostAgent-first installer copies those files into the package-local
 `module-definitions` import folder. Portal stores imported definitions in
 `omp.ModuleDefinitionDocuments`.
 
-HostAgent is bootstrap infrastructure and is currently the only accepted
-exception. It can be packaged by the installer without being represented as a
-normal module definition.
+HostAgent, WorkerManager, and WorkerProcessHost are represented by the
+`omp_core` module definition. The remaining bootstrap exception is operational:
+the first HostAgent service install and repair flow still needs a direct
+HostAgent zip because artifact deployment is not available until a HostAgent
+service is running.
 
 ## Artifact Package Object
 
@@ -100,4 +102,3 @@ import is intentionally strict and unattended: invalid filenames, incompatible
 module/app combinations, duplicate versions, and changed hashes for an existing
 version are recorded as import errors instead of silently changing database
 state.
-
