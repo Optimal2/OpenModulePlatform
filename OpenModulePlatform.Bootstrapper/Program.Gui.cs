@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -89,6 +90,7 @@ internal static partial class Program
         };
         private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
+        private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
         private readonly Button _createUpdatedInstallerPackageButton = new() { Text = "Create updated installer package", AutoSize = true };
         private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
         private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
@@ -165,6 +167,7 @@ internal static partial class Program
             LoadValues();
             _installButton.Click += async (_, _) => await InstallAsync();
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
+            _syncPackageObjectsButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
             _createUpdatedInstallerPackageButton.Click += async (_, _) => await CreateUpdatedInstallerPackageAsync();
             _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
             _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
@@ -236,6 +239,10 @@ internal static partial class Program
                 grid,
                 _checkSourceButton,
                 "On a development machine, compares the installed/package module definitions and artifacts with the source repository manifest.");
+            AddActionRow(
+                grid,
+                _syncPackageObjectsButton,
+                "On a development machine, updates newer or missing module definition JSON files and already-built artifact packages without rebuilding the whole installer package.");
             AddActionRow(
                 grid,
                 _createUpdatedInstallerPackageButton,
@@ -508,6 +515,42 @@ internal static partial class Program
                 });
         }
 
+        private async Task SyncDeveloperPackageObjectsAsync()
+        {
+            ApplyValues();
+            var confirmation = MessageBox.Show(
+                "This updates this installer package with newer or missing module definition JSON files and artifact package zips that already exist in the package, ArtifactStore _available library, RuntimeRoot\\ArtifactArchive, or source artifacts folders. It does not compile source projects. If a binary artifact package is missing everywhere, use Create updated installer package instead. Continue?",
+                "Sync package objects",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            await RunGuiOperationAsync(
+                "Syncing developer package objects...",
+                "Package object sync completed.",
+                "Package object sync completed with warnings. Review the log for details.",
+                "Package object sync failed.",
+                async () =>
+                {
+                    var result = await SyncDeveloperPackageObjectsCoreAsync();
+                    foreach (var line in result.Lines)
+                    {
+                        Console.WriteLine(line);
+                    }
+
+                    if (result.ConfigUpdated)
+                    {
+                        await SaveCurrentConfigAsync();
+                    }
+
+                    return result.HasWarnings ? 1 : 0;
+                });
+        }
+
         private async Task CreateUpdatedInstallerPackageAsync()
         {
             ApplyValues();
@@ -705,6 +748,267 @@ internal static partial class Program
                     : "Result: this installer package matches the source manifest. Installed initial modules and artifacts are up to date.");
 
             return new DeveloperSourceCheckResult(hasPackageUpdates || hasInstalledUpdates, lines);
+        }
+
+        private async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync()
+        {
+            var lines = new List<string>();
+            var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
+            var manifests = await ReadDeveloperManifestsAsync(sourceRoots);
+            var sourceDefinitions = manifests
+                .SelectMany(manifest => ReadManifestModuleDefinitions(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                .ToArray();
+            var sourceComponents = manifests
+                .SelectMany(manifest => ReadManifestComponents(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                .ToArray();
+            var artifactSearchRoots = EnumerateArtifactPackageSearchRoots(sourceRoots).ToArray();
+            var updated = 0;
+            var unchanged = 0;
+            var warnings = 0;
+            var configUpdated = false;
+
+            lines.Add($"Installer package: {_payloadRoot}");
+            lines.Add("Artifact package search roots:");
+            foreach (var root in artifactSearchRoots)
+            {
+                lines.Add($"  {root}");
+            }
+
+            lines.Add(string.Empty);
+            lines.Add("Module definitions:");
+            foreach (var definition in sourceDefinitions)
+            {
+                var sourcePath = Path.Combine(definition.SourceRoot, definition.Path);
+                if (!File.Exists(sourcePath))
+                {
+                    lines.Add($"  WARN    {definition.ModuleKey}: source file was not found ({sourcePath}).");
+                    warnings++;
+                    continue;
+                }
+
+                var packagePath = FindPackageModuleDefinitionPath(definition);
+                if (CopyFileIfDifferent(sourcePath, packagePath))
+                {
+                    var location = IsAvailablePackagePath(packagePath) ? "available" : "initial";
+                    lines.Add($"  UPDATED {definition.ModuleKey}: copied {definition.DefinitionVersion} to {location} package library.");
+                    updated++;
+                }
+                else
+                {
+                    lines.Add($"  OK      {definition.ModuleKey}: package file already matches source.");
+                    unchanged++;
+                }
+            }
+
+            lines.Add(string.Empty);
+            lines.Add("Artifact packages:");
+            foreach (var component in sourceComponents)
+            {
+                var packageName = GetArtifactPackageFileName(component);
+                var expectedTarget = component.RelativePathTemplate.Replace("{version}", component.Version, StringComparison.OrdinalIgnoreCase);
+                var sourcePackage = FindSourceArtifactPackage(packageName, artifactSearchRoots);
+                var current = FindConfiguredArtifact(component);
+
+                if (current is not null)
+                {
+                    var expectedSource = $"payload/{packageName}";
+                    var payloadPath = ResolvePackagePath(expectedSource);
+                    var targetMatches = string.Equals(
+                        NormalizePathForMatch(current.Target),
+                        NormalizePathForMatch(expectedTarget),
+                        StringComparison.OrdinalIgnoreCase);
+
+                    if (!targetMatches)
+                    {
+                        if (sourcePackage is null)
+                        {
+                            lines.Add($"  WARN    {component.ComponentKey}: package target is {current.Target}, source expects {expectedTarget}, but {packageName} was not found in any artifact package search root.");
+                            warnings++;
+                            continue;
+                        }
+
+                        CopyFileIfDifferent(sourcePackage, payloadPath);
+                        CopyFileIfDifferent(sourcePackage, Path.Combine(_payloadRoot, "available-artifacts", packageName));
+                        current.Source = expectedSource;
+                        current.Target = expectedTarget;
+                        lines.Add($"  UPDATED {component.ComponentKey}: copied {packageName} and updated initial artifact target to {expectedTarget}.");
+                        updated++;
+                        configUpdated = true;
+                        continue;
+                    }
+
+                    if (File.Exists(payloadPath))
+                    {
+                        if (sourcePackage is not null && CopyFileIfDifferent(sourcePackage, payloadPath))
+                        {
+                            lines.Add($"  UPDATED {component.ComponentKey}: refreshed initial artifact package {packageName}.");
+                            updated++;
+                        }
+                        else
+                        {
+                            lines.Add($"  OK      {component.ComponentKey}: initial artifact package is present.");
+                            unchanged++;
+                        }
+
+                        if (sourcePackage is not null)
+                        {
+                            CopyFileIfDifferent(sourcePackage, Path.Combine(_payloadRoot, "available-artifacts", packageName));
+                        }
+
+                        continue;
+                    }
+
+                    var currentSourcePath = ResolvePackagePath(current.Source);
+                    if (File.Exists(currentSourcePath))
+                    {
+                        lines.Add($"  OK      {component.ComponentKey}: configured artifact source is present ({current.Source}).");
+                        unchanged++;
+                        continue;
+                    }
+
+                    if (sourcePackage is null)
+                    {
+                        lines.Add($"  WARN    {component.ComponentKey}: configured artifact source is missing and {packageName} was not found in any artifact package search root.");
+                        warnings++;
+                        continue;
+                    }
+
+                    CopyFileIfDifferent(sourcePackage, payloadPath);
+                    CopyFileIfDifferent(sourcePackage, Path.Combine(_payloadRoot, "available-artifacts", packageName));
+                    current.Source = expectedSource;
+                    current.Target = expectedTarget;
+                    lines.Add($"  UPDATED {component.ComponentKey}: restored missing initial artifact package {packageName}.");
+                    updated++;
+                    configUpdated = true;
+                    continue;
+                }
+
+                var availablePath = Path.Combine(_payloadRoot, "available-artifacts", packageName);
+                if (File.Exists(availablePath))
+                {
+                    if (sourcePackage is not null && CopyFileIfDifferent(sourcePackage, availablePath))
+                    {
+                        lines.Add($"  UPDATED {component.ComponentKey}: refreshed available artifact package {packageName}.");
+                        updated++;
+                    }
+                    else
+                    {
+                        lines.Add($"  OK      {component.ComponentKey}: available artifact package is present.");
+                        unchanged++;
+                    }
+
+                    continue;
+                }
+
+                if (sourcePackage is null)
+                {
+                    lines.Add($"  WARN    {component.ComponentKey}: {packageName} was not found. Build the artifact first or use Create updated installer package.");
+                    warnings++;
+                    continue;
+                }
+
+                CopyFileIfDifferent(sourcePackage, availablePath);
+                lines.Add($"  UPDATED {component.ComponentKey}: copied available artifact package {packageName}.");
+                updated++;
+            }
+
+            lines.Add(string.Empty);
+            lines.Add($"Summary: {updated} updated, {unchanged} already current, {warnings} warning(s).");
+            return new DeveloperPackageObjectSyncResult(warnings > 0, configUpdated, lines);
+        }
+
+        private IEnumerable<string> EnumerateArtifactPackageSearchRoots(IReadOnlyList<string> sourceRoots)
+        {
+            var roots = new List<string>();
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void AddIfDirectory(string? path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return;
+                }
+
+                var fullPath = Path.GetFullPath(path);
+                if (Directory.Exists(fullPath) && emitted.Add(fullPath))
+                {
+                    roots.Add(fullPath);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(_config.ArtifactStoreRoot))
+            {
+                var artifactStoreRoot = Path.GetFullPath(_config.ArtifactStoreRoot);
+                var runtimeRoot = Directory.GetParent(artifactStoreRoot)?.FullName;
+                AddIfDirectory(Path.Combine(runtimeRoot ?? string.Empty, "ArtifactArchive"));
+                AddIfDirectory(Path.Combine(artifactStoreRoot, "_available", "artifacts"));
+            }
+
+            foreach (var sourceRoot in sourceRoots)
+            {
+                AddIfDirectory(Path.Combine(sourceRoot, "artifacts"));
+            }
+
+            AddIfDirectory(Path.Combine(_payloadRoot, "available-artifacts"));
+            AddIfDirectory(Path.Combine(_payloadRoot, "payload"));
+
+            return roots;
+        }
+
+        private static string? FindSourceArtifactPackage(
+            string packageName,
+            IReadOnlyList<string> artifactSearchRoots)
+        {
+            foreach (var root in artifactSearchRoots)
+            {
+                var candidate = Path.Combine(root, packageName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private string ResolvePackagePath(string packageRelativePath)
+        {
+            if (Path.IsPathRooted(packageRelativePath))
+            {
+                throw new InvalidOperationException("Package object sources must be relative to the installer package root.");
+            }
+
+            return Path.GetFullPath(Path.Combine(
+                _payloadRoot,
+                packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        }
+
+        private static bool CopyFileIfDifferent(string sourcePath, string targetPath)
+        {
+            if (File.Exists(targetPath) && FilesHaveSameContent(sourcePath, targetPath))
+            {
+                return false;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(targetPath))!);
+            File.Copy(sourcePath, targetPath, overwrite: true);
+            return true;
+        }
+
+        private static bool FilesHaveSameContent(string firstPath, string secondPath)
+        {
+            var first = new FileInfo(firstPath);
+            var second = new FileInfo(secondPath);
+            if (first.Length != second.Length)
+            {
+                return false;
+            }
+
+            using var sha256 = SHA256.Create();
+            using var firstStream = File.OpenRead(firstPath);
+            using var secondStream = File.OpenRead(secondPath);
+            var firstHash = sha256.ComputeHash(firstStream);
+            var secondHash = sha256.ComputeHash(secondStream);
+            return firstHash.SequenceEqual(secondHash);
         }
 
         private async Task<bool> AppendDatabaseStatusAsync(
@@ -1282,6 +1586,9 @@ ORDER BY ar.ArtifactId DESC;
         private void SetActionButtonsEnabled(bool enabled)
         {
             _installButton.Enabled = enabled;
+            _checkSourceButton.Enabled = enabled;
+            _syncPackageObjectsButton.Enabled = enabled;
+            _createUpdatedInstallerPackageButton.Enabled = enabled;
             _uninstallRuntimeButton.Enabled = enabled;
             _cleanUninstallButton.Enabled = enabled;
             _fullUninstallButton.Enabled = enabled;
@@ -1353,6 +1660,11 @@ ORDER BY ar.ArtifactId DESC;
 
     private sealed record DeveloperSourceCheckResult(
         bool HasUpdates,
+        IReadOnlyList<string> Lines);
+
+    private sealed record DeveloperPackageObjectSyncResult(
+        bool HasWarnings,
+        bool ConfigUpdated,
         IReadOnlyList<string> Lines);
 
     private sealed record DeveloperManifest(
