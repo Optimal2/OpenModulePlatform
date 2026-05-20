@@ -55,8 +55,13 @@ else
                             }
                         }
                     </td>
-                    <td>
-                        <a class="action-link" href="~/admin/users/edit/@row.UserId">@L["Edit"]</a>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/users/edit/@row.UserId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
                     </td>
                 </tr>
             }

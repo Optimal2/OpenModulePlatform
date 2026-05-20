@@ -74,7 +74,14 @@
                     <td>@row.DisplayName</td>
                     <td>@row.Environment</td>
                     <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
-                    <td><a class="action-link" href="~/admin/instancetemplatehostedit?id=@row.InstanceTemplateHostId">@L["Edit"]</a></td>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/instancetemplatehostedit?id=@row.InstanceTemplateHostId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
+                    </td>
                 </tr>
             }
             </tbody>
@@ -115,7 +122,14 @@
                     <td><code>@row.ModuleInstanceKey</code></td>
                     <td>@row.DisplayName</td>
                     <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
-                    <td><a class="action-link" href="~/admin/instancetemplatemoduleedit?id=@row.InstanceTemplateModuleInstanceId">@L["Edit"]</a></td>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/instancetemplatemoduleedit?id=@row.InstanceTemplateModuleInstanceId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
+                    </td>
                 </tr>
             }
             </tbody>
@@ -169,7 +183,12 @@
                         <td><span class="pill">@row.DesiredState</span></td>
                         <td>
                             <div class="stacked-actions">
-                                <a class="action-link" href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId">@L["Edit desired state"]</a>
+                                <a class="action-link admin-icon-button admin-icon-button--edit"
+                                   href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId"
+                                   title="@L["Edit desired state"]"
+                                   aria-label="@L["Edit desired state"]">
+                                    <span class="visually-hidden">@L["Edit desired state"]</span>
+                                </a>
                                 <form method="post"
                                       asp-page-handler="DeleteApp"
                                       asp-route-id="@row.InstanceTemplateAppInstanceId"
