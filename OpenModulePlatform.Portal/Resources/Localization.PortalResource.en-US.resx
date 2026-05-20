@@ -285,4 +285,7 @@
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>The artifact could not be selected as the desired version automatically. Choose it from the installation template page.</value></data>
   <data name="Open topbar menus on hover" xml:space="preserve"><value>Open topbar menus on hover</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>When this is turned off, menus open only by click or keyboard shortcut.</value></data>
+  <data name="Artifact package editor" xml:space="preserve"><value>Artifact package editor</value></data>
+  <data name="Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files." xml:space="preserve"><value>Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files.</value></data>
+  <data name="Open package editor" xml:space="preserve"><value>Open package editor</value></data>
 </root>

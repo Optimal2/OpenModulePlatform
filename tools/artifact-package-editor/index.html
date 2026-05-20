@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OMP Artifact Package Editor</title>
+    <link rel="stylesheet" href="artifact-package-editor.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">OpenModulePlatform</p>
+                <h1>Artifact Package Editor</h1>
+                <p class="lede">Create manifest-based artifact packages with one deployable payload zip and optional runtime configuration files.</p>
+            </div>
+            <div class="header-actions">
+                <label class="button button-secondary">
+                    Open manifest
+                    <input id="manifestInput" type="file" accept=".json,application/json" hidden>
+                </label>
+                <button id="newButton" type="button" class="button button-secondary">New</button>
+                <button id="downloadManifestButton" type="button" class="button button-secondary">Download manifest</button>
+                <button id="downloadPackageButton" type="button" class="button">Build package zip</button>
+            </div>
+        </header>
+
+        <section id="message" class="message" hidden></section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <div>
+                    <h2>Artifact identity</h2>
+                    <p>The generated package filename follows moduleKey__appKey__packageType__targetName__version.zip.</p>
+                </div>
+            </div>
+            <div class="grid-fields">
+                <label>
+                    Module key
+                    <input id="moduleKey" autocomplete="off" spellcheck="false" placeholder="opendocviewer">
+                </label>
+                <label>
+                    App key
+                    <input id="appKey" autocomplete="off" spellcheck="false" placeholder="opendocviewer_webapp">
+                </label>
+                <label>
+                    Package type
+                    <select id="packageType">
+                        <option value="web-app">web-app</option>
+                        <option value="service-app">service-app</option>
+                        <option value="worker">worker</option>
+                        <option value="worker-plugin">worker-plugin</option>
+                        <option value="channel-type">channel-type</option>
+                    </select>
+                </label>
+                <label>
+                    Target name
+                    <input id="targetName" autocomplete="off" spellcheck="false" placeholder="opendocviewer">
+                </label>
+                <label>
+                    Version
+                    <input id="version" autocomplete="off" spellcheck="false" placeholder="1.0.0">
+                </label>
+                <label>
+                    Format version
+                    <input id="formatVersion" type="number" min="1" step="1">
+                </label>
+            </div>
+            <div class="filename-preview">
+                <span>Filename</span>
+                <code id="filenamePreview"></code>
+            </div>
+        </section>
+
+        <section class="layout">
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Payload</h2>
+                        <p>Select the deployable app zip. The editor stores it as payload/artifact.zip inside the outer package.</p>
+                    </div>
+                </div>
+                <label class="file-drop">
+                    <span>Select payload zip</span>
+                    <input id="payloadInput" type="file" accept=".zip,application/zip">
+                </label>
+                <div id="payloadSummary" class="file-summary">No payload selected.</div>
+            </section>
+
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Configuration files</h2>
+                        <p>These files are stored in the package envelope and registered as artifact configuration files.</p>
+                    </div>
+                    <button id="addConfigButton" type="button" class="button button-secondary">Add file</button>
+                </div>
+                <div id="configFiles" class="config-list"></div>
+            </section>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <div>
+                    <h2>Manifest preview</h2>
+                    <p>The preview can be edited directly. Apply it to update the form.</p>
+                </div>
+                <div class="toolbar">
+                    <button id="applyPreviewButton" type="button" class="button button-secondary">Apply preview JSON</button>
+                    <button id="refreshPreviewButton" type="button" class="button button-secondary">Refresh</button>
+                </div>
+            </div>
+            <textarea id="preview" class="preview" spellcheck="false"></textarea>
+        </section>
+    </main>
+
+    <template id="configTemplate">
+        <article class="config-card">
+            <div class="script-toolbar">
+                <strong class="config-title"></strong>
+                <button type="button" class="button button-danger remove-config">Remove</button>
+            </div>
+            <div class="grid-fields compact">
+                <label>
+                    Deployed relative path
+                    <input class="config-relative-path" autocomplete="off" spellcheck="false" placeholder="odv.site.config.js">
+                </label>
+                <label>
+                    Package source path
+                    <input class="config-source-path" autocomplete="off" spellcheck="false" placeholder="configuration/odv.site.config.js">
+                </label>
+                <label class="file-field">
+                    Load file content
+                    <input class="config-file-input" type="file">
+                </label>
+            </div>
+            <label class="content-label">
+                File content
+                <textarea class="config-content" spellcheck="false"></textarea>
+            </label>
+        </article>
+    </template>
+
+    <script src="artifact-package-editor.js"></script>
+</body>
+</html>
