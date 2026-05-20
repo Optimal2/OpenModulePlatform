@@ -190,6 +190,34 @@ function Copy-RequiredFile {
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
 }
 
+function Copy-ModuleDefinitionsFromManifest {
+    param(
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
+        return
+    }
+
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($definition in @($manifest.moduleDefinitions)) {
+        if ($null -eq $definition) {
+            continue
+        }
+
+        $relativePath = [string]$definition.path
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            throw "Module definition entry in '$ManifestPath' is missing path."
+        }
+
+        $sourcePath = Resolve-DeploymentPath -Path $relativePath -BasePath $RepositoryRoot
+        $destinationName = [System.IO.Path]::GetFileName($sourcePath)
+        Copy-RequiredFile -Source $sourcePath -Destination (Join-Path $Destination $destinationName)
+    }
+}
+
 function Compress-FolderToZip {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -465,12 +493,10 @@ foreach ($file in $sqlFiles) {
 }
 
 Write-Step 'Copying module definitions'
-$moduleDefinitionsSource = Join-Path $RepositoryRoot 'module-definitions'
 $moduleDefinitionsDestination = Join-Path $packageRoot 'module-definitions'
-if (Test-Path -LiteralPath $moduleDefinitionsSource) {
-    Copy-Item -LiteralPath $moduleDefinitionsSource -Destination $moduleDefinitionsDestination -Recurse -Force
-}
 New-Item -ItemType Directory -Path $moduleDefinitionsDestination -Force | Out-Null
+Copy-ModuleDefinitionsFromManifest -ManifestPath $componentManifestPath -RepositoryRoot $RepositoryRoot -Destination $moduleDefinitionsDestination
+Copy-ModuleDefinitionsFromManifest -ManifestPath (Join-Path $OpenDocViewerRoot 'omp-components.json') -RepositoryRoot $OpenDocViewerRoot -Destination $moduleDefinitionsDestination
 $additionalModuleDefinitionFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalModuleDefinitionFiles' -DefaultValue @()))
 foreach ($entry in $additionalModuleDefinitionFiles) {
     $sourcePath = ''

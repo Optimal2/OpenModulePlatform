@@ -6,52 +6,47 @@
     {
       "moduleKey": "omp_core",
       "definitionVersion": "0.3.9",
-      "path": "module-definitions/omp_core.module-definition.json"
+      "path": "omp_core.module-definition.json"
     },
     {
       "moduleKey": "omp_auth",
       "definitionVersion": "0.3.3",
-      "path": "module-definitions/omp_auth.module-definition.json"
+      "path": "OpenModulePlatform.Auth/omp_auth.module-definition.json"
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.22",
-      "path": "module-definitions/omp_portal.module-definition.json"
-    },
-    {
-      "moduleKey": "opendocviewer",
-      "definitionVersion": "2.0.3",
-      "path": "module-definitions/opendocviewer.module-definition.json"
+      "definitionVersion": "0.3.23",
+      "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
       "moduleKey": "iframe_webapp",
       "definitionVersion": "0.3.4",
-      "path": "module-definitions/iframe_webapp.module-definition.json"
+      "path": "OpenModulePlatform.Web.iFrameWebAppModule/iframe_webapp.module-definition.json"
     },
     {
       "moduleKey": "content_webapp",
       "definitionVersion": "0.3.12",
-      "path": "module-definitions/content_webapp.module-definition.json"
+      "path": "OpenModulePlatform.Web.ContentWebAppModule/content_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp",
       "definitionVersion": "0.3.4",
-      "path": "module-definitions/example_webapp.module-definition.json"
+      "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp_blazor",
       "definitionVersion": "0.3.4",
-      "path": "module-definitions/example_webapp_blazor.module-definition.json"
+      "path": "examples/WebAppBlazorModule/example_webapp_blazor.module-definition.json"
     },
     {
       "moduleKey": "example_serviceapp",
       "definitionVersion": "0.3.4",
-      "path": "module-definitions/example_serviceapp.module-definition.json"
+      "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
       "moduleKey": "example_workerapp",
       "definitionVersion": "0.3.4",
-      "path": "module-definitions/example_workerapp.module-definition.json"
+      "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
   "components": [
@@ -62,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.22",
+      "version": "0.3.23",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip"

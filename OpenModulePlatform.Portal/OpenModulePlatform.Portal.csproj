@@ -9,4 +9,11 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\tools\module-definition-editor\**\*.*"
+             Link="wwwroot\tools\module-definition-editor\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
