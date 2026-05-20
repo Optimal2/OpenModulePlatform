@@ -9,8 +9,28 @@ function Get-Sha256Hex {
     param([string]$Text)
 
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
-    $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
-    return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha256.ComputeHash($bytes)
+        return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function ConvertFrom-JsonDocument {
+    param(
+        [Parameter(Mandatory = $true)][string]$Json,
+        [Parameter(Mandatory = $true)][int]$Depth
+    )
+
+    $command = Get-Command ConvertFrom-Json
+    if ($command.Parameters.ContainsKey('Depth')) {
+        return $Json | ConvertFrom-Json -Depth $Depth
+    }
+
+    return $Json | ConvertFrom-Json
 }
 
 function Resolve-RepositoryPath {
@@ -56,7 +76,7 @@ $definitionFiles = $definitionFiles | Sort-Object FullName
 
 foreach ($definitionFile in $definitionFiles) {
     $jsonText = Get-Content -LiteralPath $definitionFile.FullName -Raw -Encoding UTF8
-    $document = $jsonText | ConvertFrom-Json -Depth $jsonDepth
+    $document = ConvertFrom-JsonDocument -Json $jsonText -Depth $jsonDepth
 
     if ($null -eq $document.sqlScripts) {
         continue
