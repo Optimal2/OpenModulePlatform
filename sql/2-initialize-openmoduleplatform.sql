@@ -47,6 +47,8 @@ DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
 DECLARE @ArtifactVersion nvarchar(50) = N'0.3.10';
+DECLARE @WorkerManagerArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @WorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
 -- automation should patch it from a protected environment-specific value; the
@@ -284,6 +286,13 @@ END
 -------------------------------------------------------------------------------
 DECLARE @CoreModuleId int;
 DECLARE @HostAgentAppId int;
+DECLARE @WorkerManagerAppId int;
+DECLARE @WorkerProcessHostAppId int;
+DECLARE @HostAgentArtifactId int;
+DECLARE @WorkerManagerArtifactId int;
+DECLARE @WorkerProcessHostArtifactId int;
+DECLARE @CoreTemplateModuleInstanceId int;
+DECLARE @DefaultInstanceTemplateHostId int;
 
 IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'omp_core')
 BEGIN
@@ -321,42 +330,44 @@ SELECT @CoreModuleId = ModuleId
 FROM omp.Modules
 WHERE ModuleKey = N'omp_core';
 
-IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @CoreModuleId AND AppKey = N'omp_hostagent')
-BEGIN
-    UPDATE omp.Apps
-    SET DisplayName = N'OMP HostAgent',
-        AppType = N'HostAgent',
-        Description = N'Host-local OMP deployment agent that can prepare versioned self-upgrades.',
-        IsEnabled = 1,
-        SortOrder = 10,
-        UpdatedUtc = SYSUTCDATETIME()
-    WHERE ModuleId = @CoreModuleId
-      AND AppKey = N'omp_hostagent';
-END
-ELSE
-BEGIN
-    INSERT INTO omp.Apps(
-        ModuleId,
-        AppKey,
-        DisplayName,
-        AppType,
-        Description,
-        IsEnabled,
-        SortOrder)
-    VALUES(
-        @CoreModuleId,
-        N'omp_hostagent',
-        N'OMP HostAgent',
-        N'HostAgent',
-        N'Host-local OMP deployment agent that can prepare versioned self-upgrades.',
-        1,
-        10);
-END
+MERGE omp.Apps AS target
+USING
+(
+    VALUES
+        (@CoreModuleId, N'omp_hostagent', N'OMP HostAgent', N'HostAgent', N'Host-local OMP deployment agent that can prepare versioned self-upgrades.', 10, CONVERT(bit, 1)),
+        (@CoreModuleId, N'omp_workermanager', N'OMP WorkerManager', N'ServiceApp', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', 20, CONVERT(bit, 1)),
+        (@CoreModuleId, N'omp_workerprocesshost', N'OMP Worker Process Host', N'WorkerHost', N'Host-local executable used by WorkerManager to run worker plugin artifacts.', 30, CONVERT(bit, 1))
+) AS source(ModuleId, AppKey, DisplayName, AppType, Description, SortOrder, IsEnabled)
+ON target.ModuleId = source.ModuleId
+AND target.AppKey = source.AppKey
+WHEN MATCHED THEN
+    UPDATE SET DisplayName = source.DisplayName,
+               AppType = source.AppType,
+               Description = source.Description,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(ModuleId, AppKey, DisplayName, AppType, Description, SortOrder, IsEnabled)
+    VALUES(source.ModuleId, source.AppKey, source.DisplayName, source.AppType, source.Description, source.SortOrder, source.IsEnabled);
 
-SELECT @HostAgentAppId = AppId
+SELECT TOP (1) @HostAgentAppId = AppId
 FROM omp.Apps
 WHERE ModuleId = @CoreModuleId
-  AND AppKey = N'omp_hostagent';
+  AND AppKey = N'omp_hostagent'
+ORDER BY AppId;
+
+SELECT TOP (1) @WorkerManagerAppId = AppId
+FROM omp.Apps
+WHERE ModuleId = @CoreModuleId
+  AND AppKey = N'omp_workermanager'
+ORDER BY AppId;
+
+SELECT TOP (1) @WorkerProcessHostAppId = AppId
+FROM omp.Apps
+WHERE ModuleId = @CoreModuleId
+  AND AppKey = N'omp_workerprocesshost'
+ORDER BY AppId;
 
 MERGE omp.Artifacts AS target
 USING
@@ -366,6 +377,20 @@ USING
            N'host-agent' AS PackageType,
            N'omp-hostagent' AS TargetName,
            N'omp-hostagent/hostagent/' + @ArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+    UNION ALL
+    SELECT @WorkerManagerAppId AS AppId,
+           @WorkerManagerArtifactVersion AS Version,
+           N'service-app' AS PackageType,
+           N'omp-workermanager' AS TargetName,
+           N'omp-workermanager/service/' + @WorkerManagerArtifactVersion AS RelativePath,
+           CAST(1 AS bit) AS IsEnabled
+    UNION ALL
+    SELECT @WorkerProcessHostAppId AS AppId,
+           @WorkerProcessHostArtifactVersion AS Version,
+           N'worker-host' AS PackageType,
+           N'omp-workerprocesshost' AS TargetName,
+           N'omp-workerprocesshost/host/' + @WorkerProcessHostArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -379,6 +404,98 @@ WHEN MATCHED THEN
 WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
+
+SELECT TOP (1) @HostAgentArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @HostAgentAppId
+  AND Version = @ArtifactVersion
+  AND PackageType = N'host-agent'
+  AND TargetName = N'omp-hostagent'
+ORDER BY ArtifactId;
+
+SELECT TOP (1) @WorkerManagerArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @WorkerManagerAppId
+  AND Version = @WorkerManagerArtifactVersion
+  AND PackageType = N'service-app'
+  AND TargetName = N'omp-workermanager'
+ORDER BY ArtifactId;
+
+SELECT TOP (1) @WorkerProcessHostArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @WorkerProcessHostAppId
+  AND Version = @WorkerProcessHostArtifactVersion
+  AND PackageType = N'worker-host'
+  AND TargetName = N'omp-workerprocesshost'
+ORDER BY ArtifactId;
+
+MERGE omp.InstanceTemplateModuleInstances AS target
+USING
+(
+    SELECT @DefaultInstanceTemplateId AS InstanceTemplateId,
+           @CoreModuleId AS ModuleId,
+           N'omp_core' AS ModuleInstanceKey,
+           N'OpenModulePlatform Core' AS DisplayName,
+           N'Core runtime services and host-local infrastructure.' AS Description,
+           0 AS SortOrder,
+           CAST(1 AS bit) AS IsEnabled
+) AS source
+ON target.InstanceTemplateId = source.InstanceTemplateId
+AND target.ModuleInstanceKey = source.ModuleInstanceKey
+WHEN MATCHED THEN
+    UPDATE SET ModuleId = source.ModuleId,
+               DisplayName = source.DisplayName,
+               Description = source.Description,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder, IsEnabled)
+    VALUES(source.InstanceTemplateId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, source.SortOrder, source.IsEnabled);
+
+SELECT TOP (1) @CoreTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
+FROM omp.InstanceTemplateModuleInstances
+WHERE InstanceTemplateId = @DefaultInstanceTemplateId
+  AND ModuleInstanceKey = N'omp_core'
+ORDER BY InstanceTemplateModuleInstanceId;
+
+SELECT TOP (1) @DefaultInstanceTemplateHostId = InstanceTemplateHostId
+FROM omp.InstanceTemplateHosts
+WHERE InstanceTemplateId = @DefaultInstanceTemplateId
+  AND HostKey = N'sample-host'
+ORDER BY InstanceTemplateHostId;
+
+IF @CoreTemplateModuleInstanceId IS NOT NULL
+   AND @DefaultInstanceTemplateHostId IS NOT NULL
+BEGIN
+    MERGE omp.InstanceTemplateAppInstances AS target
+    USING
+    (
+        VALUES
+            (@CoreTemplateModuleInstanceId, @DefaultInstanceTemplateHostId, @WorkerProcessHostAppId, N'omp_workerprocesshost', N'OMP Worker Process Host', N'Host-local executable used by WorkerManager to run worker plugin artifacts.', NULL, NULL, NULL, NULL, @WorkerProcessHostArtifactId, 1, 20, CONVERT(bit, 1), CONVERT(bit, 1)),
+            (@CoreTemplateModuleInstanceId, @DefaultInstanceTemplateHostId, @WorkerManagerAppId, N'omp_workermanager', N'OMP WorkerManager', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', NULL, NULL, N'WorkerManager', N'OpenModulePlatform.WorkerManager', @WorkerManagerArtifactId, 1, 30, CONVERT(bit, 1), CONVERT(bit, 1))
+    ) AS source(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
+    ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
+    AND target.AppInstanceKey = source.AppInstanceKey
+    WHEN MATCHED THEN
+        UPDATE SET InstanceTemplateHostId = source.InstanceTemplateHostId,
+                   AppId = source.AppId,
+                   DisplayName = source.DisplayName,
+                   Description = source.Description,
+                   RoutePath = source.RoutePath,
+                   PublicUrl = source.PublicUrl,
+                   InstallPath = source.InstallPath,
+                   InstallationName = source.InstallationName,
+                   DesiredArtifactId = source.DesiredArtifactId,
+                   DesiredState = source.DesiredState,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   IsAllowed = source.IsAllowed,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
+        VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.DesiredArtifactId, source.DesiredState, source.SortOrder, source.IsEnabled, source.IsAllowed);
+END
 
 -------------------------------------------------------------------------------
 -- Seed baseline administrative placeholder role

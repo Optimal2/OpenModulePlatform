@@ -999,6 +999,9 @@
   <data name="Service app" xml:space="preserve">
     <value>Service app</value>
   </data>
+  <data name="Worker host" xml:space="preserve">
+    <value>Worker host</value>
+  </data>
   <data name="Folder" xml:space="preserve">
     <value>Folder</value>
   </data>

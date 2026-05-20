@@ -74,9 +74,9 @@ for the same app definition.
 
 1. Add Portal actions for previewing and enqueuing host deployments from the
    template/admin pages.
-2. Add any missing package-type handlers for worker-plugin installation paths.
-   Worker plugins are already provisioned and consumed through WorkerManager,
-   but drift/status views should make that explicit.
+2. Improve drift/status views for worker-plugin and worker-host artifacts so
+   operators can see the provisioned WorkerManager, WorkerProcessHost, and
+   plugin paths together.
 3. Add drift detection for IIS apps, Windows services, artifact versions, and
    runtime paths so operators can see whether a host matches the desired
    template.

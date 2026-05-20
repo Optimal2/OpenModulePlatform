@@ -41,7 +41,9 @@ public sealed class AppEditModel : OmpPortalPageModel
     [
         Opt("Portal", T("Portal")),
         Opt("WebApp", T("Web app")),
-        Opt("ServiceApp", T("Service app"))
+        Opt("ServiceApp", T("Service app")),
+        Opt("HostAgent", T("HostAgent")),
+        Opt("WorkerHost", T("Worker host"))
     ];
 
     [TempData]

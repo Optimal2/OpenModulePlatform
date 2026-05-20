@@ -23,6 +23,8 @@ OMP metadata; it does not infer the latest version from file or folder names.
   `HostAgent:DeployWebApps` is enabled
 - Windows service deployment for provisioned `service-app` artifacts when
   `HostAgent:DeployServiceApps` is enabled
+- Provisioning for `worker-host` artifacts such as WorkerProcessHost; these are
+  cached for WorkerManager rather than deployed as standalone services
 - HostAgent self-upgrade preparation and takeover for desired
   `host-agent` artifacts registered in `omp.HostAgentDesiredStates`
 - Web app deployment state in `omp.HostAppDeploymentStates`
