@@ -160,15 +160,20 @@ the package and installed database with the source repository manifest:
   module definitions or artifact entries whose versions or content differ from
   source. When an `OpenDocViewer` repository exists as a sibling of
   `OpenModulePlatform`, its component manifest is checked as well.
-- `Upgrade from source` runs the repository package builder, refreshes the
-  current package's `payload` and `module-definitions` folders, saves the
-  refreshed artifact list and SQL version overrides to the bootstrap JSON, and
-  then runs the normal install/update action.
+- `Create updated installer package` saves the current installer settings,
+  starts a separate refresh process, rebuilds a fresh HostAgent-first package
+  from source, replaces the current package folder after the installer exits,
+  and starts the updated installer. This keeps the running EXE from locking the
+  package files that need to be replaced.
 
 If the package has been copied outside the source tree, use the `Developer` tab
-to point the installer at the source repository root and, when needed, a
-specific package `.psd1` config. This developer workflow is intentionally local;
-production updates should still use controlled artifact/module-definition
+to point the installer at the source repository roots and, when needed, a
+specific package `.psd1` config. The source-root field accepts semicolon-
+separated paths. The list must include the `OpenModulePlatform` repository and
+may include sibling module repositories such as `OpenDocViewer`, `IbsPackager`,
+`iKrock2`, or `VajSkrivare` when their `omp-components.json` manifests should
+be included in the source comparison. This developer workflow is intentionally
+local; production updates should still use controlled artifact/module-definition
 packages.
 
 For non-interactive console installation, run:
