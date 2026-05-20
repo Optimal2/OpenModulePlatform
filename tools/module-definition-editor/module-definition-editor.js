@@ -9,6 +9,7 @@
         fileInput: document.getElementById("fileInput"),
         newButton: document.getElementById("newButton"),
         downloadButton: document.getElementById("downloadButton"),
+        addAppButton: document.getElementById("addAppButton"),
         addScriptButton: document.getElementById("addScriptButton"),
         applyPreviewButton: document.getElementById("applyPreviewButton"),
         refreshPreviewButton: document.getElementById("refreshPreviewButton"),
@@ -17,8 +18,10 @@
         definitionVersion: document.getElementById("definitionVersion"),
         formatVersion: document.getElementById("formatVersion"),
         definitionType: document.getElementById("definitionType"),
+        apps: document.getElementById("apps"),
         scripts: document.getElementById("scripts"),
         preview: document.getElementById("preview"),
+        appTemplate: document.getElementById("appTemplate"),
         scriptTemplate: document.getElementById("scriptTemplate")
     };
 
@@ -223,6 +226,10 @@
             loaded.sqlScripts = [];
         }
 
+        if (!Array.isArray(loaded.apps)) {
+            loaded.apps = [];
+        }
+
         for (const script of loaded.sqlScripts) {
             script._editorSql = getScriptSql(script);
         }
@@ -235,8 +242,31 @@
         elements.definitionVersion.value = documentModel.definitionVersion || "";
         elements.formatVersion.value = String(documentModel.formatVersion || 1);
         elements.definitionType.value = documentModel.definitionType || "";
+        renderApps();
         renderScripts();
         void refreshPreview();
+    }
+
+    function renderApps() {
+        elements.apps.replaceChildren();
+
+        for (const app of documentModel.apps || []) {
+            const card = elements.appTemplate.content.firstElementChild.cloneNode(true);
+            card.querySelector(".app-title").textContent = app.appKey || app.displayName || "App";
+            card.querySelector(".app-key").value = app.appKey || "";
+            card.querySelector(".app-display-name").value = app.displayName || "";
+            card.querySelector(".app-type").value = app.appType || "";
+            card.querySelector(".app-sort-order").value = Number.isFinite(Number(app.sortOrder)) ? String(app.sortOrder) : "";
+            card.querySelector(".app-is-enabled").checked = app.isEnabled !== false;
+            card.querySelector(".app-description").value = app.description || "";
+            card.querySelector(".remove-app").addEventListener("click", () => {
+                const index = Array.from(elements.apps.children).indexOf(card);
+                documentModel.apps.splice(index, 1);
+                renderApps();
+                void refreshPreview();
+            });
+            elements.apps.append(card);
+        }
     }
 
     function renderScripts() {
@@ -274,6 +304,15 @@
             delete documentModel.definitionType;
         }
 
+        documentModel.apps = Array.from(elements.apps.children).map(card => ({
+            appKey: card.querySelector(".app-key").value.trim(),
+            displayName: card.querySelector(".app-display-name").value.trim(),
+            appType: card.querySelector(".app-type").value.trim(),
+            description: card.querySelector(".app-description").value.trim(),
+            sortOrder: Number.parseInt(card.querySelector(".app-sort-order").value || "0", 10),
+            isEnabled: card.querySelector(".app-is-enabled").checked
+        }));
+
         documentModel.sqlScripts = Array.from(elements.scripts.children).map(card => ({
             key: card.querySelector(".script-key").value.trim(),
             phase: card.querySelector(".script-phase").value.trim(),
@@ -309,6 +348,26 @@
 
         if (!exportDocument.definitionVersion) {
             errors.push("Definition version is required.");
+        }
+
+        const appKeys = new Set();
+        for (const [index, app] of (exportDocument.apps || []).entries()) {
+            if (!app.appKey) {
+                errors.push(`App ${index + 1} is missing app key.`);
+                continue;
+            }
+
+            if (appKeys.has(app.appKey)) {
+                errors.push(`App key '${app.appKey}' is duplicated.`);
+            }
+
+            appKeys.add(app.appKey);
+        }
+
+        for (const [index, artifact] of (exportDocument.compatibleArtifacts || []).entries()) {
+            if (artifact.appKey && appKeys.size > 0 && !appKeys.has(artifact.appKey)) {
+                errors.push(`Compatible artifact ${index + 1} references unknown app key '${artifact.appKey}'.`);
+            }
         }
 
         for (const [index, script] of (exportDocument.sqlScripts || []).entries()) {
@@ -376,6 +435,20 @@
         }
     }
 
+    function addApp() {
+        updateModelFromForm();
+        documentModel.apps.push({
+            appKey: "new_app",
+            displayName: "New app",
+            appType: "WebApp",
+            description: "",
+            sortOrder: (documentModel.apps.length + 1) * 10,
+            isEnabled: true
+        });
+        renderApps();
+        void refreshPreview();
+    }
+
     function addScript() {
         updateModelFromForm();
         documentModel.sqlScripts.push({
@@ -423,9 +496,12 @@
 
     elements.newButton.addEventListener("click", loadNewDocument);
     elements.downloadButton.addEventListener("click", () => void downloadJson());
+    elements.addAppButton.addEventListener("click", addApp);
     elements.addScriptButton.addEventListener("click", addScript);
     elements.applyPreviewButton.addEventListener("click", applyPreviewJson);
     elements.refreshPreviewButton.addEventListener("click", () => void refreshPreview());
+    elements.apps.addEventListener("input", () => void refreshPreview());
+    elements.apps.addEventListener("change", () => void refreshPreview());
     elements.scripts.addEventListener("input", () => void refreshPreview());
 
     populateForm();

@@ -591,6 +591,26 @@ function Add-VersionOverride {
     }
 }
 
+function Add-VersionVariableOverride {
+    param(
+        [hashtable]$Overrides,
+        [string]$ScriptPath,
+        [string]$VariableName,
+        [string]$Version
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VariableName) -or [string]::IsNullOrWhiteSpace($Version)) {
+        return
+    }
+
+    $key = $ScriptPath.Replace('\', '/')
+    if (-not $Overrides.ContainsKey($key)) {
+        $Overrides[$key] = @{}
+    }
+
+    $Overrides[$key][$VariableName.Trim().TrimStart([char]'@')] = $Version
+}
+
 $config = Import-DeploymentConfig -Path $ConfigPath
 $configPathForResolution = if (Test-Path -LiteralPath $ConfigPath -PathType Leaf) { [System.IO.Path]::GetFullPath($ConfigPath) } else { Join-Path $PSScriptRoot 'omp-suite.local.psd1' }
 $configDirectory = Split-Path -Parent $configPathForResolution
@@ -954,6 +974,7 @@ Copy-AdditionalArtifactFiles `
     -Artifacts $artifacts
 
 $versionOverrides = @{}
+$versionVariableOverrides = @{}
 $hostAgentVersion = [string]($components | Where-Object { $_.componentKey -eq 'omp-hostagent-service' } | Select-Object -First 1).version
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -Version $hostAgentVersion
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Auth/2-initialize-omp-auth.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'omp-auth-web' } | Select-Object -First 1).version)
@@ -962,8 +983,10 @@ Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform.Web.iFrameWebAppModule/2-initialize-iframe-webapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'iframe-webapp' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'examples/WebAppModule/2-initialize-example-webapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-webapp' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'examples/WebAppBlazorModule/2-initialize-example-webapp-blazor.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-webapp-blazor' } | Select-Object -First 1).version)
-Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'examples/ServiceAppModule/2-initialize-example-serviceapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-serviceapp-web' } | Select-Object -First 1).version)
-Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-web' } | Select-Object -First 1).version)
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/ServiceAppModule/2-initialize-example-serviceapp.sql' -VariableName 'WebArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-serviceapp-web' } | Select-Object -First 1).version)
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/ServiceAppModule/2-initialize-example-serviceapp.sql' -VariableName 'ServiceArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-serviceapp-service' } | Select-Object -First 1).version)
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -VariableName 'WebArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-web' } | Select-Object -First 1).version)
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -VariableName 'WorkerArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-worker' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform/3-initialize-opendocviewer.sql' -Version $openDocViewerVersion
 
 $runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue 'E:\OMP')
@@ -1043,6 +1066,7 @@ $bootstrapConfig = [ordered]@{
             }
         )
         artifactVersionOverrides = $versionOverrides
+        artifactVersionVariableOverrides = $versionVariableOverrides
     }
     artifactStoreRoot = $artifactStoreRoot
     includeExampleApps = $includeExampleApps
