@@ -35,6 +35,11 @@ internal static partial class Program
         try
         {
             var cli = CliOptions.Parse(args);
+            if (cli.RefreshInstallerPackage)
+            {
+                return await RunInstallerPackageRefreshAsync(cli);
+            }
+
             var useGui = cli.Gui || (args.Length == 0 && OperatingSystem.IsWindows() && Environment.UserInteractive);
             if (!useGui)
             {
@@ -241,6 +246,7 @@ internal static partial class Program
         Console.WriteLine("Usage:");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> --payload-root <path> [--parent-process-id <pid>] [--restart-gui]");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
@@ -2406,6 +2412,12 @@ internal sealed class CliOptions
 
     public bool ShowHelp { get; private init; }
 
+    public bool RefreshInstallerPackage { get; private init; }
+
+    public int ParentProcessId { get; private init; }
+
+    public bool RestartGui { get; private init; }
+
     public static CliOptions Parse(string[] args)
     {
         var options = new CliOptionsBuilder();
@@ -2434,6 +2446,15 @@ internal sealed class CliOptions
                     break;
                 case "--gui":
                     options.Gui = true;
+                    break;
+                case "--refresh-installer-package":
+                    options.RefreshInstallerPackage = true;
+                    break;
+                case "--parent-process-id":
+                    options.ParentProcessId = int.Parse(ReadValue(args, ref i, arg));
+                    break;
+                case "--restart-gui":
+                    options.RestartGui = true;
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown argument: {arg}");
@@ -2468,6 +2489,12 @@ internal sealed class CliOptions
 
         public bool ShowHelp { get; set; }
 
+        public bool RefreshInstallerPackage { get; set; }
+
+        public int ParentProcessId { get; set; }
+
+        public bool RestartGui { get; set; }
+
         public CliOptions ToOptions()
             => new()
             {
@@ -2476,7 +2503,10 @@ internal sealed class CliOptions
                 PayloadZipPath = PayloadZipPath,
                 Yes = Yes,
                 Gui = Gui,
-                ShowHelp = ShowHelp
+                ShowHelp = ShowHelp,
+                RefreshInstallerPackage = RefreshInstallerPackage,
+                ParentProcessId = ParentProcessId,
+                RestartGui = RestartGui
             };
     }
 }

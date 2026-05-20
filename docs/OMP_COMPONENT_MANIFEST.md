@@ -65,5 +65,6 @@ component projects, and emits standard artifact package zips.
 
 The graphical bootstrapper exposes the same workflow for development machines:
 `Check source objects` compares the current package and database with the source
-manifests, and `Upgrade from source` rebuilds the package objects from the
-manifest before running the normal install/update path.
+manifests. `Create updated installer package` starts a detached refresh process
+that rebuilds the HostAgent-first package from the manifest, replaces the
+current package after the GUI exits, and restarts the updated installer.
