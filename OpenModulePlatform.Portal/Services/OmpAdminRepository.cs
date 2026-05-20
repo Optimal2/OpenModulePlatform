@@ -359,10 +359,11 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
     public async Task<IReadOnlyList<ArtifactRow>> GetArtifactsAsync(CancellationToken ct)
     {
         const string sql = @"
-SELECT ar.ArtifactId, a.AppKey, ar.Version, ar.PackageType, ar.TargetName, ar.RelativePath, ar.IsEnabled, ar.CreatedUtc
+SELECT ar.ArtifactId, m.ModuleKey, a.AppKey, ar.Version, ar.PackageType, ar.TargetName, ar.RelativePath, ar.IsEnabled, ar.CreatedUtc
 FROM omp.Artifacts ar
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
-ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+ORDER BY m.ModuleKey, a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
 
         var rows = new List<ArtifactRow>();
         await using var conn = _db.Create();
@@ -374,15 +375,130 @@ ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
             rows.Add(new ArtifactRow
             {
                 ArtifactId = rdr.GetInt32(0),
-                AppKey = rdr.GetString(1),
-                Version = rdr.GetString(2),
-                PackageType = rdr.GetString(3),
-                TargetName = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                RelativePath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                IsEnabled = rdr.GetBoolean(6),
-                CreatedUtc = rdr.GetDateTime(7)
+                ModuleKey = rdr.GetString(1),
+                AppKey = rdr.GetString(2),
+                Version = rdr.GetString(3),
+                PackageType = rdr.GetString(4),
+                TargetName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                RelativePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                IsEnabled = rdr.GetBoolean(7),
+                CreatedUtc = rdr.GetDateTime(8)
             });
         }
+        return rows;
+    }
+
+    public async Task<ModuleDefinitionDocumentRow?> GetAppliedModuleDefinitionDocumentAsync(
+        string moduleKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1) d.ModuleDefinitionDocumentId,
+       d.ModuleKey,
+       d.DefinitionVersion,
+       d.FormatVersion,
+       d.DefinitionSha256,
+       d.DefinitionJson,
+       d.SourceName,
+       d.IsApplied,
+       d.AppliedUtc,
+       d.CreatedUtc,
+       d.UpdatedUtc,
+       (
+           SELECT COUNT(1)
+           FROM omp.ModuleDefinitionArtifactCompatibility c
+           WHERE c.ModuleDefinitionDocumentId = d.ModuleDefinitionDocumentId
+       ) AS CompatibleArtifactSlotCount
+FROM omp.ModuleDefinitionDocuments d
+WHERE d.ModuleKey = @ModuleKey
+  AND d.IsApplied = 1
+ORDER BY d.AppliedUtc DESC, d.UpdatedUtc DESC, d.ModuleDefinitionDocumentId DESC;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ModuleKey", moduleKey);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        return await rdr.ReadAsync(ct)
+            ? ReadModuleDefinitionDocumentRow(rdr, includeJson: true)
+            : null;
+    }
+
+    public async Task<IReadOnlyList<ModuleArtifactPackageRow>> GetModuleArtifactPackagesAsync(
+        string moduleKey,
+        bool includeAllVersions,
+        CancellationToken ct)
+    {
+        var sql = includeAllVersions
+            ? @"
+SELECT ar.ArtifactId,
+       m.ModuleKey,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName,
+       ar.RelativePath,
+       ar.IsEnabled
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = @ModuleKey
+ORDER BY a.AppKey, ar.PackageType, ar.TargetName, ar.CreatedUtc DESC, ar.ArtifactId DESC;"
+            : @"
+WITH CurrentReferences AS
+(
+    SELECT tai.DesiredArtifactId AS ArtifactId
+    FROM omp.InstanceTemplateAppInstances tai
+    WHERE tai.DesiredArtifactId IS NOT NULL
+
+    UNION
+
+    SELECT ai.ArtifactId
+    FROM omp.AppInstances ai
+    WHERE ai.ArtifactId IS NOT NULL
+
+    UNION
+
+    SELECT wi.ArtifactId
+    FROM omp.WorkerInstances wi
+    WHERE wi.ArtifactId IS NOT NULL
+)
+SELECT DISTINCT ar.ArtifactId,
+       m.ModuleKey,
+       a.AppKey,
+       ar.Version,
+       ar.PackageType,
+       ar.TargetName,
+       ar.RelativePath,
+       ar.IsEnabled
+FROM CurrentReferences refs
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = refs.ArtifactId
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = @ModuleKey
+ORDER BY a.AppKey, ar.PackageType, ar.TargetName, ar.Version;";
+
+        var rows = new List<ModuleArtifactPackageRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ModuleKey", moduleKey);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new ModuleArtifactPackageRow
+            {
+                ArtifactId = rdr.GetInt32(0),
+                ModuleKey = rdr.GetString(1),
+                AppKey = rdr.GetString(2),
+                Version = rdr.GetString(3),
+                PackageType = rdr.GetString(4),
+                TargetName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                RelativePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                IsEnabled = rdr.GetBoolean(7)
+            });
+        }
+
         return rows;
     }
 

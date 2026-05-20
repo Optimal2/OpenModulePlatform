@@ -406,6 +406,8 @@ public sealed class ArtifactRow
 {
     public int ArtifactId { get; set; }
 
+    public string ModuleKey { get; set; } = string.Empty;
+
     public string AppKey { get; set; } = string.Empty;
 
     public string Version { get; set; } = string.Empty;
@@ -419,6 +421,28 @@ public sealed class ArtifactRow
     public bool IsEnabled { get; set; }
 
     public DateTime CreatedUtc { get; set; }
+}
+
+/// <summary>
+/// Artifact row with enough identity information to export a portable artifact package.
+/// </summary>
+public sealed class ModuleArtifactPackageRow
+{
+    public int ArtifactId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string Version { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public string? RelativePath { get; set; }
+
+    public bool IsEnabled { get; set; }
 }
 
 /// <summary>

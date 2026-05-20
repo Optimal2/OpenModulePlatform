@@ -118,6 +118,7 @@ internal static partial class Program
 
             var preparedArtifactConfigurationFiles = PrepareArtifacts(config, payloadRoot);
             await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
+            PublishAvailableDeploymentObjects(config, payloadRoot);
 
             if (config.HostAgent.Enabled)
             {
@@ -1178,6 +1179,55 @@ END;
         }
 
         return preparedConfigurationFiles;
+    }
+
+    private static void PublishAvailableDeploymentObjects(
+        BootstrapConfig config,
+        string payloadRoot)
+    {
+        if (string.IsNullOrWhiteSpace(config.ArtifactStoreRoot))
+        {
+            return;
+        }
+
+        var artifactStoreRoot = Path.GetFullPath(config.ArtifactStoreRoot.Trim());
+        var availableRoot = Path.Combine(artifactStoreRoot, "_available");
+        var definitionsCopied = CopyAvailableDeploymentObjects(
+            Path.Combine(payloadRoot, "available-module-definitions"),
+            Path.Combine(availableRoot, "module-definitions"),
+            "*.json");
+        var artifactsCopied = CopyAvailableDeploymentObjects(
+            Path.Combine(payloadRoot, "available-artifacts"),
+            Path.Combine(availableRoot, "artifacts"),
+            "*.zip");
+
+        if (definitionsCopied > 0 || artifactsCopied > 0)
+        {
+            Console.WriteLine(
+                $"> Available package library: {definitionsCopied} module definition(s), {artifactsCopied} artifact package(s)");
+        }
+    }
+
+    private static int CopyAvailableDeploymentObjects(
+        string sourceRoot,
+        string targetRoot,
+        string searchPattern)
+    {
+        if (!Directory.Exists(sourceRoot))
+        {
+            return 0;
+        }
+
+        Directory.CreateDirectory(targetRoot);
+        var copied = 0;
+        foreach (var sourcePath in Directory.EnumerateFiles(sourceRoot, searchPattern, SearchOption.TopDirectoryOnly))
+        {
+            var targetPath = Path.Combine(targetRoot, Path.GetFileName(sourcePath));
+            File.Copy(sourcePath, targetPath, overwrite: true);
+            copied++;
+        }
+
+        return copied;
     }
 
     private static async Task RegisterPreparedArtifactConfigurationFilesAsync(

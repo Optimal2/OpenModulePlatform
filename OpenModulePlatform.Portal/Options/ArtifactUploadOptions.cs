@@ -16,6 +16,16 @@ public sealed class ArtifactUploadOptions
     public string ArtifactStoreRoot { get; set; } = string.Empty;
 
     /// <summary>
+    /// Optional folder containing module definition JSON files available for later Portal import.
+    /// </summary>
+    public string AvailableModuleDefinitionsRoot { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional folder containing standard artifact package zip files available for later Portal import.
+    /// </summary>
+    public string AvailableArtifactsRoot { get; set; } = string.Empty;
+
+    /// <summary>
     /// Maximum accepted zip upload size in bytes.
     /// </summary>
     public long MaxUploadBytes { get; set; } = DefaultMaxUploadBytes;
