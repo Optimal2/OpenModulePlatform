@@ -67,6 +67,10 @@ Portal:
 - `/admin/moduledefinitionedit` can download the stored JSON definition.
 - `/admin/moduledefinitioneditor` opens the browser-based module definition
   editor.
+- `/admin/modulepackageimport` can upload one portable module package zip,
+  upload one module definition JSON together with one or more artifact package
+  zips, import package-library files from `ArtifactStoreRoot\_available`, and
+  export an applied module definition with its active artifact packages.
 - `/admin/artifacts` and `/admin/artifactupload` import artifact packages.
 - `/admin/artifactedit` can download an installed artifact as a standard package
   object, including registered configuration files.
@@ -90,12 +94,15 @@ Command-line helpers:
 
 To move a module from one OMP installation to another:
 
-1. Download the module definition JSON from Portal or take it from source.
-2. Download or build the compatible artifact package zips.
-3. Import the module definition into the target OMP.
-4. Validate the module definition matrix and run required safe repairs.
-5. Import the artifact packages.
-6. Update the desired template state so HostAgent deploys the new versions.
+1. Export a module package from Portal, or collect one module definition JSON
+   and the compatible artifact package zips from source/package output.
+2. Import the module package into the target OMP through
+   `/admin/modulepackageimport`.
+3. Validate the module definition matrix and run required safe repairs when the
+   import did not execute them immediately.
+4. Review the desired template state. When "use imported artifacts immediately"
+   was enabled during import, HostAgent deploys the selected versions on its
+   next cycle.
 
 Portal-driven import can offer operator choices for conflicts. HostAgent folder
 import is intentionally strict and unattended: invalid filenames, incompatible

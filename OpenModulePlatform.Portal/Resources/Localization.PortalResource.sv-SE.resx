@@ -1835,4 +1835,30 @@
   <data name="Artifact relative path is invalid." xml:space="preserve"><value>Artefaktens relativa sökväg är ogiltig.</value></data>
   <data name="Artifact payload folder was not found in the artifact store." xml:space="preserve"><value>Artefaktens payload-mapp hittades inte i artefaktlagret.</value></data>
   <data name="Download module definition" xml:space="preserve"><value>Ladda ned moduldefinition</value></data>
+  <data name="Module packages" xml:space="preserve"><value>Modulpaket</value></data>
+  <data name="Import or export a portable module package containing one module definition JSON and the compatible artifact package zips." xml:space="preserve"><value>Importera eller exportera ett portabelt modulpaket med en moduldefinition i JSON-format och kompatibla artefaktpaket.</value></data>
+  <data name="Upload module package" xml:space="preserve"><value>Ladda upp modulpaket</value></data>
+  <data name="Upload either one package zip containing a module definition JSON and artifact zips, or upload the JSON and artifact zips separately." xml:space="preserve"><value>Ladda upp antingen en paket-zip som innehåller moduldefinitionens JSON och artefaktzippar, eller ladda upp JSON och artefaktzippar separat.</value></data>
+  <data name="Package zip" xml:space="preserve"><value>Paket-zip</value></data>
+  <data name="Use this when the JSON and artifact packages are bundled in one zip." xml:space="preserve"><value>Använd detta när JSON-filen och artefaktpaketen ligger samlade i en zip-fil.</value></data>
+  <data name="Artifact packages" xml:space="preserve"><value>Artefaktpaket</value></data>
+  <data name="Artifact filenames must follow module__app__packageType__target__version.zip." xml:space="preserve"><value>Artefaktfilnamn måste följa module__app__packageType__target__version.zip.</value></data>
+  <data name="Use imported artifacts immediately" xml:space="preserve"><value>Använd importerade artefakter direkt</value></data>
+  <data name="Replace existing artifacts with same identity" xml:space="preserve"><value>Ersätt befintliga artefakter med samma identitet</value></data>
+  <data name="Import uploaded package" xml:space="preserve"><value>Importera uppladdat paket</value></data>
+  <data name="Export module package" xml:space="preserve"><value>Exportera modulpaket</value></data>
+  <data name="Export the active module definition together with the artifact packages currently referenced by the installation template and runtime rows." xml:space="preserve"><value>Exportera den aktiva moduldefinitionen tillsammans med artefaktpaketen som just nu används av installationsmallen och runtime-raderna.</value></data>
+  <data name="Include all historical artifact versions" xml:space="preserve"><value>Inkludera alla historiska artefaktversioner</value></data>
+  <data name="Available package library" xml:space="preserve"><value>Tillgängligt paketbibliotek</value></data>
+  <data name="These module definitions and artifact packages were installed into the shared artifact store for later import." xml:space="preserve"><value>Dessa moduldefinitioner och artefaktpaket installerades i det gemensamma artefaktlagret för senare import.</value></data>
+  <data name="No available module packages found." xml:space="preserve"><value>Inga tillgängliga modulpaket hittades.</value></data>
+  <data name="Module definition" xml:space="preserve"><value>Moduldefinition</value></data>
+  <data name="Import" xml:space="preserve"><value>Importera</value></data>
+  <data name="Import/export module package" xml:space="preserve"><value>Importera/exportera modulpaket</value></data>
+  <data name="Imported module definition {0} {1}." xml:space="preserve"><value>Importerade moduldefinition {0} {1}.</value></data>
+  <data name="The definition was applied." xml:space="preserve"><value>Definitionen applicerades.</value></data>
+  <data name="The definition was stored but not applied." xml:space="preserve"><value>Definitionen sparades men applicerades inte.</value></data>
+  <data name="Executed {0} SQL repair script(s)." xml:space="preserve"><value>Körde {0} SQL-rättningsskript.</value></data>
+  <data name="Artifacts imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artefakter importerade eller ersatta: {0}. Misslyckade: {1}.</value></data>
+  <data name="Select one available module definition." xml:space="preserve"><value>Välj en tillgänglig moduldefinition.</value></data>
 </root>
