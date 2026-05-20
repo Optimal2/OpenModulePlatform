@@ -148,6 +148,26 @@ Both entry points open the graphical installer. The EXE requests administrator
 rights, loads the package defaults, lets the operator review or change common
 SQL, path, HostAgent, and IIS settings, and then runs the selected action.
 
+On a development machine where the installer package still lives below an
+OpenModulePlatform source checkout, the graphical installer can also compare
+the package and installed database with the source repository manifest:
+
+- `Check source objects` reads `omp-components.json`, the module definition
+  files, the current package payload, and the target database. It reports
+  module definitions or artifact entries whose versions or content differ from
+  source. When an `OpenDocViewer` repository exists as a sibling of
+  `OpenModulePlatform`, its component manifest is checked as well.
+- `Upgrade from source` runs the repository package builder, refreshes the
+  current package's `payload` and `module-definitions` folders, saves the
+  refreshed artifact list and SQL version overrides to the bootstrap JSON, and
+  then runs the normal install/update action.
+
+If the package has been copied outside the source tree, use the `Developer` tab
+to point the installer at the source repository root and, when needed, a
+specific package `.psd1` config. This developer workflow is intentionally local;
+production updates should still use controlled artifact/module-definition
+packages.
+
 For non-interactive console installation, run:
 
 ```cmd

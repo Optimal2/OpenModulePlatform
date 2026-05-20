@@ -2501,6 +2501,8 @@ internal sealed class BootstrapConfig
 {
     public SqlBootstrapOptions Sql { get; set; } = new();
 
+    public DeveloperSourceOptions DeveloperSource { get; set; } = new();
+
     public string ArtifactStoreRoot { get; set; } = string.Empty;
 
     public bool IncludeExampleApps { get; set; } = true;
@@ -2508,6 +2510,15 @@ internal sealed class BootstrapConfig
     public List<ArtifactPayloadOptions> Artifacts { get; set; } = [];
 
     public HostAgentInstallOptions HostAgent { get; set; } = new();
+}
+
+internal sealed class DeveloperSourceOptions
+{
+    public string SourceRoot { get; set; } = string.Empty;
+
+    public string PackageConfigPath { get; set; } = string.Empty;
+
+    public string PackageOutputRoot { get; set; } = string.Empty;
 }
 
 internal sealed class SqlBootstrapOptions
