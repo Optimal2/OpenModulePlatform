@@ -132,11 +132,11 @@ Runtime-local files are preserved through
 can update application binaries without overwriting local configuration or
 runtime data.
 
-Artifact packages should not contain runtime configuration files in the first
-place. The exclusions above are a safety net for existing runtime folders and
-older packages, while Portal artifact upload rejects known runtime config files
-such as `appsettings*.json` and `odv.site.config.js`. Environment-owned config
-is either written by the bootstrap/deployment layer or managed through
+Legacy artifact zips should not contain runtime configuration files. The
+exclusions above are a safety net for existing runtime folders and older
+packages, while Portal artifact upload rejects known runtime config files such
+as `appsettings*.json` and `odv.site.config.js`. Environment-owned config is
+either written by the bootstrap/deployment layer or managed through
 `omp.ArtifactConfigurationFiles`.
 
 Enabled rows in `omp.ArtifactConfigurationFiles` are written after the artifact
@@ -145,6 +145,11 @@ to the deployed app root plus the exact text HostAgent should write. HostAgent
 uses this for deployment-owned runtime files, for example a site-local
 `odv.site.config.js`, without requiring a new artifact zip for every
 configuration change.
+
+New artifact packages can carry those files in the manifest envelope documented
+in [`ARTIFACT_PACKAGES.md`](ARTIFACT_PACKAGES.md). HostAgent registers the
+configuration rows during import and only extracts the declared payload to the
+artifact store.
 
 Configuration file content may contain HostAgent tokens. Tokens are expanded per
 deployment, so one artifact-level row can still produce host- or
@@ -186,10 +191,11 @@ off unless `HostAgent:ArtifactZipImport:IsEnabled` is set to `true`.
 Each zip filename must use the same metadata format as Portal upload:
 `moduleKey__appKey__packageType__targetName__version.zip`. HostAgent validates
 and extracts the zip below `CentralArtifactRoot`, rejects duplicate extracted
-content by SHA-256, registers the `omp.Artifacts` row, copies configuration file
-rows from the latest previous matching artifact when enabled, and selects the
-new artifact for matching desired app rows. Successful files move to
-`processed`; failed files move to `failed` with an adjacent `.error.txt`.
+content by SHA-256, registers the `omp.Artifacts` row, registers configuration
+files declared by `omp-artifact-package.json` or copies configuration file rows
+from the latest previous matching artifact when enabled, and selects the new
+artifact for matching desired app rows. Successful files move to `processed`;
+failed files move to `failed` with an adjacent `.error.txt`.
 
 ## Runtime file mirrors
 

@@ -1,10 +1,10 @@
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -130,8 +130,9 @@ public sealed class ArtifactZipImportService
 
             finalPath = ResolveUnderRoot(storeRoot, relativePath);
 
-            ExtractValidatedZip(tempZipPath, stagingPath);
-            var contentHash = await ComputeDirectorySha256Async(stagingPath, cancellationToken);
+            var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
+                .Extract(tempZipPath, stagingPath);
+            var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
             var duplicate = await _repository.FindImportedArtifactBySha256Async(contentHash, cancellationToken);
             if (duplicate is not null)
             {
@@ -146,7 +147,7 @@ public sealed class ArtifactZipImportService
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-            Directory.Move(stagingPath, finalPath);
+            Directory.Move(package.ArtifactContentPath, finalPath);
             movedToFinal = true;
 
             var artifactId = await _repository.RegisterImportedArtifactAsync(
@@ -160,7 +161,14 @@ public sealed class ArtifactZipImportService
 
             artifactRegistered = true;
             var copiedConfigurationFiles = 0;
-            if (importSettings.CopyConfigurationFilesFromPreviousVersion)
+            if (package.ConfigurationFiles.Count > 0)
+            {
+                copiedConfigurationFiles = await _repository.ReplaceArtifactConfigurationFilesAsync(
+                    artifactId,
+                    package.ConfigurationFiles,
+                    cancellationToken);
+            }
+            else if (importSettings.CopyConfigurationFilesFromPreviousVersion)
             {
                 copiedConfigurationFiles = await _repository.CopyConfigurationFilesFromLatestPreviousArtifactAsync(
                     artifactId,
@@ -208,10 +216,7 @@ public sealed class ArtifactZipImportService
         finally
         {
             TryDelete(tempZipPath);
-            if (!movedToFinal)
-            {
-                TryDelete(stagingPath);
-            }
+            TryDelete(stagingPath);
         }
     }
 
@@ -239,61 +244,6 @@ public sealed class ArtifactZipImportService
         }
     }
 
-    private static void ExtractValidatedZip(string zipPath, string stagingPath)
-    {
-        using var archive = ZipFile.OpenRead(zipPath);
-        var fileCount = 0;
-
-        Directory.CreateDirectory(stagingPath);
-
-        foreach (var entry in archive.Entries)
-        {
-            var entryName = NormalizeZipEntryName(entry.FullName);
-            var entryPath = ResolveZipEntryPath(stagingPath, entryName);
-
-            if (string.IsNullOrEmpty(entry.Name))
-            {
-                Directory.CreateDirectory(entryPath);
-                continue;
-            }
-
-            ValidateArtifactEntryIsNotRuntimeConfiguration(entryName);
-            Directory.CreateDirectory(Path.GetDirectoryName(entryPath)!);
-            entry.ExtractToFile(entryPath, overwrite: false);
-            fileCount++;
-        }
-
-        if (fileCount == 0)
-        {
-            throw new InvalidOperationException("The artifact zip must contain at least one file.");
-        }
-    }
-
-    private static string NormalizeZipEntryName(string fullName)
-    {
-        var normalized = fullName.Replace('\\', '/').Trim();
-        if (normalized.Length == 0 || normalized.StartsWith("/", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("The artifact zip contains an invalid entry path.");
-        }
-
-        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var invalidFileNameChars = Path.GetInvalidFileNameChars();
-        if (segments.Length == 0
-            || segments.Any(segment => segment is "." or "..")
-            || segments.Any(segment => segment.IndexOfAny(invalidFileNameChars) >= 0))
-        {
-            throw new InvalidOperationException("The artifact zip contains a path that escapes the artifact root.");
-        }
-
-        if (normalized.Contains(':', StringComparison.Ordinal) || normalized.IndexOf('\0') >= 0)
-        {
-            throw new InvalidOperationException("The artifact zip contains a rooted or invalid entry path.");
-        }
-
-        return string.Join('/', segments);
-    }
-
     private static void ValidateArtifactEntryIsNotRuntimeConfiguration(string normalizedEntryName)
     {
         var fileName = normalizedEntryName.Split('/').LastOrDefault() ?? string.Empty;
@@ -319,12 +269,6 @@ public sealed class ArtifactZipImportService
 
         return RuntimeConfigurationFileNames.Any(
             name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string ResolveZipEntryPath(string rootPath, string relativeEntryPath)
-    {
-        var localRelativePath = relativeEntryPath.Replace('/', Path.DirectorySeparatorChar);
-        return ResolveUnderRoot(rootPath, localRelativePath);
     }
 
     private static async Task<string> ComputeDirectorySha256Async(string path, CancellationToken cancellationToken)
