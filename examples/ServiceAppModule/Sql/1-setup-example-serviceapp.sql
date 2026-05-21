@@ -5,9 +5,6 @@ Creates the example Service App module schema and tables.
 Prerequisite:
 - Run ../../sql/1-setup-openmoduleplatform.sql first.
 */
-USE [OpenModulePlatform];
-GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_example_serviceapp')
     EXEC('CREATE SCHEMA [omp_example_serviceapp]');
 GO
