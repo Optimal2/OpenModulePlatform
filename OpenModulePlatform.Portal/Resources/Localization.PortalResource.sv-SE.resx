@@ -1875,4 +1875,15 @@
   <data name="Importing will add this module definition and register the package artifacts so HostAgent can deploy them." xml:space="preserve"><value>Import lägger till moduldefinitionen och registrerar paketets artefakter så att HostAgent kan deploya dem.</value></data>
   <data name="Allow multiple active instances" xml:space="preserve"><value>Tillåt flera aktiva instanser</value></data>
   <data name="Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel." xml:space="preserve"><value>Använd bara för appdefinitioner som avsiktligt skapar flera runtime-rader, till exempel en worker-rad per kanal.</value></data>
+  <data name="Dashboard" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="Arrange widgets freely on your personal canvas." xml:space="preserve"><value>Placera widgets fritt på din personliga canvas.</value></data>
+  <data name="Dashboard canvas" xml:space="preserve"><value>Dashboard-canvas</value></data>
+  <data name="No widgets have been added yet." xml:space="preserve"><value>Inga widgets har lagts till ännu.</value></data>
+  <data name="Dashboard widgets require an OMP user." xml:space="preserve"><value>Dashboard-widgets kräver en OMP-user.</value></data>
+  <data name="Edit dashboard" xml:space="preserve"><value>Redigera dashboard</value></data>
+  <data name="Add widget" xml:space="preserve"><value>Lägg till widget</value></data>
+  <data name="Remove widget" xml:space="preserve"><value>Ta bort widget</value></data>
+  <data name="No widgets are available." xml:space="preserve"><value>Inga widgets är tillgängliga.</value></data>
+  <data name="Close" xml:space="preserve"><value>Stäng</value></data>
+  <data name="Portal widget" xml:space="preserve"><value>Portal-widget</value></data>
 </root>

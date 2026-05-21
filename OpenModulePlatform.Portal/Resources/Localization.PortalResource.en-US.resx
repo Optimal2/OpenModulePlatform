@@ -295,4 +295,15 @@
   <data name="Download module definition" xml:space="preserve"><value>Download module definition</value></data>
   <data name="Allow multiple active instances" xml:space="preserve"><value>Allow multiple active instances</value></data>
   <data name="Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel." xml:space="preserve"><value>Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel.</value></data>
+  <data name="Dashboard" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="Arrange widgets freely on your personal canvas." xml:space="preserve"><value>Arrange widgets freely on your personal canvas.</value></data>
+  <data name="Dashboard canvas" xml:space="preserve"><value>Dashboard canvas</value></data>
+  <data name="No widgets have been added yet." xml:space="preserve"><value>No widgets have been added yet.</value></data>
+  <data name="Dashboard widgets require an OMP user." xml:space="preserve"><value>Dashboard widgets require an OMP user.</value></data>
+  <data name="Edit dashboard" xml:space="preserve"><value>Edit dashboard</value></data>
+  <data name="Add widget" xml:space="preserve"><value>Add widget</value></data>
+  <data name="Remove widget" xml:space="preserve"><value>Remove widget</value></data>
+  <data name="No widgets are available." xml:space="preserve"><value>No widgets are available.</value></data>
+  <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Portal widget" xml:space="preserve"><value>Portal widget</value></data>
 </root>

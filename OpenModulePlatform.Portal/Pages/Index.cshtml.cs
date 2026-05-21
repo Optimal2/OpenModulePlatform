@@ -9,42 +9,39 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using SharedRbacService = OpenModulePlatform.Web.Shared.Services.RbacService;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace OpenModulePlatform.Portal.Pages;
 
 /// <summary>
-/// Portal start page showing the app catalog available to the current user.
+/// Portal start page showing the user's dashboard.
 /// </summary>
 public sealed class IndexModel : OmpPageModel<PortalResource>
 {
-    private readonly PortalEntryService _portalEntries;
+    private readonly PortalDashboardService _dashboard;
     private readonly SharedRbacService _rbac;
     private readonly OmpAdminRepository _repo;
     private readonly PortalUserSettingsService _userSettings;
 
     public IndexModel(
         IOptions<WebAppOptions> options,
-        PortalEntryService portalEntries,
+        PortalDashboardService dashboard,
         SharedRbacService rbac,
         OmpAdminRepository repo,
         PortalUserSettingsService userSettings)
         : base(options)
     {
-        _portalEntries = portalEntries;
+        _dashboard = dashboard;
         _rbac = rbac;
         _repo = repo;
         _userSettings = userSettings;
     }
 
-    public IReadOnlyList<PortalEntry> PinnedEntries { get; private set; } = [];
+    public IReadOnlyList<DashboardActiveWidget> ActiveWidgets { get; private set; } = [];
 
-    public IReadOnlyList<PortalEntry> AllEntries { get; private set; } = [];
+    public IReadOnlyList<DashboardWidgetDefinition> AvailableWidgets { get; private set; } = [];
 
-    public bool CanPersonalizeEntries { get; private set; }
-
-    public bool ManageList { get; private set; }
-
-    public bool ShowFullList { get; private set; }
+    public bool CanEditDashboard { get; private set; }
 
     public bool IsPortalAdmin { get; private set; }
 
@@ -54,86 +51,72 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public async Task OnGet(bool manage = false, bool fullList = false, CancellationToken ct = default)
     {
-        await LoadAsync(manage, fullList, ct);
+        await LoadAsync(ct);
     }
 
-    public async Task<IActionResult> OnPostPin(int portalEntryId, bool manage, bool fullList, CancellationToken ct)
+    public async Task<IActionResult> OnPostAddWidget(int widgetId, CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return Forbid();
         }
 
-        await _portalEntries.SetPinnedAsync(userId, portalEntryId, true, ct);
-        return RedirectToPage(new { manage, fullList });
+        var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
+        var widget = await _dashboard.AddWidgetAsync(
+            userId,
+            widgetId,
+            roleContext.EffectiveRoleIds.ToHashSet(),
+            roleContext.EffectivePermissions,
+            ct);
+        if (widget is null)
+        {
+            return Forbid();
+        }
+
+        return new JsonResult(ToDashboardWidgetDto(widget));
     }
 
-    public async Task<IActionResult> OnPostUnpin(int portalEntryId, bool manage, bool fullList, CancellationToken ct)
+    public async Task<IActionResult> OnPostSaveDashboard(string widgetsJson, CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return Forbid();
         }
 
-        await _portalEntries.SetPinnedAsync(userId, portalEntryId, false, ct);
-        return RedirectToPage(new { manage, fullList });
-    }
-
-    public async Task<IActionResult> OnPostHide(int portalEntryId, bool manage, bool fullList, CancellationToken ct)
-    {
-        if (!TryGetCurrentUserId(out var userId))
-        {
-            return Forbid();
-        }
-
-        await _portalEntries.SetHiddenAsync(userId, portalEntryId, true, ct);
-        return RedirectToPage(new { manage, fullList });
-    }
-
-    public async Task<IActionResult> OnPostUnhide(int portalEntryId, bool manage, bool fullList, CancellationToken ct)
-    {
-        if (!TryGetCurrentUserId(out var userId))
-        {
-            return Forbid();
-        }
-
-        await _portalEntries.SetHiddenAsync(userId, portalEntryId, false, ct);
-        return RedirectToPage(new { manage, fullList });
-    }
-
-    public async Task<IActionResult> OnPostSortPinned(string orderedPortalEntryIds, CancellationToken ct)
-    {
-        if (!TryGetCurrentUserId(out var userId))
-        {
-            return Forbid();
-        }
-
-        var ids = (orderedPortalEntryIds ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(x => int.TryParse(x, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : 0)
-            .Where(id => id > 0)
-            .Distinct()
-            .ToArray();
-
-        await _portalEntries.UpdatePinnedSortOrderAsync(userId, ids, ct);
+        var updates = string.IsNullOrWhiteSpace(widgetsJson)
+            ? new List<DashboardWidgetLayoutUpdate>()
+            : JsonSerializer.Deserialize<List<DashboardWidgetLayoutUpdate>>(
+                widgetsJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        await _dashboard.UpdateLayoutAsync(userId, updates, ct);
         return new JsonResult(new { ok = true });
     }
 
-    private async Task LoadAsync(bool manage, bool fullList, CancellationToken ct)
+    public async Task<IActionResult> OnPostRemoveWidget(long userActiveWidgetId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        await _dashboard.RemoveWidgetAsync(userId, userActiveWidgetId, ct);
+        return new JsonResult(new { ok = true });
+    }
+
+    private async Task LoadAsync(CancellationToken ct)
     {
         SetTitles();
 
-        ManageList = manage;
-        ShowFullList = fullList;
-
-        var permissions = await _rbac.GetUserPermissionsAsync(User, ct);
+        var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
+        var permissions = roleContext.EffectivePermissions;
+        var roleIds = roleContext.EffectiveRoleIds.ToHashSet();
         IsPortalAdmin = permissions.Contains(OmpPortalPermissions.Admin);
         ViewData["IsPortalAdmin"] = IsPortalAdmin;
 
         var userId = TryGetCurrentUserId(out var resolvedUserId)
             ? resolvedUserId
             : (int?)null;
-        CanPersonalizeEntries = userId.HasValue;
+        CanEditDashboard = userId.HasValue;
 
         if (IsPortalAdmin)
         {
@@ -146,18 +129,16 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             }
         }
 
-        var entries = await _portalEntries.GetEntriesAsync(Request, userId, permissions, fullList, ct);
-        PinnedEntries = entries
-            .Where(entry => entry.IsPinned && !entry.IsHidden)
-            .OrderBy(entry => entry.UserSortOrder ?? int.MaxValue)
-            .ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        AllEntries = entries
-            .Where(entry => entry.IsHidden || !entry.IsPinned)
-            .OrderBy(entry => entry.IsHidden)
-            .ThenBy(entry => entry.DefaultSortOrder)
-            .ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        if (userId.HasValue)
+        {
+            ActiveWidgets = await _dashboard.GetActiveWidgetsAsync(userId.Value, roleIds, permissions, ct);
+            AvailableWidgets = await _dashboard.GetAvailableWidgetsAsync(roleIds, permissions, ct);
+        }
+        else
+        {
+            ActiveWidgets = [];
+            AvailableWidgets = [];
+        }
     }
 
     private bool TryGetCurrentUserId(out int userId)
@@ -165,4 +146,19 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         var userIdClaim = User.FindFirstValue(OpenModulePlatform.Web.Shared.Security.OmpAuthDefaults.UserIdClaimType);
         return int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out userId);
     }
+
+    private static object ToDashboardWidgetDto(DashboardActiveWidget widget)
+        => new
+        {
+            userActiveWidgetId = widget.UserActiveWidgetId,
+            widgetId = widget.WidgetId,
+            title = widget.EffectiveTitle,
+            widgetType = widget.WidgetType,
+            payload = widget.Payload,
+            offsetTop = widget.OffsetTop,
+            offsetLeft = widget.OffsetLeft,
+            width = widget.Width,
+            height = widget.Height,
+            orderPriority = widget.OrderPriority
+        };
 }
