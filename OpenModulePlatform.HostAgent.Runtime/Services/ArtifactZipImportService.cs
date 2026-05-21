@@ -1,5 +1,8 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
@@ -12,6 +15,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class ArtifactZipImportService
 {
     private const int HashBufferSize = 1024 * 128;
+    private const int MaxModuleDefinitionBytes = 1024 * 1024 * 5;
 
     private static readonly Regex MetadataTokenPattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
@@ -21,6 +25,13 @@ public sealed class ArtifactZipImportService
     [
         "odv.site.config.js"
     ];
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        WriteIndented = true
+    };
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
@@ -53,22 +64,22 @@ public sealed class ArtifactZipImportService
         Directory.CreateDirectory(processedPath);
         Directory.CreateDirectory(failedPath);
 
-        var zipPaths = Directory.EnumerateFiles(importPath, "*.zip", SearchOption.TopDirectoryOnly)
+        var importPaths = Directory.EnumerateFiles(importPath, "*", SearchOption.TopDirectoryOnly)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .Take(importSettings.MaxFilesPerCycle)
             .ToList();
 
-        foreach (var zipPath in zipPaths)
+        foreach (var path in importPaths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ImportOneAsync(settings, importSettings, zipPath, processedPath, failedPath, cancellationToken);
+            await ImportOneAsync(settings, importSettings, path, processedPath, failedPath, cancellationToken);
         }
     }
 
     private async Task ImportOneAsync(
         HostAgentSettings settings,
         HostAgentArtifactZipImportSettings importSettings,
-        string zipPath,
+        string importPath,
         string processedPath,
         string failedPath,
         CancellationToken cancellationToken)
@@ -77,8 +88,201 @@ public sealed class ArtifactZipImportService
         var tempRoot = Path.Combine(storeRoot, ".hostagent-import-staging");
         Directory.CreateDirectory(tempRoot);
 
-        var tempZipPath = Path.Combine(tempRoot, $"{Guid.NewGuid():N}.zip");
-        var stagingPath = Path.Combine(tempRoot, $"artifact-{Guid.NewGuid():N}");
+        var tempImportPath = Path.Combine(tempRoot, $"{Guid.NewGuid():N}{Path.GetExtension(importPath)}");
+        var stagingPath = Path.Combine(tempRoot, $"import-{Guid.NewGuid():N}");
+
+        try
+        {
+            if (!await TryCopyReadyFileAsync(importPath, tempImportPath, cancellationToken))
+            {
+                return;
+            }
+
+            var extension = Path.GetExtension(importPath);
+            if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                var definition = await ReadModuleDefinitionAsync(
+                    tempImportPath,
+                    Path.GetFileName(importPath),
+                    cancellationToken);
+                var result = await ImportModuleDefinitionAsync(definition, cancellationToken);
+                _logger.LogInformation(
+                    "Imported module definition from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}",
+                    importPath,
+                    result.ModuleKey,
+                    result.DefinitionVersion,
+                    result.ModuleDefinitionDocumentId,
+                    result.Applied,
+                    result.SqlRepairCount);
+            }
+            else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
+                     && TryParseFilenameMetadata(Path.GetFileName(importPath)) is { } metadata)
+            {
+                var result = await ImportArtifactPackageAsync(
+                    settings,
+                    importSettings,
+                    metadata,
+                    tempImportPath,
+                    Path.Combine(stagingPath, "artifact"),
+                    cancellationToken);
+                _logger.LogInformation(
+                    "Imported artifact zip. Zip={ImportPath}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, AdoptedExistingContent={AdoptedExistingContent}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}",
+                    importPath,
+                    result.ArtifactId,
+                    result.Version,
+                    result.RelativePath,
+                    result.AdoptedExistingContent,
+                    result.CopiedConfigurationFileCount,
+                    result.TemplateAppRowsUpdated,
+                    result.AppInstanceRowsUpdated,
+                    result.WorkerInstanceRowsUpdated,
+                    result.HostAgentDesiredRowsUpdated);
+            }
+            else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                var result = await ImportModulePackageZipAsync(
+                    settings,
+                    importSettings,
+                    tempImportPath,
+                    Path.Combine(stagingPath, "module-package"),
+                    cancellationToken);
+                _logger.LogInformation(
+                    "Imported module package from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}, ArtifactCount={ArtifactCount}",
+                    importPath,
+                    result.ModuleKey,
+                    result.DefinitionVersion,
+                    result.ModuleDefinitionDocumentId,
+                    result.Applied,
+                    result.SqlRepairCount,
+                    result.Artifacts.Count);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "Unsupported HostAgent import file. Expected .json module definition, standard artifact .zip, or module package .zip.");
+            }
+
+            MoveImportFile(importPath, processedPath, null);
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            MoveImportFile(importPath, failedPath, ex.Message);
+            _logger.LogWarning(ex, "HostAgent import failed. File={ImportPath}", importPath);
+        }
+        finally
+        {
+            TryDelete(tempImportPath);
+            TryDelete(stagingPath);
+        }
+    }
+
+    private async Task<bool> TryCopyReadyFileAsync(
+        string importPath,
+        string tempImportPath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var source = new FileStream(importPath, FileMode.Open, FileAccess.Read, FileShare.None);
+            await using var target = new FileStream(tempImportPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            await source.CopyToAsync(target, cancellationToken);
+            return true;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import file is not ready. File={ImportPath}", importPath);
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import file is not accessible. File={ImportPath}", importPath);
+            return false;
+        }
+    }
+
+    private async Task<ModulePackageImportResult> ImportModulePackageZipAsync(
+        HostAgentSettings settings,
+        HostAgentArtifactZipImportSettings importSettings,
+        string packageZipPath,
+        string extractionRoot,
+        CancellationToken cancellationToken)
+    {
+        ExtractZipToDirectory(packageZipPath, extractionRoot);
+        var definitionPath = FindSingleModuleDefinitionFile(extractionRoot);
+        var definition = await ReadModuleDefinitionAsync(
+            definitionPath,
+            Path.GetFileName(definitionPath),
+            cancellationToken);
+
+        var definitionResult = await ImportModuleDefinitionAsync(definition, cancellationToken);
+        var artifactResults = new List<ArtifactZipImportResult>();
+        var artifactPaths = Directory.EnumerateFiles(extractionRoot, "*.zip", SearchOption.AllDirectories)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var artifactPath in artifactPaths)
+        {
+            var metadata = TryParseFilenameMetadata(Path.GetFileName(artifactPath))
+                ?? throw new InvalidOperationException(
+                    $"Module package artifact '{Path.GetFileName(artifactPath)}' does not follow moduleKey__appKey__packageType__targetName__version.zip.");
+            if (!metadata.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Module package artifact '{Path.GetFileName(artifactPath)}' belongs to module '{metadata.ModuleKey}', not '{definition.ModuleKey}'.");
+            }
+
+            artifactResults.Add(await ImportArtifactPackageAsync(
+                settings,
+                importSettings,
+                metadata,
+                artifactPath,
+                Path.Combine(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
+                cancellationToken));
+        }
+
+        return new ModulePackageImportResult(
+            definitionResult.ModuleKey,
+            definitionResult.DefinitionVersion,
+            definitionResult.ModuleDefinitionDocumentId,
+            definitionResult.Applied,
+            definitionResult.SqlRepairCount,
+            artifactResults);
+    }
+
+    private async Task<ModuleDefinitionImportResult> ImportModuleDefinitionAsync(
+        ModuleDefinitionImportDocument definition,
+        CancellationToken cancellationToken)
+    {
+        var saveResult = await _repository.SaveImportedModuleDefinitionAsync(
+            definition,
+            replaceExisting: false,
+            cancellationToken);
+        var applied = await _repository.ApplyImportedModuleDefinitionAsync(
+            saveResult.ModuleDefinitionDocumentId,
+            cancellationToken);
+        var repairs = applied
+            ? await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+                saveResult.ModuleDefinitionDocumentId,
+                cancellationToken)
+            : 0;
+
+        return new ModuleDefinitionImportResult(
+            definition.ModuleKey,
+            definition.DefinitionVersion,
+            saveResult.ModuleDefinitionDocumentId,
+            applied,
+            repairs);
+    }
+
+    private async Task<ArtifactZipImportResult> ImportArtifactPackageAsync(
+        HostAgentSettings settings,
+        HostAgentArtifactZipImportSettings importSettings,
+        FilenameMetadata metadata,
+        string packagePath,
+        string stagingPath,
+        CancellationToken cancellationToken)
+    {
+        var storeRoot = Path.GetFullPath(settings.CentralArtifactRoot.Trim());
         string? finalPath = null;
         var movedToFinal = false;
         var artifactRegistered = false;
@@ -86,15 +290,6 @@ public sealed class ArtifactZipImportService
 
         try
         {
-            if (!await TryCopyReadyZipAsync(zipPath, tempZipPath, cancellationToken))
-            {
-                return;
-            }
-
-            var metadata = TryParseFilenameMetadata(Path.GetFileName(zipPath))
-                ?? throw new InvalidOperationException(
-                    "Artifact zip filename must match moduleKey__appKey__packageType__targetName__version.zip.");
-
             var app = await _repository.ResolveArtifactZipImportAppAsync(
                 metadata.ModuleKey,
                 metadata.AppKey,
@@ -130,9 +325,8 @@ public sealed class ArtifactZipImportService
             }
 
             finalPath = ResolveUnderRoot(storeRoot, relativePath);
-
             var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
-                .Extract(tempZipPath, stagingPath);
+                .Extract(packagePath, stagingPath);
             var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
             if (Directory.Exists(finalPath) || File.Exists(finalPath))
             {
@@ -208,7 +402,7 @@ public sealed class ArtifactZipImportService
                     cancellationToken);
             }
 
-            var result = new ArtifactZipImportResult(
+            return new ArtifactZipImportResult(
                 artifactId,
                 metadata.Version,
                 relativePath,
@@ -216,60 +410,17 @@ public sealed class ArtifactZipImportService
                 application.TemplateAppRowsUpdated,
                 application.AppInstanceRowsUpdated,
                 application.WorkerInstanceRowsUpdated,
-                hostAgentDesiredRows);
-
-            MoveImportZip(zipPath, processedPath, null);
-            _logger.LogInformation(
-                "Imported artifact zip. Zip={ZipPath}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, AdoptedExistingContent={AdoptedExistingContent}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}",
-                zipPath,
-                result.ArtifactId,
-                result.Version,
-                result.RelativePath,
-                adoptedExistingContent,
-                result.CopiedConfigurationFileCount,
-                result.TemplateAppRowsUpdated,
-                result.AppInstanceRowsUpdated,
-                result.WorkerInstanceRowsUpdated,
-                result.HostAgentDesiredRowsUpdated);
+                hostAgentDesiredRows,
+                adoptedExistingContent);
         }
-        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        catch
         {
             if (movedToFinal && !artifactRegistered && !string.IsNullOrWhiteSpace(finalPath))
             {
                 TryDelete(finalPath);
             }
 
-            MoveImportZip(zipPath, failedPath, ex.Message);
-            _logger.LogWarning(ex, "Artifact zip import failed. Zip={ZipPath}", zipPath);
-        }
-        finally
-        {
-            TryDelete(tempZipPath);
-            TryDelete(stagingPath);
-        }
-    }
-
-    private async Task<bool> TryCopyReadyZipAsync(
-        string zipPath,
-        string tempZipPath,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var source = new FileStream(zipPath, FileMode.Open, FileAccess.Read, FileShare.None);
-            await using var target = new FileStream(tempZipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            await source.CopyToAsync(target, cancellationToken);
-            return true;
-        }
-        catch (IOException ex)
-        {
-            _logger.LogDebug(ex, "Artifact zip is not ready for import. Zip={ZipPath}", zipPath);
-            return false;
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.LogDebug(ex, "Artifact zip is not accessible for import. Zip={ZipPath}", zipPath);
-            return false;
+            throw;
         }
     }
 
@@ -329,6 +480,106 @@ public sealed class ArtifactZipImportService
 
         sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
+    }
+
+    private static async Task<ModuleDefinitionImportDocument> ReadModuleDefinitionAsync(
+        string path,
+        string sourceName,
+        CancellationToken cancellationToken)
+    {
+        var fileInfo = new FileInfo(path);
+        if (fileInfo.Length > MaxModuleDefinitionBytes)
+        {
+            throw new InvalidOperationException(
+                $"The module definition exceeds the limit of {MaxModuleDefinitionBytes} bytes.");
+        }
+
+        var jsonText = await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken);
+        var root = JsonNode.Parse(jsonText)
+            ?? throw new InvalidOperationException("The module definition JSON file is empty.");
+
+        var moduleKey = GetJsonStringProperty(root, "moduleKey");
+        var definitionVersion = GetJsonStringProperty(root, "definitionVersion");
+        if (string.IsNullOrWhiteSpace(moduleKey) || string.IsNullOrWhiteSpace(definitionVersion))
+        {
+            throw new InvalidOperationException("Module definition JSON must contain moduleKey and definitionVersion.");
+        }
+
+        var normalizedJson = root.ToJsonString(JsonOptions);
+        var sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedJson))).ToLowerInvariant();
+        return new ModuleDefinitionImportDocument(
+            moduleKey,
+            definitionVersion,
+            GetJsonIntProperty(root, "formatVersion", 1),
+            normalizedJson,
+            sha256,
+            Truncate(sourceName, 400),
+            ReadCompatibleArtifacts(root));
+    }
+
+    private static IReadOnlyList<ModuleDefinitionArtifactCompatibilityEntry> ReadCompatibleArtifacts(JsonNode root)
+    {
+        if (root["compatibleArtifacts"] is not JsonArray items)
+        {
+            return [];
+        }
+
+        var entries = new List<ModuleDefinitionArtifactCompatibilityEntry>();
+        foreach (var item in items.OfType<JsonObject>())
+        {
+            var appKey = GetJsonStringProperty(item, "appKey");
+            var packageType = GetJsonStringProperty(item, "packageType");
+            if (string.IsNullOrWhiteSpace(appKey) || string.IsNullOrWhiteSpace(packageType))
+            {
+                throw new InvalidOperationException("Each compatibleArtifacts item must contain appKey and packageType.");
+            }
+
+            entries.Add(new ModuleDefinitionArtifactCompatibilityEntry(
+                appKey,
+                packageType,
+                NullIfWhiteSpace(GetJsonStringProperty(item, "targetName")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "relativePathTemplate")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "minVersion")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "maxVersion"))));
+        }
+
+        return entries;
+    }
+
+    private static string FindSingleModuleDefinitionFile(string root)
+    {
+        var candidates = Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
+            .Where(static path => TryReadDefinitionSummary(path) is not null)
+            .ToList();
+
+        return candidates.Count switch
+        {
+            1 => candidates[0],
+            0 => throw new InvalidOperationException("The module package zip contains no module definition JSON file."),
+            _ => throw new InvalidOperationException("The module package zip contains multiple module definition JSON files.")
+        };
+    }
+
+    private static (string ModuleKey, string DefinitionVersion)? TryReadDefinitionSummary(string path)
+    {
+        try
+        {
+            var root = JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8));
+            if (root is null)
+            {
+                return null;
+            }
+
+            var moduleKey = GetJsonStringProperty(root, "moduleKey");
+            var definitionVersion = GetJsonStringProperty(root, "definitionVersion");
+            return string.IsNullOrWhiteSpace(moduleKey) || string.IsNullOrWhiteSpace(definitionVersion)
+                ? null
+                : (moduleKey, definitionVersion);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static FilenameMetadata? TryParseFilenameMetadata(string fileName)
@@ -439,18 +690,18 @@ public sealed class ArtifactZipImportService
         return fullPath;
     }
 
-    private static void MoveImportZip(string zipPath, string destinationRoot, string? errorMessage)
+    private static void MoveImportFile(string importPath, string destinationRoot, string? errorMessage)
     {
         try
         {
             Directory.CreateDirectory(destinationRoot);
             var destination = Path.Combine(
                 destinationRoot,
-                $"{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}-{Path.GetFileName(zipPath)}");
+                $"{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}-{Path.GetFileName(importPath)}");
 
-            if (File.Exists(zipPath))
+            if (File.Exists(importPath))
             {
-                MoveFile(zipPath, destination);
+                MoveFile(importPath, destination);
             }
 
             if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -476,9 +727,51 @@ public sealed class ArtifactZipImportService
     private static bool IsExpectedImportFailure(Exception exception)
         => exception is InvalidOperationException
             or InvalidDataException
+            or JsonException
             or IOException
             or SqlException
             or UnauthorizedAccessException;
+
+    private static void ExtractZipToDirectory(string zipPath, string destinationRoot)
+    {
+        Directory.CreateDirectory(destinationRoot);
+        using var archive = ZipFile.OpenRead(zipPath);
+        foreach (var entry in archive.Entries)
+        {
+            var entryName = NormalizeZipEntryName(entry.FullName);
+            var destinationPath = ResolveUnderRoot(destinationRoot, entryName);
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                Directory.CreateDirectory(destinationPath);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            entry.ExtractToFile(destinationPath, overwrite: false);
+        }
+    }
+
+    private static string NormalizeZipEntryName(string fullName)
+    {
+        var normalized = fullName.Replace('\\', '/').Trim();
+        if (normalized.Length == 0 || normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The zip package contains an invalid entry path.");
+        }
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var invalidFileNameChars = Path.GetInvalidFileNameChars();
+        if (segments.Length == 0
+            || segments.Any(segment => segment is "." or "..")
+            || segments.Any(segment => segment.IndexOfAny(invalidFileNameChars) >= 0)
+            || normalized.Contains(':', StringComparison.Ordinal)
+            || normalized.IndexOf('\0') >= 0)
+        {
+            throw new InvalidOperationException("The zip package contains a path that escapes the package root.");
+        }
+
+        return string.Join('/', segments);
+    }
 
     private static void MoveDirectory(string source, string destination)
     {
@@ -565,6 +858,54 @@ public sealed class ArtifactZipImportService
         {
             // Best effort cleanup after a failed import.
         }
+    }
+
+    private static string GetJsonStringProperty(JsonNode node, string propertyName)
+    {
+        if (node is not JsonObject obj
+            || !obj.TryGetPropertyValue(propertyName, out var value)
+            || value is null)
+        {
+            return string.Empty;
+        }
+
+        return value is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var text)
+            ? text.Trim()
+            : string.Empty;
+    }
+
+    private static int GetJsonIntProperty(JsonNode node, string propertyName, int defaultValue)
+    {
+        if (node is not JsonObject obj
+            || !obj.TryGetPropertyValue(propertyName, out var value)
+            || value is not JsonValue jsonValue)
+        {
+            return defaultValue;
+        }
+
+        if (jsonValue.TryGetValue<int>(out var number))
+        {
+            return number;
+        }
+
+        return jsonValue.TryGetValue<string>(out var text)
+            && int.TryParse(text, out var parsed)
+            ? parsed
+            : defaultValue;
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? Truncate(string? value, int maxLength)
+    {
+        var text = value?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return text.Length <= maxLength ? text : text[..maxLength];
     }
 
     private sealed record FilenameMetadata(

@@ -311,4 +311,29 @@
   <data name="Add favorite" xml:space="preserve"><value>Add favorite</value></data>
   <data name="Remove favorite" xml:space="preserve"><value>Remove favorite</value></data>
   <data name="Portal widget" xml:space="preserve"><value>Portal widget</value></data>
+  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard widgets</value></data>
+  <data name="Import and export portable Portal dashboard widget definitions as JSON files." xml:space="preserve"><value>Import and export portable Portal dashboard widget definitions as JSON files.</value></data>
+  <data name="Import widgets" xml:space="preserve"><value>Import widgets</value></data>
+  <data name="Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created." xml:space="preserve"><value>Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created.</value></data>
+  <data name="Widget JSON" xml:space="preserve"><value>Widget JSON</value></data>
+  <data name="The import replaces the widget definition and its permission restrictions for matching widgetKey. moduleKey is optional ownership metadata, not part of the identity." xml:space="preserve"><value>The import replaces the widget definition and its permission restrictions for matching widgetKey. moduleKey is optional ownership metadata, not part of the identity.</value></data>
+  <data name="Export widgets" xml:space="preserve"><value>Export widgets</value></data>
+  <data name="Export all widgets or only the widgets owned by one module key." xml:space="preserve"><value>Export all widgets or only the widgets owned by one module key.</value></data>
+  <data name="All modules" xml:space="preserve"><value>All modules</value></data>
+  <data name="JSON format" xml:space="preserve"><value>JSON format</value></data>
+  <data name="Widget JSON uses a globally stable widgetKey so private module repositories can version widget definitions without depending on database IDs. moduleKey is optional ownership metadata for filtering and export. Use empty permissionNames and roleNames arrays when a widget should be available to every signed-in OMP user." xml:space="preserve"><value>Widget JSON uses a globally stable widgetKey so private module repositories can version widget definitions without depending on database IDs. moduleKey is optional ownership metadata for filtering and export. Use empty permissionNames and roleNames arrays when a widget should be available to every signed-in OMP user.</value></data>
+  <data name="Existing widgets" xml:space="preserve"><value>Existing widgets</value></data>
+  <data name="These widget definitions are currently registered in this OMP installation." xml:space="preserve"><value>These widget definitions are currently registered in this OMP installation.</value></data>
+  <data name="Widget key" xml:space="preserve"><value>Widget key</value></data>
+  <data name="Widget type" xml:space="preserve"><value>Widget type</value></data>
+  <data name="Payload" xml:space="preserve"><value>Payload</value></data>
+  <data name="Access" xml:space="preserve"><value>Access</value></data>
+  <data name="Modified" xml:space="preserve"><value>Modified</value></data>
+  <data name="All signed-in users" xml:space="preserve"><value>All signed-in users</value></data>
+  <data name="No dashboard widgets found." xml:space="preserve"><value>No dashboard widgets found.</value></data>
+  <data name="Back to overview" xml:space="preserve"><value>Back to overview</value></data>
+  <data name="Imported dashboard widgets. Created: {0}. Updated: {1}. Permission rows: {2}." xml:space="preserve"><value>Imported dashboard widgets. Created: {0}. Updated: {1}. Permission rows: {2}.</value></data>
+  <data name="Select one dashboard widget JSON file." xml:space="preserve"><value>Select one dashboard widget JSON file.</value></data>
+  <data name="The uploaded dashboard widget file must be a .json file." xml:space="preserve"><value>The uploaded dashboard widget file must be a .json file.</value></data>
+  <data name="The uploaded dashboard widget file exceeds the configured limit of {0} bytes." xml:space="preserve"><value>The uploaded dashboard widget file exceeds the configured limit of {0} bytes.</value></data>
 </root>

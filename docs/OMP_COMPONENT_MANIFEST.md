@@ -67,12 +67,15 @@ identity fields. The HostAgent-first package builder consumes
 `omp-components.json`, embeds current SQL into module-definition JSON, publishes
 component projects, and emits standard artifact package zips.
 
-The graphical bootstrapper exposes the same workflow for development machines:
-`Check source objects` compares the current package and database with the source
-manifests. `Create updated installer package` starts a detached refresh process
-that rebuilds the HostAgent-first package from the manifest, replaces the
-current package after the GUI exits, and restarts the updated installer.
-`Sync package objects` is narrower: it copies updated module-definition JSON and
-standard artifact package zips into the current installer package, and when a
-missing artifact has a resolvable .NET `projectPath`, it publishes only that
-component and stores the generated artifact package in `RuntimeRoot\ArtifactArchive`.
+The graphical bootstrapper exposes the same workflow for development machines.
+It can load multiple bootstrap JSON profiles from the package-local `configs`
+folder so one installer package can be reused across local and private
+environments. `Check source objects` compares the selected profile's package and
+database with the source manifests. `Create updated installer package` starts a
+detached refresh process that rebuilds the HostAgent-first package from the
+manifest, replaces the current package after the GUI exits, and restarts the
+updated installer. `Sync package objects` is narrower: it copies updated
+module-definition JSON and standard artifact package zips into the current
+installer package, and when a missing artifact has a resolvable .NET
+`projectPath`, it publishes only that component and stores the generated
+artifact package in `RuntimeRoot\ArtifactArchive`.

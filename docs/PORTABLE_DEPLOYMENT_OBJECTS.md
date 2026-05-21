@@ -70,7 +70,9 @@ Portal:
 - `/admin/modulepackageimport` can upload one portable module package zip,
   upload one module definition JSON together with one or more artifact package
   zips, import package-library files from `ArtifactStoreRoot\_available`, and
-  export an applied module definition with its active artifact packages.
+  export an applied module definition with its active artifact packages. The
+  package-library view only offers artifact packages that match the selected
+  module definition's declared compatibility range.
 - `/admin/artifacts` and `/admin/artifactupload` import artifact packages.
 - `/admin/artifactedit` can download an installed artifact as a standard package
   object, including registered configuration files.
@@ -105,7 +107,9 @@ To move a module from one OMP installation to another:
    next cycle.
 
 Portal-driven import can offer operator choices for conflicts. HostAgent folder
-import is intentionally strict and unattended: invalid filenames, incompatible
-module/app combinations, duplicate versions, and changed hashes for an existing
-version are recorded as import errors instead of silently changing database
-state.
+import is intentionally strict and unattended. The same import folder can accept
+module definition JSON files, standard artifact package zips, and module
+package zips containing one module definition JSON plus one or more artifact
+package zips for that module. Invalid filenames, incompatible module/app
+combinations, duplicate versions, and changed hashes for an existing version
+are recorded as import errors instead of silently changing database state.

@@ -200,7 +200,11 @@ internal static partial class Program
             return Path.GetFullPath(cli.PayloadRoot);
         }
 
-        return Path.GetDirectoryName(configPath) ?? Environment.CurrentDirectory;
+        var configDirectory = Path.GetDirectoryName(configPath) ?? Environment.CurrentDirectory;
+        return Path.GetFileName(Path.TrimEndingDirectorySeparator(configDirectory))
+            .Equals("configs", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(configDirectory)) ?? configDirectory
+            : configDirectory;
     }
 
     private static void WritePlan(BootstrapConfig config, string configPath, string payloadRoot)
@@ -246,7 +250,7 @@ internal static partial class Program
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--yes]");
-        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui [--config <bootstrap.json> | --config-dir <configs>] [--payload-root <path>] [--payload-zip <zip>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> --payload-root <path> [--parent-process-id <pid>] [--restart-gui]");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
@@ -2460,6 +2464,8 @@ internal sealed class CliOptions
 {
     public string ConfigPath { get; private init; } = string.Empty;
 
+    public string ConfigDirectory { get; private init; } = string.Empty;
+
     public string PayloadRoot { get; private init; } = string.Empty;
 
     public string PayloadZipPath { get; private init; } = string.Empty;
@@ -2491,6 +2497,9 @@ internal sealed class CliOptions
                 case "-c":
                 case "--config":
                     options.ConfigPath = ReadValue(args, ref i, arg);
+                    break;
+                case "--config-dir":
+                    options.ConfigDirectory = ReadValue(args, ref i, arg);
                     break;
                 case "--payload-root":
                     options.PayloadRoot = ReadValue(args, ref i, arg);
@@ -2537,6 +2546,8 @@ internal sealed class CliOptions
     {
         public string ConfigPath { get; set; } = string.Empty;
 
+        public string ConfigDirectory { get; set; } = string.Empty;
+
         public string PayloadRoot { get; set; } = string.Empty;
 
         public string PayloadZipPath { get; set; } = string.Empty;
@@ -2557,6 +2568,7 @@ internal sealed class CliOptions
             => new()
             {
                 ConfigPath = ConfigPath,
+                ConfigDirectory = ConfigDirectory,
                 PayloadRoot = PayloadRoot,
                 PayloadZipPath = PayloadZipPath,
                 Yes = Yes,
