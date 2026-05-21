@@ -135,10 +135,13 @@ The portable JSON format is:
 }
 ```
 
-`widgetKey` is the stable portable identity within a module. Re-importing the
-same `moduleKey`/`widgetKey` updates the existing definition and replaces its
-permission restrictions. Use empty `permissionNames` and `roleNames` arrays only
-when the widget should be available to every signed-in OMP user.
+`widgetKey` is the stable portable identity for a widget and must be globally
+unique within one OMP installation. `moduleKey` is optional ownership metadata
+used for filtering and export; it is not part of the widget identity. Re-importing
+the same `widgetKey` updates the existing definition and replaces its permission
+restrictions, even when the widget moves from module-owned to global or the
+other way around. Use empty `permissionNames` and `roleNames` arrays only when
+the widget should be available to every signed-in OMP user.
 
 ### 2. Create or adjust the instance
 

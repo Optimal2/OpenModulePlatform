@@ -437,20 +437,6 @@ INNER JOIN legacy_widgets legacy ON legacy.widget_id = w.widget_id
 WHERE legacy.rn = 1;
 GO
 
-IF NOT EXISTS
-(
-    SELECT 1
-    FROM sys.indexes
-    WHERE name = N'UX_omp_portal_widgets_module_key_widget_key'
-      AND object_id = OBJECT_ID(N'omp_portal.widgets')
-)
-BEGIN
-    CREATE UNIQUE INDEX UX_omp_portal_widgets_module_key_widget_key
-        ON omp_portal.widgets(module_key, widget_key)
-        WHERE widget_key IS NOT NULL;
-END
-GO
-
 IF OBJECT_ID(N'omp_portal.widget_permissions', N'U') IS NULL
 BEGIN
     CREATE TABLE omp_portal.widget_permissions
@@ -546,6 +532,110 @@ BEGIN
 END
 GO
 
+IF EXISTS
+(
+    SELECT 1
+    FROM omp_portal.widgets
+    WHERE widget_key IS NOT NULL
+    GROUP BY widget_key
+    HAVING COUNT(*) > 1
+)
+BEGIN
+    ;WITH duplicate_widgets AS
+    (
+        SELECT widget_id,
+               MIN(widget_id) OVER (PARTITION BY widget_key) AS keep_widget_id
+        FROM omp_portal.widgets
+        WHERE widget_key IS NOT NULL
+    )
+    UPDATE active_widgets
+    SET widget_id = duplicate_widgets.keep_widget_id
+    FROM omp_portal.user_active_widgets active_widgets
+    INNER JOIN duplicate_widgets ON duplicate_widgets.widget_id = active_widgets.widget_id
+    WHERE duplicate_widgets.widget_id <> duplicate_widgets.keep_widget_id;
+
+    ;WITH duplicate_widgets AS
+    (
+        SELECT widget_id,
+               MIN(widget_id) OVER (PARTITION BY widget_key) AS keep_widget_id
+        FROM omp_portal.widgets
+        WHERE widget_key IS NOT NULL
+    ),
+    duplicate_permissions AS
+    (
+        SELECT duplicate_widgets.keep_widget_id,
+               widget_permissions.permission_id,
+               widget_permissions.role_id
+        FROM omp_portal.widget_permissions widget_permissions
+        INNER JOIN duplicate_widgets ON duplicate_widgets.widget_id = widget_permissions.widget_id
+        WHERE duplicate_widgets.widget_id <> duplicate_widgets.keep_widget_id
+    )
+    INSERT INTO omp_portal.widget_permissions(widget_id, permission_id, role_id)
+    SELECT DISTINCT keep_widget_id,
+           permission_id,
+           role_id
+    FROM duplicate_permissions dp
+    WHERE NOT EXISTS
+    (
+        SELECT 1
+        FROM omp_portal.widget_permissions target
+        WHERE target.widget_id = dp.keep_widget_id
+          AND ISNULL(target.permission_id, -1) = ISNULL(dp.permission_id, -1)
+          AND ISNULL(target.role_id, -1) = ISNULL(dp.role_id, -1)
+    );
+
+    ;WITH duplicate_widgets AS
+    (
+        SELECT widget_id,
+               MIN(widget_id) OVER (PARTITION BY widget_key) AS keep_widget_id
+        FROM omp_portal.widgets
+        WHERE widget_key IS NOT NULL
+    )
+    DELETE widget_permissions
+    FROM omp_portal.widget_permissions widget_permissions
+    INNER JOIN duplicate_widgets ON duplicate_widgets.widget_id = widget_permissions.widget_id
+    WHERE duplicate_widgets.widget_id <> duplicate_widgets.keep_widget_id;
+
+    ;WITH duplicate_widgets AS
+    (
+        SELECT widget_id,
+               MIN(widget_id) OVER (PARTITION BY widget_key) AS keep_widget_id
+        FROM omp_portal.widgets
+        WHERE widget_key IS NOT NULL
+    )
+    DELETE widgets
+    FROM omp_portal.widgets widgets
+    INNER JOIN duplicate_widgets ON duplicate_widgets.widget_id = widgets.widget_id
+    WHERE duplicate_widgets.widget_id <> duplicate_widgets.keep_widget_id;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'UX_omp_portal_widgets_module_key_widget_key'
+      AND object_id = OBJECT_ID(N'omp_portal.widgets')
+)
+BEGIN
+    DROP INDEX UX_omp_portal_widgets_module_key_widget_key ON omp_portal.widgets;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'UX_omp_portal_widgets_widget_key'
+      AND object_id = OBJECT_ID(N'omp_portal.widgets')
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_portal_widgets_widget_key
+        ON omp_portal.widgets(widget_key)
+        WHERE widget_key IS NOT NULL;
+END
+GO
+
 MERGE omp_portal.widgets AS target
 USING
 (
@@ -564,11 +654,11 @@ USING
            N'OpenModulePlatform' AS author
 ) AS source
 ON target.widget_key = source.widget_key
-AND ISNULL(target.module_key, N'') = source.module_key
 WHEN MATCHED THEN
     UPDATE SET title = source.title,
                widget_type = source.widget_type,
                payload = source.payload,
+               module_key = source.module_key,
                author = source.author,
                modified_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
@@ -588,9 +678,7 @@ DECLARE @PortalAdminPermissionId int;
 
 SELECT @AdminOverviewWidgetId = widget_id
 FROM omp_portal.widgets
-WHERE title = N'Admin overview'
-  AND widget_type = N'portal'
-  AND module_key = N'omp_portal';
+WHERE widget_key = N'admin-overview';
 
 SELECT @PortalAdminPermissionId = PermissionId
 FROM omp.Permissions
