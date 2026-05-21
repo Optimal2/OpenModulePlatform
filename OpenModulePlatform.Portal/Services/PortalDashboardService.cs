@@ -297,6 +297,7 @@ WHERE user_id = @user_id;";
     {
         const string sql = @"
 SELECT w.widget_id,
+       w.widget_key,
        w.title,
        w.widget_type,
        w.payload,
@@ -326,16 +327,17 @@ ORDER BY w.title,
                 definitions[widgetId] = new DashboardWidgetDefinition
                 {
                     WidgetId = widgetId,
-                    Title = rdr.GetString(1),
-                    WidgetType = rdr.GetString(2),
-                    Payload = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-                    ModuleKey = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                    Author = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                    ModifiedUtc = rdr.GetDateTime(6)
+                    WidgetKey = rdr.IsDBNull(1) ? string.Empty : rdr.GetString(1),
+                    Title = rdr.GetString(2),
+                    WidgetType = rdr.GetString(3),
+                    Payload = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                    ModuleKey = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                    Author = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                    ModifiedUtc = rdr.GetDateTime(7)
                 };
             }
 
-            if (!rdr.IsDBNull(7) || !rdr.IsDBNull(8))
+            if (!rdr.IsDBNull(8) || !rdr.IsDBNull(9))
             {
                 if (!restrictions.TryGetValue(widgetId, out var rules))
                 {
@@ -344,8 +346,8 @@ ORDER BY w.title,
                 }
 
                 rules.Add(new WidgetAccessRule(
-                    rdr.IsDBNull(7) ? null : rdr.GetInt32(7),
-                    rdr.IsDBNull(8) ? null : rdr.GetString(8)));
+                    rdr.IsDBNull(8) ? null : rdr.GetInt32(8),
+                    rdr.IsDBNull(9) ? null : rdr.GetString(9)));
             }
         }
 

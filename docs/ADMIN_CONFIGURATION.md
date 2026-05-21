@@ -111,6 +111,35 @@ saved when the user leaves dashboard edit mode with the Done button. Resetting
 the dashboard removes the current user's active widget rows and does not change
 the global widget definitions.
 
+Portal administrators can import and export widget definitions from
+`/admin/dashboardwidgets`. This lets module-specific widgets live beside the
+module that owns them, including modules maintained in private repositories.
+The portable JSON format is:
+
+```json
+{
+  "format": "omp.portal.dashboard.widgets",
+  "formatVersion": 1,
+  "moduleKey": "example_module",
+  "author": "Example module",
+  "widgets": [
+    {
+      "widgetKey": "example:status",
+      "title": "Example status",
+      "widgetType": "portal",
+      "payload": "example-status",
+      "permissionNames": [ "Example.View" ],
+      "roleNames": []
+    }
+  ]
+}
+```
+
+`widgetKey` is the stable portable identity within a module. Re-importing the
+same `moduleKey`/`widgetKey` updates the existing definition and replaces its
+permission restrictions. Use empty `permissionNames` and `roleNames` arrays only
+when the widget should be available to every signed-in OMP user.
+
 ### 2. Create or adjust the instance
 
 An `Instance` is the highest manual scope in OMP.
