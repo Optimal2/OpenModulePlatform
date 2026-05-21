@@ -1510,6 +1510,13 @@ VALUES
         hostAgentSettings["IisAppPoolNamePrefix"] = hostAgent.IisAppPoolNamePrefix;
         hostAgentSettings["IisAppPoolUserName"] = hostAgent.IisAppPoolUserName;
         hostAgentSettings["IisAppPoolPassword"] = hostAgent.IisAppPoolPassword;
+        if (hostAgent.IisAppPoolOverrides.Count > 0)
+        {
+            hostAgentSettings["IisAppPoolOverrides"] = JsonSerializer.SerializeToNode(
+                hostAgent.IisAppPoolOverrides,
+                JsonOptions);
+        }
+
         hostAgentSettings["DeployServiceApps"] = hostAgent.DeployServiceApps;
         hostAgentSettings["ServicesRoot"] = hostAgent.ServicesRoot;
 
@@ -1590,6 +1597,7 @@ VALUES
                         IisAppPoolNamePrefix = hostAgent.IisAppPoolNamePrefix,
                         IisAppPoolUserName = hostAgent.IisAppPoolUserName,
                         IisAppPoolPassword = hostAgent.IisAppPoolPassword,
+                        IisAppPoolOverrides = hostAgent.IisAppPoolOverrides,
                         DeployServiceApps = hostAgent.DeployServiceApps,
                         ServicesRoot = hostAgent.ServicesRoot,
                         SelfUpgrade = new
@@ -2710,11 +2718,20 @@ internal sealed class HostAgentInstallOptions
 
     public string IisAppPoolPassword { get; set; } = string.Empty;
 
+    public Dictionary<string, IisAppPoolIdentityOptions> IisAppPoolOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public bool DeployServiceApps { get; set; } = true;
 
     public string ServicesRoot { get; set; } = string.Empty;
 
     public JsonNode? AppSettings { get; set; }
+}
+
+internal sealed class IisAppPoolIdentityOptions
+{
+    public string UserName { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
 }
 
 internal sealed record ProcessResult(int ExitCode, string StdOut, string StdErr);

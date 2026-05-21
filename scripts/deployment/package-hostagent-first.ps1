@@ -1335,6 +1335,7 @@ foreach ($name in @((Get-NestedConfigValue -Config $config -Section 'HostAgentFi
 }
 $runAsUser = [string](Get-ConfigValue -Config $config -Name 'RunAsUser' -DefaultValue '')
 $runAsPassword = [string](Get-ConfigValue -Config $config -Name 'RunAsPassword' -DefaultValue '')
+$iisAppPoolOverrides = Get-NestedConfigValue -Config $config -Section 'HostAgent' -Name 'IisAppPoolOverrides' -DefaultValue @{}
 $bootstrapPrincipal = @((Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipals' -DefaultValue @('DOMAIN\UserOrGroup')))[0]
 $bootstrapPrincipalType = [string](Get-ConfigValue -Config $config -Name 'BootstrapPortalAdminPrincipalType' -DefaultValue 'ADUser')
 $sqlServer = [string](Get-ConfigValue -Config $config -Name 'SqlServer' -DefaultValue 'localhost')
@@ -1409,6 +1410,7 @@ $bootstrapConfig = [ordered]@{
         iisAppPoolNamePrefix = 'OMP_'
         iisAppPoolUserName = $runAsUser
         iisAppPoolPassword = $runAsPassword
+        iisAppPoolOverrides = $iisAppPoolOverrides
         deployServiceApps = $true
         servicesRoot = $servicesRoot
         appSettings = [ordered]@{
@@ -1446,6 +1448,7 @@ $bootstrapConfig = [ordered]@{
                 IisAppPoolNamePrefix = 'OMP_'
                 IisAppPoolUserName = $runAsUser
                 IisAppPoolPassword = $runAsPassword
+                IisAppPoolOverrides = $iisAppPoolOverrides
                 WebAppDataProtectionKeyPath = $webAppDataProtectionKeyPath
                 DeployServiceApps = $true
                 ServicesRoot = $servicesRoot

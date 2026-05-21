@@ -315,15 +315,15 @@ public sealed class WebAppDeploymentService
 
         if (string.IsNullOrWhiteSpace(appPath))
         {
-            EnsureAppPool(settings, appPoolName);
+            EnsureAppPool(settings, appPoolName, ResolveIisAppPoolIdentity(settings, deployment, appPoolName));
             EnsureIisSite(settings, targetPath, appPoolName);
             return;
         }
 
         var rootAppPoolName = ResolvePortalAppPoolName(settings);
-        EnsureAppPool(settings, rootAppPoolName);
+        EnsureAppPool(settings, rootAppPoolName, ResolveDefaultIisAppPoolIdentity(settings));
         EnsureIisSite(settings, siteRootPath, rootAppPoolName);
-        EnsureAppPool(settings, appPoolName);
+        EnsureAppPool(settings, appPoolName, ResolveIisAppPoolIdentity(settings, deployment, appPoolName));
         EnsureIisChildApplication(settings, iisAppName, appPath, targetPath, appPoolName);
     }
 
@@ -411,7 +411,10 @@ public sealed class WebAppDeploymentService
     private static string FormatIisBoolean(bool value)
         => value ? "true" : "false";
 
-    private static void EnsureAppPool(HostAgentSettings settings, string appPoolName)
+    private static void EnsureAppPool(
+        HostAgentSettings settings,
+        string appPoolName,
+        HostAgentIisAppPoolIdentitySettings identity)
     {
         if (!IisObjectExists("list", "apppool", $"/name:{appPoolName}"))
         {
@@ -425,7 +428,7 @@ public sealed class WebAppDeploymentService
             "/managedRuntimeVersion:",
             "/processModel.loadUserProfile:true");
 
-        if (!string.IsNullOrWhiteSpace(settings.IisAppPoolUserName))
+        if (!string.IsNullOrWhiteSpace(identity.UserName))
         {
             var arguments = new List<string>
             {
@@ -433,16 +436,86 @@ public sealed class WebAppDeploymentService
                 "apppool",
                 $"/apppool.name:{appPoolName}",
                 "/processModel.identityType:SpecificUser",
-                $"/processModel.userName:{settings.IisAppPoolUserName.Trim()}"
+                $"/processModel.userName:{identity.UserName.Trim()}"
             };
 
-            if (!string.IsNullOrWhiteSpace(settings.IisAppPoolPassword))
+            if (!string.IsNullOrWhiteSpace(identity.Password))
             {
-                arguments.Add($"/processModel.password:{settings.IisAppPoolPassword}");
+                arguments.Add($"/processModel.password:{identity.Password}");
             }
 
             RunAppCmd([.. arguments]);
         }
+    }
+
+    private static HostAgentIisAppPoolIdentitySettings ResolveIisAppPoolIdentity(
+        HostAgentSettings settings,
+        WebAppDeploymentDescriptor deployment,
+        string appPoolName)
+    {
+        foreach (var key in ResolveIisAppPoolOverrideKeys(deployment, appPoolName))
+        {
+            if (TryGetIisAppPoolIdentityOverride(settings, key, out var identity)
+                && !string.IsNullOrWhiteSpace(identity.UserName))
+            {
+                return identity;
+            }
+        }
+
+        return ResolveDefaultIisAppPoolIdentity(settings);
+    }
+
+    private static HostAgentIisAppPoolIdentitySettings ResolveDefaultIisAppPoolIdentity(HostAgentSettings settings)
+        => new()
+        {
+            UserName = settings.IisAppPoolUserName,
+            Password = settings.IisAppPoolPassword
+        };
+
+    private static IEnumerable<string> ResolveIisAppPoolOverrideKeys(
+        WebAppDeploymentDescriptor deployment,
+        string appPoolName)
+    {
+        yield return deployment.AppInstanceKey;
+
+        if (!string.IsNullOrWhiteSpace(deployment.RoutePath))
+        {
+            yield return deployment.RoutePath.Trim().Trim('/', '\\').Replace('\\', '/');
+        }
+
+        yield return appPoolName;
+    }
+
+    private static bool TryGetIisAppPoolIdentityOverride(
+        HostAgentSettings settings,
+        string key,
+        out HostAgentIisAppPoolIdentitySettings identity)
+    {
+        var overrides = settings.IisAppPoolOverrides;
+        if (overrides is not { Count: > 0 } || string.IsNullOrWhiteSpace(key))
+        {
+            identity = new HostAgentIisAppPoolIdentitySettings();
+            return false;
+        }
+
+        if (overrides.TryGetValue(key, out var configuredIdentity) && configuredIdentity is not null)
+        {
+            identity = configuredIdentity;
+            return true;
+        }
+
+        foreach (var pair in overrides)
+        {
+            if (pair.Value is not null
+                && string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+            {
+                identity = pair.Value;
+                return true;
+            }
+        }
+
+        identity = new HostAgentIisAppPoolIdentitySettings();
+        return false;
     }
 
     private static string ResolveIisAppPoolName(
