@@ -166,7 +166,7 @@ internal static partial class Program
             ?? throw new InvalidOperationException($"No generated HostAgent-first package was found below {packageOutputRoot}.");
 
         Console.WriteLine($"Generated package: {generatedPackageRoot}");
-        await MergeCurrentBootstrapConfigAsync(config, generatedPackageRoot);
+        await MergeCurrentBootstrapConfigAsync(config, configPath, payloadRoot, generatedPackageRoot);
         ReplaceDirectory(generatedPackageRoot, payloadRoot);
 
         var destinationLogPath = Path.Combine(payloadRoot, "installer-refresh.log");
@@ -252,16 +252,55 @@ internal static partial class Program
         }
     }
 
-    private static async Task MergeCurrentBootstrapConfigAsync(BootstrapConfig currentConfig, string generatedPackageRoot)
+    private static async Task MergeCurrentBootstrapConfigAsync(
+        BootstrapConfig currentConfig,
+        string currentConfigPath,
+        string currentPackageRoot,
+        string generatedPackageRoot)
     {
-        var generatedConfigPath = Path.Combine(generatedPackageRoot, "bootstrap.local.sample.json");
-        var generatedConfig = await ReadJsonAsync<BootstrapConfig>(generatedConfigPath);
+        var generatedTemplateConfigPath = ResolveGeneratedTemplateConfigPath(generatedPackageRoot);
+        var generatedConfig = await ReadJsonAsync<BootstrapConfig>(generatedTemplateConfigPath);
         currentConfig.Artifacts = generatedConfig.Artifacts;
         currentConfig.Sql.ArtifactVersionOverrides = generatedConfig.Sql.ArtifactVersionOverrides;
         currentConfig.Sql.ArtifactVersionVariableOverrides = generatedConfig.Sql.ArtifactVersionVariableOverrides;
 
+        var generatedConfigPath = ResolveGeneratedCurrentConfigPath(
+            currentConfigPath,
+            currentPackageRoot,
+            generatedPackageRoot,
+            generatedTemplateConfigPath);
         var json = JsonSerializer.Serialize(currentConfig, JsonOptions);
+        Directory.CreateDirectory(Path.GetDirectoryName(generatedConfigPath)!);
         await File.WriteAllTextAsync(generatedConfigPath, json + Environment.NewLine, Encoding.UTF8);
+    }
+
+    private static string ResolveGeneratedTemplateConfigPath(string generatedPackageRoot)
+    {
+        var candidates = new[]
+        {
+            Path.Combine(generatedPackageRoot, "configs", "bootstrap.local.sample.json"),
+            Path.Combine(generatedPackageRoot, "bootstrap.local.sample.json")
+        };
+
+        return candidates.FirstOrDefault(File.Exists)
+            ?? throw new FileNotFoundException("Generated bootstrap config was not found.", candidates[0]);
+    }
+
+    private static string ResolveGeneratedCurrentConfigPath(
+        string currentConfigPath,
+        string currentPackageRoot,
+        string generatedPackageRoot,
+        string fallbackGeneratedConfigPath)
+    {
+        var currentFullPath = Path.GetFullPath(currentConfigPath);
+        var currentRoot = Path.GetFullPath(currentPackageRoot);
+        if (IsSameOrChildPath(currentRoot, currentFullPath))
+        {
+            var relativePath = Path.GetRelativePath(currentRoot, currentFullPath);
+            return Path.GetFullPath(Path.Combine(generatedPackageRoot, relativePath));
+        }
+
+        return fallbackGeneratedConfigPath;
     }
 
     private static IReadOnlyList<string> ResolveDeveloperSourceRoots(

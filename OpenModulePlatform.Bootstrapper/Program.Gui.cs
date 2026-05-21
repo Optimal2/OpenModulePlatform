@@ -22,13 +22,14 @@ internal static partial class Program
 
         try
         {
-            var configPath = ResolveGuiConfigPath(cli);
-            var config = ReadJsonAsync<BootstrapConfig>(configPath).GetAwaiter().GetResult();
-            var payloadRoot = ResolvePayloadRoot(cli, configPath);
+            var configProfiles = ResolveGuiConfigProfiles(cli);
+            var selectedConfigPath = ResolveGuiSelectedConfigPath(cli, configProfiles);
+            var config = ReadJsonAsync<BootstrapConfig>(selectedConfigPath).GetAwaiter().GetResult();
+            var payloadRoot = ResolvePayloadRoot(cli, selectedConfigPath);
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(defaultValue: false);
-            using var form = new InstallerForm(config, configPath, payloadRoot, cli.PayloadZipPath);
+            using var form = new InstallerForm(configProfiles, config, selectedConfigPath, payloadRoot, cli);
             Application.Run(form);
             return form.ExitCode;
         }
@@ -43,32 +44,145 @@ internal static partial class Program
         }
     }
 
-    private static string ResolveGuiConfigPath(CliOptions cli)
+    private static IReadOnlyList<BootstrapConfigProfile> ResolveGuiConfigProfiles(CliOptions cli)
     {
-        if (!string.IsNullOrWhiteSpace(cli.ConfigPath))
+        var profiles = new Dictionary<string, BootstrapConfigProfile>(StringComparer.OrdinalIgnoreCase);
+        void AddConfigFile(string path)
         {
-            return Path.GetFullPath(cli.ConfigPath);
+            var fullPath = Path.GetFullPath(path);
+            if (!File.Exists(fullPath))
+            {
+                return;
+            }
+
+            var name = Path.GetFileNameWithoutExtension(fullPath)
+                .Replace("bootstrap.", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace(".sample", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace('.', ' ')
+                .Replace('-', ' ')
+                .Replace('_', ' ')
+                .Trim();
+            profiles[fullPath] = new BootstrapConfigProfile(
+                string.IsNullOrWhiteSpace(name) ? Path.GetFileName(fullPath) : name,
+                fullPath);
         }
 
-        var candidates = new[]
+        void AddConfigDirectory(string path)
         {
-            Path.Combine(Environment.CurrentDirectory, "bootstrap.local.sample.json"),
-            Path.Combine(AppContext.BaseDirectory, "bootstrap.local.sample.json"),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "bootstrap.local.sample.json")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "bootstrap.local.sample.json"))
-        };
+            var fullPath = Path.GetFullPath(path);
+            if (!Directory.Exists(fullPath))
+            {
+                return;
+            }
 
-        return candidates.FirstOrDefault(File.Exists)
-            ?? throw new FileNotFoundException(
-                "No bootstrap config was specified and bootstrap.local.sample.json could not be found near the installer.");
+            foreach (var configPath in Directory.EnumerateFiles(fullPath, "*.json", SearchOption.TopDirectoryOnly)
+                         .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase))
+            {
+                AddConfigFile(configPath);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(cli.ConfigPath))
+        {
+            AddConfigFile(cli.ConfigPath);
+        }
+
+        foreach (var directory in EnumerateGuiConfigDirectories(cli))
+        {
+            AddConfigDirectory(directory);
+        }
+
+        if (profiles.Count == 0)
+        {
+            foreach (var path in EnumerateLegacyGuiConfigFiles())
+            {
+                AddConfigFile(path);
+            }
+        }
+
+        return profiles.Values
+            .OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static item => item.ConfigPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
+
+    private static string ResolveGuiSelectedConfigPath(
+        CliOptions cli,
+        IReadOnlyList<BootstrapConfigProfile> profiles)
+    {
+        if (profiles.Count == 0)
+        {
+            throw new FileNotFoundException(
+                "No bootstrap config was specified and no .json config file could be found near the installer.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(cli.ConfigPath))
+        {
+            var fullPath = Path.GetFullPath(cli.ConfigPath);
+            if (profiles.Any(profile => profile.ConfigPath.Equals(fullPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                return fullPath;
+            }
+        }
+
+        return profiles[0].ConfigPath;
+    }
+
+    private static IEnumerable<string> EnumerateGuiConfigDirectories(CliOptions cli)
+    {
+        if (!string.IsNullOrWhiteSpace(cli.ConfigDirectory))
+        {
+            yield return cli.ConfigDirectory;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cli.ConfigPath)
+            && Path.GetDirectoryName(cli.ConfigPath) is { } explicitConfigDirectory)
+        {
+            yield return explicitConfigDirectory;
+            yield return Path.Combine(explicitConfigDirectory, "configs");
+        }
+
+        yield return Path.Combine(Environment.CurrentDirectory, "configs");
+        yield return Path.Combine(AppContext.BaseDirectory, "configs");
+        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "configs"));
+        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "configs"));
+        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "configs"));
+    }
+
+    private static IEnumerable<string> EnumerateLegacyGuiConfigFiles()
+    {
+        yield return Path.Combine(Environment.CurrentDirectory, "bootstrap.local.sample.json");
+        yield return Path.Combine(AppContext.BaseDirectory, "bootstrap.local.sample.json");
+        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "bootstrap.local.sample.json"));
+        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "bootstrap.local.sample.json"));
+        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "bootstrap.local.sample.json"));
+    }
+
+    private sealed record BootstrapConfigProfile(string DisplayName, string ConfigPath);
 
     private sealed class InstallerForm : Form
     {
-        private readonly BootstrapConfig _config;
-        private readonly string _configPath;
-        private readonly string _payloadRoot;
+        private readonly IReadOnlyList<BootstrapConfigProfile> _configProfiles;
+        private BootstrapConfig _config;
+        private string _configPath;
+        private string _payloadRoot;
+        private readonly CliOptions _cli;
         private readonly string _payloadZipPath;
+        private readonly ComboBox _configSelector = new()
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 320
+        };
+        private readonly Label _configPathLabel = new()
+        {
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText
+        };
+        private readonly Label _payloadRootLabel = new()
+        {
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText
+        };
         private readonly TextBox _logBox = new()
         {
             Dock = DockStyle.Fill,
@@ -103,17 +217,21 @@ internal static partial class Program
         private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools" };
         private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data" };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
+        private bool _loadingProfile;
 
         public InstallerForm(
+            IReadOnlyList<BootstrapConfigProfile> configProfiles,
             BootstrapConfig config,
             string configPath,
             string payloadRoot,
-            string payloadZipPath)
+            CliOptions cli)
         {
+            _configProfiles = configProfiles;
             _config = config;
             _configPath = configPath;
             _payloadRoot = payloadRoot;
-            _payloadZipPath = payloadZipPath;
+            _cli = cli;
+            _payloadZipPath = cli.PayloadZipPath;
             ExitCode = 2;
 
             Text = "OpenModulePlatform Installer";
@@ -165,6 +283,7 @@ internal static partial class Program
             buttons.Controls.Add(_exitButton);
             root.Controls.Add(buttons, 0, 6);
 
+            LoadConfigProfiles();
             LoadValues();
             _installButton.Click += async (_, _) => await InstallAsync();
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
@@ -174,6 +293,7 @@ internal static partial class Program
             _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
             _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
             _exitButton.Click += (_, _) => Close();
+            _configSelector.SelectedIndexChanged += async (_, _) => await ChangeSelectedConfigAsync();
         }
 
         public int ExitCode { get; private set; }
@@ -191,78 +311,174 @@ internal static partial class Program
             {
                 AutoSize = true,
                 Font = new Font(Font.FontFamily, 14, FontStyle.Bold),
-                Text = "OpenModulePlatform HostAgent-first installation"
+                Text = "OpenModulePlatform installer"
             });
             panel.Controls.Add(new Label
             {
                 AutoSize = true,
-                Text = "Review the installation settings before starting. Existing OMP artifacts can be upgraded later through HostAgent."
+                Text = "Choose an installation profile, review the settings, and then run the action that matches what you want to do."
             });
-            panel.Controls.Add(new Label
+
+            var profileRow = new TableLayoutPanel
             {
                 AutoSize = true,
-                ForeColor = SystemColors.GrayText,
-                Text = $"Config: {_configPath}"
-            });
-            panel.Controls.Add(new Label
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                Margin = new Padding(0, 8, 0, 0)
+            };
+            profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+            profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            profileRow.Controls.Add(new Label
             {
                 AutoSize = true,
-                ForeColor = SystemColors.GrayText,
-                Text = $"Payload: {_payloadRoot}"
-            });
+                Anchor = AnchorStyles.Left,
+                Text = "Installation profile"
+            }, 0, 0);
+            profileRow.Controls.Add(_configSelector, 1, 0);
+            panel.Controls.Add(profileRow);
+
+            panel.Controls.Add(_configPathLabel);
+            panel.Controls.Add(_payloadRootLabel);
             return panel;
+        }
+
+        private void LoadConfigProfiles()
+        {
+            _loadingProfile = true;
+            try
+            {
+                _configSelector.Items.Clear();
+                foreach (var profile in _configProfiles)
+                {
+                    _configSelector.Items.Add(profile);
+                }
+
+                _configSelector.DisplayMember = nameof(BootstrapConfigProfile.DisplayName);
+                var selectedIndex = _configProfiles
+                    .Select((profile, index) => new { profile, index })
+                    .FirstOrDefault(item => item.profile.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase))
+                    ?.index ?? 0;
+                _configSelector.SelectedIndex = selectedIndex;
+                UpdateProfileLabels();
+            }
+            finally
+            {
+                _loadingProfile = false;
+            }
+        }
+
+        private async Task ChangeSelectedConfigAsync()
+        {
+            if (_loadingProfile || _configSelector.SelectedItem is not BootstrapConfigProfile profile)
+            {
+                return;
+            }
+
+            try
+            {
+                _loadingProfile = true;
+                _configPath = profile.ConfigPath;
+                _payloadRoot = ResolvePayloadRoot(_cli, _configPath);
+                _config = await ReadJsonAsync<BootstrapConfig>(_configPath);
+                LoadValues();
+                UpdateProfileLabels();
+                _logBox.Clear();
+                SetReadyStatus($"Loaded installation profile '{profile.DisplayName}'.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                _loadingProfile = false;
+            }
+        }
+
+        private void UpdateProfileLabels()
+        {
+            _configPathLabel.Text = $"Config: {_configPath}";
+            _payloadRootLabel.Text = $"Payload: {_payloadRoot}";
         }
 
         private Control CreateActionPanel()
         {
-            var group = new GroupBox
+            var tabs = new TabControl
+            {
+                Dock = DockStyle.Fill,
+                Height = 230
+            };
+
+            tabs.TabPages.Add(CreateActionTab(
+                "Install / update",
+                "Use this when you want this machine to match the selected installation profile.",
+                [
+                    (_installButton, "Runs enabled SQL bootstrap steps, prepares ArtifactStore and available package objects, and installs or updates HostAgent.")
+                ]));
+
+            tabs.TabPages.Add(CreateActionTab(
+                "Package tools",
+                "Developer-only helpers for checking and refreshing package objects from source repositories.",
+                [
+                    (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
+                    (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
+                    (_createUpdatedInstallerPackageButton, "Starts a separate refresh process that creates a fresh installer package from source and restarts the updated installer.")
+                ]));
+
+            tabs.TabPages.Add(CreateActionTab(
+                "Uninstall",
+                "Removal actions are intentionally separate. Read each description carefully before running them.",
+                [
+                    (_uninstallRuntimeButton, "Stops and removes HostAgent/runtime Windows services plus the configured IIS site and app pools. Runtime files and database objects are kept."),
+                    (_cleanUninstallButton, "Does the runtime uninstall and also removes configured runtime folders, ArtifactStore, web-app folders, and service folders. The database is kept."),
+                    (_fullUninstallButton, "Does the clean uninstall and removes all user objects from the configured database. The database itself is never dropped.")
+                ]));
+
+            return tabs;
+        }
+
+        private static TabPage CreateActionTab(
+            string title,
+            string description,
+            IReadOnlyList<(Button Button, string Description)> actions)
+        {
+            var page = new TabPage(title) { Padding = new Padding(12) };
+            var panel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 AutoSize = true,
-                Text = "Actions",
-                Padding = new Padding(12)
+                ColumnCount = 1
             };
+            panel.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(880, 0),
+                ForeColor = SystemColors.GrayText,
+                Text = description
+            });
 
             var grid = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
                 AutoSize = true,
-                ColumnCount = 2
+                ColumnCount = 2,
+                Margin = new Padding(0, 8, 0, 0)
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-            AddActionRow(
-                grid,
-                _installButton,
-                "Runs the SQL bootstrap, prepares ArtifactStore, and installs or updates HostAgent using the settings above.");
-            AddActionRow(
-                grid,
-                _checkSourceButton,
-                "On a development machine, compares the installed/package module definitions and artifacts with the source repository manifest.");
-            AddActionRow(
-                grid,
-                _syncPackageObjectsButton,
-                "On a development machine, updates newer or missing module definition JSON files and already-built artifact packages without rebuilding the whole installer package.");
-            AddActionRow(
-                grid,
-                _createUpdatedInstallerPackageButton,
-                "On a development machine, starts a separate refresh process that rebuilds this installer package from source and restarts the updated installer.");
-            AddActionRow(
-                grid,
-                _uninstallRuntimeButton,
-                "Stops and removes HostAgent/runtime Windows services plus the configured IIS site and app pools. Runtime files and database objects are kept.");
-            AddActionRow(
-                grid,
-                _cleanUninstallButton,
-                "Does the runtime uninstall and also removes the configured runtime folders, ArtifactStore, web-app folders, and service folders. The database is kept.");
-            AddActionRow(
-                grid,
-                _fullUninstallButton,
-                "Does the clean uninstall and removes all user objects from the configured database. The database itself is never dropped.");
+            foreach (var (button, actionDescription) in actions)
+            {
+                AddActionRow(grid, button, actionDescription);
+            }
 
-            group.Controls.Add(grid);
-            return group;
+            panel.Controls.Add(grid);
+            page.Controls.Add(panel);
+            return page;
         }
 
         private Control CreateStatusPanel()
@@ -1786,6 +2002,7 @@ ORDER BY ar.ArtifactId DESC;
             _uninstallRuntimeButton.Enabled = enabled;
             _cleanUninstallButton.Enabled = enabled;
             _fullUninstallButton.Enabled = enabled;
+            _configSelector.Enabled = enabled;
         }
 
         private void SetBusyStatus(string text)
