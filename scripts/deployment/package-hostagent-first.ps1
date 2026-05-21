@@ -1471,13 +1471,21 @@ $bootstrapConfig = [ordered]@{
     }
 }
 
-$bootstrapConfig | ConvertTo-Json -Depth 18 | Set-Content -LiteralPath (Join-Path $packageRoot 'bootstrap.local.sample.json') -Encoding UTF8
+$configsRoot = Join-Path $packageRoot 'configs'
+New-Item -ItemType Directory -Force -Path $configsRoot | Out-Null
+$bootstrapConfigJson = $bootstrapConfig | ConvertTo-Json -Depth 18
+$rootBootstrapConfigPath = Join-Path $packageRoot 'bootstrap.local.sample.json'
+$profileBootstrapConfigPath = Join-Path $configsRoot 'bootstrap.local.sample.json'
+$bootstrapConfigJson | Set-Content -LiteralPath $profileBootstrapConfigPath -Encoding UTF8
+# Keep the root-level file for command-line and older package automation while
+# the GUI now treats configs\*.json as selectable installation profiles.
+$bootstrapConfigJson | Set-Content -LiteralPath $rootBootstrapConfigPath -Encoding UTF8
 
 $cmd = @'
 @echo off
 setlocal
 set ROOT=%~dp0
-"%ROOT%tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe" --gui --config "%ROOT%bootstrap.local.sample.json"
+"%ROOT%tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe" --gui --config-dir "%ROOT%configs"
 endlocal
 '@
 Set-Content -LiteralPath (Join-Path $packageRoot 'install-hostagent-first.cmd') -Value $cmd -Encoding ASCII
@@ -1744,7 +1752,7 @@ $manifest = [ordered]@{
         version = [string]$componentManifest.repositoryVersion
     }
     openDocViewerVersion = $openDocViewerVersion
-    bootstrapConfig = 'bootstrap.local.sample.json'
+    bootstrapConfig = 'configs/bootstrap.local.sample.json'
     bootstrapper = 'tools/OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.exe'
     payloads = @($artifacts | ForEach-Object { $_.source })
     availableModuleDefinitions = @(

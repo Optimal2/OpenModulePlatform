@@ -81,6 +81,7 @@ public sealed class PortableModulePackageService
 
             var artifacts = artifactFiles
                 .Where(file => file.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+                .Where(file => IsCompatibleWithDefinition(file, definition.CompatibleArtifacts))
                 .OrderBy(static file => file.AppKey, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static file => file.PackageType, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static file => file.TargetName, StringComparer.OrdinalIgnoreCase)
@@ -109,6 +110,8 @@ public sealed class PortableModulePackageService
 
         var artifactPaths = Directory.Exists(artifactsRoot)
             ? Directory.EnumerateFiles(artifactsRoot, $"{definition.ModuleKey}__*.zip", SearchOption.TopDirectoryOnly)
+                .Where(path => TryReadArtifactPackageFile(path) is { } artifact
+                    && IsCompatibleWithDefinition(artifact, definition.CompatibleArtifacts))
                 .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)
                 .ToList()
             : [];
@@ -676,7 +679,7 @@ public sealed class PortableModulePackageService
             var definitionVersion = GetJsonStringProperty(root, "definitionVersion");
             return string.IsNullOrWhiteSpace(moduleKey) || string.IsNullOrWhiteSpace(definitionVersion)
                 ? null
-                : new ModuleDefinitionSummary(moduleKey, definitionVersion);
+                : new ModuleDefinitionSummary(moduleKey, definitionVersion, ReadCompatibleArtifacts(root));
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -1119,13 +1122,68 @@ public sealed class PortableModulePackageService
     private static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static bool IsCompatibleWithDefinition(
+        ArtifactPackageFile artifact,
+        IReadOnlyList<ModuleDefinitionCompatibilityEditData> compatibility)
+        => compatibility.Any(slot =>
+            slot.AppKey.Equals(artifact.AppKey, StringComparison.OrdinalIgnoreCase)
+            && slot.PackageType.Equals(artifact.PackageType, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slot.TargetName ?? string.Empty, artifact.TargetName, StringComparison.OrdinalIgnoreCase)
+            && IsVersionInRange(artifact.Version, slot.MinArtifactVersion, slot.MaxArtifactVersion));
+
+    private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(minVersion)
+            && CompareArtifactVersions(version, minVersion) < 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(maxVersion)
+            && CompareArtifactVersions(version, maxVersion) > 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int CompareArtifactVersions(string left, string right)
+    {
+        if (TryParseComparableVersion(left, out var leftVersion)
+            && TryParseComparableVersion(right, out var rightVersion))
+        {
+            return leftVersion.CompareTo(rightVersion);
+        }
+
+        return string.Compare(
+            left?.Trim(),
+            right?.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseComparableVersion(string? value, out Version version)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        var suffixIndex = text.IndexOfAny(['-', '+']);
+        if (suffixIndex >= 0)
+        {
+            text = text[..suffixIndex];
+        }
+
+        return Version.TryParse(text, out version!);
+    }
+
     private static string Truncate(string value, int maxLength)
         => value.Length <= maxLength ? value : value[..maxLength];
 
     private static string AppendWarning(string current, string next)
         => string.IsNullOrWhiteSpace(current) ? next : current + " " + next;
 
-    private sealed record ModuleDefinitionSummary(string ModuleKey, string DefinitionVersion);
+    private sealed record ModuleDefinitionSummary(
+        string ModuleKey,
+        string DefinitionVersion,
+        IReadOnlyList<ModuleDefinitionCompatibilityEditData> CompatibleArtifacts);
 }
 
 public sealed record PortableModulePackageImportOptions(

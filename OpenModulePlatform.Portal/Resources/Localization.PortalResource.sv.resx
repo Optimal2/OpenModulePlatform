@@ -1899,4 +1899,29 @@
   <data name="Add favorite" xml:space="preserve"><value>Lägg till favorit</value></data>
   <data name="Remove favorite" xml:space="preserve"><value>Ta bort favorit</value></data>
   <data name="Portal widget" xml:space="preserve"><value>Portal-widget</value></data>
+  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard-widgets</value></data>
+  <data name="Import and export portable Portal dashboard widget definitions as JSON files." xml:space="preserve"><value>Importera och exportera portabla widgetdefinitioner för portalens dashboard som JSON-filer.</value></data>
+  <data name="Import widgets" xml:space="preserve"><value>Importera widgets</value></data>
+  <data name="Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created." xml:space="preserve"><value>Ladda upp en JSON-fil med dashboard-widgets. Matchande widgets uppdateras via widgetKey; saknade widgets skapas.</value></data>
+  <data name="Widget JSON" xml:space="preserve"><value>Widget-JSON</value></data>
+  <data name="The import replaces the widget definition and its permission restrictions for matching widgetKey. moduleKey is optional ownership metadata, not part of the identity." xml:space="preserve"><value>Importen ersätter widgetdefinitionen och dess behörighetsbegränsningar för matchande widgetKey. moduleKey är valfri ägarmetadata, inte en del av identiteten.</value></data>
+  <data name="Export widgets" xml:space="preserve"><value>Exportera widgets</value></data>
+  <data name="Export all widgets or only the widgets owned by one module key." xml:space="preserve"><value>Exportera alla widgets eller bara widgets som tillhör en viss modulnyckel.</value></data>
+  <data name="All modules" xml:space="preserve"><value>Alla moduler</value></data>
+  <data name="JSON format" xml:space="preserve"><value>JSON-format</value></data>
+  <data name="Widget JSON uses a globally stable widgetKey so private module repositories can version widget definitions without depending on database IDs. moduleKey is optional ownership metadata for filtering and export. Use empty permissionNames and roleNames arrays when a widget should be available to every signed-in OMP user." xml:space="preserve"><value>Widget-JSON använder en globalt stabil widgetKey så att privata modulrepon kan versionshantera widgetdefinitioner utan att bero på databas-ID:n. moduleKey är valfri ägarmetadata för filtrering och export. Använd tomma permissionNames- och roleNames-listor när en widget ska vara tillgänglig för alla inloggade OMP-användare.</value></data>
+  <data name="Existing widgets" xml:space="preserve"><value>Befintliga widgets</value></data>
+  <data name="These widget definitions are currently registered in this OMP installation." xml:space="preserve"><value>Dessa widgetdefinitioner är registrerade i den här OMP-installationen.</value></data>
+  <data name="Widget key" xml:space="preserve"><value>Widgetnyckel</value></data>
+  <data name="Widget type" xml:space="preserve"><value>Widgettyp</value></data>
+  <data name="Payload" xml:space="preserve"><value>Payload</value></data>
+  <data name="Access" xml:space="preserve"><value>Åtkomst</value></data>
+  <data name="Modified" xml:space="preserve"><value>Ändrad</value></data>
+  <data name="All signed-in users" xml:space="preserve"><value>Alla inloggade användare</value></data>
+  <data name="No dashboard widgets found." xml:space="preserve"><value>Inga dashboard-widgets hittades.</value></data>
+  <data name="Back to overview" xml:space="preserve"><value>Tillbaka till översikt</value></data>
+  <data name="Imported dashboard widgets. Created: {0}. Updated: {1}. Permission rows: {2}." xml:space="preserve"><value>Importerade dashboard-widgets. Skapade: {0}. Uppdaterade: {1}. Behörighetsrader: {2}.</value></data>
+  <data name="Select one dashboard widget JSON file." xml:space="preserve"><value>Välj en JSON-fil med dashboard-widgets.</value></data>
+  <data name="The uploaded dashboard widget file must be a .json file." xml:space="preserve"><value>Den uppladdade dashboard-widgetfilen måste vara en .json-fil.</value></data>
+  <data name="The uploaded dashboard widget file exceeds the configured limit of {0} bytes." xml:space="preserve"><value>Den uppladdade dashboard-widgetfilen överstiger gränsen på {0} byte.</value></data>
 </root>
