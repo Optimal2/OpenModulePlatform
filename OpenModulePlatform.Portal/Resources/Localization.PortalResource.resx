@@ -1777,4 +1777,6 @@
   <data name="Importing will apply this module definition version and can move matching app instances to the package artifact versions." xml:space="preserve"><value>Importing will apply this module definition version and can move matching app instances to the package artifact versions.</value></data>
   <data name="Importing will fill in missing pieces and may update desired artifact versions for matching app instances." xml:space="preserve"><value>Importing will fill in missing pieces and may update desired artifact versions for matching app instances.</value></data>
   <data name="Importing will add this module definition and register the package artifacts so HostAgent can deploy them." xml:space="preserve"><value>Importing will add this module definition and register the package artifacts so HostAgent can deploy them.</value></data>
+  <data name="Allow multiple active instances" xml:space="preserve"><value>Allow multiple active instances</value></data>
+  <data name="Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel." xml:space="preserve"><value>Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel.</value></data>
 </root>
