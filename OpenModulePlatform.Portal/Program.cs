@@ -19,6 +19,7 @@ builder.Services.AddScoped<OmpUserAdminRepository>();
 builder.Services.AddScoped<PortalUserSettingsAdminRepository>();
 builder.Services.AddScoped<PortalEntryService>();
 builder.Services.AddScoped<PortalDashboardService>();
+builder.Services.AddScoped<PortalDashboardWidgetPackageService>();
 builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<RbacAdminRepository>();
 builder.Services.AddScoped<PortableModulePackageService>();
