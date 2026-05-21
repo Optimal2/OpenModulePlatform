@@ -171,6 +171,84 @@ public sealed class PortalEntryLayoutUpdate
 }
 
 /// <summary>
+/// Widget definition that can be placed on the Portal dashboard.
+/// </summary>
+public sealed class DashboardWidgetDefinition
+{
+    public int WidgetId { get; set; }
+
+    public string Title { get; set; } = string.Empty;
+
+    public string WidgetType { get; set; } = string.Empty;
+
+    public string? Payload { get; set; }
+
+    public string? ModuleKey { get; set; }
+
+    public string? Author { get; set; }
+
+    public DateTime ModifiedUtc { get; set; }
+}
+
+/// <summary>
+/// A widget instance placed on one user's Portal dashboard.
+/// </summary>
+public sealed class DashboardActiveWidget
+{
+    public long UserActiveWidgetId { get; set; }
+
+    public int WidgetId { get; set; }
+
+    public string WidgetTitle { get; set; } = string.Empty;
+
+    public string WidgetType { get; set; } = string.Empty;
+
+    public string? Payload { get; set; }
+
+    public int OffsetTop { get; set; }
+
+    public int OffsetLeft { get; set; }
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public int OrderPriority { get; set; }
+
+    public string? Title { get; set; }
+
+    public int? IntData { get; set; }
+
+    public string? StringData { get; set; }
+
+    public string EffectiveTitle => string.IsNullOrWhiteSpace(Title) ? WidgetTitle : Title.Trim();
+}
+
+/// <summary>
+/// Client-provided dashboard layout update for one active widget.
+/// </summary>
+public sealed class DashboardWidgetLayoutUpdate
+{
+    public long UserActiveWidgetId { get; set; }
+
+    public int OffsetTop { get; set; }
+
+    public int OffsetLeft { get; set; }
+
+    public int Width { get; set; }
+
+    public int Height { get; set; }
+
+    public int OrderPriority { get; set; }
+
+    public string? Title { get; set; }
+
+    public int? IntData { get; set; }
+
+    public string? StringData { get; set; }
+}
+
+/// <summary>
 /// Portal overview counts for the main admin landing page.
 /// </summary>
 public sealed class OverviewMetrics

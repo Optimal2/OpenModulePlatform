@@ -72,213 +72,117 @@
     </section>
 }
 
-<section class="portal-entries portal-entries--framed top-gap" data-portal-entries-root data-manage-mode="@Model.ManageList.ToString().ToLowerInvariant()">
-    <div class="portal-entries__toolbar">
+<section class="portal-dashboard top-gap"
+         data-dashboard-root
+         data-can-edit="@Model.CanEditDashboard.ToString().ToLowerInvariant()"
+         data-add-url="@Url.Page("/Index", "AddWidget")"
+         data-save-url="@Url.Page("/Index", "SaveDashboard")"
+         data-remove-url="@Url.Page("/Index", "RemoveWidget")"
+         data-done-label="@L["Done"]"
+         data-edit-label="@L["Edit dashboard"]"
+         data-remove-label="@L["Remove widget"]">
+    <form class="visually-hidden" method="post" data-dashboard-token-form>
+        @Html.AntiForgeryToken()
+    </form>
+
+    <div class="portal-dashboard__header">
         <div>
-            <h3>@L["Portal entries"]</h3>
-            <p class="muted">@L["Portal entries are curated start points for the destinations you can access."]</p>
+            <h3>@L["Dashboard"]</h3>
+            <p class="muted">@L["Arrange widgets freely on your personal canvas."]</p>
         </div>
-        @if (Model.CanPersonalizeEntries || Model.IsPortalAdmin)
+    </div>
+
+    <div class="portal-dashboard__canvas" data-dashboard-canvas aria-label="@L["Dashboard canvas"]">
+        @if (Model.ActiveWidgets.Count == 0)
         {
-            <div class="portal-entries__toolbar-actions">
-                @if (Model.CanPersonalizeEntries && Model.ManageList)
+            <div class="portal-dashboard__empty" data-dashboard-empty>
+                @if (Model.CanEditDashboard)
                 {
-                    <a class="button secondary" href="@Url.Page("/Index", new { fullList = Model.ShowFullList })">@L["Done"]</a>
+                    <span>@L["No widgets have been added yet."]</span>
                 }
-                else if (Model.CanPersonalizeEntries)
+                else
                 {
-                    <a class="button secondary" href="@Url.Page("/Index", new { manage = true, fullList = Model.ShowFullList })">@L["Manage list"]</a>
-                }
-
-                @if (Model.CanPersonalizeEntries && Model.ShowFullList)
-                {
-                    <a class="button secondary" href="@Url.Page("/Index", new { manage = Model.ManageList })">@L["Show normal list"]</a>
-                }
-                else if (Model.CanPersonalizeEntries)
-                {
-                    <a class="button secondary" href="@Url.Page("/Index", new { manage = Model.ManageList, fullList = true })">@L["Show full list"]</a>
-                }
-
-                @if (Model.IsPortalAdmin)
-                {
-                    <a class="button secondary" href="~/admin/portalentries">@L["Administer portal entries"]</a>
+                    <span>@L["Dashboard widgets require an OMP user."]</span>
                 }
             </div>
         }
+        else
+        {
+            <div class="portal-dashboard__empty is-hidden" data-dashboard-empty>@L["No widgets have been added yet."]</div>
+        }
+
+        @foreach (var widget in Model.ActiveWidgets)
+        {
+            <article class="dashboard-widget"
+                     data-dashboard-widget
+                     data-user-active-widget-id="@widget.UserActiveWidgetId"
+                     data-widget-id="@widget.WidgetId"
+                     data-widget-type="@widget.WidgetType"
+                     style="top: @(widget.OffsetTop)px; left: @(widget.OffsetLeft)px; width: @(widget.Width)px; height: @(widget.Height)px; z-index: @(widget.OrderPriority);">
+                @if (!string.IsNullOrWhiteSpace(widget.EffectiveTitle))
+                {
+                    <div class="dashboard-widget__titlebar" data-widget-titlebar>@widget.EffectiveTitle</div>
+                }
+                <div class="dashboard-widget__body">
+                    <div class="dashboard-widget__blank"></div>
+                </div>
+                @if (Model.CanEditDashboard)
+                {
+                    <button type="button"
+                            class="dashboard-widget__remove"
+                            data-widget-remove
+                            title="@L["Remove widget"]"
+                            aria-label="@L["Remove widget"]">
+                        ×
+                    </button>
+                    <span class="dashboard-widget__resize" data-widget-resize aria-hidden="true"></span>
+                }
+            </article>
+        }
     </div>
 
-    @if (Model.CanPersonalizeEntries && Model.ManageList && Model.PinnedEntries.Count > 1)
+    @if (Model.CanEditDashboard)
     {
-        <form class="visually-hidden" method="post" asp-page-handler="SortPinned" data-portal-entry-sort-form>
-            @Html.AntiForgeryToken()
-        </form>
+        <button type="button" class="dashboard-floating-button" data-dashboard-edit-toggle aria-pressed="false">
+            <span class="dashboard-floating-button__icon" aria-hidden="true"></span>
+            <span data-dashboard-edit-label>@L["Edit dashboard"]</span>
+        </button>
+
+        <button type="button" class="dashboard-add-button" data-dashboard-add-open>
+            @L["Add widget"]
+        </button>
+
+        <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">
+            <div class="dashboard-widget-picker__header">
+                <h3 id="dashboard-widget-picker-title">@L["Add widget"]</h3>
+                <button type="button" class="icon-button" data-widget-picker-close aria-label="@L["Close"]">×</button>
+            </div>
+            @if (Model.AvailableWidgets.Count == 0)
+            {
+                <div class="empty-state">@L["No widgets are available."]</div>
+            }
+            else
+            {
+                <div class="dashboard-widget-picker__list">
+                    @foreach (var widget in Model.AvailableWidgets)
+                    {
+                        <button type="button"
+                                class="dashboard-widget-option"
+                                data-widget-option
+                                data-widget-id="@widget.WidgetId"
+                                data-widget-title="@widget.Title"
+                                data-widget-type="@widget.WidgetType"
+                                data-widget-payload="@widget.Payload">
+                            <span class="dashboard-widget-option__title">@widget.Title</span>
+                            <span class="dashboard-widget-option__meta">@L["Portal widget"]</span>
+                        </button>
+                    }
+                </div>
+            }
+        </dialog>
     }
-
-    <div class="portal-entry-section">
-        <div class="portal-entry-section__label">
-            <span>@L["Pinned"]</span>
-        </div>
-        @if (Model.PinnedEntries.Count == 0)
-        {
-            <div class="empty-state">@L["No pinned entries"]</div>
-        }
-        else
-        {
-            <div class="portal-entry-list portal-entry-list--pinned" data-portal-pinned-list>
-                @foreach (var entry in Model.PinnedEntries)
-                {
-                    <article class="portal-entry-card"
-                             data-portal-entry-card
-                             data-portal-entry-id="@entry.PortalEntryId"
-                             draggable="@(Model.CanPersonalizeEntries && Model.ManageList ? "true" : "false")">
-                        @if (Model.CanPersonalizeEntries && Model.ManageList)
-                        {
-                            <span class="portal-entry-card__drag-handle" title="@L["Drag to sort"]" aria-hidden="true">⋮⋮</span>
-                        }
-                        <a class="portal-entry-card__main" href="@entry.TargetHref">
-                            <span class="portal-entry-card__logo">
-                                @if (!string.IsNullOrWhiteSpace(entry.LogoUrl))
-                                {
-                                    <img src="@entry.LogoUrl" alt="" />
-                                }
-                                else
-                                {
-                                    <span>@entry.LogoFallbackText</span>
-                                }
-                            </span>
-                            <span class="portal-entry-card__text">
-                                <span class="portal-entry-card__title">@entry.DisplayName</span>
-                                @if (!string.IsNullOrWhiteSpace(entry.Description))
-                                {
-                                    <span class="portal-entry-card__description">@entry.Description</span>
-                                }
-                            </span>
-                        </a>
-                        @if (Model.CanPersonalizeEntries || Model.IsPortalAdmin)
-                        {
-                            <div class="portal-entry-card__actions">
-                                @if (Model.CanPersonalizeEntries)
-                                {
-                                    <form method="post" asp-page-handler="Unpin" class="inline-form">
-                                        <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
-                                        <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
-                                        <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
-                                        <button type="submit" class="icon-button is-active" title="@L["Unpin"]" aria-label="@L["Unpin"]">★</button>
-                                    </form>
-                                }
-                                <details class="portal-entry-options">
-                                    <summary class="icon-button" title="@L["Options"]" aria-label="@L["Options"]">⋯</summary>
-                                    <div class="portal-entry-options__menu">
-                                        @if (Model.IsPortalAdmin)
-                                        {
-                                            <a href="@Url.Page("/Admin/PortalEntryEdit", new { portalEntryId = entry.PortalEntryId })">@L["Edit"]</a>
-                                        }
-                                        @if (Model.CanPersonalizeEntries)
-                                        {
-                                            <form method="post" asp-page-handler="Hide">
-                                                <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
-                                                <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
-                                                <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
-                                                <button type="submit">@L["Hide"]</button>
-                                            </form>
-                                        }
-                                    </div>
-                                </details>
-                            </div>
-                        }
-                    </article>
-                }
-            </div>
-        }
-    </div>
-
-    <div class="portal-entry-section">
-        <div class="portal-entry-section__label">
-            <span>@L["All entries"]</span>
-        </div>
-        @if (Model.AllEntries.Count == 0)
-        {
-            <div class="empty-state">@L["No entries to show"]</div>
-        }
-        else
-        {
-            <div class="portal-entry-list">
-                @foreach (var entry in Model.AllEntries)
-                {
-                    <article class="portal-entry-card@(entry.IsHidden ? " is-hidden" : string.Empty)" data-portal-entry-card data-portal-entry-id="@entry.PortalEntryId">
-                        <a class="portal-entry-card__main" href="@entry.TargetHref" aria-disabled="@(entry.IsHidden ? "true" : "false")">
-                            <span class="portal-entry-card__logo">
-                                @if (!string.IsNullOrWhiteSpace(entry.LogoUrl))
-                                {
-                                    <img src="@entry.LogoUrl" alt="" />
-                                }
-                                else
-                                {
-                                    <span>@entry.LogoFallbackText</span>
-                                }
-                            </span>
-                            <span class="portal-entry-card__text">
-                                <span class="portal-entry-card__title">
-                                    @entry.DisplayName
-                                    @if (entry.IsHidden)
-                                    {
-                                        <span class="portal-entry-card__badge">@L["Hidden"]</span>
-                                    }
-                                </span>
-                                @if (!string.IsNullOrWhiteSpace(entry.Description))
-                                {
-                                    <span class="portal-entry-card__description">@entry.Description</span>
-                                }
-                            </span>
-                        </a>
-                        @if (Model.CanPersonalizeEntries || Model.IsPortalAdmin)
-                        {
-                            <div class="portal-entry-card__actions">
-                                @if (Model.CanPersonalizeEntries && entry.IsHidden)
-                                {
-                                    <form method="post" asp-page-handler="Unhide" class="inline-form">
-                                        <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
-                                        <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
-                                        <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
-                                        <button type="submit" class="button secondary">@L["Undo"]</button>
-                                    </form>
-                                }
-                                else if (Model.CanPersonalizeEntries)
-                                {
-                                    <form method="post" asp-page-handler="Pin" class="inline-form">
-                                        <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
-                                        <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
-                                        <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
-                                        <button type="submit" class="icon-button" title="@L["Pin"]" aria-label="@L["Pin"]">☆</button>
-                                    </form>
-                                }
-
-                                @if (Model.IsPortalAdmin || (Model.CanPersonalizeEntries && !entry.IsHidden))
-                                {
-                                    <details class="portal-entry-options">
-                                        <summary class="icon-button" title="@L["Options"]" aria-label="@L["Options"]">⋯</summary>
-                                        <div class="portal-entry-options__menu">
-                                            @if (Model.IsPortalAdmin)
-                                            {
-                                                <a href="@Url.Page("/Admin/PortalEntryEdit", new { portalEntryId = entry.PortalEntryId })">@L["Edit"]</a>
-                                            }
-                                            @if (Model.CanPersonalizeEntries && !entry.IsHidden)
-                                            {
-                                                <form method="post" asp-page-handler="Hide">
-                                                    <input type="hidden" name="portalEntryId" value="@entry.PortalEntryId" />
-                                                    <input type="hidden" name="manage" value="@Model.ManageList.ToString().ToLowerInvariant()" />
-                                                    <input type="hidden" name="fullList" value="@Model.ShowFullList.ToString().ToLowerInvariant()" />
-                                                    <button type="submit">@L["Hide"]</button>
-                                                </form>
-                                            }
-                                        </div>
-                                    </details>
-                                }
-                            </div>
-                        }
-                    </article>
-                }
-            </div>
-        }
-    </div>
 </section>
+
+@section Scripts {
+    <script src="~/js/portal-dashboard.js"></script>
+}

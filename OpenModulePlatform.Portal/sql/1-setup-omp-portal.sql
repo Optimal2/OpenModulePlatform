@@ -376,3 +376,136 @@ WHEN NOT MATCHED BY TARGET THEN
     INSERT(entry_key, parent_entry_id, display_name, description, target_url, is_enabled, default_sort_order)
     VALUES(source.entry_key, source.parent_entry_id, source.display_name, source.description, source.target_url, 1, source.default_sort_order);
 GO
+
+IF OBJECT_ID(N'omp_portal.widgets', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.widgets
+    (
+        widget_id int IDENTITY(1,1) NOT NULL,
+        title nvarchar(200) NOT NULL,
+        widget_type nvarchar(50) NOT NULL,
+        payload nvarchar(max) NULL,
+        module_key nvarchar(100) NULL,
+        author nvarchar(200) NULL,
+        modified_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_widgets_modified_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_widgets PRIMARY KEY(widget_id)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.widget_permissions', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.widget_permissions
+    (
+        widget_permission_id int IDENTITY(1,1) NOT NULL,
+        widget_id int NOT NULL,
+        permission_id int NULL,
+        role_id int NULL,
+
+        CONSTRAINT PK_omp_portal_widget_permissions PRIMARY KEY(widget_permission_id),
+        CONSTRAINT FK_omp_portal_widget_permissions_widget FOREIGN KEY(widget_id)
+            REFERENCES omp_portal.widgets(widget_id),
+        CONSTRAINT FK_omp_portal_widget_permissions_permission FOREIGN KEY(permission_id)
+            REFERENCES omp.Permissions(PermissionId),
+        CONSTRAINT FK_omp_portal_widget_permissions_role FOREIGN KEY(role_id)
+            REFERENCES omp.Roles(RoleId),
+        CONSTRAINT CK_omp_portal_widget_permissions_target CHECK
+        (
+            (permission_id IS NOT NULL AND role_id IS NULL)
+            OR (permission_id IS NULL AND role_id IS NOT NULL)
+        )
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_portal_widget_permissions_widget'
+      AND object_id = OBJECT_ID(N'omp_portal.widget_permissions')
+)
+BEGIN
+    CREATE INDEX IX_omp_portal_widget_permissions_widget
+        ON omp_portal.widget_permissions(widget_id)
+        INCLUDE(permission_id, role_id);
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_active_widgets', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.user_active_widgets
+    (
+        user_active_widget_id bigint IDENTITY(1,1) NOT NULL,
+        widget_id int NOT NULL,
+        user_id int NOT NULL,
+        offset_top int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_offset_top DEFAULT(0),
+        offset_left int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_offset_left DEFAULT(0),
+        width int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_width DEFAULT(320),
+        height int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_height DEFAULT(180),
+        order_priority int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_order_priority DEFAULT(0),
+        title nvarchar(200) NULL,
+        int_data int NULL,
+        string_data nvarchar(20) NULL,
+
+        CONSTRAINT PK_omp_portal_user_active_widgets PRIMARY KEY(user_active_widget_id),
+        CONSTRAINT FK_omp_portal_user_active_widgets_widget FOREIGN KEY(widget_id)
+            REFERENCES omp_portal.widgets(widget_id),
+        CONSTRAINT FK_omp_portal_user_active_widgets_user FOREIGN KEY(user_id)
+            REFERENCES omp.users(user_id),
+        CONSTRAINT CK_omp_portal_user_active_widgets_size CHECK(width >= 160 AND height >= 96),
+        CONSTRAINT CK_omp_portal_user_active_widgets_offset CHECK(offset_top >= 0 AND offset_left >= 0)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_portal_user_active_widgets_user_order'
+      AND object_id = OBJECT_ID(N'omp_portal.user_active_widgets')
+)
+BEGIN
+    CREATE INDEX IX_omp_portal_user_active_widgets_user_order
+        ON omp_portal.user_active_widgets(user_id, order_priority, user_active_widget_id)
+        INCLUDE(widget_id, offset_top, offset_left, width, height, title, int_data, string_data);
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_active_widget_data', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.user_active_widget_data
+    (
+        user_active_widget_id bigint NOT NULL,
+        data_value nvarchar(max) NOT NULL,
+
+        CONSTRAINT PK_omp_portal_user_active_widget_data PRIMARY KEY(user_active_widget_id),
+        CONSTRAINT FK_omp_portal_user_active_widget_data_active_widget FOREIGN KEY(user_active_widget_id)
+            REFERENCES omp_portal.user_active_widgets(user_active_widget_id)
+            ON DELETE CASCADE
+    );
+END
+GO
+
+MERGE omp_portal.widgets AS target
+USING
+(
+    SELECT N'Blank widget' AS title,
+           N'portal' AS widget_type,
+           N'blank-rectangle' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
+) AS source
+ON target.title = source.title
+AND target.widget_type = source.widget_type
+AND ISNULL(target.module_key, N'') = source.module_key
+WHEN MATCHED THEN
+    UPDATE SET payload = source.payload,
+               author = source.author,
+               modified_at = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(title, widget_type, payload, module_key, author, modified_at)
+    VALUES(source.title, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
+GO
