@@ -1,3 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -422,6 +427,272 @@ ORDER BY ModuleDefinitionArtifactCompatibilityId;";
         }
 
         return compatible;
+    }
+
+    public async Task<ModuleDefinitionSaveResult> SaveImportedModuleDefinitionAsync(
+        ModuleDefinitionImportDocument input,
+        bool replaceExisting,
+        CancellationToken ct)
+    {
+        const string findSql = @"
+SELECT ModuleDefinitionDocumentId,
+       DefinitionSha256
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleKey = @moduleKey
+  AND DefinitionVersion = @definitionVersion;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            int? existingId = null;
+            string? existingSha256 = null;
+            await using (var find = new SqlCommand(findSql, conn, tx))
+            {
+                Add(find, "@moduleKey", input.ModuleKey);
+                Add(find, "@definitionVersion", input.DefinitionVersion);
+                await using var rdr = await find.ExecuteReaderAsync(ct);
+                if (await rdr.ReadAsync(ct))
+                {
+                    existingId = rdr.GetInt32(0);
+                    existingSha256 = rdr.GetString(1);
+                }
+            }
+
+            var isIdentical = existingId.HasValue
+                && string.Equals(existingSha256, input.DefinitionSha256, StringComparison.OrdinalIgnoreCase);
+            if (existingId.HasValue && !replaceExisting && !isIdentical)
+            {
+                throw new InvalidOperationException(
+                    "A module definition with the same module key and version already exists, but the imported JSON is different. Use a new definition version for unattended HostAgent folder imports.");
+            }
+
+            var documentId = existingId ?? await InsertModuleDefinitionDocumentAsync(conn, tx, input, ct);
+            if (existingId.HasValue && (replaceExisting || !isIdentical))
+            {
+                await UpdateModuleDefinitionDocumentAsync(conn, tx, documentId, input, ct);
+            }
+
+            await ReplaceModuleDefinitionCompatibilityAsync(conn, tx, documentId, input.CompatibleArtifacts, ct);
+            await tx.CommitAsync(ct);
+
+            return new ModuleDefinitionSaveResult(
+                documentId,
+                !existingId.HasValue,
+                existingId.HasValue && replaceExisting && !isIdentical,
+                existingId.HasValue && isIdentical);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<bool> ApplyImportedModuleDefinitionAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @DefinitionJson nvarchar(max);
+DECLARE @ModuleKey nvarchar(100);
+DECLARE @ModuleDisplayName nvarchar(200);
+DECLARE @ModuleType nvarchar(50);
+DECLARE @SchemaName nvarchar(128);
+DECLARE @Description nvarchar(500);
+DECLARE @SortOrder int;
+DECLARE @IsEnabled bit;
+DECLARE @ModuleId int;
+
+SELECT @DefinitionJson = DefinitionJson,
+       @ModuleKey = ModuleKey
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;
+
+IF @DefinitionJson IS NULL
+BEGIN
+    THROW 53230, N'Module definition document was not found.', 1;
+END;
+
+SELECT @ModuleDisplayName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.displayName'), N''),
+       @ModuleType = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.moduleType'), N''),
+       @SchemaName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.schemaName'), N''),
+       @Description = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.description'), N''),
+       @SortOrder = TRY_CONVERT(int, JSON_VALUE(@DefinitionJson, N'$.module.sortOrder')),
+       @IsEnabled = TRY_CONVERT(bit, JSON_VALUE(@DefinitionJson, N'$.module.isEnabled'));
+
+IF @ModuleDisplayName IS NOT NULL
+BEGIN
+    MERGE omp.Modules AS target
+    USING
+    (
+        SELECT @ModuleKey AS ModuleKey,
+               @ModuleDisplayName AS DisplayName,
+               COALESCE(@ModuleType, N'WebAppModule') AS ModuleType,
+               COALESCE(@SchemaName, @ModuleKey) AS SchemaName,
+               @Description AS Description,
+               COALESCE(@SortOrder, 0) AS SortOrder,
+               COALESCE(@IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+    ) AS source
+    ON target.ModuleKey = source.ModuleKey
+    WHEN MATCHED THEN
+        UPDATE SET DisplayName = source.DisplayName,
+                   ModuleType = source.ModuleType,
+                   SchemaName = source.SchemaName,
+                   Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ModuleKey, DisplayName, ModuleType, SchemaName, Description, SortOrder, IsEnabled)
+        VALUES(source.ModuleKey, source.DisplayName, source.ModuleType, source.SchemaName, source.Description, source.SortOrder, source.IsEnabled);
+END;
+
+SELECT @ModuleId = ModuleId
+FROM omp.Modules
+WHERE ModuleKey = @ModuleKey;
+
+IF @ModuleId IS NOT NULL
+BEGIN
+    ;WITH AppRows AS
+    (
+        SELECT AppKey,
+               COALESCE(NULLIF(DisplayName, N''), AppKey) AS DisplayName,
+               COALESCE(NULLIF(AppType, N''), N'WebApp') AS AppType,
+               COALESCE(AllowMultipleActiveInstances, CONVERT(bit, 0)) AS AllowMultipleActiveInstances,
+               NULLIF(Description, N'') AS Description,
+               COALESCE(SortOrder, 0) AS SortOrder,
+               COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+        FROM OPENJSON(@DefinitionJson, N'$.apps')
+        WITH
+        (
+            AppKey nvarchar(100) N'$.appKey',
+            DisplayName nvarchar(200) N'$.displayName',
+            AppType nvarchar(50) N'$.appType',
+            AllowMultipleActiveInstances bit N'$.allowMultipleActiveInstances',
+            Description nvarchar(500) N'$.description',
+            SortOrder int N'$.sortOrder',
+            IsEnabled bit N'$.isEnabled'
+        )
+        WHERE AppKey IS NOT NULL
+    )
+    MERGE omp.Apps AS target
+    USING AppRows AS source
+    ON target.ModuleId = @ModuleId
+    AND target.AppKey = source.AppKey
+    WHEN MATCHED THEN
+        UPDATE SET DisplayName = source.DisplayName,
+                   AppType = source.AppType,
+                   AllowMultipleActiveInstances = source.AllowMultipleActiveInstances,
+                   Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ModuleId, AppKey, DisplayName, AppType, AllowMultipleActiveInstances, Description, SortOrder, IsEnabled)
+        VALUES(@ModuleId, source.AppKey, source.DisplayName, source.AppType, source.AllowMultipleActiveInstances, source.Description, source.SortOrder, source.IsEnabled);
+END;
+
+UPDATE omp.ModuleDefinitionDocuments
+SET IsApplied = CASE WHEN ModuleDefinitionDocumentId = @moduleDefinitionDocumentId THEN 1 ELSE 0 END,
+    AppliedUtc = CASE WHEN ModuleDefinitionDocumentId = @moduleDefinitionDocumentId THEN SYSUTCDATETIME() ELSE AppliedUtc END,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ModuleKey = @ModuleKey;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
+            await cmd.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<int> ExecuteImportedModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        var definitionJson = await GetModuleDefinitionJsonAsync(moduleDefinitionDocumentId, ct);
+        if (string.IsNullOrWhiteSpace(definitionJson) || IsInstallerManagedModuleDefinitionSql(definitionJson))
+        {
+            return 0;
+        }
+
+        var scripts = ReadPortableSqlScripts(definitionJson)
+            .OrderBy(static script => script.Order)
+            .ThenBy(static script => script.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (scripts.Count == 0)
+        {
+            return 0;
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
+
+        var executed = 0;
+        foreach (var script in scripts)
+        {
+            if (!string.Equals(script.Execution, "idempotent", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Module definition SQL script '{script.Key}' is not idempotent and cannot be executed by HostAgent folder import.");
+            }
+
+            var sqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(sqlText))
+            {
+                continue;
+            }
+
+            var scriptSha256 = ComputeTextSha256(sqlText);
+            if (!string.IsNullOrWhiteSpace(script.Sha256)
+                && !string.Equals(script.Sha256, scriptSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Module definition SQL script '{script.Key}' content does not match its declared SHA-256.");
+            }
+
+            var safety = ValidateSafeModuleDefinitionSql(sqlText);
+            if (safety is not null)
+            {
+                throw new InvalidOperationException($"Module definition SQL script '{script.Key}' was blocked: {safety}");
+            }
+
+            var executionId = await InsertModuleDefinitionSqlExecutionAsync(
+                conn,
+                moduleDefinitionDocumentId,
+                script,
+                scriptSha256,
+                ct);
+
+            try
+            {
+                await ExecuteSqlBatchesAsync(conn, sqlText, ct);
+                await CompleteModuleDefinitionSqlExecutionAsync(conn, executionId, "Succeeded", null, ct);
+                executed++;
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+            {
+                await CompleteModuleDefinitionSqlExecutionAsync(conn, executionId, "Failed", ex.Message, ct);
+                throw new InvalidOperationException($"Module definition SQL script '{script.Key}' failed: {ex.Message}", ex);
+            }
+        }
+
+        return executed;
     }
 
     public async Task<ArtifactZipImportAppDescriptor?> ResolveArtifactZipImportAppAsync(
@@ -1666,6 +1937,387 @@ WHEN NOT MATCHED THEN
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    private static async Task<int> InsertModuleDefinitionDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        ModuleDefinitionImportDocument input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.ModuleDefinitionDocuments
+(
+    ModuleKey,
+    DefinitionVersion,
+    FormatVersion,
+    DefinitionJson,
+    DefinitionSha256,
+    SourceName,
+    IsApplied
+)
+VALUES
+(
+    @moduleKey,
+    @definitionVersion,
+    @formatVersion,
+    @definitionJson,
+    @definitionSha256,
+    @sourceName,
+    0
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        BindModuleDefinitionDocument(cmd, input);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task UpdateModuleDefinitionDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        ModuleDefinitionImportDocument input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.ModuleDefinitionDocuments
+SET FormatVersion = @formatVersion,
+    DefinitionJson = @definitionJson,
+    DefinitionSha256 = @definitionSha256,
+    SourceName = @sourceName,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@moduleDefinitionDocumentId", documentId);
+        BindModuleDefinitionDocument(cmd, input);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ReplaceModuleDefinitionCompatibilityAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        IReadOnlyList<ModuleDefinitionArtifactCompatibilityEntry> entries,
+        CancellationToken ct)
+    {
+        const string deleteSql = @"
+DELETE FROM omp.ModuleDefinitionArtifactCompatibility
+WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
+
+        await using (var delete = new SqlCommand(deleteSql, conn, tx))
+        {
+            Add(delete, "@moduleDefinitionDocumentId", documentId);
+            await delete.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSql = @"
+INSERT INTO omp.ModuleDefinitionArtifactCompatibility
+(
+    ModuleDefinitionDocumentId,
+    AppKey,
+    PackageType,
+    TargetName,
+    RelativePathTemplate,
+    MinArtifactVersion,
+    MaxArtifactVersion
+)
+VALUES
+(
+    @moduleDefinitionDocumentId,
+    @appKey,
+    @packageType,
+    @targetName,
+    @relativePathTemplate,
+    @minArtifactVersion,
+    @maxArtifactVersion
+);";
+
+        foreach (var entry in entries)
+        {
+            await using var insert = new SqlCommand(insertSql, conn, tx);
+            Add(insert, "@moduleDefinitionDocumentId", documentId);
+            Add(insert, "@appKey", entry.AppKey);
+            Add(insert, "@packageType", entry.PackageType);
+            Add(insert, "@targetName", entry.TargetName);
+            Add(insert, "@relativePathTemplate", entry.RelativePathTemplate);
+            Add(insert, "@minArtifactVersion", entry.MinArtifactVersion);
+            Add(insert, "@maxArtifactVersion", entry.MaxArtifactVersion);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static void BindModuleDefinitionDocument(
+        SqlCommand cmd,
+        ModuleDefinitionImportDocument input)
+    {
+        Add(cmd, "@moduleKey", input.ModuleKey);
+        Add(cmd, "@definitionVersion", input.DefinitionVersion);
+        Add(cmd, "@formatVersion", input.FormatVersion);
+        Add(cmd, "@definitionJson", input.DefinitionJson);
+        Add(cmd, "@definitionSha256", input.DefinitionSha256);
+        Add(cmd, "@sourceName", input.SourceName);
+    }
+
+    private async Task<string?> GetModuleDefinitionJsonAsync(int moduleDefinitionDocumentId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT DefinitionJson
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is null || value == DBNull.Value ? null : Convert.ToString(value);
+    }
+
+    private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson) as JsonObject;
+        return root is not null
+            && string.Equals(GetJsonString(root, "definitionType"), "platform-core", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<PortableModuleDefinitionSqlScript> ReadPortableSqlScripts(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson);
+        if (root?["sqlScripts"] is not JsonArray items)
+        {
+            return [];
+        }
+
+        var scripts = new List<PortableModuleDefinitionSqlScript>();
+        foreach (var item in items.OfType<JsonObject>())
+        {
+            var key = GetJsonString(item, "key");
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            scripts.Add(new PortableModuleDefinitionSqlScript(
+                key,
+                GetJsonString(item, "phase", "setup"),
+                GetJsonString(item, "scope", "module"),
+                GetJsonInt(item, "order", 0),
+                GetJsonString(item, "execution", "idempotent"),
+                NullIfWhiteSpace(GetJsonString(item, "path")),
+                NullIfWhiteSpace(GetJsonString(item, "source")),
+                NullIfWhiteSpace(GetJsonString(item, "inlineSql")),
+                NullIfWhiteSpace(GetJsonString(item, "contentEncoding")),
+                NullIfWhiteSpace(GetJsonString(item, "content")),
+                NullIfWhiteSpace(GetJsonString(item, "sha256"))));
+        }
+
+        return scripts;
+    }
+
+    private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)
+    {
+        if (!string.IsNullOrWhiteSpace(script.InlineSql))
+        {
+            return script.InlineSql;
+        }
+
+        if (string.IsNullOrWhiteSpace(script.Content))
+        {
+            return null;
+        }
+
+        if (string.Equals(script.ContentEncoding, "base64-utf8", StringComparison.OrdinalIgnoreCase))
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(script.Content));
+        }
+
+        return script.Content;
+    }
+
+    private static async Task AcquireModuleDefinitionSqlExecutionLockAsync(SqlConnection conn, CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @Result int;
+EXEC @Result = sys.sp_getapplock
+    @Resource = N'omp.module-definition-sql-repair',
+    @LockMode = N'Exclusive',
+    @LockOwner = N'Session',
+    @LockTimeout = 0;
+SELECT @Result;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        var result = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        if (result < 0)
+        {
+            throw new InvalidOperationException("Another module definition SQL repair is already running.");
+        }
+    }
+
+    private static async Task<long> InsertModuleDefinitionSqlExecutionAsync(
+        SqlConnection conn,
+        int moduleDefinitionDocumentId,
+        PortableModuleDefinitionSqlScript script,
+        string scriptSha256,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.ModuleDefinitionSqlExecutions
+(
+    ModuleDefinitionDocumentId,
+    ScriptKey,
+    ScriptPhase,
+    ScriptOrder,
+    ScriptSha256,
+    ExecutionStatus
+)
+VALUES
+(
+    @moduleDefinitionDocumentId,
+    @scriptKey,
+    @scriptPhase,
+    @scriptOrder,
+    @scriptSha256,
+    N'Running'
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
+        Add(cmd, "@scriptKey", script.Key);
+        Add(cmd, "@scriptPhase", script.Phase);
+        Add(cmd, "@scriptOrder", script.Order);
+        Add(cmd, "@scriptSha256", scriptSha256);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task CompleteModuleDefinitionSqlExecutionAsync(
+        SqlConnection conn,
+        long executionId,
+        string status,
+        string? errorMessage,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.ModuleDefinitionSqlExecutions
+SET ExecutionStatus = @executionStatus,
+    CompletedUtc = SYSUTCDATETIME(),
+    ErrorMessage = @errorMessage
+WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@moduleDefinitionSqlExecutionId", executionId);
+        Add(cmd, "@executionStatus", status);
+        Add(cmd, "@errorMessage", Truncate(errorMessage ?? string.Empty, 4000));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ExecuteSqlBatchesAsync(SqlConnection conn, string sqlText, CancellationToken ct)
+    {
+        foreach (var batch in SplitSqlBatches(sqlText))
+        {
+            if (string.IsNullOrWhiteSpace(batch))
+            {
+                continue;
+            }
+
+            await using var cmd = new SqlCommand(batch, conn)
+            {
+                CommandTimeout = 3600
+            };
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static IEnumerable<string> SplitSqlBatches(string sqlText)
+    {
+        var batch = new StringBuilder();
+        using var reader = new StringReader(sqlText);
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (Regex.IsMatch(line, @"^\s*GO\s*(?:--.*)?$", RegexOptions.IgnoreCase))
+            {
+                yield return batch.ToString();
+                batch.Clear();
+                continue;
+            }
+
+            batch.AppendLine(line);
+        }
+
+        yield return batch.ToString();
+    }
+
+    private static string? ValidateSafeModuleDefinitionSql(string sqlText)
+    {
+        if (Regex.IsMatch(sqlText, @"(?im)^\s*USE\s+(?:\[[^\]]+\]|[A-Za-z0-9_]+)\s*;?\s*$"))
+        {
+            return "Module definition SQL must not contain USE database directives.";
+        }
+
+        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b"))
+        {
+            return "The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE.";
+        }
+
+        if (Regex.IsMatch(sqlText, @"(?is)\bTRUNCATE\s+TABLE\b"))
+        {
+            return "The script contains TRUNCATE TABLE.";
+        }
+
+        foreach (Match match in Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)"))
+        {
+            var statement = match.Groups["statement"].Value;
+            if (!Regex.IsMatch(statement, @"(?is)\bWHERE\b"))
+            {
+                return "The script contains DELETE FROM without a WHERE clause.";
+            }
+        }
+
+        return null;
+    }
+
+    private static string ComputeTextSha256(string text)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    private static string GetJsonString(JsonObject obj, string propertyName, string defaultValue = "")
+    {
+        if (!obj.TryGetPropertyValue(propertyName, out var node) || node is null)
+        {
+            return defaultValue;
+        }
+
+        return node is JsonValue value && value.TryGetValue<string>(out var text)
+            ? text.Trim()
+            : defaultValue;
+    }
+
+    private static int GetJsonInt(JsonObject obj, string propertyName, int defaultValue)
+    {
+        if (!obj.TryGetPropertyValue(propertyName, out var node) || node is not JsonValue value)
+        {
+            return defaultValue;
+        }
+
+        if (value.TryGetValue<int>(out var number))
+        {
+            return number;
+        }
+
+        return value.TryGetValue<string>(out var text)
+            && int.TryParse(text, out var parsed)
+            ? parsed
+            : defaultValue;
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static void Add(SqlCommand cmd, string name, object? value)
+        => cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+
     private static string Truncate(string value, int maxLength)
     {
         var trimmed = value.Trim();
@@ -1724,4 +2376,17 @@ WHEN NOT MATCHED THEN
                 var max = string.IsNullOrWhiteSpace(slot.MaxArtifactVersion) ? "*" : slot.MaxArtifactVersion;
                 return $"{min}..{max}";
             }));
+
+    private sealed record PortableModuleDefinitionSqlScript(
+        string Key,
+        string Phase,
+        string Scope,
+        int Order,
+        string Execution,
+        string? Path,
+        string? Source,
+        string? InlineSql,
+        string? ContentEncoding,
+        string? Content,
+        string? Sha256);
 }

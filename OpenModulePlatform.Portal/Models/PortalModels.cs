@@ -186,6 +186,8 @@ public sealed class DashboardWidgetDefinition
 {
     public int WidgetId { get; set; }
 
+    public string WidgetKey { get; set; } = string.Empty;
+
     public string Title { get; set; } = string.Empty;
 
     public string WidgetType { get; set; } = string.Empty;
@@ -255,6 +257,44 @@ public sealed class DashboardWidgetLayoutUpdate
     public int? IntData { get; set; }
 
     public string? StringData { get; set; }
+}
+
+/// <summary>
+/// Admin-facing widget definition row including portable import/export metadata.
+/// </summary>
+public sealed class DashboardWidgetAdminRow
+{
+    public int WidgetId { get; set; }
+
+    public string WidgetKey { get; set; } = string.Empty;
+
+    public string Title { get; set; } = string.Empty;
+
+    public string WidgetType { get; set; } = string.Empty;
+
+    public string? Payload { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string? Author { get; set; }
+
+    public DateTime ModifiedUtc { get; set; }
+
+    public List<string> PermissionNames { get; } = [];
+
+    public List<string> RoleNames { get; } = [];
+}
+
+/// <summary>
+/// Result from importing a portable dashboard widget document.
+/// </summary>
+public sealed class DashboardWidgetImportResult
+{
+    public int CreatedCount { get; set; }
+
+    public int UpdatedCount { get; set; }
+
+    public int PermissionRowCount { get; set; }
 }
 
 /// <summary>

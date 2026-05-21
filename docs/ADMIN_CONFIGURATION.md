@@ -84,6 +84,65 @@ Portal administrators can maintain the concrete values from
 of available category/setting combinations; that list belongs to OMP SQL
 upgrades so the UI only exposes settings that the runtime code understands.
 
+### Portal dashboard
+
+The Portal start page includes a user-customizable dashboard. The dashboard is
+defined in the Portal schema and is intentionally separate from the global
+Portal navigation entries:
+
+- `omp_portal.widgets` stores reusable widget definitions
+- `omp_portal.widget_permissions` optionally limits a widget to a role or
+  permission; widgets without rows in this table are available to every signed-in
+  OMP user
+- `omp_portal.user_active_widgets` stores one user's placed widgets, including
+  position, size, z-order, optional title, and small typed values
+- `omp_portal.user_active_widget_data` is reserved for larger per-widget user
+  data when a future widget needs more than the inline int/string fields
+
+The current dashboard renderer supports Portal-owned widgets. `payload` selects
+which server-rendered widget body is used; for example, `admin-overview` renders
+the Portal administration metric cards and is restricted by
+`OMP.Portal.Admin`. The client script only persists user layout state. Widget
+definitions, permissions, and seeded widgets are owned by Portal SQL/module
+definition upgrades.
+
+Adding or removing a widget is saved immediately. Moving and resizing widgets is
+saved when the user leaves dashboard edit mode with the Done button. Resetting
+the dashboard removes the current user's active widget rows and does not change
+the global widget definitions.
+
+Portal administrators can import and export widget definitions from
+`/admin/dashboardwidgets`. This lets module-specific widgets live beside the
+module that owns them, including modules maintained in private repositories.
+The portable JSON format is:
+
+```json
+{
+  "format": "omp.portal.dashboard.widgets",
+  "formatVersion": 1,
+  "moduleKey": "example_module",
+  "author": "Example module",
+  "widgets": [
+    {
+      "widgetKey": "example:status",
+      "title": "Example status",
+      "widgetType": "portal",
+      "payload": "example-status",
+      "permissionNames": [ "Example.View" ],
+      "roleNames": []
+    }
+  ]
+}
+```
+
+`widgetKey` is the stable portable identity for a widget and must be globally
+unique within one OMP installation. `moduleKey` is optional ownership metadata
+used for filtering and export; it is not part of the widget identity. Re-importing
+the same `widgetKey` updates the existing definition and replaces its permission
+restrictions, even when the widget moves from module-owned to global or the
+other way around. Use empty `permissionNames` and `roleNames` arrays only when
+the widget should be available to every signed-in OMP user.
+
 ### 2. Create or adjust the instance
 
 An `Instance` is the highest manual scope in OMP.
@@ -199,15 +258,17 @@ artifact immediately. When selected, Portal updates matching desired template
 app rows and already materialized app rows to the new artifact. HostAgent then
 provisions and deploys the version on its next cycle.
 
-HostAgent can optionally import the same artifact zip format from a local or
+HostAgent can optionally import portable deployment objects from a local or
 shared folder without a Portal upload. Configure this under
-`HostAgent:ArtifactZipImport`; it is disabled by default. Imported zip files
-must use the same `moduleKey__appKey__packageType__targetName__version.zip`
-filename format. Successful imports are moved to `processed`, failed imports
-are moved to `failed` with an adjacent `.error.txt` file, previous artifact
-configuration file rows are copied when available, packaged configuration files
-are registered when the zip contains `omp-artifact-package.json`, and matching
-apps are always set to use the imported artifact.
+`HostAgent:ArtifactZipImport`; it is disabled by default. The import folder
+accepts module definition JSON files, standard artifact package zips, and
+module package zips that contain one module definition JSON plus one or more
+artifact package zips for that module. Successful imports are moved to
+`processed`, failed imports are moved to `failed` with an adjacent `.error.txt`
+file, previous artifact configuration file rows are copied when available,
+packaged configuration files are registered when the zip contains
+`omp-artifact-package.json`, and matching apps are always set to use the
+imported artifact.
 
 Artifact-owned configuration files are managed from the artifact edit page.
 These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them
