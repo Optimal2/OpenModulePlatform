@@ -23,6 +23,8 @@ shape:
 OpenModulePlatformHostAgentFirst-<version>/
   OpenModulePlatform.Bootstrapper.exe
   bootstrap.local.sample.json
+  configs/
+    bootstrap.local.sample.json
   install-hostagent-first.cmd
   install-hostagent-first-console.cmd
   uninstall-hostagent-first.cmd
@@ -53,7 +55,10 @@ console usage and troubleshooting.
 The package can be zipped and copied as a single file, or generated as an
 expanded folder by setting `Package.SkipZip = $true` or passing `-SkipZip`.
 The expanded package is self-contained except for environment-specific values in
-`bootstrap.local.sample.json`.
+the bootstrap configuration files. The graphical installer treats
+`configs\*.json` as selectable installation profiles and keeps the root-level
+`bootstrap.local.sample.json` only for command-line and older automation
+compatibility.
 
 ## Environment Configuration Model
 
@@ -124,8 +129,11 @@ be edited later through Portal.
 ## Installing
 
 1. Expand the package on the target server.
-2. Copy `bootstrap.local.sample.json` to an environment-specific JSON file or
-   edit it in place for a disposable local environment.
+2. Put one or more environment-specific bootstrap JSON files in `configs`.
+   Keeping names such as `linus.json`, `alfons.json`, `vgr-production.json`,
+   and `vgr-test.json` lets one package carry multiple installation profiles.
+   For a disposable local environment, editing `configs\bootstrap.local.sample.json`
+   in place is also acceptable.
 3. Set at least:
    - `sql.server`
    - `sql.database`
@@ -148,8 +156,10 @@ install-hostagent-first.cmd
 ```
 
 Both entry points open the graphical installer. The EXE requests administrator
-rights, loads the package defaults, lets the operator review or change common
-SQL, path, HostAgent, and IIS settings, and then runs the selected action.
+rights, loads `configs\*.json`, lets the operator select an installation
+profile from a dropdown, review or change common SQL, path, HostAgent, and IIS
+settings, and then run one of the action tabs: install/update, package tools,
+or uninstall.
 
 On a development machine where the installer package still lives below an
 OpenModulePlatform source checkout, the graphical installer can also compare
@@ -211,6 +221,13 @@ For non-interactive console installation, run:
 
 ```cmd
 tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --config bootstrap.local.sample.json
+```
+
+When using a profile below `configs`, the package root is resolved to the parent
+folder automatically:
+
+```cmd
+tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --config configs\linus.json
 ```
 
 Use `--yes` only for controlled automated runs:
