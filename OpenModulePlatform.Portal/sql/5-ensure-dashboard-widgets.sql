@@ -10,6 +10,15 @@ Prerequisite:
 USE [OpenModulePlatform];
 GO
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_portal')
     EXEC('CREATE SCHEMA [omp_portal]');
 GO
@@ -289,13 +298,15 @@ USING
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
     UNION ALL
-    SELECT N'Favorite portal entries' AS title,
+    SELECT N'portal-entry-favorites' AS widget_key,
+           N'Favorite portal entries' AS title,
            N'portal' AS widget_type,
            N'portal-entry-favorites' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
     UNION ALL
-    SELECT N'All portal entries' AS title,
+    SELECT N'portal-entry-list' AS widget_key,
+           N'All portal entries' AS title,
            N'portal' AS widget_type,
            N'portal-entry-list' AS payload,
            N'omp_portal' AS module_key,

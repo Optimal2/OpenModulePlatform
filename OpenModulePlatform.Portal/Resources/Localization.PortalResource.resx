@@ -1820,4 +1820,8 @@
   <data name="Select one dashboard widget JSON file." xml:space="preserve"><value>Select one dashboard widget JSON file.</value></data>
   <data name="The uploaded dashboard widget file must be a .json file." xml:space="preserve"><value>The uploaded dashboard widget file must be a .json file.</value></data>
   <data name="The uploaded dashboard widget file exceeds the configured limit of {0} bytes." xml:space="preserve"><value>The uploaded dashboard widget file exceeds the configured limit of {0} bytes.</value></data>
+  <data name="Newer: {0}" xml:space="preserve"><value>Newer: {0}</value></data>
+  <data name="Upgrade to latest compatible artifact version {0}" xml:space="preserve"><value>Upgrade to latest compatible artifact version {0}</value></data>
+  <data name="Desired artifact updated to version {0}." xml:space="preserve"><value>Desired artifact updated to version {0}.</value></data>
+  <data name="The desired artifact could not be updated: {0}" xml:space="preserve"><value>The desired artifact could not be updated: {0}</value></data>
 </root>
