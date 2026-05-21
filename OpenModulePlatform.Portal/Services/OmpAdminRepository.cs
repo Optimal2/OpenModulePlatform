@@ -944,6 +944,7 @@ SELECT tai.InstanceTemplateAppInstanceId,
        tai.DisplayName,
        tai.RoutePath,
        tai.InstallationName,
+       ar.ArtifactId,
        ar.Version,
        tai.IsEnabled,
        tai.IsAllowed,
@@ -964,29 +965,137 @@ ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey, tai.SortOrder, tai.AppInstanceKey
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@InstanceTemplateId", instanceTemplateId);
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-
-        while (await rdr.ReadAsync(ct))
+        await using (var rdr = await cmd.ExecuteReaderAsync(ct))
         {
-            rows.Add(new InstanceTemplateAppTopologyRow
+            while (await rdr.ReadAsync(ct))
             {
-                InstanceTemplateAppInstanceId = rdr.GetInt32(0),
-                ModuleInstanceKey = rdr.GetString(1),
-                HostKey = rdr.IsDBNull(2) ? null : rdr.GetString(2),
-                AppKey = rdr.GetString(3),
-                AppInstanceKey = rdr.GetString(4),
-                DisplayName = rdr.GetString(5),
-                RoutePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                InstallationName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                ArtifactVersion = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-                IsEnabled = rdr.GetBoolean(9),
-                IsAllowed = rdr.GetBoolean(10),
-                DesiredState = rdr.GetByte(11),
-                SortOrder = rdr.GetInt32(12)
-            });
+                rows.Add(new InstanceTemplateAppTopologyRow
+                {
+                    InstanceTemplateAppInstanceId = rdr.GetInt32(0),
+                    ModuleInstanceKey = rdr.GetString(1),
+                    HostKey = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                    AppKey = rdr.GetString(3),
+                    AppInstanceKey = rdr.GetString(4),
+                    DisplayName = rdr.GetString(5),
+                    RoutePath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                    InstallationName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                    ArtifactId = rdr.IsDBNull(8) ? null : rdr.GetInt32(8),
+                    ArtifactVersion = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                    IsEnabled = rdr.GetBoolean(10),
+                    IsAllowed = rdr.GetBoolean(11),
+                    DesiredState = rdr.GetByte(12),
+                    SortOrder = rdr.GetInt32(13)
+                });
+            }
         }
 
+        await PopulateLatestTemplateArtifactUpgradesAsync(conn, instanceTemplateId, rows, ct);
+
         return rows;
+    }
+
+    private static async Task PopulateLatestTemplateArtifactUpgradesAsync(
+        SqlConnection conn,
+        int instanceTemplateId,
+        IReadOnlyList<InstanceTemplateAppTopologyRow> rows,
+        CancellationToken ct)
+    {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        var rowsById = rows
+            .Where(static row => row.ArtifactId.HasValue && !string.IsNullOrWhiteSpace(row.ArtifactVersion))
+            .ToDictionary(static row => row.InstanceTemplateAppInstanceId);
+        if (rowsById.Count == 0)
+        {
+            return;
+        }
+
+        const string sql = @"
+WITH AppliedDefinitions AS
+(
+    SELECT ModuleDefinitionDocumentId,
+           ModuleKey,
+           ROW_NUMBER() OVER
+           (
+               PARTITION BY ModuleKey
+               ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC
+           ) AS rn
+    FROM omp.ModuleDefinitionDocuments
+    WHERE IsApplied = 1
+)
+SELECT tai.InstanceTemplateAppInstanceId,
+       candidate.ArtifactId,
+       candidate.Version,
+       compat.MinArtifactVersion,
+       compat.MaxArtifactVersion
+FROM omp.InstanceTemplateAppInstances tai
+INNER JOIN omp.InstanceTemplateModuleInstances tmi
+    ON tmi.InstanceTemplateModuleInstanceId = tai.InstanceTemplateModuleInstanceId
+INNER JOIN omp.Apps a ON a.AppId = tai.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = tai.DesiredArtifactId
+INNER JOIN omp.Artifacts candidate
+    ON candidate.AppId = currentArtifact.AppId
+   AND candidate.PackageType = currentArtifact.PackageType
+   AND ISNULL(candidate.TargetName, N'') = ISNULL(currentArtifact.TargetName, N'')
+   AND candidate.IsEnabled = 1
+INNER JOIN AppliedDefinitions d
+    ON d.ModuleKey = m.ModuleKey
+   AND d.rn = 1
+INNER JOIN omp.ModuleDefinitionArtifactCompatibility compat
+    ON compat.ModuleDefinitionDocumentId = d.ModuleDefinitionDocumentId
+   AND compat.AppKey = a.AppKey
+   AND compat.PackageType = candidate.PackageType
+   AND ISNULL(compat.TargetName, N'') = ISNULL(candidate.TargetName, N'')
+WHERE tmi.InstanceTemplateId = @InstanceTemplateId;";
+
+        var bestByTemplateApp = new Dictionary<int, (int ArtifactId, string Version)>();
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var templateAppId = rdr.GetInt32(0);
+            if (!rowsById.TryGetValue(templateAppId, out var row)
+                || string.IsNullOrWhiteSpace(row.ArtifactVersion))
+            {
+                continue;
+            }
+
+            var candidateVersion = rdr.GetString(2);
+            if (CompareArtifactVersions(candidateVersion, row.ArtifactVersion) <= 0)
+            {
+                continue;
+            }
+
+            var minVersion = rdr.IsDBNull(3) ? null : rdr.GetString(3);
+            var maxVersion = rdr.IsDBNull(4) ? null : rdr.GetString(4);
+            if (!IsVersionInRange(candidateVersion, minVersion, maxVersion))
+            {
+                continue;
+            }
+
+            if (!bestByTemplateApp.TryGetValue(templateAppId, out var currentBest)
+                || CompareArtifactVersions(candidateVersion, currentBest.Version) > 0)
+            {
+                bestByTemplateApp[templateAppId] = (rdr.GetInt32(1), candidateVersion);
+            }
+        }
+
+        foreach (var (templateAppId, latest) in bestByTemplateApp)
+        {
+            if (!rowsById.TryGetValue(templateAppId, out var row))
+            {
+                continue;
+            }
+
+            row.LatestArtifactId = latest.ArtifactId;
+            row.LatestArtifactVersion = latest.Version;
+        }
     }
 
     public async Task<IReadOnlyList<HostTemplateRow>> GetHostTemplatesAsync(CancellationToken ct)

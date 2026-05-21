@@ -79,4 +79,33 @@ public sealed class InstanceTemplateEditModel : OmpPortalPageModel
 
         return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });
     }
+
+    public async Task<IActionResult> OnPostUpgradeAppArtifact(
+        int id,
+        int templateId,
+        int artifactId,
+        CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        try
+        {
+            var version = await _repo.UpgradeInstanceTemplateAppArtifactAsync(id, artifactId, ct);
+            StatusMessage = string.Format(T("Desired artifact updated to version {0}."), version);
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = T(ex.Message);
+        }
+        catch (SqlException ex)
+        {
+            StatusMessage = string.Format(T("The desired artifact could not be updated: {0}"), ex.Message);
+        }
+
+        return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });
+    }
 }

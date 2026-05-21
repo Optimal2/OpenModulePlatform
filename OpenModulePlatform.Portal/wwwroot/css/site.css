@@ -1911,6 +1911,48 @@ button {
     white-space: nowrap;
 }
 
+.artifact-version-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 150px;
+    flex-wrap: wrap;
+}
+
+.artifact-upgrade-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.artifact-upgrade-button {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border: 1px solid #86efac;
+    border-radius: 999px;
+    background: #ecfdf3;
+    color: #047857;
+    cursor: pointer;
+    font: inherit;
+    font-size: 1.05rem;
+    font-weight: 800;
+    line-height: 1;
+    padding: 0;
+}
+
+.artifact-upgrade-button:hover {
+    border-color: #22c55e;
+    background: #dcfce7;
+    color: #065f46;
+}
+
+.artifact-upgrade-label {
+    color: #047857;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
 .module-definitions-grid,
 .module-integrity-grid {
     table-layout: fixed;

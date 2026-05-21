@@ -176,7 +176,29 @@
                         <td><code>@(row.HostKey ?? L["Any host"].Value)</code></td>
                         <td><code>@row.AppKey</code></td>
                         <td><code>@row.AppInstanceKey</code></td>
-                        <td>@row.ArtifactVersion</td>
+                        <td>
+                            <div class="artifact-version-cell">
+                                <span>@(row.ArtifactVersion ?? L["None"].Value)</span>
+                                @if (row.HasNewerArtifact)
+                                {
+                                    var latestArtifactVersion = row.LatestArtifactVersion ?? string.Empty;
+                                    <form method="post"
+                                          asp-page-handler="UpgradeAppArtifact"
+                                          asp-route-id="@row.InstanceTemplateAppInstanceId"
+                                          asp-route-templateId="@Model.Template.InstanceTemplateId"
+                                          asp-route-artifactId="@row.LatestArtifactId"
+                                          class="artifact-upgrade-form">
+                                        <button type="submit"
+                                                class="artifact-upgrade-button"
+                                                title="@L["Upgrade to latest compatible artifact version {0}", latestArtifactVersion]"
+                                                aria-label="@L["Upgrade to latest compatible artifact version {0}", latestArtifactVersion]">
+                                            <span aria-hidden="true">↑</span>
+                                        </button>
+                                    </form>
+                                    <span class="artifact-upgrade-label">@L["Newer: {0}", latestArtifactVersion]</span>
+                                }
+                            </div>
+                        </td>
                         <td>@row.RoutePath</td>
                         <td>@row.InstallationName</td>
                         <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>

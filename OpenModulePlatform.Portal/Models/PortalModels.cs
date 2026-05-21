@@ -763,7 +763,16 @@ public sealed class InstanceTemplateAppTopologyRow
 
     public string? InstallationName { get; set; }
 
+    public int? ArtifactId { get; set; }
+
     public string? ArtifactVersion { get; set; }
+
+    public int? LatestArtifactId { get; set; }
+
+    public string? LatestArtifactVersion { get; set; }
+
+    public bool HasNewerArtifact => LatestArtifactId.HasValue
+        && !string.IsNullOrWhiteSpace(LatestArtifactVersion);
 
     public bool IsEnabled { get; set; }
 
