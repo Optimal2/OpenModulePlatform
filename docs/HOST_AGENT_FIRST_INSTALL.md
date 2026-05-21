@@ -376,6 +376,10 @@ For example, a protected VGR package can set:
 - `artifactStoreRoot` to the shared ArtifactStore UNC path
 - `hostAgent.ensureIisSite`, `hostAgent.iisBinding*`, and app pool identity
   settings when HostAgent should create or repair the IIS site and app pools
+- `HostAgent.IisAppPoolOverrides` when one web app must run under a dedicated
+  IIS app-pool account. Override keys are matched against app instance key,
+  route path, and final app-pool name; apps without a match
+  keep using the package-level `RunAsUser`/`RunAsPassword` identity.
 - `HostAgent:FileMirrors` in `hostAgent.appSettings` for shared Content files
 - separate SQL/bootstrap JSON files for test and production if paths or host
   keys differ
