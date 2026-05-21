@@ -1163,7 +1163,7 @@ internal static partial class Program
                 }
 
                 var packagePath = FindPackageModuleDefinitionPath(definition);
-                if (CopyFileIfDifferent(sourcePath, packagePath))
+                if (await CopyModuleDefinitionIfDifferentAsync(sourcePath, packagePath))
                 {
                     var location = IsAvailablePackagePath(packagePath) ? "available" : "initial";
                     lines.Add($"  UPDATED {definition.ModuleKey}: copied {definition.DefinitionVersion} to {location} package library.");
@@ -1553,6 +1553,26 @@ internal static partial class Program
             if (File.Exists(targetPath) && FilesHaveSameContent(sourcePath, targetPath))
             {
                 return false;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(targetPath))!);
+            File.Copy(sourcePath, targetPath, overwrite: true);
+            return true;
+        }
+
+        private static async Task<bool> CopyModuleDefinitionIfDifferentAsync(string sourcePath, string targetPath)
+        {
+            if (File.Exists(targetPath))
+            {
+                var sourceDocument = await ReadModuleDefinitionAsync(sourcePath);
+                var targetDocument = await ReadModuleDefinitionAsync(targetPath);
+                if (string.Equals(
+                    sourceDocument.DefinitionSha256,
+                    targetDocument.DefinitionSha256,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(targetPath))!);
