@@ -1,0 +1,148 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.DashboardWidgetsModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["System"]</div>
+        <h2>@L["Dashboard widgets"]</h2>
+        <p class="lede">@L["Import and export portable Portal dashboard widget definitions as JSON files."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<div class="section-grid section-grid--wide top-gap">
+    <section class="card section-card">
+        <h3>@L["Import widgets"]</h3>
+        <p class="muted">@L["Upload one dashboard widget JSON file. Matching widgets are updated by moduleKey and widgetKey; missing widgets are created."]</p>
+
+        <form method="post" asp-page-handler="Import" enctype="multipart/form-data" class="form-grid">
+            <div class="form-field">
+                <label asp-for="UploadInput.JsonFile">@L["Widget JSON"]</label>
+                <input asp-for="UploadInput.JsonFile" type="file" accept=".json,application/json" />
+                <div class="field-help">@L["The import replaces the widget definition and its permission restrictions for matching moduleKey/widgetKey."]</div>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Import widgets"]</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card section-card">
+        <h3>@L["Export widgets"]</h3>
+        <p class="muted">@L["Export all widgets or only the widgets owned by one module key."]</p>
+
+        <form method="get" asp-page-handler="Export" class="form-grid">
+            <div class="form-field">
+                <label for="moduleKey">@L["Module key"]</label>
+                <select id="moduleKey" name="moduleKey">
+                    <option value="">@L["All modules"]</option>
+                    @foreach (var moduleKey in Model.ModuleKeys)
+                    {
+                        <option value="@moduleKey">@moduleKey</option>
+                    }
+                </select>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Export widgets"]</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<section class="card top-gap">
+    <h3>@L["JSON format"]</h3>
+    <p class="muted">@L["Widget JSON uses a stable widgetKey so private module repositories can version widget definitions without depending on database IDs. Use empty permissionNames and roleNames arrays when a widget should be available to every signed-in OMP user."]</p>
+    <pre class="code-sample"><code>{
+  "format": "omp.portal.dashboard.widgets",
+  "formatVersion": 1,
+  "moduleKey": "example_module",
+  "author": "Example module",
+  "widgets": [
+    {
+      "widgetKey": "example:status",
+      "title": "Example status",
+      "widgetType": "portal",
+      "payload": "example-status",
+      "permissionNames": [ "Example.View" ],
+      "roleNames": []
+    }
+  ]
+}</code></pre>
+</section>
+
+<section class="card top-gap">
+    <div class="section-heading-row">
+        <div>
+            <h3>@L["Existing widgets"]</h3>
+            <p class="lede">@L["These widget definitions are currently registered in this OMP installation."]</p>
+        </div>
+    </div>
+
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty-state">@L["No dashboard widgets found."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Module key"]</th>
+                        <th>@L["Widget key"]</th>
+                        <th>@L["Title"]</th>
+                        <th>@L["Widget type"]</th>
+                        <th>@L["Payload"]</th>
+                        <th>@L["Access"]</th>
+                        <th>@L["Modified"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td><code>@row.ModuleKey</code></td>
+                        <td><code>@row.WidgetKey</code></td>
+                        <td>@row.Title</td>
+                        <td>@row.WidgetType</td>
+                        <td><code>@row.Payload</code></td>
+                        <td>
+                            @if (row.PermissionNames.Count == 0 && row.RoleNames.Count == 0)
+                            {
+                                <span class="pill">@L["All signed-in users"]</span>
+                            }
+                            else
+                            {
+                                @if (row.PermissionNames.Count > 0)
+                                {
+                                    <div><strong>@L["Permissions"]:</strong> @string.Join(", ", row.PermissionNames)</div>
+                                }
+                                @if (row.RoleNames.Count > 0)
+                                {
+                                    <div><strong>@L["Roles"]:</strong> @string.Join(", ", row.RoleNames)</div>
+                                }
+                            }
+                        </td>
+                        <td>@row.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/overview">@L["Back to overview"]</a>
+</div>

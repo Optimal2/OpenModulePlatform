@@ -768,6 +768,16 @@ code {
     font-family: ui-monospace, Consolas, monospace;
 }
 
+.code-sample {
+    max-width: 100%;
+    overflow: auto;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-muted);
+    color: var(--text);
+}
+
 .mini-metrics {
     display: grid;
     gap: 10px;

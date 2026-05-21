@@ -19,6 +19,7 @@ BEGIN
     CREATE TABLE omp_portal.widgets
     (
         widget_id int IDENTITY(1,1) NOT NULL,
+        widget_key nvarchar(200) NULL,
         title nvarchar(200) NOT NULL,
         widget_type nvarchar(50) NOT NULL,
         payload nvarchar(max) NULL,
@@ -28,6 +29,61 @@ BEGIN
 
         CONSTRAINT PK_omp_portal_widgets PRIMARY KEY(widget_id)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp_portal.widgets', N'widget_key') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.widgets
+        ADD widget_key nvarchar(200) NULL;
+END
+GO
+
+;WITH legacy_widgets AS
+(
+    SELECT widget_id,
+           ROW_NUMBER() OVER (ORDER BY widget_id) AS rn
+    FROM omp_portal.widgets
+    WHERE widget_key IS NULL
+      AND module_key = N'omp_portal'
+      AND widget_type = N'portal'
+      AND payload = N'blank-rectangle'
+)
+UPDATE w
+SET widget_key = N'blank-rectangle'
+FROM omp_portal.widgets w
+INNER JOIN legacy_widgets legacy ON legacy.widget_id = w.widget_id
+WHERE legacy.rn = 1;
+GO
+
+;WITH legacy_widgets AS
+(
+    SELECT widget_id,
+           ROW_NUMBER() OVER (ORDER BY widget_id) AS rn
+    FROM omp_portal.widgets
+    WHERE widget_key IS NULL
+      AND module_key = N'omp_portal'
+      AND widget_type = N'portal'
+      AND payload = N'admin-overview'
+)
+UPDATE w
+SET widget_key = N'admin-overview'
+FROM omp_portal.widgets w
+INNER JOIN legacy_widgets legacy ON legacy.widget_id = w.widget_id
+WHERE legacy.rn = 1;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'UX_omp_portal_widgets_module_key_widget_key'
+      AND object_id = OBJECT_ID(N'omp_portal.widgets')
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_portal_widgets_module_key_widget_key
+        ON omp_portal.widgets(module_key, widget_key)
+        WHERE widget_key IS NOT NULL;
 END
 GO
 
@@ -129,28 +185,31 @@ GO
 MERGE omp_portal.widgets AS target
 USING
 (
-    SELECT N'Blank widget' AS title,
+    SELECT N'blank-rectangle' AS widget_key,
+           N'Blank widget' AS title,
            N'portal' AS widget_type,
            N'blank-rectangle' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
     UNION ALL
-    SELECT N'Admin overview' AS title,
+    SELECT N'admin-overview' AS widget_key,
+           N'Admin overview' AS title,
            N'portal' AS widget_type,
            N'admin-overview' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
 ) AS source
-ON target.title = source.title
-AND target.widget_type = source.widget_type
+ON target.widget_key = source.widget_key
 AND ISNULL(target.module_key, N'') = source.module_key
 WHEN MATCHED THEN
-    UPDATE SET payload = source.payload,
+    UPDATE SET title = source.title,
+               widget_type = source.widget_type,
+               payload = source.payload,
                author = source.author,
                modified_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(title, widget_type, payload, module_key, author, modified_at)
-    VALUES(source.title, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
+    INSERT(widget_key, title, widget_type, payload, module_key, author, modified_at)
+    VALUES(source.widget_key, source.title, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
 GO
 
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.Admin')
