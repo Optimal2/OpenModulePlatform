@@ -19,22 +19,22 @@ namespace OpenModulePlatform.Portal.Pages;
 public sealed class IndexModel : OmpPageModel<PortalResource>
 {
     private readonly PortalDashboardService _dashboard;
+    private readonly PortalEntryService _portalEntries;
     private readonly SharedRbacService _rbac;
     private readonly OmpAdminRepository _repo;
-    private readonly PortalUserSettingsService _userSettings;
 
     public IndexModel(
         IOptions<WebAppOptions> options,
         PortalDashboardService dashboard,
+        PortalEntryService portalEntries,
         SharedRbacService rbac,
-        OmpAdminRepository repo,
-        PortalUserSettingsService userSettings)
+        OmpAdminRepository repo)
         : base(options)
     {
         _dashboard = dashboard;
+        _portalEntries = portalEntries;
         _rbac = rbac;
         _repo = repo;
-        _userSettings = userSettings;
     }
 
     public IReadOnlyList<DashboardActiveWidget> ActiveWidgets { get; private set; } = [];
@@ -45,9 +45,11 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public bool IsPortalAdmin { get; private set; }
 
-    public bool AdminMetricsCollapsed { get; private set; }
-
     public OverviewMetrics Metrics { get; private set; } = new();
+
+    public IReadOnlyList<PortalEntry> FavoritePortalEntries { get; private set; } = [];
+
+    public IReadOnlyList<PortalEntry> AllPortalEntries { get; private set; } = [];
 
     public async Task OnGet(bool manage = false, bool fullList = false, CancellationToken ct = default)
     {
@@ -132,23 +134,21 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         if (IsPortalAdmin)
         {
             Metrics = await _repo.GetOverviewAsync(ct);
-
-            if (userId.HasValue)
-            {
-                var settings = await _userSettings.GetForUserAsync(userId.Value, ct);
-                AdminMetricsCollapsed = settings.AdminMetricsCollapsed;
-            }
         }
 
         if (userId.HasValue)
         {
             ActiveWidgets = await _dashboard.GetActiveWidgetsAsync(userId.Value, roleIds, permissions, ct);
             AvailableWidgets = await _dashboard.GetAvailableWidgetsAsync(roleIds, permissions, ct);
+            AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId.Value, permissions, includeHidden: false, ct);
+            FavoritePortalEntries = await _portalEntries.GetNavigationFavoriteEntriesAsync(Request, userId.Value, permissions, ct);
         }
         else
         {
             ActiveWidgets = [];
             AvailableWidgets = [];
+            AllPortalEntries = [];
+            FavoritePortalEntries = [];
         }
     }
 

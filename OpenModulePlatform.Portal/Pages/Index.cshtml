@@ -14,27 +14,6 @@
     <div><b>@ompBranding.ApplyTerms(L["Portal admin"].Value)</b>: @(Model.IsPortalAdmin ? L["Yes"] : L["No"])</div>
 </div>
 
-@if (Model.IsPortalAdmin)
-{
-    <section class="card top-gap portal-overview-panel">
-        <details class="portal-overview" open="@(!Model.AdminMetricsCollapsed)">
-            <summary class="portal-overview__summary">
-                <div class="page-header portal-overview__header">
-                    <h3>@L["Overview"]</h3>
-                    <span class="portal-overview__toggle" aria-hidden="true">
-                        <span class="portal-overview__toggle-icon portal-overview__toggle-icon--open">&#9660;</span>
-                        <span class="portal-overview__toggle-icon portal-overview__toggle-icon--closed">&#9664;</span>
-                    </span>
-                </div>
-            </summary>
-
-            <div class="portal-overview__body">
-                <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
-            </div>
-        </details>
-    </section>
-}
-
 <section class="portal-dashboard top-gap"
          data-dashboard-root
          data-can-edit="@Model.CanEditDashboard.ToString().ToLowerInvariant()"
@@ -42,10 +21,13 @@
          data-save-url="@Url.Page("/Index", "SaveDashboard")"
          data-remove-url="@Url.Page("/Index", "RemoveWidget")"
          data-reset-url="@Url.Page("/Index", "ResetDashboard")"
+         data-favorite-toggle-url="@Url.Content("~/navigation/favorites/toggle")"
          data-done-label="@L["Done"]"
          data-edit-label="@L["Edit dashboard"]"
          data-remove-label="@L["Remove widget"]"
-         data-reset-confirm="@L["This clears your current dashboard widgets. Continue?"]">
+         data-reset-confirm="@L["This clears your current dashboard widgets. Continue?"]"
+         data-add-favorite-label="@L["Add favorite"]"
+         data-remove-favorite-label="@L["Remove favorite"]">
     <form class="visually-hidden" method="post" data-dashboard-token-form>
         @Html.AntiForgeryToken()
     </form>
@@ -95,6 +77,14 @@
                             <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
                         </div>
                     }
+                    else if (widget.Payload == "portal-entry-favorites")
+                    {
+                        <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.FavoritePortalEntries, true)" />
+                    }
+                    else if (widget.Payload == "portal-entry-list")
+                    {
+                        <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.AllPortalEntries, false)" />
+                    }
                     else
                     {
                         <div class="dashboard-widget__blank"></div>
@@ -138,6 +128,14 @@
                 </div>
             </template>
         }
+
+        <template data-dashboard-widget-template="portal-entry-favorites">
+            <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.FavoritePortalEntries, true)" />
+        </template>
+
+        <template data-dashboard-widget-template="portal-entry-list">
+            <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.AllPortalEntries, false)" />
+        </template>
 
         <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">
             <div class="dashboard-widget-picker__header">

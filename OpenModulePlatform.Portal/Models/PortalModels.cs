@@ -58,6 +58,8 @@ public sealed class PortalEntry
 
     public bool IsHidden { get; set; }
 
+    public bool IsNavigationFavorite { get; set; }
+
     public int? UserSortOrder { get; set; }
 
     public int DefaultSortOrder { get; set; }
@@ -73,6 +75,13 @@ public sealed class PortalEntry
         }
     }
 }
+
+/// <summary>
+/// Portal Entry list rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardPortalEntryWidgetList(
+    IReadOnlyList<PortalEntry> Entries,
+    bool IsFavoritesList);
 
 /// <summary>
 /// Admin list row for Portal Entries.

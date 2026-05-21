@@ -8,6 +8,7 @@
     var scheduledTopbars = new Set();
     var globalHandlersRegistered = false;
     var rebalanceFrameRequested = false;
+    var FAVORITE_CHANGED_EVENT = 'omp:navigation-favorite-changed';
     var canHoverMedia = typeof window.matchMedia === 'function'
         ? window.matchMedia('(hover: hover) and (pointer: fine)')
         : null;
@@ -336,6 +337,23 @@
         button.setAttribute('aria-label', label);
     }
 
+    function normalizeFavoritePayload(payload) {
+        if (!payload || !payload.entryKey) {
+            return null;
+        }
+
+        return {
+            source: payload.source || '',
+            isFavorite: !!payload.isFavorite,
+            entryKey: payload.entryKey || '',
+            appInstanceId: payload.appInstanceId || '',
+            href: payload.href || '',
+            groupTitle: payload.groupTitle || '',
+            entryTitle: payload.entryTitle || '',
+            label: payload.label || ''
+        };
+    }
+
     function findNavigationRow(root, entryKey, appInstanceId) {
         if (!root) {
             return null;
@@ -410,8 +428,46 @@
         link.appendChild(entry);
     }
 
+    function enrichFavoritePayload(root, payload) {
+        var normalized = normalizeFavoritePayload(payload);
+        if (!normalized || !root) {
+            return normalized;
+        }
+
+        var navigationRow = findNavigationRow(root, normalized.entryKey, normalized.appInstanceId);
+        if (navigationRow) {
+            normalized.href = normalized.href || navigationRow.getAttribute('data-favorite-href') || '';
+            normalized.label = normalized.label || navigationRow.getAttribute('data-favorite-label') || '';
+            normalized.groupTitle = normalized.groupTitle || navigationRow.getAttribute('data-favorite-group-title') || '';
+            normalized.entryTitle = normalized.entryTitle || navigationRow.getAttribute('data-favorite-entry-title') || '';
+        }
+
+        return normalized;
+    }
+
+    function applyFavoritePayloadToTopbar(root, payload) {
+        var normalized = enrichFavoritePayload(root, payload);
+        if (!normalized) {
+            return;
+        }
+
+        updateFavoriteButtons(root, normalized.entryKey, normalized.appInstanceId, normalized.isFavorite);
+        updateFavoritesMenu(root, normalized);
+    }
+
+    function dispatchFavoriteChanged(payload) {
+        var normalized = normalizeFavoritePayload(payload);
+        if (!normalized) {
+            return;
+        }
+
+        normalized.source = 'topbar';
+        window.dispatchEvent(new CustomEvent(FAVORITE_CHANGED_EVENT, { detail: normalized }));
+    }
+
     function updateFavoritesMenu(root, payload) {
-        if (!root || !payload || !payload.entryKey) {
+        payload = enrichFavoritePayload(root, payload);
+        if (!root || !payload) {
             return;
         }
 
@@ -427,13 +483,13 @@
             var navigationRow = findNavigationRow(root, payload.entryKey, appInstanceId);
             var label = navigationRow
                 ? navigationRow.getAttribute('data-favorite-label')
-                : null;
+                : payload.label;
             var groupTitle = navigationRow
                 ? navigationRow.getAttribute('data-favorite-group-title')
-                : null;
+                : payload.groupTitle;
             var entryTitle = navigationRow
                 ? navigationRow.getAttribute('data-favorite-entry-title')
-                : null;
+                : payload.entryTitle;
 
             if (!existing) {
                 existing = document.createElement('div');
@@ -513,8 +569,9 @@
                     return response.json();
                 })
                 .then(function (payload) {
-                    updateFavoriteButtons(root, payload.entryKey, payload.appInstanceId || '', !!payload.isFavorite);
-                    updateFavoritesMenu(root, payload);
+                    var normalized = enrichFavoritePayload(root, payload);
+                    applyFavoritePayloadToTopbar(root, normalized);
+                    dispatchFavoriteChanged(normalized);
                 })
                 .catch(function (error) {
                     if (window.console && typeof window.console.warn === 'function') {
@@ -526,6 +583,17 @@
                         button.disabled = false;
                     }
                 });
+        });
+    }
+
+    function handleExternalFavoriteChanged(event) {
+        var payload = normalizeFavoritePayload(event.detail);
+        if (!payload || payload.source === 'topbar') {
+            return;
+        }
+
+        document.querySelectorAll('[data-portal-topbar-root]').forEach(function (root) {
+            applyFavoritePayloadToTopbar(root, payload);
         });
     }
 
@@ -824,6 +892,7 @@
         });
         window.addEventListener('resize', rebalanceAll);
         window.addEventListener('load', rebalanceAll);
+        window.addEventListener(FAVORITE_CHANGED_EVENT, handleExternalFavoriteChanged);
     }
 
     function initTopbar(topbar) {
