@@ -173,8 +173,10 @@ VALUES
         insertCmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         insertCmd.Parameters.Add("@offset_top", SqlDbType.Int).Value = offset;
         insertCmd.Parameters.Add("@offset_left", SqlDbType.Int).Value = offset;
-        insertCmd.Parameters.Add("@width", SqlDbType.Int).Value = DefaultWidgetWidth;
-        insertCmd.Parameters.Add("@height", SqlDbType.Int).Value = DefaultWidgetHeight;
+        var defaultWidth = GetDefaultWidgetWidth(definition);
+        var defaultHeight = GetDefaultWidgetHeight(definition);
+        insertCmd.Parameters.Add("@width", SqlDbType.Int).Value = defaultWidth;
+        insertCmd.Parameters.Add("@height", SqlDbType.Int).Value = defaultHeight;
         insertCmd.Parameters.Add("@order_priority", SqlDbType.Int).Value = orderPriority;
         var userActiveWidgetId = Convert.ToInt64(await insertCmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
 
@@ -187,8 +189,8 @@ VALUES
             Payload = definition.Payload,
             OffsetTop = offset,
             OffsetLeft = offset,
-            Width = DefaultWidgetWidth,
-            Height = DefaultWidgetHeight,
+            Width = defaultWidth,
+            Height = defaultHeight,
             OrderPriority = orderPriority
         };
     }
@@ -266,6 +268,25 @@ WHERE user_id = @user_id
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = userActiveWidgetId;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task ResetDashboardAsync(int userId, CancellationToken ct)
+    {
+        const string sql = @"
+DELETE awd
+FROM omp_portal.user_active_widget_data awd
+INNER JOIN omp_portal.user_active_widgets aw
+    ON aw.user_active_widget_id = awd.user_active_widget_id
+WHERE aw.user_id = @user_id;
+
+DELETE FROM omp_portal.user_active_widgets
+WHERE user_id = @user_id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -379,6 +400,16 @@ ORDER BY w.title,
 
     private static int Clamp(int value, int min, int max)
         => Math.Min(Math.Max(value, min), max);
+
+    private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)
+        => string.Equals(definition.Payload, "admin-overview", StringComparison.OrdinalIgnoreCase)
+            ? 760
+            : DefaultWidgetWidth;
+
+    private static int GetDefaultWidgetHeight(DashboardWidgetDefinition definition)
+        => string.Equals(definition.Payload, "admin-overview", StringComparison.OrdinalIgnoreCase)
+            ? 360
+            : DefaultWidgetHeight;
 
     private readonly record struct WidgetAccessRule(int? RoleId, string? PermissionName);
 }

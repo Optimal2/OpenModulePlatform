@@ -1196,7 +1196,7 @@ button {
 
 .portal-dashboard__canvas {
     position: relative;
-    min-height: 560px;
+    min-height: 760px;
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -1274,6 +1274,25 @@ button {
     border: 1px dashed var(--border-strong);
     border-radius: 6px;
     background: #ffffff;
+}
+
+.dashboard-widget__admin-overview {
+    height: 100%;
+    overflow: auto;
+}
+
+.dashboard-widget__admin-overview .portal-admin-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 8px;
+}
+
+.dashboard-widget__admin-overview .metric-card {
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.dashboard-widget__admin-overview .metric-card .metric {
+    font-size: 1.35rem;
 }
 
 .dashboard-widget__remove {
@@ -1372,6 +1391,24 @@ button {
 }
 
 .portal-dashboard.is-editing .dashboard-add-button {
+    display: inline-flex;
+}
+
+.dashboard-reset-button {
+    position: fixed;
+    left: 22px;
+    bottom: 122px;
+    z-index: 40;
+    display: none;
+    min-height: 38px;
+    border-color: #d36f6f;
+    border-radius: 999px;
+    background: var(--surface);
+    color: #8a1f1f;
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
+}
+
+.portal-dashboard.is-editing .dashboard-reset-button {
     display: inline-flex;
 }
 

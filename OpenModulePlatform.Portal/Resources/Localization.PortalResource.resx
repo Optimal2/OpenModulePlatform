@@ -1789,5 +1789,7 @@
   <data name="Remove widget" xml:space="preserve"><value>Remove widget</value></data>
   <data name="No widgets are available." xml:space="preserve"><value>No widgets are available.</value></data>
   <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Reset layout" xml:space="preserve"><value>Reset layout</value></data>
+  <data name="This clears your current dashboard widgets. Continue?" xml:space="preserve"><value>This clears your current dashboard widgets. Continue?</value></data>
   <data name="Portal widget" xml:space="preserve"><value>Portal widget</value></data>
 </root>

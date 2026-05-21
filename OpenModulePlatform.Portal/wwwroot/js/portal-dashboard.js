@@ -10,6 +10,7 @@
         const editToggle = root.querySelector('[data-dashboard-edit-toggle]');
         const editLabel = root.querySelector('[data-dashboard-edit-label]');
         const addButton = root.querySelector('[data-dashboard-add-open]');
+        const resetButton = root.querySelector('[data-dashboard-reset]');
         const picker = root.querySelector('[data-widget-picker]');
         const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
 
@@ -40,6 +41,18 @@
             } else {
                 picker.setAttribute('open', '');
             }
+        });
+
+        resetButton?.addEventListener('click', async () => {
+            const message = root.dataset.resetConfirm || 'This clears your current dashboard widgets. Continue?';
+            if (!window.confirm(message)) {
+                return;
+            }
+
+            await postForm(root.dataset.resetUrl, token, {});
+            canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => widget.remove());
+            maxOrder = 0;
+            updateEmptyState(canvas);
         });
 
         picker?.querySelector('[data-widget-picker-close]')?.addEventListener('click', () => {
@@ -266,9 +279,7 @@
 
         const body = document.createElement('div');
         body.className = 'dashboard-widget__body';
-        const blank = document.createElement('div');
-        blank.className = 'dashboard-widget__blank';
-        body.appendChild(blank);
+        body.appendChild(createWidgetBodyContent(root, widget.payload));
         element.appendChild(body);
 
         const remove = document.createElement('button');
@@ -287,6 +298,19 @@
         element.appendChild(resize);
 
         return element;
+    }
+
+    function createWidgetBodyContent(root, payload) {
+        const template = payload
+            ? root.querySelector(`[data-dashboard-widget-template="${cssEscape(payload)}"]`)
+            : null;
+        if (template?.content?.firstElementChild) {
+            return template.content.firstElementChild.cloneNode(true);
+        }
+
+        const blank = document.createElement('div');
+        blank.className = 'dashboard-widget__blank';
+        return blank;
     }
 
     function bringToFront(widget, order) {
@@ -321,6 +345,14 @@
         } else {
             picker.removeAttribute('open');
         }
+    }
+
+    function cssEscape(value) {
+        if (window.CSS?.escape) {
+            return window.CSS.escape(value);
+        }
+
+        return String(value).replace(/["\\]/g, '\\$&');
     }
 
     function initAll() {

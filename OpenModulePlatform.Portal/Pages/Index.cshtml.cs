@@ -103,6 +103,17 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         return new JsonResult(new { ok = true });
     }
 
+    public async Task<IActionResult> OnPostResetDashboard(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        await _dashboard.ResetDashboardAsync(userId, ct);
+        return new JsonResult(new { ok = true });
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         SetTitles();
