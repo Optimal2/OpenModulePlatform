@@ -116,7 +116,10 @@ internal static partial class Program
                 await ImportModuleDefinitionsAsync(config, payloadRoot);
             }
 
-            var preparedArtifactConfigurationFiles = PrepareArtifacts(config, payloadRoot);
+            var preparedArtifactConfigurationFiles = PrepareArtifacts(
+                config,
+                payloadRoot,
+                ArtifactPreparationMode.InstallOrUpdate);
             await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
             PublishAvailableDeploymentObjects(config, payloadRoot);
 
@@ -127,6 +130,76 @@ internal static partial class Program
 
             Console.WriteLine();
             Console.WriteLine("OpenModulePlatform bootstrap completed.");
+            return 0;
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(temporaryPayloadRoot))
+            {
+                TryDeleteDirectory(temporaryPayloadRoot);
+            }
+        }
+    }
+
+    private static async Task<int> RunUpgradeOrCompleteAsync(
+        BootstrapConfig config,
+        string configPath,
+        string payloadRoot,
+        string payloadZipPath)
+    {
+        var temporaryPayloadRoot = string.Empty;
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(payloadZipPath))
+            {
+                temporaryPayloadRoot = Path.Combine(
+                    Path.GetTempPath(),
+                    "OpenModulePlatform.Bootstrapper",
+                    Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(temporaryPayloadRoot);
+                ZipFile.ExtractToDirectory(Path.GetFullPath(payloadZipPath), temporaryPayloadRoot, overwriteFiles: true);
+                payloadRoot = temporaryPayloadRoot;
+            }
+
+            WritePlan(config, configPath, payloadRoot);
+
+            if (config.Sql.Enabled)
+            {
+                await ImportModuleDefinitionsAsync(config, payloadRoot, onlyNewerOrChanged: true);
+            }
+
+            var preparedArtifactConfigurationFiles = PrepareArtifacts(
+                config,
+                payloadRoot,
+                ArtifactPreparationMode.AddMissingOnly);
+            await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
+            PublishAvailableDeploymentObjects(config, payloadRoot, overwrite: false);
+
+            if (!config.HostAgent.Enabled)
+            {
+                Console.WriteLine("> HostAgent installation is disabled in this profile.");
+            }
+            else if (!OperatingSystem.IsWindows())
+            {
+                Console.WriteLine("> HostAgent service check requires Windows; skipping HostAgent installation.");
+            }
+            else if (string.IsNullOrWhiteSpace(config.HostAgent.ServiceName))
+            {
+                Console.WriteLine("> HostAgent service name is not configured; skipping HostAgent installation.");
+            }
+            else if (!ServiceExists(config.HostAgent.ServiceName))
+            {
+                Console.WriteLine($"> HostAgent service '{config.HostAgent.ServiceName}' is missing; installing it.");
+                await InstallHostAgentAsync(config, payloadRoot);
+            }
+            else
+            {
+                Console.WriteLine("> HostAgent service already exists; leaving runtime installation unchanged.");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("OpenModulePlatform upgrade/complete completed.");
             return 0;
         }
         finally
@@ -283,7 +356,10 @@ internal static partial class Program
         }
     }
 
-    private static async Task ImportModuleDefinitionsAsync(BootstrapConfig config, string payloadRoot)
+    private static async Task ImportModuleDefinitionsAsync(
+        BootstrapConfig config,
+        string payloadRoot,
+        bool onlyNewerOrChanged = false)
     {
         var definitionsRoot = Path.Combine(payloadRoot, "module-definitions");
         if (!Directory.Exists(definitionsRoot))
@@ -307,6 +383,30 @@ internal static partial class Program
         foreach (var definitionPath in definitionPaths)
         {
             var definition = await ReadModuleDefinitionAsync(definitionPath);
+            if (onlyNewerOrChanged)
+            {
+                var current = await QueryAppliedModuleDefinitionAsync(
+                    connection,
+                    definition.ModuleKey,
+                    config.Sql.CommandTimeoutSeconds);
+                if (current is not null
+                    && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) < 0)
+                {
+                    Console.WriteLine(
+                        $"  {definition.ModuleKey} {definition.DefinitionVersion} skipped; installed definition {current.DefinitionVersion} is newer.");
+                    continue;
+                }
+
+                if (current is not null
+                    && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) == 0
+                    && string.Equals(definition.DefinitionSha256, current.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine(
+                        $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; skipped.");
+                    continue;
+                }
+            }
+
             using var transaction = connection.BeginTransaction();
 
             try
@@ -342,6 +442,35 @@ internal static partial class Program
 
             Console.WriteLine($"  {definition.ModuleKey} {definition.DefinitionVersion}");
         }
+    }
+
+    private static async Task<AppliedModuleDefinition?> QueryAppliedModuleDefinitionAsync(
+        SqlConnection connection,
+        string moduleKey,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+SELECT TOP (1)
+    DefinitionVersion,
+    DefinitionSha256
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleKey = @moduleKey
+  AND IsApplied = 1
+ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@moduleKey", moduleKey);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+        return new AppliedModuleDefinition(
+            reader.GetString(0),
+            reader.IsDBNull(1) ? string.Empty : reader.GetString(1));
     }
 
     private static async Task<ModuleDefinitionDocument> ReadModuleDefinitionAsync(string path)
@@ -404,6 +533,41 @@ internal static partial class Program
         }
 
         return entries;
+    }
+
+    private static int CompareVersionText(string left, string right)
+    {
+        if (Version.TryParse(left, out var leftVersion) && Version.TryParse(right, out var rightVersion))
+        {
+            return leftVersion.CompareTo(rightVersion);
+        }
+
+        var leftParts = left.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
+        var rightParts = right.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
+        var count = Math.Max(leftParts.Length, rightParts.Length);
+        for (var index = 0; index < count; index++)
+        {
+            var leftPart = index < leftParts.Length ? leftParts[index] : "0";
+            var rightPart = index < rightParts.Length ? rightParts[index] : "0";
+            if (int.TryParse(leftPart, out var leftNumber) && int.TryParse(rightPart, out var rightNumber))
+            {
+                var numberComparison = leftNumber.CompareTo(rightNumber);
+                if (numberComparison != 0)
+                {
+                    return numberComparison;
+                }
+
+                continue;
+            }
+
+            var textComparison = string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
+            if (textComparison != 0)
+            {
+                return textComparison;
+            }
+        }
+
+        return 0;
     }
 
     private static async Task<int> UpsertModuleDefinitionDocumentAsync(
@@ -1093,7 +1257,8 @@ END;
 
     private static IReadOnlyList<PreparedArtifactConfigurationFiles> PrepareArtifacts(
         BootstrapConfig config,
-        string payloadRoot)
+        string payloadRoot,
+        ArtifactPreparationMode mode)
     {
         if (string.IsNullOrWhiteSpace(config.ArtifactStoreRoot))
         {
@@ -1118,6 +1283,13 @@ END;
 
             var source = ResolvePath(payloadRoot, artifact.Source);
             var target = CombineUnderRoot(artifactStoreRoot, artifact.Target);
+            if (mode == ArtifactPreparationMode.AddMissingOnly
+                && (File.Exists(target) || Directory.Exists(target)))
+            {
+                Console.WriteLine($"> Artifact {artifact.Target} already exists; skipped.");
+                continue;
+            }
+
             Console.WriteLine($"> Artifact {artifact.Target}");
 
             if (Directory.Exists(source))
@@ -1187,7 +1359,8 @@ END;
 
     private static void PublishAvailableDeploymentObjects(
         BootstrapConfig config,
-        string payloadRoot)
+        string payloadRoot,
+        bool overwrite = true)
     {
         if (string.IsNullOrWhiteSpace(config.ArtifactStoreRoot))
         {
@@ -1199,11 +1372,13 @@ END;
         var definitionsCopied = CopyAvailableDeploymentObjects(
             Path.Combine(payloadRoot, "available-module-definitions"),
             Path.Combine(availableRoot, "module-definitions"),
-            "*.json");
+            "*.json",
+            overwrite);
         var artifactsCopied = CopyAvailableDeploymentObjects(
             Path.Combine(payloadRoot, "available-artifacts"),
             Path.Combine(availableRoot, "artifacts"),
-            "*.zip");
+            "*.zip",
+            overwrite);
 
         if (definitionsCopied > 0 || artifactsCopied > 0)
         {
@@ -1215,7 +1390,8 @@ END;
     private static int CopyAvailableDeploymentObjects(
         string sourceRoot,
         string targetRoot,
-        string searchPattern)
+        string searchPattern,
+        bool overwrite)
     {
         if (!Directory.Exists(sourceRoot))
         {
@@ -1227,6 +1403,11 @@ END;
         foreach (var sourcePath in Directory.EnumerateFiles(sourceRoot, searchPattern, SearchOption.TopDirectoryOnly))
         {
             var targetPath = Path.Combine(targetRoot, Path.GetFileName(sourcePath));
+            if (!overwrite && File.Exists(targetPath))
+            {
+                continue;
+            }
+
             File.Copy(sourcePath, targetPath, overwrite: true);
             copied++;
         }
@@ -2597,8 +2778,20 @@ internal sealed record ModuleDefinitionCompatibilityEntry(
     string? MinArtifactVersion,
     string? MaxArtifactVersion);
 
+internal sealed record AppliedModuleDefinition(
+    string DefinitionVersion,
+    string DefinitionSha256);
+
+internal enum ArtifactPreparationMode
+{
+    InstallOrUpdate,
+    AddMissingOnly
+}
+
 internal sealed class BootstrapConfig
 {
+    public BootstrapProfileOptions Profile { get; set; } = new();
+
     public SqlBootstrapOptions Sql { get; set; } = new();
 
     public DeveloperSourceOptions DeveloperSource { get; set; } = new();
@@ -2610,6 +2803,13 @@ internal sealed class BootstrapConfig
     public List<ArtifactPayloadOptions> Artifacts { get; set; } = [];
 
     public HostAgentInstallOptions HostAgent { get; set; } = new();
+}
+
+internal sealed class BootstrapProfileOptions
+{
+    public string DisplayName { get; set; } = string.Empty;
+
+    public List<string> MachineNames { get; set; } = [];
 }
 
 internal sealed class DeveloperSourceOptions

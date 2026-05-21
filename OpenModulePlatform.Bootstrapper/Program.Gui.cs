@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Diagnostics;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -55,6 +56,7 @@ internal static partial class Program
                 return;
             }
 
+            var config = ReadJsonAsync<BootstrapConfig>(fullPath).GetAwaiter().GetResult();
             var name = Path.GetFileNameWithoutExtension(fullPath)
                 .Replace("bootstrap.", string.Empty, StringComparison.OrdinalIgnoreCase)
                 .Replace(".sample", string.Empty, StringComparison.OrdinalIgnoreCase)
@@ -62,9 +64,15 @@ internal static partial class Program
                 .Replace('-', ' ')
                 .Replace('_', ' ')
                 .Trim();
+            if (!string.IsNullOrWhiteSpace(config.Profile.DisplayName))
+            {
+                name = config.Profile.DisplayName.Trim();
+            }
+
             profiles[fullPath] = new BootstrapConfigProfile(
                 string.IsNullOrWhiteSpace(name) ? Path.GetFileName(fullPath) : name,
-                fullPath);
+                fullPath,
+                ResolveProfileMachineNames(config));
         }
 
         void AddConfigDirectory(string path)
@@ -125,7 +133,85 @@ internal static partial class Program
             }
         }
 
-        return profiles[0].ConfigPath;
+        var localMachineNames = GetLocalMachineNames();
+        var machineMatch = profiles.FirstOrDefault(profile => ProfileMatchesMachine(profile, localMachineNames));
+        return machineMatch?.ConfigPath ?? profiles[0].ConfigPath;
+    }
+
+    private static IReadOnlyList<string> ResolveProfileMachineNames(BootstrapConfig config)
+    {
+        var names = new List<string>();
+        names.AddRange(config.Profile.MachineNames);
+        if (!string.IsNullOrWhiteSpace(config.HostAgent.HostName))
+        {
+            names.Add(config.HostAgent.HostName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(config.HostAgent.HostKey))
+        {
+            names.Add(config.HostAgent.HostKey);
+        }
+
+        return names
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlySet<string> GetLocalMachineNames()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddMachineName(names, Environment.MachineName);
+        try
+        {
+            AddMachineName(names, Dns.GetHostName());
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            // DNS lookups are not required for profile matching; the local
+            // machine name above is enough for normal Windows installations.
+        }
+
+        return names;
+    }
+
+    private static void AddMachineName(HashSet<string> names, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        var normalized = value.Trim();
+        names.Add(normalized);
+        var dotIndex = normalized.IndexOf('.');
+        if (dotIndex > 0)
+        {
+            names.Add(normalized[..dotIndex]);
+        }
+    }
+
+    private static bool ProfileMatchesMachine(
+        BootstrapConfigProfile profile,
+        IReadOnlySet<string> localMachineNames)
+        => profile.MachineNames.Any(name => MachineNameMatches(name, localMachineNames));
+
+    private static bool MachineNameMatches(string configuredName, IReadOnlySet<string> localMachineNames)
+    {
+        if (string.IsNullOrWhiteSpace(configuredName))
+        {
+            return false;
+        }
+
+        var normalized = configuredName.Trim();
+        if (localMachineNames.Contains(normalized))
+        {
+            return true;
+        }
+
+        var dotIndex = normalized.IndexOf('.');
+        return dotIndex > 0 && localMachineNames.Contains(normalized[..dotIndex]);
     }
 
     private static IEnumerable<string> EnumerateGuiConfigDirectories(CliOptions cli)
@@ -158,11 +244,14 @@ internal static partial class Program
         yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "bootstrap.local.sample.json"));
     }
 
-    private sealed record BootstrapConfigProfile(string DisplayName, string ConfigPath);
+    private sealed record BootstrapConfigProfile(
+        string DisplayName,
+        string ConfigPath,
+        IReadOnlyList<string> MachineNames);
 
     private sealed class InstallerForm : Form
     {
-        private readonly IReadOnlyList<BootstrapConfigProfile> _configProfiles;
+        private IReadOnlyList<BootstrapConfigProfile> _configProfiles;
         private BootstrapConfig _config;
         private string _configPath;
         private string _payloadRoot;
@@ -204,6 +293,7 @@ internal static partial class Program
             Style = ProgressBarStyle.Continuous
         };
         private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
+        private readonly Button _upgradeCompleteButton = new() { Text = "Upgrade / complete", AutoSize = true };
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
         private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
         private readonly Button _createUpdatedInstallerPackageButton = new() { Text = "Create updated installer package", AutoSize = true };
@@ -211,11 +301,12 @@ internal static partial class Program
         private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
         private readonly Button _fullUninstallButton = new() { Text = "Full uninstall", AutoSize = true, ForeColor = Color.DarkRed };
         private readonly Button _exitButton = new() { Text = "Exit", AutoSize = true };
-        private readonly CheckBox _runSql = new() { Text = "Run SQL bootstrap" };
-        private readonly CheckBox _installHostAgent = new() { Text = "Install/update HostAgent" };
-        private readonly CheckBox _deployWebApps = new() { Text = "Let HostAgent deploy web apps" };
-        private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools" };
-        private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data" };
+        private readonly Button _reloadConfigButton = new() { Text = "Reload config", AutoSize = true };
+        private readonly CheckBox _runSql = new() { Text = "Run SQL bootstrap", Enabled = false };
+        private readonly CheckBox _installHostAgent = new() { Text = "Install/update HostAgent", Enabled = false };
+        private readonly CheckBox _deployWebApps = new() { Text = "Let HostAgent deploy web apps", Enabled = false };
+        private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools", Enabled = false };
+        private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data", Enabled = false };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
         private bool _loadingProfile;
 
@@ -286,6 +377,7 @@ internal static partial class Program
             LoadConfigProfiles();
             LoadValues();
             _installButton.Click += async (_, _) => await InstallAsync();
+            _upgradeCompleteButton.Click += async (_, _) => await UpgradeOrCompleteAsync();
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
             _syncPackageObjectsButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
             _createUpdatedInstallerPackageButton.Click += async (_, _) => await CreateUpdatedInstallerPackageAsync();
@@ -294,6 +386,7 @@ internal static partial class Program
             _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
             _exitButton.Click += (_, _) => Close();
             _configSelector.SelectedIndexChanged += async (_, _) => await ChangeSelectedConfigAsync();
+            _reloadConfigButton.Click += async (_, _) => await ReloadSelectedConfigAsync("Reloaded installation profile.");
         }
 
         public int ExitCode { get; private set; }
@@ -323,10 +416,11 @@ internal static partial class Program
             {
                 AutoSize = true,
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
+                ColumnCount = 3,
                 Margin = new Padding(0, 8, 0, 0)
             };
             profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+            profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
             profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             profileRow.Controls.Add(new Label
             {
@@ -335,8 +429,15 @@ internal static partial class Program
                 Text = "Installation profile"
             }, 0, 0);
             profileRow.Controls.Add(_configSelector, 1, 0);
+            profileRow.Controls.Add(_reloadConfigButton, 2, 0);
             panel.Controls.Add(profileRow);
 
+            panel.Controls.Add(new Label
+            {
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
+                Text = $"Local computer: {Environment.MachineName}"
+            });
             panel.Controls.Add(_configPathLabel);
             panel.Controls.Add(_payloadRootLabel);
             return panel;
@@ -379,9 +480,7 @@ internal static partial class Program
                 _loadingProfile = true;
                 _configPath = profile.ConfigPath;
                 _payloadRoot = ResolvePayloadRoot(_cli, _configPath);
-                _config = await ReadJsonAsync<BootstrapConfig>(_configPath);
-                LoadValues();
-                UpdateProfileLabels();
+                await ReloadSelectedConfigCoreAsync();
                 _logBox.Clear();
                 SetReadyStatus($"Loaded installation profile '{profile.DisplayName}'.");
             }
@@ -397,6 +496,37 @@ internal static partial class Program
             {
                 _loadingProfile = false;
             }
+        }
+
+        private async Task ReloadSelectedConfigAsync(string statusText)
+        {
+            try
+            {
+                _loadingProfile = true;
+                await ReloadSelectedConfigCoreAsync();
+                _logBox.Clear();
+                SetReadyStatus(statusText);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                _loadingProfile = false;
+            }
+        }
+
+        private async Task ReloadSelectedConfigCoreAsync()
+        {
+            _config = await ReadJsonAsync<BootstrapConfig>(_configPath);
+            _payloadRoot = ResolvePayloadRoot(_cli, _configPath);
+            LoadValues();
+            UpdateProfileLabels();
         }
 
         private void UpdateProfileLabels()
@@ -415,9 +545,10 @@ internal static partial class Program
 
             tabs.TabPages.Add(CreateActionTab(
                 "Install / update",
-                "Use this when you want this machine to match the selected installation profile.",
+                "Use these actions when you want this machine to match or catch up with the selected installation profile.",
                 [
-                    (_installButton, "Runs enabled SQL bootstrap steps, prepares ArtifactStore and available package objects, and installs or updates HostAgent.")
+                    (_installButton, "Runs enabled SQL bootstrap steps, prepares ArtifactStore and available package objects, and installs or updates HostAgent."),
+                    (_upgradeCompleteButton, "Adds newer or missing module definitions and missing artifacts from this package. Existing artifact folders and an existing HostAgent service are left unchanged.")
                 ]));
 
             tabs.TabPages.Add(CreateActionTab(
@@ -609,6 +740,7 @@ internal static partial class Program
                 {
                     Anchor = AnchorStyles.Left | AnchorStyles.Right,
                     Width = 620,
+                    ReadOnly = true,
                     Margin = new Padding(0, 4, 0, 4)
                 };
                 if (key.Contains("password", StringComparison.OrdinalIgnoreCase))
@@ -710,6 +842,32 @@ internal static partial class Program
                     _payloadRoot,
                     _payloadZipPath,
                     yes: true));
+        }
+
+        private async Task UpgradeOrCompleteAsync()
+        {
+            ApplyValues();
+            var confirmation = MessageBox.Show(
+                "This adds newer or missing module definitions and missing artifact folders from the selected package. It does not run the full SQL bootstrap and it does not reinstall artifact folders or HostAgent when they already exist. Continue?",
+                "Upgrade / complete",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            await RunGuiOperationAsync(
+                "Upgrading or completing OpenModulePlatform package objects...",
+                "Upgrade/complete completed.",
+                "Upgrade/complete did not complete.",
+                "Upgrade/complete failed.",
+                () => RunUpgradeOrCompleteAsync(
+                    _config,
+                    _configPath,
+                    _payloadRoot,
+                    _payloadZipPath));
         }
 
         private async Task CheckDeveloperSourceAsync()
@@ -1996,6 +2154,7 @@ ORDER BY ar.ArtifactId DESC;
         private void SetActionButtonsEnabled(bool enabled)
         {
             _installButton.Enabled = enabled;
+            _upgradeCompleteButton.Enabled = enabled;
             _checkSourceButton.Enabled = enabled;
             _syncPackageObjectsButton.Enabled = enabled;
             _createUpdatedInstallerPackageButton.Enabled = enabled;
@@ -2003,6 +2162,7 @@ ORDER BY ar.ArtifactId DESC;
             _cleanUninstallButton.Enabled = enabled;
             _fullUninstallButton.Enabled = enabled;
             _configSelector.Enabled = enabled;
+            _reloadConfigButton.Enabled = enabled;
         }
 
         private void SetBusyStatus(string text)
