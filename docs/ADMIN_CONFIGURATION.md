@@ -84,6 +84,33 @@ Portal administrators can maintain the concrete values from
 of available category/setting combinations; that list belongs to OMP SQL
 upgrades so the UI only exposes settings that the runtime code understands.
 
+### Portal dashboard
+
+The Portal start page includes a user-customizable dashboard. The dashboard is
+defined in the Portal schema and is intentionally separate from the global
+Portal navigation entries:
+
+- `omp_portal.widgets` stores reusable widget definitions
+- `omp_portal.widget_permissions` optionally limits a widget to a role or
+  permission; widgets without rows in this table are available to every signed-in
+  OMP user
+- `omp_portal.user_active_widgets` stores one user's placed widgets, including
+  position, size, z-order, optional title, and small typed values
+- `omp_portal.user_active_widget_data` is reserved for larger per-widget user
+  data when a future widget needs more than the inline int/string fields
+
+The current dashboard renderer supports Portal-owned widgets. `payload` selects
+which server-rendered widget body is used; for example, `admin-overview` renders
+the Portal administration metric cards and is restricted by
+`OMP.Portal.Admin`. The client script only persists user layout state. Widget
+definitions, permissions, and seeded widgets are owned by Portal SQL/module
+definition upgrades.
+
+Adding or removing a widget is saved immediately. Moving and resizing widgets is
+saved when the user leaves dashboard edit mode with the Done button. Resetting
+the dashboard removes the current user's active widget rows and does not change
+the global widget definitions.
+
 ### 2. Create or adjust the instance
 
 An `Instance` is the highest manual scope in OMP.
