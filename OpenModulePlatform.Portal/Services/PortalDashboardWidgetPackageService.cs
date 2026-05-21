@@ -129,9 +129,7 @@ ORDER BY w.module_key,
                     Title = row.Title,
                     WidgetType = row.WidgetType,
                     Payload = row.Payload,
-                    ModuleKey = string.Equals(row.ModuleKey, trimmedModuleKey, StringComparison.OrdinalIgnoreCase)
-                        ? null
-                        : row.ModuleKey,
+                    ModuleKey = GetExportItemModuleKey(row.ModuleKey, trimmedModuleKey),
                     Author = row.Author,
                     PermissionNames = row.PermissionNames
                         .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
@@ -237,7 +235,7 @@ ORDER BY w.module_key,
         var widgetKey = CleanRequiredKey(item.WidgetKey, "widgetKey", 200);
         var title = CleanRequiredText(item.Title, "title", 200);
         var widgetType = CleanRequiredKey(item.WidgetType, "widgetType", 50);
-        var moduleKey = CleanRequiredKey(item.ModuleKey ?? document.ModuleKey, "moduleKey", 100);
+        var moduleKey = CleanOptionalKey(item.ModuleKey ?? document.ModuleKey, "moduleKey", 100);
         var payload = CleanOptionalText(item.Payload, "payload", MaxPayloadLength);
         var author = CleanOptionalText(item.Author ?? document.Author, "author", 200);
         if (item.PermissionNames is null || item.RoleNames is null)
@@ -273,13 +271,12 @@ FROM
     SELECT widget_id,
            0 AS match_priority
     FROM omp_portal.widgets
-    WHERE module_key = @module_key
-      AND widget_key = @widget_key
+    WHERE widget_key = @widget_key
     UNION ALL
     SELECT widget_id,
            1 AS match_priority
     FROM omp_portal.widgets
-    WHERE module_key = @module_key
+    WHERE ((@module_key IS NULL AND module_key IS NULL) OR module_key = @module_key)
       AND widget_key IS NULL
       AND title = @title
       AND widget_type = @widget_type
@@ -433,7 +430,8 @@ VALUES(@widget_id, @permission_id, @role_id);";
 
     private static void AddIdentityParameters(SqlCommand cmd, NormalizedDashboardWidget widget)
     {
-        cmd.Parameters.Add("@module_key", SqlDbType.NVarChar, 100).Value = widget.ModuleKey;
+        cmd.Parameters.Add("@module_key", SqlDbType.NVarChar, 100).Value =
+            widget.ModuleKey is null ? DBNull.Value : widget.ModuleKey;
         cmd.Parameters.Add("@widget_key", SqlDbType.NVarChar, 200).Value = widget.WidgetKey;
         cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = widget.Title;
         cmd.Parameters.Add("@widget_type", SqlDbType.NVarChar, 50).Value = widget.WidgetType;
@@ -528,6 +526,34 @@ VALUES(@widget_id, @permission_id, @role_id);";
             : key;
     }
 
+    private static string? GetExportItemModuleKey(string? rowModuleKey, string? rootModuleKey)
+    {
+        var normalized = string.IsNullOrWhiteSpace(rowModuleKey) ? null : rowModuleKey.Trim();
+        if (normalized is null || string.Equals(normalized, rootModuleKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return normalized;
+    }
+
+    private static string? CleanOptionalKey(string? value, string propertyName, int maxLength)
+    {
+        var key = CleanOptionalText(value, propertyName, maxLength);
+        if (key is null)
+        {
+            return null;
+        }
+
+        if (!key.All(IsPortableKeyCharacter))
+        {
+            throw new InvalidOperationException(
+                $"Dashboard widget {propertyName} may only contain letters, digits, period, underscore, colon, or hyphen.");
+        }
+
+        return key;
+    }
+
     private static bool IsPortableKeyCharacter(char ch)
         => char.IsLetterOrDigit(ch) || ch is '.' or '_' or ':' or '-';
 
@@ -587,7 +613,7 @@ VALUES(@widget_id, @permission_id, @role_id);";
         string Title,
         string WidgetType,
         string? Payload,
-        string ModuleKey,
+        string? ModuleKey,
         string? Author,
         IReadOnlyList<string> PermissionNames,
         IReadOnlyList<string> RoleNames);
