@@ -19,6 +19,18 @@ function Get-Sha256Hex {
     }
 }
 
+function ConvertTo-PortableModuleDefinitionSql {
+    param([string]$SqlText)
+
+    # Portal executes embedded module-definition SQL on an already-open
+    # connection to the configured OMP database. Strip the historical local
+    # development database switch so the same JSON works in every installation.
+    return [System.Text.RegularExpressions.Regex]::Replace(
+        $SqlText,
+        '(?im)^\s*USE\s+\[OpenModulePlatform\]\s*;\s*\r?\n\s*GO\s*(?:--.*)?\s*(?:\r?\n)?',
+        '')
+}
+
 function ConvertFrom-JsonDocument {
     param(
         [Parameter(Mandatory = $true)][string]$Json,
@@ -109,6 +121,7 @@ foreach ($definitionFile in $definitionFiles) {
         }
 
         $sqlText = Get-Content -LiteralPath $sqlPath -Raw -Encoding UTF8
+        $sqlText = ConvertTo-PortableModuleDefinitionSql -SqlText $sqlText
         $contentEncoding = 'base64-utf8'
         $content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($sqlText))
         $sha256 = Get-Sha256Hex -Text $sqlText

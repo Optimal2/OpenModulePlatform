@@ -1,117 +1,111 @@
 {
-    "formatVersion":  1,
-    "moduleKey":  "omp_auth",
-    "definitionVersion":  "0.3.3",
-    "module":  {
-                   "displayName":  "OMP Auth",
-                   "moduleType":  "WebAppModule",
-                   "schemaName":  "omp",
-                   "description":  "Shared OpenModulePlatform authentication web application.",
-                   "sortOrder":  90,
-                   "isEnabled":  true
-               },
-    "apps":  [
-                 {
-                     "appKey":  "omp_auth",
-                     "displayName":  "OMP Auth",
-                     "appType":  "WebApp",
-                     "description":  "Authentication web application for OMP cookie sign-in.",
-                     "sortOrder":  90,
-                     "isEnabled":  true
-                 }
-             ],
-    "compatibleArtifacts":  [
-                                {
-                                    "appKey":  "omp_auth",
-                                    "packageType":  "web-app",
-                                    "targetName":  "omp-auth",
-                                    "relativePathTemplate":  "omp-auth/web/{version}",
-                                    "minVersion":  "0.3.3",
-                                    "maxVersion":  "0.3.3"
-                                }
-                            ],
-    "artifactConfigurationFiles":  [
-                                       {
-                                           "appKey":  "omp_auth",
-                                           "packageType":  "web-app",
-                                           "targetName":  "omp-auth",
-                                           "relativePath":  "appsettings.json",
-                                           "contentSource":  "host-agent-generated",
-                                           "purpose":  "HostAgent-generated auth appsettings with OMP connection string and shared auth cookie settings."
-                                       }
-                                   ],
-    "sqlScripts":  [
-                       {
-                           "key":  "initialize-auth-metadata",
-                           "phase":  "initialize",
-                           "scope":  "omp",
-                           "order":  20,
-                           "path":  "OpenModulePlatform.Auth/sql/2-initialize-omp-auth.sql",
-                           "execution":  "idempotent",
-                           "inlineSql":  null,
-                           "contentEncoding":  "base64-utf8",
-                           "content":  "LS0gRmlsZTogT3Blbk1vZHVsZVBsYXRmb3JtLkF1dGgvc3FsLzItaW5pdGlhbGl6ZS1vbXAtYXV0aC5zcWwKLyoKU2VlZHMgT01QIHJlZ2lzdHJhdGlvbiByb3dzIGZvciB0aGUgc2hhcmVkIGF1dGhlbnRpY2F0aW9uIHdlYiBhcHBsaWNhdGlvbi4KClRoZSBBdXRoIGFwcCBpcyBwbGF0Zm9ybSBpbmZyYXN0cnVjdHVyZSByYXRoZXIgdGhhbiBhIHVzZXItZmFjaW5nIG1vZHVsZSBtZW51CmVudHJ5LiBIb3N0QWdlbnQgc3RpbGwgbmVlZHMgYSBub3JtYWwgd2ViLWFwcCBhcnRpZmFjdCBhbmQgYXBwIGluc3RhbmNlIHNvIGl0CmNhbiBkZXBsb3kgdGhlIC9hdXRoIElJUyBhcHBsaWNhdGlvbiBpbiBIb3N0QWdlbnQtZmlyc3QgaW5zdGFsbGF0aW9ucy4KClByZXJlcXVpc2l0ZXM6Ci0gUnVuIC4uLy4uL3NxbC8xLXNldHVwLW9wZW5tb2R1bGVwbGF0Zm9ybS5zcWwKLSBSdW4gLi4vLi4vc3FsLzItaW5pdGlhbGl6ZS1vcGVubW9kdWxlcGxhdGZvcm0uc3FsCiovClVTRSBbT3Blbk1vZHVsZVBsYXRmb3JtXTsKR08KClNFVCBBTlNJX05VTExTIE9OOwpTRVQgUVVPVEVEX0lERU5USUZJRVIgT047ClNFVCBBTlNJX1BBRERJTkcgT047ClNFVCBBTlNJX1dBUk5JTkdTIE9OOwpTRVQgQ09OQ0FUX05VTExfWUlFTERTX05VTEwgT047ClNFVCBBUklUSEFCT1JUIE9OOwpTRVQgTlVNRVJJQ19ST1VOREFCT1JUIE9GRjsKCkRFQ0xBUkUgQEluc3RhbmNlSWQgdW5pcXVlaWRlbnRpZmllcjsKREVDTEFSRSBASW5zdGFuY2VUZW1wbGF0ZUlkIGludDsKREVDTEFSRSBAQXV0aE1vZHVsZUlkIGludDsKREVDTEFSRSBAQXV0aE1vZHVsZUluc3RhbmNlSWQgdW5pcXVlaWRlbnRpZmllcjsKREVDTEFSRSBAQXV0aFRlbXBsYXRlTW9kdWxlSW5zdGFuY2VJZCBpbnQ7CkRFQ0xBUkUgQEF1dGhBcHBJZCBpbnQ7CkRFQ0xBUkUgQEF1dGhBcHBJbnN0YW5jZUlkIHVuaXF1ZWlkZW50aWZpZXI7CkRFQ0xBUkUgQEF1dGhBcnRpZmFjdElkIGludDsKREVDTEFSRSBAQXJ0aWZhY3RWZXJzaW9uIG52YXJjaGFyKDUwKSA9IE4nMC4zLjMnOwoKU0VMRUNUIFRPUCAoMSkKICAgICAgIEBJbnN0YW5jZUlkID0gSW5zdGFuY2VJZCwKICAgICAgIEBJbnN0YW5jZVRlbXBsYXRlSWQgPSBJbnN0YW5jZVRlbXBsYXRlSWQKRlJPTSBvbXAuSW5zdGFuY2VzCldIRVJFIEluc3RhbmNlS2V5ID0gTidkZWZhdWx0JwpPUkRFUiBCWSBJbnN0YW5jZUlkOwoKSUYgQEluc3RhbmNlSWQgSVMgTlVMTAogICAgVEhST1cgNTAwMDAsICdEZWZhdWx0IE9NUCBpbnN0YW5jZSBub3QgZm91bmQuIFJ1biB0aGUgY29yZSBTUUwgc2V0dXAvaW5pdCBzY3JpcHRzIGZpcnN0LicsIDE7CgpJRiBFWElTVFMgKFNFTEVDVCAxIEZST00gb21wLk1vZHVsZXMgV0hFUkUgTW9kdWxlS2V5ID0gTidvbXBfYXV0aCcpCkJFR0lOCiAgICBVUERBVEUgb21wLk1vZHVsZXMKICAgIFNFVCBEaXNwbGF5TmFtZSA9IE4nT01QIEF1dGgnLAogICAgICAgIE1vZHVsZVR5cGUgPSBOJ1dlYkFwcE1vZHVsZScsCiAgICAgICAgU2NoZW1hTmFtZSA9IE4nb21wJywKICAgICAgICBEZXNjcmlwdGlvbiA9IE4nU2hhcmVkIE9wZW5Nb2R1bGVQbGF0Zm9ybSBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24nLAogICAgICAgIElzRW5hYmxlZCA9IDEsCiAgICAgICAgU29ydE9yZGVyID0gOTAsCiAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKICAgIFdIRVJFIE1vZHVsZUtleSA9IE4nb21wX2F1dGgnOwpFTkQKRUxTRQpCRUdJTgogICAgSU5TRVJUIElOVE8gb21wLk1vZHVsZXMoTW9kdWxlS2V5LCBEaXNwbGF5TmFtZSwgTW9kdWxlVHlwZSwgU2NoZW1hTmFtZSwgRGVzY3JpcHRpb24sIElzRW5hYmxlZCwgU29ydE9yZGVyKQogICAgVkFMVUVTKE4nb21wX2F1dGgnLCBOJ09NUCBBdXRoJywgTidXZWJBcHBNb2R1bGUnLCBOJ29tcCcsIE4nU2hhcmVkIE9wZW5Nb2R1bGVQbGF0Zm9ybSBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24nLCAxLCA5MCk7CkVORAoKU0VMRUNUIEBBdXRoTW9kdWxlSWQgPSBNb2R1bGVJZCBGUk9NIG9tcC5Nb2R1bGVzIFdIRVJFIE1vZHVsZUtleSA9IE4nb21wX2F1dGgnOwoKSUYgRVhJU1RTIChTRUxFQ1QgMSBGUk9NIG9tcC5BcHBzIFdIRVJFIE1vZHVsZUlkID0gQEF1dGhNb2R1bGVJZCBBTkQgQXBwS2V5ID0gTidvbXBfYXV0aCcpCkJFR0lOCiAgICBVUERBVEUgb21wLkFwcHMKICAgIFNFVCBEaXNwbGF5TmFtZSA9IE4nT01QIEF1dGgnLAogICAgICAgIEFwcFR5cGUgPSBOJ1dlYkFwcCcsCiAgICAgICAgRGVzY3JpcHRpb24gPSBOJ0F1dGhlbnRpY2F0aW9uIHdlYiBhcHBsaWNhdGlvbiBmb3IgT01QIGNvb2tpZSBzaWduLWluJywKICAgICAgICBJc0VuYWJsZWQgPSAxLAogICAgICAgIFNvcnRPcmRlciA9IDkwLAogICAgICAgIFVwZGF0ZWRVdGMgPSBTWVNVVENEQVRFVElNRSgpCiAgICBXSEVSRSBNb2R1bGVJZCA9IEBBdXRoTW9kdWxlSWQgQU5EIEFwcEtleSA9IE4nb21wX2F1dGgnOwpFTkQKRUxTRQpCRUdJTgogICAgSU5TRVJUIElOVE8gb21wLkFwcHMoTW9kdWxlSWQsIEFwcEtleSwgRGlzcGxheU5hbWUsIEFwcFR5cGUsIERlc2NyaXB0aW9uLCBJc0VuYWJsZWQsIFNvcnRPcmRlcikKICAgIFZBTFVFUyhAQXV0aE1vZHVsZUlkLCBOJ29tcF9hdXRoJywgTidPTVAgQXV0aCcsIE4nV2ViQXBwJywgTidBdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24gZm9yIE9NUCBjb29raWUgc2lnbi1pbicsIDEsIDkwKTsKRU5ECgpTRUxFQ1QgQEF1dGhBcHBJZCA9IEFwcElkCkZST00gb21wLkFwcHMKV0hFUkUgTW9kdWxlSWQgPSBAQXV0aE1vZHVsZUlkCiAgQU5EIEFwcEtleSA9IE4nb21wX2F1dGgnOwoKTUVSR0Ugb21wLkFydGlmYWN0cyBBUyB0YXJnZXQKVVNJTkcKKAogICAgU0VMRUNUIEBBdXRoQXBwSWQgQVMgQXBwSWQsCiAgICAgICAgICAgQEFydGlmYWN0VmVyc2lvbiBBUyBWZXJzaW9uLAogICAgICAgICAgIE4nd2ViLWFwcCcgQVMgUGFja2FnZVR5cGUsCiAgICAgICAgICAgTidvbXAtYXV0aCcgQVMgVGFyZ2V0TmFtZSwKICAgICAgICAgICBOJ29tcC1hdXRoL3dlYi8nICsgQEFydGlmYWN0VmVyc2lvbiBBUyBSZWxhdGl2ZVBhdGgsCiAgICAgICAgICAgQ0FTVCgxIEFTIGJpdCkgQVMgSXNFbmFibGVkCikgQVMgc291cmNlCk9OIHRhcmdldC5BcHBJZCA9IHNvdXJjZS5BcHBJZApBTkQgdGFyZ2V0LlZlcnNpb24gPSBzb3VyY2UuVmVyc2lvbgpBTkQgdGFyZ2V0LlBhY2thZ2VUeXBlID0gc291cmNlLlBhY2thZ2VUeXBlCkFORCB0YXJnZXQuVGFyZ2V0TmFtZSA9IHNvdXJjZS5UYXJnZXROYW1lCldIRU4gTUFUQ0hFRCBUSEVOCiAgICBVUERBVEUgU0VUIFJlbGF0aXZlUGF0aCA9IHNvdXJjZS5SZWxhdGl2ZVBhdGgsCiAgICAgICAgICAgICAgIElzRW5hYmxlZCA9IHNvdXJjZS5Jc0VuYWJsZWQsCiAgICAgICAgICAgICAgIFVwZGF0ZWRVdGMgPSBTWVNVVENEQVRFVElNRSgpCldIRU4gTk9UIE1BVENIRUQgVEhFTgogICAgSU5TRVJUIChBcHBJZCwgVmVyc2lvbiwgUGFja2FnZVR5cGUsIFRhcmdldE5hbWUsIFJlbGF0aXZlUGF0aCwgSXNFbmFibGVkKQogICAgVkFMVUVTKHNvdXJjZS5BcHBJZCwgc291cmNlLlZlcnNpb24sIHNvdXJjZS5QYWNrYWdlVHlwZSwgc291cmNlLlRhcmdldE5hbWUsIHNvdXJjZS5SZWxhdGl2ZVBhdGgsIHNvdXJjZS5Jc0VuYWJsZWQpOwoKU0VMRUNUIEBBdXRoQXJ0aWZhY3RJZCA9IEFydGlmYWN0SWQKRlJPTSBvbXAuQXJ0aWZhY3RzCldIRVJFIEFwcElkID0gQEF1dGhBcHBJZAogIEFORCBWZXJzaW9uID0gQEFydGlmYWN0VmVyc2lvbgogIEFORCBQYWNrYWdlVHlwZSA9IE4nd2ViLWFwcCcKICBBTkQgVGFyZ2V0TmFtZSA9IE4nb21wLWF1dGgnOwoKTUVSR0Ugb21wLkFydGlmYWN0Q29uZmlndXJhdGlvbkZpbGVzIEFTIHRhcmdldApVU0lORwooCiAgICBTRUxFQ1QgQEF1dGhBcnRpZmFjdElkIEFTIEFydGlmYWN0SWQsCiAgICAgICAgICAgTidhcHBzZXR0aW5ncy5qc29uJyBBUyBSZWxhdGl2ZVBhdGgsCiAgICAgICAgICAgTid7CiAgIkNvbm5lY3Rpb25TdHJpbmdzIjogewogICAgIk9tcERiIjogInt7T21wLkpzb24uQ29ubmVjdGlvblN0cmluZ3MuT21wRGJ9fSIKICB9LAogICJPbXBBdXRoIjogewogICAgIkNvb2tpZU5hbWUiOiAiLk9wZW5Nb2R1bGVQbGF0Zm9ybS5BdXRoIiwKICAgICJMb2dpblBhdGgiOiAiL2F1dGgvbG9naW4iLAogICAgIkxvZ291dFBhdGgiOiAiL2F1dGgvbG9nb3V0IiwKICAgICJBY2Nlc3NEZW5pZWRQYXRoIjogIi9zdGF0dXMvNDAzIiwKICAgICJBcHBsaWNhdGlvbk5hbWUiOiAiT3Blbk1vZHVsZVBsYXRmb3JtIiwKICAgICJEYXRhUHJvdGVjdGlvbktleVBhdGgiOiAie3tPbXAuSnNvbi5Ib3N0QWdlbnQuV2ViQXBwRGF0YVByb3RlY3Rpb25LZXlQYXRofX0iCiAgfSwKICAiTG9nZ2luZyI6IHsKICAgICJMb2dMZXZlbCI6IHsKICAgICAgIkRlZmF1bHQiOiAiSW5mb3JtYXRpb24iLAogICAgICAiTWljcm9zb2Z0LkFzcE5ldENvcmUiOiAiV2FybmluZyIKICAgIH0KICB9Cn0nIEFTIEZpbGVDb250ZW50LAogICAgICAgICAgIENBU1QoMSBBUyBiaXQpIEFTIElzRW5hYmxlZAopIEFTIHNvdXJjZQpPTiB0YXJnZXQuQXJ0aWZhY3RJZCA9IHNvdXJjZS5BcnRpZmFjdElkCkFORCB0YXJnZXQuUmVsYXRpdmVQYXRoID0gc291cmNlLlJlbGF0aXZlUGF0aApXSEVOIE1BVENIRUQgVEhFTgogICAgVVBEQVRFIFNFVCBGaWxlQ29udGVudCA9IHNvdXJjZS5GaWxlQ29udGVudCwKICAgICAgICAgICAgICAgSXNFbmFibGVkID0gc291cmNlLklzRW5hYmxlZCwKICAgICAgICAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKV0hFTiBOT1QgTUFUQ0hFRCBUSEVOCiAgICBJTlNFUlQgKEFydGlmYWN0SWQsIFJlbGF0aXZlUGF0aCwgRmlsZUNvbnRlbnQsIElzRW5hYmxlZCkKICAgIFZBTFVFUyhzb3VyY2UuQXJ0aWZhY3RJZCwgc291cmNlLlJlbGF0aXZlUGF0aCwgc291cmNlLkZpbGVDb250ZW50LCBzb3VyY2UuSXNFbmFibGVkKTsKClNFTEVDVCBAQXV0aE1vZHVsZUluc3RhbmNlSWQgPSBNb2R1bGVJbnN0YW5jZUlkCkZST00gb21wLk1vZHVsZUluc3RhbmNlcwpXSEVSRSBJbnN0YW5jZUlkID0gQEluc3RhbmNlSWQKICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJzsKCklGIEBBdXRoTW9kdWxlSW5zdGFuY2VJZCBJUyBOVUxMCkJFR0lOCiAgICBTRVQgQEF1dGhNb2R1bGVJbnN0YW5jZUlkID0gTkVXSUQoKTsKCiAgICBJTlNFUlQgSU5UTyBvbXAuTW9kdWxlSW5zdGFuY2VzKAogICAgICAgIE1vZHVsZUluc3RhbmNlSWQsCiAgICAgICAgSW5zdGFuY2VJZCwKICAgICAgICBNb2R1bGVJZCwKICAgICAgICBNb2R1bGVJbnN0YW5jZUtleSwKICAgICAgICBEaXNwbGF5TmFtZSwKICAgICAgICBEZXNjcmlwdGlvbiwKICAgICAgICBJc0VuYWJsZWQsCiAgICAgICAgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBBdXRoTW9kdWxlSW5zdGFuY2VJZCwKICAgICAgICBASW5zdGFuY2VJZCwKICAgICAgICBAQXV0aE1vZHVsZUlkLAogICAgICAgIE4nb21wX2F1dGgnLAogICAgICAgIE4nT01QIEF1dGgnLAogICAgICAgIE4nQXV0aGVudGljYXRpb24gYXBwIGluc3RhbmNlIGZvciB0aGUgZGVmYXVsdCBPTVAgaW5zdGFuY2UnLAogICAgICAgIDEsCiAgICAgICAgOTApOwpFTkQKRUxTRQpCRUdJTgogICAgVVBEQVRFIG9tcC5Nb2R1bGVJbnN0YW5jZXMKICAgIFNFVCBJbnN0YW5jZUlkID0gQEluc3RhbmNlSWQsCiAgICAgICAgTW9kdWxlSWQgPSBAQXV0aE1vZHVsZUlkLAogICAgICAgIE1vZHVsZUluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCcsCiAgICAgICAgRGlzcGxheU5hbWUgPSBOJ09NUCBBdXRoJywKICAgICAgICBEZXNjcmlwdGlvbiA9IE4nQXV0aGVudGljYXRpb24gYXBwIGluc3RhbmNlIGZvciB0aGUgZGVmYXVsdCBPTVAgaW5zdGFuY2UnLAogICAgICAgIElzRW5hYmxlZCA9IDEsCiAgICAgICAgU29ydE9yZGVyID0gOTAsCiAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKICAgIFdIRVJFIE1vZHVsZUluc3RhbmNlSWQgPSBAQXV0aE1vZHVsZUluc3RhbmNlSWQ7CkVORAoKSUYgTk9UIEVYSVNUUwooCiAgICBTRUxFQ1QgMQogICAgRlJPTSBvbXAuSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlcwogICAgV0hFUkUgSW5zdGFuY2VUZW1wbGF0ZUlkID0gQEluc3RhbmNlVGVtcGxhdGVJZAogICAgICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJwopCkJFR0lOCiAgICBJTlNFUlQgSU5UTyBvbXAuSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlcygKICAgICAgICBJbnN0YW5jZVRlbXBsYXRlSWQsCiAgICAgICAgTW9kdWxlSWQsCiAgICAgICAgTW9kdWxlSW5zdGFuY2VLZXksCiAgICAgICAgRGlzcGxheU5hbWUsCiAgICAgICAgRGVzY3JpcHRpb24sCiAgICAgICAgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBJbnN0YW5jZVRlbXBsYXRlSWQsCiAgICAgICAgQEF1dGhNb2R1bGVJZCwKICAgICAgICBOJ29tcF9hdXRoJywKICAgICAgICBOJ09NUCBBdXRoJywKICAgICAgICBOJ0F1dGhlbnRpY2F0aW9uIGFwcCBpbnN0YW5jZSBmb3IgdGhlIGRlZmF1bHQgdGVtcGxhdGUnLAogICAgICAgIDkwKTsKRU5ECkVMU0UKQkVHSU4KICAgIFVQREFURSBvbXAuSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlcwogICAgU0VUIE1vZHVsZUlkID0gQEF1dGhNb2R1bGVJZCwKICAgICAgICBEaXNwbGF5TmFtZSA9IE4nT01QIEF1dGgnLAogICAgICAgIERlc2NyaXB0aW9uID0gTidBdXRoZW50aWNhdGlvbiBhcHAgaW5zdGFuY2UgZm9yIHRoZSBkZWZhdWx0IHRlbXBsYXRlJywKICAgICAgICBTb3J0T3JkZXIgPSA5MCwKICAgICAgICBVcGRhdGVkVXRjID0gU1lTVVRDREFURVRJTUUoKQogICAgV0hFUkUgSW5zdGFuY2VUZW1wbGF0ZUlkID0gQEluc3RhbmNlVGVtcGxhdGVJZAogICAgICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJzsKRU5ECgpTRUxFQ1QgQEF1dGhUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQgPSBJbnN0YW5jZVRlbXBsYXRlTW9kdWxlSW5zdGFuY2VJZApGUk9NIG9tcC5JbnN0YW5jZVRlbXBsYXRlTW9kdWxlSW5zdGFuY2VzCldIRVJFIEluc3RhbmNlVGVtcGxhdGVJZCA9IEBJbnN0YW5jZVRlbXBsYXRlSWQKICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJzsKClNFTEVDVCBAQXV0aEFwcEluc3RhbmNlSWQgPSBBcHBJbnN0YW5jZUlkCkZST00gb21wLkFwcEluc3RhbmNlcwpXSEVSRSBNb2R1bGVJbnN0YW5jZUlkID0gQEF1dGhNb2R1bGVJbnN0YW5jZUlkCiAgQU5EIEFwcEluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCc7CgpJRiBAQXV0aEFwcEluc3RhbmNlSWQgSVMgTlVMTApCRUdJTgogICAgU0VUIEBBdXRoQXBwSW5zdGFuY2VJZCA9IE5FV0lEKCk7CgogICAgSU5TRVJUIElOVE8gb21wLkFwcEluc3RhbmNlcygKICAgICAgICBBcHBJbnN0YW5jZUlkLCBNb2R1bGVJbnN0YW5jZUlkLCBIb3N0SWQsIEFwcElkLCBBcHBJbnN0YW5jZUtleSwgRGlzcGxheU5hbWUsIERlc2NyaXB0aW9uLAogICAgICAgIFJvdXRlUGF0aCwgSW5zdGFsbGF0aW9uTmFtZSwgQXJ0aWZhY3RJZCwgSXNFbmFibGVkLCBJc0FsbG93ZWQsIERlc2lyZWRTdGF0ZSwgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBBdXRoQXBwSW5zdGFuY2VJZCwgQEF1dGhNb2R1bGVJbnN0YW5jZUlkLCBOVUxMLCBAQXV0aEFwcElkLCBOJ29tcF9hdXRoJywgTidPTVAgQXV0aCcsCiAgICAgICAgTidTaGFyZWQgYXV0aGVudGljYXRpb24gd2ViIGFwcGxpY2F0aW9uIGZvciB0aGUgZGVmYXVsdCBPTVAgaW5zdGFuY2UnLCBOJ2F1dGgnLCBOJ2F1dGgnLCBAQXV0aEFydGlmYWN0SWQsIDEsIDEsIDEsIDkwKTsKRU5ECkVMU0UKQkVHSU4KICAgIFVQREFURSBvbXAuQXBwSW5zdGFuY2VzCiAgICBTRVQgTW9kdWxlSW5zdGFuY2VJZCA9IEBBdXRoTW9kdWxlSW5zdGFuY2VJZCwKICAgICAgICBIb3N0SWQgPSBOVUxMLAogICAgICAgIEFwcElkID0gQEF1dGhBcHBJZCwKICAgICAgICBBcHBJbnN0YW5jZUtleSA9IE4nb21wX2F1dGgnLAogICAgICAgIERpc3BsYXlOYW1lID0gTidPTVAgQXV0aCcsCiAgICAgICAgRGVzY3JpcHRpb24gPSBOJ1NoYXJlZCBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24gZm9yIHRoZSBkZWZhdWx0IE9NUCBpbnN0YW5jZScsCiAgICAgICAgUm91dGVQYXRoID0gTidhdXRoJywKICAgICAgICBJbnN0YWxsYXRpb25OYW1lID0gTidhdXRoJywKICAgICAgICBBcnRpZmFjdElkID0gQEF1dGhBcnRpZmFjdElkLAogICAgICAgIElzRW5hYmxlZCA9IDEsCiAgICAgICAgSXNBbGxvd2VkID0gMSwKICAgICAgICBEZXNpcmVkU3RhdGUgPSAxLAogICAgICAgIFNvcnRPcmRlciA9IDkwLAogICAgICAgIFVwZGF0ZWRVdGMgPSBTWVNVVENEQVRFVElNRSgpCiAgICBXSEVSRSBBcHBJbnN0YW5jZUlkID0gQEF1dGhBcHBJbnN0YW5jZUlkOwpFTkQKCklGIE5PVCBFWElTVFMKKAogICAgU0VMRUNUIDEKICAgIEZST00gb21wLkluc3RhbmNlVGVtcGxhdGVBcHBJbnN0YW5jZXMKICAgIFdIRVJFIEluc3RhbmNlVGVtcGxhdGVNb2R1bGVJbnN0YW5jZUlkID0gQEF1dGhUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQKICAgICAgQU5EIEFwcEluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCcKKQpCRUdJTgogICAgSU5TRVJUIElOVE8gb21wLkluc3RhbmNlVGVtcGxhdGVBcHBJbnN0YW5jZXMoCiAgICAgICAgSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQsIEluc3RhbmNlVGVtcGxhdGVIb3N0SWQsIEFwcElkLCBBcHBJbnN0YW5jZUtleSwgRGlzcGxheU5hbWUsIERlc2NyaXB0aW9uLAogICAgICAgIFJvdXRlUGF0aCwgSW5zdGFsbGF0aW9uTmFtZSwgRGVzaXJlZEFydGlmYWN0SWQsIERlc2lyZWRTdGF0ZSwgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBBdXRoVGVtcGxhdGVNb2R1bGVJbnN0YW5jZUlkLCBOVUxMLCBAQXV0aEFwcElkLCBOJ29tcF9hdXRoJywgTidPTVAgQXV0aCcsCiAgICAgICAgTidTaGFyZWQgYXV0aGVudGljYXRpb24gd2ViIGFwcGxpY2F0aW9uIGZvciB0aGUgZGVmYXVsdCB0ZW1wbGF0ZScsIE4nYXV0aCcsIE4nYXV0aCcsIEBBdXRoQXJ0aWZhY3RJZCwgMSwgOTApOwpFTkQKRUxTRQpCRUdJTgogICAgVVBEQVRFIG9tcC5JbnN0YW5jZVRlbXBsYXRlQXBwSW5zdGFuY2VzCiAgICBTRVQgSW5zdGFuY2VUZW1wbGF0ZUhvc3RJZCA9IE5VTEwsCiAgICAgICAgQXBwSWQgPSBAQXV0aEFwcElkLAogICAgICAgIERpc3BsYXlOYW1lID0gTidPTVAgQXV0aCcsCiAgICAgICAgRGVzY3JpcHRpb24gPSBOJ1NoYXJlZCBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24gZm9yIHRoZSBkZWZhdWx0IHRlbXBsYXRlJywKICAgICAgICBSb3V0ZVBhdGggPSBOJ2F1dGgnLAogICAgICAgIEluc3RhbGxhdGlvbk5hbWUgPSBOJ2F1dGgnLAogICAgICAgIERlc2lyZWRBcnRpZmFjdElkID0gQEF1dGhBcnRpZmFjdElkLAogICAgICAgIERlc2lyZWRTdGF0ZSA9IDEsCiAgICAgICAgU29ydE9yZGVyID0gOTAsCiAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKICAgIFdIRVJFIEluc3RhbmNlVGVtcGxhdGVNb2R1bGVJbnN0YW5jZUlkID0gQEF1dGhUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQKICAgICAgQU5EIEFwcEluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCc7CkVORApHTwo=",
-                           "sha256":  "927dc9fcecf672eabca443fe16c81231f7e580493923d008bae831a645287a6c"
-                       }
-                   ],
-    "integrity":  {
-                      "source":  "Derived from OpenModulePlatform.Auth/sql/2-initialize-omp-auth.sql.",
-                      "requiredSchemas":  [
-                                              "omp"
-                                          ],
-                      "requiredTables":  [
-
-                                         ],
-                      "requiredOmpRows":  {
-                                              "modules":  [
-                                                              {
-                                                                  "moduleKey":  "omp_auth",
-                                                                  "schemaName":  "omp"
-                                                              }
-                                                          ],
-                                              "apps":  [
-                                                           {
-                                                               "appKey":  "omp_auth",
-                                                               "moduleKey":  "omp_auth",
-                                                               "appType":  "WebApp"
-                                                           }
-                                                       ],
-                                              "moduleInstances":  [
-                                                                      {
-                                                                          "moduleInstanceKey":  "omp_auth",
-                                                                          "instanceKey":  "default"
-                                                                      }
-                                                                  ],
-                                              "appInstances":  [
-                                                                   {
-                                                                       "appInstanceKey":  "omp_auth",
-                                                                       "moduleInstanceKey":  "omp_auth",
-                                                                       "routePath":  "auth",
-                                                                       "installationName":  "auth",
-                                                                       "hostBinding":  "host-neutral"
-                                                                   }
-                                                               ],
-                                              "instanceTemplateModuleInstances":  [
-                                                                                      {
-                                                                                          "moduleInstanceKey":  "omp_auth",
-                                                                                          "instanceTemplateKey":  "default"
-                                                                                      }
-                                                                                  ],
-                                              "instanceTemplateAppInstances":  [
-                                                                                   {
-                                                                                       "appInstanceKey":  "omp_auth",
-                                                                                       "moduleInstanceKey":  "omp_auth",
-                                                                                       "routePath":  "auth",
-                                                                                       "installationName":  "auth",
-                                                                                       "hostBinding":  "host-neutral"
-                                                                                   }
-                                                                               ]
-                                          },
-                      "requiredModuleRows":  {
-
-                                             },
-                      "excludedSeedData":  [
-
-                                           ]
-                  }
+  "formatVersion": 1,
+  "moduleKey": "omp_auth",
+  "definitionVersion": "0.3.4",
+  "module": {
+    "displayName": "OMP Auth",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp",
+    "description": "Shared OpenModulePlatform authentication web application.",
+    "sortOrder": 90,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "omp_auth",
+      "displayName": "OMP Auth",
+      "appType": "WebApp",
+      "description": "Authentication web application for OMP cookie sign-in.",
+      "sortOrder": 90,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "omp_auth",
+      "packageType": "web-app",
+      "targetName": "omp-auth",
+      "relativePathTemplate": "omp-auth/web/{version}",
+      "minVersion": "0.3.3",
+      "maxVersion": "0.3.3"
+    }
+  ],
+  "artifactConfigurationFiles": [
+    {
+      "appKey": "omp_auth",
+      "packageType": "web-app",
+      "targetName": "omp-auth",
+      "relativePath": "appsettings.json",
+      "contentSource": "host-agent-generated",
+      "purpose": "HostAgent-generated auth appsettings with OMP connection string and shared auth cookie settings."
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "initialize-auth-metadata",
+      "phase": "initialize",
+      "scope": "omp",
+      "order": 20,
+      "path": "OpenModulePlatform.Auth/sql/2-initialize-omp-auth.sql",
+      "execution": "idempotent",
+      "inlineSql": null,
+      "contentEncoding": "base64-utf8",
+      "content": "LS0gRmlsZTogT3Blbk1vZHVsZVBsYXRmb3JtLkF1dGgvc3FsLzItaW5pdGlhbGl6ZS1vbXAtYXV0aC5zcWwKLyoKU2VlZHMgT01QIHJlZ2lzdHJhdGlvbiByb3dzIGZvciB0aGUgc2hhcmVkIGF1dGhlbnRpY2F0aW9uIHdlYiBhcHBsaWNhdGlvbi4KClRoZSBBdXRoIGFwcCBpcyBwbGF0Zm9ybSBpbmZyYXN0cnVjdHVyZSByYXRoZXIgdGhhbiBhIHVzZXItZmFjaW5nIG1vZHVsZSBtZW51CmVudHJ5LiBIb3N0QWdlbnQgc3RpbGwgbmVlZHMgYSBub3JtYWwgd2ViLWFwcCBhcnRpZmFjdCBhbmQgYXBwIGluc3RhbmNlIHNvIGl0CmNhbiBkZXBsb3kgdGhlIC9hdXRoIElJUyBhcHBsaWNhdGlvbiBpbiBIb3N0QWdlbnQtZmlyc3QgaW5zdGFsbGF0aW9ucy4KClByZXJlcXVpc2l0ZXM6Ci0gUnVuIC4uLy4uL3NxbC8xLXNldHVwLW9wZW5tb2R1bGVwbGF0Zm9ybS5zcWwKLSBSdW4gLi4vLi4vc3FsLzItaW5pdGlhbGl6ZS1vcGVubW9kdWxlcGxhdGZvcm0uc3FsCiovClNFVCBBTlNJX05VTExTIE9OOwpTRVQgUVVPVEVEX0lERU5USUZJRVIgT047ClNFVCBBTlNJX1BBRERJTkcgT047ClNFVCBBTlNJX1dBUk5JTkdTIE9OOwpTRVQgQ09OQ0FUX05VTExfWUlFTERTX05VTEwgT047ClNFVCBBUklUSEFCT1JUIE9OOwpTRVQgTlVNRVJJQ19ST1VOREFCT1JUIE9GRjsKCkRFQ0xBUkUgQEluc3RhbmNlSWQgdW5pcXVlaWRlbnRpZmllcjsKREVDTEFSRSBASW5zdGFuY2VUZW1wbGF0ZUlkIGludDsKREVDTEFSRSBAQXV0aE1vZHVsZUlkIGludDsKREVDTEFSRSBAQXV0aE1vZHVsZUluc3RhbmNlSWQgdW5pcXVlaWRlbnRpZmllcjsKREVDTEFSRSBAQXV0aFRlbXBsYXRlTW9kdWxlSW5zdGFuY2VJZCBpbnQ7CkRFQ0xBUkUgQEF1dGhBcHBJZCBpbnQ7CkRFQ0xBUkUgQEF1dGhBcHBJbnN0YW5jZUlkIHVuaXF1ZWlkZW50aWZpZXI7CkRFQ0xBUkUgQEF1dGhBcnRpZmFjdElkIGludDsKREVDTEFSRSBAQXJ0aWZhY3RWZXJzaW9uIG52YXJjaGFyKDUwKSA9IE4nMC4zLjMnOwoKU0VMRUNUIFRPUCAoMSkKICAgICAgIEBJbnN0YW5jZUlkID0gSW5zdGFuY2VJZCwKICAgICAgIEBJbnN0YW5jZVRlbXBsYXRlSWQgPSBJbnN0YW5jZVRlbXBsYXRlSWQKRlJPTSBvbXAuSW5zdGFuY2VzCldIRVJFIEluc3RhbmNlS2V5ID0gTidkZWZhdWx0JwpPUkRFUiBCWSBJbnN0YW5jZUlkOwoKSUYgQEluc3RhbmNlSWQgSVMgTlVMTAogICAgVEhST1cgNTAwMDAsICdEZWZhdWx0IE9NUCBpbnN0YW5jZSBub3QgZm91bmQuIFJ1biB0aGUgY29yZSBTUUwgc2V0dXAvaW5pdCBzY3JpcHRzIGZpcnN0LicsIDE7CgpJRiBFWElTVFMgKFNFTEVDVCAxIEZST00gb21wLk1vZHVsZXMgV0hFUkUgTW9kdWxlS2V5ID0gTidvbXBfYXV0aCcpCkJFR0lOCiAgICBVUERBVEUgb21wLk1vZHVsZXMKICAgIFNFVCBEaXNwbGF5TmFtZSA9IE4nT01QIEF1dGgnLAogICAgICAgIE1vZHVsZVR5cGUgPSBOJ1dlYkFwcE1vZHVsZScsCiAgICAgICAgU2NoZW1hTmFtZSA9IE4nb21wJywKICAgICAgICBEZXNjcmlwdGlvbiA9IE4nU2hhcmVkIE9wZW5Nb2R1bGVQbGF0Zm9ybSBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24nLAogICAgICAgIElzRW5hYmxlZCA9IDEsCiAgICAgICAgU29ydE9yZGVyID0gOTAsCiAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKICAgIFdIRVJFIE1vZHVsZUtleSA9IE4nb21wX2F1dGgnOwpFTkQKRUxTRQpCRUdJTgogICAgSU5TRVJUIElOVE8gb21wLk1vZHVsZXMoTW9kdWxlS2V5LCBEaXNwbGF5TmFtZSwgTW9kdWxlVHlwZSwgU2NoZW1hTmFtZSwgRGVzY3JpcHRpb24sIElzRW5hYmxlZCwgU29ydE9yZGVyKQogICAgVkFMVUVTKE4nb21wX2F1dGgnLCBOJ09NUCBBdXRoJywgTidXZWJBcHBNb2R1bGUnLCBOJ29tcCcsIE4nU2hhcmVkIE9wZW5Nb2R1bGVQbGF0Zm9ybSBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24nLCAxLCA5MCk7CkVORAoKU0VMRUNUIEBBdXRoTW9kdWxlSWQgPSBNb2R1bGVJZCBGUk9NIG9tcC5Nb2R1bGVzIFdIRVJFIE1vZHVsZUtleSA9IE4nb21wX2F1dGgnOwoKSUYgRVhJU1RTIChTRUxFQ1QgMSBGUk9NIG9tcC5BcHBzIFdIRVJFIE1vZHVsZUlkID0gQEF1dGhNb2R1bGVJZCBBTkQgQXBwS2V5ID0gTidvbXBfYXV0aCcpCkJFR0lOCiAgICBVUERBVEUgb21wLkFwcHMKICAgIFNFVCBEaXNwbGF5TmFtZSA9IE4nT01QIEF1dGgnLAogICAgICAgIEFwcFR5cGUgPSBOJ1dlYkFwcCcsCiAgICAgICAgRGVzY3JpcHRpb24gPSBOJ0F1dGhlbnRpY2F0aW9uIHdlYiBhcHBsaWNhdGlvbiBmb3IgT01QIGNvb2tpZSBzaWduLWluJywKICAgICAgICBJc0VuYWJsZWQgPSAxLAogICAgICAgIFNvcnRPcmRlciA9IDkwLAogICAgICAgIFVwZGF0ZWRVdGMgPSBTWVNVVENEQVRFVElNRSgpCiAgICBXSEVSRSBNb2R1bGVJZCA9IEBBdXRoTW9kdWxlSWQgQU5EIEFwcEtleSA9IE4nb21wX2F1dGgnOwpFTkQKRUxTRQpCRUdJTgogICAgSU5TRVJUIElOVE8gb21wLkFwcHMoTW9kdWxlSWQsIEFwcEtleSwgRGlzcGxheU5hbWUsIEFwcFR5cGUsIERlc2NyaXB0aW9uLCBJc0VuYWJsZWQsIFNvcnRPcmRlcikKICAgIFZBTFVFUyhAQXV0aE1vZHVsZUlkLCBOJ29tcF9hdXRoJywgTidPTVAgQXV0aCcsIE4nV2ViQXBwJywgTidBdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24gZm9yIE9NUCBjb29raWUgc2lnbi1pbicsIDEsIDkwKTsKRU5ECgpTRUxFQ1QgQEF1dGhBcHBJZCA9IEFwcElkCkZST00gb21wLkFwcHMKV0hFUkUgTW9kdWxlSWQgPSBAQXV0aE1vZHVsZUlkCiAgQU5EIEFwcEtleSA9IE4nb21wX2F1dGgnOwoKTUVSR0Ugb21wLkFydGlmYWN0cyBBUyB0YXJnZXQKVVNJTkcKKAogICAgU0VMRUNUIEBBdXRoQXBwSWQgQVMgQXBwSWQsCiAgICAgICAgICAgQEFydGlmYWN0VmVyc2lvbiBBUyBWZXJzaW9uLAogICAgICAgICAgIE4nd2ViLWFwcCcgQVMgUGFja2FnZVR5cGUsCiAgICAgICAgICAgTidvbXAtYXV0aCcgQVMgVGFyZ2V0TmFtZSwKICAgICAgICAgICBOJ29tcC1hdXRoL3dlYi8nICsgQEFydGlmYWN0VmVyc2lvbiBBUyBSZWxhdGl2ZVBhdGgsCiAgICAgICAgICAgQ0FTVCgxIEFTIGJpdCkgQVMgSXNFbmFibGVkCikgQVMgc291cmNlCk9OIHRhcmdldC5BcHBJZCA9IHNvdXJjZS5BcHBJZApBTkQgdGFyZ2V0LlZlcnNpb24gPSBzb3VyY2UuVmVyc2lvbgpBTkQgdGFyZ2V0LlBhY2thZ2VUeXBlID0gc291cmNlLlBhY2thZ2VUeXBlCkFORCB0YXJnZXQuVGFyZ2V0TmFtZSA9IHNvdXJjZS5UYXJnZXROYW1lCldIRU4gTUFUQ0hFRCBUSEVOCiAgICBVUERBVEUgU0VUIFJlbGF0aXZlUGF0aCA9IHNvdXJjZS5SZWxhdGl2ZVBhdGgsCiAgICAgICAgICAgICAgIElzRW5hYmxlZCA9IHNvdXJjZS5Jc0VuYWJsZWQsCiAgICAgICAgICAgICAgIFVwZGF0ZWRVdGMgPSBTWVNVVENEQVRFVElNRSgpCldIRU4gTk9UIE1BVENIRUQgVEhFTgogICAgSU5TRVJUIChBcHBJZCwgVmVyc2lvbiwgUGFja2FnZVR5cGUsIFRhcmdldE5hbWUsIFJlbGF0aXZlUGF0aCwgSXNFbmFibGVkKQogICAgVkFMVUVTKHNvdXJjZS5BcHBJZCwgc291cmNlLlZlcnNpb24sIHNvdXJjZS5QYWNrYWdlVHlwZSwgc291cmNlLlRhcmdldE5hbWUsIHNvdXJjZS5SZWxhdGl2ZVBhdGgsIHNvdXJjZS5Jc0VuYWJsZWQpOwoKU0VMRUNUIEBBdXRoQXJ0aWZhY3RJZCA9IEFydGlmYWN0SWQKRlJPTSBvbXAuQXJ0aWZhY3RzCldIRVJFIEFwcElkID0gQEF1dGhBcHBJZAogIEFORCBWZXJzaW9uID0gQEFydGlmYWN0VmVyc2lvbgogIEFORCBQYWNrYWdlVHlwZSA9IE4nd2ViLWFwcCcKICBBTkQgVGFyZ2V0TmFtZSA9IE4nb21wLWF1dGgnOwoKTUVSR0Ugb21wLkFydGlmYWN0Q29uZmlndXJhdGlvbkZpbGVzIEFTIHRhcmdldApVU0lORwooCiAgICBTRUxFQ1QgQEF1dGhBcnRpZmFjdElkIEFTIEFydGlmYWN0SWQsCiAgICAgICAgICAgTidhcHBzZXR0aW5ncy5qc29uJyBBUyBSZWxhdGl2ZVBhdGgsCiAgICAgICAgICAgTid7CiAgIkNvbm5lY3Rpb25TdHJpbmdzIjogewogICAgIk9tcERiIjogInt7T21wLkpzb24uQ29ubmVjdGlvblN0cmluZ3MuT21wRGJ9fSIKICB9LAogICJPbXBBdXRoIjogewogICAgIkNvb2tpZU5hbWUiOiAiLk9wZW5Nb2R1bGVQbGF0Zm9ybS5BdXRoIiwKICAgICJMb2dpblBhdGgiOiAiL2F1dGgvbG9naW4iLAogICAgIkxvZ291dFBhdGgiOiAiL2F1dGgvbG9nb3V0IiwKICAgICJBY2Nlc3NEZW5pZWRQYXRoIjogIi9zdGF0dXMvNDAzIiwKICAgICJBcHBsaWNhdGlvbk5hbWUiOiAiT3Blbk1vZHVsZVBsYXRmb3JtIiwKICAgICJEYXRhUHJvdGVjdGlvbktleVBhdGgiOiAie3tPbXAuSnNvbi5Ib3N0QWdlbnQuV2ViQXBwRGF0YVByb3RlY3Rpb25LZXlQYXRofX0iCiAgfSwKICAiTG9nZ2luZyI6IHsKICAgICJMb2dMZXZlbCI6IHsKICAgICAgIkRlZmF1bHQiOiAiSW5mb3JtYXRpb24iLAogICAgICAiTWljcm9zb2Z0LkFzcE5ldENvcmUiOiAiV2FybmluZyIKICAgIH0KICB9Cn0nIEFTIEZpbGVDb250ZW50LAogICAgICAgICAgIENBU1QoMSBBUyBiaXQpIEFTIElzRW5hYmxlZAopIEFTIHNvdXJjZQpPTiB0YXJnZXQuQXJ0aWZhY3RJZCA9IHNvdXJjZS5BcnRpZmFjdElkCkFORCB0YXJnZXQuUmVsYXRpdmVQYXRoID0gc291cmNlLlJlbGF0aXZlUGF0aApXSEVOIE1BVENIRUQgVEhFTgogICAgVVBEQVRFIFNFVCBGaWxlQ29udGVudCA9IHNvdXJjZS5GaWxlQ29udGVudCwKICAgICAgICAgICAgICAgSXNFbmFibGVkID0gc291cmNlLklzRW5hYmxlZCwKICAgICAgICAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKV0hFTiBOT1QgTUFUQ0hFRCBUSEVOCiAgICBJTlNFUlQgKEFydGlmYWN0SWQsIFJlbGF0aXZlUGF0aCwgRmlsZUNvbnRlbnQsIElzRW5hYmxlZCkKICAgIFZBTFVFUyhzb3VyY2UuQXJ0aWZhY3RJZCwgc291cmNlLlJlbGF0aXZlUGF0aCwgc291cmNlLkZpbGVDb250ZW50LCBzb3VyY2UuSXNFbmFibGVkKTsKClNFTEVDVCBAQXV0aE1vZHVsZUluc3RhbmNlSWQgPSBNb2R1bGVJbnN0YW5jZUlkCkZST00gb21wLk1vZHVsZUluc3RhbmNlcwpXSEVSRSBJbnN0YW5jZUlkID0gQEluc3RhbmNlSWQKICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJzsKCklGIEBBdXRoTW9kdWxlSW5zdGFuY2VJZCBJUyBOVUxMCkJFR0lOCiAgICBTRVQgQEF1dGhNb2R1bGVJbnN0YW5jZUlkID0gTkVXSUQoKTsKCiAgICBJTlNFUlQgSU5UTyBvbXAuTW9kdWxlSW5zdGFuY2VzKAogICAgICAgIE1vZHVsZUluc3RhbmNlSWQsCiAgICAgICAgSW5zdGFuY2VJZCwKICAgICAgICBNb2R1bGVJZCwKICAgICAgICBNb2R1bGVJbnN0YW5jZUtleSwKICAgICAgICBEaXNwbGF5TmFtZSwKICAgICAgICBEZXNjcmlwdGlvbiwKICAgICAgICBJc0VuYWJsZWQsCiAgICAgICAgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBBdXRoTW9kdWxlSW5zdGFuY2VJZCwKICAgICAgICBASW5zdGFuY2VJZCwKICAgICAgICBAQXV0aE1vZHVsZUlkLAogICAgICAgIE4nb21wX2F1dGgnLAogICAgICAgIE4nT01QIEF1dGgnLAogICAgICAgIE4nQXV0aGVudGljYXRpb24gYXBwIGluc3RhbmNlIGZvciB0aGUgZGVmYXVsdCBPTVAgaW5zdGFuY2UnLAogICAgICAgIDEsCiAgICAgICAgOTApOwpFTkQKRUxTRQpCRUdJTgogICAgVVBEQVRFIG9tcC5Nb2R1bGVJbnN0YW5jZXMKICAgIFNFVCBJbnN0YW5jZUlkID0gQEluc3RhbmNlSWQsCiAgICAgICAgTW9kdWxlSWQgPSBAQXV0aE1vZHVsZUlkLAogICAgICAgIE1vZHVsZUluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCcsCiAgICAgICAgRGlzcGxheU5hbWUgPSBOJ09NUCBBdXRoJywKICAgICAgICBEZXNjcmlwdGlvbiA9IE4nQXV0aGVudGljYXRpb24gYXBwIGluc3RhbmNlIGZvciB0aGUgZGVmYXVsdCBPTVAgaW5zdGFuY2UnLAogICAgICAgIElzRW5hYmxlZCA9IDEsCiAgICAgICAgU29ydE9yZGVyID0gOTAsCiAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKICAgIFdIRVJFIE1vZHVsZUluc3RhbmNlSWQgPSBAQXV0aE1vZHVsZUluc3RhbmNlSWQ7CkVORAoKSUYgTk9UIEVYSVNUUwooCiAgICBTRUxFQ1QgMQogICAgRlJPTSBvbXAuSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlcwogICAgV0hFUkUgSW5zdGFuY2VUZW1wbGF0ZUlkID0gQEluc3RhbmNlVGVtcGxhdGVJZAogICAgICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJwopCkJFR0lOCiAgICBJTlNFUlQgSU5UTyBvbXAuSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlcygKICAgICAgICBJbnN0YW5jZVRlbXBsYXRlSWQsCiAgICAgICAgTW9kdWxlSWQsCiAgICAgICAgTW9kdWxlSW5zdGFuY2VLZXksCiAgICAgICAgRGlzcGxheU5hbWUsCiAgICAgICAgRGVzY3JpcHRpb24sCiAgICAgICAgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBJbnN0YW5jZVRlbXBsYXRlSWQsCiAgICAgICAgQEF1dGhNb2R1bGVJZCwKICAgICAgICBOJ29tcF9hdXRoJywKICAgICAgICBOJ09NUCBBdXRoJywKICAgICAgICBOJ0F1dGhlbnRpY2F0aW9uIGFwcCBpbnN0YW5jZSBmb3IgdGhlIGRlZmF1bHQgdGVtcGxhdGUnLAogICAgICAgIDkwKTsKRU5ECkVMU0UKQkVHSU4KICAgIFVQREFURSBvbXAuSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlcwogICAgU0VUIE1vZHVsZUlkID0gQEF1dGhNb2R1bGVJZCwKICAgICAgICBEaXNwbGF5TmFtZSA9IE4nT01QIEF1dGgnLAogICAgICAgIERlc2NyaXB0aW9uID0gTidBdXRoZW50aWNhdGlvbiBhcHAgaW5zdGFuY2UgZm9yIHRoZSBkZWZhdWx0IHRlbXBsYXRlJywKICAgICAgICBTb3J0T3JkZXIgPSA5MCwKICAgICAgICBVcGRhdGVkVXRjID0gU1lTVVRDREFURVRJTUUoKQogICAgV0hFUkUgSW5zdGFuY2VUZW1wbGF0ZUlkID0gQEluc3RhbmNlVGVtcGxhdGVJZAogICAgICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJzsKRU5ECgpTRUxFQ1QgQEF1dGhUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQgPSBJbnN0YW5jZVRlbXBsYXRlTW9kdWxlSW5zdGFuY2VJZApGUk9NIG9tcC5JbnN0YW5jZVRlbXBsYXRlTW9kdWxlSW5zdGFuY2VzCldIRVJFIEluc3RhbmNlVGVtcGxhdGVJZCA9IEBJbnN0YW5jZVRlbXBsYXRlSWQKICBBTkQgTW9kdWxlSW5zdGFuY2VLZXkgPSBOJ29tcF9hdXRoJzsKClNFTEVDVCBAQXV0aEFwcEluc3RhbmNlSWQgPSBBcHBJbnN0YW5jZUlkCkZST00gb21wLkFwcEluc3RhbmNlcwpXSEVSRSBNb2R1bGVJbnN0YW5jZUlkID0gQEF1dGhNb2R1bGVJbnN0YW5jZUlkCiAgQU5EIEFwcEluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCc7CgpJRiBAQXV0aEFwcEluc3RhbmNlSWQgSVMgTlVMTApCRUdJTgogICAgU0VUIEBBdXRoQXBwSW5zdGFuY2VJZCA9IE5FV0lEKCk7CgogICAgSU5TRVJUIElOVE8gb21wLkFwcEluc3RhbmNlcygKICAgICAgICBBcHBJbnN0YW5jZUlkLCBNb2R1bGVJbnN0YW5jZUlkLCBIb3N0SWQsIEFwcElkLCBBcHBJbnN0YW5jZUtleSwgRGlzcGxheU5hbWUsIERlc2NyaXB0aW9uLAogICAgICAgIFJvdXRlUGF0aCwgSW5zdGFsbGF0aW9uTmFtZSwgQXJ0aWZhY3RJZCwgSXNFbmFibGVkLCBJc0FsbG93ZWQsIERlc2lyZWRTdGF0ZSwgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBBdXRoQXBwSW5zdGFuY2VJZCwgQEF1dGhNb2R1bGVJbnN0YW5jZUlkLCBOVUxMLCBAQXV0aEFwcElkLCBOJ29tcF9hdXRoJywgTidPTVAgQXV0aCcsCiAgICAgICAgTidTaGFyZWQgYXV0aGVudGljYXRpb24gd2ViIGFwcGxpY2F0aW9uIGZvciB0aGUgZGVmYXVsdCBPTVAgaW5zdGFuY2UnLCBOJ2F1dGgnLCBOJ2F1dGgnLCBAQXV0aEFydGlmYWN0SWQsIDEsIDEsIDEsIDkwKTsKRU5ECkVMU0UKQkVHSU4KICAgIFVQREFURSBvbXAuQXBwSW5zdGFuY2VzCiAgICBTRVQgTW9kdWxlSW5zdGFuY2VJZCA9IEBBdXRoTW9kdWxlSW5zdGFuY2VJZCwKICAgICAgICBIb3N0SWQgPSBOVUxMLAogICAgICAgIEFwcElkID0gQEF1dGhBcHBJZCwKICAgICAgICBBcHBJbnN0YW5jZUtleSA9IE4nb21wX2F1dGgnLAogICAgICAgIERpc3BsYXlOYW1lID0gTidPTVAgQXV0aCcsCiAgICAgICAgRGVzY3JpcHRpb24gPSBOJ1NoYXJlZCBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24gZm9yIHRoZSBkZWZhdWx0IE9NUCBpbnN0YW5jZScsCiAgICAgICAgUm91dGVQYXRoID0gTidhdXRoJywKICAgICAgICBJbnN0YWxsYXRpb25OYW1lID0gTidhdXRoJywKICAgICAgICBBcnRpZmFjdElkID0gQEF1dGhBcnRpZmFjdElkLAogICAgICAgIElzRW5hYmxlZCA9IDEsCiAgICAgICAgSXNBbGxvd2VkID0gMSwKICAgICAgICBEZXNpcmVkU3RhdGUgPSAxLAogICAgICAgIFNvcnRPcmRlciA9IDkwLAogICAgICAgIFVwZGF0ZWRVdGMgPSBTWVNVVENEQVRFVElNRSgpCiAgICBXSEVSRSBBcHBJbnN0YW5jZUlkID0gQEF1dGhBcHBJbnN0YW5jZUlkOwpFTkQKCklGIE5PVCBFWElTVFMKKAogICAgU0VMRUNUIDEKICAgIEZST00gb21wLkluc3RhbmNlVGVtcGxhdGVBcHBJbnN0YW5jZXMKICAgIFdIRVJFIEluc3RhbmNlVGVtcGxhdGVNb2R1bGVJbnN0YW5jZUlkID0gQEF1dGhUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQKICAgICAgQU5EIEFwcEluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCcKKQpCRUdJTgogICAgSU5TRVJUIElOVE8gb21wLkluc3RhbmNlVGVtcGxhdGVBcHBJbnN0YW5jZXMoCiAgICAgICAgSW5zdGFuY2VUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQsIEluc3RhbmNlVGVtcGxhdGVIb3N0SWQsIEFwcElkLCBBcHBJbnN0YW5jZUtleSwgRGlzcGxheU5hbWUsIERlc2NyaXB0aW9uLAogICAgICAgIFJvdXRlUGF0aCwgSW5zdGFsbGF0aW9uTmFtZSwgRGVzaXJlZEFydGlmYWN0SWQsIERlc2lyZWRTdGF0ZSwgU29ydE9yZGVyKQogICAgVkFMVUVTKAogICAgICAgIEBBdXRoVGVtcGxhdGVNb2R1bGVJbnN0YW5jZUlkLCBOVUxMLCBAQXV0aEFwcElkLCBOJ29tcF9hdXRoJywgTidPTVAgQXV0aCcsCiAgICAgICAgTidTaGFyZWQgYXV0aGVudGljYXRpb24gd2ViIGFwcGxpY2F0aW9uIGZvciB0aGUgZGVmYXVsdCB0ZW1wbGF0ZScsIE4nYXV0aCcsIE4nYXV0aCcsIEBBdXRoQXJ0aWZhY3RJZCwgMSwgOTApOwpFTkQKRUxTRQpCRUdJTgogICAgVVBEQVRFIG9tcC5JbnN0YW5jZVRlbXBsYXRlQXBwSW5zdGFuY2VzCiAgICBTRVQgSW5zdGFuY2VUZW1wbGF0ZUhvc3RJZCA9IE5VTEwsCiAgICAgICAgQXBwSWQgPSBAQXV0aEFwcElkLAogICAgICAgIERpc3BsYXlOYW1lID0gTidPTVAgQXV0aCcsCiAgICAgICAgRGVzY3JpcHRpb24gPSBOJ1NoYXJlZCBhdXRoZW50aWNhdGlvbiB3ZWIgYXBwbGljYXRpb24gZm9yIHRoZSBkZWZhdWx0IHRlbXBsYXRlJywKICAgICAgICBSb3V0ZVBhdGggPSBOJ2F1dGgnLAogICAgICAgIEluc3RhbGxhdGlvbk5hbWUgPSBOJ2F1dGgnLAogICAgICAgIERlc2lyZWRBcnRpZmFjdElkID0gQEF1dGhBcnRpZmFjdElkLAogICAgICAgIERlc2lyZWRTdGF0ZSA9IDEsCiAgICAgICAgU29ydE9yZGVyID0gOTAsCiAgICAgICAgVXBkYXRlZFV0YyA9IFNZU1VUQ0RBVEVUSU1FKCkKICAgIFdIRVJFIEluc3RhbmNlVGVtcGxhdGVNb2R1bGVJbnN0YW5jZUlkID0gQEF1dGhUZW1wbGF0ZU1vZHVsZUluc3RhbmNlSWQKICAgICAgQU5EIEFwcEluc3RhbmNlS2V5ID0gTidvbXBfYXV0aCc7CkVORApHTwo=",
+      "sha256": "352a3d29404775b208f7d3e46f2d7d6bb15203aab1adfb2d65d1c01341525a47"
+    }
+  ],
+  "integrity": {
+    "source": "Derived from OpenModulePlatform.Auth/sql/2-initialize-omp-auth.sql.",
+    "requiredSchemas": [
+      "omp"
+    ],
+    "requiredTables": [],
+    "requiredOmpRows": {
+      "modules": [
+        {
+          "moduleKey": "omp_auth",
+          "schemaName": "omp"
+        }
+      ],
+      "apps": [
+        {
+          "appKey": "omp_auth",
+          "moduleKey": "omp_auth",
+          "appType": "WebApp"
+        }
+      ],
+      "moduleInstances": [
+        {
+          "moduleInstanceKey": "omp_auth",
+          "instanceKey": "default"
+        }
+      ],
+      "appInstances": [
+        {
+          "appInstanceKey": "omp_auth",
+          "moduleInstanceKey": "omp_auth",
+          "routePath": "auth",
+          "installationName": "auth",
+          "hostBinding": "host-neutral"
+        }
+      ],
+      "instanceTemplateModuleInstances": [
+        {
+          "moduleInstanceKey": "omp_auth",
+          "instanceTemplateKey": "default"
+        }
+      ],
+      "instanceTemplateAppInstances": [
+        {
+          "appInstanceKey": "omp_auth",
+          "moduleInstanceKey": "omp_auth",
+          "routePath": "auth",
+          "installationName": "auth",
+          "hostBinding": "host-neutral"
+        }
+      ]
+    },
+    "requiredModuleRows": {},
+    "excludedSeedData": []
+  }
 }
