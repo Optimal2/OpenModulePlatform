@@ -1,0 +1,384 @@
+// File: OpenModulePlatform.Portal/Services/PortalDashboardService.cs
+using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Web.Shared.Services;
+using System.Data;
+using System.Globalization;
+
+namespace OpenModulePlatform.Portal.Services;
+
+/// <summary>
+/// Loads and persists the first user-customizable Portal dashboard.
+/// </summary>
+public sealed class PortalDashboardService
+{
+    private const int DefaultWidgetWidth = 320;
+    private const int DefaultWidgetHeight = 180;
+    private const int MinWidgetWidth = 160;
+    private const int MinWidgetHeight = 96;
+    private const int MaxWidgetWidth = 1800;
+    private const int MaxWidgetHeight = 1400;
+    private const int MaxWidgetOffset = 10000;
+    private const int MaxWidgetOrder = 10000;
+
+    private readonly SqlConnectionFactory _db;
+
+    public PortalDashboardService(SqlConnectionFactory db)
+    {
+        _db = db;
+    }
+
+    public async Task<IReadOnlyList<DashboardActiveWidget>> GetActiveWidgetsAsync(
+        int userId,
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var definitions = await GetAccessibleDefinitionMapAsync(roleIds, permissions, ct);
+        if (definitions.Count == 0)
+        {
+            return [];
+        }
+
+        const string sql = @"
+SELECT uaw.user_active_widget_id,
+       uaw.widget_id,
+       uaw.offset_top,
+       uaw.offset_left,
+       uaw.width,
+       uaw.height,
+       uaw.order_priority,
+       uaw.title,
+       uaw.int_data,
+       uaw.string_data
+FROM omp_portal.user_active_widgets uaw
+WHERE uaw.user_id = @user_id
+ORDER BY uaw.order_priority,
+         uaw.user_active_widget_id;";
+
+        var widgets = new List<DashboardActiveWidget>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var widgetId = rdr.GetInt32(1);
+            if (!definitions.TryGetValue(widgetId, out var definition))
+            {
+                continue;
+            }
+
+            widgets.Add(new DashboardActiveWidget
+            {
+                UserActiveWidgetId = rdr.GetInt64(0),
+                WidgetId = widgetId,
+                WidgetTitle = definition.Title,
+                WidgetType = definition.WidgetType,
+                Payload = definition.Payload,
+                OffsetTop = rdr.GetInt32(2),
+                OffsetLeft = rdr.GetInt32(3),
+                Width = rdr.GetInt32(4),
+                Height = rdr.GetInt32(5),
+                OrderPriority = rdr.GetInt32(6),
+                Title = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                IntData = rdr.IsDBNull(8) ? null : rdr.GetInt32(8),
+                StringData = rdr.IsDBNull(9) ? null : rdr.GetString(9)
+            });
+        }
+
+        return widgets;
+    }
+
+    public async Task<IReadOnlyList<DashboardWidgetDefinition>> GetAvailableWidgetsAsync(
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var definitions = await GetAccessibleDefinitionMapAsync(roleIds, permissions, ct);
+        return definitions.Values
+            .OrderBy(widget => widget.Title, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public async Task<DashboardActiveWidget?> AddWidgetAsync(
+        int userId,
+        int widgetId,
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var definitions = await GetAccessibleDefinitionMapAsync(roleIds, permissions, ct);
+        if (!definitions.TryGetValue(widgetId, out var definition))
+        {
+            return null;
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        const string placementSql = @"
+SELECT COUNT(1),
+       COALESCE(MAX(order_priority), 0) + 10
+FROM omp_portal.user_active_widgets
+WHERE user_id = @user_id;";
+
+        var existingCount = 0;
+        var orderPriority = 10;
+        await using (var placementCmd = new SqlCommand(placementSql, conn))
+        {
+            placementCmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+            await using var rdr = await placementCmd.ExecuteReaderAsync(ct);
+            if (await rdr.ReadAsync(ct))
+            {
+                existingCount = rdr.GetInt32(0);
+                orderPriority = rdr.GetInt32(1);
+            }
+        }
+
+        var offset = Math.Min(24 + (existingCount % 8) * 22, 220);
+        const string insertSql = @"
+INSERT INTO omp_portal.user_active_widgets
+(
+    widget_id,
+    user_id,
+    offset_top,
+    offset_left,
+    width,
+    height,
+    order_priority,
+    title,
+    int_data,
+    string_data
+)
+OUTPUT INSERTED.user_active_widget_id
+VALUES
+(
+    @widget_id,
+    @user_id,
+    @offset_top,
+    @offset_left,
+    @width,
+    @height,
+    @order_priority,
+    NULL,
+    NULL,
+    NULL
+);";
+
+        await using var insertCmd = new SqlCommand(insertSql, conn);
+        insertCmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+        insertCmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        insertCmd.Parameters.Add("@offset_top", SqlDbType.Int).Value = offset;
+        insertCmd.Parameters.Add("@offset_left", SqlDbType.Int).Value = offset;
+        insertCmd.Parameters.Add("@width", SqlDbType.Int).Value = DefaultWidgetWidth;
+        insertCmd.Parameters.Add("@height", SqlDbType.Int).Value = DefaultWidgetHeight;
+        insertCmd.Parameters.Add("@order_priority", SqlDbType.Int).Value = orderPriority;
+        var userActiveWidgetId = Convert.ToInt64(await insertCmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+
+        return new DashboardActiveWidget
+        {
+            UserActiveWidgetId = userActiveWidgetId,
+            WidgetId = widgetId,
+            WidgetTitle = definition.Title,
+            WidgetType = definition.WidgetType,
+            Payload = definition.Payload,
+            OffsetTop = offset,
+            OffsetLeft = offset,
+            Width = DefaultWidgetWidth,
+            Height = DefaultWidgetHeight,
+            OrderPriority = orderPriority
+        };
+    }
+
+    public async Task UpdateLayoutAsync(
+        int userId,
+        IReadOnlyList<DashboardWidgetLayoutUpdate> updates,
+        CancellationToken ct)
+    {
+        if (updates.Count == 0)
+        {
+            return;
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            const string sql = @"
+UPDATE omp_portal.user_active_widgets
+SET offset_top = @offset_top,
+    offset_left = @offset_left,
+    width = @width,
+    height = @height,
+    order_priority = @order_priority,
+    title = @title,
+    int_data = @int_data,
+    string_data = @string_data
+WHERE user_active_widget_id = @user_active_widget_id
+  AND user_id = @user_id;";
+
+            foreach (var update in updates.GroupBy(item => item.UserActiveWidgetId).Select(group => group.Last()))
+            {
+                await using var cmd = new SqlCommand(sql, conn, tx);
+                cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = update.UserActiveWidgetId;
+                cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+                cmd.Parameters.Add("@offset_top", SqlDbType.Int).Value = Clamp(update.OffsetTop, 0, MaxWidgetOffset);
+                cmd.Parameters.Add("@offset_left", SqlDbType.Int).Value = Clamp(update.OffsetLeft, 0, MaxWidgetOffset);
+                cmd.Parameters.Add("@width", SqlDbType.Int).Value = Clamp(update.Width, MinWidgetWidth, MaxWidgetWidth);
+                cmd.Parameters.Add("@height", SqlDbType.Int).Value = Clamp(update.Height, MinWidgetHeight, MaxWidgetHeight);
+                cmd.Parameters.Add("@order_priority", SqlDbType.Int).Value = Clamp(update.OrderPriority, 0, MaxWidgetOrder);
+                cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = CleanTitle(update.Title) ?? (object)DBNull.Value;
+                cmd.Parameters.Add("@int_data", SqlDbType.Int).Value = update.IntData.HasValue ? update.IntData.Value : DBNull.Value;
+                cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(update.StringData) ?? (object)DBNull.Value;
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task RemoveWidgetAsync(int userId, long userActiveWidgetId, CancellationToken ct)
+    {
+        const string sql = @"
+DELETE awd
+FROM omp_portal.user_active_widget_data awd
+INNER JOIN omp_portal.user_active_widgets aw
+    ON aw.user_active_widget_id = awd.user_active_widget_id
+WHERE aw.user_id = @user_id
+  AND aw.user_active_widget_id = @user_active_widget_id;
+
+DELETE FROM omp_portal.user_active_widgets
+WHERE user_id = @user_id
+  AND user_active_widget_id = @user_active_widget_id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = userActiveWidgetId;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private async Task<Dictionary<int, DashboardWidgetDefinition>> GetAccessibleDefinitionMapAsync(
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT w.widget_id,
+       w.title,
+       w.widget_type,
+       w.payload,
+       w.module_key,
+       w.author,
+       w.modified_at,
+       wp.role_id,
+       p.Name AS permission_name
+FROM omp_portal.widgets w
+LEFT JOIN omp_portal.widget_permissions wp ON wp.widget_id = w.widget_id
+LEFT JOIN omp.Permissions p ON p.PermissionId = wp.permission_id
+ORDER BY w.title,
+         w.widget_id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        var definitions = new Dictionary<int, DashboardWidgetDefinition>();
+        var restrictions = new Dictionary<int, List<WidgetAccessRule>>();
+        while (await rdr.ReadAsync(ct))
+        {
+            var widgetId = rdr.GetInt32(0);
+            if (!definitions.ContainsKey(widgetId))
+            {
+                definitions[widgetId] = new DashboardWidgetDefinition
+                {
+                    WidgetId = widgetId,
+                    Title = rdr.GetString(1),
+                    WidgetType = rdr.GetString(2),
+                    Payload = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                    ModuleKey = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                    Author = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                    ModifiedUtc = rdr.GetDateTime(6)
+                };
+            }
+
+            if (!rdr.IsDBNull(7) || !rdr.IsDBNull(8))
+            {
+                if (!restrictions.TryGetValue(widgetId, out var rules))
+                {
+                    rules = [];
+                    restrictions[widgetId] = rules;
+                }
+
+                rules.Add(new WidgetAccessRule(
+                    rdr.IsDBNull(7) ? null : rdr.GetInt32(7),
+                    rdr.IsDBNull(8) ? null : rdr.GetString(8)));
+            }
+        }
+
+        foreach (var definition in definitions.Values.ToArray())
+        {
+            if (!CanAccessWidget(definition.WidgetId, restrictions, roleIds, permissions))
+            {
+                definitions.Remove(definition.WidgetId);
+            }
+        }
+
+        return definitions;
+    }
+
+    private static bool CanAccessWidget(
+        int widgetId,
+        IReadOnlyDictionary<int, List<WidgetAccessRule>> restrictions,
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions)
+    {
+        if (!restrictions.TryGetValue(widgetId, out var rules) || rules.Count == 0)
+        {
+            return true;
+        }
+
+        return rules.Any(rule =>
+            (rule.RoleId.HasValue && roleIds.Contains(rule.RoleId.Value))
+            || (!string.IsNullOrWhiteSpace(rule.PermissionName) && permissions.Contains(rule.PermissionName)));
+    }
+
+    private static string? CleanTitle(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return null;
+        }
+
+        return trimmed.Length > 200 ? trimmed[..200] : trimmed;
+    }
+
+    private static string? CleanStringData(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return null;
+        }
+
+        return trimmed.Length > 20 ? trimmed[..20] : trimmed;
+    }
+
+    private static int Clamp(int value, int min, int max)
+        => Math.Min(Math.Max(value, min), max);
+
+    private readonly record struct WidgetAccessRule(int? RoleId, string? PermissionName);
+}

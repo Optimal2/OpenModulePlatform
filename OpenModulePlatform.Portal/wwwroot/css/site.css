@@ -1172,6 +1172,272 @@ button {
     outline: none;
 }
 
+.portal-dashboard {
+    position: relative;
+    display: grid;
+    gap: 14px;
+}
+
+.portal-dashboard__header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.portal-dashboard__header h3,
+.portal-dashboard__header p {
+    margin: 0;
+}
+
+.portal-dashboard__header p {
+    margin-top: 4px;
+}
+
+.portal-dashboard__canvas {
+    position: relative;
+    min-height: 560px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background:
+        linear-gradient(90deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
+        var(--surface-muted);
+    background-size: 32px 32px;
+    box-shadow: var(--shadow);
+    touch-action: none;
+}
+
+.portal-dashboard__empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    color: var(--text-muted);
+    text-align: center;
+    pointer-events: none;
+}
+
+.portal-dashboard__empty.is-hidden {
+    display: none;
+}
+
+.dashboard-widget {
+    position: absolute;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-width: 160px;
+    min-height: 96px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.1);
+}
+
+.portal-dashboard.is-editing .dashboard-widget {
+    cursor: move;
+    outline: 1px dashed rgba(11, 87, 208, 0.28);
+    outline-offset: -4px;
+}
+
+.dashboard-widget.is-moving,
+.dashboard-widget.is-resizing {
+    opacity: 0.88;
+    user-select: none;
+}
+
+.dashboard-widget__titlebar {
+    min-height: 34px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-muted);
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-widget__body {
+    min-height: 0;
+    padding: 12px;
+}
+
+.dashboard-widget__blank {
+    width: 100%;
+    height: 100%;
+    min-height: 48px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.dashboard-widget__remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.portal-dashboard.is-editing .dashboard-widget__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dashboard-widget__remove:hover,
+.dashboard-widget__remove:focus-visible {
+    border-color: #d36f6f;
+    color: #8a1f1f;
+    outline: none;
+}
+
+.dashboard-widget__resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: none;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+}
+
+.dashboard-widget__resize::before {
+    content: "";
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid var(--border-strong);
+    border-bottom: 2px solid var(--border-strong);
+}
+
+.portal-dashboard.is-editing .dashboard-widget__resize {
+    display: block;
+}
+
+.dashboard-floating-button {
+    position: fixed;
+    left: 22px;
+    bottom: 22px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 16px 36px rgba(17, 24, 39, 0.18);
+}
+
+.dashboard-floating-button__icon {
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/wrench.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/wrench.svg") center / contain no-repeat;
+}
+
+.portal-dashboard.is-editing .dashboard-floating-button {
+    border-color: var(--link);
+    background: var(--link);
+    color: #ffffff;
+}
+
+.dashboard-add-button {
+    position: fixed;
+    left: 22px;
+    bottom: 74px;
+    z-index: 40;
+    display: none;
+    min-height: 38px;
+    border-radius: 999px;
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
+}
+
+.portal-dashboard.is-editing .dashboard-add-button {
+    display: inline-flex;
+}
+
+.dashboard-widget-picker {
+    width: min(520px, calc(100vw - 32px));
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 24px 64px rgba(17, 24, 39, 0.22);
+}
+
+.dashboard-widget-picker::backdrop {
+    background: rgba(23, 32, 51, 0.38);
+}
+
+.dashboard-widget-picker__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.dashboard-widget-picker__header h3 {
+    margin: 0;
+}
+
+.dashboard-widget-picker__list {
+    display: grid;
+    gap: 8px;
+    max-height: min(58vh, 460px);
+    padding: 12px;
+    overflow-y: auto;
+}
+
+.dashboard-widget-option {
+    display: grid;
+    justify-items: start;
+    gap: 3px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    text-align: left;
+}
+
+.dashboard-widget-option:hover,
+.dashboard-widget-option:focus-visible {
+    border-color: var(--link);
+    background: var(--surface-muted);
+    outline: none;
+}
+
+.dashboard-widget-option__title {
+    font-weight: 700;
+}
+
+.dashboard-widget-option__meta {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
 @media (hover: none), (max-width: 760px) {
     .portal-entry-card__actions {
         opacity: 1;
