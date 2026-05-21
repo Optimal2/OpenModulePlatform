@@ -258,6 +258,7 @@
             card.querySelector(".app-type").value = app.appType || "";
             card.querySelector(".app-sort-order").value = Number.isFinite(Number(app.sortOrder)) ? String(app.sortOrder) : "";
             card.querySelector(".app-is-enabled").checked = app.isEnabled !== false;
+            card.querySelector(".app-allow-multiple-active-instances").checked = app.allowMultipleActiveInstances === true;
             card.querySelector(".app-description").value = app.description || "";
             card.querySelector(".remove-app").addEventListener("click", () => {
                 const index = Array.from(elements.apps.children).indexOf(card);
@@ -310,7 +311,8 @@
             appType: card.querySelector(".app-type").value.trim(),
             description: card.querySelector(".app-description").value.trim(),
             sortOrder: Number.parseInt(card.querySelector(".app-sort-order").value || "0", 10),
-            isEnabled: card.querySelector(".app-is-enabled").checked
+            isEnabled: card.querySelector(".app-is-enabled").checked,
+            allowMultipleActiveInstances: card.querySelector(".app-allow-multiple-active-instances").checked
         }));
 
         documentModel.sqlScripts = Array.from(elements.scripts.children).map(card => ({
@@ -443,7 +445,8 @@
             appType: "WebApp",
             description: "",
             sortOrder: (documentModel.apps.length + 1) * 10,
-            isEnabled: true
+            isEnabled: true,
+            allowMultipleActiveInstances: false
         });
         renderApps();
         void refreshPreview();

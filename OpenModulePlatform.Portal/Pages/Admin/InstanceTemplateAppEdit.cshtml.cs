@@ -349,7 +349,8 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool AllowsHostNeutralPlacement(AppDefinitionContext app)
-        => string.Equals(app.AppType, "WebApp", StringComparison.OrdinalIgnoreCase)
+        => app.AllowMultipleActiveInstances
+           || string.Equals(app.AppType, "WebApp", StringComparison.OrdinalIgnoreCase)
            || string.Equals(app.AppType, "Portal", StringComparison.OrdinalIgnoreCase);
 
     private static string ToFriendlySqlMessage(SqlException ex)

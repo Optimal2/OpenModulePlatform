@@ -372,7 +372,8 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
     }
 
     private static bool AllowsHostNeutralPlacement(AppDefinitionContext app)
-        => string.Equals(app.AppType, "WebApp", StringComparison.OrdinalIgnoreCase)
+        => app.AllowMultipleActiveInstances
+           || string.Equals(app.AppType, "WebApp", StringComparison.OrdinalIgnoreCase)
            || string.Equals(app.AppType, "Portal", StringComparison.OrdinalIgnoreCase);
 
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)

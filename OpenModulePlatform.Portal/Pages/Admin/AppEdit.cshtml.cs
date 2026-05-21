@@ -43,6 +43,7 @@ public sealed class AppEditModel : OmpPortalPageModel
         Opt("WebApp", T("Web app")),
         Opt("ServiceApp", T("Service app")),
         Opt("HostAgent", T("HostAgent")),
+        Opt("Worker", T("Worker")),
         Opt("WorkerHost", T("Worker host"))
     ];
 
@@ -82,6 +83,7 @@ public sealed class AppEditModel : OmpPortalPageModel
             AppKey = row.AppKey,
             DisplayName = row.DisplayName,
             AppType = row.AppType,
+            AllowMultipleActiveInstances = row.AllowMultipleActiveInstances,
             Description = row.Description,
             IsEnabled = row.IsEnabled,
             SortOrder = row.SortOrder
@@ -117,6 +119,7 @@ public sealed class AppEditModel : OmpPortalPageModel
                     AppKey = Input.AppKey.Trim(),
                     DisplayName = Input.DisplayName.Trim(),
                     AppType = Input.AppType,
+                    AllowMultipleActiveInstances = Input.AllowMultipleActiveInstances,
                     Description = Clean(Input.Description),
                     IsEnabled = Input.IsEnabled,
                     SortOrder = Input.SortOrder
@@ -222,6 +225,9 @@ public sealed class AppEditModel : OmpPortalPageModel
         [StringLength(50)]
         [Display(Name = "App type")]
         public string AppType { get; set; } = string.Empty;
+
+        [Display(Name = "Allow multiple active instances")]
+        public bool AllowMultipleActiveInstances { get; set; }
 
         [StringLength(500)]
         [Display(Name = "Description")]

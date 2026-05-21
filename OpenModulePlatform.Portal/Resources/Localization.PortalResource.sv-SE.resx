@@ -1873,4 +1873,6 @@
   <data name="Importing will apply this module definition version and can move matching app instances to the package artifact versions." xml:space="preserve"><value>Import applicerar denna moduldefinitionsversion och kan flytta matchande appinstanser till paketets artefaktversioner.</value></data>
   <data name="Importing will fill in missing pieces and may update desired artifact versions for matching app instances." xml:space="preserve"><value>Import kompletterar saknade delar och kan uppdatera önskade artefaktversioner för matchande appinstanser.</value></data>
   <data name="Importing will add this module definition and register the package artifacts so HostAgent can deploy them." xml:space="preserve"><value>Import lägger till moduldefinitionen och registrerar paketets artefakter så att HostAgent kan deploya dem.</value></data>
+  <data name="Allow multiple active instances" xml:space="preserve"><value>Tillåt flera aktiva instanser</value></data>
+  <data name="Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel." xml:space="preserve"><value>Använd bara för appdefinitioner som avsiktligt skapar flera runtime-rader, till exempel en worker-rad per kanal.</value></data>
 </root>

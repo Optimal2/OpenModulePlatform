@@ -293,4 +293,6 @@
   <data name="Artifact relative path is invalid." xml:space="preserve"><value>Artifact relative path is invalid.</value></data>
   <data name="Artifact payload folder was not found in the artifact store." xml:space="preserve"><value>Artifact payload folder was not found in the artifact store.</value></data>
   <data name="Download module definition" xml:space="preserve"><value>Download module definition</value></data>
+  <data name="Allow multiple active instances" xml:space="preserve"><value>Allow multiple active instances</value></data>
+  <data name="Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel." xml:space="preserve"><value>Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel.</value></data>
 </root>

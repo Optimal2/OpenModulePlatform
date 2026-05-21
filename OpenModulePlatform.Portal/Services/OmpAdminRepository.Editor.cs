@@ -1343,6 +1343,7 @@ SELECT AppId,
        AppKey,
        DisplayName,
        AppType,
+       AllowMultipleActiveInstances,
        Description,
        IsEnabled,
        SortOrder
@@ -1367,9 +1368,10 @@ WHERE AppId = @AppId;";
             AppKey = rdr.GetString(2),
             DisplayName = rdr.GetString(3),
             AppType = rdr.GetString(4),
-            Description = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-            IsEnabled = rdr.GetBoolean(6),
-            SortOrder = rdr.GetInt32(7)
+            AllowMultipleActiveInstances = rdr.GetBoolean(5),
+            Description = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            IsEnabled = rdr.GetBoolean(7),
+            SortOrder = rdr.GetInt32(8)
         };
     }
 
@@ -1387,6 +1389,7 @@ INSERT INTO omp.Apps
     AppKey,
     DisplayName,
     AppType,
+    AllowMultipleActiveInstances,
     Description,
     IsEnabled,
     SortOrder
@@ -1397,6 +1400,7 @@ VALUES
     @AppKey,
     @DisplayName,
     @AppType,
+    @AllowMultipleActiveInstances,
     @Description,
     @IsEnabled,
     @SortOrder
@@ -1415,6 +1419,7 @@ SET ModuleId = @ModuleId,
     AppKey = @AppKey,
     DisplayName = @DisplayName,
     AppType = @AppType,
+    AllowMultipleActiveInstances = @AllowMultipleActiveInstances,
     Description = @Description,
     IsEnabled = @IsEnabled,
     SortOrder = @SortOrder,
@@ -1688,6 +1693,7 @@ BEGIN
         SELECT AppKey,
                COALESCE(NULLIF(DisplayName, N''), AppKey) AS DisplayName,
                COALESCE(NULLIF(AppType, N''), N'WebApp') AS AppType,
+               COALESCE(AllowMultipleActiveInstances, CONVERT(bit, 0)) AS AllowMultipleActiveInstances,
                NULLIF(Description, N'') AS Description,
                COALESCE(SortOrder, 0) AS SortOrder,
                COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled
@@ -1697,6 +1703,7 @@ BEGIN
             AppKey nvarchar(100) N'$.appKey',
             DisplayName nvarchar(200) N'$.displayName',
             AppType nvarchar(50) N'$.appType',
+            AllowMultipleActiveInstances bit N'$.allowMultipleActiveInstances',
             Description nvarchar(500) N'$.description',
             SortOrder int N'$.sortOrder',
             IsEnabled bit N'$.isEnabled'
@@ -1710,13 +1717,14 @@ BEGIN
     WHEN MATCHED THEN
         UPDATE SET DisplayName = source.DisplayName,
                    AppType = source.AppType,
+                   AllowMultipleActiveInstances = source.AllowMultipleActiveInstances,
                    Description = source.Description,
                    SortOrder = source.SortOrder,
                    IsEnabled = source.IsEnabled,
                    UpdatedUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
-        INSERT(ModuleId, AppKey, DisplayName, AppType, Description, SortOrder, IsEnabled)
-        VALUES(@ModuleId, source.AppKey, source.DisplayName, source.AppType, source.Description, source.SortOrder, source.IsEnabled);
+        INSERT(ModuleId, AppKey, DisplayName, AppType, AllowMultipleActiveInstances, Description, SortOrder, IsEnabled)
+        VALUES(@ModuleId, source.AppKey, source.DisplayName, source.AppType, source.AllowMultipleActiveInstances, source.Description, source.SortOrder, source.IsEnabled);
 END;
 
 UPDATE omp.ModuleDefinitionDocuments
@@ -2782,7 +2790,8 @@ WHERE HostId = @HostId;";
 SELECT AppId,
        ModuleId,
        AppKey,
-       AppType
+       AppType,
+       AllowMultipleActiveInstances
 FROM omp.Apps
 WHERE AppId = @AppId;";
 
@@ -2802,7 +2811,8 @@ WHERE AppId = @AppId;";
             AppId = rdr.GetInt32(0),
             ModuleId = rdr.GetInt32(1),
             AppKey = rdr.GetString(2),
-            AppType = rdr.GetString(3)
+            AppType = rdr.GetString(3),
+            AllowMultipleActiveInstances = rdr.GetBoolean(4)
         };
     }
 
@@ -2890,18 +2900,22 @@ WHERE ArtifactId = @ArtifactId
     {
         const string sql = @"
 SELECT COUNT(1)
-FROM omp.AppInstances
-WHERE AppInstanceId <> @AppInstanceId
-  AND ModuleInstanceId = @ModuleInstanceId
-  AND AppId = @AppId
-  AND IsEnabled = 1
-  AND IsAllowed = 1
-  AND DesiredState = 1
+FROM omp.AppInstances ai
+INNER JOIN omp.Apps a
+    ON a.AppId = ai.AppId
+   AND a.AppType IN (N'Portal', N'WebApp')
+   AND a.AllowMultipleActiveInstances = 0
+WHERE ai.AppInstanceId <> @AppInstanceId
+  AND ai.ModuleInstanceId = @ModuleInstanceId
+  AND ai.AppId = @AppId
+  AND ai.IsEnabled = 1
+  AND ai.IsAllowed = 1
+  AND ai.DesiredState = 1
   AND
   (
       (@HostId IS NULL)
-      OR HostId IS NULL
-      OR HostId = @HostId
+      OR ai.HostId IS NULL
+      OR ai.HostId = @HostId
   );";
 
         await using var conn = _db.Create();
@@ -2925,18 +2939,22 @@ WHERE AppInstanceId <> @AppInstanceId
     {
         const string sql = @"
 SELECT COUNT(1)
-FROM omp.InstanceTemplateAppInstances
-WHERE InstanceTemplateAppInstanceId <> @InstanceTemplateAppInstanceId
-  AND InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId
-  AND AppId = @AppId
-  AND IsEnabled = 1
-  AND IsAllowed = 1
-  AND DesiredState = 1
+FROM omp.InstanceTemplateAppInstances tai
+INNER JOIN omp.Apps a
+    ON a.AppId = tai.AppId
+   AND a.AppType IN (N'Portal', N'WebApp')
+   AND a.AllowMultipleActiveInstances = 0
+WHERE tai.InstanceTemplateAppInstanceId <> @InstanceTemplateAppInstanceId
+  AND tai.InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId
+  AND tai.AppId = @AppId
+  AND tai.IsEnabled = 1
+  AND tai.IsAllowed = 1
+  AND tai.DesiredState = 1
   AND
   (
       (@InstanceTemplateHostId IS NULL)
-      OR InstanceTemplateHostId IS NULL
-      OR InstanceTemplateHostId = @InstanceTemplateHostId
+      OR tai.InstanceTemplateHostId IS NULL
+      OR tai.InstanceTemplateHostId = @InstanceTemplateHostId
   );";
 
         await using var conn = _db.Create();
@@ -3070,6 +3088,7 @@ WHERE ai.AppInstanceId = @AppInstanceId;";
         Add(cmd, "@AppKey", input.AppKey);
         Add(cmd, "@DisplayName", input.DisplayName);
         Add(cmd, "@AppType", input.AppType);
+        Add(cmd, "@AllowMultipleActiveInstances", input.AllowMultipleActiveInstances);
         Add(cmd, "@Description", input.Description);
         Add(cmd, "@IsEnabled", input.IsEnabled);
         Add(cmd, "@SortOrder", input.SortOrder);
