@@ -402,14 +402,20 @@ ORDER BY w.title,
         => Math.Min(Math.Max(value, min), max);
 
     private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)
-        => string.Equals(definition.Payload, "admin-overview", StringComparison.OrdinalIgnoreCase)
-            ? 760
-            : DefaultWidgetWidth;
+        => definition.Payload switch
+        {
+            "admin-overview" => 760,
+            "portal-entry-favorites" or "portal-entry-list" => 420,
+            _ => DefaultWidgetWidth
+        };
 
     private static int GetDefaultWidgetHeight(DashboardWidgetDefinition definition)
-        => string.Equals(definition.Payload, "admin-overview", StringComparison.OrdinalIgnoreCase)
-            ? 360
-            : DefaultWidgetHeight;
+        => definition.Payload switch
+        {
+            "admin-overview" => 360,
+            "portal-entry-favorites" or "portal-entry-list" => 360,
+            _ => DefaultWidgetHeight
+        };
 
     private readonly record struct WidgetAccessRule(int? RoleId, string? PermissionName);
 }

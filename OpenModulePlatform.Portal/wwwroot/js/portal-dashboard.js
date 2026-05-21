@@ -4,6 +4,7 @@
 
     const minWidth = 160;
     const minHeight = 96;
+    const favoriteChangedEvent = 'omp:navigation-favorite-changed';
 
     function initDashboard(root) {
         const canvas = root.querySelector('[data-dashboard-canvas]');
@@ -80,6 +81,7 @@
                 const element = createWidgetElement(root, widget);
                 canvas.appendChild(element);
                 bindWidget(root, canvas, element, token, () => ++maxOrder);
+                bindEntryFavoriteToggles(root, element, token);
                 updateEmptyState(canvas);
                 closePicker(picker);
                 setEditing(true);
@@ -89,6 +91,7 @@
         canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => {
             bindWidget(root, canvas, widget, token, () => ++maxOrder);
         });
+        bindEntryFavoriteToggles(root, root, token);
 
         function setEditing(next) {
             isEditing = next;
@@ -144,6 +147,256 @@
             widget.remove();
             updateEmptyState(canvas);
         });
+    }
+
+    function bindEntryFavoriteToggles(root, scope, token) {
+        scope.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
+            if (button.dataset.dashboardFavoriteBound === 'true') {
+                return;
+            }
+
+            button.dataset.dashboardFavoriteBound = 'true';
+            button.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const row = button.closest('[data-dashboard-entry-row]');
+                const entryKey = row?.dataset.entryKey || '';
+                if (!entryKey || button.disabled) {
+                    return;
+                }
+
+                button.disabled = true;
+                try {
+                    const payload = await postForm(root.dataset.favoriteToggleUrl, token, { entryKey });
+                    if (payload?.entryKey) {
+                        const enrichedPayload = enrichFavoritePayloadFromRow(payload, row);
+                        updateDashboardEntryFavoriteState(root, enrichedPayload.entryKey, enrichedPayload.isFavorite, row, enrichedPayload);
+                        dispatchFavoriteChanged(enrichedPayload);
+                    }
+                } finally {
+                    button.disabled = false;
+                }
+            });
+        });
+    }
+
+    function updateDashboardEntryFavoriteState(root, entryKey, isFavorite, sourceRow, payload) {
+        getEntryRows(root, entryKey).forEach((row) => {
+            updateEntryRowFavoriteState(root, row, isFavorite);
+        });
+
+        getEntryLists(root, 'favorites').forEach((list) => {
+            const existing = Array.from(list.querySelectorAll('[data-dashboard-entry-row]'))
+                .find((row) => row.dataset.entryKey === entryKey);
+
+            if (isFavorite && !existing) {
+                const source = findSourceEntryRow(root, entryKey, sourceRow);
+                if (source) {
+                    const clone = source.cloneNode(true);
+                    clone.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
+                        delete button.dataset.dashboardFavoriteBound;
+                    });
+                    updateEntryRowFavoriteState(root, clone, true);
+                    list.appendChild(clone);
+                    bindEntryFavoriteToggles(root, clone, root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '');
+                } else if (payload) {
+                    const row = createEntryRowFromFavoritePayload(root, payload);
+                    if (row) {
+                        list.appendChild(row);
+                        bindEntryFavoriteToggles(root, row, root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '');
+                    }
+                }
+            }
+
+            if (!isFavorite) {
+                list.querySelectorAll('[data-dashboard-entry-row]').forEach((row) => {
+                    if (row.dataset.entryKey === entryKey) {
+                        row.remove();
+                    }
+                });
+            }
+
+            updateEntryListEmptyState(list);
+        });
+    }
+
+    function normalizeFavoritePayload(payload) {
+        if (!payload?.entryKey) {
+            return null;
+        }
+
+        return {
+            source: payload.source || '',
+            isFavorite: !!payload.isFavorite,
+            entryKey: payload.entryKey || '',
+            appInstanceId: payload.appInstanceId || '',
+            href: payload.href || '',
+            groupTitle: payload.groupTitle || '',
+            entryTitle: payload.entryTitle || '',
+            label: payload.label || '',
+            description: payload.description || '',
+            logoUrl: payload.logoUrl || '',
+            logoFallback: payload.logoFallback || ''
+        };
+    }
+
+    function enrichFavoritePayloadFromRow(payload, row) {
+        const normalized = normalizeFavoritePayload(payload);
+        if (!normalized || !row) {
+            return normalized;
+        }
+
+        normalized.href = normalized.href || row.dataset.entryHref || '';
+        normalized.entryTitle = normalized.entryTitle || row.dataset.entryTitle || '';
+        normalized.description = normalized.description || row.dataset.entryDescription || '';
+        normalized.logoUrl = normalized.logoUrl || row.dataset.entryLogoUrl || '';
+        normalized.logoFallback = normalized.logoFallback || row.dataset.entryLogoFallback || '';
+        normalized.label = normalized.label || normalized.entryTitle || row.dataset.entryTitle || normalized.entryKey;
+        return normalized;
+    }
+
+    function dispatchFavoriteChanged(payload) {
+        const normalized = normalizeFavoritePayload(payload);
+        if (!normalized) {
+            return;
+        }
+
+        normalized.source = 'dashboard';
+        window.dispatchEvent(new CustomEvent(favoriteChangedEvent, { detail: normalized }));
+    }
+
+    function createEntryRowFromFavoritePayload(root, payload) {
+        const normalized = normalizeFavoritePayload(payload);
+        if (!normalized) {
+            return null;
+        }
+
+        const title = normalized.entryTitle || normalized.label || normalized.entryKey;
+        const href = normalized.href || '#';
+        const logoFallback = normalized.logoFallback || buildLogoFallback(title);
+        const row = document.createElement('div');
+        row.className = 'dashboard-entry-list__row';
+        row.setAttribute('data-dashboard-entry-row', '');
+        row.dataset.entryKey = normalized.entryKey;
+        row.dataset.entryTitle = title;
+        row.dataset.entryDescription = normalized.description;
+        row.dataset.entryHref = href;
+        row.dataset.entryLogoUrl = normalized.logoUrl;
+        row.dataset.entryLogoFallback = logoFallback;
+
+        const link = document.createElement('a');
+        link.className = 'dashboard-entry-list__item';
+        link.href = href;
+
+        const logo = document.createElement('span');
+        logo.className = 'dashboard-entry-list__logo';
+        if (normalized.logoUrl) {
+            const image = document.createElement('img');
+            image.src = normalized.logoUrl;
+            image.alt = '';
+            logo.appendChild(image);
+        } else {
+            const fallback = document.createElement('span');
+            fallback.textContent = logoFallback;
+            logo.appendChild(fallback);
+        }
+
+        const text = document.createElement('span');
+        text.className = 'dashboard-entry-list__text';
+
+        const titleElement = document.createElement('span');
+        titleElement.className = 'dashboard-entry-list__title';
+        titleElement.textContent = title;
+        text.appendChild(titleElement);
+
+        if (normalized.description) {
+            const description = document.createElement('span');
+            description.className = 'dashboard-entry-list__description';
+            description.textContent = normalized.description;
+            text.appendChild(description);
+        }
+
+        link.appendChild(logo);
+        link.appendChild(text);
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'dashboard-entry-list__favorite-toggle is-favorite';
+        button.setAttribute('data-dashboard-entry-favorite-toggle', '');
+        row.appendChild(link);
+        row.appendChild(button);
+        updateEntryRowFavoriteState(root, row, true);
+        return row;
+    }
+
+    function buildLogoFallback(title) {
+        const parts = String(title || '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) {
+            return '?';
+        }
+
+        return parts.slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+    }
+
+    function handleExternalFavoriteChanged(event) {
+        const payload = normalizeFavoritePayload(event.detail);
+        if (!payload || payload.source === 'dashboard') {
+            return;
+        }
+
+        document.querySelectorAll('[data-dashboard-root]').forEach((root) => {
+            updateDashboardEntryFavoriteState(root, payload.entryKey, payload.isFavorite, null, payload);
+        });
+    }
+
+    function updateEntryRowFavoriteState(root, row, isFavorite) {
+        row.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
+            const label = isFavorite
+                ? root.dataset.removeFavoriteLabel || 'Remove favorite'
+                : root.dataset.addFavoriteLabel || 'Add favorite';
+            button.classList.toggle('is-favorite', isFavorite);
+            button.textContent = isFavorite ? '★' : '☆';
+            button.title = label;
+            button.setAttribute('aria-label', label);
+        });
+    }
+
+    function findSourceEntryRow(root, entryKey, fallback) {
+        const allRows = getEntryLists(root, 'all')
+            .flatMap((list) => Array.from(list.querySelectorAll('[data-dashboard-entry-row]')));
+        return allRows.find((row) => row.dataset.entryKey === entryKey)
+            || fallback
+            || getEntryRows(root, entryKey)[0]
+            || null;
+    }
+
+    function getEntryRows(root, entryKey) {
+        const selector = `[data-dashboard-entry-row][data-entry-key="${cssEscape(entryKey)}"]`;
+        return [
+            ...root.querySelectorAll(selector),
+            ...getTemplateContentMatches(root, selector)
+        ];
+    }
+
+    function getEntryLists(root, kind) {
+        const selector = `[data-dashboard-entry-list][data-dashboard-entry-list-kind="${kind}"]`;
+        return [
+            ...root.querySelectorAll(selector),
+            ...getTemplateContentMatches(root, selector)
+        ];
+    }
+
+    function getTemplateContentMatches(root, selector) {
+        return Array.from(root.querySelectorAll('template[data-dashboard-widget-template]'))
+            .flatMap((template) => Array.from(template.content.querySelectorAll(selector)));
+    }
+
+    function updateEntryListEmptyState(list) {
+        const empty = list.querySelector('[data-dashboard-entry-list-empty]');
+        if (empty) {
+            empty.hidden = list.querySelectorAll('[data-dashboard-entry-row]').length > 0;
+        }
     }
 
     function startDrag(canvas, widget, event) {
@@ -305,7 +558,11 @@
             ? root.querySelector(`[data-dashboard-widget-template="${cssEscape(payload)}"]`)
             : null;
         if (template?.content?.firstElementChild) {
-            return template.content.firstElementChild.cloneNode(true);
+            const clone = template.content.firstElementChild.cloneNode(true);
+            clone.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
+                delete button.dataset.dashboardFavoriteBound;
+            });
+            return clone;
         }
 
         const blank = document.createElement('div');
@@ -364,4 +621,6 @@
     } else {
         initAll();
     }
+
+    window.addEventListener(favoriteChangedEvent, handleExternalFavoriteChanged);
 })();

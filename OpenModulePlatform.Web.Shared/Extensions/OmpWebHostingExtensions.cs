@@ -304,6 +304,8 @@ public static class OmpWebHostingExtensions
                 entryKey = result.Entry.EntryKey,
                 appInstanceId = result.Entry.AppInstanceId?.ToString("D", CultureInfo.InvariantCulture) ?? string.Empty,
                 href = result.Entry.Href,
+                groupTitle = result.Entry.GroupTitle,
+                entryTitle = result.Entry.TextKey,
                 label = result.Entry.FavoriteLabel
             });
         }).RequireAuthorization();

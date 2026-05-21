@@ -503,6 +503,18 @@ USING
            N'admin-overview' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'Favorite portal entries' AS title,
+           N'portal' AS widget_type,
+           N'portal-entry-favorites' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'All portal entries' AS title,
+           N'portal' AS widget_type,
+           N'portal-entry-list' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
 ) AS source
 ON target.title = source.title
 AND target.widget_type = source.widget_type

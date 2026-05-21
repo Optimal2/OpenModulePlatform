@@ -188,10 +188,6 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         }
 
         await _settings.UpsertTopbarDropdownsOpenOnHoverAsync(userId, PortalInput.TopbarDropdownsOpenOnHover, ct);
-        if (IsPortalAdmin)
-        {
-            await _settings.UpsertAdminMetricsCollapsedAsync(userId, PortalInput.AdminMetricsCollapsed, ct);
-        }
 
         StatusMessage = T("Settings saved.");
         return RedirectToSettings(PortalTab);
@@ -225,7 +221,6 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
         if (loadPortalInput)
         {
-            PortalInput.AdminMetricsCollapsed = settings.AdminMetricsCollapsed;
             PortalInput.TopbarDropdownsOpenOnHover = settings.TopbarDropdownsOpenOnHover;
         }
 
@@ -430,8 +425,6 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     public sealed class PortalInputModel
     {
-        public bool AdminMetricsCollapsed { get; set; }
-
         public bool TopbarDropdownsOpenOnHover { get; set; } = true;
     }
 }

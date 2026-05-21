@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal/Services/PortalEntryService.cs
 using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Portal.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Http;
@@ -45,6 +46,9 @@ public sealed class PortalEntryService
         var allApps = await _catalog.GetEnabledWebAppsAsync(ct);
         var accessibleApps = _catalog.FilterByPermissions(allApps, permissions)
             .ToDictionary(app => app.AppInstanceId);
+        var navigationFavorites = userId.HasValue
+            ? (await GetNavigationFavoriteEntryKeysAsync(userId.Value, ct)).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var entries = new List<PortalEntry>();
         foreach (var row in rows)
@@ -54,8 +58,24 @@ public sealed class PortalEntryService
                 continue;
             }
 
+            if (row.SourceAppInstanceId is Guid sourceAppInstanceId && !accessibleApps.ContainsKey(sourceAppInstanceId))
+            {
+                continue;
+            }
+
+            if (TryParseAppInstanceId(row.TargetEntryKey, out var targetAppInstanceId)
+                && !accessibleApps.ContainsKey(targetAppInstanceId))
+            {
+                continue;
+            }
+
             var href = ResolveTargetHref(request, row, accessibleApps);
             if (string.IsNullOrWhiteSpace(href))
+            {
+                continue;
+            }
+
+            if (!CanAccessTargetHref(request, href, allApps, accessibleApps, permissions))
             {
                 continue;
             }
@@ -73,12 +93,47 @@ public sealed class PortalEntryService
                 TargetEntryKey = row.TargetEntryKey,
                 IsPinned = row.IsPinned,
                 IsHidden = row.IsHidden,
+                IsNavigationFavorite = navigationFavorites.Contains(row.EntryKey),
                 UserSortOrder = row.SortOrder,
                 DefaultSortOrder = row.DefaultSortOrder
             });
         }
 
         return entries;
+    }
+
+    public async Task<IReadOnlyList<PortalEntry>> GetNavigationFavoriteEntriesAsync(
+        HttpRequest request,
+        int userId,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var entries = await GetEntriesAsync(request, userId, permissions, includeHidden: false, ct);
+        if (entries.Count == 0)
+        {
+            return [];
+        }
+
+        var favoriteEntryKeys = entries
+            .Where(entry => entry.IsNavigationFavorite)
+            .Select(entry => entry.EntryKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (favoriteEntryKeys.Count == 0)
+        {
+            return [];
+        }
+
+        var entriesByKey = entries.ToDictionary(entry => entry.EntryKey, StringComparer.OrdinalIgnoreCase);
+        var favorites = new List<PortalEntry>();
+        foreach (var entryKey in await GetNavigationFavoriteEntryKeysAsync(userId, ct))
+        {
+            if (favoriteEntryKeys.Contains(entryKey) && entriesByKey.TryGetValue(entryKey, out var entry))
+            {
+                favorites.Add(entry);
+            }
+        }
+
+        return favorites;
     }
 
     public async Task<IReadOnlyList<PortalEntryAdminRow>> GetAdminRowsAsync(CancellationToken ct)
@@ -634,6 +689,40 @@ WHERE user_id = @user_id
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    private async Task<IReadOnlyList<string>> GetNavigationFavoriteEntryKeysAsync(int userId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        const string sql = @"
+IF OBJECT_ID(N'omp_portal.user_navigation_favorites', N'U') IS NULL
+BEGIN
+    SELECT CAST(NULL AS nvarchar(200)) AS entry_key
+    WHERE 1 = 0;
+END
+ELSE
+BEGIN
+    SELECT entry_key
+    FROM omp_portal.user_navigation_favorites
+    WHERE user_id = @user_id
+    ORDER BY COALESCE(sort_order, 2147483647),
+             created_at,
+             entry_key;
+END";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        var rows = new List<string>();
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(rdr.GetString(0));
+        }
+
+        return rows;
+    }
+
     private async Task<string> CreateUniqueEntryKeyAsync(string displayName, CancellationToken ct)
     {
         var baseKey = "custom:" + ToKeySlug(displayName);
@@ -812,6 +901,136 @@ ORDER BY pe.default_sort_order,
 
         var publicRoot = request.GetPublicBaseUrl().TrimEnd('/');
         return $"{publicRoot}/{trimmed.TrimStart('/')}";
+    }
+
+    private static bool CanAccessTargetHref(
+        HttpRequest request,
+        string href,
+        IReadOnlyList<PortalAppEntry> apps,
+        IReadOnlyDictionary<Guid, PortalAppEntry> accessibleApps,
+        IReadOnlySet<string> permissions)
+    {
+        var path = href;
+        if (Uri.TryCreate(href, UriKind.Absolute, out var absoluteUri))
+        {
+            path = absoluteUri.AbsolutePath;
+        }
+
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith("/", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var normalizedPath = NormalizeAbsolutePath(path);
+        if (IsPathMatch(normalizedPath, "/admin"))
+        {
+            return permissions.Contains(OmpPortalPermissions.Admin);
+        }
+
+        var app = FindBestMatchingApp(request, apps, normalizedPath);
+        if (app is null)
+        {
+            return true;
+        }
+
+        if (!accessibleApps.ContainsKey(app.AppInstanceId))
+        {
+            return false;
+        }
+
+        var appRelativePath = GetAppRelativePath(request, normalizedPath, app);
+        return !RequiresElevatedAccess(appRelativePath)
+            || HasInferredAdminAccess(app, permissions);
+    }
+
+    private static PortalAppEntry? FindBestMatchingApp(
+        HttpRequest request,
+        IReadOnlyList<PortalAppEntry> apps,
+        string normalizedPath)
+        => apps
+            .Select(app => new
+            {
+                App = app,
+                Path = NormalizeAbsolutePath(AppLinkBuilder.ResolveHref(request, app))
+            })
+            .Where(item => IsPathMatch(normalizedPath, item.Path))
+            .OrderByDescending(item => item.Path.Length)
+            .Select(item => item.App)
+            .FirstOrDefault();
+
+    private static string GetAppRelativePath(HttpRequest request, string normalizedPath, PortalAppEntry app)
+    {
+        var appPath = NormalizeAbsolutePath(AppLinkBuilder.ResolveHref(request, app));
+        if (!IsPathMatch(normalizedPath, appPath))
+        {
+            return "/";
+        }
+
+        return normalizedPath.Length == appPath.Length
+            ? "/"
+            : normalizedPath[appPath.Length..].TrimStart('/');
+    }
+
+    private static bool RequiresElevatedAccess(string appRelativePath)
+    {
+        var normalized = NormalizeAbsolutePath(appRelativePath);
+        return IsPathMatch(normalized, "/admin")
+            || IsPathMatch(normalized, "/create")
+            || normalized.Contains("/admin/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasInferredAdminAccess(PortalAppEntry app, IReadOnlySet<string> permissions)
+    {
+        var candidatePermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var permission in app.RequiredPermissions)
+        {
+            if (permission.EndsWith(".View", StringComparison.OrdinalIgnoreCase))
+            {
+                candidatePermissions.Add($"{permission[..^5]}.Admin");
+            }
+        }
+
+        candidatePermissions.Add($"{app.AppKey}.Admin");
+        candidatePermissions.Add($"{app.AppInstanceKey}.Admin");
+
+        return candidatePermissions.Any(permissions.Contains);
+    }
+
+    private static string NormalizeAbsolutePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absoluteUri))
+        {
+            path = absoluteUri.AbsolutePath;
+        }
+
+        var trimmed = path.Trim();
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+        {
+            trimmed = "/" + trimmed;
+        }
+
+        return trimmed.TrimEnd('/').ToLowerInvariant() switch
+        {
+            "" => "/",
+            var value => value
+        };
+    }
+
+    private static bool IsPathMatch(string normalizedPath, string normalizedPrefix)
+    {
+        normalizedPrefix = NormalizeAbsolutePath(normalizedPrefix);
+        if (string.Equals(normalizedPrefix, "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedPath.StartsWith("/", StringComparison.Ordinal);
+        }
+
+        return string.Equals(normalizedPath, normalizedPrefix, StringComparison.OrdinalIgnoreCase)
+            || normalizedPath.StartsWith($"{normalizedPrefix}/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? Clean(string? value)
