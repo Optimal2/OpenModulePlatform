@@ -134,6 +134,22 @@ be edited later through Portal.
    and `vgr-test.json` lets one package carry multiple installation profiles.
    For a disposable local environment, editing `configs\bootstrap.local.sample.json`
    in place is also acceptable.
+   Profiles can include a `profile` section:
+
+   ```json
+   {
+     "profile": {
+       "displayName": "VGR Production - VGMS1825",
+       "machineNames": [ "VGMS1825", "VGMS1825.vgregion.se" ]
+     }
+   }
+   ```
+
+   When the graphical installer starts without an explicit `--config`, it
+   selects the first profile whose `profile.machineNames`,
+   `hostAgent.hostName`, or `hostAgent.hostKey` matches the local computer
+   name. If no profile matches, the operator must select one manually from the
+   dropdown.
 3. Set at least:
    - `sql.server`
    - `sql.database`
@@ -157,9 +173,18 @@ install-hostagent-first.cmd
 
 Both entry points open the graphical installer. The EXE requests administrator
 rights, loads `configs\*.json`, lets the operator select an installation
-profile from a dropdown, review or change common SQL, path, HostAgent, and IIS
-settings, and then run one of the action tabs: install/update, package tools,
-or uninstall.
+profile from a dropdown, review common SQL, path, HostAgent, and IIS settings,
+and then run one of the action tabs: install/update, package tools, or
+uninstall. Profile values are read-only in the GUI so operational changes are
+made in the JSON file and then loaded with `Reload config`.
+
+The `Upgrade / complete` action is a package catch-up action for an existing
+installation. It imports missing, newer, or changed module definition documents,
+copies missing artifact folders, publishes missing available package-library
+files, and installs HostAgent only if the configured service is absent. Existing
+artifact folders and an existing HostAgent service are deliberately left
+unchanged; use `Install or update` when a full bootstrap/reconfiguration pass is
+intended.
 
 On a development machine where the installer package still lives below an
 OpenModulePlatform source checkout, the graphical installer can also compare
