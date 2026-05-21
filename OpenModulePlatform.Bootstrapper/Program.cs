@@ -20,6 +20,7 @@ internal static partial class Program
     private const int SqlDeadlockRetryCount = 3;
     private const int ServiceStopTimeoutSeconds = 60;
     private const int AttachParentProcess = -1;
+    private const int ArtifactHashBufferSize = 64 * 1024;
     private static readonly IReadOnlyDictionary<string, string> EmptyStringDictionary =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -120,6 +121,7 @@ internal static partial class Program
                 config,
                 payloadRoot,
                 ArtifactPreparationMode.InstallOrUpdate);
+            await RegisterPackageArtifactsAsync(config);
             await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
             PublishAvailableDeploymentObjects(config, payloadRoot);
 
@@ -173,6 +175,7 @@ internal static partial class Program
                 config,
                 payloadRoot,
                 ArtifactPreparationMode.AddMissingOnly);
+            await RegisterPackageArtifactsAsync(config);
             await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
             PublishAvailableDeploymentObjects(config, payloadRoot, overwrite: false);
 
@@ -1355,6 +1358,210 @@ END;
         }
 
         return preparedConfigurationFiles;
+    }
+
+    private static async Task RegisterPackageArtifactsAsync(BootstrapConfig config)
+    {
+        if (!config.Sql.Enabled)
+        {
+            Console.WriteLine("> SQL disabled; skipping artifact metadata registration.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(config.ArtifactStoreRoot))
+        {
+            return;
+        }
+
+        var artifactStoreRoot = Path.GetFullPath(config.ArtifactStoreRoot.Trim());
+        await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
+        await connection.OpenAsync();
+
+        var registered = 0;
+        foreach (var artifact in config.Artifacts.Where(static item => item.Enabled))
+        {
+            if (artifact.IsExample && !config.IncludeExampleApps)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(artifact.Source) || string.IsNullOrWhiteSpace(artifact.Target))
+            {
+                continue;
+            }
+
+            var identity = ParseConfiguredArtifactIdentity(artifact.Source);
+            if (identity is null)
+            {
+                Console.WriteLine($"> Artifact metadata {artifact.Target}: skipped because Source filename does not use the standard artifact package name.");
+                continue;
+            }
+
+            var appId = await ResolveArtifactAppIdAsync(connection, identity.ModuleKey, identity.AppKey);
+            if (appId is null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot register artifact '{Path.GetFileName(artifact.Source)}' because app '{identity.ModuleKey}/{identity.AppKey}' is not registered.");
+            }
+
+            var targetPath = CombineUnderRoot(artifactStoreRoot, artifact.Target);
+            if (!Directory.Exists(targetPath))
+            {
+                throw new DirectoryNotFoundException(
+                    $"Cannot register artifact '{Path.GetFileName(artifact.Source)}' because target path '{targetPath}' does not exist.");
+            }
+
+            var relativePath = NormalizePathForMatch(artifact.Target);
+            var sha256 = ComputeDirectorySha256(targetPath);
+            await UpsertArtifactMetadataAsync(
+                connection,
+                appId.Value,
+                identity.Version,
+                identity.PackageType,
+                identity.TargetName,
+                relativePath,
+                sha256);
+
+            registered++;
+        }
+
+        if (registered > 0)
+        {
+            Console.WriteLine($"> Artifact metadata registered or updated: {registered}");
+        }
+    }
+
+    private static ConfiguredArtifactIdentity? ParseConfiguredArtifactIdentity(string source)
+    {
+        var fileName = Path.GetFileNameWithoutExtension(source);
+        var parts = fileName.Split(["__"], StringSplitOptions.None);
+        return parts.Length == 5
+            && parts.All(static part => !string.IsNullOrWhiteSpace(part))
+            ? new ConfiguredArtifactIdentity(parts[0], parts[1], parts[2], parts[3], parts[4])
+            : null;
+    }
+
+    private static async Task<int?> ResolveArtifactAppIdAsync(
+        SqlConnection connection,
+        string moduleKey,
+        string appKey)
+    {
+        const string sql = """
+SELECT TOP (1) app.AppId
+FROM omp.Apps app
+INNER JOIN omp.Modules module ON module.ModuleId = app.ModuleId
+WHERE module.ModuleKey = @moduleKey
+  AND app.AppKey = @appKey
+  AND module.IsEnabled = 1
+  AND app.IsEnabled = 1
+ORDER BY app.AppId;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@moduleKey", moduleKey);
+        command.Parameters.AddWithValue("@appKey", appKey);
+
+        var value = await command.ExecuteScalarAsync();
+        return value is null or DBNull ? null : Convert.ToInt32(value);
+    }
+
+    private static async Task<int> UpsertArtifactMetadataAsync(
+        SqlConnection connection,
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        string relativePath,
+        string sha256)
+    {
+        const string sql = """
+DECLARE @artifactId int;
+
+UPDATE omp.Artifacts
+SET RelativePath = @relativePath,
+    Sha256 = @sha256,
+    IsEnabled = 1,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppId = @appId
+  AND Version = @version
+  AND PackageType = @packageType
+  AND ((TargetName = @targetName) OR (TargetName IS NULL AND @targetName IS NULL));
+
+IF @@ROWCOUNT = 0
+BEGIN
+    INSERT INTO omp.Artifacts
+    (
+        AppId,
+        Version,
+        PackageType,
+        TargetName,
+        RelativePath,
+        Sha256,
+        IsEnabled
+    )
+    VALUES
+    (
+        @appId,
+        @version,
+        @packageType,
+        @targetName,
+        @relativePath,
+        @sha256,
+        1
+    );
+
+    SET @artifactId = CAST(SCOPE_IDENTITY() AS int);
+END;
+ELSE
+BEGIN
+    SELECT TOP (1) @artifactId = ArtifactId
+    FROM omp.Artifacts
+    WHERE AppId = @appId
+      AND Version = @version
+      AND PackageType = @packageType
+      AND ((TargetName = @targetName) OR (TargetName IS NULL AND @targetName IS NULL))
+    ORDER BY ArtifactId;
+END;
+
+SELECT @artifactId;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@appId", appId);
+        command.Parameters.AddWithValue("@version", version);
+        command.Parameters.AddWithValue("@packageType", packageType);
+        command.Parameters.AddWithValue("@targetName", string.IsNullOrWhiteSpace(targetName) ? DBNull.Value : targetName.Trim());
+        command.Parameters.AddWithValue("@relativePath", relativePath);
+        command.Parameters.AddWithValue("@sha256", sha256);
+
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static string ComputeDirectorySha256(string path)
+    {
+        using var sha = SHA256.Create();
+        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+            .OrderBy(file => Path.GetRelativePath(path, file), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var file in files)
+        {
+            var relative = Path.GetRelativePath(path, file).Replace('\\', '/');
+            var relativeBytes = Encoding.UTF8.GetBytes(relative);
+            sha.TransformBlock(relativeBytes, 0, relativeBytes.Length, null, 0);
+            sha.TransformBlock([0], 0, 1, null, 0);
+
+            using var stream = File.OpenRead(file);
+            var buffer = new byte[ArtifactHashBufferSize];
+            int read;
+            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                sha.TransformBlock(buffer, 0, read, null, 0);
+            }
+        }
+
+        sha.TransformFinalBlock([], 0, 0);
+        return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
     }
 
     private static void PublishAvailableDeploymentObjects(
@@ -2640,6 +2847,13 @@ VALUES
 internal sealed record PreparedArtifactConfigurationFiles(
     string ArtifactRelativePath,
     IReadOnlyList<ArtifactPackageConfigurationFile> ConfigurationFiles);
+
+internal sealed record ConfiguredArtifactIdentity(
+    string ModuleKey,
+    string AppKey,
+    string PackageType,
+    string TargetName,
+    string Version);
 
 internal sealed class CliOptions
 {
