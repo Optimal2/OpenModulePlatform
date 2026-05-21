@@ -1924,4 +1924,8 @@
   <data name="Select one dashboard widget JSON file." xml:space="preserve"><value>Välj en JSON-fil med dashboard-widgets.</value></data>
   <data name="The uploaded dashboard widget file must be a .json file." xml:space="preserve"><value>Den uppladdade dashboard-widgetfilen måste vara en .json-fil.</value></data>
   <data name="The uploaded dashboard widget file exceeds the configured limit of {0} bytes." xml:space="preserve"><value>Den uppladdade dashboard-widgetfilen överstiger gränsen på {0} byte.</value></data>
+  <data name="Newer: {0}" xml:space="preserve"><value>Nyare: {0}</value></data>
+  <data name="Upgrade to latest compatible artifact version {0}" xml:space="preserve"><value>Uppgradera till senaste kompatibla artefaktversion {0}</value></data>
+  <data name="Desired artifact updated to version {0}." xml:space="preserve"><value>Önskad artefakt uppdaterades till version {0}.</value></data>
+  <data name="The desired artifact could not be updated: {0}" xml:space="preserve"><value>Den önskade artefakten kunde inte uppdateras: {0}</value></data>
 </root>

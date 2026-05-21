@@ -663,6 +663,78 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             instanceTemplateAppInstanceId,
             ct);
 
+    public async Task<string> UpgradeInstanceTemplateAppArtifactAsync(
+        int instanceTemplateAppInstanceId,
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string contextSql = @"
+SELECT currentArtifact.Version,
+       targetArtifact.Version,
+       targetArtifact.AppId,
+       targetArtifact.PackageType,
+       targetArtifact.TargetName
+FROM omp.InstanceTemplateAppInstances tai
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = tai.DesiredArtifactId
+INNER JOIN omp.Artifacts targetArtifact
+    ON targetArtifact.ArtifactId = @ArtifactId
+   AND targetArtifact.AppId = currentArtifact.AppId
+   AND targetArtifact.PackageType = currentArtifact.PackageType
+   AND ISNULL(targetArtifact.TargetName, N'') = ISNULL(currentArtifact.TargetName, N'')
+   AND targetArtifact.IsEnabled = 1
+WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
+
+        string currentVersion;
+        string targetVersion;
+        int targetAppId;
+        string packageType;
+        string? targetName;
+
+        await using (var conn = _db.Create())
+        {
+            await conn.OpenAsync(ct);
+            await using var context = new SqlCommand(contextSql, conn);
+            Add(context, "@InstanceTemplateAppInstanceId", instanceTemplateAppInstanceId);
+            Add(context, "@ArtifactId", artifactId);
+            await using var rdr = await context.ExecuteReaderAsync(ct);
+            if (!await rdr.ReadAsync(ct))
+            {
+                throw new InvalidOperationException("The selected artifact is not a valid upgrade for this desired app row.");
+            }
+
+            currentVersion = rdr.GetString(0);
+            targetVersion = rdr.GetString(1);
+            targetAppId = rdr.GetInt32(2);
+            packageType = rdr.GetString(3);
+            targetName = rdr.IsDBNull(4) ? null : rdr.GetString(4);
+        }
+
+        if (CompareArtifactVersions(targetVersion, currentVersion) <= 0)
+        {
+            throw new InvalidOperationException("The selected artifact is not newer than the current desired artifact.");
+        }
+
+        await RequireCompatibleArtifactSlotAsync(targetAppId, targetVersion, packageType, targetName, ct);
+
+        const string updateSql = @"
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @ArtifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
+
+        await using (var conn = _db.Create())
+        {
+            await conn.OpenAsync(ct);
+            await using var update = new SqlCommand(updateSql, conn);
+            Add(update, "@InstanceTemplateAppInstanceId", instanceTemplateAppInstanceId);
+            Add(update, "@ArtifactId", artifactId);
+            await update.ExecuteNonQueryAsync(ct);
+        }
+
+        return targetVersion;
+    }
+
     public async Task<InstanceTemplateHostEditData?> GetInstanceTemplateHostAsync(
         int instanceTemplateHostId,
         CancellationToken ct)
