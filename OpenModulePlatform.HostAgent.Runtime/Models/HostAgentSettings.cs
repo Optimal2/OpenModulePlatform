@@ -50,6 +50,8 @@ public sealed class HostAgentSettings
 
     public string IisAppPoolPassword { get; set; } = string.Empty;
 
+    public Dictionary<string, HostAgentIisAppPoolIdentitySettings> IisAppPoolOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public string WebAppDataProtectionKeyPath { get; set; } = string.Empty;
 
     public bool UseAppOfflineForWebAppDeployment { get; set; } = true;
@@ -220,6 +222,13 @@ public sealed class HostAgentSettings
         ArtifactZipImport.Validate();
         SelfUpgrade.Validate();
     }
+}
+
+public sealed class HostAgentIisAppPoolIdentitySettings
+{
+    public string UserName { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
 }
 
 public sealed class HostAgentArtifactZipImportSettings

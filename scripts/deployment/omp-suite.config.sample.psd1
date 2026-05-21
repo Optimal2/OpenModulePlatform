@@ -152,6 +152,16 @@
         ArtifactZipImportPath = 'C:\OMP\ArtifactImports'
         ArtifactZipImportProcessedPath = ''
         ArtifactZipImportFailedPath = ''
+
+        # Optional per-web-app IIS app-pool identities. Keys are matched against
+        # app instance key, route path, or final app-pool name.
+        # Entries not listed here use RunAsUser/RunAsPassword.
+        IisAppPoolOverrides = @{
+            # 'some_web_app' = @{
+            #     UserName = 'DOMAIN\DedicatedWebAccount'
+            #     Password = ''
+            # }
+        }
     }
 
     HostAgentFirst = @{
