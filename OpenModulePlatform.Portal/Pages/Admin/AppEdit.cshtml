@@ -79,6 +79,12 @@
         <label asp-for="Input.IsEnabled"></label>
     </div>
 
+    <div class="form-field checkbox-row checkbox-row--boxed">
+        <input asp-for="Input.AllowMultipleActiveInstances" type="checkbox" />
+        <label asp-for="Input.AllowMultipleActiveInstances"></label>
+        <div class="field-help">@L["Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel."]</div>
+    </div>
+
     <div class="toolbar">
         <button type="submit">@L["Save app"]</button>
         <a class="action-link" href="~/admin/apps">@L["Back to apps"]</a>

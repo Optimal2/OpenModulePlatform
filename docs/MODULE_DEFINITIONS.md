@@ -115,6 +115,7 @@ The document shape is versioned. Version 1 uses these top-level fields:
       "appType": "WebApp",
       "description": "Example web app.",
       "sortOrder": 10,
+      "allowMultipleActiveInstances": false,
       "isEnabled": true
     }
   ],
@@ -267,6 +268,12 @@ a document packaging module can require an OpenDocViewer definition version
 when it produces links or payloads that the viewer must understand. Dependencies
 are directional: the dependent module lists what it needs; the referenced module
 does not need to list its consumers.
+
+`allowMultipleActiveInstances` is optional and defaults to `false`. Keep the
+default for ordinary portal/web apps where one active host-neutral or
+host-specific row should describe the deployed app. Set it to `true` only for
+definitions that intentionally create several active runtime rows for the same
+app definition, such as one worker row per configured channel.
 
 `sqlScripts` is optional. Autonomous modules can use an empty array when all
 they need is OMP metadata plus runtime configuration supplied through normal

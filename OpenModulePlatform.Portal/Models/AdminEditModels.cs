@@ -114,6 +114,8 @@ public sealed class AppEditData
 
     public string AppType { get; set; } = string.Empty;
 
+    public bool AllowMultipleActiveInstances { get; set; }
+
     public string? Description { get; set; }
 
     public bool IsEnabled { get; set; }
@@ -654,6 +656,8 @@ public sealed class AppDefinitionContext
     public string AppKey { get; set; } = string.Empty;
 
     public string AppType { get; set; } = string.Empty;
+
+    public bool AllowMultipleActiveInstances { get; set; }
 }
 
 /// <summary>

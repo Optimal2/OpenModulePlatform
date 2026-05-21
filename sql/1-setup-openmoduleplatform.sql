@@ -284,6 +284,7 @@ BEGIN
         AppKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
         AppType nvarchar(50) NOT NULL,
+        AllowMultipleActiveInstances bit NOT NULL CONSTRAINT DF_omp_Apps_AllowMultipleActiveInstances DEFAULT(0),
         Description nvarchar(500) NULL,
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_Apps_IsEnabled DEFAULT(1),
         SortOrder int NOT NULL CONSTRAINT DF_omp_Apps_SortOrder DEFAULT(0),
@@ -292,6 +293,14 @@ BEGIN
         CONSTRAINT FK_omp_Apps_Module FOREIGN KEY(ModuleId) REFERENCES omp.Modules(ModuleId),
         CONSTRAINT UQ_omp_Apps_Module_AppKey UNIQUE(ModuleId, AppKey)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.Apps', N'AllowMultipleActiveInstances') IS NULL
+BEGIN
+    ALTER TABLE omp.Apps
+        ADD AllowMultipleActiveInstances bit NOT NULL
+            CONSTRAINT DF_omp_Apps_AllowMultipleActiveInstances DEFAULT(0) WITH VALUES;
 END
 GO
 
@@ -833,32 +842,62 @@ GO
 IF EXISTS
 (
     SELECT 1
-    FROM omp.AppInstances
-    WHERE HostId IS NOT NULL
-      AND IsEnabled = 1
-      AND IsAllowed = 1
-      AND DesiredState = 1
-    GROUP BY ModuleInstanceId, HostId, AppId
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+    WHERE ai.HostId IS NOT NULL
+      AND ai.IsEnabled = 1
+      AND ai.IsAllowed = 1
+      AND ai.DesiredState = 1
+      AND a.AppType IN (N'Portal', N'WebApp')
+      AND a.AllowMultipleActiveInstances = 0
+    GROUP BY ai.ModuleInstanceId, ai.HostId, ai.AppId
     HAVING COUNT(1) > 1
 )
 BEGIN
-    THROW 51050, 'Duplicate active host-specific app instances exist. Keep only one active desired row per module instance, app definition and host.', 1;
+    THROW 51050, 'Duplicate active host-specific web app instances exist. Keep only one active desired row per module instance, web app definition and host.', 1;
 END
 GO
 
 IF EXISTS
 (
     SELECT 1
-    FROM omp.AppInstances
-    WHERE HostId IS NULL
-      AND IsEnabled = 1
-      AND IsAllowed = 1
-      AND DesiredState = 1
-    GROUP BY ModuleInstanceId, AppId
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+    WHERE ai.HostId IS NULL
+      AND ai.IsEnabled = 1
+      AND ai.IsAllowed = 1
+      AND ai.DesiredState = 1
+      AND a.AppType IN (N'Portal', N'WebApp')
+      AND a.AllowMultipleActiveInstances = 0
+    GROUP BY ai.ModuleInstanceId, ai.AppId
     HAVING COUNT(1) > 1
 )
 BEGIN
-    THROW 51051, 'Duplicate active host-neutral app instances exist. Keep only one active desired host-neutral row per module instance and app definition.', 1;
+    THROW 51051, 'Duplicate active host-neutral web app instances exist. Keep only one active desired host-neutral row per module instance and web app definition.', 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.AppInstances')
+      AND name = N'UX_omp_AppInstances_Active_Module_Host_App'
+)
+BEGIN
+    DROP INDEX UX_omp_AppInstances_Active_Module_Host_App ON omp.AppInstances;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.AppInstances')
+      AND name = N'UX_omp_AppInstances_Active_Module_HostNeutral_App'
+)
+BEGIN
+    DROP INDEX UX_omp_AppInstances_Active_Module_HostNeutral_App ON omp.AppInstances;
 END
 GO
 
@@ -867,11 +906,11 @@ IF NOT EXISTS
     SELECT 1
     FROM sys.indexes
     WHERE object_id = OBJECT_ID(N'omp.AppInstances')
-      AND name = N'UX_omp_AppInstances_Active_Module_Host_App'
+      AND name = N'IX_omp_AppInstances_Active_Module_Host_App'
 )
 BEGIN
-    CREATE UNIQUE INDEX UX_omp_AppInstances_Active_Module_Host_App
-        ON omp.AppInstances(ModuleInstanceId, HostId, AppId)
+    CREATE INDEX IX_omp_AppInstances_Active_Module_Host_App
+        ON omp.AppInstances(ModuleInstanceId, HostId, AppId, AppInstanceKey)
         WHERE HostId IS NOT NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
@@ -884,11 +923,11 @@ IF NOT EXISTS
     SELECT 1
     FROM sys.indexes
     WHERE object_id = OBJECT_ID(N'omp.AppInstances')
-      AND name = N'UX_omp_AppInstances_Active_Module_HostNeutral_App'
+      AND name = N'IX_omp_AppInstances_Active_Module_HostNeutral_App'
 )
 BEGIN
-    CREATE UNIQUE INDEX UX_omp_AppInstances_Active_Module_HostNeutral_App
-        ON omp.AppInstances(ModuleInstanceId, AppId)
+    CREATE INDEX IX_omp_AppInstances_Active_Module_HostNeutral_App
+        ON omp.AppInstances(ModuleInstanceId, AppId, AppInstanceKey)
         WHERE HostId IS NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
@@ -911,6 +950,10 @@ BEGIN
     (
         SELECT 1
         FROM inserted i
+        INNER JOIN omp.Apps a
+            ON a.AppId = i.AppId
+           AND a.AppType IN (N'Portal', N'WebApp')
+           AND a.AllowMultipleActiveInstances = 0
         INNER JOIN omp.AppInstances existing
             ON existing.ModuleInstanceId = i.ModuleInstanceId
            AND existing.AppId = i.AppId
@@ -928,13 +971,17 @@ BEGIN
           AND existing.DesiredState = 1
     )
     BEGIN
-        THROW 51052, 'Only one active desired app instance is allowed per module instance, app definition and host placement.', 1;
+        THROW 51052, 'Only one active desired web app instance is allowed per module instance, web app definition and host placement.', 1;
     END;
 
     IF EXISTS
     (
         SELECT 1
         FROM inserted i
+        INNER JOIN omp.Apps a
+            ON a.AppId = i.AppId
+           AND a.AppType IN (N'Portal', N'WebApp')
+           AND a.AllowMultipleActiveInstances = 0
         INNER JOIN omp.AppInstances existing
             ON existing.ModuleInstanceId = i.ModuleInstanceId
            AND existing.AppId = i.AppId
@@ -952,7 +999,7 @@ BEGIN
           AND existing.DesiredState = 1
     )
     BEGIN
-        THROW 51053, 'Do not mix active host-neutral and host-specific app instances for the same module instance and app definition.', 1;
+        THROW 51053, 'Do not mix active host-neutral and host-specific web app instances for the same module instance and web app definition.', 1;
     END;
 END
 GO
@@ -960,32 +1007,62 @@ GO
 IF EXISTS
 (
     SELECT 1
-    FROM omp.InstanceTemplateAppInstances
-    WHERE InstanceTemplateHostId IS NOT NULL
-      AND IsEnabled = 1
-      AND IsAllowed = 1
-      AND DesiredState = 1
-    GROUP BY InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId
+    FROM omp.InstanceTemplateAppInstances tai
+    INNER JOIN omp.Apps a ON a.AppId = tai.AppId
+    WHERE tai.InstanceTemplateHostId IS NOT NULL
+      AND tai.IsEnabled = 1
+      AND tai.IsAllowed = 1
+      AND tai.DesiredState = 1
+      AND a.AppType IN (N'Portal', N'WebApp')
+      AND a.AllowMultipleActiveInstances = 0
+    GROUP BY tai.InstanceTemplateModuleInstanceId, tai.InstanceTemplateHostId, tai.AppId
     HAVING COUNT(1) > 1
 )
 BEGIN
-    THROW 51054, 'Duplicate active host-specific template app rows exist. Keep only one active desired row per template module, app definition and template host.', 1;
+    THROW 51054, 'Duplicate active host-specific template web app rows exist. Keep only one active desired row per template module, web app definition and template host.', 1;
 END
 GO
 
 IF EXISTS
 (
     SELECT 1
-    FROM omp.InstanceTemplateAppInstances
-    WHERE InstanceTemplateHostId IS NULL
-      AND IsEnabled = 1
-      AND IsAllowed = 1
-      AND DesiredState = 1
-    GROUP BY InstanceTemplateModuleInstanceId, AppId
+    FROM omp.InstanceTemplateAppInstances tai
+    INNER JOIN omp.Apps a ON a.AppId = tai.AppId
+    WHERE tai.InstanceTemplateHostId IS NULL
+      AND tai.IsEnabled = 1
+      AND tai.IsAllowed = 1
+      AND tai.DesiredState = 1
+      AND a.AppType IN (N'Portal', N'WebApp')
+      AND a.AllowMultipleActiveInstances = 0
+    GROUP BY tai.InstanceTemplateModuleInstanceId, tai.AppId
     HAVING COUNT(1) > 1
 )
 BEGIN
-    THROW 51055, 'Duplicate active host-neutral template app rows exist. Keep only one active desired host-neutral row per template module and app definition.', 1;
+    THROW 51055, 'Duplicate active host-neutral template web app rows exist. Keep only one active desired host-neutral row per template module and web app definition.', 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+      AND name = N'UX_omp_InstanceTemplateAppInstances_Active_Module_Host_App'
+)
+BEGIN
+    DROP INDEX UX_omp_InstanceTemplateAppInstances_Active_Module_Host_App ON omp.InstanceTemplateAppInstances;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+      AND name = N'UX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App'
+)
+BEGIN
+    DROP INDEX UX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App ON omp.InstanceTemplateAppInstances;
 END
 GO
 
@@ -994,11 +1071,11 @@ IF NOT EXISTS
     SELECT 1
     FROM sys.indexes
     WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
-      AND name = N'UX_omp_InstanceTemplateAppInstances_Active_Module_Host_App'
+      AND name = N'IX_omp_InstanceTemplateAppInstances_Active_Module_Host_App'
 )
 BEGIN
-    CREATE UNIQUE INDEX UX_omp_InstanceTemplateAppInstances_Active_Module_Host_App
-        ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId)
+    CREATE INDEX IX_omp_InstanceTemplateAppInstances_Active_Module_Host_App
+        ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey)
         WHERE InstanceTemplateHostId IS NOT NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
@@ -1011,11 +1088,11 @@ IF NOT EXISTS
     SELECT 1
     FROM sys.indexes
     WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
-      AND name = N'UX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App'
+      AND name = N'IX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App'
 )
 BEGIN
-    CREATE UNIQUE INDEX UX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App
-        ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, AppId)
+    CREATE INDEX IX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App
+        ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, AppId, AppInstanceKey)
         WHERE InstanceTemplateHostId IS NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
@@ -1038,6 +1115,10 @@ BEGIN
     (
         SELECT 1
         FROM inserted i
+        INNER JOIN omp.Apps a
+            ON a.AppId = i.AppId
+           AND a.AppType IN (N'Portal', N'WebApp')
+           AND a.AllowMultipleActiveInstances = 0
         INNER JOIN omp.InstanceTemplateAppInstances existing
             ON existing.InstanceTemplateModuleInstanceId = i.InstanceTemplateModuleInstanceId
            AND existing.AppId = i.AppId
@@ -1055,13 +1136,17 @@ BEGIN
           AND existing.DesiredState = 1
     )
     BEGIN
-        THROW 51056, 'Only one active desired template app row is allowed per template module, app definition and host placement.', 1;
+        THROW 51056, 'Only one active desired template web app row is allowed per template module, web app definition and host placement.', 1;
     END;
 
     IF EXISTS
     (
         SELECT 1
         FROM inserted i
+        INNER JOIN omp.Apps a
+            ON a.AppId = i.AppId
+           AND a.AppType IN (N'Portal', N'WebApp')
+           AND a.AllowMultipleActiveInstances = 0
         INNER JOIN omp.InstanceTemplateAppInstances existing
             ON existing.InstanceTemplateModuleInstanceId = i.InstanceTemplateModuleInstanceId
            AND existing.AppId = i.AppId
@@ -1079,7 +1164,7 @@ BEGIN
           AND existing.DesiredState = 1
     )
     BEGIN
-        THROW 51057, 'Do not mix active host-neutral and host-specific template app rows for the same template module and app definition.', 1;
+        THROW 51057, 'Do not mix active host-neutral and host-specific template web app rows for the same template module and web app definition.', 1;
     END;
 END
 GO
