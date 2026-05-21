@@ -4167,6 +4167,11 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
 
     private static string? ValidateSafeModuleDefinitionSql(string sqlText)
     {
+        if (Regex.IsMatch(sqlText, @"(?im)^\s*USE\s+(?:\[[^\]]+\]|[A-Za-z0-9_]+)\s*;?\s*$"))
+        {
+            return "Module definition SQL must not contain USE database directives. Portal runs repairs on the configured OMP database.";
+        }
+
         if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b"))
         {
             return "The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE, which is not allowed for Portal repair.";

@@ -7,9 +7,6 @@ Prerequisites:
 - Run ../../sql/2-initialize-openmoduleplatform.sql
 - Run 1-setup-example-workerapp.sql
 */
-USE [OpenModulePlatform];
-GO
-
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
 SET ANSI_PADDING ON;

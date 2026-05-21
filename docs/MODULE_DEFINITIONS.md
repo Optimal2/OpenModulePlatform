@@ -249,7 +249,10 @@ the stored normalized JSON from each module-definition edit page so an applied
 definition can be moved from one OMP installation to another.
 
 Use `scripts/dev/embed-module-definition-sql.ps1` to refresh embedded SQL from
-the source `.sql` files.
+the source `.sql` files. The embed step removes the historical
+`USE [OpenModulePlatform]` development-database switch from embedded content.
+Portal executes repairs on the configured OMP database connection, so module
+definition SQL must not switch databases.
 
 The `compatibleArtifacts` array defines artifact slots, not already-installed
 artifact rows. An artifact zip import uses these rows to validate
