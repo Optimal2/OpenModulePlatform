@@ -29,44 +29,7 @@
             </summary>
 
             <div class="portal-overview__body">
-                <div class="card-grid portal-admin-metrics">
-                    <a class="card metric-card" href="~/admin/instances">
-                        <div class="metric">@Model.Metrics.InstanceCount</div>
-                        <div>@L["Instances"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/hosts">
-                        <div class="metric">@Model.Metrics.HostCount</div>
-                        <div>@L["Hosts"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/modules">
-                        <div class="metric">@Model.Metrics.ModuleCount</div>
-                        <div>@L["Module definitions"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/moduleinstances">
-                        <div class="metric">@Model.Metrics.ModuleInstanceCount</div>
-                        <div>@L["Module instances"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/apps">
-                        <div class="metric">@Model.Metrics.AppCount</div>
-                        <div>@L["App definitions"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/appinstances">
-                        <div class="metric">@Model.Metrics.AppInstanceCount</div>
-                        <div>@L["App instances"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/workers">
-                        <div class="metric">@Model.Metrics.AppWorkerDefinitionCount</div>
-                        <div>@L["App workers"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/workers">
-                        <div class="metric">@Model.Metrics.AppInstanceRuntimeStateCount</div>
-                        <div>@L["Worker runtime states"]</div>
-                    </a>
-                    <a class="card metric-card" href="~/admin/artifacts">
-                        <div class="metric">@Model.Metrics.ArtifactCount</div>
-                        <div>@L["Artifacts"]</div>
-                    </a>
-                </div>
+                <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
             </div>
         </details>
     </section>
@@ -78,9 +41,11 @@
          data-add-url="@Url.Page("/Index", "AddWidget")"
          data-save-url="@Url.Page("/Index", "SaveDashboard")"
          data-remove-url="@Url.Page("/Index", "RemoveWidget")"
+         data-reset-url="@Url.Page("/Index", "ResetDashboard")"
          data-done-label="@L["Done"]"
          data-edit-label="@L["Edit dashboard"]"
-         data-remove-label="@L["Remove widget"]">
+         data-remove-label="@L["Remove widget"]"
+         data-reset-confirm="@L["This clears your current dashboard widgets. Continue?"]">
     <form class="visually-hidden" method="post" data-dashboard-token-form>
         @Html.AntiForgeryToken()
     </form>
@@ -124,7 +89,16 @@
                     <div class="dashboard-widget__titlebar" data-widget-titlebar>@widget.EffectiveTitle</div>
                 }
                 <div class="dashboard-widget__body">
-                    <div class="dashboard-widget__blank"></div>
+                    @if (widget.Payload == "admin-overview")
+                    {
+                        <div class="dashboard-widget__admin-overview">
+                            <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="dashboard-widget__blank"></div>
+                    }
                 </div>
                 @if (Model.CanEditDashboard)
                 {
@@ -151,6 +125,19 @@
         <button type="button" class="dashboard-add-button" data-dashboard-add-open>
             @L["Add widget"]
         </button>
+
+        <button type="button" class="dashboard-reset-button" data-dashboard-reset>
+            @L["Reset layout"]
+        </button>
+
+        @if (Model.IsPortalAdmin)
+        {
+            <template data-dashboard-widget-template="admin-overview">
+                <div class="dashboard-widget__admin-overview">
+                    <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
+                </div>
+            </template>
+        }
 
         <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">
             <div class="dashboard-widget-picker__header">

@@ -497,6 +497,12 @@ USING
            N'blank-rectangle' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'Admin overview' AS title,
+           N'portal' AS widget_type,
+           N'admin-overview' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
 ) AS source
 ON target.title = source.title
 AND target.widget_type = source.widget_type
@@ -508,4 +514,39 @@ WHEN MATCHED THEN
 WHEN NOT MATCHED THEN
     INSERT(title, widget_type, payload, module_key, author, modified_at)
     VALUES(source.title, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
+GO
+
+IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.Admin')
+BEGIN
+    INSERT INTO omp.Permissions(Name, Description)
+    VALUES(N'OMP.Portal.Admin', N'Administrative access to the OMP Portal');
+END
+GO
+
+DECLARE @AdminOverviewWidgetId int;
+DECLARE @PortalAdminPermissionId int;
+
+SELECT @AdminOverviewWidgetId = widget_id
+FROM omp_portal.widgets
+WHERE title = N'Admin overview'
+  AND widget_type = N'portal'
+  AND module_key = N'omp_portal';
+
+SELECT @PortalAdminPermissionId = PermissionId
+FROM omp.Permissions
+WHERE Name = N'OMP.Portal.Admin';
+
+IF @AdminOverviewWidgetId IS NOT NULL
+   AND @PortalAdminPermissionId IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp_portal.widget_permissions
+       WHERE widget_id = @AdminOverviewWidgetId
+         AND permission_id = @PortalAdminPermissionId
+   )
+BEGIN
+    INSERT INTO omp_portal.widget_permissions(widget_id, permission_id, role_id)
+    VALUES(@AdminOverviewWidgetId, @PortalAdminPermissionId, NULL);
+END
 GO
