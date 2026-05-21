@@ -176,10 +176,12 @@ For values written inside JSON strings, use the `Omp.Json.` variants, for
 example `{{Omp.Json.ConnectionStrings.OmpDb}}`. Those variants escape the value
 for JSON string content but do not include the surrounding quotes.
 
-## Artifact zip import
+## Import folder
 
-HostAgent can poll a folder for immutable artifact zip files. The feature is
-off unless `HostAgent:ArtifactZipImport:IsEnabled` is set to `true`.
+HostAgent can poll a folder for portable deployment objects. The feature is off
+unless `HostAgent:ArtifactZipImport:IsEnabled` is set to `true`. The setting
+name still contains `ArtifactZipImport` for backward compatibility with older
+runtime configuration files.
 
 ```json
 {
@@ -196,14 +198,31 @@ off unless `HostAgent:ArtifactZipImport:IsEnabled` is set to `true`.
 }
 ```
 
-Each zip filename must use the same metadata format as Portal upload:
-`moduleKey__appKey__packageType__targetName__version.zip`. HostAgent validates
-and extracts the zip below `CentralArtifactRoot`, rejects duplicate extracted
-content by SHA-256, registers the `omp.Artifacts` row, registers configuration
-files declared by `omp-artifact-package.json` or copies configuration file rows
-from the latest previous matching artifact when enabled, and selects the new
-artifact for matching desired app rows. Successful files move to `processed`;
-failed files move to `failed` with an adjacent `.error.txt`.
+The import folder recognizes these top-level file types:
+
+- A standard artifact package zip named
+  `moduleKey__appKey__packageType__targetName__version.zip`. Both legacy
+  root-payload zips and manifest-based packages with
+  `omp-artifact-package.json` are accepted.
+- A module definition JSON document with `moduleKey` and `definitionVersion`.
+- A module package zip that contains exactly one module definition JSON document
+  plus one or more standard artifact package zips for the same module.
+
+HostAgent performs only the unattended choices that are safe to automate. It
+applies imported module definitions, runs embedded idempotent repair SQL for
+non-platform modules, imports compatible artifact packages, registers packaged
+configuration files or copies configuration file rows from the latest previous
+matching artifact when enabled, and selects imported artifacts for matching
+desired app rows.
+
+The folder import is intentionally stricter than Portal. Duplicate module
+definitions with the same version but different JSON, duplicate artifact
+versions with different content, invalid package filenames, unknown
+module/app/package combinations, incompatible artifact versions, unsafe repair
+SQL, and malformed JSON or zip files fail without prompting. Successful files
+move to `processed`; failed files move to `failed` with an adjacent
+`.error.txt`. Files with other extensions are treated as unsupported and moved
+to `failed` once HostAgent can open them exclusively.
 
 ## Runtime file mirrors
 
@@ -348,8 +367,8 @@ For a desired upgrade, insert or update one row in
 `omp.HostAgentDesiredStates` for the concrete host and point it at the desired
 `host-agent` artifact. The artifact must already be present in
 `omp.Artifacts`, and its files must exist below `HostAgent:CentralArtifactRoot`.
-When the artifact zip import folder is enabled and a valid `host-agent` artifact
-zip is imported by a HostAgent, the importer also points
+When the import folder is enabled and a valid `host-agent` artifact zip is
+imported by a HostAgent, the importer also points
 `omp.HostAgentDesiredStates` at that artifact for the importing host. This makes
 the file-drop import path self-contained: a new HostAgent zip can be dropped
 into the import folder and the local HostAgent will prepare the versioned

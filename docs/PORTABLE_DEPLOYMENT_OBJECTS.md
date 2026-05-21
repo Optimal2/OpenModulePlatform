@@ -105,7 +105,9 @@ To move a module from one OMP installation to another:
    next cycle.
 
 Portal-driven import can offer operator choices for conflicts. HostAgent folder
-import is intentionally strict and unattended: invalid filenames, incompatible
-module/app combinations, duplicate versions, and changed hashes for an existing
-version are recorded as import errors instead of silently changing database
-state.
+import is intentionally strict and unattended. The same import folder can accept
+module definition JSON files, standard artifact package zips, and module
+package zips containing one module definition JSON plus one or more artifact
+package zips for that module. Invalid filenames, incompatible module/app
+combinations, duplicate versions, and changed hashes for an existing version
+are recorded as import errors instead of silently changing database state.
