@@ -1,0 +1,60 @@
+@using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Models
+@model DashboardPortalEntryWidgetList
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+<div class="dashboard-entry-list"
+     data-dashboard-entry-list
+     data-dashboard-entry-list-kind="@(Model.IsFavoritesList ? "favorites" : "all")">
+    @if (Model.Entries.Count == 0)
+    {
+        <div class="dashboard-entry-list__empty" data-dashboard-entry-list-empty>
+            @L["No portal entries to show."]
+        </div>
+    }
+    else
+    {
+        <div class="dashboard-entry-list__empty" data-dashboard-entry-list-empty hidden>
+            @L["No portal entries to show."]
+        </div>
+    }
+    @foreach (var entry in Model.Entries)
+    {
+        var favoriteLabel = L[entry.IsNavigationFavorite ? "Remove favorite" : "Add favorite"];
+        <div class="dashboard-entry-list__row"
+             data-dashboard-entry-row
+             data-entry-key="@entry.EntryKey"
+             data-entry-title="@entry.DisplayName"
+             data-entry-description="@entry.Description"
+             data-entry-href="@entry.TargetHref"
+             data-entry-logo-url="@entry.LogoUrl"
+             data-entry-logo-fallback="@entry.LogoFallbackText">
+            <a class="dashboard-entry-list__item" href="@entry.TargetHref">
+                <span class="dashboard-entry-list__logo">
+                    @if (!string.IsNullOrWhiteSpace(entry.LogoUrl))
+                    {
+                        <img src="@entry.LogoUrl" alt="" />
+                    }
+                    else
+                    {
+                        <span>@entry.LogoFallbackText</span>
+                    }
+                </span>
+                <span class="dashboard-entry-list__text">
+                    <span class="dashboard-entry-list__title">@entry.DisplayName</span>
+                    @if (!string.IsNullOrWhiteSpace(entry.Description))
+                    {
+                        <span class="dashboard-entry-list__description">@entry.Description</span>
+                    }
+                </span>
+            </a>
+            <button type="button"
+                    class="dashboard-entry-list__favorite-toggle@(entry.IsNavigationFavorite ? " is-favorite" : string.Empty)"
+                    data-dashboard-entry-favorite-toggle
+                    title="@favoriteLabel"
+                    aria-label="@favoriteLabel">
+                @(entry.IsNavigationFavorite ? "★" : "☆")
+            </button>
+        </div>
+    }
+</div>
