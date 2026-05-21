@@ -70,7 +70,9 @@ Portal:
 - `/admin/modulepackageimport` can upload one portable module package zip,
   upload one module definition JSON together with one or more artifact package
   zips, import package-library files from `ArtifactStoreRoot\_available`, and
-  export an applied module definition with its active artifact packages.
+  export an applied module definition with its active artifact packages. The
+  package-library view only offers artifact packages that match the selected
+  module definition's declared compatibility range.
 - `/admin/artifacts` and `/admin/artifactupload` import artifact packages.
 - `/admin/artifactedit` can download an installed artifact as a standard package
   object, including registered configuration files.
