@@ -707,7 +707,9 @@ function Copy-AdditionalArtifactFiles {
         }
 
         $payloadPath = $payloadPath.Replace('\', '/')
-        if ([System.IO.Path]::IsPathRooted($payloadPath) -or $payloadPath.Contains('../') -or $payloadPath.Contains('..\', [StringComparison]::Ordinal)) {
+        if ([System.IO.Path]::IsPathRooted($payloadPath) `
+                -or $payloadPath.Contains('../') `
+                -or $payloadPath.IndexOf('..\', [StringComparison]::Ordinal) -ge 0) {
             throw "Additional artifact payload path must be relative and stay inside the package: $payloadPath"
         }
 
