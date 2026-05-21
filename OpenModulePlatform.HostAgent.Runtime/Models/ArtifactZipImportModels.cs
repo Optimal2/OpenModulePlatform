@@ -23,7 +23,8 @@ public sealed record ArtifactZipImportResult(
     int TemplateAppRowsUpdated,
     int AppInstanceRowsUpdated,
     int WorkerInstanceRowsUpdated,
-    int HostAgentDesiredRowsUpdated);
+    int HostAgentDesiredRowsUpdated,
+    bool AdoptedExistingContent);
 
 public sealed record ArtifactZipImportDuplicateInfo(
     int ArtifactId,
@@ -31,3 +32,41 @@ public sealed record ArtifactZipImportDuplicateInfo(
     string Version,
     string PackageType,
     string? TargetName);
+
+public sealed record ModuleDefinitionImportDocument(
+    string ModuleKey,
+    string DefinitionVersion,
+    int FormatVersion,
+    string DefinitionJson,
+    string DefinitionSha256,
+    string? SourceName,
+    IReadOnlyList<ModuleDefinitionArtifactCompatibilityEntry> CompatibleArtifacts);
+
+public sealed record ModuleDefinitionArtifactCompatibilityEntry(
+    string AppKey,
+    string PackageType,
+    string? TargetName,
+    string? RelativePathTemplate,
+    string? MinArtifactVersion,
+    string? MaxArtifactVersion);
+
+public sealed record ModuleDefinitionSaveResult(
+    int ModuleDefinitionDocumentId,
+    bool Created,
+    bool Replaced,
+    bool WasIdentical);
+
+public sealed record ModuleDefinitionImportResult(
+    string ModuleKey,
+    string DefinitionVersion,
+    int ModuleDefinitionDocumentId,
+    bool Applied,
+    int SqlRepairCount);
+
+public sealed record ModulePackageImportResult(
+    string ModuleKey,
+    string DefinitionVersion,
+    int ModuleDefinitionDocumentId,
+    bool Applied,
+    int SqlRepairCount,
+    IReadOnlyList<ArtifactZipImportResult> Artifacts);
