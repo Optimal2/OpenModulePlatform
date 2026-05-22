@@ -43,6 +43,7 @@ public sealed class PortalEntryService
             return [];
         }
 
+        var rowsById = rows.ToDictionary(row => row.PortalEntryId);
         var allApps = await _catalog.GetEnabledWebAppsAsync(ct);
         var accessibleApps = _catalog.FilterByPermissions(allApps, permissions)
             .ToDictionary(app => app.AppInstanceId);
@@ -86,6 +87,7 @@ public sealed class PortalEntryService
                 ParentEntryId = row.ParentEntryId,
                 EntryKey = row.EntryKey,
                 DisplayName = row.DisplayName,
+                ContextName = BuildContextName(row, rowsById),
                 Description = row.Description,
                 LogoUrl = row.LogoUrl,
                 IconKey = row.IconKey,
@@ -901,6 +903,35 @@ ORDER BY pe.default_sort_order,
 
         var publicRoot = request.GetPublicBaseUrl().TrimEnd('/');
         return $"{publicRoot}/{trimmed.TrimStart('/')}";
+    }
+
+    private static string? BuildContextName(
+        PortalEntryRow row,
+        IReadOnlyDictionary<int, PortalEntryRow> rowsById)
+    {
+        if (!row.ParentEntryId.HasValue)
+        {
+            return null;
+        }
+
+        var visited = new HashSet<int> { row.PortalEntryId };
+        var contextNames = new Stack<string>();
+        var parentId = row.ParentEntryId;
+        while (parentId.HasValue
+               && rowsById.TryGetValue(parentId.Value, out var parent)
+               && visited.Add(parent.PortalEntryId))
+        {
+            if (!string.IsNullOrWhiteSpace(parent.DisplayName))
+            {
+                contextNames.Push(parent.DisplayName);
+            }
+
+            parentId = parent.ParentEntryId;
+        }
+
+        return contextNames.Count == 0
+            ? null
+            : string.Join(" / ", contextNames);
     }
 
     private static bool CanAccessTargetHref(

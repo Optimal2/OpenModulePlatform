@@ -44,6 +44,8 @@ public sealed class PortalEntry
 
     public string DisplayName { get; set; } = string.Empty;
 
+    public string? ContextName { get; set; }
+
     public string? Description { get; set; }
 
     public string? LogoUrl { get; set; }
@@ -74,6 +76,10 @@ public sealed class PortalEntry
                 : trimmed[..1].ToUpperInvariant();
         }
     }
+
+    public string FullDisplayName => string.IsNullOrWhiteSpace(ContextName)
+        ? DisplayName
+        : $"{ContextName} / {DisplayName}";
 }
 
 /// <summary>
