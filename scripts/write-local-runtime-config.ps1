@@ -213,6 +213,7 @@ $hostAgentConfig = [ordered]@{
         OmpDb = $connectionString
     }
     HostAgent = [ordered]@{
+        ServiceName = 'OMP.HostAgent'
         HostKey = $HostKey
         HostName = $env:COMPUTERNAME
         RefreshSeconds = 30

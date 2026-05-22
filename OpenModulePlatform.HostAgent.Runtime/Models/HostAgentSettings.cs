@@ -2,7 +2,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Models;
 
 public sealed class HostAgentSettings
 {
-    public string ServiceName { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = "OMP.HostAgent";
 
     public string Version { get; set; } = string.Empty;
 

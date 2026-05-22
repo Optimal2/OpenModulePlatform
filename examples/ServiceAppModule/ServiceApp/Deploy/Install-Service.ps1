@@ -1,7 +1,7 @@
 # File: OpenModulePlatform.Service.ExampleServiceAppModule/Deploy/Install-Service.ps1
 [CmdletBinding()]
 param(
-    [string]$ServiceName = 'OpenModulePlatform.Service.ExampleServiceAppModule',
+    [string]$ServiceName = 'OMP.Service.ExampleServiceAppModule',
     [string]$DisplayName = 'OpenModulePlatform Service - ExampleServiceAppModule',
     [string]$Description = 'Example OMP service app installed from a published folder.',
     [string]$InstallRoot = "$env:ProgramFiles\OpenModulePlatform\ServiceApps",

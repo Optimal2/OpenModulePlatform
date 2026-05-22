@@ -397,6 +397,7 @@ HostAgentFirst = @{
     # Optional cleanup list for legacy Windows services whose executable paths
     # no longer live below the configured HostAgent/Services roots.
     AdditionalServiceNamesToRemove = @(
+        'OpenModulePlatform.HostAgent',
         'OpenModulePlatform.WorkerManager',
         'OpenModulePlatform.Service.ExampleServiceAppModule'
     )

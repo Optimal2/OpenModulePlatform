@@ -46,8 +46,8 @@ DECLARE @DefaultHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.11';
-DECLARE @WorkerManagerArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @ArtifactVersion nvarchar(50) = N'0.3.19';
+DECLARE @WorkerManagerArtifactVersion nvarchar(50) = N'0.3.4';
 DECLARE @WorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
@@ -473,7 +473,7 @@ BEGIN
     (
         VALUES
             (@CoreTemplateModuleInstanceId, @DefaultInstanceTemplateHostId, @WorkerProcessHostAppId, N'omp_workerprocesshost', N'OMP Worker Process Host', N'Host-local executable used by WorkerManager to run worker plugin artifacts.', NULL, NULL, NULL, NULL, @WorkerProcessHostArtifactId, 1, 20, CONVERT(bit, 1), CONVERT(bit, 1)),
-            (@CoreTemplateModuleInstanceId, @DefaultInstanceTemplateHostId, @WorkerManagerAppId, N'omp_workermanager', N'OMP WorkerManager', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', NULL, NULL, N'WorkerManager', N'OpenModulePlatform.WorkerManager', @WorkerManagerArtifactId, 1, 30, CONVERT(bit, 1), CONVERT(bit, 1))
+            (@CoreTemplateModuleInstanceId, @DefaultInstanceTemplateHostId, @WorkerManagerAppId, N'omp_workermanager', N'OMP WorkerManager', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', NULL, NULL, N'WorkerManager', N'OMP.WorkerManager', @WorkerManagerArtifactId, 1, 30, CONVERT(bit, 1), CONVERT(bit, 1))
     ) AS source(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
     ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
     AND target.AppInstanceKey = source.AppInstanceKey
