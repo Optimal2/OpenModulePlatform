@@ -288,10 +288,13 @@ public sealed class PortableModulePackageService
             definition,
             options.ReplaceExistingModuleDefinition,
             ct);
+        var appliedDefinition = await _repo.GetAppliedModuleDefinitionDocumentAsync(definition.ModuleKey, ct);
+        var keepNewerAppliedDefinition = appliedDefinition is not null
+            && CompareArtifactVersions(appliedDefinition.DefinitionVersion, definition.DefinitionVersion) > 0;
 
         var applied = false;
         var repairCount = 0;
-        if (options.ApplyModuleDefinition)
+        if (options.ApplyModuleDefinition && !keepNewerAppliedDefinition)
         {
             var applyResult = await _repo.ApplyModuleDefinitionDocumentAsync(
                 saveResult.ModuleDefinitionDocumentId,
@@ -308,30 +311,38 @@ public sealed class PortableModulePackageService
             }
         }
 
+        var plans = CreateArtifactImportPlans(definition, artifactPaths);
+        var activationKeys = SelectLatestActivationKeys(plans);
         var artifactResults = new List<PortableModulePackageArtifactImportResult>();
-        foreach (var artifactPath in artifactPaths)
+        foreach (var plan in plans)
         {
-            if (TryReadArtifactPackageFile(artifactPath) is not { } identity)
+            if (plan.Identity is null || !string.IsNullOrWhiteSpace(plan.SkipMessage))
             {
                 artifactResults.Add(new PortableModulePackageArtifactImportResult(
-                    Path.GetFileName(artifactPath),
+                    Path.GetFileName(plan.Path),
                     "Skipped",
-                    "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
+                    plan.SkipMessage ?? "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
                     null));
                 continue;
             }
 
-            if (!identity.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+            var activateArtifact = options.UseArtifactsImmediately
+                && activationKeys.Contains(BuildArtifactActivationKey(plan.Identity));
+            var artifactOptions = options with { UseArtifactsImmediately = activateArtifact };
+            var result = await ImportArtifactPackageAsync(plan.Identity, plan.Path, artifactOptions, ct);
+            if (options.UseArtifactsImmediately
+                && !activateArtifact
+                && result.Status is "Imported" or "Replaced" or "Skipped")
             {
-                artifactResults.Add(new PortableModulePackageArtifactImportResult(
-                    Path.GetFileName(artifactPath),
-                    "Skipped",
-                    $"The artifact belongs to module '{identity.ModuleKey}', not '{definition.ModuleKey}'.",
-                    null));
-                continue;
+                result = result with
+                {
+                    Message = AppendWarning(
+                        result.Message ?? string.Empty,
+                        "The artifact was kept as a historical package and was not selected because a newer compatible artifact for the same app slot exists in this module package.")
+                };
             }
 
-            artifactResults.Add(await ImportArtifactPackageAsync(identity, artifactPath, options, ct));
+            artifactResults.Add(result);
         }
 
         return new PortableModulePackageImportResult(
@@ -374,7 +385,7 @@ public sealed class PortableModulePackageService
         }
         catch (InvalidOperationException ex)
         {
-            return new PortableModulePackageArtifactImportResult(identity.FileName, "Failed", ex.Message, null);
+            return new PortableModulePackageArtifactImportResult(identity.FileName, "Skipped", ex.Message, null);
         }
 
         var storeRoot = RequireConfiguredRoot(_options.ArtifactStoreRoot, "ArtifactStoreRoot");
@@ -402,10 +413,25 @@ public sealed class PortableModulePackageService
             if (existingIdentity is not null
                 && string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
             {
+                var existingWarning = string.Empty;
+                if (options.UseArtifactsImmediately)
+                {
+                    try
+                    {
+                        await _repo.ApplyArtifactToMatchingApplicationsAsync(existingIdentity.ArtifactId, ct);
+                    }
+                    catch (SqlException ex)
+                    {
+                        existingWarning = AppendWarning(
+                            existingWarning,
+                            $"The existing artifact was found, but it could not be selected as desired version automatically: {ex.Message}");
+                    }
+                }
+
                 return new PortableModulePackageArtifactImportResult(
                     identity.FileName,
                     "Skipped",
-                    "The same artifact identity and content already exists.",
+                    AppendWarning("The same artifact identity and content already exists.", existingWarning),
                     existingIdentity.ArtifactId);
             }
 
@@ -665,6 +691,59 @@ public sealed class PortableModulePackageService
         }
 
         return entries;
+    }
+
+    private static IReadOnlyList<ArtifactImportPlan> CreateArtifactImportPlans(
+        ModuleDefinitionDocumentEditData definition,
+        IReadOnlyList<string> artifactPaths)
+    {
+        var plans = new List<ArtifactImportPlan>();
+        foreach (var artifactPath in artifactPaths)
+        {
+            var identity = TryReadArtifactPackageFile(artifactPath);
+            if (identity is null)
+            {
+                plans.Add(new ArtifactImportPlan(
+                    artifactPath,
+                    null,
+                    "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format."));
+                continue;
+            }
+
+            if (!identity.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+            {
+                plans.Add(new ArtifactImportPlan(
+                    artifactPath,
+                    identity,
+                    $"The artifact belongs to module '{identity.ModuleKey}', not '{definition.ModuleKey}'."));
+                continue;
+            }
+
+            if (!IsCompatibleWithDefinition(identity, definition.CompatibleArtifacts))
+            {
+                plans.Add(new ArtifactImportPlan(
+                    artifactPath,
+                    identity,
+                    $"Artifact version {identity.Version} is not compatible with module definition '{definition.ModuleKey}' version {definition.DefinitionVersion}."));
+                continue;
+            }
+
+            plans.Add(new ArtifactImportPlan(artifactPath, identity, null));
+        }
+
+        return plans;
+    }
+
+    private static HashSet<string> SelectLatestActivationKeys(IReadOnlyList<ArtifactImportPlan> plans)
+    {
+        return plans
+            .Where(static plan => plan.Identity is not null && string.IsNullOrWhiteSpace(plan.SkipMessage))
+            .GroupBy(static plan => BuildArtifactSlotKey(plan.Identity!), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderByDescending(static plan => plan.Identity!.Version, ArtifactVersionComparer.Instance)
+                .First())
+            .Select(static plan => BuildArtifactActivationKey(plan.Identity!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static string FindSingleModuleDefinitionFile(string root)
@@ -1147,6 +1226,12 @@ public sealed class PortableModulePackageService
             && string.Equals(slot.TargetName ?? string.Empty, artifact.TargetName, StringComparison.OrdinalIgnoreCase)
             && IsVersionInRange(artifact.Version, slot.MinArtifactVersion, slot.MaxArtifactVersion));
 
+    private static string BuildArtifactSlotKey(ArtifactPackageFile artifact)
+        => string.Join('\u001f', artifact.ModuleKey, artifact.AppKey, artifact.PackageType, artifact.TargetName);
+
+    private static string BuildArtifactActivationKey(ArtifactPackageFile artifact)
+        => string.Join('\u001f', BuildArtifactSlotKey(artifact), artifact.Version);
+
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
     {
         if (!string.IsNullOrWhiteSpace(minVersion)
@@ -1200,6 +1285,19 @@ public sealed class PortableModulePackageService
         string ModuleKey,
         string DefinitionVersion,
         IReadOnlyList<ModuleDefinitionCompatibilityEditData> CompatibleArtifacts);
+
+    private sealed record ArtifactImportPlan(
+        string Path,
+        ArtifactPackageFile? Identity,
+        string? SkipMessage);
+
+    private sealed class ArtifactVersionComparer : IComparer<string>
+    {
+        public static readonly ArtifactVersionComparer Instance = new();
+
+        public int Compare(string? x, string? y)
+            => CompareArtifactVersions(x ?? string.Empty, y ?? string.Empty);
+    }
 }
 
 public sealed record PortableModulePackageImportOptions(

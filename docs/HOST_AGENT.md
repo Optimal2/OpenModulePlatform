@@ -218,14 +218,25 @@ configuration files or copies configuration file rows from the latest previous
 matching artifact when enabled, and selects imported artifacts for matching
 desired app rows.
 
+For complete module package zips, HostAgent treats each inner artifact package
+independently. Identical already-registered artifacts are skipped, incompatible
+historical artifact versions are skipped, and compatible missing artifacts are
+imported. If the package carries an older module definition than the one already
+applied, HostAgent stores it but keeps the newer applied definition. If several
+compatible versions for the same app/package/target slot are present, only the
+highest compatible version is selected as desired state so an exported package
+with history cannot accidentally downgrade a running installation.
+
 The folder import is intentionally stricter than Portal. Duplicate module
 definitions with the same version but different JSON, duplicate artifact
 versions with different content, invalid package filenames, unknown
-module/app/package combinations, incompatible artifact versions, unsafe repair
-SQL, and malformed JSON or zip files fail without prompting. Successful files
-move to `processed`; failed files move to `failed` with an adjacent
-`.error.txt`. Files with other extensions are treated as unsupported and moved
-to `failed` once HostAgent can open them exclusively.
+module/app/package combinations, unsafe repair SQL, and malformed JSON or zip
+files fail without prompting. A standalone artifact zip with an incompatible
+version fails; an incompatible inner artifact in a complete module package is
+skipped as historical package content. Successful files move to `processed`;
+failed files move to `failed` with an adjacent `.error.txt`. Files with other
+extensions are treated as unsupported and moved to `failed` once HostAgent can
+open them exclusively.
 
 ## Runtime file mirrors
 
