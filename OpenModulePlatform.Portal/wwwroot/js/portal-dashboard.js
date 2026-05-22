@@ -20,6 +20,7 @@
         const resetChangesButton = root.querySelector('[data-dashboard-reset-changes]');
         const resetButton = root.querySelector('[data-dashboard-reset]');
         const alignToggle = root.querySelector('[data-dashboard-align-toggle]');
+        const expandedToggle = root.querySelector('[data-dashboard-expanded-toggle]');
         const picker = root.querySelector('[data-widget-picker]');
         const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
 
@@ -28,6 +29,7 @@
                 updateCanvasHeight(root, canvas);
                 window.addEventListener('resize', () => updateCanvasHeight(root, canvas));
             }
+            bindEntryListFilters(root);
             return;
         }
 
@@ -35,6 +37,7 @@
         let maxOrder = getMaxOrder(canvas);
         const state = {
             alignToGrid: root.dataset.alignToGrid !== 'false',
+            expandedCanvas: root.dataset.expandedCanvas === 'true',
             gridSize: parsePositiveInteger(root.dataset.gridSize, defaultGridSize),
             minCanvasHeight: parsePositiveInteger(root.dataset.minCanvasHeight, defaultMinCanvasHeight),
             bottomPadding: parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding),
@@ -46,6 +49,7 @@
         };
 
         updateAlignToGridState(root, alignToggle, state.alignToGrid);
+        updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
         updateCanvasHeight(root, canvas, state);
         window.addEventListener('resize', () => updateCanvasHeight(root, canvas, state));
 
@@ -109,10 +113,27 @@
             }
 
             try {
-                await postForm(root.dataset.preferenceUrl, token, { alignToGrid: next });
+                await saveDashboardPreferences(root, token, state);
             } catch (error) {
                 state.alignToGrid = previous;
                 updateAlignToGridState(root, alignToggle, state.alignToGrid);
+                throw error;
+            }
+        });
+
+        expandedToggle?.addEventListener('change', async () => {
+            const next = expandedToggle.checked;
+            const previous = state.expandedCanvas;
+            state.expandedCanvas = next;
+            updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
+            updateCanvasHeight(root, canvas, state);
+
+            try {
+                await saveDashboardPreferences(root, token, state);
+            } catch (error) {
+                state.expandedCanvas = previous;
+                updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
+                updateCanvasHeight(root, canvas, state);
                 throw error;
             }
         });
@@ -148,6 +169,7 @@
                 }
                 bindWidget(root, canvas, element, token, () => ++maxOrder, state);
                 bindEntryFavoriteToggles(root, element, token);
+                bindEntryListFilters(element);
                 updateEmptyState(canvas);
                 updateCanvasHeight(root, canvas, state);
                 closePicker(picker);
@@ -159,6 +181,7 @@
             bindWidget(root, canvas, widget, token, () => ++maxOrder, state);
         });
         bindEntryFavoriteToggles(root, root, token);
+        bindEntryListFilters(root);
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
 
         function setEditing(next) {
@@ -263,12 +286,14 @@
             updateEntryRowFavoriteState(root, row, isFavorite);
         });
 
-        getEntryLists(root, 'favorites').forEach((list) => {
+        const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
+        const source = findSourceEntryRow(root, entryKey, sourceRow);
+
+        [...getEntryLists(root, 'favorites'), ...getEntryLists(root, 'combo-favorites')].forEach((list) => {
             const existing = Array.from(list.querySelectorAll('[data-dashboard-entry-row]'))
                 .find((row) => row.dataset.entryKey === entryKey);
 
             if (isFavorite && !existing) {
-                const source = findSourceEntryRow(root, entryKey, sourceRow);
                 if (source) {
                     const clone = source.cloneNode(true);
                     clone.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
@@ -276,12 +301,12 @@
                     });
                     updateEntryRowFavoriteState(root, clone, true);
                     list.appendChild(clone);
-                    bindEntryFavoriteToggles(root, clone, root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '');
+                    bindEntryFavoriteToggles(root, clone, token);
                 } else if (payload) {
-                    const row = createEntryRowFromFavoritePayload(root, payload);
+                    const row = createEntryRowFromFavoritePayload(root, payload, true);
                     if (row) {
                         list.appendChild(row);
-                        bindEntryFavoriteToggles(root, row, root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '');
+                        bindEntryFavoriteToggles(root, row, token);
                     }
                 }
             }
@@ -294,6 +319,39 @@
                 });
             }
 
+            applyEntryListFilter(list);
+            updateEntryListEmptyState(list);
+        });
+
+        getEntryLists(root, 'combo-all').forEach((list) => {
+            const existing = Array.from(list.querySelectorAll('[data-dashboard-entry-row]'))
+                .find((row) => row.dataset.entryKey === entryKey);
+
+            if (isFavorite) {
+                list.querySelectorAll('[data-dashboard-entry-row]').forEach((row) => {
+                    if (row.dataset.entryKey === entryKey) {
+                        row.remove();
+                    }
+                });
+            } else if (!existing) {
+                if (source) {
+                    const clone = source.cloneNode(true);
+                    clone.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
+                        delete button.dataset.dashboardFavoriteBound;
+                    });
+                    updateEntryRowFavoriteState(root, clone, false);
+                    list.appendChild(clone);
+                    bindEntryFavoriteToggles(root, clone, token);
+                } else if (payload) {
+                    const row = createEntryRowFromFavoritePayload(root, payload, false);
+                    if (row) {
+                        list.appendChild(row);
+                        bindEntryFavoriteToggles(root, row, token);
+                    }
+                }
+            }
+
+            applyEntryListFilter(list);
             updateEntryListEmptyState(list);
         });
     }
@@ -346,7 +404,7 @@
         window.dispatchEvent(new CustomEvent(favoriteChangedEvent, { detail: normalized }));
     }
 
-    function createEntryRowFromFavoritePayload(root, payload) {
+    function createEntryRowFromFavoritePayload(root, payload, isFavorite = true) {
         const normalized = normalizeFavoritePayload(payload);
         if (!normalized) {
             return null;
@@ -415,7 +473,7 @@
         button.setAttribute('data-dashboard-entry-favorite-toggle', '');
         row.appendChild(link);
         row.appendChild(button);
-        updateEntryRowFavoriteState(root, row, true);
+        updateEntryRowFavoriteState(root, row, isFavorite);
         return row;
     }
 
@@ -452,7 +510,7 @@
     }
 
     function findSourceEntryRow(root, entryKey, fallback) {
-        const allRows = getEntryLists(root, 'all')
+        const allRows = [...getEntryLists(root, 'all'), ...getEntryLists(root, 'combo-all')]
             .flatMap((list) => Array.from(list.querySelectorAll('[data-dashboard-entry-row]')));
         return allRows.find((row) => row.dataset.entryKey === entryKey)
             || fallback
@@ -484,8 +542,78 @@
     function updateEntryListEmptyState(list) {
         const empty = list.querySelector('[data-dashboard-entry-list-empty]');
         if (empty) {
-            empty.hidden = list.querySelectorAll('[data-dashboard-entry-row]').length > 0;
+            const combo = list.closest('[data-dashboard-entry-combo-list]');
+            const comboFilter = combo?.querySelector('[data-dashboard-entry-filter]');
+            if (combo && normalizeSearchText(comboFilter?.value || '').length > 0) {
+                const comboLists = Array.from(combo.querySelectorAll('[data-dashboard-entry-list]'));
+                const anyVisible = comboLists.some((comboList) => Array.from(comboList.querySelectorAll('[data-dashboard-entry-row]'))
+                    .some((row) => !row.hidden));
+                comboLists.forEach((comboList, index) => {
+                    const comboEmpty = comboList.querySelector('[data-dashboard-entry-list-empty]');
+                    if (comboEmpty) {
+                        comboEmpty.hidden = anyVisible || index > 0;
+                    }
+                });
+                return;
+            }
+
+            empty.hidden = Array.from(list.querySelectorAll('[data-dashboard-entry-row]'))
+                .some((row) => !row.hidden);
         }
+    }
+
+    function bindEntryListFilters(scope) {
+        scope.querySelectorAll('[data-dashboard-entry-filter]').forEach((input) => {
+            if (input.dataset.dashboardEntryFilterBound === 'true') {
+                return;
+            }
+
+            input.dataset.dashboardEntryFilterBound = 'true';
+            input.addEventListener('input', () => {
+                getFilterLists(input).forEach(applyEntryListFilter);
+            });
+            getFilterLists(input).forEach(applyEntryListFilter);
+        });
+    }
+
+    function getFilterLists(input) {
+        const combo = input.closest('[data-dashboard-entry-combo-list]');
+        if (combo) {
+            return Array.from(combo.querySelectorAll('[data-dashboard-entry-list]'));
+        }
+
+        const list = input.closest('[data-dashboard-entry-list]');
+        return list ? [list] : [];
+    }
+
+    function applyEntryListFilter(list) {
+        const filterInput = list.closest('[data-dashboard-entry-combo-list]')?.querySelector('[data-dashboard-entry-filter]')
+            || list.querySelector('[data-dashboard-entry-filter]');
+        const query = normalizeSearchText(filterInput?.value || '');
+        const isFiltering = query.length > 0;
+
+        list.querySelectorAll('[data-dashboard-entry-row]').forEach((row) => {
+            row.hidden = isFiltering && !getEntryRowSearchText(row).includes(query);
+        });
+
+        list.querySelectorAll('[data-dashboard-entry-list-section]').forEach((section) => {
+            section.hidden = isFiltering;
+        });
+        updateEntryListEmptyState(list);
+    }
+
+    function getEntryRowSearchText(row) {
+        return normalizeSearchText([
+            row.dataset.entryTitle,
+            row.dataset.entryContext,
+            row.dataset.entryDescription,
+            row.dataset.entryHref,
+            row.dataset.entryKey
+        ].join(' '));
+    }
+
+    function normalizeSearchText(value) {
+        return String(value || '').trim().toLocaleLowerCase();
     }
 
     function startDrag(root, canvas, widget, event, state) {
@@ -659,10 +787,12 @@
             await postForm(root.dataset.removeUrl, token, { userActiveWidgetId });
         }
 
-        if (state.alignToGrid !== snapshot.alignToGrid) {
+        if (state.alignToGrid !== snapshot.alignToGrid || state.expandedCanvas !== snapshot.expandedCanvas) {
             state.alignToGrid = snapshot.alignToGrid;
+            state.expandedCanvas = snapshot.expandedCanvas;
             updateAlignToGridState(root, root.querySelector('[data-dashboard-align-toggle]'), state.alignToGrid);
-            await postForm(root.dataset.preferenceUrl, token, { alignToGrid: state.alignToGrid });
+            updateExpandedCanvasState(root, root.querySelector('[data-dashboard-expanded-toggle]'), state.expandedCanvas);
+            await saveDashboardPreferences(root, token, state);
         }
 
         restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder);
@@ -676,6 +806,7 @@
     function captureDashboardSnapshot(canvas, state) {
         return {
             alignToGrid: !!state?.alignToGrid,
+            expandedCanvas: !!state?.expandedCanvas,
             maxOrder: getMaxOrder(canvas),
             widgets: Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
                 .map((widget) => {
@@ -695,6 +826,7 @@
             canvas.appendChild(widget);
             bindWidget(root, canvas, widget, token, nextOrder, state);
             bindEntryFavoriteToggles(root, widget, token);
+            bindEntryListFilters(widget);
         });
     }
 
@@ -702,6 +834,22 @@
         element.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
             delete button.dataset.dashboardFavoriteBound;
         });
+    }
+
+    async function saveDashboardPreferences(root, token, state) {
+        await postForm(root.dataset.preferenceUrl, token, {
+            alignToGrid: !!state.alignToGrid,
+            expandedCanvas: !!state.expandedCanvas
+        });
+    }
+
+    function updateExpandedCanvasState(root, expandedToggle, enabled) {
+        root.dataset.expandedCanvas = enabled ? 'true' : 'false';
+        root.classList.toggle('is-expanded-canvas', enabled);
+        root.closest('.content-shell')?.classList.toggle('content-shell--expanded-dashboard', enabled);
+        if (expandedToggle) {
+            expandedToggle.checked = enabled;
+        }
     }
 
     async function postForm(url, token, values) {

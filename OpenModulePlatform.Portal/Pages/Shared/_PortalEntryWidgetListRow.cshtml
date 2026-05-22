@@ -1,0 +1,49 @@
+@using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Models
+@model PortalEntry
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+@{
+    var favoriteLabel = L[Model.IsNavigationFavorite ? "Remove favorite" : "Add favorite"];
+}
+
+<div class="dashboard-entry-list__row"
+     data-dashboard-entry-row
+     data-entry-key="@Model.EntryKey"
+     data-entry-title="@Model.DisplayName"
+     data-entry-context="@Model.ContextName"
+     data-entry-description="@Model.Description"
+     data-entry-href="@Model.TargetHref"
+     data-entry-logo-url="@Model.LogoUrl"
+     data-entry-logo-fallback="@Model.LogoFallbackText">
+    <a class="dashboard-entry-list__item" href="@Model.TargetHref">
+        <span class="dashboard-entry-list__logo">
+            @if (!string.IsNullOrWhiteSpace(Model.LogoUrl))
+            {
+                <img src="@Model.LogoUrl" alt="" />
+            }
+            else
+            {
+                <span>@Model.LogoFallbackText</span>
+            }
+        </span>
+        <span class="dashboard-entry-list__text">
+            <span class="dashboard-entry-list__title">@Model.DisplayName</span>
+            @if (!string.IsNullOrWhiteSpace(Model.ContextName))
+            {
+                <span class="dashboard-entry-list__context">@Model.ContextName</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Description))
+            {
+                <span class="dashboard-entry-list__description">@Model.Description</span>
+            }
+        </span>
+    </a>
+    <button type="button"
+            class="dashboard-entry-list__favorite-toggle@(Model.IsNavigationFavorite ? " is-favorite" : string.Empty)"
+            data-dashboard-entry-favorite-toggle
+            title="@favoriteLabel"
+            aria-label="@favoriteLabel">
+        @(Model.IsNavigationFavorite ? "★" : "☆")
+    </button>
+</div>

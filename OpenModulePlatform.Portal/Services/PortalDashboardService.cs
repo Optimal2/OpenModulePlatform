@@ -13,6 +13,7 @@ namespace OpenModulePlatform.Portal.Services;
 public sealed class PortalDashboardService
 {
     private const bool DefaultAlignToGrid = true;
+    private const bool DefaultExpandedCanvas = false;
     private const int DefaultWidgetWidth = 320;
     private const int DefaultWidgetHeight = 192;
     private const int MinWidgetWidth = 160;
@@ -32,7 +33,8 @@ public sealed class PortalDashboardService
     public async Task<DashboardPreferences> GetPreferencesAsync(int userId, CancellationToken ct)
     {
         const string sql = @"
-SELECT align_to_grid
+SELECT align_to_grid,
+       expanded_canvas
 FROM omp_portal.user_dashboard_preferences
 WHERE user_id = @user_id;";
 
@@ -41,11 +43,18 @@ WHERE user_id = @user_id;";
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
 
-        var value = await cmd.ExecuteScalarAsync(ct);
-        return new DashboardPreferences(value is null or DBNull ? DefaultAlignToGrid : Convert.ToBoolean(value, CultureInfo.InvariantCulture));
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return new DashboardPreferences(DefaultAlignToGrid, DefaultExpandedCanvas);
+        }
+
+        return new DashboardPreferences(
+            rdr.IsDBNull(0) ? DefaultAlignToGrid : Convert.ToBoolean(rdr.GetValue(0), CultureInfo.InvariantCulture),
+            rdr.IsDBNull(1) ? DefaultExpandedCanvas : Convert.ToBoolean(rdr.GetValue(1), CultureInfo.InvariantCulture));
     }
 
-    public async Task SetAlignToGridAsync(int userId, bool alignToGrid, CancellationToken ct)
+    public async Task SetPreferencesAsync(int userId, bool alignToGrid, bool expandedCanvas, CancellationToken ct)
     {
         const string sql = @"
 MERGE omp_portal.user_dashboard_preferences AS target
@@ -53,16 +62,18 @@ USING (SELECT @user_id AS user_id) AS source
 ON target.user_id = source.user_id
 WHEN MATCHED THEN
     UPDATE SET align_to_grid = @align_to_grid,
+               expanded_canvas = @expanded_canvas,
                updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(user_id, align_to_grid, updated_at)
-    VALUES(@user_id, @align_to_grid, SYSUTCDATETIME());";
+    INSERT(user_id, align_to_grid, expanded_canvas, updated_at)
+    VALUES(@user_id, @align_to_grid, @expanded_canvas, SYSUTCDATETIME());";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         cmd.Parameters.Add("@align_to_grid", SqlDbType.Bit).Value = alignToGrid;
+        cmd.Parameters.Add("@expanded_canvas", SqlDbType.Bit).Value = expandedCanvas;
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -445,7 +456,7 @@ ORDER BY w.title,
         => definition.Payload switch
         {
             "admin-overview" => 768,
-            "portal-entry-favorites" or "portal-entry-list" => 416,
+            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 416,
             _ => DefaultWidgetWidth
         };
 
@@ -453,7 +464,7 @@ ORDER BY w.title,
         => definition.Payload switch
         {
             "admin-overview" => 384,
-            "portal-entry-favorites" or "portal-entry-list" => 352,
+            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 384,
             _ => DefaultWidgetHeight
         };
 

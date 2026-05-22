@@ -279,6 +279,11 @@ a:hover {
     padding: 24px;
 }
 
+.content-shell--expanded-dashboard,
+.content-shell:has(.portal-dashboard.is-expanded-canvas) {
+    max-width: none;
+}
+
 .content {
     padding: 16px;
 }
@@ -1231,6 +1236,10 @@ button {
     touch-action: none;
 }
 
+.portal-dashboard.is-editing.is-expanded-canvas .portal-dashboard__canvas {
+    overflow: auto;
+}
+
 .portal-dashboard.is-editing.is-free-placement .portal-dashboard__canvas {
     background:
         linear-gradient(90deg, rgba(215, 222, 234, 0.18) 1px, transparent 1px),
@@ -1328,16 +1337,68 @@ button {
 .dashboard-entry-list {
     display: grid;
     gap: 8px;
+    align-content: start;
     height: 100%;
     min-height: 0;
     overflow: auto;
-    padding-right: 2px;
+    padding: 4px;
+}
+
+.dashboard-entry-combo-list {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    padding: 4px;
+}
+
+.dashboard-entry-combo-list .dashboard-entry-list {
+    height: auto;
+    min-height: auto;
+    overflow: visible;
+    padding: 0;
+}
+
+.dashboard-entry-list__search {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding-bottom: 4px;
+    background: var(--surface);
+}
+
+.dashboard-entry-list__search input {
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+}
+
+.dashboard-entry-list__search input:focus {
+    border-color: var(--link);
+    outline: 2px solid rgba(11, 87, 208, 0.14);
+    outline-offset: 1px;
+}
+
+.dashboard-entry-list__section {
+    padding: 2px 2px 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .dashboard-entry-list__empty {
     display: grid;
-    min-height: 100%;
+    min-height: 80px;
     place-items: center;
+    padding: 12px;
     color: var(--text-muted);
     text-align: center;
 }
@@ -1350,7 +1411,7 @@ button {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 34px;
     align-items: center;
-    min-height: 48px;
+    min-height: 72px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
@@ -1369,8 +1430,8 @@ button {
     gap: 10px;
     align-items: center;
     min-width: 0;
-    min-height: 48px;
-    padding: 8px;
+    min-height: 72px;
+    padding: 10px;
     color: var(--text);
     text-decoration: none;
 }
@@ -1508,7 +1569,7 @@ button {
     position: fixed;
     left: 22px;
     bottom: 22px;
-    z-index: 40;
+    z-index: 20000;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -1540,7 +1601,7 @@ button {
 .dashboard-reset-changes-button {
     position: fixed;
     left: 22px;
-    z-index: 40;
+    z-index: 20000;
     display: none;
     min-height: 38px;
     border-radius: 999px;
@@ -1570,25 +1631,33 @@ button {
     position: fixed;
     left: 22px;
     bottom: 218px;
-    z-index: 40;
+    z-index: 20000;
     display: none;
     min-height: 38px;
-    border-color: #d36f6f;
+    border-color: #b42318;
     border-radius: 999px;
-    background: var(--surface-muted);
-    color: #8a1f1f;
+    background: #b42318;
+    color: #ffffff;
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
+}
+
+.dashboard-reset-button:hover,
+.dashboard-reset-button:focus-visible {
+    border-color: #8a1f1f;
+    background: #8a1f1f;
+    color: #ffffff;
+    outline: none;
 }
 
 .portal-dashboard.is-editing .dashboard-reset-button {
     display: inline-flex;
 }
 
-.dashboard-grid-toggle {
+.dashboard-grid-toggle,
+.dashboard-expanded-toggle {
     position: fixed;
     left: 22px;
-    bottom: 266px;
-    z-index: 40;
+    z-index: 20000;
     display: none;
     align-items: center;
     gap: 8px;
@@ -1602,11 +1671,21 @@ button {
     cursor: pointer;
 }
 
-.portal-dashboard.is-editing .dashboard-grid-toggle {
+.dashboard-grid-toggle {
+    bottom: 266px;
+}
+
+.dashboard-expanded-toggle {
+    bottom: 314px;
+}
+
+.portal-dashboard.is-editing .dashboard-grid-toggle,
+.portal-dashboard.is-editing .dashboard-expanded-toggle {
     display: inline-flex;
 }
 
-.dashboard-grid-toggle input {
+.dashboard-grid-toggle input,
+.dashboard-expanded-toggle input {
     margin: 0;
 }
 

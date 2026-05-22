@@ -1,0 +1,66 @@
+@using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Models
+@model DashboardPortalEntryComboWidgetList
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+@{
+    var favoriteKeys = Model.FavoriteEntries
+        .Select(entry => entry.EntryKey)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var remainingEntries = Model.AllEntries
+        .Where(entry => !favoriteKeys.Contains(entry.EntryKey))
+        .ToArray();
+}
+
+<div class="dashboard-entry-combo-list" data-dashboard-entry-combo-list>
+    <div class="dashboard-entry-list__search">
+        <input type="search"
+               data-dashboard-entry-filter
+               placeholder="@L["Search..."]"
+               aria-label="@L["Search"]" />
+    </div>
+
+    <div class="dashboard-entry-list"
+         data-dashboard-entry-list
+         data-dashboard-entry-list-kind="combo-favorites">
+        <div class="dashboard-entry-list__section" data-dashboard-entry-list-section>@L["Favorites"]</div>
+        @if (Model.FavoriteEntries.Count == 0)
+        {
+            <div class="dashboard-entry-list__empty" data-dashboard-entry-list-empty>
+                @L["No portal entries to show."]
+            </div>
+        }
+        else
+        {
+            <div class="dashboard-entry-list__empty" data-dashboard-entry-list-empty hidden>
+                @L["No portal entries to show."]
+            </div>
+        }
+        @foreach (var entry in Model.FavoriteEntries)
+        {
+            <partial name="_PortalEntryWidgetListRow" model="entry" />
+        }
+    </div>
+
+    <div class="dashboard-entry-list"
+         data-dashboard-entry-list
+         data-dashboard-entry-list-kind="combo-all">
+        <div class="dashboard-entry-list__section" data-dashboard-entry-list-section>@L["All modules"]</div>
+        @if (remainingEntries.Length == 0)
+        {
+            <div class="dashboard-entry-list__empty" data-dashboard-entry-list-empty>
+                @L["No portal entries to show."]
+            </div>
+        }
+        else
+        {
+            <div class="dashboard-entry-list__empty" data-dashboard-entry-list-empty hidden>
+                @L["No portal entries to show."]
+            </div>
+        }
+        @foreach (var entry in remainingEntries)
+        {
+            <partial name="_PortalEntryWidgetListRow" model="entry" />
+        }
+    </div>
+</div>

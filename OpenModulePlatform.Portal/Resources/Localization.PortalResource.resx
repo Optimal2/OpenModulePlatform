@@ -1798,10 +1798,14 @@
   <data name="Reset changes" xml:space="preserve"><value>Reset changes</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Reset layout</value></data>
   <data name="Align to grid" xml:space="preserve"><value>Align to grid</value></data>
+  <data name="Expanded canvas" xml:space="preserve"><value>Expanded canvas</value></data>
   <data name="This clears your current dashboard widgets. Continue?" xml:space="preserve"><value>This clears your current dashboard widgets. Continue?</value></data>
   <data name="No portal entries to show." xml:space="preserve"><value>No portal entries to show.</value></data>
   <data name="Add favorite" xml:space="preserve"><value>Add favorite</value></data>
   <data name="Remove favorite" xml:space="preserve"><value>Remove favorite</value></data>
+  <data name="Search" xml:space="preserve"><value>Search</value></data>
+  <data name="Search..." xml:space="preserve"><value>Search...</value></data>
+  <data name="Favorites" xml:space="preserve"><value>Favorites</value></data>
   <data name="Portal widget" xml:space="preserve"><value>Portal widget</value></data>
   <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard widgets</value></data>
   <data name="Import and export portable Portal dashboard widget definitions as JSON files." xml:space="preserve"><value>Import and export portable Portal dashboard widget definitions as JSON files.</value></data>
