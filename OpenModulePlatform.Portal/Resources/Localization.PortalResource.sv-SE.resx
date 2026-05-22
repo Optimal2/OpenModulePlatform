@@ -1892,6 +1892,7 @@
   <data name="No widgets are available." xml:space="preserve"><value>Inga widgets är tillgängliga.</value></data>
   <data name="Close" xml:space="preserve"><value>Stäng</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Återställ layout</value></data>
+  <data name="Align to grid" xml:space="preserve"><value>Fäst mot rutnät</value></data>
   <data name="This clears your current dashboard widgets. Continue?" xml:space="preserve"><value>Detta rensar dina nuvarande dashboard-widgets. Vill du fortsätta?</value></data>
   <data name="No portal entries to show." xml:space="preserve"><value>Inga portal entries att visa.</value></data>
   <data name="Add favorite" xml:space="preserve"><value>Lägg till favorit</value></data>

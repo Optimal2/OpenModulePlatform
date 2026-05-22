@@ -495,7 +495,7 @@ BEGIN
         offset_top int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_offset_top DEFAULT(0),
         offset_left int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_offset_left DEFAULT(0),
         width int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_width DEFAULT(320),
-        height int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_height DEFAULT(180),
+        height int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_height DEFAULT(192),
         order_priority int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_order_priority DEFAULT(0),
         title nvarchar(200) NULL,
         int_data int NULL,
@@ -537,6 +537,21 @@ BEGIN
         CONSTRAINT FK_omp_portal_user_active_widget_data_active_widget FOREIGN KEY(user_active_widget_id)
             REFERENCES omp_portal.user_active_widgets(user_active_widget_id)
             ON DELETE CASCADE
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.user_dashboard_preferences
+    (
+        user_id int NOT NULL,
+        align_to_grid bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_align_to_grid DEFAULT(1),
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_updated_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_user_dashboard_preferences PRIMARY KEY(user_id),
+        CONSTRAINT FK_omp_portal_user_dashboard_preferences_user FOREIGN KEY(user_id)
+            REFERENCES omp.users(user_id)
     );
 END
 GO
