@@ -1330,11 +1330,14 @@ $contentWebAppFileMirrors = Get-ContentWebAppFileMirrors `
     -HtmlFilesPath $contentWebAppHtmlFilesPath `
     -WebAppsRoot $webAppsRoot `
     -ContentWebAppPath $contentWebAppPath
-$hostAgentServiceName = [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'HostAgent' -DefaultValue 'OpenModulePlatform.HostAgent')
+$hostAgentServiceName = [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'HostAgent' -DefaultValue 'OMP.HostAgent')
 $additionalServiceNamesToRemove = [System.Collections.Generic.List[string]]::new()
 foreach ($name in @(
-        [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'WorkerManager' -DefaultValue 'OpenModulePlatform.WorkerManager'),
-        [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'ExampleService' -DefaultValue 'OpenModulePlatform.Service.ExampleServiceAppModule')
+        [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'WorkerManager' -DefaultValue 'OMP.WorkerManager'),
+        [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'ExampleService' -DefaultValue 'OMP.Service.ExampleServiceAppModule'),
+        'OpenModulePlatform.HostAgent',
+        'OpenModulePlatform.WorkerManager',
+        'OpenModulePlatform.Service.ExampleServiceAppModule'
     )) {
     if (-not [string]::IsNullOrWhiteSpace($name) -and -not $additionalServiceNamesToRemove.Contains($name.Trim())) {
         $additionalServiceNamesToRemove.Add($name.Trim())

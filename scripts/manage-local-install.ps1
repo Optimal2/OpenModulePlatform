@@ -31,8 +31,8 @@ Set-StrictMode -Version Latest
 
 # Stop dependents first and start providers first. WorkerManager relies on
 # HostAgent runtime services, so the order is intentionally reversed.
-$script:serviceNames = @('OpenModulePlatform.WorkerManager', 'OpenModulePlatform.HostAgent')
-$script:startServiceNames = @('OpenModulePlatform.HostAgent', 'OpenModulePlatform.WorkerManager')
+$script:serviceNames = @('OMP.WorkerManager', 'OMP.HostAgent', 'OpenModulePlatform.WorkerManager', 'OpenModulePlatform.HostAgent')
+$script:startServiceNames = @('OMP.HostAgent', 'OMP.WorkerManager')
 $script:appPools = @('OMP_Portal', 'OMP_Auth', 'OMP_ContentWebAppModule', 'OMP_iFrameWebAppModule')
 $script:publishRoot = Join-Path $RuntimeRoot 'Publish\OMP'
 $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
@@ -672,8 +672,8 @@ function Ensure-WindowsServices {
     $workerManagerExe = Join-Path $RuntimeRoot 'Services\WorkerManager\OpenModulePlatform.WorkerManager.WindowsService.exe'
 
     $serviceSpecs = @(
-        @{ Name = 'OpenModulePlatform.HostAgent'; DisplayName = 'OpenModulePlatform HostAgent'; Exe = $hostAgentExe },
-        @{ Name = 'OpenModulePlatform.WorkerManager'; DisplayName = 'OpenModulePlatform WorkerManager'; Exe = $workerManagerExe }
+        @{ Name = 'OMP.HostAgent'; DisplayName = 'OpenModulePlatform HostAgent'; Exe = $hostAgentExe },
+        @{ Name = 'OMP.WorkerManager'; DisplayName = 'OpenModulePlatform WorkerManager'; Exe = $workerManagerExe }
     )
 
     foreach ($spec in $serviceSpecs) {

@@ -57,8 +57,8 @@ The Portal IIS application can then point to `E:\OMP\Sites\Portal`; the Windows 
 The standard local service names are:
 
 ```text
-OpenModulePlatform.HostAgent
-OpenModulePlatform.WorkerManager
+OMP.HostAgent
+OMP.WorkerManager
 ```
 
 Use those names when stopping or starting the runtime around publish operations.
@@ -154,8 +154,8 @@ you intentionally want to replace the runtime files.
 The standard service names are:
 
 ```text
-OpenModulePlatform.HostAgent
-OpenModulePlatform.WorkerManager
+OMP.HostAgent
+OMP.WorkerManager
 ```
 
 The WorkerManager runtime config must point to:

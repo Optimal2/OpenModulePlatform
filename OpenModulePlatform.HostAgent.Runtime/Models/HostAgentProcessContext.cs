@@ -14,7 +14,7 @@ public sealed class HostAgentProcessContext
         string runtimeMode,
         string? takeoverFromServiceName)
     {
-        ServiceName = Clean(serviceName, "OpenModulePlatform.HostAgent");
+        ServiceName = Clean(serviceName, "OMP.HostAgent");
         Version = Clean(version, ResolveAssemblyVersion());
         _runtimeMode = NormalizeMode(runtimeMode);
         TakeoverFromServiceName = string.IsNullOrWhiteSpace(takeoverFromServiceName)

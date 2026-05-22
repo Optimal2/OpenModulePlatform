@@ -46,7 +46,7 @@ DECLARE @ServiceAdminPermissionId int;
 DECLARE @InitialServiceConfigId int;
 DECLARE @ServiceArtifactId int;
 DECLARE @WebArtifactVersion nvarchar(50) = N'0.3.4';
-DECLARE @ServiceArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @ServiceArtifactVersion nvarchar(50) = N'0.3.4';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -419,7 +419,7 @@ BEGIN
         N'Example Service Worker',
         N'Primary service app instance for the example HostAppModule',
         N'C:\Program Files\OpenModulePlatform\ServiceApps\ExampleServiceAppModule',
-        N'OpenModulePlatform.Service.ExampleServiceAppModule',
+        N'OMP.Service.ExampleServiceAppModule',
         @ServiceArtifactId,
         @InitialServiceConfigId,
         /*
@@ -444,7 +444,7 @@ BEGIN
         DisplayName = N'Example Service Worker',
         Description = N'Primary service app instance for the example HostAppModule',
         InstallPath = N'C:\Program Files\OpenModulePlatform\ServiceApps\ExampleServiceAppModule',
-        InstallationName = N'OpenModulePlatform.Service.ExampleServiceAppModule',
+        InstallationName = N'OMP.Service.ExampleServiceAppModule',
         ArtifactId = @ServiceArtifactId,
         ConfigId = @InitialServiceConfigId,
         ExpectedLogin = N'DOMAIN\\ServiceAccountName',
@@ -490,7 +490,7 @@ BEGIN
         N'Example Service Worker',
         N'Primary service app instance for the example HostAppModule',
         N'C:\Program Files\OpenModulePlatform\ServiceApps\ExampleServiceAppModule',
-        N'OpenModulePlatform.Service.ExampleServiceAppModule',
+        N'OMP.Service.ExampleServiceAppModule',
         @ServiceArtifactId,
         @InitialServiceConfigId,
         N'DOMAIN\\ServiceAccountName',
@@ -501,7 +501,8 @@ BEGIN
 END
 
 UPDATE omp.InstanceTemplateAppInstances
-SET DesiredArtifactId = @ServiceArtifactId
+SET DesiredArtifactId = @ServiceArtifactId,
+    InstallationName = N'OMP.Service.ExampleServiceAppModule'
 WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
   AND AppInstanceKey = N'example_serviceapp_service';
 

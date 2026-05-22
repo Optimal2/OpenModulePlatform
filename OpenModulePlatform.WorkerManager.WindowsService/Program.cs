@@ -11,7 +11,7 @@ using OpenModulePlatform.WorkerManager.WindowsService.Services;
 var builder = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "OpenModulePlatform.WorkerManager.WindowsService";
+        options.ServiceName = "OMP.WorkerManager";
     })
     .ConfigureLogging(logging =>
     {

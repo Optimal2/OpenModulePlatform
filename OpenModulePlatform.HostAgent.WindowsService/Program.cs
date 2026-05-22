@@ -21,7 +21,7 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
     .UseWindowsService(options =>
     {
         options.ServiceName = string.IsNullOrWhiteSpace(startupServiceName)
-            ? "OpenModulePlatform.HostAgent.WindowsService"
+            ? "OMP.HostAgent"
             : startupServiceName.Trim();
     })
     .ConfigureLogging(logging =>
@@ -62,7 +62,7 @@ static HostAgentProcessContext CreateProcessContext(string[] args, HostAgentSett
 {
     var serviceName = GetArgumentValue(args, "--service-name")
         ?? settings?.ServiceName
-        ?? "OpenModulePlatform.HostAgent";
+        ?? "OMP.HostAgent";
     var version = settings?.Version ?? string.Empty;
     var runtimeMode = GetArgumentValue(args, "--runtime-mode")
         ?? (args.Any(static arg => string.Equals(arg, "--takeover", StringComparison.OrdinalIgnoreCase))

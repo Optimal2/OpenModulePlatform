@@ -223,7 +223,13 @@ function Remove-Services {
     }
 
     Write-Step 'Removing Windows services'
-    foreach ($serviceName in @($script:Services.ExampleService, $script:Services.WorkerManager, $script:Services.HostAgent)) {
+    foreach ($serviceName in @(
+            $script:Services.ExampleService,
+            $script:Services.WorkerManager,
+            $script:Services.HostAgent,
+            'OpenModulePlatform.Service.ExampleServiceAppModule',
+            'OpenModulePlatform.WorkerManager',
+            'OpenModulePlatform.HostAgent')) {
         if (-not [string]::IsNullOrWhiteSpace($serviceName)) {
             Remove-WindowsServiceIfExists -Name $serviceName
         }
@@ -561,9 +567,9 @@ foreach ($key in @($configuredPools.Keys)) {
 $script:AppPools = [pscustomobject]$defaultAppPools
 
 $defaultServices = @{
-    HostAgent = 'OpenModulePlatform.HostAgent'
-    WorkerManager = 'OpenModulePlatform.WorkerManager'
-    ExampleService = 'OpenModulePlatform.Service.ExampleServiceAppModule'
+    HostAgent = 'OMP.HostAgent'
+    WorkerManager = 'OMP.WorkerManager'
+    ExampleService = 'OMP.Service.ExampleServiceAppModule'
 }
 $configuredServices = Get-ConfigValue -Config $config -Name 'Services' -DefaultValue @{}
 foreach ($key in @($configuredServices.Keys)) {

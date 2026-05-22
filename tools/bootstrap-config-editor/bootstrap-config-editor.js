@@ -82,7 +82,7 @@ function createDefaultConfig() {
         artifacts: [],
         hostAgent: {
             enabled: true,
-            serviceName: 'OpenModulePlatform.HostAgent',
+            serviceName: 'OMP.HostAgent',
             additionalServiceNamesToRemove: [],
             displayName: 'OpenModulePlatform HostAgent',
             description: 'OpenModulePlatform artifact provisioning agent.',
@@ -94,7 +94,7 @@ function createDefaultConfig() {
             serviceAppPasswordCredentialKey: '',
             serviceAppIdentityOverrides: {},
             installPath: 'E:\\OMP\\Services\\HostAgent',
-            packagePath: 'payload\\OpenModulePlatform.HostAgent.zip',
+            packagePath: 'payload\\OpenModulePlatform.HostAgent.WindowsService.zip',
             backupExistingInstall: true,
             startService: true,
             settingsFileName: 'appsettings.Production.json',
@@ -249,7 +249,7 @@ function buildConfigFromForm() {
     config.hostAgent.serviceAppPasswordCredentialKey = config.hostAgent.serviceAppPasswordCredentialKey || '';
     config.hostAgent.serviceAppIdentityOverrides = config.hostAgent.serviceAppIdentityOverrides ?? {};
     config.hostAgent.installPath = fields.hostAgentInstallPath.value.trim();
-    config.hostAgent.packagePath = config.hostAgent.packagePath || 'payload\\OpenModulePlatform.HostAgent.zip';
+    config.hostAgent.packagePath = config.hostAgent.packagePath || 'payload\\OpenModulePlatform.HostAgent.WindowsService.zip';
     config.hostAgent.backupExistingInstall = config.hostAgent.backupExistingInstall !== false;
     config.hostAgent.startService = config.hostAgent.startService !== false;
     config.hostAgent.settingsFileName = config.hostAgent.settingsFileName || 'appsettings.Production.json';

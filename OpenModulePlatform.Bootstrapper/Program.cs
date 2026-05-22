@@ -2226,7 +2226,7 @@ VALUES
 
         var packagePath = ResolvePath(payloadRoot, hostAgent.PackagePath);
         var installPath = Path.GetFullPath(hostAgent.InstallPath.Trim());
-        var stagingRoot = Path.Combine(Path.GetTempPath(), "OpenModulePlatform.HostAgent", Guid.NewGuid().ToString("N"));
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "OMP.HostAgent", Guid.NewGuid().ToString("N"));
         var sourceDirectory = packagePath;
 
         try
@@ -3477,7 +3477,7 @@ VALUES
             verb,
             hostAgent.ServiceName,
             "binPath=",
-            executablePath,
+            CreateHostAgentServiceBinaryPath(executablePath, hostAgent.ServiceName),
             "start=",
             "auto",
             "DisplayName=",
@@ -3497,6 +3497,14 @@ VALUES
         }
 
         return [.. arguments];
+    }
+
+    private static string CreateHostAgentServiceBinaryPath(string executablePath, string serviceName)
+    {
+        var quotedExecutablePath = "\"" + executablePath.Trim().Trim('"') + "\"";
+        return string.IsNullOrWhiteSpace(serviceName)
+            ? quotedExecutablePath
+            : $"{quotedExecutablePath} --service-name={serviceName.Trim()}";
     }
 
     private static void SetServiceDescription(HostAgentInstallOptions hostAgent)
@@ -3983,7 +3991,7 @@ internal sealed class HostAgentInstallOptions
 {
     public bool Enabled { get; set; } = true;
 
-    public string ServiceName { get; set; } = "OpenModulePlatform.HostAgent";
+    public string ServiceName { get; set; } = "OMP.HostAgent";
 
     public List<string> AdditionalServiceNamesToRemove { get; set; } = [];
 

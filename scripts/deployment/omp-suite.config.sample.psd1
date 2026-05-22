@@ -139,9 +139,9 @@
     }
 
     Services = @{
-        HostAgent = 'OpenModulePlatform.HostAgent'
-        WorkerManager = 'OpenModulePlatform.WorkerManager'
-        ExampleService = 'OpenModulePlatform.Service.ExampleServiceAppModule'
+        HostAgent = 'OMP.HostAgent'
+        WorkerManager = 'OMP.WorkerManager'
+        ExampleService = 'OMP.Service.ExampleServiceAppModule'
     }
 
     HostAgent = @{
@@ -169,6 +169,7 @@
         # below ServicesRoot automatically. Keep explicit names here for older
         # service names that may no longer point at the configured runtime root.
         AdditionalServiceNamesToRemove = @(
+            'OpenModulePlatform.HostAgent',
             'OpenModulePlatform.WorkerManager',
             'OpenModulePlatform.Service.ExampleServiceAppModule'
         )

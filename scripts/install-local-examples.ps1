@@ -41,9 +41,10 @@ $script:portalPath = Join-Path $RuntimeRoot 'Sites\Portal'
 $script:authAppPath = Join-Path $RuntimeRoot 'WebApps\auth'
 $script:servicesRoot = Join-Path $RuntimeRoot 'Services'
 $script:appcmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
-$script:exampleServiceName = 'OpenModulePlatform.Service.ExampleServiceAppModule'
-$script:hostAgentServiceName = 'OpenModulePlatform.HostAgent'
-$script:workerManagerServiceName = 'OpenModulePlatform.WorkerManager'
+$script:exampleServiceName = 'OMP.Service.ExampleServiceAppModule'
+$script:exampleServiceExecutableName = 'OpenModulePlatform.Service.ExampleServiceAppModule.exe'
+$script:hostAgentServiceName = 'OMP.HostAgent'
+$script:workerManagerServiceName = 'OMP.WorkerManager'
 $script:authAppPoolName = 'OMP_Auth'
 $script:portalAppPoolName = 'OMP_Portal'
 $script:openDocViewerAppPoolName = 'OMP_OpenDocViewer'
@@ -548,6 +549,8 @@ function Deploy-PublishedOutputs {
     if (-not $SkipRuntimeServices) {
         Stop-WindowsServiceIfInstalled -Name $script:workerManagerServiceName
         Stop-WindowsServiceIfInstalled -Name $script:hostAgentServiceName
+        Stop-WindowsServiceIfInstalled -Name 'OpenModulePlatform.WorkerManager'
+        Stop-WindowsServiceIfInstalled -Name 'OpenModulePlatform.HostAgent'
 
         $runtimeServiceDeployments = @(
             @{ Source = 'OpenModulePlatform.HostAgent.WindowsService'; Destination = 'Services\HostAgent' },
@@ -568,8 +571,9 @@ function Deploy-PublishedOutputs {
 
     if (-not $SkipExampleService) {
         Stop-WindowsServiceIfInstalled -Name $script:exampleServiceName
+        Stop-WindowsServiceIfInstalled -Name 'OpenModulePlatform.Service.ExampleServiceAppModule'
 
-        $serviceSourcePath = Join-Path $script:publishRoot $script:exampleServiceName
+        $serviceSourcePath = Join-Path $script:publishRoot 'OpenModulePlatform.Service.ExampleServiceAppModule'
         if (-not (Test-Path -LiteralPath $serviceSourcePath)) {
             throw "Published example service output was not found: $serviceSourcePath"
         }
@@ -1618,7 +1622,7 @@ function Ensure-ExampleWindowsService {
         -ServiceName $script:exampleServiceName `
         -DisplayName 'OpenModulePlatform Service - ExampleServiceAppModule' `
         -Description 'Example OMP service app installed by scripts/install-local-examples.ps1.' `
-        -ExecutablePath (Join-Path $script:servicesRoot "ExampleServiceAppModule\$script:exampleServiceName.exe") `
+        -ExecutablePath (Join-Path $script:servicesRoot "ExampleServiceAppModule\$script:exampleServiceExecutableName") `
         -SkipStart:$SkipStartExampleService
 }
 
