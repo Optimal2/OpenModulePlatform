@@ -17,6 +17,8 @@ namespace OpenModulePlatform.Portal.Services;
 /// </summary>
 public sealed partial class OmpAdminRepository
 {
+    private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
+
     // -------------------------------------------------------------------------
     // Lookup helpers used by edit forms
     // -------------------------------------------------------------------------
@@ -2077,13 +2079,14 @@ WHERE ModuleKey = @ModuleKey;";
         var executed = 0;
         foreach (var script in scripts.Where(script => repairableKeys.Contains(script.Key)))
         {
-            var sqlText = ResolvePortableSqlText(script);
-            if (string.IsNullOrWhiteSpace(sqlText))
+            var originalSqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(originalSqlText))
             {
                 continue;
             }
 
-            var scriptSha256 = ComputeTextSha256(sqlText);
+            var scriptSha256 = ComputeTextSha256(originalSqlText);
+            var sqlText = await PatchBootstrapPortalAdminPrincipalAsync(conn, originalSqlText, ct);
             var safety = ValidateSafeModuleDefinitionSql(sqlText);
             if (safety is not null)
             {
@@ -3992,6 +3995,75 @@ VALUES
         return script.Content;
     }
 
+    private static async Task<string> PatchBootstrapPortalAdminPrincipalAsync(
+        SqlConnection conn,
+        string sqlText,
+        CancellationToken ct)
+    {
+        if (!sqlText.Contains(BootstrapPortalAdminPrincipalPlaceholder, StringComparison.Ordinal))
+        {
+            return sqlText;
+        }
+
+        var principal = await ResolveExistingBootstrapPortalAdminPrincipalAsync(conn, ct)
+            ?? throw new InvalidOperationException(
+                "The module definition SQL contains a bootstrap PortalAdmin placeholder, but no existing PortalAdmins principal was found to reuse.");
+
+        var principalLiteral = ToSqlUnicodeLiteral(principal.Principal);
+        var principalTypeLiteral = ToSqlUnicodeLiteral(principal.PrincipalType);
+        var patched = Regex.Replace(
+            sqlText,
+            @"DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';",
+            $"DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = {principalLiteral};",
+            RegexOptions.IgnoreCase);
+
+        // The historical Portal initialization script hardcodes ADUser because the
+        // installer normally patches the script before execution. Portal repair runs
+        // after bootstrap and must preserve whichever principal type is already active.
+        patched = Regex.Replace(
+            patched,
+            @"PrincipalType\s*=\s*N'ADUser'",
+            $"PrincipalType = {principalTypeLiteral}",
+            RegexOptions.IgnoreCase);
+        patched = Regex.Replace(
+            patched,
+            @"VALUES\s*\(\s*@PortalAdminsRoleId\s*,\s*N'ADUser'\s*,\s*@BootstrapPortalAdminPrincipal\s*\)",
+            $"VALUES(@PortalAdminsRoleId, {principalTypeLiteral}, @BootstrapPortalAdminPrincipal)",
+            RegexOptions.IgnoreCase);
+
+        return patched;
+    }
+
+    private static async Task<BootstrapPortalAdminPrincipal?> ResolveExistingBootstrapPortalAdminPrincipalAsync(
+        SqlConnection conn,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       rp.PrincipalType,
+       rp.Principal
+FROM omp.RolePrincipals rp
+INNER JOIN omp.Roles r ON r.RoleId = rp.RoleId
+WHERE r.Name = N'PortalAdmins'
+  AND NULLIF(LTRIM(RTRIM(rp.PrincipalType)), N'') IS NOT NULL
+  AND NULLIF(LTRIM(RTRIM(rp.Principal)), N'') IS NOT NULL
+  AND rp.Principal NOT IN (N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__', N'REPLACE_ME\UserOrGroup')
+ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE 2 END,
+         rp.Principal;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new BootstrapPortalAdminPrincipal(rdr.GetString(0), rdr.GetString(1));
+    }
+
+    private static string ToSqlUnicodeLiteral(string value)
+        => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+
     private static async Task<Dictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
         SqlConnection conn,
         IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
@@ -4359,6 +4431,10 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         string Status,
         DateTime? CompletedUtc,
         string? ErrorMessage);
+
+    private sealed record BootstrapPortalAdminPrincipal(
+        string PrincipalType,
+        string Principal);
 
     private static void Add(SqlCommand cmd, string name, object? value)
     {

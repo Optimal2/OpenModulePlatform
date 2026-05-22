@@ -415,6 +415,7 @@ internal static partial class Program
                     var skippedRepairCount = await ExecuteModuleDefinitionSqlRepairsAsync(
                         connection,
                         config.Sql,
+                        payloadRoot,
                         current.ModuleDefinitionDocumentId,
                         definition);
                     Console.WriteLine(
@@ -468,6 +469,7 @@ internal static partial class Program
             var repairCount = await ExecuteModuleDefinitionSqlRepairsAsync(
                 connection,
                 config.Sql,
+                payloadRoot,
                 documentId,
                 definition);
 
@@ -862,6 +864,7 @@ END;";
     private static async Task<int> ExecuteModuleDefinitionSqlRepairsAsync(
         SqlConnection connection,
         SqlBootstrapOptions sql,
+        string payloadRoot,
         int documentId,
         ModuleDefinitionDocument definition)
     {
@@ -904,7 +907,11 @@ END;";
                     $"Module definition SQL script '{script.Key}' content does not match its declared SHA-256.");
             }
 
-            var sqlText = PatchBootstrapPrincipal(originalSqlText, sql);
+            var sqlText = PreprocessSql(
+                originalSqlText,
+                sql,
+                script.Path ?? script.Source ?? script.Key,
+                payloadRoot);
             var safety = ValidateSafeModuleDefinitionSql(sqlText);
             if (safety is not null)
             {
@@ -1295,13 +1302,15 @@ END
             return null;
         }
 
-        var relative = NormalizePathForMatch(Path.GetRelativePath(payloadRoot, scriptPath));
+        var relative = NormalizeScriptPathForOverrideMatch(scriptPath, payloadRoot);
         foreach (var item in options.ArtifactVersionOverrides)
         {
             var key = NormalizePathForMatch(item.Key);
+            var keyFileName = Path.GetFileName(key);
             if (relative.Equals(key, StringComparison.OrdinalIgnoreCase)
                 || relative.EndsWith("/" + key, StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileName(relative).Equals(key, StringComparison.OrdinalIgnoreCase))
+                || Path.GetFileName(relative).Equals(key, StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(relative).Equals(keyFileName, StringComparison.OrdinalIgnoreCase))
             {
                 return item.Value;
             }
@@ -1320,19 +1329,31 @@ END
             return EmptyStringDictionary;
         }
 
-        var relative = NormalizePathForMatch(Path.GetRelativePath(payloadRoot, scriptPath));
+        var relative = NormalizeScriptPathForOverrideMatch(scriptPath, payloadRoot);
         foreach (var item in options.ArtifactVersionVariableOverrides)
         {
             var key = NormalizePathForMatch(item.Key);
+            var keyFileName = Path.GetFileName(key);
             if (relative.Equals(key, StringComparison.OrdinalIgnoreCase)
                 || relative.EndsWith("/" + key, StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileName(relative).Equals(key, StringComparison.OrdinalIgnoreCase))
+                || Path.GetFileName(relative).Equals(key, StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(relative).Equals(keyFileName, StringComparison.OrdinalIgnoreCase))
             {
                 return item.Value;
             }
         }
 
         return EmptyStringDictionary;
+    }
+
+    private static string NormalizeScriptPathForOverrideMatch(string scriptPath, string payloadRoot)
+    {
+        if (Path.IsPathFullyQualified(scriptPath))
+        {
+            return NormalizePathForMatch(Path.GetRelativePath(payloadRoot, scriptPath));
+        }
+
+        return NormalizePathForMatch(scriptPath);
     }
 
     private static string PatchSqlNVarCharDeclaration(
