@@ -1502,20 +1502,15 @@ internal static partial class Program
 
                     if (File.Exists(payloadPath))
                     {
-                        if (sourcePackage is not null && CopyFileIfDifferent(sourcePackage, payloadPath))
-                        {
-                            lines.Add($"  UPDATED {component.ComponentKey}: refreshed initial artifact package {packageName}.");
-                            updated++;
-                        }
-                        else
-                        {
-                            lines.Add($"  OK      {component.ComponentKey}: initial artifact package is present.");
-                            unchanged++;
-                        }
+                        // Existing same-target packages are treated as immutable. Refresh should add missing or newer
+                        // versions, not rewrite bytes for an already versioned artifact and create noisy binary diffs.
+                        lines.Add($"  OK      {component.ComponentKey}: initial artifact package is present.");
+                        unchanged++;
 
-                        if (sourcePackage is not null)
+                        var availableMirrorPath = Path.Combine(_payloadRoot, "available-artifacts", packageName);
+                        if (!File.Exists(availableMirrorPath))
                         {
-                            CopyFileIfDifferent(sourcePackage, Path.Combine(_payloadRoot, "available-artifacts", packageName));
+                            CopyFileIfDifferent(payloadPath, availableMirrorPath);
                         }
 
                         continue;
@@ -1558,16 +1553,9 @@ internal static partial class Program
                 var availablePath = Path.Combine(_payloadRoot, "available-artifacts", packageName);
                 if (File.Exists(availablePath))
                 {
-                    if (sourcePackage is not null && CopyFileIfDifferent(sourcePackage, availablePath))
-                    {
-                        lines.Add($"  UPDATED {component.ComponentKey}: refreshed available artifact package {packageName}.");
-                        updated++;
-                    }
-                    else
-                    {
-                        lines.Add($"  OK      {component.ComponentKey}: available artifact package is present.");
-                        unchanged++;
-                    }
+                    // Available packages follow the same immutable-version rule as initial payload packages.
+                    lines.Add($"  OK      {component.ComponentKey}: available artifact package is present.");
+                    unchanged++;
 
                     continue;
                 }
