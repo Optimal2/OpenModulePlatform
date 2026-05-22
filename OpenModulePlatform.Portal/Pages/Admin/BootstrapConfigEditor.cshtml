@@ -1,0 +1,19 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.BootstrapConfigEditorModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Installation"]</div>
+        <h2>@L["Bootstrap config editor"]</h2>
+        <p class="lede">@L["Use this editor to create or update machine-specific bootstrap configuration JSON files for the installer."]</p>
+    </div>
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Back to installation"]</a>
+</div>
+
+<iframe
+    class="module-definition-editor-frame top-gap"
+    title="@L["Bootstrap config editor"]"
+    src="~/tools/bootstrap-config-editor/index.html"></iframe>
