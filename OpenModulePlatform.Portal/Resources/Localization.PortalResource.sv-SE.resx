@@ -1920,4 +1920,7 @@
   <data name="Upgrade to latest compatible artifact version {0}" xml:space="preserve"><value>Uppgradera till senaste kompatibla artefaktversion {0}</value></data>
   <data name="Desired artifact updated to version {0}." xml:space="preserve"><value>Önskad artefakt uppdaterades till version {0}.</value></data>
   <data name="The desired artifact could not be updated: {0}" xml:space="preserve"><value>Den önskade artefakten kunde inte uppdateras: {0}</value></data>
+  <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap-konfigurationseditor</value></data>
+  <data name="Use this editor to create or update machine-specific bootstrap configuration JSON files for the installer." xml:space="preserve"><value>Använd editorn för att skapa eller uppdatera maskinspecifika bootstrap-konfigurationsfiler i JSON-format för installern.</value></data>
+  <data name="Back to installation" xml:space="preserve"><value>Tillbaka till installation</value></data>
 </root>
