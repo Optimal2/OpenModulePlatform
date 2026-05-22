@@ -165,11 +165,17 @@ if ($RunHostAgentOnce) {
         throw "HostAgent executable was not found: $hostAgentExe"
     }
 
-    $service = Get-Service -Name 'OpenModulePlatform.HostAgent' -ErrorAction SilentlyContinue
+    $hostAgentServiceName = 'OMP.HostAgent'
+    $service = Get-Service -Name $hostAgentServiceName -ErrorAction SilentlyContinue
+    if ($null -eq $service) {
+        $hostAgentServiceName = 'OpenModulePlatform.HostAgent'
+        $service = Get-Service -Name $hostAgentServiceName -ErrorAction SilentlyContinue
+    }
+
     $restartService = $false
     if ($null -ne $service -and $service.Status -eq 'Running') {
-        Write-Host 'Stopping OpenModulePlatform.HostAgent before run-once to avoid concurrent IIS configuration writes.'
-        Stop-Service -Name 'OpenModulePlatform.HostAgent'
+        Write-Host "Stopping $hostAgentServiceName before run-once to avoid concurrent IIS configuration writes."
+        Stop-Service -Name $hostAgentServiceName
         $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
         $restartService = $true
     }
@@ -184,7 +190,7 @@ if ($RunHostAgentOnce) {
     finally {
         Pop-Location
         if ($restartService) {
-            Start-Service -Name 'OpenModulePlatform.HostAgent'
+            Start-Service -Name $hostAgentServiceName
         }
     }
 }

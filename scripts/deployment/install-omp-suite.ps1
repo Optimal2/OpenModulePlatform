@@ -2071,7 +2071,13 @@ function Test-IisApplicationExact {
 function Stop-ExistingRuntime {
     Write-Step 'Stopping existing runtime'
 
-    foreach ($serviceName in @($script:Services.HostAgent, $script:Services.WorkerManager, $script:Services.ExampleService)) {
+    foreach ($serviceName in @(
+            $script:Services.HostAgent,
+            $script:Services.WorkerManager,
+            $script:Services.ExampleService,
+            'OpenModulePlatform.HostAgent',
+            'OpenModulePlatform.WorkerManager',
+            'OpenModulePlatform.Service.ExampleServiceAppModule')) {
         if ([string]::IsNullOrWhiteSpace($serviceName)) {
             continue
         }
@@ -2443,9 +2449,9 @@ foreach ($key in @($configuredPools.Keys)) {
 $script:AppPools = [pscustomobject]$defaultAppPools
 
 $defaultServices = @{
-    HostAgent = 'OpenModulePlatform.HostAgent'
-    WorkerManager = 'OpenModulePlatform.WorkerManager'
-    ExampleService = 'OpenModulePlatform.Service.ExampleServiceAppModule'
+    HostAgent = 'OMP.HostAgent'
+    WorkerManager = 'OMP.WorkerManager'
+    ExampleService = 'OMP.Service.ExampleServiceAppModule'
 }
 $configuredServices = Get-ConfigValue -Config $config -Name 'Services' -DefaultValue @{}
 foreach ($key in @($configuredServices.Keys)) {

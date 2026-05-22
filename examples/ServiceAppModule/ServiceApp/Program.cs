@@ -9,7 +9,7 @@ using NLog.Extensions.Hosting;
 var builder = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "OpenModulePlatform.Service.ExampleServiceAppModule";
+        options.ServiceName = "OMP.Service.ExampleServiceAppModule";
     })
     .ConfigureLogging(logging =>
     {

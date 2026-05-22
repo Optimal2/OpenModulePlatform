@@ -344,12 +344,12 @@ Minimal configuration:
 ```json
 {
   "HostAgent": {
-    "ServiceName": "OpenModulePlatform.HostAgent",
+    "ServiceName": "OMP.HostAgent",
     "Version": "0.3.10",
     "SelfUpgrade": {
       "IsEnabled": true,
       "InstallRoot": "D:\\OMP\\Services",
-      "ServiceNamePrefix": "OpenModulePlatform.HostAgent",
+      "ServiceNamePrefix": "OMP.HostAgent",
       "ServiceAccountName": "",
       "ServiceAccountPasswordCredentialKey": "",
       "TakeoverStopTimeoutSeconds": 45,
