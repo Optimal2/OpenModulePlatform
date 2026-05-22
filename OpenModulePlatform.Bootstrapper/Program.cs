@@ -404,6 +404,12 @@ internal static partial class Program
                     && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) == 0
                     && string.Equals(definition.DefinitionSha256, current.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
                 {
+                    await ApplyModuleDefinitionCatalogMetadataAsync(
+                        connection,
+                        null,
+                        current.ModuleDefinitionDocumentId,
+                        config.Sql.CommandTimeoutSeconds);
+
                     var skippedRepairCount = await ExecuteModuleDefinitionSqlRepairsAsync(
                         connection,
                         config.Sql,
@@ -440,6 +446,12 @@ internal static partial class Program
                     connection,
                     transaction,
                     definition.ModuleKey,
+                    documentId,
+                    config.Sql.CommandTimeoutSeconds);
+
+                await ApplyModuleDefinitionCatalogMetadataAsync(
+                    connection,
+                    transaction,
                     documentId,
                     config.Sql.CommandTimeoutSeconds);
 
@@ -733,6 +745,116 @@ VALUES
             insert.Parameters.AddWithValue("@maxArtifactVersion", entry.MaxArtifactVersion is null ? DBNull.Value : entry.MaxArtifactVersion);
             await insert.ExecuteNonQueryAsync();
         }
+    }
+
+    private static async Task ApplyModuleDefinitionCatalogMetadataAsync(
+        SqlConnection connection,
+        SqlTransaction? transaction,
+        int documentId,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+DECLARE @DefinitionJson nvarchar(max);
+DECLARE @ModuleKey nvarchar(100);
+DECLARE @ModuleDisplayName nvarchar(200);
+DECLARE @ModuleType nvarchar(50);
+DECLARE @SchemaName nvarchar(128);
+DECLARE @Description nvarchar(500);
+DECLARE @SortOrder int;
+DECLARE @IsEnabled bit;
+DECLARE @ModuleId int;
+
+SELECT @DefinitionJson = DefinitionJson,
+       @ModuleKey = ModuleKey
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleDefinitionDocumentId = @documentId;
+
+IF @DefinitionJson IS NULL
+BEGIN
+    THROW 53230, N'Module definition document was not found.', 1;
+END;
+
+SELECT @ModuleDisplayName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.displayName'), N''),
+       @ModuleType = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.moduleType'), N''),
+       @SchemaName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.schemaName'), N''),
+       @Description = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.description'), N''),
+       @SortOrder = TRY_CONVERT(int, JSON_VALUE(@DefinitionJson, N'$.module.sortOrder')),
+       @IsEnabled = TRY_CONVERT(bit, JSON_VALUE(@DefinitionJson, N'$.module.isEnabled'));
+
+MERGE omp.Modules AS target
+USING
+(
+    SELECT @ModuleKey AS ModuleKey,
+           COALESCE(@ModuleDisplayName, @ModuleKey) AS DisplayName,
+           COALESCE(@ModuleType, N'WebAppModule') AS ModuleType,
+           COALESCE(@SchemaName, @ModuleKey) AS SchemaName,
+           @Description AS Description,
+           COALESCE(@SortOrder, 0) AS SortOrder,
+           COALESCE(@IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+) AS source
+ON target.ModuleKey = source.ModuleKey
+WHEN MATCHED THEN
+    UPDATE SET DisplayName = source.DisplayName,
+               ModuleType = source.ModuleType,
+               SchemaName = source.SchemaName,
+               Description = source.Description,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(ModuleKey, DisplayName, ModuleType, SchemaName, Description, SortOrder, IsEnabled)
+    VALUES(source.ModuleKey, source.DisplayName, source.ModuleType, source.SchemaName, source.Description, source.SortOrder, source.IsEnabled);
+
+SELECT @ModuleId = ModuleId
+FROM omp.Modules
+WHERE ModuleKey = @ModuleKey;
+
+IF @ModuleId IS NOT NULL
+BEGIN
+    ;WITH AppRows AS
+    (
+        SELECT AppKey,
+               COALESCE(NULLIF(DisplayName, N''), AppKey) AS DisplayName,
+               COALESCE(NULLIF(AppType, N''), N'WebApp') AS AppType,
+               COALESCE(AllowMultipleActiveInstances, CONVERT(bit, 0)) AS AllowMultipleActiveInstances,
+               NULLIF(Description, N'') AS Description,
+               COALESCE(SortOrder, 0) AS SortOrder,
+               COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+        FROM OPENJSON(@DefinitionJson, N'$.apps')
+        WITH
+        (
+            AppKey nvarchar(100) N'$.appKey',
+            DisplayName nvarchar(200) N'$.displayName',
+            AppType nvarchar(50) N'$.appType',
+            AllowMultipleActiveInstances bit N'$.allowMultipleActiveInstances',
+            Description nvarchar(500) N'$.description',
+            SortOrder int N'$.sortOrder',
+            IsEnabled bit N'$.isEnabled'
+        )
+        WHERE AppKey IS NOT NULL
+    )
+    MERGE omp.Apps AS target
+    USING AppRows AS source
+    ON target.ModuleId = @ModuleId
+    AND target.AppKey = source.AppKey
+    WHEN MATCHED THEN
+        UPDATE SET DisplayName = source.DisplayName,
+                   AppType = source.AppType,
+                   AllowMultipleActiveInstances = source.AllowMultipleActiveInstances,
+                   Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ModuleId, AppKey, DisplayName, AppType, AllowMultipleActiveInstances, Description, SortOrder, IsEnabled)
+        VALUES(@ModuleId, source.AppKey, source.DisplayName, source.AppType, source.AllowMultipleActiveInstances, source.Description, source.SortOrder, source.IsEnabled);
+END;";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Transaction = transaction;
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@documentId", documentId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task<int> ExecuteModuleDefinitionSqlRepairsAsync(
