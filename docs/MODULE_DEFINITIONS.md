@@ -150,6 +150,18 @@ The document shape is versioned. Version 1 uses these top-level fields:
   ],
   "sqlScripts": [
     {
+      "key": "validate",
+      "phase": "validate",
+      "scope": "module",
+      "order": 5,
+      "path": "sql/validate.sql",
+      "execution": "read-only",
+      "inlineSql": null,
+      "contentEncoding": null,
+      "content": null,
+      "sha256": "..."
+    },
+    {
       "key": "repair",
       "phase": "repair",
       "scope": "module",
@@ -253,6 +265,38 @@ no embedded content is resolved inside the package, validated against `sha256`
 when present, and normalized into `inlineSql` before the definition is stored in
 `omp.ModuleDefinitionDocuments`. The source package stays reviewable while the
 stored definition remains self-contained for later integrity checks and repairs.
+
+Module-specific validation SQL is optional and should use `phase: "validate"`
+or `execution: "validation"`. Validation SQL must be read-only and return one
+result row. The first column, or a column named `IsHealthy`, is interpreted as
+healthy when it is `1`, `true`, `ok`, `healthy`, `pass`, or `passed`; it is
+interpreted as unhealthy when it is `0`, `false`, `error`, `unhealthy`, `fail`,
+or `failed`. An optional `Message` column can explain the result in Portal.
+
+Example validation script:
+
+```sql
+SELECT
+    CAST(CASE
+        WHEN EXISTS
+        (
+            SELECT 1
+            FROM sys.tables t
+            INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+            WHERE s.name = N'example_module'
+              AND t.name = N'Configurations'
+        )
+        THEN 1
+        ELSE 0
+    END AS bit) AS IsHealthy,
+    N'Example module schema check' AS Message;
+```
+
+If one or more module-specific validation scripts report unhealthy state,
+Portal marks the module's non-validation idempotent SQL scripts as repairable.
+HostAgent folder import uses the same rule: validation scripts decide whether
+the idempotent repair/setup scripts need to run. Validation scripts are never
+executed as repairs.
 
 Standalone JSON uploads can still use `inlineSql`, `content`, or the historical
 `contentEncoding: "base64-utf8"` form. Those forms remain supported for
