@@ -19,6 +19,44 @@ public sealed partial class OmpAdminRepository
 {
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
 
+    public async Task RequestServiceIdentityRepairAsync(
+        Guid hostId,
+        Guid appInstanceId,
+        string requestedBy,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'IdentityRepairRequestedUtc') IS NULL
+BEGIN
+    THROW 53310, N'Host app deployment identity repair columns are not installed. Run module definition SQL repair first.', 1;
+END;
+
+UPDATE s
+SET IdentityRepairRequestedUtc = SYSUTCDATETIME(),
+    IdentityRepairRequestedBy = @requestedBy,
+    IdentityCheckStatus = N'RepairRequested',
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.HostAppDeploymentStates s
+INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = s.AppInstanceId
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+WHERE s.HostId = @hostId
+  AND s.AppInstanceId = @appInstanceId
+  AND a.AppType = N'ServiceApp';
+
+IF @@ROWCOUNT = 0
+BEGIN
+    THROW 53311, N'The selected service-app deployment state was not found.', 1;
+END;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
+        cmd.Parameters.AddWithValue("@requestedBy", string.IsNullOrWhiteSpace(requestedBy) ? (object)DBNull.Value : requestedBy.Trim());
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     // -------------------------------------------------------------------------
     // Lookup helpers used by edit forms
     // -------------------------------------------------------------------------
