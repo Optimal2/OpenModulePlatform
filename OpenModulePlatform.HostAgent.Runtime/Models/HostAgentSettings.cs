@@ -98,6 +98,8 @@ public sealed class HostAgentSettings
 
     public HostAgentUpgradeSettings SelfUpgrade { get; set; } = new();
 
+    public HostAgentCredentialStoreSettings CredentialStore { get; set; } = new();
+
     public int MaxArtifactsPerCycle { get; set; } = 100;
 
     public bool EnableRpc { get; set; } = true;
@@ -221,6 +223,7 @@ public sealed class HostAgentSettings
 
         ArtifactZipImport.Validate();
         SelfUpgrade.Validate();
+        CredentialStore.Validate();
     }
 }
 
@@ -230,6 +233,110 @@ public sealed class HostAgentIisAppPoolIdentitySettings
 
     public string Password { get; set; } = string.Empty;
 }
+
+public static class HostAgentCredentialAutomationModes
+{
+    public const string Disabled = "Disabled";
+
+    public const string PortalAdminApproved = "PortalAdminApproved";
+
+    public const string Full = "Full";
+
+    public static bool IsKnown(string value)
+        => string.Equals(value, Disabled, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, PortalAdminApproved, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Full, StringComparison.OrdinalIgnoreCase);
+}
+
+public static class HostAgentCredentialProtectionScopes
+{
+    public const string CurrentUser = "CurrentUser";
+
+    public const string LocalMachine = "LocalMachine";
+
+    public static bool IsKnown(string value)
+        => string.Equals(value, CurrentUser, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, LocalMachine, StringComparison.OrdinalIgnoreCase);
+}
+
+public sealed class HostAgentCredentialStoreSettings
+{
+    public string AutomationMode { get; set; } = HostAgentCredentialAutomationModes.Disabled;
+
+    public string FilePath { get; set; } = string.Empty;
+
+    public string ProtectionScope { get; set; } = HostAgentCredentialProtectionScopes.LocalMachine;
+
+    public string EntropyPurpose { get; set; } = "OpenModulePlatform.HostAgent.CredentialStore.v1";
+
+    public bool IsEnabled()
+        => !string.Equals(
+            AutomationMode?.Trim(),
+            HostAgentCredentialAutomationModes.Disabled,
+            StringComparison.OrdinalIgnoreCase);
+
+    public void Validate()
+    {
+        var automationMode = string.IsNullOrWhiteSpace(AutomationMode)
+            ? HostAgentCredentialAutomationModes.Disabled
+            : AutomationMode.Trim();
+        if (!HostAgentCredentialAutomationModes.IsKnown(automationMode))
+        {
+            throw new InvalidOperationException(
+                "HostAgent:CredentialStore:AutomationMode must be Disabled, PortalAdminApproved, or Full.");
+        }
+
+        var protectionScope = string.IsNullOrWhiteSpace(ProtectionScope)
+            ? HostAgentCredentialProtectionScopes.LocalMachine
+            : ProtectionScope.Trim();
+        if (!HostAgentCredentialProtectionScopes.IsKnown(protectionScope))
+        {
+            throw new InvalidOperationException(
+                "HostAgent:CredentialStore:ProtectionScope must be CurrentUser or LocalMachine.");
+        }
+
+        if (IsEnabled() && string.IsNullOrWhiteSpace(EntropyPurpose))
+        {
+            throw new InvalidOperationException(
+                "HostAgent:CredentialStore:EntropyPurpose must be configured when credential storage is enabled.");
+        }
+    }
+
+    public string ResolveFilePath()
+        => string.IsNullOrWhiteSpace(FilePath)
+            ? Path.Combine(AppContext.BaseDirectory, "hostagent.credentials.json")
+            : FilePath.Trim();
+}
+
+public sealed class HostAgentStoredCredentialEntry
+{
+    public string UserName { get; set; } = string.Empty;
+
+    public string EncryptedPassword { get; set; } = string.Empty;
+
+    public string ProtectionProvider { get; set; } = "WindowsDpapi";
+
+    public string ProtectionScope { get; set; } = HostAgentCredentialProtectionScopes.LocalMachine;
+
+    public string Description { get; set; } = string.Empty;
+
+    public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class HostAgentCredentialStoreDocument
+{
+    public int FormatVersion { get; set; } = 1;
+
+    public DateTimeOffset UpdatedUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    public Dictionary<string, HostAgentStoredCredentialEntry> Credentials { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed record HostAgentPlainTextCredential(
+    string Key,
+    string UserName,
+    string Password);
 
 public sealed class HostAgentArtifactZipImportSettings
 {

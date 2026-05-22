@@ -2348,6 +2348,23 @@ VALUES
         selfUpgrade["ServiceNamePrefix"] = hostAgent.ServiceName;
         selfUpgrade["ServiceAccountName"] = hostAgent.ServiceAccountName;
         selfUpgrade["ServiceAccountPassword"] = hostAgent.ServiceAccountPassword;
+
+        var credentialStore = GetOrCreateJsonObject(hostAgentSettings, "CredentialStore");
+        SetJsonValueIfMissing(credentialStore, "AutomationMode", "Disabled");
+        SetJsonValueIfMissing(credentialStore, "FilePath", string.Empty);
+        SetJsonValueIfMissing(credentialStore, "ProtectionScope", "LocalMachine");
+        SetJsonValueIfMissing(
+            credentialStore,
+            "EntropyPurpose",
+            "OpenModulePlatform.HostAgent.CredentialStore.v1");
+    }
+
+    private static void SetJsonValueIfMissing(JsonObject parent, string propertyName, string value)
+    {
+        if (!parent.ContainsKey(propertyName))
+        {
+            parent[propertyName] = value;
+        }
     }
 
     private static JsonObject GetOrCreateJsonObject(JsonObject parent, string propertyName)
@@ -2433,6 +2450,13 @@ VALUES
                             TakeoverStopTimeoutSeconds = 45,
                             DeletePreviousServiceAfterTakeover = true,
                             StartPreparedService = true
+                        },
+                        CredentialStore = new
+                        {
+                            AutomationMode = "Disabled",
+                            FilePath = string.Empty,
+                            ProtectionScope = "LocalMachine",
+                            EntropyPurpose = "OpenModulePlatform.HostAgent.CredentialStore.v1"
                         },
                         EnableRpc = true
                     }

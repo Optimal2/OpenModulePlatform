@@ -20,6 +20,8 @@ Implemented in v1:
 - deploys provisioned Windows `service-app` artifacts when
   `HostAgent:DeployServiceApps` is enabled
 - writes app deployment state to `omp.HostAppDeploymentStates`
+- can be configured with a host-local credential store model for future
+  service identity, app-pool identity, and HostAgent self-upgrade automation
 
 Expected first use:
 
@@ -37,11 +39,47 @@ Expected first use:
    service runtime folder and creates or updates the Windows service.
 7. Worker Manager can be configured to resolve app-instance artifacts from `omp.HostArtifactStates`.
 
+## Credential Store
+
+HostAgent supports a credential-store configuration section for identities that
+may be needed when future automation creates IIS app pools, creates Windows
+services, or prepares a HostAgent self-upgrade. This step only provides the
+storage model and helper service; deployment code does not consume stored
+credentials yet.
+
+Example configuration:
+
+```json
+"CredentialStore": {
+  "AutomationMode": "Disabled",
+  "FilePath": "",
+  "ProtectionScope": "LocalMachine",
+  "EntropyPurpose": "OpenModulePlatform.HostAgent.CredentialStore.v1"
+}
+```
+
+`AutomationMode` has three supported values:
+
+- `Disabled`: HostAgent does not read or write stored credentials. Operators
+  remain responsible for service and app-pool identities.
+- `PortalAdminApproved`: reserved for a later flow where PortalAdmin-approved
+  database jobs can instruct HostAgent to use stored credentials.
+- `Full`: reserved for full HostAgent-driven automation where the agent can use
+  stored credentials whenever the desired host state requires it.
+
+Credential files store readable credential keys and usernames, but passwords are
+encrypted with Windows DPAPI. `LocalMachine` protects the value for the current
+machine/server, so copying the file to another host does not make it
+decryptable. `CurrentUser` is stricter and also binds decryption to the Windows
+identity that encrypted the value.
+
 Not implemented in v1:
 
 - remote HTTP download
 - package extraction
 - retention/cleanup policy
+- use of credential-store entries during IIS app-pool, Windows service, or
+  HostAgent self-upgrade operations
 
 See `../docs/HOST_AGENT_TEMPLATE_AUTOMATION.md` for the roadmap from template
 metadata to full HostAgent-driven deployment automation.
