@@ -121,21 +121,31 @@ internal static partial class Program
         if (profiles.Count == 0)
         {
             throw new FileNotFoundException(
-                "No bootstrap config was specified and no .json config file could be found near the installer.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(cli.ConfigPath))
-        {
-            var fullPath = Path.GetFullPath(cli.ConfigPath);
-            if (profiles.Any(profile => profile.ConfigPath.Equals(fullPath, StringComparison.OrdinalIgnoreCase)))
-            {
-                return fullPath;
-            }
+                "No bootstrap configuration file was found. Create a machine-specific config in the package 'configs' folder before starting the installer. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
         }
 
         var localMachineNames = GetLocalMachineNames();
-        var machineMatch = profiles.FirstOrDefault(profile => ProfileMatchesMachine(profile, localMachineNames));
-        return machineMatch?.ConfigPath ?? profiles[0].ConfigPath;
+        var machineMatches = profiles
+            .Where(profile => ProfileMatchesMachine(profile, localMachineNames))
+            .ToArray();
+        if (machineMatches.Length == 1)
+        {
+            return machineMatches[0].ConfigPath;
+        }
+
+        if (machineMatches.Length > 1)
+        {
+            throw new InvalidOperationException(
+                "More than one bootstrap configuration matches this computer. Keep exactly one matching config file in the package 'configs' folder, then start the installer again." + Environment.NewLine + Environment.NewLine
+                + "Local computer names: " + string.Join(", ", localMachineNames.OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)) + Environment.NewLine
+                + "Matching configs: " + string.Join(", ", machineMatches.Select(static profile => profile.ConfigPath)));
+        }
+
+        throw new InvalidOperationException(
+            "No bootstrap configuration matches this computer. The installer is locked to the config whose profile.machineNames, hostAgent.hostName, or hostAgent.hostKey matches the local computer name." + Environment.NewLine + Environment.NewLine
+            + "Local computer names: " + string.Join(", ", localMachineNames.OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)) + Environment.NewLine
+            + "Config folder: " + string.Join(Environment.NewLine + "  ", profiles.Select(static profile => Path.GetDirectoryName(profile.ConfigPath)).Distinct(StringComparer.OrdinalIgnoreCase)) + Environment.NewLine + Environment.NewLine
+            + "Create or update a config file in the package 'configs' folder, then start the installer again. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
     }
 
     private static IReadOnlyList<string> ResolveProfileMachineNames(BootstrapConfig config)
@@ -257,10 +267,10 @@ internal static partial class Program
         private string _payloadRoot;
         private readonly CliOptions _cli;
         private readonly string _payloadZipPath;
-        private readonly ComboBox _configSelector = new()
+        private readonly Label _profileNameLabel = new()
         {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 320
+            AutoSize = true,
+            Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold)
         };
         private readonly Label _configPathLabel = new()
         {
@@ -302,13 +312,54 @@ internal static partial class Program
         private readonly Button _fullUninstallButton = new() { Text = "Full uninstall", AutoSize = true, ForeColor = Color.DarkRed };
         private readonly Button _exitButton = new() { Text = "Exit", AutoSize = true };
         private readonly Button _reloadConfigButton = new() { Text = "Reload config", AutoSize = true };
+        private readonly Label _installationStatusLabel = new()
+        {
+            AutoSize = true,
+            Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold)
+        };
+        private readonly Label _primaryActionDescriptionLabel = new()
+        {
+            AutoSize = true,
+            MaximumSize = new Size(850, 0)
+        };
+        private readonly Button _primaryActionButton = new()
+        {
+            AutoSize = true,
+            MinimumSize = new Size(260, 36)
+        };
+        private readonly CheckBox _refreshPackageBeforePrimaryAction = new()
+        {
+            AutoSize = true,
+            Checked = true,
+            Text = "Refresh installer package from source first"
+        };
+        private readonly Label _developerSourceStatusLabel = new()
+        {
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText,
+            MaximumSize = new Size(850, 0)
+        };
+        private readonly CheckBox _showAdvancedActions = new()
+        {
+            AutoSize = true,
+            Text = "Show other functions"
+        };
+        private readonly Panel _advancedActionsHost = new()
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Visible = false
+        };
         private readonly CheckBox _runSql = new() { Text = "Run SQL bootstrap", Enabled = false };
         private readonly CheckBox _installHostAgent = new() { Text = "Install/update HostAgent", Enabled = false };
         private readonly CheckBox _deployWebApps = new() { Text = "Let HostAgent deploy web apps", Enabled = false };
         private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools", Enabled = false };
         private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data", Enabled = false };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
-        private bool _loadingProfile;
+        private TabControl? _advancedActionTabs;
+        private TabPage? _packageToolsTab;
+        private bool _hasExistingInstallation;
+        private bool _hasDeveloperSource;
 
         public InstallerForm(
             IReadOnlyList<BootstrapConfigProfile> configProfiles,
@@ -338,10 +389,10 @@ internal static partial class Program
                 Padding = new Padding(12)
             };
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             Controls.Add(root);
@@ -376,6 +427,7 @@ internal static partial class Program
 
             LoadConfigProfiles();
             LoadValues();
+            _primaryActionButton.Click += async (_, _) => await RunPrimaryActionAsync();
             _installButton.Click += async (_, _) => await InstallAsync();
             _upgradeCompleteButton.Click += async (_, _) => await UpgradeOrCompleteAsync();
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
@@ -385,7 +437,7 @@ internal static partial class Program
             _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
             _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
             _exitButton.Click += (_, _) => Close();
-            _configSelector.SelectedIndexChanged += async (_, _) => await ChangeSelectedConfigAsync();
+            _showAdvancedActions.CheckedChanged += (_, _) => _advancedActionsHost.Visible = _showAdvancedActions.Checked;
             _reloadConfigButton.Click += async (_, _) => await ReloadSelectedConfigAsync("Reloaded installation profile.");
         }
 
@@ -409,7 +461,7 @@ internal static partial class Program
             panel.Controls.Add(new Label
             {
                 AutoSize = true,
-                Text = "Choose an installation profile, review the settings, and then run the action that matches what you want to do."
+                Text = "The installer uses the configuration profile that matches this computer. Review the detected profile and run the recommended action."
             });
 
             var profileRow = new TableLayoutPanel
@@ -420,15 +472,15 @@ internal static partial class Program
                 Margin = new Padding(0, 8, 0, 0)
             };
             profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+            profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             profileRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             profileRow.Controls.Add(new Label
             {
                 AutoSize = true,
                 Anchor = AnchorStyles.Left,
-                Text = "Installation profile"
+                Text = "Matched profile"
             }, 0, 0);
-            profileRow.Controls.Add(_configSelector, 1, 0);
+            profileRow.Controls.Add(_profileNameLabel, 1, 0);
             profileRow.Controls.Add(_reloadConfigButton, 2, 0);
             panel.Controls.Add(profileRow);
 
@@ -445,64 +497,13 @@ internal static partial class Program
 
         private void LoadConfigProfiles()
         {
-            _loadingProfile = true;
-            try
-            {
-                _configSelector.Items.Clear();
-                foreach (var profile in _configProfiles)
-                {
-                    _configSelector.Items.Add(profile);
-                }
-
-                _configSelector.DisplayMember = nameof(BootstrapConfigProfile.DisplayName);
-                var selectedIndex = _configProfiles
-                    .Select((profile, index) => new { profile, index })
-                    .FirstOrDefault(item => item.profile.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase))
-                    ?.index ?? 0;
-                _configSelector.SelectedIndex = selectedIndex;
-                UpdateProfileLabels();
-            }
-            finally
-            {
-                _loadingProfile = false;
-            }
-        }
-
-        private async Task ChangeSelectedConfigAsync()
-        {
-            if (_loadingProfile || _configSelector.SelectedItem is not BootstrapConfigProfile profile)
-            {
-                return;
-            }
-
-            try
-            {
-                _loadingProfile = true;
-                _configPath = profile.ConfigPath;
-                _payloadRoot = ResolvePayloadRoot(_cli, _configPath);
-                await ReloadSelectedConfigCoreAsync();
-                _logBox.Clear();
-                SetReadyStatus($"Loaded installation profile '{profile.DisplayName}'.");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    ex.Message,
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-            finally
-            {
-                _loadingProfile = false;
-            }
+            UpdateProfileLabels();
         }
 
         private async Task ReloadSelectedConfigAsync(string statusText)
         {
             try
             {
-                _loadingProfile = true;
                 await ReloadSelectedConfigCoreAsync();
                 _logBox.Clear();
                 SetReadyStatus(statusText);
@@ -514,10 +515,6 @@ internal static partial class Program
                     "OpenModulePlatform installer",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
-            }
-            finally
-            {
-                _loadingProfile = false;
             }
         }
 
@@ -531,34 +528,92 @@ internal static partial class Program
 
         private void UpdateProfileLabels()
         {
+            var profile = _configProfiles.FirstOrDefault(item =>
+                item.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase));
+            _profileNameLabel.Text = profile?.DisplayName ?? Path.GetFileNameWithoutExtension(_configPath);
             _configPathLabel.Text = $"Config: {_configPath}";
             _payloadRootLabel.Text = $"Payload: {_payloadRoot}";
         }
 
         private Control CreateActionPanel()
         {
-            var tabs = new TabControl
+            var panel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
+                AutoSize = true,
+                ColumnCount = 1,
+                Padding = new Padding(0, 4, 0, 0)
+            };
+
+            panel.Controls.Add(_installationStatusLabel);
+            panel.Controls.Add(CreatePrimaryActionPanel());
+
+            _showAdvancedActions.Margin = new Padding(0, 8, 0, 4);
+            panel.Controls.Add(_showAdvancedActions);
+            _advancedActionsHost.Controls.Add(CreateAdvancedActionTabs());
+            panel.Controls.Add(_advancedActionsHost);
+
+            return panel;
+        }
+
+        private Control CreatePrimaryActionPanel()
+        {
+            var group = new GroupBox
+            {
+                Text = "Recommended action",
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                Padding = new Padding(12),
+                Margin = new Padding(0, 8, 0, 0)
+            };
+            var panel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2
+            };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            _primaryActionButton.Width = 260;
+            _primaryActionButton.Margin = new Padding(0, 6, 12, 6);
+            panel.Controls.Add(_primaryActionButton, 0, 0);
+            panel.Controls.Add(_primaryActionDescriptionLabel, 1, 0);
+
+            _refreshPackageBeforePrimaryAction.Margin = new Padding(0, 4, 12, 4);
+            panel.Controls.Add(_refreshPackageBeforePrimaryAction, 0, 1);
+            panel.Controls.Add(_developerSourceStatusLabel, 1, 1);
+
+            group.Controls.Add(panel);
+            return group;
+        }
+
+        private Control CreateAdvancedActionTabs()
+        {
+            var tabs = new TabControl
+            {
+                Dock = DockStyle.Top,
                 Height = 230
             };
+            _advancedActionTabs = tabs;
 
             tabs.TabPages.Add(CreateActionTab(
                 "Install / update",
-                "Use these actions when you want this machine to match or catch up with the selected installation profile.",
+                "Advanced actions for full bootstrap passes or package catch-up runs.",
                 [
-                    (_installButton, "Runs enabled SQL bootstrap steps, prepares ArtifactStore and available package objects, and installs or updates HostAgent."),
+                    (_installButton, "Runs the full bootstrap again with the matched profile. Use this for deliberate reconfiguration or repair."),
                     (_upgradeCompleteButton, "Adds newer or missing module definitions and missing artifacts from this package. Existing artifact folders and an existing HostAgent service are left unchanged.")
                 ]));
 
-            tabs.TabPages.Add(CreateActionTab(
+            _packageToolsTab = CreateActionTab(
                 "Package tools",
                 "Developer-only helpers for checking and refreshing package objects from source repositories.",
                 [
                     (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
                     (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
                     (_createUpdatedInstallerPackageButton, "Starts a separate refresh process that creates a fresh installer package from source and restarts the updated installer.")
-                ]));
+                ]);
+            tabs.TabPages.Add(_packageToolsTab);
 
             tabs.TabPages.Add(CreateActionTab(
                 "Uninstall",
@@ -792,6 +847,8 @@ internal static partial class Program
             _deployWebApps.Checked = _config.HostAgent.DeployWebApps;
             _ensureIisSite.Checked = _config.HostAgent.EnsureIisSite;
             _includeExampleApps.Checked = _config.IncludeExampleApps;
+
+            RefreshInstallerState();
         }
 
         private void ApplyValues()
@@ -826,6 +883,227 @@ internal static partial class Program
             _config.HostAgent.DeployWebApps = _deployWebApps.Checked;
             _config.HostAgent.EnsureIisSite = _ensureIisSite.Checked;
             _config.IncludeExampleApps = _includeExampleApps.Checked;
+        }
+
+        private void RefreshInstallerState()
+        {
+            _hasExistingInstallation = DetectExistingInstallation(out var installationDetails);
+            _hasDeveloperSource = HasDeveloperSourceAvailable(out var developerSourceDetails);
+
+            if (_hasExistingInstallation)
+            {
+                _installationStatusLabel.ForeColor = Color.DarkGreen;
+                _installationStatusLabel.Text = "Current status: an existing OpenModulePlatform installation was detected.";
+                _primaryActionButton.Text = "Upgrade existing installation";
+                _primaryActionDescriptionLabel.Text =
+                    "Applies newer or missing package objects from this installer package and installs HostAgent only if the configured service is missing.";
+            }
+            else
+            {
+                _installationStatusLabel.ForeColor = Color.DarkOrange;
+                _installationStatusLabel.Text = "Current status: no existing OpenModulePlatform installation was detected.";
+                _primaryActionButton.Text = "Install OpenModulePlatform";
+                _primaryActionDescriptionLabel.Text =
+                    "Runs the initial SQL bootstrap, prepares ArtifactStore and package-library objects, and installs HostAgent for this computer.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(installationDetails))
+            {
+                _primaryActionDescriptionLabel.Text += Environment.NewLine + installationDetails;
+            }
+
+            _developerSourceStatusLabel.Text = _hasDeveloperSource
+                ? "Developer source repositories are available. The checked option refreshes the installer package before the main action."
+                : "Developer source repositories are not available for this profile. Package refresh options are disabled.";
+            _refreshPackageBeforePrimaryAction.Visible = _hasDeveloperSource;
+            _refreshPackageBeforePrimaryAction.Enabled = _hasDeveloperSource;
+            _refreshPackageBeforePrimaryAction.Checked = _hasDeveloperSource;
+            _developerSourceStatusLabel.ForeColor = _hasDeveloperSource ? Color.DarkGreen : SystemColors.GrayText;
+            _developerSourceStatusLabel.Text += string.IsNullOrWhiteSpace(developerSourceDetails)
+                ? string.Empty
+                : Environment.NewLine + developerSourceDetails;
+
+            UpdatePackageToolsVisibility();
+        }
+
+        private void UpdatePackageToolsVisibility()
+        {
+            if (_advancedActionTabs is null || _packageToolsTab is null)
+            {
+                return;
+            }
+
+            var containsPackageTools = _advancedActionTabs.TabPages.Contains(_packageToolsTab);
+            if (_hasDeveloperSource && !containsPackageTools)
+            {
+                var insertIndex = Math.Min(1, _advancedActionTabs.TabPages.Count);
+                _advancedActionTabs.TabPages.Insert(insertIndex, _packageToolsTab);
+            }
+            else if (!_hasDeveloperSource && containsPackageTools)
+            {
+                _advancedActionTabs.TabPages.Remove(_packageToolsTab);
+            }
+        }
+
+        private bool DetectExistingInstallation(out string details)
+        {
+            var findings = new List<string>();
+
+            if (OperatingSystem.IsWindows()
+                && !string.IsNullOrWhiteSpace(_config.HostAgent.ServiceName)
+                && ServiceExists(_config.HostAgent.ServiceName))
+            {
+                findings.Add($"HostAgent service '{_config.HostAgent.ServiceName}' exists.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(_config.HostAgent.PortalPhysicalPath))
+            {
+                var portalDll = Path.Combine(
+                    Path.GetFullPath(_config.HostAgent.PortalPhysicalPath),
+                    "OpenModulePlatform.Portal.dll");
+                if (File.Exists(portalDll))
+                {
+                    findings.Add($"Portal files exist at '{_config.HostAgent.PortalPhysicalPath}'.");
+                }
+            }
+
+            if (OperatingSystem.IsWindows()
+                && !string.IsNullOrWhiteSpace(_config.HostAgent.IisSiteName)
+                && IisSiteExists(_config.HostAgent.IisSiteName))
+            {
+                findings.Add($"IIS site '{_config.HostAgent.IisSiteName}' exists.");
+            }
+
+            details = findings.Count == 0
+                ? string.Empty
+                : "Detected: " + string.Join(" ", findings);
+            return findings.Count > 0;
+        }
+
+        private static bool IisSiteExists(string siteName)
+        {
+            var appCmdPath = TryGetAppCmdPath();
+            return !string.IsNullOrWhiteSpace(appCmdPath)
+                && RunProcess(appCmdPath, ["list", "site", $"/name:{siteName.Trim()}"], throwOnFailure: false).ExitCode == 0;
+        }
+
+        private bool HasDeveloperSourceAvailable(out string details)
+        {
+            try
+            {
+                var roots = ResolveDeveloperSourceRoots(throwIfMissing: false);
+                details = roots.Count == 0
+                    ? string.Empty
+                    : "Source roots: " + string.Join("; ", roots);
+                return roots.Count > 0;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                details = ex.Message;
+                return false;
+            }
+        }
+
+        private async Task RunPrimaryActionAsync()
+        {
+            ApplyValues();
+            RefreshInstallerState();
+
+            var actionName = _hasExistingInstallation
+                ? "upgrade the existing OpenModulePlatform installation"
+                : "install OpenModulePlatform";
+            var refreshPackage = _hasDeveloperSource && _refreshPackageBeforePrimaryAction.Checked;
+            if (!ConfirmPrimaryAction(actionName, refreshPackage))
+            {
+                return;
+            }
+
+            await RunGuiOperationAsync(
+                _hasExistingInstallation
+                    ? "Upgrading existing OpenModulePlatform installation..."
+                    : "Installing OpenModulePlatform...",
+                _hasExistingInstallation ? "Upgrade completed." : "Installation completed.",
+                _hasExistingInstallation ? "Upgrade did not complete." : "Installation did not complete.",
+                _hasExistingInstallation ? "Upgrade failed." : "Installation failed.",
+                async () =>
+                {
+                    if (refreshPackage)
+                    {
+                        var refreshExitCode = await RefreshInstallerPackageObjectsForPrimaryActionAsync();
+                        if (refreshExitCode != 0)
+                        {
+                            return refreshExitCode;
+                        }
+                    }
+
+                    return _hasExistingInstallation
+                        ? await RunUpgradeOrCompleteAsync(
+                            _config,
+                            _configPath,
+                            _payloadRoot,
+                            _payloadZipPath)
+                        : await RunBootstrapAsync(
+                            _config,
+                            _configPath,
+                            _payloadRoot,
+                            _payloadZipPath,
+                            yes: true);
+                });
+
+            RefreshInstallerState();
+        }
+
+        private async Task<int> RefreshInstallerPackageObjectsForPrimaryActionAsync()
+        {
+            Console.WriteLine("> Refresh installer package objects from source");
+            var result = await SyncDeveloperPackageObjectsCoreAsync();
+            foreach (var line in result.Lines)
+            {
+                Console.WriteLine(line);
+            }
+
+            if (result.ConfigUpdated)
+            {
+                await SaveCurrentConfigAsync();
+            }
+
+            if (result.HasWarnings)
+            {
+                Console.WriteLine("> Package object refresh had warnings. The main installation action was not started.");
+                return 1;
+            }
+
+            Console.WriteLine("> Package object refresh completed.");
+            return 0;
+        }
+
+        private bool ConfirmPrimaryAction(string actionName, bool refreshPackage)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine($"This will {actionName} using the matched profile.");
+            builder.AppendLine();
+            builder.AppendLine($"Profile: {(_configProfiles.FirstOrDefault(profile => profile.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase))?.DisplayName ?? Path.GetFileName(_configPath))}");
+            builder.AppendLine($"Computer: {Environment.MachineName}");
+            builder.AppendLine($"Config: {_configPath}");
+            builder.AppendLine($"SQL target: {_config.Sql.Server}/{_config.Sql.Database}");
+            builder.AppendLine($"ArtifactStore: {ValueOrPlaceholder(_config.ArtifactStoreRoot)}");
+            builder.AppendLine($"HostAgent service: {ValueOrPlaceholder(_config.HostAgent.ServiceName)}");
+            builder.AppendLine($"HostAgent install path: {ValueOrPlaceholder(_config.HostAgent.InstallPath)}");
+            builder.AppendLine($"IIS site: {ValueOrPlaceholder(_config.HostAgent.IisSiteName)}");
+            builder.AppendLine($"Portal path: {ValueOrPlaceholder(_config.HostAgent.PortalPhysicalPath)}");
+            builder.AppendLine();
+            builder.AppendLine(refreshPackage
+                ? "Before the main action, the installer package will be refreshed from the configured source repositories. Warnings stop the main action so package problems can be reviewed first."
+                : "The installer package will be used as-is.");
+            builder.AppendLine();
+            builder.Append("Continue?");
+
+            return MessageBox.Show(
+                builder.ToString(),
+                "Confirm OpenModulePlatform action",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) == DialogResult.Yes;
         }
 
         private async Task InstallAsync()
@@ -2173,15 +2451,17 @@ ORDER BY ar.ArtifactId DESC;
 
         private void SetActionButtonsEnabled(bool enabled)
         {
+            _primaryActionButton.Enabled = enabled;
+            _refreshPackageBeforePrimaryAction.Enabled = enabled && _hasDeveloperSource;
+            _showAdvancedActions.Enabled = enabled;
             _installButton.Enabled = enabled;
             _upgradeCompleteButton.Enabled = enabled;
-            _checkSourceButton.Enabled = enabled;
-            _syncPackageObjectsButton.Enabled = enabled;
-            _createUpdatedInstallerPackageButton.Enabled = enabled;
+            _checkSourceButton.Enabled = enabled && _hasDeveloperSource;
+            _syncPackageObjectsButton.Enabled = enabled && _hasDeveloperSource;
+            _createUpdatedInstallerPackageButton.Enabled = enabled && _hasDeveloperSource;
             _uninstallRuntimeButton.Enabled = enabled;
             _cleanUninstallButton.Enabled = enabled;
             _fullUninstallButton.Enabled = enabled;
-            _configSelector.Enabled = enabled;
             _reloadConfigButton.Enabled = enabled;
         }
 

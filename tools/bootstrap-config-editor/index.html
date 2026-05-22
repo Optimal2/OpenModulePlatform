@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OMP Bootstrap Config Editor</title>
+    <link rel="stylesheet" href="bootstrap-config-editor.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">OpenModulePlatform</p>
+                <h1>Bootstrap Config Editor</h1>
+                <p class="lede">Create or edit machine-specific installer configuration files for the HostAgent-first bootstrapper.</p>
+            </div>
+            <div class="header-actions">
+                <label class="button button-secondary">
+                    Open JSON
+                    <input id="fileInput" type="file" accept=".json,application/json" hidden>
+                </label>
+                <button id="newButton" type="button" class="button button-secondary">New</button>
+                <button id="downloadButton" type="button" class="button">Download JSON</button>
+            </div>
+        </header>
+
+        <section id="message" class="message" hidden></section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <div>
+                    <h2>Profile</h2>
+                    <p>The graphical installer uses the config whose machine names match the local computer.</p>
+                </div>
+            </div>
+            <div class="grid-fields">
+                <label>Display name<input id="profileDisplayName" autocomplete="off" spellcheck="false" placeholder="Production - HOST01"></label>
+                <label>Machine names (; separated)<input id="profileMachineNames" autocomplete="off" spellcheck="false" placeholder="HOST01;HOST01.example.local"></label>
+            </div>
+        </section>
+
+        <section class="layout">
+            <div class="editor-column">
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
+                            <h2>SQL</h2>
+                            <p>Use Windows authentication for normal local and domain installations.</p>
+                        </div>
+                    </div>
+                    <div class="grid-fields">
+                        <label>Server<input id="sqlServer" autocomplete="off" spellcheck="false" placeholder="localhost"></label>
+                        <label>Database<input id="sqlDatabase" autocomplete="off" spellcheck="false" placeholder="OpenModulePlatform"></label>
+                        <label>Bootstrap admin principal<input id="bootstrapPrincipal" autocomplete="off" spellcheck="false" placeholder="DOMAIN\\User"></label>
+                        <label>Command timeout seconds<input id="sqlTimeout" type="number" min="1" step="1"></label>
+                    </div>
+                    <div class="check-list">
+                        <label><input id="sqlEnabled" type="checkbox"> Run SQL bootstrap</label>
+                        <label><input id="integratedSecurity" type="checkbox"> Integrated security</label>
+                        <label><input id="trustServerCertificate" type="checkbox"> Trust SQL Server certificate</label>
+                        <label><input id="createDatabase" type="checkbox"> Create database if missing</label>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
+                            <h2>Runtime Paths</h2>
+                            <p>These paths are shown read-only in the installer and used by HostAgent.</p>
+                        </div>
+                    </div>
+                    <div class="grid-fields">
+                        <label>ArtifactStore root<input id="artifactStoreRoot" autocomplete="off" spellcheck="false" placeholder="E:\\OMP\\ArtifactStore"></label>
+                        <label>HostAgent install path<input id="hostAgentInstallPath" autocomplete="off" spellcheck="false" placeholder="E:\\OMP\\Services\\HostAgent"></label>
+                        <label>Local artifact cache<input id="localArtifactCacheRoot" autocomplete="off" spellcheck="false" placeholder="E:\\OMP\\ArtifactCache"></label>
+                        <label>Web apps root<input id="webAppsRoot" autocomplete="off" spellcheck="false" placeholder="E:\\OMP\\WebApps"></label>
+                        <label>Portal physical path<input id="portalPhysicalPath" autocomplete="off" spellcheck="false" placeholder="E:\\OMP\\Sites\\Portal"></label>
+                        <label>Services root<input id="servicesRoot" autocomplete="off" spellcheck="false" placeholder="E:\\OMP\\Services"></label>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
+                            <h2>HostAgent And IIS</h2>
+                            <p>HostAgent normally needs a local administrator account so it can manage services and IIS.</p>
+                        </div>
+                    </div>
+                    <div class="grid-fields">
+                        <label>Service name<input id="serviceName" autocomplete="off" spellcheck="false" placeholder="OpenModulePlatform.HostAgent"></label>
+                        <label>Service account<input id="serviceAccountName" autocomplete="off" spellcheck="false" placeholder="DOMAIN\\Account"></label>
+                        <label>Service password<input id="serviceAccountPassword" type="password" autocomplete="off"></label>
+                        <label>Host key<input id="hostKey" autocomplete="off" spellcheck="false" placeholder="host01"></label>
+                        <label>Host name<input id="hostName" autocomplete="off" spellcheck="false" placeholder="HOST01.example.local"></label>
+                        <label>IIS site name<input id="iisSiteName" autocomplete="off" spellcheck="false" placeholder="OpenModulePlatform"></label>
+                        <label>IIS binding port<input id="iisBindingPort" type="number" min="1" max="65535" step="1"></label>
+                        <label>IIS binding host header<input id="iisBindingHostHeader" autocomplete="off" spellcheck="false"></label>
+                        <label>App pool prefix<input id="iisAppPoolNamePrefix" autocomplete="off" spellcheck="false" placeholder="OMP_"></label>
+                        <label>App pool account<input id="iisAppPoolUserName" autocomplete="off" spellcheck="false"></label>
+                        <label>App pool password<input id="iisAppPoolPassword" type="password" autocomplete="off"></label>
+                    </div>
+                    <div class="check-list">
+                        <label><input id="hostAgentEnabled" type="checkbox"> Install HostAgent</label>
+                        <label><input id="deployWebApps" type="checkbox"> Let HostAgent deploy web apps</label>
+                        <label><input id="ensureIisSite" type="checkbox"> Create/update IIS site</label>
+                        <label><input id="deployServiceApps" type="checkbox"> Let HostAgent deploy service apps</label>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
+                            <h2>Developer Source</h2>
+                            <p>Package refresh options are available only when these paths resolve to valid repositories.</p>
+                        </div>
+                    </div>
+                    <div class="grid-fields single">
+                        <label>Source repository roots (; separated)<input id="developerSourceRoot" autocomplete="off" spellcheck="false" placeholder="E:\\Git\\OpenModulePlatform;E:\\Git\\OpenDocViewer"></label>
+                        <label>Package config path<input id="packageConfigPath" autocomplete="off" spellcheck="false"></label>
+                        <label>Temporary package output root<input id="packageOutputRoot" autocomplete="off" spellcheck="false"></label>
+                    </div>
+                </section>
+            </div>
+
+            <section class="panel preview-panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>JSON Preview</h2>
+                        <p>The preview can be edited directly. Apply it to load values back into the form.</p>
+                    </div>
+                    <button id="applyPreviewButton" type="button" class="button button-secondary">Apply preview</button>
+                </div>
+                <textarea id="jsonPreview" spellcheck="false"></textarea>
+            </section>
+        </section>
+    </main>
+    <script src="bootstrap-config-editor.js"></script>
+</body>
+</html>
