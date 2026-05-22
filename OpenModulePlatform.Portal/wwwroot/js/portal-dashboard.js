@@ -15,7 +15,9 @@
         const canvas = root.querySelector('[data-dashboard-canvas]');
         const editToggle = root.querySelector('[data-dashboard-edit-toggle]');
         const editLabel = root.querySelector('[data-dashboard-edit-label]');
+        const saveButton = root.querySelector('[data-dashboard-save]');
         const addButton = root.querySelector('[data-dashboard-add-open]');
+        const resetChangesButton = root.querySelector('[data-dashboard-reset-changes]');
         const resetButton = root.querySelector('[data-dashboard-reset]');
         const alignToggle = root.querySelector('[data-dashboard-align-toggle]');
         const picker = root.querySelector('[data-widget-picker]');
@@ -37,7 +39,10 @@
             minCanvasHeight: parsePositiveInteger(root.dataset.minCanvasHeight, defaultMinCanvasHeight),
             bottomPadding: parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding),
             viewBottomPadding: parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding),
-            emptyCanvasHeight: parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight)
+            emptyCanvasHeight: parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight),
+            addedWidgetIds: new Set(),
+            pendingRemovedWidgetIds: new Set(),
+            savedSnapshot: null
         };
 
         updateAlignToGridState(root, alignToggle, state.alignToGrid);
@@ -46,12 +51,17 @@
 
         editToggle.addEventListener('click', async () => {
             if (isEditing) {
-                await saveLayout(root, canvas, token);
+                await saveDashboardChanges(root, canvas, token, state);
                 setEditing(false);
                 return;
             }
 
             setEditing(true);
+        });
+
+        saveButton?.addEventListener('click', async () => {
+            await saveDashboardChanges(root, canvas, token, state);
+            maxOrder = getMaxOrder(canvas);
         });
 
         addButton?.addEventListener('click', () => {
@@ -66,6 +76,12 @@
             }
         });
 
+        resetChangesButton?.addEventListener('click', async () => {
+            const snapshot = state.savedSnapshot || captureDashboardSnapshot(canvas, state);
+            await resetDashboardChanges(root, canvas, token, state, snapshot, () => ++maxOrder);
+            maxOrder = snapshot.maxOrder;
+        });
+
         resetButton?.addEventListener('click', async () => {
             const message = root.dataset.resetConfirm || 'This clears your current dashboard widgets. Continue?';
             if (!window.confirm(message)) {
@@ -77,17 +93,25 @@
             maxOrder = 0;
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
+            state.addedWidgetIds.clear();
+            state.pendingRemovedWidgetIds.clear();
+            state.savedSnapshot = captureDashboardSnapshot(canvas, state);
         });
 
         alignToggle?.addEventListener('change', async () => {
             const next = alignToggle.checked;
+            const previous = state.alignToGrid;
             updateAlignToGridState(root, alignToggle, next);
             state.alignToGrid = next;
+            if (next) {
+                snapAllWidgetsToGrid(canvas, state);
+                updateCanvasHeight(root, canvas, state);
+            }
 
             try {
                 await postForm(root.dataset.preferenceUrl, token, { alignToGrid: next });
             } catch (error) {
-                state.alignToGrid = !next;
+                state.alignToGrid = previous;
                 updateAlignToGridState(root, alignToggle, state.alignToGrid);
                 throw error;
             }
@@ -118,6 +142,10 @@
                 const element = createWidgetElement(root, widget);
                 canvas.appendChild(element);
                 snapWidgetToGrid(element, state);
+                const userActiveWidgetId = parseInt(element.dataset.userActiveWidgetId || '0', 10);
+                if (userActiveWidgetId > 0) {
+                    state.addedWidgetIds.add(userActiveWidgetId);
+                }
                 bindWidget(root, canvas, element, token, () => ++maxOrder, state);
                 bindEntryFavoriteToggles(root, element, token);
                 updateEmptyState(canvas);
@@ -131,9 +159,17 @@
             bindWidget(root, canvas, widget, token, () => ++maxOrder, state);
         });
         bindEntryFavoriteToggles(root, root, token);
+        state.savedSnapshot = captureDashboardSnapshot(canvas, state);
 
         function setEditing(next) {
             isEditing = next;
+            if (isEditing) {
+                state.addedWidgetIds.clear();
+                state.pendingRemovedWidgetIds.clear();
+                state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+                maxOrder = state.savedSnapshot.maxOrder;
+            }
+
             root.classList.toggle('is-editing', isEditing);
             editToggle.setAttribute('aria-pressed', isEditing ? 'true' : 'false');
             if (editLabel) {
@@ -183,7 +219,7 @@
                 return;
             }
 
-            await postForm(root.dataset.removeUrl, token, { userActiveWidgetId });
+            state.pendingRemovedWidgetIds.add(userActiveWidgetId);
             widget.remove();
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
@@ -525,6 +561,12 @@
         widget.style.height = `${snapSizeIfNeeded(widget.offsetHeight, minHeight, state)}px`;
     }
 
+    function snapAllWidgetsToGrid(canvas, state) {
+        canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => {
+            snapWidgetToGrid(widget, state);
+        });
+    }
+
     function snapIfNeeded(value, state) {
         if (!state?.alignToGrid) {
             return Math.round(value);
@@ -574,7 +616,19 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
     }
 
-    async function saveLayout(root, canvas, token) {
+    async function saveDashboardChanges(root, canvas, token, state) {
+        await saveLayout(root, canvas, token, state);
+        state.pendingRemovedWidgetIds.clear();
+        state.addedWidgetIds.clear();
+        state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+    }
+
+    async function saveLayout(root, canvas, token, state) {
+        if (state?.alignToGrid) {
+            snapAllWidgetsToGrid(canvas, state);
+            updateCanvasHeight(root, canvas, state);
+        }
+
         const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
             .map((widget) => ({
                 userActiveWidgetId: parseInt(widget.dataset.userActiveWidgetId || '0', 10),
@@ -591,6 +645,62 @@
 
         await postForm(root.dataset.saveUrl, token, {
             widgetsJson: JSON.stringify(widgets)
+        });
+
+        const removedIds = Array.from(state?.pendingRemovedWidgetIds || []);
+        for (const userActiveWidgetId of removedIds) {
+            await postForm(root.dataset.removeUrl, token, { userActiveWidgetId });
+        }
+    }
+
+    async function resetDashboardChanges(root, canvas, token, state, snapshot, nextOrder) {
+        const addedIds = Array.from(state.addedWidgetIds);
+        for (const userActiveWidgetId of addedIds) {
+            await postForm(root.dataset.removeUrl, token, { userActiveWidgetId });
+        }
+
+        if (state.alignToGrid !== snapshot.alignToGrid) {
+            state.alignToGrid = snapshot.alignToGrid;
+            updateAlignToGridState(root, root.querySelector('[data-dashboard-align-toggle]'), state.alignToGrid);
+            await postForm(root.dataset.preferenceUrl, token, { alignToGrid: state.alignToGrid });
+        }
+
+        restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder);
+        state.pendingRemovedWidgetIds.clear();
+        state.addedWidgetIds.clear();
+        state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+        updateEmptyState(canvas);
+        updateCanvasHeight(root, canvas, state);
+    }
+
+    function captureDashboardSnapshot(canvas, state) {
+        return {
+            alignToGrid: !!state?.alignToGrid,
+            maxOrder: getMaxOrder(canvas),
+            widgets: Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
+                .map((widget) => {
+                    const clone = widget.cloneNode(true);
+                    clearDashboardBindingMarkers(clone);
+                    return clone;
+                })
+        };
+    }
+
+    function restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder) {
+        canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => widget.remove());
+
+        snapshot.widgets.forEach((savedWidget) => {
+            const widget = savedWidget.cloneNode(true);
+            clearDashboardBindingMarkers(widget);
+            canvas.appendChild(widget);
+            bindWidget(root, canvas, widget, token, nextOrder, state);
+            bindEntryFavoriteToggles(root, widget, token);
+        });
+    }
+
+    function clearDashboardBindingMarkers(element) {
+        element.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
+            delete button.dataset.dashboardFavoriteBound;
         });
     }
 
