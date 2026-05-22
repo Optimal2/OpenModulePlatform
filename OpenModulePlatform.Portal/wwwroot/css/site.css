@@ -1418,6 +1418,10 @@ button {
     overflow: hidden;
 }
 
+.dashboard-entry-list__row[hidden] {
+    display: none;
+}
+
 .dashboard-entry-list__row:hover,
 .dashboard-entry-list__row:focus-within {
     border-color: var(--border-strong);
