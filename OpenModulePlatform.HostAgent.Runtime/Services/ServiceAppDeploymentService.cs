@@ -927,6 +927,17 @@ public sealed class ServiceAppDeploymentService
             return "NT AUTHORITY\\NetworkService";
         }
 
+        if (normalized.StartsWith(".\\", StringComparison.Ordinal))
+        {
+            return Environment.MachineName + "\\" + normalized[2..];
+        }
+
+        if (!normalized.Contains('\\', StringComparison.Ordinal)
+            && !normalized.Contains('@', StringComparison.Ordinal))
+        {
+            return Environment.MachineName + "\\" + normalized;
+        }
+
         return normalized;
     }
 
