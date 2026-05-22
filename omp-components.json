@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.33",
+      "definitionVersion": "0.3.34",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -57,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.33",
+      "version": "0.3.34",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip"

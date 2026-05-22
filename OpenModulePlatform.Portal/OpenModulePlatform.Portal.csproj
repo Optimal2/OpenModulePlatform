@@ -20,5 +20,9 @@
              Link="wwwroot\tools\artifact-package-editor\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\tools\bootstrap-config-editor\**\*.*"
+             Link="wwwroot\tools\bootstrap-config-editor\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

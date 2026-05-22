@@ -336,4 +336,7 @@
   <data name="Select one dashboard widget JSON file." xml:space="preserve"><value>Select one dashboard widget JSON file.</value></data>
   <data name="The uploaded dashboard widget file must be a .json file." xml:space="preserve"><value>The uploaded dashboard widget file must be a .json file.</value></data>
   <data name="The uploaded dashboard widget file exceeds the configured limit of {0} bytes." xml:space="preserve"><value>The uploaded dashboard widget file exceeds the configured limit of {0} bytes.</value></data>
+  <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap config editor</value></data>
+  <data name="Use this editor to create or update machine-specific bootstrap configuration JSON files for the installer." xml:space="preserve"><value>Use this editor to create or update machine-specific bootstrap configuration JSON files for the installer.</value></data>
+  <data name="Back to installation" xml:space="preserve"><value>Back to installation</value></data>
 </root>

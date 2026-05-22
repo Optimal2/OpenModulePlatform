@@ -1824,4 +1824,7 @@
   <data name="Upgrade to latest compatible artifact version {0}" xml:space="preserve"><value>Upgrade to latest compatible artifact version {0}</value></data>
   <data name="Desired artifact updated to version {0}." xml:space="preserve"><value>Desired artifact updated to version {0}.</value></data>
   <data name="The desired artifact could not be updated: {0}" xml:space="preserve"><value>The desired artifact could not be updated: {0}</value></data>
+  <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap config editor</value></data>
+  <data name="Use this editor to create or update machine-specific bootstrap configuration JSON files for the installer." xml:space="preserve"><value>Use this editor to create or update machine-specific bootstrap configuration JSON files for the installer.</value></data>
+  <data name="Back to installation" xml:space="preserve"><value>Back to installation</value></data>
 </root>
