@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_webapp_blazor",
-  "definitionVersion": "0.3.5",
+  "definitionVersion": "0.3.6",
   "module": {
     "displayName": "Example WebApp Blazor Module",
     "moduleType": "WebAppModule",
@@ -31,6 +31,18 @@
     }
   ],
   "sqlScripts": [
+    {
+      "key": "validate-example-webapp-blazor-schema",
+      "phase": "validate",
+      "scope": "module",
+      "order": 5,
+      "path": "examples/WebAppBlazorModule/Sql/0-validate-example-webapp-blazor.sql",
+      "execution": "validation",
+      "inlineSql": null,
+      "contentEncoding": "base64-utf8",
+      "content": "U0VUIE5PQ09VTlQgT047CgpERUNMQVJFIEBNaXNzaW5nIGludCA9IDA7CgpJRiBPQkpFQ1RfSUQoTidvbXBfZXhhbXBsZV93ZWJhcHBfYmxhem9yLkNvbmZpZ3VyYXRpb25zJywgTidVJykgSVMgTlVMTAogICAgU0VMRUNUIEBNaXNzaW5nID0gQE1pc3NpbmcgKyAxOwoKO1dJVEggUmVxdWlyZWRDb2x1bW5zKFNjaGVtYU5hbWUsIFRhYmxlTmFtZSwgQ29sdW1uTmFtZSkgQVMKKAogICAgU0VMRUNUIHYuU2NoZW1hTmFtZSwgdi5UYWJsZU5hbWUsIHYuQ29sdW1uTmFtZQogICAgRlJPTSAoVkFMVUVTCiAgICAgICAgKE4nb21wX2V4YW1wbGVfd2ViYXBwX2JsYXpvcicsIE4nQ29uZmlndXJhdGlvbnMnLCBOJ0NvbmZpZ0lkJyksCiAgICAgICAgKE4nb21wX2V4YW1wbGVfd2ViYXBwX2JsYXpvcicsIE4nQ29uZmlndXJhdGlvbnMnLCBOJ1ZlcnNpb25ObycpLAogICAgICAgIChOJ29tcF9leGFtcGxlX3dlYmFwcF9ibGF6b3InLCBOJ0NvbmZpZ3VyYXRpb25zJywgTidDb25maWdKc29uJyksCiAgICAgICAgKE4nb21wX2V4YW1wbGVfd2ViYXBwX2JsYXpvcicsIE4nQ29uZmlndXJhdGlvbnMnLCBOJ0NvbW1lbnQnKSwKICAgICAgICAoTidvbXBfZXhhbXBsZV93ZWJhcHBfYmxhem9yJywgTidDb25maWd1cmF0aW9ucycsIE4nQ3JlYXRlZFV0YycpLAogICAgICAgIChOJ29tcF9leGFtcGxlX3dlYmFwcF9ibGF6b3InLCBOJ0NvbmZpZ3VyYXRpb25zJywgTidDcmVhdGVkQnknKQogICAgKSBBUyB2KFNjaGVtYU5hbWUsIFRhYmxlTmFtZSwgQ29sdW1uTmFtZSkKKQpTRUxFQ1QgQE1pc3NpbmcgPSBATWlzc2luZyArIENPVU5UKDEpCkZST00gUmVxdWlyZWRDb2x1bW5zIHJlcXVpcmVkCldIRVJFIENPTF9MRU5HVEgocmVxdWlyZWQuU2NoZW1hTmFtZSArIE4nLicgKyByZXF1aXJlZC5UYWJsZU5hbWUsIHJlcXVpcmVkLkNvbHVtbk5hbWUpIElTIE5VTEw7CgpJRiBPQkpFQ1RfSUQoTidvbXBfZXhhbXBsZV93ZWJhcHBfYmxhem9yLkNvbmZpZ3VyYXRpb25zJywgTidVJykgSVMgTk9UIE5VTEwKQkVHSU4KICAgIFNFTEVDVCBATWlzc2luZyA9IEBNaXNzaW5nICsgQ0FTRQogICAgICAgIFdIRU4gRVhJU1RTIChTRUxFQ1QgMSBGUk9NIG9tcF9leGFtcGxlX3dlYmFwcF9ibGF6b3IuQ29uZmlndXJhdGlvbnMgV0hFUkUgVmVyc2lvbk5vID0gMCkKICAgICAgICBUSEVOIDAgRUxTRSAxIEVORDsKRU5EOwoKU0VMRUNUCiAgICBDQVNUKENBU0UgV0hFTiBATWlzc2luZyA9IDAgVEhFTiAxIEVMU0UgMCBFTkQgQVMgYml0KSBBUyBJc0hlYWx0aHksCiAgICBDQVNFCiAgICAgICAgV0hFTiBATWlzc2luZyA9IDAgVEhFTiBOJ0V4YW1wbGUgQmxhem9yIG1vZHVsZSBzdG9yYWdlIGlzIGhlYWx0aHkuJwogICAgICAgIEVMU0UgQ09OQ0FUKE4nRXhhbXBsZSBCbGF6b3IgbW9kdWxlIHN0b3JhZ2UgaXMgbWlzc2luZyAnLCBATWlzc2luZywgTicgcmVxdWlyZWQgb2JqZWN0KHMpLicpCiAgICBFTkQgQVMgTWVzc2FnZTsK",
+      "sha256": "12aa6b4400ce72ca82481377cf895983306973ffa3410fbc2c76970f9b108cac"
+    },
     {
       "key": "setup-example-webapp-blazor-schema",
       "phase": "setup",
