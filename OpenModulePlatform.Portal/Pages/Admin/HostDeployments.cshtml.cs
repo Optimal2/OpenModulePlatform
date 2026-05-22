@@ -30,11 +30,28 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         if (guard is not null)
             return guard;
 
+        await LoadAsync(ct);
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostRequestIdentityRepair(Guid hostId, Guid appInstanceId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+            return guard;
+
+        var requestedBy = User.Identity?.Name ?? "PortalAdmin";
+        await _repo.RequestServiceIdentityRepairAsync(hostId, appInstanceId, requestedBy, ct);
+        TempData["StatusMessage"] = "Service identity repair was requested. HostAgent will apply it during its next cycle when credential automation is set to PortalAdminApproved.";
+        return RedirectToPage();
+    }
+
+    private async Task LoadAsync(CancellationToken ct)
+    {
         SetTitles("Host deployments");
         Rows = await _repo.GetHostDeploymentsAsync(ct);
         AppDeploymentStates = await _repo.GetHostAppDeploymentStatesAsync(ct);
         ArtifactStates = await _repo.GetHostArtifactStatesAsync(ct);
-        return Page();
     }
 
     public static string FormatHostDeploymentStatus(byte status)
@@ -44,6 +61,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             1 => "Running",
             2 => "Succeeded",
             3 => "Failed",
+            4 => "Warning",
             _ => "Unknown"
         };
 

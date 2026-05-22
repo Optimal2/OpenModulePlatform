@@ -37,4 +37,8 @@ public sealed class ServiceAppDeploymentDescriptor
     public string? DeployedTargetPath { get; init; }
 
     public string? DeployedRuntimeName { get; init; }
+
+    public DateTime? IdentityRepairRequestedUtc { get; init; }
+
+    public string? IdentityRepairRequestedBy { get; init; }
 }

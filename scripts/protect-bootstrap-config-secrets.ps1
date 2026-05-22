@@ -100,6 +100,7 @@ function Protect-ConfigFile {
     if ($null -ne $config.hostAgent) {
         Ensure-Property -Object $config.hostAgent -Name 'serviceAccountCredentialKey' -Value ''
         Ensure-Property -Object $config.hostAgent -Name 'iisAppPoolPasswordCredentialKey' -Value ''
+        Ensure-Property -Object $config.hostAgent -Name 'serviceAppPasswordCredentialKey' -Value ''
         Ensure-Property -Object $config.hostAgent -Name 'credentialStore' -Value ([pscustomobject]@{
             automationMode = ''
             filePath = ''
@@ -113,6 +114,10 @@ function Protect-ConfigFile {
 
         if ($null -ne $config.hostAgent.PSObject.Properties['iisAppPoolPassword']) {
             $config.hostAgent.iisAppPoolPassword = Protect-PortableSecret -Value $config.hostAgent.iisAppPoolPassword -Key $key
+        }
+
+        if ($null -ne $config.hostAgent.PSObject.Properties['serviceAppPassword']) {
+            $config.hostAgent.serviceAppPassword = Protect-PortableSecret -Value $config.hostAgent.serviceAppPassword -Key $key
         }
 
         if ($null -ne $config.hostAgent.iisAppPoolOverrides) {
@@ -132,13 +137,42 @@ function Protect-ConfigFile {
             }
         }
 
+        if ($null -ne $config.hostAgent.serviceAppIdentityOverrides) {
+            foreach ($property in $config.hostAgent.serviceAppIdentityOverrides.PSObject.Properties) {
+                $identity = $property.Value
+                if ($null -eq $identity) {
+                    continue
+                }
+
+                Ensure-Property -Object $identity -Name 'passwordCredentialKey' -Value ''
+                if ($null -ne $identity.PSObject.Properties['password']) {
+                    $identity.password = Protect-PortableSecret -Value $identity.password -Key $key
+                }
+                elseif ($null -ne $identity.PSObject.Properties['Password']) {
+                    $identity.Password = Protect-PortableSecret -Value $identity.Password -Key $key
+                }
+            }
+        }
+
         if ($null -ne $config.hostAgent.appSettings -and $null -ne $config.hostAgent.appSettings.HostAgent) {
             $hostAgentSettings = $config.hostAgent.appSettings.HostAgent
             Remove-PropertyIfPresent -Object $hostAgentSettings -Name 'IisAppPoolPassword'
             Ensure-Property -Object $hostAgentSettings -Name 'IisAppPoolPasswordCredentialKey' -Value ''
+            Remove-PropertyIfPresent -Object $hostAgentSettings -Name 'ServiceAppPassword'
+            Ensure-Property -Object $hostAgentSettings -Name 'ServiceAppPasswordCredentialKey' -Value ''
 
             if ($null -ne $hostAgentSettings.IisAppPoolOverrides) {
                 foreach ($property in $hostAgentSettings.IisAppPoolOverrides.PSObject.Properties) {
+                    if ($null -ne $property.Value) {
+                        Remove-PropertyIfPresent -Object $property.Value -Name 'Password'
+                        Remove-PropertyIfPresent -Object $property.Value -Name 'password'
+                        Ensure-Property -Object $property.Value -Name 'PasswordCredentialKey' -Value ''
+                    }
+                }
+            }
+
+            if ($null -ne $hostAgentSettings.ServiceAppIdentityOverrides) {
+                foreach ($property in $hostAgentSettings.ServiceAppIdentityOverrides.PSObject.Properties) {
                     if ($null -ne $property.Value) {
                         Remove-PropertyIfPresent -Object $property.Value -Name 'Password'
                         Remove-PropertyIfPresent -Object $property.Value -Name 'password'

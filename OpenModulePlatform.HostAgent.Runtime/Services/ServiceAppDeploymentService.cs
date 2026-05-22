@@ -14,15 +14,18 @@ public sealed class ServiceAppDeploymentService
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
+    private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<ServiceAppDeploymentService> _logger;
 
     public ServiceAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
         OmpHostArtifactRepository repository,
+        HostAgentCredentialStoreService credentialStore,
         ILogger<ServiceAppDeploymentService> logger)
     {
         _settings = settings;
         _repository = repository;
+        _credentialStore = credentialStore;
         _logger = logger;
     }
 
@@ -76,6 +79,11 @@ public sealed class ServiceAppDeploymentService
                 targetPath,
                 executableRelativePath,
                 $"Service app instance '{deployment.AppInstanceKey}' executable path");
+            var serviceIdentity = await ResolveServiceAppIdentityAsync(
+                settings,
+                deployment,
+                serviceName,
+                cancellationToken);
 
             var configuredConnectionString = _repository.GetConfiguredConnectionString();
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
@@ -94,9 +102,28 @@ public sealed class ServiceAppDeploymentService
             {
                 if (ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
                 {
+                    var identityCheck = await EnsureServiceIdentityAsync(
+                        settings,
+                        deployment,
+                        serviceName,
+                        serviceIdentity,
+                        cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(identityCheck.WarningMessage))
+                    {
+                        await _repository.PublishAppDeploymentResultAsync(
+                            deployment,
+                            AddIdentityCheck(
+                                AppDeploymentResult.Warning(targetPath, serviceName, identityCheck.WarningMessage),
+                                identityCheck),
+                            cancellationToken);
+                        return;
+                    }
+
                     await _repository.PublishAppDeploymentResultAsync(
                         deployment,
-                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false),
+                        AddIdentityCheck(
+                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
+                            identityCheck),
                         cancellationToken);
                     return;
                 }
@@ -122,15 +149,35 @@ public sealed class ServiceAppDeploymentService
 
             EnsureWindowsService(deployment, serviceName, targetExecutablePath);
 
+            var postDeployIdentityCheck = await EnsureServiceIdentityAsync(
+                settings,
+                deployment,
+                serviceName,
+                serviceIdentity,
+                cancellationToken);
+
             if (settings.StartServiceAfterServiceAppDeployment)
             {
                 StartServiceIfStopped(serviceName, settings.ServiceAppStartTimeoutSeconds);
                 serviceStopped = false;
             }
 
+            if (!string.IsNullOrWhiteSpace(postDeployIdentityCheck.WarningMessage))
+            {
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    AddIdentityCheck(
+                        AppDeploymentResult.Warning(targetPath, serviceName, postDeployIdentityCheck.WarningMessage),
+                        postDeployIdentityCheck),
+                    cancellationToken);
+                return;
+            }
+
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Succeeded(targetPath, serviceName, applied: true),
+                AddIdentityCheck(
+                    AppDeploymentResult.Succeeded(targetPath, serviceName, applied: true),
+                    postDeployIdentityCheck),
                 cancellationToken);
 
             _logger.LogInformation(
@@ -298,6 +345,272 @@ public sealed class ServiceAppDeploymentService
         RunScChecked("description", serviceName, description);
     }
 
+    private async Task<ServiceIdentityCheckResult> EnsureServiceIdentityAsync(
+        HostAgentSettings settings,
+        ServiceAppDeploymentDescriptor deployment,
+        string serviceName,
+        ServiceAppIdentityResolution desiredIdentity,
+        CancellationToken cancellationToken)
+    {
+        var automationMode = NormalizeAutomationMode(settings.CredentialStore.AutomationMode);
+        if (!desiredIdentity.IsConfigured)
+        {
+            return new ServiceIdentityCheckResult(
+                automationMode,
+                null,
+                GetServiceStartNameIfExists(serviceName),
+                HostAppIdentityCheckStatuses.NotApplicable,
+                null,
+                Applied: false,
+                ClearRepairRequest: false);
+        }
+
+        var actualIdentity = GetServiceStartNameIfExists(serviceName);
+        if (actualIdentity is null)
+        {
+            return new ServiceIdentityCheckResult(
+                automationMode,
+                desiredIdentity.UserName,
+                null,
+                HostAppIdentityCheckStatuses.NotApplicable,
+                null,
+                Applied: false,
+                ClearRepairRequest: false);
+        }
+
+        if (AccountsEqual(actualIdentity, desiredIdentity.UserName))
+        {
+            return new ServiceIdentityCheckResult(
+                automationMode,
+                desiredIdentity.UserName,
+                actualIdentity,
+                HostAppIdentityCheckStatuses.Compliant,
+                null,
+                Applied: false,
+                ClearRepairRequest: true);
+        }
+
+        var canApply = string.Equals(automationMode, HostAgentCredentialAutomationModes.Full, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(automationMode, HostAgentCredentialAutomationModes.PortalAdminApproved, StringComparison.OrdinalIgnoreCase)
+                && deployment.IdentityRepairRequestedUtc.HasValue);
+        if (canApply)
+        {
+            if (RequiresPassword(desiredIdentity.UserName) && string.IsNullOrWhiteSpace(desiredIdentity.Password))
+            {
+                throw new InvalidOperationException(
+                    $"Windows service '{serviceName}' must run as '{desiredIdentity.UserName}', but HostAgent has no stored password for that account.");
+            }
+
+            ApplyDesiredServiceIdentity(settings, serviceName, desiredIdentity);
+            var updatedIdentity = GetServiceStartName(serviceName);
+            if (!AccountsEqual(updatedIdentity, desiredIdentity.UserName))
+            {
+                throw new InvalidOperationException(
+                    $"Windows service '{serviceName}' was configured to run as '{desiredIdentity.UserName}', but Windows still reports '{updatedIdentity}'.");
+            }
+
+            return new ServiceIdentityCheckResult(
+                automationMode,
+                desiredIdentity.UserName,
+                updatedIdentity,
+                HostAppIdentityCheckStatuses.Compliant,
+                null,
+                Applied: true,
+                ClearRepairRequest: true);
+        }
+
+        if (string.Equals(automationMode, HostAgentCredentialAutomationModes.PortalAdminApproved, StringComparison.OrdinalIgnoreCase))
+        {
+            var status = deployment.IdentityRepairRequestedUtc.HasValue
+                ? HostAppIdentityCheckStatuses.RepairRequested
+                : HostAppIdentityCheckStatuses.WaitingForPortalAdminApproval;
+            var message = deployment.IdentityRepairRequestedUtc.HasValue
+                ? $"Windows service '{serviceName}' is waiting for HostAgent to apply the PortalAdmin-approved service identity repair."
+                : $"Windows service '{serviceName}' runs as '{actualIdentity}', but desired identity is '{desiredIdentity.UserName}'. PortalAdmin approval is required before HostAgent changes the service account.";
+            return new ServiceIdentityCheckResult(
+                automationMode,
+                desiredIdentity.UserName,
+                actualIdentity,
+                status,
+                message,
+                Applied: false,
+                ClearRepairRequest: false);
+        }
+
+        return new ServiceIdentityCheckResult(
+            automationMode,
+            desiredIdentity.UserName,
+            actualIdentity,
+            HostAppIdentityCheckStatuses.ManualActionRequired,
+            $"Windows service '{serviceName}' runs as '{actualIdentity}', but desired identity is '{desiredIdentity.UserName}'. Credential automation is disabled; manually configure the Windows service logon account and restart the service.",
+            Applied: false,
+            ClearRepairRequest: false);
+    }
+
+    private async Task<ServiceAppIdentityResolution> ResolveServiceAppIdentityAsync(
+        HostAgentSettings settings,
+        ServiceAppDeploymentDescriptor deployment,
+        string serviceName,
+        CancellationToken cancellationToken)
+    {
+        foreach (var key in ResolveServiceAppIdentityOverrideKeys(deployment, serviceName))
+        {
+            if (TryGetServiceAppIdentityOverride(settings, key, out var identity)
+                && HasConfiguredServiceAppIdentity(identity))
+            {
+                return await ResolveStoredServiceAppPasswordAsync(identity, cancellationToken);
+            }
+        }
+
+        var defaultIdentity = new HostAgentServiceAppIdentitySettings
+        {
+            UserName = string.IsNullOrWhiteSpace(settings.ServiceAppUserName)
+                ? settings.SelfUpgrade.ServiceAccountName
+                : settings.ServiceAppUserName,
+            Password = string.IsNullOrWhiteSpace(settings.ServiceAppPassword)
+                ? settings.SelfUpgrade.ServiceAccountPassword
+                : settings.ServiceAppPassword,
+            PasswordCredentialKey = string.IsNullOrWhiteSpace(settings.ServiceAppPasswordCredentialKey)
+                ? settings.SelfUpgrade.ServiceAccountPasswordCredentialKey
+                : settings.ServiceAppPasswordCredentialKey
+        };
+
+        return await ResolveStoredServiceAppPasswordAsync(defaultIdentity, cancellationToken);
+    }
+
+    private async Task<ServiceAppIdentityResolution> ResolveStoredServiceAppPasswordAsync(
+        HostAgentServiceAppIdentitySettings identity,
+        CancellationToken cancellationToken)
+    {
+        var userName = identity.UserName;
+        var password = identity.Password;
+        if (!string.IsNullOrWhiteSpace(identity.PasswordCredentialKey))
+        {
+            var credential = await _credentialStore.TryReadCredentialAsync(identity.PasswordCredentialKey, cancellationToken);
+            if (credential is null)
+            {
+                return string.IsNullOrWhiteSpace(userName)
+                    ? ServiceAppIdentityResolution.NotConfigured
+                    : new ServiceAppIdentityResolution(userName.Trim(), password);
+            }
+
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                userName = credential.UserName;
+            }
+
+            password = credential.Password;
+        }
+
+        return string.IsNullOrWhiteSpace(userName)
+            ? ServiceAppIdentityResolution.NotConfigured
+            : new ServiceAppIdentityResolution(userName.Trim(), password);
+    }
+
+    private static bool HasConfiguredServiceAppIdentity(HostAgentServiceAppIdentitySettings identity)
+        => !string.IsNullOrWhiteSpace(identity.UserName)
+            || !string.IsNullOrWhiteSpace(identity.PasswordCredentialKey);
+
+    private static IEnumerable<string> ResolveServiceAppIdentityOverrideKeys(
+        ServiceAppDeploymentDescriptor deployment,
+        string serviceName)
+    {
+        yield return deployment.AppInstanceKey;
+
+        if (!string.IsNullOrWhiteSpace(deployment.InstallationName))
+        {
+            yield return deployment.InstallationName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(deployment.TargetName))
+        {
+            yield return deployment.TargetName.Trim();
+        }
+
+        yield return serviceName;
+    }
+
+    private static bool TryGetServiceAppIdentityOverride(
+        HostAgentSettings settings,
+        string key,
+        out HostAgentServiceAppIdentitySettings identity)
+    {
+        var overrides = settings.ServiceAppIdentityOverrides;
+        if (overrides is not { Count: > 0 } || string.IsNullOrWhiteSpace(key))
+        {
+            identity = new HostAgentServiceAppIdentitySettings();
+            return false;
+        }
+
+        if (overrides.TryGetValue(key, out var configuredIdentity) && configuredIdentity is not null)
+        {
+            identity = configuredIdentity;
+            return true;
+        }
+
+        foreach (var pair in overrides)
+        {
+            if (string.Equals(pair.Key?.Trim(), key.Trim(), StringComparison.OrdinalIgnoreCase)
+                && pair.Value is not null)
+            {
+                identity = pair.Value;
+                return true;
+            }
+        }
+
+        identity = new HostAgentServiceAppIdentitySettings();
+        return false;
+    }
+
+    private static AppDeploymentResult AddIdentityCheck(
+        AppDeploymentResult result,
+        ServiceIdentityCheckResult identityCheck)
+        => result.WithIdentityCheck(
+            identityCheck.AutomationMode,
+            identityCheck.DesiredIdentity,
+            identityCheck.ActualIdentity,
+            identityCheck.Status,
+            identityCheck.ClearRepairRequest);
+
+    private static void ApplyDesiredServiceIdentity(
+        HostAgentSettings settings,
+        string serviceName,
+        ServiceAppIdentityResolution desiredIdentity)
+    {
+        var actualIdentity = GetServiceStartNameIfExists(serviceName);
+        if (actualIdentity is null || AccountsEqual(actualIdentity, desiredIdentity.UserName))
+        {
+            return;
+        }
+
+        var wasRunning = IsServiceRunning(serviceName);
+        if (wasRunning)
+        {
+            StopServiceIfRunning(serviceName, settings.ServiceAppStopTimeoutSeconds);
+        }
+
+        var arguments = new List<string>
+        {
+            "config",
+            serviceName,
+            "obj=",
+            NormalizeAccountForSc(desiredIdentity.UserName)
+        };
+
+        if (RequiresPassword(desiredIdentity.UserName))
+        {
+            arguments.Add("password=");
+            arguments.Add(desiredIdentity.Password);
+        }
+
+        RunScChecked([.. arguments]);
+
+        if (wasRunning)
+        {
+            StartServiceIfStopped(serviceName, settings.ServiceAppStartTimeoutSeconds);
+        }
+    }
+
     private static bool StopServiceIfRunning(string serviceName, int timeoutSeconds)
     {
         var state = GetServiceState(serviceName);
@@ -332,6 +645,9 @@ public sealed class ServiceAppDeploymentService
         RunScChecked("start", serviceName);
         WaitForServiceState(serviceName, "RUNNING", timeoutSeconds);
     }
+
+    private static bool IsServiceRunning(string serviceName)
+        => string.Equals(GetServiceState(serviceName), "RUNNING", StringComparison.OrdinalIgnoreCase);
 
     private static void TryStartService(string serviceName, int timeoutSeconds, ILogger logger)
     {
@@ -408,6 +724,58 @@ public sealed class ServiceAppDeploymentService
         }
 
         return null;
+    }
+
+    private static string? GetServiceStartNameIfExists(string serviceName)
+    {
+        var result = RunSc("qc", serviceName);
+        if (result.ExitCode != 0)
+        {
+            if (IsServiceNotFound(result))
+            {
+                return null;
+            }
+
+            throw new InvalidOperationException(CreateScFailureMessage(
+                result.ExitCode,
+                result.Output,
+                result.Error,
+                "query configuration for",
+                serviceName));
+        }
+
+        return ParseServiceStartName(serviceName, result.Output);
+    }
+
+    private static string GetServiceStartName(string serviceName)
+        => GetServiceStartNameIfExists(serviceName)
+            ?? throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
+
+    private static string ParseServiceStartName(string serviceName, string output)
+    {
+        foreach (var line in output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var nameIndex = line.IndexOf("SERVICE_START_NAME", StringComparison.OrdinalIgnoreCase);
+            if (nameIndex < 0)
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf(':', nameIndex);
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            var startName = line[(separatorIndex + 1)..].Trim();
+            if (!string.IsNullOrWhiteSpace(startName))
+            {
+                return startName;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Could not determine logon account for Windows service '{serviceName}'. sc.exe did not return SERVICE_START_NAME.");
     }
 
     private static ScResult RunSc(params string[] arguments)
@@ -531,6 +899,68 @@ public sealed class ServiceAppDeploymentService
             || value.Equals("service", StringComparison.OrdinalIgnoreCase)
             || value.Equals("serviceapp", StringComparison.OrdinalIgnoreCase);
 
+    private static bool AccountsEqual(string actual, string desired)
+        => string.Equals(
+            NormalizeAccountForComparison(actual),
+            NormalizeAccountForComparison(desired),
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeAccountForComparison(string value)
+    {
+        var normalized = value.Trim();
+        if (normalized.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\SYSTEM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals(".\\LocalSystem", StringComparison.OrdinalIgnoreCase))
+        {
+            return "LocalSystem";
+        }
+
+        if (normalized.Equals("LocalService", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\LocalService", StringComparison.OrdinalIgnoreCase))
+        {
+            return "NT AUTHORITY\\LocalService";
+        }
+
+        if (normalized.Equals("NetworkService", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\NetworkService", StringComparison.OrdinalIgnoreCase))
+        {
+            return "NT AUTHORITY\\NetworkService";
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeAccountForSc(string value)
+    {
+        var normalized = NormalizeAccountForComparison(value);
+        return normalized.Equals("NT AUTHORITY\\SYSTEM", StringComparison.OrdinalIgnoreCase)
+            ? "LocalSystem"
+            : normalized;
+    }
+
+    private static bool RequiresPassword(string userName)
+    {
+        var normalized = NormalizeAccountForComparison(userName);
+        return !normalized.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            && !normalized.Equals("NT AUTHORITY\\LocalService", StringComparison.OrdinalIgnoreCase)
+            && !normalized.Equals("NT AUTHORITY\\NetworkService", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeAutomationMode(string automationMode)
+    {
+        if (string.Equals(automationMode?.Trim(), HostAgentCredentialAutomationModes.Full, StringComparison.OrdinalIgnoreCase))
+        {
+            return HostAgentCredentialAutomationModes.Full;
+        }
+
+        if (string.Equals(automationMode?.Trim(), HostAgentCredentialAutomationModes.PortalAdminApproved, StringComparison.OrdinalIgnoreCase))
+        {
+            return HostAgentCredentialAutomationModes.PortalAdminApproved;
+        }
+
+        return HostAgentCredentialAutomationModes.Disabled;
+    }
+
     private static string Quote(string value)
         => '"' + value.Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
 
@@ -552,4 +982,20 @@ public sealed class ServiceAppDeploymentService
     {
         public string CombinedOutput => string.Concat(Output, "\n", Error);
     }
+
+    private sealed record ServiceAppIdentityResolution(string UserName, string Password)
+    {
+        public static ServiceAppIdentityResolution NotConfigured { get; } = new(string.Empty, string.Empty);
+
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(UserName);
+    }
+
+    private sealed record ServiceIdentityCheckResult(
+        string AutomationMode,
+        string? DesiredIdentity,
+        string? ActualIdentity,
+        string Status,
+        string? WarningMessage,
+        bool Applied,
+        bool ClearRepairRequest);
 }

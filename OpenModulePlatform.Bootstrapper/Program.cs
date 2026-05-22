@@ -2380,6 +2380,21 @@ VALUES
 
         hostAgentSettings["DeployServiceApps"] = hostAgent.DeployServiceApps;
         hostAgentSettings["ServicesRoot"] = hostAgent.ServicesRoot;
+        hostAgentSettings["ServiceAppUserName"] = string.IsNullOrWhiteSpace(hostAgent.ServiceAppUserName)
+            ? hostAgent.ServiceAccountName
+            : hostAgent.ServiceAppUserName;
+        hostAgentSettings["ServiceAppPasswordCredentialKey"] = credentialPlan.DefaultServiceAppCredentialKey;
+        hostAgentSettings.Remove("ServiceAppPassword");
+        if (credentialPlan.ServiceAppIdentityOverrides.Count > 0)
+        {
+            hostAgentSettings["ServiceAppIdentityOverrides"] = JsonSerializer.SerializeToNode(
+                credentialPlan.ServiceAppIdentityOverrides,
+                JsonOptions);
+        }
+        else
+        {
+            hostAgentSettings.Remove("ServiceAppIdentityOverrides");
+        }
 
         var selfUpgrade = GetOrCreateJsonObject(hostAgentSettings, "SelfUpgrade");
         selfUpgrade["InstallRoot"] = hostAgent.ServicesRoot;
@@ -2431,6 +2446,63 @@ VALUES
             hostAgent.IisAppPoolUserName,
             defaultIisPassword);
 
+        var serviceAppPassword = string.IsNullOrWhiteSpace(hostAgent.ServiceAppPassword)
+            ? serviceAccountPassword
+            : ResolveInstallerSecret(
+                hostAgent.ServiceAppPassword,
+                config,
+                "HostAgent:ServiceAppPassword");
+        var serviceAppCredentialKey = ResolveCredentialKey(
+            hostAgent.ServiceAppPasswordCredentialKey,
+            serviceAppPassword,
+            "service-app:default");
+        var serviceAppUserName = string.IsNullOrWhiteSpace(hostAgent.ServiceAppUserName)
+            ? hostAgent.ServiceAccountName
+            : hostAgent.ServiceAppUserName;
+        if (string.IsNullOrWhiteSpace(hostAgent.ServiceAppPasswordCredentialKey)
+            && string.Equals(serviceAppUserName, hostAgent.ServiceAccountName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(serviceAppPassword, serviceAccountPassword, StringComparison.Ordinal))
+        {
+            serviceAppCredentialKey = serviceAccountCredentialKey;
+        }
+
+        AddCredentialIfConfigured(
+            credentials,
+            serviceAppCredentialKey,
+            serviceAppUserName,
+            serviceAppPassword);
+
+        var serviceAppOverrides = new Dictionary<string, HostAgentServiceAppIdentitySettings>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in hostAgent.ServiceAppIdentityOverrides)
+        {
+            var configured = pair.Value;
+            if (configured is null)
+            {
+                continue;
+            }
+
+            var overridePassword = ResolveInstallerSecret(
+                configured.Password,
+                config,
+                $"HostAgent:ServiceAppIdentityOverrides:{pair.Key}:Password");
+            var overrideCredentialKey = ResolveCredentialKey(
+                configured.PasswordCredentialKey,
+                overridePassword,
+                "service-app:override:" + SanitizeCredentialKey(pair.Key));
+
+            AddCredentialIfConfigured(
+                credentials,
+                overrideCredentialKey,
+                configured.UserName,
+                overridePassword);
+
+            serviceAppOverrides[pair.Key] = new HostAgentServiceAppIdentitySettings
+            {
+                UserName = configured.UserName,
+                PasswordCredentialKey = overrideCredentialKey
+            };
+        }
+
         foreach (var pair in hostAgent.IisAppPoolOverrides)
         {
             var configured = pair.Value;
@@ -2463,6 +2535,8 @@ VALUES
 
         var hasCredentialReferences = !string.IsNullOrWhiteSpace(serviceAccountCredentialKey)
             || !string.IsNullOrWhiteSpace(defaultIisCredentialKey)
+            || !string.IsNullOrWhiteSpace(serviceAppCredentialKey)
+            || serviceAppOverrides.Values.Any(static value => !string.IsNullOrWhiteSpace(value.PasswordCredentialKey))
             || overrides.Values.Any(static value => !string.IsNullOrWhiteSpace(value.PasswordCredentialKey));
         var storeSettings = CreateCredentialStoreSettings(
             hostAgent.CredentialStore,
@@ -2479,6 +2553,8 @@ VALUES
             storeSettings,
             serviceAccountCredentialKey,
             defaultIisCredentialKey,
+            serviceAppCredentialKey,
+            serviceAppOverrides,
             overrides,
             credentials);
     }
@@ -2759,6 +2835,11 @@ VALUES
                         IisAppPoolOverrides = new Dictionary<string, object>(),
                         DeployServiceApps = hostAgent.DeployServiceApps,
                         ServicesRoot = hostAgent.ServicesRoot,
+                        ServiceAppUserName = string.IsNullOrWhiteSpace(hostAgent.ServiceAppUserName)
+                            ? hostAgent.ServiceAccountName
+                            : hostAgent.ServiceAppUserName,
+                        ServiceAppPasswordCredentialKey = string.Empty,
+                        ServiceAppIdentityOverrides = new Dictionary<string, object>(),
                         SelfUpgrade = new
                         {
                             IsEnabled = true,
@@ -3964,12 +4045,29 @@ internal sealed class HostAgentInstallOptions
 
     public string ServicesRoot { get; set; } = string.Empty;
 
+    public string ServiceAppUserName { get; set; } = string.Empty;
+
+    public string ServiceAppPassword { get; set; } = string.Empty;
+
+    public string ServiceAppPasswordCredentialKey { get; set; } = string.Empty;
+
+    public Dictionary<string, ServiceAppIdentityOptions> ServiceAppIdentityOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public HostAgentCredentialStoreBootstrapOptions CredentialStore { get; set; } = new();
 
     public JsonNode? AppSettings { get; set; }
 }
 
 internal sealed class IisAppPoolIdentityOptions
+{
+    public string UserName { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
+
+    public string PasswordCredentialKey { get; set; } = string.Empty;
+}
+
+internal sealed class ServiceAppIdentityOptions
 {
     public string UserName { get; set; } = string.Empty;
 
@@ -3993,6 +4091,8 @@ internal sealed record HostAgentCredentialBootstrapPlan(
     HostAgentCredentialStoreSettings StoreSettings,
     string ServiceAccountCredentialKey,
     string DefaultIisAppPoolCredentialKey,
+    string DefaultServiceAppCredentialKey,
+    IReadOnlyDictionary<string, HostAgentServiceAppIdentitySettings> ServiceAppIdentityOverrides,
     IReadOnlyDictionary<string, HostAgentIisAppPoolIdentitySettings> IisAppPoolOverrides,
     IReadOnlyList<HostAgentPlainTextCredential> Credentials);
 

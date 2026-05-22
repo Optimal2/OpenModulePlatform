@@ -1189,8 +1189,31 @@ ORDER BY d.RequestedUtc DESC, d.HostDeploymentId DESC;";
 
     public async Task<IReadOnlyList<HostAppDeploymentStateRow>> GetHostAppDeploymentStatesAsync(CancellationToken ct)
     {
-        const string sql = @"
+        var rows = new List<HostAppDeploymentStateRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var hasIdentityColumns = await ColumnExistsAsync(conn, "omp.HostAppDeploymentStates", "IdentityCheckStatus", ct);
+        var identityColumns = hasIdentityColumns
+            ? @",
+       s.CredentialAutomationMode,
+       s.DesiredRuntimeIdentity,
+       s.ActualRuntimeIdentity,
+       s.IdentityCheckStatus,
+       s.IdentityRepairRequestedUtc,
+       s.IdentityRepairRequestedBy"
+            : @",
+       CAST(NULL AS nvarchar(40)) AS CredentialAutomationMode,
+       CAST(NULL AS nvarchar(256)) AS DesiredRuntimeIdentity,
+       CAST(NULL AS nvarchar(256)) AS ActualRuntimeIdentity,
+       CAST(NULL AS nvarchar(40)) AS IdentityCheckStatus,
+       CAST(NULL AS datetime2(3)) AS IdentityRepairRequestedUtc,
+       CAST(NULL AS nvarchar(256)) AS IdentityRepairRequestedBy";
+
+        var sql = $@"
 SELECT TOP (100)
+       s.HostId,
+       s.AppInstanceId,
        h.HostKey,
        ai.AppInstanceKey,
        ai.DisplayName,
@@ -1202,32 +1225,38 @@ SELECT TOP (100)
        s.LastCheckedUtc,
        s.LastAppliedUtc,
        s.LastError
+       {identityColumns}
 FROM omp.HostAppDeploymentStates s
 INNER JOIN omp.Hosts h ON h.HostId = s.HostId
 INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = s.AppInstanceId
 LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = s.ArtifactId
 ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey, ai.AppInstanceKey;";
 
-        var rows = new List<HostAppDeploymentStateRow>();
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
             rows.Add(new HostAppDeploymentStateRow
             {
-                HostKey = rdr.GetString(0),
-                AppInstanceKey = rdr.GetString(1),
-                DisplayName = rdr.GetString(2),
-                ArtifactVersion = rdr.IsDBNull(3) ? string.Empty : rdr.GetString(3),
-                PackageType = rdr.IsDBNull(4) ? string.Empty : rdr.GetString(4),
-                DeploymentState = rdr.GetByte(5),
-                TargetPath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                RuntimeName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                LastCheckedUtc = rdr.IsDBNull(8) ? null : rdr.GetDateTime(8),
-                LastAppliedUtc = rdr.IsDBNull(9) ? null : rdr.GetDateTime(9),
-                LastError = rdr.IsDBNull(10) ? null : rdr.GetString(10)
+                HostId = rdr.GetGuid(0),
+                AppInstanceId = rdr.GetGuid(1),
+                HostKey = rdr.GetString(2),
+                AppInstanceKey = rdr.GetString(3),
+                DisplayName = rdr.GetString(4),
+                ArtifactVersion = rdr.IsDBNull(5) ? string.Empty : rdr.GetString(5),
+                PackageType = rdr.IsDBNull(6) ? string.Empty : rdr.GetString(6),
+                DeploymentState = rdr.GetByte(7),
+                TargetPath = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                RuntimeName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                LastCheckedUtc = rdr.IsDBNull(10) ? null : rdr.GetDateTime(10),
+                LastAppliedUtc = rdr.IsDBNull(11) ? null : rdr.GetDateTime(11),
+                LastError = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                CredentialAutomationMode = rdr.IsDBNull(13) ? null : rdr.GetString(13),
+                DesiredRuntimeIdentity = rdr.IsDBNull(14) ? null : rdr.GetString(14),
+                ActualRuntimeIdentity = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+                IdentityCheckStatus = rdr.IsDBNull(16) ? null : rdr.GetString(16),
+                IdentityRepairRequestedUtc = rdr.IsDBNull(17) ? null : rdr.GetDateTime(17),
+                IdentityRepairRequestedBy = rdr.IsDBNull(18) ? null : rdr.GetString(18)
             });
         }
         return rows;
@@ -1299,6 +1328,15 @@ ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey,
         const string sql = "SELECT CAST(CASE WHEN OBJECT_ID(@TableName, 'U') IS NULL THEN 0 ELSE 1 END AS bit);";
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@TableName", tableName);
+        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task<bool> ColumnExistsAsync(SqlConnection conn, string tableName, string columnName, CancellationToken ct)
+    {
+        const string sql = "SELECT CAST(CASE WHEN COL_LENGTH(@TableName, @ColumnName) IS NULL THEN 0 ELSE 1 END AS bit);";
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@TableName", tableName);
+        cmd.Parameters.AddWithValue("@ColumnName", columnName);
         return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
     }
 

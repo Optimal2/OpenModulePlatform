@@ -607,6 +607,12 @@ BEGIN
         TargetPath nvarchar(500) NULL,
         RuntimeName nvarchar(200) NULL,
         ContentSha256 nvarchar(128) NULL,
+        CredentialAutomationMode nvarchar(40) NULL,
+        DesiredRuntimeIdentity nvarchar(256) NULL,
+        ActualRuntimeIdentity nvarchar(256) NULL,
+        IdentityCheckStatus nvarchar(40) NULL,
+        IdentityRepairRequestedUtc datetime2(3) NULL,
+        IdentityRepairRequestedBy nvarchar(256) NULL,
         LastCheckedUtc datetime2(3) NULL,
         LastAppliedUtc datetime2(3) NULL,
         LastError nvarchar(4000) NULL,
@@ -617,6 +623,42 @@ BEGIN
         CONSTRAINT FK_omp_HostAppDeploymentStates_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId),
         CONSTRAINT FK_omp_HostAppDeploymentStates_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'CredentialAutomationMode') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD CredentialAutomationMode nvarchar(40) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'DesiredRuntimeIdentity') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD DesiredRuntimeIdentity nvarchar(256) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'ActualRuntimeIdentity') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD ActualRuntimeIdentity nvarchar(256) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'IdentityCheckStatus') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD IdentityCheckStatus nvarchar(40) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'IdentityRepairRequestedUtc') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD IdentityRepairRequestedUtc datetime2(3) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'IdentityRepairRequestedBy') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD IdentityRepairRequestedBy nvarchar(256) NULL;
 END
 GO
 

@@ -78,6 +78,14 @@ public sealed class HostAgentSettings
 
     public string ServicesRoot { get; set; } = string.Empty;
 
+    public string ServiceAppUserName { get; set; } = string.Empty;
+
+    public string ServiceAppPassword { get; set; } = string.Empty;
+
+    public string ServiceAppPasswordCredentialKey { get; set; } = string.Empty;
+
+    public Dictionary<string, HostAgentServiceAppIdentitySettings> ServiceAppIdentityOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public bool StopServiceForServiceAppDeployment { get; set; } = true;
 
     public bool StartServiceAfterServiceAppDeployment { get; set; } = true;
@@ -230,6 +238,15 @@ public sealed class HostAgentSettings
 }
 
 public sealed class HostAgentIisAppPoolIdentitySettings
+{
+    public string UserName { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
+
+    public string PasswordCredentialKey { get; set; } = string.Empty;
+}
+
+public sealed class HostAgentServiceAppIdentitySettings
 {
     public string UserName { get; set; } = string.Empty;
 
