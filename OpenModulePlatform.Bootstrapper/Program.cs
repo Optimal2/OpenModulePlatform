@@ -404,17 +404,25 @@ internal static partial class Program
                     && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) == 0
                     && string.Equals(definition.DefinitionSha256, current.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
                 {
+                    var skippedRepairCount = await ExecuteModuleDefinitionSqlRepairsAsync(
+                        connection,
+                        config.Sql,
+                        current.ModuleDefinitionDocumentId,
+                        definition);
                     Console.WriteLine(
-                        $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; skipped.");
+                        skippedRepairCount > 0
+                            ? $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; executed {skippedRepairCount} SQL repair script(s)."
+                            : $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; skipped.");
                     continue;
                 }
             }
 
+            int documentId;
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                var documentId = await UpsertModuleDefinitionDocumentAsync(
+                documentId = await UpsertModuleDefinitionDocumentAsync(
                     connection,
                     transaction,
                     definition,
@@ -443,7 +451,16 @@ internal static partial class Program
                 throw;
             }
 
-            Console.WriteLine($"  {definition.ModuleKey} {definition.DefinitionVersion}");
+            var repairCount = await ExecuteModuleDefinitionSqlRepairsAsync(
+                connection,
+                config.Sql,
+                documentId,
+                definition);
+
+            Console.WriteLine(
+                repairCount > 0
+                    ? $"  {definition.ModuleKey} {definition.DefinitionVersion}; executed {repairCount} SQL repair script(s)."
+                    : $"  {definition.ModuleKey} {definition.DefinitionVersion}");
         }
     }
 
@@ -454,6 +471,7 @@ internal static partial class Program
     {
         const string sql = @"
 SELECT TOP (1)
+    ModuleDefinitionDocumentId,
     DefinitionVersion,
     DefinitionSha256
 FROM omp.ModuleDefinitionDocuments
@@ -472,8 +490,9 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
         }
 
         return new AppliedModuleDefinition(
-            reader.GetString(0),
-            reader.IsDBNull(1) ? string.Empty : reader.GetString(1));
+            reader.GetInt32(0),
+            reader.GetString(1),
+            reader.IsDBNull(2) ? string.Empty : reader.GetString(2));
     }
 
     private static async Task<ModuleDefinitionDocument> ReadModuleDefinitionAsync(string path)
@@ -714,6 +733,295 @@ VALUES
             insert.Parameters.AddWithValue("@maxArtifactVersion", entry.MaxArtifactVersion is null ? DBNull.Value : entry.MaxArtifactVersion);
             await insert.ExecuteNonQueryAsync();
         }
+    }
+
+    private static async Task<int> ExecuteModuleDefinitionSqlRepairsAsync(
+        SqlConnection connection,
+        SqlBootstrapOptions sql,
+        int documentId,
+        ModuleDefinitionDocument definition)
+    {
+        if (IsInstallerManagedModuleDefinitionSql(definition.DefinitionJson))
+        {
+            return 0;
+        }
+
+        var scripts = ReadPortableSqlScripts(definition.DefinitionJson)
+            .OrderBy(static script => script.Order)
+            .ThenBy(static script => script.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (scripts.Count == 0)
+        {
+            return 0;
+        }
+
+        await AcquireModuleDefinitionSqlExecutionLockAsync(connection, sql.CommandTimeoutSeconds);
+
+        var executed = 0;
+        foreach (var script in scripts)
+        {
+            if (!string.Equals(script.Execution, "idempotent", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Module definition SQL script '{script.Key}' is not idempotent and cannot be executed by the bootstrapper.");
+            }
+
+            var sqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(sqlText))
+            {
+                continue;
+            }
+
+            var scriptSha256 = ComputeTextSha256(sqlText);
+            if (!string.IsNullOrWhiteSpace(script.Sha256)
+                && !string.Equals(script.Sha256, scriptSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Module definition SQL script '{script.Key}' content does not match its declared SHA-256.");
+            }
+
+            var safety = ValidateSafeModuleDefinitionSql(sqlText);
+            if (safety is not null)
+            {
+                throw new InvalidOperationException($"Module definition SQL script '{script.Key}' was blocked: {safety}");
+            }
+
+            var executionId = await InsertModuleDefinitionSqlExecutionAsync(
+                connection,
+                documentId,
+                script,
+                scriptSha256,
+                sql.CommandTimeoutSeconds);
+
+            try
+            {
+                await ExecuteModuleDefinitionSqlBatchesAsync(
+                    connection,
+                    sql,
+                    sqlText,
+                    $"module definition '{definition.ModuleKey}' script '{script.Key}'");
+                await CompleteModuleDefinitionSqlExecutionAsync(
+                    connection,
+                    executionId,
+                    "Succeeded",
+                    null,
+                    sql.CommandTimeoutSeconds);
+                executed++;
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+            {
+                await CompleteModuleDefinitionSqlExecutionAsync(
+                    connection,
+                    executionId,
+                    "Failed",
+                    ex.Message,
+                    sql.CommandTimeoutSeconds);
+                throw new InvalidOperationException($"Module definition SQL script '{script.Key}' failed: {ex.Message}", ex);
+            }
+        }
+
+        return executed;
+    }
+
+    private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson) as JsonObject;
+        return root is not null
+            && string.Equals(GetJsonStringProperty(root, "definitionType"), "platform-core", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<PortableModuleDefinitionSqlScript> ReadPortableSqlScripts(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson);
+        if (GetJsonObjectProperty(root, "sqlScripts") is not JsonArray items)
+        {
+            return [];
+        }
+
+        var scripts = new List<PortableModuleDefinitionSqlScript>();
+        foreach (var item in items.OfType<JsonObject>())
+        {
+            var key = GetJsonStringProperty(item, "key");
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            scripts.Add(new PortableModuleDefinitionSqlScript(
+                key,
+                GetJsonStringProperty(item, "phase") is { Length: > 0 } phase ? phase : "setup",
+                GetJsonStringProperty(item, "scope") is { Length: > 0 } scope ? scope : "module",
+                GetJsonIntProperty(item, "order", 0),
+                GetJsonStringProperty(item, "execution") is { Length: > 0 } execution ? execution : "idempotent",
+                NullIfWhiteSpace(GetJsonStringProperty(item, "path")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "source")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "inlineSql")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "contentEncoding")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "content")),
+                NullIfWhiteSpace(GetJsonStringProperty(item, "sha256"))));
+        }
+
+        return scripts;
+    }
+
+    private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)
+    {
+        if (!string.IsNullOrWhiteSpace(script.InlineSql))
+        {
+            return script.InlineSql;
+        }
+
+        if (string.IsNullOrWhiteSpace(script.Content))
+        {
+            return null;
+        }
+
+        if (string.Equals(script.ContentEncoding, "base64-utf8", StringComparison.OrdinalIgnoreCase))
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(script.Content));
+        }
+
+        return script.Content;
+    }
+
+    private static string ComputeTextSha256(string text)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+    private static async Task AcquireModuleDefinitionSqlExecutionLockAsync(
+        SqlConnection connection,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+DECLARE @Result int;
+EXEC @Result = sys.sp_getapplock
+    @Resource = N'omp.module-definition-sql-repair',
+    @LockMode = N'Exclusive',
+    @LockOwner = N'Session',
+    @LockTimeout = 0;
+SELECT @Result;";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        var result = Convert.ToInt32(await command.ExecuteScalarAsync());
+        if (result < 0)
+        {
+            throw new InvalidOperationException("Another module definition SQL repair is already running.");
+        }
+    }
+
+    private static async Task<long> InsertModuleDefinitionSqlExecutionAsync(
+        SqlConnection connection,
+        int documentId,
+        PortableModuleDefinitionSqlScript script,
+        string scriptSha256,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+INSERT INTO omp.ModuleDefinitionSqlExecutions
+(
+    ModuleDefinitionDocumentId,
+    ScriptKey,
+    ScriptPhase,
+    ScriptOrder,
+    ScriptSha256,
+    ExecutionStatus
+)
+VALUES
+(
+    @documentId,
+    @scriptKey,
+    @scriptPhase,
+    @scriptOrder,
+    @scriptSha256,
+    N'Running'
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@documentId", documentId);
+        command.Parameters.AddWithValue("@scriptKey", script.Key);
+        command.Parameters.AddWithValue("@scriptPhase", script.Phase);
+        command.Parameters.AddWithValue("@scriptOrder", script.Order);
+        command.Parameters.AddWithValue("@scriptSha256", scriptSha256);
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task CompleteModuleDefinitionSqlExecutionAsync(
+        SqlConnection connection,
+        long executionId,
+        string status,
+        string? errorMessage,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+UPDATE omp.ModuleDefinitionSqlExecutions
+SET ExecutionStatus = @executionStatus,
+    CompletedUtc = SYSUTCDATETIME(),
+    ErrorMessage = @errorMessage
+WHERE ModuleDefinitionSqlExecutionId = @executionId;";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@executionId", executionId);
+        command.Parameters.AddWithValue("@executionStatus", status);
+        command.Parameters.AddWithValue("@errorMessage", Truncate(errorMessage ?? string.Empty, 4000));
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task ExecuteModuleDefinitionSqlBatchesAsync(
+        SqlConnection connection,
+        SqlBootstrapOptions sql,
+        string sqlText,
+        string sourceName)
+    {
+        var batchNumber = 0;
+        foreach (var batch in SplitSqlBatches(sqlText))
+        {
+            if (string.IsNullOrWhiteSpace(batch))
+            {
+                continue;
+            }
+
+            batchNumber++;
+            await ExecuteSqlBatchWithRetryAsync(
+                connection,
+                batch,
+                sql.CommandTimeoutSeconds,
+                sourceName,
+                sql.Database,
+                batchNumber);
+        }
+    }
+
+    private static string? ValidateSafeModuleDefinitionSql(string sqlText)
+    {
+        if (Regex.IsMatch(sqlText, @"(?im)^\s*USE\s+(?:\[[^\]]+\]|[A-Za-z0-9_]+)\s*;?\s*$"))
+        {
+            return "Module definition SQL must not contain USE database directives.";
+        }
+
+        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b"))
+        {
+            return "The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE.";
+        }
+
+        if (Regex.IsMatch(sqlText, @"(?is)\bTRUNCATE\s+TABLE\b"))
+        {
+            return "The script contains TRUNCATE TABLE.";
+        }
+
+        foreach (Match match in Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)"))
+        {
+            var statement = match.Groups["statement"].Value;
+            if (!Regex.IsMatch(statement, @"(?is)\bWHERE\b"))
+            {
+                return "The script contains DELETE FROM without a WHERE clause.";
+            }
+        }
+
+        return null;
     }
 
     private static async Task EnsureDatabaseAsync(SqlBootstrapOptions sql)
@@ -2546,6 +2854,12 @@ VALUES
     private static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static string Truncate(string value, int maxLength)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
     private static void EnsureSafeRuntimeDeletePath(string path)
     {
         var root = Path.GetPathRoot(path);
@@ -2993,8 +3307,22 @@ internal sealed record ModuleDefinitionCompatibilityEntry(
     string? MaxArtifactVersion);
 
 internal sealed record AppliedModuleDefinition(
+    int ModuleDefinitionDocumentId,
     string DefinitionVersion,
     string DefinitionSha256);
+
+internal sealed record PortableModuleDefinitionSqlScript(
+    string Key,
+    string Phase,
+    string Scope,
+    int Order,
+    string Execution,
+    string? Path,
+    string? Source,
+    string? InlineSql,
+    string? ContentEncoding,
+    string? Content,
+    string? Sha256);
 
 internal enum ArtifactPreparationMode
 {
