@@ -724,6 +724,8 @@ internal static partial class Program
                 ("hostAgent.serviceName", "Service name"),
                 ("hostAgent.serviceAccountName", "Service account"),
                 ("hostAgent.serviceAccountPassword", "Service password"),
+                ("hostAgent.serviceAppUserName", "Default service-app account"),
+                ("hostAgent.serviceAppPassword", "Default service-app password"),
                 ("hostAgent.hostKey", "Host key"),
                 ("hostAgent.hostName", "Host name")
             ]));
@@ -820,6 +822,8 @@ internal static partial class Program
             Set("hostAgent.serviceName", _config.HostAgent.ServiceName);
             Set("hostAgent.serviceAccountName", _config.HostAgent.ServiceAccountName);
             Set("hostAgent.serviceAccountPassword", _config.HostAgent.ServiceAccountPassword);
+            Set("hostAgent.serviceAppUserName", _config.HostAgent.ServiceAppUserName);
+            Set("hostAgent.serviceAppPassword", _config.HostAgent.ServiceAppPassword);
             Set("hostAgent.installPath", _config.HostAgent.InstallPath);
             Set("hostAgent.localArtifactCacheRoot", _config.HostAgent.LocalArtifactCacheRoot);
             Set("hostAgent.hostKey", _config.HostAgent.HostKey);
@@ -860,6 +864,8 @@ internal static partial class Program
             _config.HostAgent.ServiceName = Get("hostAgent.serviceName");
             _config.HostAgent.ServiceAccountName = Get("hostAgent.serviceAccountName");
             _config.HostAgent.ServiceAccountPassword = Get("hostAgent.serviceAccountPassword");
+            _config.HostAgent.ServiceAppUserName = Get("hostAgent.serviceAppUserName");
+            _config.HostAgent.ServiceAppPassword = Get("hostAgent.serviceAppPassword");
             _config.HostAgent.InstallPath = Get("hostAgent.installPath");
             _config.HostAgent.LocalArtifactCacheRoot = Get("hostAgent.localArtifactCacheRoot");
             _config.HostAgent.HostKey = Get("hostAgent.hostKey");

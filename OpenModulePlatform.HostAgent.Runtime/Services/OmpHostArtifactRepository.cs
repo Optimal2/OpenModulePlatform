@@ -1687,7 +1687,9 @@ BEGIN
         CAST(NULL AS tinyint) AS DeploymentState,
         CAST(NULL AS nvarchar(500)) AS DeployedSourceLocalPath,
         CAST(NULL AS nvarchar(500)) AS DeployedTargetPath,
-        CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName;
+        CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName,
+        CAST(NULL AS datetime2(3)) AS IdentityRepairRequestedUtc,
+        CAST(NULL AS nvarchar(256)) AS IdentityRepairRequestedBy;
     RETURN;
 END;
 
@@ -1709,7 +1711,9 @@ SELECT TOP (@maxDeployments)
     hds.DeploymentState,
     hds.SourceLocalPath AS DeployedSourceLocalPath,
     hds.TargetPath AS DeployedTargetPath,
-    hds.RuntimeName AS DeployedRuntimeName
+    hds.RuntimeName AS DeployedRuntimeName,
+    hds.IdentityRepairRequestedUtc,
+    hds.IdentityRepairRequestedBy
 FROM omp.AppInstances ai
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
 INNER JOIN omp.HostArtifactStates has
@@ -1760,7 +1764,9 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
                 DeploymentState = rdr.IsDBNull(14) ? null : rdr.GetByte(14),
                 DeployedSourceLocalPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
                 DeployedTargetPath = rdr.IsDBNull(16) ? null : rdr.GetString(16),
-                DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17)
+                DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17),
+                IdentityRepairRequestedUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
+                IdentityRepairRequestedBy = rdr.IsDBNull(19) ? null : rdr.GetString(19)
             });
         }
 
@@ -1878,6 +1884,12 @@ WHEN MATCHED THEN
         TargetPath = @targetPath,
         RuntimeName = @runtimeName,
         ContentSha256 = @contentSha256,
+        CredentialAutomationMode = @credentialAutomationMode,
+        DesiredRuntimeIdentity = @desiredRuntimeIdentity,
+        ActualRuntimeIdentity = @actualRuntimeIdentity,
+        IdentityCheckStatus = @identityCheckStatus,
+        IdentityRepairRequestedUtc = CASE WHEN @clearIdentityRepairRequest = 1 THEN NULL ELSE target.IdentityRepairRequestedUtc END,
+        IdentityRepairRequestedBy = CASE WHEN @clearIdentityRepairRequest = 1 THEN NULL ELSE target.IdentityRepairRequestedBy END,
         LastCheckedUtc = @nowUtc,
         LastAppliedUtc = CASE WHEN @applied = 1 THEN @nowUtc ELSE target.LastAppliedUtc END,
         LastError = @lastError,
@@ -1893,6 +1905,12 @@ WHEN NOT MATCHED THEN
         TargetPath,
         RuntimeName,
         ContentSha256,
+        CredentialAutomationMode,
+        DesiredRuntimeIdentity,
+        ActualRuntimeIdentity,
+        IdentityCheckStatus,
+        IdentityRepairRequestedUtc,
+        IdentityRepairRequestedBy,
         LastCheckedUtc,
         LastAppliedUtc,
         LastError,
@@ -1909,6 +1927,12 @@ WHEN NOT MATCHED THEN
         @targetPath,
         @runtimeName,
         @contentSha256,
+        @credentialAutomationMode,
+        @desiredRuntimeIdentity,
+        @actualRuntimeIdentity,
+        @identityCheckStatus,
+        NULL,
+        NULL,
         @nowUtc,
         CASE WHEN @applied = 1 THEN @nowUtc ELSE NULL END,
         @lastError,
@@ -1935,6 +1959,11 @@ WHEN NOT MATCHED THEN
         cmd.Parameters.AddWithValue("@targetPath", string.IsNullOrWhiteSpace(result.TargetPath) ? (object)DBNull.Value : result.TargetPath);
         cmd.Parameters.AddWithValue("@runtimeName", string.IsNullOrWhiteSpace(result.RuntimeName) ? (object)DBNull.Value : result.RuntimeName);
         cmd.Parameters.AddWithValue("@contentSha256", string.IsNullOrWhiteSpace(contentSha256) ? (object)DBNull.Value : contentSha256);
+        cmd.Parameters.AddWithValue("@credentialAutomationMode", string.IsNullOrWhiteSpace(result.CredentialAutomationMode) ? (object)DBNull.Value : result.CredentialAutomationMode);
+        cmd.Parameters.AddWithValue("@desiredRuntimeIdentity", string.IsNullOrWhiteSpace(result.DesiredRuntimeIdentity) ? (object)DBNull.Value : result.DesiredRuntimeIdentity);
+        cmd.Parameters.AddWithValue("@actualRuntimeIdentity", string.IsNullOrWhiteSpace(result.ActualRuntimeIdentity) ? (object)DBNull.Value : result.ActualRuntimeIdentity);
+        cmd.Parameters.AddWithValue("@identityCheckStatus", string.IsNullOrWhiteSpace(result.IdentityCheckStatus) ? (object)DBNull.Value : result.IdentityCheckStatus);
+        cmd.Parameters.AddWithValue("@clearIdentityRepairRequest", result.ClearIdentityRepairRequest);
         cmd.Parameters.AddWithValue("@applied", result.Applied);
         cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
         await cmd.ExecuteNonQueryAsync(ct);

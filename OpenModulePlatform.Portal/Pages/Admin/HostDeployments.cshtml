@@ -9,6 +9,13 @@
     </div>
 </section>
 
+@if (TempData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+{
+    <section class="section-card section-card--wide">
+        <div class="notice">@L[statusMessage]</div>
+    </section>
+}
+
 <section class="card section-card section-card--wide">
     <h3>@L["App deployment state"]</h3>
     <p class="muted">@L["These rows show the latest HostAgent result for each host and app instance. This is usually the most useful view after a desired version has been selected."]</p>
@@ -31,7 +38,9 @@
                         <th>@L["Last applied UTC"]</th>
                         <th>@L["Target path"]</th>
                         <th>@L["Runtime"]</th>
+                        <th>@L["Identity"]</th>
                         <th>@L["Error"]</th>
+                        <th>@L["Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -52,7 +61,47 @@
                         <td>@row.LastAppliedUtc?.ToString("u")</td>
                         <td><code>@row.TargetPath</code></td>
                         <td><code>@row.RuntimeName</code></td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.IdentityCheckStatus))
+                            {
+                                <span class="muted">@L["Not checked"]</span>
+                            }
+                            else
+                            {
+                                <div><span class="pill">@L[row.IdentityCheckStatus]</span></div>
+                                @if (!string.IsNullOrWhiteSpace(row.DesiredRuntimeIdentity))
+                                {
+                                    <div class="muted">@L["Desired"]: <code>@row.DesiredRuntimeIdentity</code></div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(row.ActualRuntimeIdentity))
+                                {
+                                    <div class="muted">@L["Actual"]: <code>@row.ActualRuntimeIdentity</code></div>
+                                }
+                                @if (row.IdentityRepairRequestedUtc.HasValue)
+                                {
+                                    <div class="muted">@L["Repair requested"]: @row.IdentityRepairRequestedUtc.Value.ToString("u")</div>
+                                }
+                            }
+                        </td>
                         <td>@(string.IsNullOrWhiteSpace(row.LastError) ? L["None"].Value : row.LastError)</td>
+                        <td>
+                            @if (row.CanRequestIdentityRepair)
+                            {
+                                <form method="post" asp-page-handler="RequestIdentityRepair" class="inline-form">
+                                    <input type="hidden" name="hostId" value="@row.HostId" />
+                                    <input type="hidden" name="appInstanceId" value="@row.AppInstanceId" />
+                                    <button type="submit" class="btn btn-secondary">@L["Request repair"]</button>
+                                </form>
+                            }
+                            else if (string.Equals(row.IdentityCheckStatus, "ManualActionRequired", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="muted">@L["Manual repair required"]</span>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                        </td>
                     </tr>
                 }
                 </tbody>

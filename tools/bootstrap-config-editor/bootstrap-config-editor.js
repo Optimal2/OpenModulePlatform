@@ -20,6 +20,8 @@ const fields = {
     serviceName: document.getElementById('serviceName'),
     serviceAccountName: document.getElementById('serviceAccountName'),
     serviceAccountPassword: document.getElementById('serviceAccountPassword'),
+    serviceAppUserName: document.getElementById('serviceAppUserName'),
+    serviceAppPassword: document.getElementById('serviceAppPassword'),
     hostKey: document.getElementById('hostKey'),
     hostName: document.getElementById('hostName'),
     iisSiteName: document.getElementById('iisSiteName'),
@@ -87,6 +89,10 @@ function createDefaultConfig() {
             serviceAccountName: '',
             serviceAccountPassword: '',
             serviceAccountCredentialKey: '',
+            serviceAppUserName: '',
+            serviceAppPassword: '',
+            serviceAppPasswordCredentialKey: '',
+            serviceAppIdentityOverrides: {},
             installPath: 'E:\\OMP\\Services\\HostAgent',
             packagePath: 'payload\\OpenModulePlatform.HostAgent.zip',
             backupExistingInstall: true,
@@ -178,6 +184,8 @@ function loadConfig(config) {
     fields.serviceName.value = hostAgent.serviceName ?? '';
     fields.serviceAccountName.value = hostAgent.serviceAccountName ?? '';
     fields.serviceAccountPassword.value = hostAgent.serviceAccountPassword ?? '';
+    fields.serviceAppUserName.value = hostAgent.serviceAppUserName ?? '';
+    fields.serviceAppPassword.value = hostAgent.serviceAppPassword ?? '';
     fields.hostKey.value = hostAgent.hostKey ?? '';
     fields.hostName.value = hostAgent.hostName ?? '';
     fields.iisSiteName.value = hostAgent.iisSiteName ?? '';
@@ -236,6 +244,10 @@ function buildConfigFromForm() {
     config.hostAgent.serviceAccountName = fields.serviceAccountName.value.trim();
     config.hostAgent.serviceAccountPassword = fields.serviceAccountPassword.value;
     config.hostAgent.serviceAccountCredentialKey = config.hostAgent.serviceAccountCredentialKey || '';
+    config.hostAgent.serviceAppUserName = fields.serviceAppUserName.value.trim();
+    config.hostAgent.serviceAppPassword = fields.serviceAppPassword.value;
+    config.hostAgent.serviceAppPasswordCredentialKey = config.hostAgent.serviceAppPasswordCredentialKey || '';
+    config.hostAgent.serviceAppIdentityOverrides = config.hostAgent.serviceAppIdentityOverrides ?? {};
     config.hostAgent.installPath = fields.hostAgentInstallPath.value.trim();
     config.hostAgent.packagePath = config.hostAgent.packagePath || 'payload\\OpenModulePlatform.HostAgent.zip';
     config.hostAgent.backupExistingInstall = config.hostAgent.backupExistingInstall !== false;
@@ -400,7 +412,22 @@ async function protectSecrets() {
         const config = buildConfigFromForm();
         const keyText = config.security?.portableEncryptionKey ?? '';
         config.hostAgent.serviceAccountPassword = await protectPortableSecret(config.hostAgent.serviceAccountPassword, keyText);
+        config.hostAgent.serviceAppPassword = await protectPortableSecret(config.hostAgent.serviceAppPassword, keyText);
         config.hostAgent.iisAppPoolPassword = await protectPortableSecret(config.hostAgent.iisAppPoolPassword, keyText);
+
+        for (const identity of Object.values(config.hostAgent.serviceAppIdentityOverrides ?? {})) {
+            if (identity && typeof identity === 'object') {
+                const hasPascalCasePassword = Object.prototype.hasOwnProperty.call(identity, 'Password')
+                    && !Object.prototype.hasOwnProperty.call(identity, 'password');
+                const password = hasPascalCasePassword ? identity.Password : identity.password;
+                const encrypted = await protectPortableSecret(password ?? '', keyText);
+                if (hasPascalCasePassword) {
+                    identity.Password = encrypted;
+                } else {
+                    identity.password = encrypted;
+                }
+            }
+        }
 
         for (const identity of Object.values(config.hostAgent.iisAppPoolOverrides ?? {})) {
             if (identity && typeof identity === 'object') {

@@ -859,6 +859,10 @@ public sealed class HostDeploymentRow
 /// </summary>
 public sealed class HostAppDeploymentStateRow
 {
+    public Guid HostId { get; set; }
+
+    public Guid AppInstanceId { get; set; }
+
     public string HostKey { get; set; } = string.Empty;
 
     public string AppInstanceKey { get; set; } = string.Empty;
@@ -880,6 +884,24 @@ public sealed class HostAppDeploymentStateRow
     public DateTime? LastAppliedUtc { get; set; }
 
     public string? LastError { get; set; }
+
+    public string? CredentialAutomationMode { get; set; }
+
+    public string? DesiredRuntimeIdentity { get; set; }
+
+    public string? ActualRuntimeIdentity { get; set; }
+
+    public string? IdentityCheckStatus { get; set; }
+
+    public DateTime? IdentityRepairRequestedUtc { get; set; }
+
+    public string? IdentityRepairRequestedBy { get; set; }
+
+    public bool CanRequestIdentityRepair =>
+        string.Equals(PackageType, "service-app", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(CredentialAutomationMode, "PortalAdminApproved", StringComparison.OrdinalIgnoreCase)
+        && !IdentityRepairRequestedUtc.HasValue
+        && string.Equals(IdentityCheckStatus, "WaitingForPortalAdminApproval", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>

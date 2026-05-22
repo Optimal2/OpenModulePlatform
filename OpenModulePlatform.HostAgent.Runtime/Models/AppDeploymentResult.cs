@@ -14,6 +14,16 @@ public sealed class AppDeploymentResult
 
     public bool IsSuccess => State == HostDeploymentStatuses.Succeeded;
 
+    public string? CredentialAutomationMode { get; init; }
+
+    public string? DesiredRuntimeIdentity { get; init; }
+
+    public string? ActualRuntimeIdentity { get; init; }
+
+    public string? IdentityCheckStatus { get; init; }
+
+    public bool ClearIdentityRepairRequest { get; init; }
+
     public static AppDeploymentResult Succeeded(string targetPath, string? runtimeName, bool applied)
     {
         return new AppDeploymentResult
@@ -35,6 +45,17 @@ public sealed class AppDeploymentResult
         };
     }
 
+    public static AppDeploymentResult Warning(string? targetPath, string? runtimeName, string message)
+    {
+        return new AppDeploymentResult
+        {
+            State = HostDeploymentStatuses.Warning,
+            TargetPath = targetPath,
+            RuntimeName = runtimeName,
+            ErrorMessage = message
+        };
+    }
+
     public static AppDeploymentResult Failed(string? targetPath, string? runtimeName, string message)
     {
         return new AppDeploymentResult
@@ -43,6 +64,28 @@ public sealed class AppDeploymentResult
             TargetPath = targetPath,
             RuntimeName = runtimeName,
             ErrorMessage = message
+        };
+    }
+
+    public AppDeploymentResult WithIdentityCheck(
+        string automationMode,
+        string? desiredRuntimeIdentity,
+        string? actualRuntimeIdentity,
+        string identityCheckStatus,
+        bool clearIdentityRepairRequest = false)
+    {
+        return new AppDeploymentResult
+        {
+            State = State,
+            Applied = Applied,
+            TargetPath = TargetPath,
+            RuntimeName = RuntimeName,
+            ErrorMessage = ErrorMessage,
+            CredentialAutomationMode = automationMode,
+            DesiredRuntimeIdentity = desiredRuntimeIdentity,
+            ActualRuntimeIdentity = actualRuntimeIdentity,
+            IdentityCheckStatus = identityCheckStatus,
+            ClearIdentityRepairRequest = clearIdentityRepairRequest
         };
     }
 }

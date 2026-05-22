@@ -1941,4 +1941,18 @@
   <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap-konfigurationseditor</value></data>
   <data name="Use this editor to create or update machine-specific bootstrap configuration JSON files for the installer." xml:space="preserve"><value>Använd editorn för att skapa eller uppdatera maskinspecifika bootstrap-konfigurationsfiler i JSON-format för installern.</value></data>
   <data name="Back to installation" xml:space="preserve"><value>Tillbaka till installation</value></data>
+  <data name="Warning" xml:space="preserve"><value>Varning</value></data>
+  <data name="Identity" xml:space="preserve"><value>Identitet</value></data>
+  <data name="Desired" xml:space="preserve"><value>Önskad</value></data>
+  <data name="Actual" xml:space="preserve"><value>Faktisk</value></data>
+  <data name="Repair requested" xml:space="preserve"><value>Rättning begärd</value></data>
+  <data name="Request repair" xml:space="preserve"><value>Begär rättning</value></data>
+  <data name="Manual repair required" xml:space="preserve"><value>Manuell rättning krävs</value></data>
+  <data name="NotApplicable" xml:space="preserve"><value>Ej relevant</value></data>
+  <data name="Compliant" xml:space="preserve"><value>Korrekt</value></data>
+  <data name="WaitingForPortalAdminApproval" xml:space="preserve"><value>Väntar på PortalAdmin-godkännande</value></data>
+  <data name="RepairRequested" xml:space="preserve"><value>Rättning begärd</value></data>
+  <data name="ManualActionRequired" xml:space="preserve"><value>Manuell åtgärd krävs</value></data>
+  <data name="RepairFailed" xml:space="preserve"><value>Rättning misslyckades</value></data>
+  <data name="Service identity repair was requested. HostAgent will apply it during its next cycle when credential automation is set to PortalAdminApproved." xml:space="preserve"><value>Rättning av tjänsteidentitet har begärts. HostAgent genomför rättningen vid nästa körning när credential automation är satt till PortalAdminApproved.</value></data>
 </root>
