@@ -84,6 +84,11 @@ public sealed record DashboardPortalEntryWidgetList(
     bool IsFavoritesList);
 
 /// <summary>
+/// Per-user dashboard behavior preferences.
+/// </summary>
+public sealed record DashboardPreferences(bool AlignToGrid);
+
+/// <summary>
 /// Admin list row for Portal Entries.
 /// </summary>
 public sealed class PortalEntryAdminRow

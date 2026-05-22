@@ -19,9 +19,14 @@
          data-can-edit="@Model.CanEditDashboard.ToString().ToLowerInvariant()"
          data-add-url="@Url.Page("/Index", "AddWidget")"
          data-save-url="@Url.Page("/Index", "SaveDashboard")"
+         data-preference-url="@Url.Page("/Index", "SaveDashboardPreference")"
          data-remove-url="@Url.Page("/Index", "RemoveWidget")"
          data-reset-url="@Url.Page("/Index", "ResetDashboard")"
          data-favorite-toggle-url="@Url.Content("~/navigation/favorites/toggle")"
+         data-align-to-grid="@Model.DashboardAlignToGrid.ToString().ToLowerInvariant()"
+         data-grid-size="32"
+         data-min-canvas-height="640"
+         data-canvas-bottom-padding="64"
          data-done-label="@L["Done"]"
          data-edit-label="@L["Edit dashboard"]"
          data-remove-label="@L["Remove widget"]"
@@ -119,6 +124,11 @@
         <button type="button" class="dashboard-reset-button" data-dashboard-reset>
             @L["Reset layout"]
         </button>
+
+        <label class="dashboard-grid-toggle">
+            <input type="checkbox" data-dashboard-align-toggle @(Model.DashboardAlignToGrid ? "checked" : null) />
+            <span>@L["Align to grid"]</span>
+        </label>
 
         @if (Model.IsPortalAdmin)
         {

@@ -45,6 +45,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public bool IsPortalAdmin { get; private set; }
 
+    public bool DashboardAlignToGrid { get; private set; } = true;
+
     public OverviewMetrics Metrics { get; private set; } = new();
 
     public IReadOnlyList<PortalEntry> FavoritePortalEntries { get; private set; } = [];
@@ -94,6 +96,17 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         return new JsonResult(new { ok = true });
     }
 
+    public async Task<IActionResult> OnPostSaveDashboardPreference(bool alignToGrid, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        await _dashboard.SetAlignToGridAsync(userId, alignToGrid, ct);
+        return new JsonResult(new { ok = true, alignToGrid });
+    }
+
     public async Task<IActionResult> OnPostRemoveWidget(long userActiveWidgetId, CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -138,6 +151,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         if (userId.HasValue)
         {
+            DashboardAlignToGrid = (await _dashboard.GetPreferencesAsync(userId.Value, ct)).AlignToGrid;
             ActiveWidgets = await _dashboard.GetActiveWidgetsAsync(userId.Value, roleIds, permissions, ct);
             AvailableWidgets = await _dashboard.GetAvailableWidgetsAsync(roleIds, permissions, ct);
             AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId.Value, permissions, includeHidden: false, ct);

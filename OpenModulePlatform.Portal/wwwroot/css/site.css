@@ -1208,7 +1208,8 @@ button {
 
 .portal-dashboard__canvas {
     position: relative;
-    min-height: 760px;
+    min-height: var(--dashboard-canvas-height, 760px);
+    height: var(--dashboard-canvas-height, 760px);
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -1216,9 +1217,17 @@ button {
         linear-gradient(90deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
         linear-gradient(180deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
         var(--surface-muted);
-    background-size: 32px 32px;
+    background-size: var(--dashboard-grid-size, 32px) var(--dashboard-grid-size, 32px);
     box-shadow: var(--shadow);
     touch-action: none;
+}
+
+.portal-dashboard.is-free-placement .portal-dashboard__canvas {
+    background:
+        linear-gradient(90deg, rgba(215, 222, 234, 0.18) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(215, 222, 234, 0.18) 1px, transparent 1px),
+        var(--surface-muted);
+    background-size: var(--dashboard-grid-size, 32px) var(--dashboard-grid-size, 32px);
 }
 
 .portal-dashboard__empty {
@@ -1542,6 +1551,32 @@ button {
 
 .portal-dashboard.is-editing .dashboard-reset-button {
     display: inline-flex;
+}
+
+.dashboard-grid-toggle {
+    position: fixed;
+    left: 22px;
+    bottom: 170px;
+    z-index: 40;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-muted);
+    color: var(--text);
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
+    cursor: pointer;
+}
+
+.portal-dashboard.is-editing .dashboard-grid-toggle {
+    display: inline-flex;
+}
+
+.dashboard-grid-toggle input {
+    margin: 0;
 }
 
 .dashboard-widget-picker {

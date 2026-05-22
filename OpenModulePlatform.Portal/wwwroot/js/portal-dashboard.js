@@ -4,6 +4,9 @@
 
     const minWidth = 160;
     const minHeight = 96;
+    const defaultGridSize = 32;
+    const defaultMinCanvasHeight = 640;
+    const defaultBottomPadding = 64;
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
 
     function initDashboard(root) {
@@ -12,15 +15,30 @@
         const editLabel = root.querySelector('[data-dashboard-edit-label]');
         const addButton = root.querySelector('[data-dashboard-add-open]');
         const resetButton = root.querySelector('[data-dashboard-reset]');
+        const alignToggle = root.querySelector('[data-dashboard-align-toggle]');
         const picker = root.querySelector('[data-widget-picker]');
         const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
 
         if (!canvas || !editToggle || root.dataset.canEdit !== 'true') {
+            if (canvas) {
+                updateCanvasHeight(root, canvas);
+                window.addEventListener('resize', () => updateCanvasHeight(root, canvas));
+            }
             return;
         }
 
         let isEditing = false;
         let maxOrder = getMaxOrder(canvas);
+        const state = {
+            alignToGrid: root.dataset.alignToGrid !== 'false',
+            gridSize: parsePositiveInteger(root.dataset.gridSize, defaultGridSize),
+            minCanvasHeight: parsePositiveInteger(root.dataset.minCanvasHeight, defaultMinCanvasHeight),
+            bottomPadding: parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)
+        };
+
+        updateAlignToGridState(root, alignToggle, state.alignToGrid);
+        updateCanvasHeight(root, canvas, state);
+        window.addEventListener('resize', () => updateCanvasHeight(root, canvas, state));
 
         editToggle.addEventListener('click', async () => {
             if (isEditing) {
@@ -54,6 +72,21 @@
             canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => widget.remove());
             maxOrder = 0;
             updateEmptyState(canvas);
+            updateCanvasHeight(root, canvas, state);
+        });
+
+        alignToggle?.addEventListener('change', async () => {
+            const next = alignToggle.checked;
+            updateAlignToGridState(root, alignToggle, next);
+            state.alignToGrid = next;
+
+            try {
+                await postForm(root.dataset.preferenceUrl, token, { alignToGrid: next });
+            } catch (error) {
+                state.alignToGrid = !next;
+                updateAlignToGridState(root, alignToggle, state.alignToGrid);
+                throw error;
+            }
         });
 
         picker?.querySelector('[data-widget-picker-close]')?.addEventListener('click', () => {
@@ -80,16 +113,18 @@
 
                 const element = createWidgetElement(root, widget);
                 canvas.appendChild(element);
-                bindWidget(root, canvas, element, token, () => ++maxOrder);
+                snapWidgetToGrid(element, state);
+                bindWidget(root, canvas, element, token, () => ++maxOrder, state);
                 bindEntryFavoriteToggles(root, element, token);
                 updateEmptyState(canvas);
+                updateCanvasHeight(root, canvas, state);
                 closePicker(picker);
                 setEditing(true);
             });
         });
 
         canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => {
-            bindWidget(root, canvas, widget, token, () => ++maxOrder);
+            bindWidget(root, canvas, widget, token, () => ++maxOrder, state);
         });
         bindEntryFavoriteToggles(root, root, token);
 
@@ -105,7 +140,7 @@
         }
     }
 
-    function bindWidget(root, canvas, widget, token, nextOrder) {
+    function bindWidget(root, canvas, widget, token, nextOrder, state) {
         const removeButton = widget.querySelector('[data-widget-remove]');
         const resizeHandle = widget.querySelector('[data-widget-resize]');
 
@@ -120,7 +155,7 @@
 
             event.preventDefault();
             bringToFront(widget, nextOrder());
-            startDrag(canvas, widget, event);
+            startDrag(root, canvas, widget, event, state);
         });
 
         resizeHandle?.addEventListener('pointerdown', (event) => {
@@ -131,7 +166,7 @@
             event.preventDefault();
             event.stopPropagation();
             bringToFront(widget, nextOrder());
-            startResize(widget, event);
+            startResize(root, canvas, widget, event, state);
         });
 
         removeButton?.addEventListener('click', async (event) => {
@@ -146,6 +181,7 @@
             await postForm(root.dataset.removeUrl, token, { userActiveWidgetId });
             widget.remove();
             updateEmptyState(canvas);
+            updateCanvasHeight(root, canvas, state);
         });
     }
 
@@ -399,7 +435,7 @@
         }
     }
 
-    function startDrag(canvas, widget, event) {
+    function startDrag(root, canvas, widget, event, state) {
         const canvasRect = canvas.getBoundingClientRect();
         const widgetRect = widget.getBoundingClientRect();
         const startX = event.clientX;
@@ -413,8 +449,9 @@
         const move = (moveEvent) => {
             const nextLeft = Math.max(0, startLeft + moveEvent.clientX - startX);
             const nextTop = Math.max(0, startTop + moveEvent.clientY - startY);
-            widget.style.left = `${Math.round(nextLeft)}px`;
-            widget.style.top = `${Math.round(nextTop)}px`;
+            widget.style.left = `${snapIfNeeded(nextLeft, state)}px`;
+            widget.style.top = `${snapIfNeeded(nextTop, state)}px`;
+            updateCanvasHeight(root, canvas, state);
         };
 
         const end = () => {
@@ -422,6 +459,7 @@
             widget.removeEventListener('pointermove', move);
             widget.removeEventListener('pointerup', end);
             widget.removeEventListener('pointercancel', end);
+            updateCanvasHeight(root, canvas, state);
         };
 
         widget.addEventListener('pointermove', move);
@@ -429,7 +467,7 @@
         widget.addEventListener('pointercancel', end);
     }
 
-    function startResize(widget, event) {
+    function startResize(root, canvas, widget, event, state) {
         const startX = event.clientX;
         const startY = event.clientY;
         const startWidth = widget.offsetWidth;
@@ -441,8 +479,9 @@
         const move = (moveEvent) => {
             const nextWidth = Math.max(minWidth, startWidth + moveEvent.clientX - startX);
             const nextHeight = Math.max(minHeight, startHeight + moveEvent.clientY - startY);
-            widget.style.width = `${Math.round(nextWidth)}px`;
-            widget.style.height = `${Math.round(nextHeight)}px`;
+            widget.style.width = `${Math.max(minWidth, snapIfNeeded(nextWidth, state))}px`;
+            widget.style.height = `${Math.max(minHeight, snapIfNeeded(nextHeight, state))}px`;
+            updateCanvasHeight(root, canvas, state);
         };
 
         const end = () => {
@@ -450,11 +489,61 @@
             widget.removeEventListener('pointermove', move);
             widget.removeEventListener('pointerup', end);
             widget.removeEventListener('pointercancel', end);
+            updateCanvasHeight(root, canvas, state);
         };
 
         widget.addEventListener('pointermove', move);
         widget.addEventListener('pointerup', end);
         widget.addEventListener('pointercancel', end);
+    }
+
+    function snapWidgetToGrid(widget, state) {
+        if (!state?.alignToGrid) {
+            return;
+        }
+
+        widget.style.left = `${snapIfNeeded(parsePixel(widget.style.left), state)}px`;
+        widget.style.top = `${snapIfNeeded(parsePixel(widget.style.top), state)}px`;
+        widget.style.width = `${Math.max(minWidth, snapIfNeeded(widget.offsetWidth, state))}px`;
+        widget.style.height = `${Math.max(minHeight, snapIfNeeded(widget.offsetHeight, state))}px`;
+    }
+
+    function snapIfNeeded(value, state) {
+        if (!state?.alignToGrid) {
+            return Math.round(value);
+        }
+
+        const gridSize = state.gridSize || defaultGridSize;
+        return Math.round(value / gridSize) * gridSize;
+    }
+
+    function updateAlignToGridState(root, alignToggle, enabled) {
+        root.dataset.alignToGrid = enabled ? 'true' : 'false';
+        root.classList.toggle('is-aligning-to-grid', enabled);
+        root.classList.toggle('is-free-placement', !enabled);
+        if (alignToggle) {
+            alignToggle.checked = enabled;
+        }
+    }
+
+    function updateCanvasHeight(root, canvas, state) {
+        const minCanvasHeight = getMinCanvasHeight(root, canvas, state);
+        const bottomPadding = state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding);
+        const lowestWidgetBottom = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
+            .reduce((max, widget) => Math.max(max, parsePixel(widget.style.top) + widget.offsetHeight), 0);
+        const nextHeight = Math.max(minCanvasHeight, lowestWidgetBottom + bottomPadding);
+        canvas.style.setProperty('--dashboard-canvas-height', `${Math.ceil(nextHeight)}px`);
+    }
+
+    function getMinCanvasHeight(root, canvas, state) {
+        const configuredMin = state?.minCanvasHeight ?? parsePositiveInteger(root.dataset.minCanvasHeight, defaultMinCanvasHeight);
+        const available = window.innerHeight - canvas.getBoundingClientRect().top - 32;
+        return Math.max(configuredMin, available);
+    }
+
+    function parsePositiveInteger(value, fallback) {
+        const parsed = parseInt(value || '', 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
     }
 
     async function saveLayout(root, canvas, token) {
@@ -519,7 +608,7 @@
         element.style.top = `${widget.offsetTop || 0}px`;
         element.style.left = `${widget.offsetLeft || 0}px`;
         element.style.width = `${widget.width || 320}px`;
-        element.style.height = `${widget.height || 180}px`;
+        element.style.height = `${widget.height || 192}px`;
         element.style.zIndex = `${widget.orderPriority || 10}`;
 
         if (widget.title) {

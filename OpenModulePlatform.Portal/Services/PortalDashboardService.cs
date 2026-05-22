@@ -12,8 +12,9 @@ namespace OpenModulePlatform.Portal.Services;
 /// </summary>
 public sealed class PortalDashboardService
 {
+    private const bool DefaultAlignToGrid = true;
     private const int DefaultWidgetWidth = 320;
-    private const int DefaultWidgetHeight = 180;
+    private const int DefaultWidgetHeight = 192;
     private const int MinWidgetWidth = 160;
     private const int MinWidgetHeight = 96;
     private const int MaxWidgetWidth = 1800;
@@ -26,6 +27,43 @@ public sealed class PortalDashboardService
     public PortalDashboardService(SqlConnectionFactory db)
     {
         _db = db;
+    }
+
+    public async Task<DashboardPreferences> GetPreferencesAsync(int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT align_to_grid
+FROM omp_portal.user_dashboard_preferences
+WHERE user_id = @user_id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return new DashboardPreferences(value is null or DBNull ? DefaultAlignToGrid : Convert.ToBoolean(value, CultureInfo.InvariantCulture));
+    }
+
+    public async Task SetAlignToGridAsync(int userId, bool alignToGrid, CancellationToken ct)
+    {
+        const string sql = @"
+MERGE omp_portal.user_dashboard_preferences AS target
+USING (SELECT @user_id AS user_id) AS source
+ON target.user_id = source.user_id
+WHEN MATCHED THEN
+    UPDATE SET align_to_grid = @align_to_grid,
+               updated_at = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(user_id, align_to_grid, updated_at)
+    VALUES(@user_id, @align_to_grid, SYSUTCDATETIME());";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@align_to_grid", SqlDbType.Bit).Value = alignToGrid;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<IReadOnlyList<DashboardActiveWidget>> GetActiveWidgetsAsync(
@@ -138,7 +176,7 @@ WHERE user_id = @user_id;";
             }
         }
 
-        var offset = Math.Min(24 + (existingCount % 8) * 22, 220);
+        var offset = Math.Min(32 + (existingCount % 8) * 32, 256);
         const string insertSql = @"
 INSERT INTO omp_portal.user_active_widgets
 (
@@ -406,16 +444,16 @@ ORDER BY w.title,
     private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)
         => definition.Payload switch
         {
-            "admin-overview" => 760,
-            "portal-entry-favorites" or "portal-entry-list" => 420,
+            "admin-overview" => 768,
+            "portal-entry-favorites" or "portal-entry-list" => 416,
             _ => DefaultWidgetWidth
         };
 
     private static int GetDefaultWidgetHeight(DashboardWidgetDefinition definition)
         => definition.Payload switch
         {
-            "admin-overview" => 360,
-            "portal-entry-favorites" or "portal-entry-list" => 360,
+            "admin-overview" => 384,
+            "portal-entry-favorites" or "portal-entry-list" => 352,
             _ => DefaultWidgetHeight
         };
 
