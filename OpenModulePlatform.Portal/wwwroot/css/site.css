@@ -1535,10 +1535,11 @@ button {
     color: #ffffff;
 }
 
-.dashboard-add-button {
+.dashboard-save-button,
+.dashboard-add-button,
+.dashboard-reset-changes-button {
     position: fixed;
     left: 22px;
-    bottom: 74px;
     z-index: 40;
     display: none;
     min-height: 38px;
@@ -1547,14 +1548,28 @@ button {
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
 }
 
-.portal-dashboard.is-editing .dashboard-add-button {
+.dashboard-save-button {
+    bottom: 74px;
+}
+
+.dashboard-add-button {
+    bottom: 122px;
+}
+
+.dashboard-reset-changes-button {
+    bottom: 170px;
+}
+
+.portal-dashboard.is-editing .dashboard-save-button,
+.portal-dashboard.is-editing .dashboard-add-button,
+.portal-dashboard.is-editing .dashboard-reset-changes-button {
     display: inline-flex;
 }
 
 .dashboard-reset-button {
     position: fixed;
     left: 22px;
-    bottom: 122px;
+    bottom: 218px;
     z-index: 40;
     display: none;
     min-height: 38px;
@@ -1572,7 +1587,7 @@ button {
 .dashboard-grid-toggle {
     position: fixed;
     left: 22px;
-    bottom: 170px;
+    bottom: 266px;
     z-index: 40;
     display: none;
     align-items: center;
