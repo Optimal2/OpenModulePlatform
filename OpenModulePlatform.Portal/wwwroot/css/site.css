@@ -1210,8 +1210,17 @@ button {
     position: relative;
     min-height: var(--dashboard-canvas-height, 760px);
     height: var(--dashboard-canvas-height, 760px);
+    overflow: visible;
+    border: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    touch-action: auto;
+}
+
+.portal-dashboard.is-editing .portal-dashboard__canvas {
     overflow: hidden;
-    border: 1px solid var(--border);
+    border-color: var(--border);
     border-radius: 16px;
     background:
         linear-gradient(90deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
@@ -1222,7 +1231,7 @@ button {
     touch-action: none;
 }
 
-.portal-dashboard.is-free-placement .portal-dashboard__canvas {
+.portal-dashboard.is-editing.is-free-placement .portal-dashboard__canvas {
     background:
         linear-gradient(90deg, rgba(215, 222, 234, 0.18) 1px, transparent 1px),
         linear-gradient(180deg, rgba(215, 222, 234, 0.18) 1px, transparent 1px),
@@ -1420,6 +1429,7 @@ button {
 }
 
 .dashboard-entry-list__title,
+.dashboard-entry-list__context,
 .dashboard-entry-list__description {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1428,6 +1438,12 @@ button {
 
 .dashboard-entry-list__title {
     font-weight: 700;
+}
+
+.dashboard-entry-list__context {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
 }
 
 .dashboard-entry-list__description {

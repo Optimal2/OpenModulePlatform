@@ -7,6 +7,8 @@
     const defaultGridSize = 32;
     const defaultMinCanvasHeight = 640;
     const defaultBottomPadding = 64;
+    const defaultViewBottomPadding = 32;
+    const defaultEmptyCanvasHeight = 220;
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
 
     function initDashboard(root) {
@@ -33,7 +35,9 @@
             alignToGrid: root.dataset.alignToGrid !== 'false',
             gridSize: parsePositiveInteger(root.dataset.gridSize, defaultGridSize),
             minCanvasHeight: parsePositiveInteger(root.dataset.minCanvasHeight, defaultMinCanvasHeight),
-            bottomPadding: parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)
+            bottomPadding: parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding),
+            viewBottomPadding: parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding),
+            emptyCanvasHeight: parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight)
         };
 
         updateAlignToGridState(root, alignToggle, state.alignToGrid);
@@ -137,6 +141,7 @@
                     ? root.dataset.doneLabel || 'Done'
                     : root.dataset.editLabel || 'Edit dashboard';
             }
+            updateCanvasHeight(root, canvas, state);
         }
     }
 
@@ -270,6 +275,7 @@
             href: payload.href || '',
             groupTitle: payload.groupTitle || '',
             entryTitle: payload.entryTitle || '',
+            contextName: payload.contextName || payload.groupTitle || '',
             label: payload.label || '',
             description: payload.description || '',
             logoUrl: payload.logoUrl || '',
@@ -285,6 +291,8 @@
 
         normalized.href = normalized.href || row.dataset.entryHref || '';
         normalized.entryTitle = normalized.entryTitle || row.dataset.entryTitle || '';
+        normalized.contextName = normalized.contextName || row.dataset.entryContext || '';
+        normalized.groupTitle = normalized.groupTitle || normalized.contextName;
         normalized.description = normalized.description || row.dataset.entryDescription || '';
         normalized.logoUrl = normalized.logoUrl || row.dataset.entryLogoUrl || '';
         normalized.logoFallback = normalized.logoFallback || row.dataset.entryLogoFallback || '';
@@ -309,6 +317,7 @@
         }
 
         const title = normalized.entryTitle || normalized.label || normalized.entryKey;
+        const contextName = normalized.contextName || normalized.groupTitle || '';
         const href = normalized.href || '#';
         const logoFallback = normalized.logoFallback || buildLogoFallback(title);
         const row = document.createElement('div');
@@ -316,6 +325,7 @@
         row.setAttribute('data-dashboard-entry-row', '');
         row.dataset.entryKey = normalized.entryKey;
         row.dataset.entryTitle = title;
+        row.dataset.entryContext = contextName;
         row.dataset.entryDescription = normalized.description;
         row.dataset.entryHref = href;
         row.dataset.entryLogoUrl = normalized.logoUrl;
@@ -345,6 +355,13 @@
         titleElement.className = 'dashboard-entry-list__title';
         titleElement.textContent = title;
         text.appendChild(titleElement);
+
+        if (contextName) {
+            const context = document.createElement('span');
+            context.className = 'dashboard-entry-list__context';
+            context.textContent = contextName;
+            text.appendChild(context);
+        }
 
         if (normalized.description) {
             const description = document.createElement('span');
@@ -479,8 +496,8 @@
         const move = (moveEvent) => {
             const nextWidth = Math.max(minWidth, startWidth + moveEvent.clientX - startX);
             const nextHeight = Math.max(minHeight, startHeight + moveEvent.clientY - startY);
-            widget.style.width = `${Math.max(minWidth, snapIfNeeded(nextWidth, state))}px`;
-            widget.style.height = `${Math.max(minHeight, snapIfNeeded(nextHeight, state))}px`;
+            widget.style.width = `${snapSizeIfNeeded(nextWidth, minWidth, state)}px`;
+            widget.style.height = `${snapSizeIfNeeded(nextHeight, minHeight, state)}px`;
             updateCanvasHeight(root, canvas, state);
         };
 
@@ -504,8 +521,8 @@
 
         widget.style.left = `${snapIfNeeded(parsePixel(widget.style.left), state)}px`;
         widget.style.top = `${snapIfNeeded(parsePixel(widget.style.top), state)}px`;
-        widget.style.width = `${Math.max(minWidth, snapIfNeeded(widget.offsetWidth, state))}px`;
-        widget.style.height = `${Math.max(minHeight, snapIfNeeded(widget.offsetHeight, state))}px`;
+        widget.style.width = `${snapSizeIfNeeded(widget.offsetWidth, minWidth, state)}px`;
+        widget.style.height = `${snapSizeIfNeeded(widget.offsetHeight, minHeight, state)}px`;
     }
 
     function snapIfNeeded(value, state) {
@@ -515,6 +532,11 @@
 
         const gridSize = state.gridSize || defaultGridSize;
         return Math.round(value / gridSize) * gridSize;
+    }
+
+    function snapSizeIfNeeded(value, min, state) {
+        const snapped = snapIfNeeded(value, state);
+        return Math.max(min, snapped);
     }
 
     function updateAlignToGridState(root, alignToggle, enabled) {
@@ -527,11 +549,17 @@
     }
 
     function updateCanvasHeight(root, canvas, state) {
-        const minCanvasHeight = getMinCanvasHeight(root, canvas, state);
-        const bottomPadding = state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding);
-        const lowestWidgetBottom = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
+        const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'));
+        const lowestWidgetBottom = widgets
             .reduce((max, widget) => Math.max(max, parsePixel(widget.style.top) + widget.offsetHeight), 0);
-        const nextHeight = Math.max(minCanvasHeight, lowestWidgetBottom + bottomPadding);
+        const isEditing = root.classList.contains('is-editing');
+        const nextHeight = isEditing
+            ? Math.max(
+                getMinCanvasHeight(root, canvas, state),
+                lowestWidgetBottom + (state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)))
+            : widgets.length > 0
+                ? lowestWidgetBottom + (state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding))
+                : (state?.emptyCanvasHeight ?? parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight));
         canvas.style.setProperty('--dashboard-canvas-height', `${Math.ceil(nextHeight)}px`);
     }
 

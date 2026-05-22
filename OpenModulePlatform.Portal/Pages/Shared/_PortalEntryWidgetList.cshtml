@@ -25,6 +25,7 @@
              data-dashboard-entry-row
              data-entry-key="@entry.EntryKey"
              data-entry-title="@entry.DisplayName"
+             data-entry-context="@entry.ContextName"
              data-entry-description="@entry.Description"
              data-entry-href="@entry.TargetHref"
              data-entry-logo-url="@entry.LogoUrl"
@@ -42,6 +43,10 @@
                 </span>
                 <span class="dashboard-entry-list__text">
                     <span class="dashboard-entry-list__title">@entry.DisplayName</span>
+                    @if (!string.IsNullOrWhiteSpace(entry.ContextName))
+                    {
+                        <span class="dashboard-entry-list__context">@entry.ContextName</span>
+                    }
                     @if (!string.IsNullOrWhiteSpace(entry.Description))
                     {
                         <span class="dashboard-entry-list__description">@entry.Description</span>
