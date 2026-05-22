@@ -755,6 +755,8 @@ public sealed class InstanceTemplateAppTopologyRow
 
     public string AppKey { get; set; } = string.Empty;
 
+    public string AppType { get; set; } = string.Empty;
+
     public string AppInstanceKey { get; set; } = string.Empty;
 
     public string DisplayName { get; set; } = string.Empty;

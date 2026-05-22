@@ -2007,6 +2007,7 @@ WHERE ModuleKey = @ModuleKey;";
             {
                 status = "Not recorded";
                 message = "No successful execution has been recorded for this script content.";
+                needsExecution = true;
             }
             else
             {
