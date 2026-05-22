@@ -1891,6 +1891,7 @@
   <data name="Remove widget" xml:space="preserve"><value>Ta bort widget</value></data>
   <data name="No widgets are available." xml:space="preserve"><value>Inga widgets är tillgängliga.</value></data>
   <data name="Close" xml:space="preserve"><value>Stäng</value></data>
+  <data name="Reset changes" xml:space="preserve"><value>Återställ ändringar</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Återställ layout</value></data>
   <data name="Align to grid" xml:space="preserve"><value>Fäst mot rutnät</value></data>
   <data name="This clears your current dashboard widgets. Continue?" xml:space="preserve"><value>Detta rensar dina nuvarande dashboard-widgets. Vill du fortsätta?</value></data>
