@@ -10,7 +10,10 @@ installations:
 Together they replace module-specific installation scripts for normal
 application deployment. A new environment should first import module
 definitions, then import artifact packages that are compatible with those
-definitions, then let HostAgent materialize the desired runtime state.
+definitions, then let HostAgent materialize the desired runtime state. When a
+module should move as one unit, use a complete module package: one zip that
+contains the module definition plus the outer artifact package zips for that
+module.
 
 ## Module Definition Object
 
@@ -29,8 +32,8 @@ HostAgent-first installer copies those files into the package-local
 `module-definitions` import folder. Portal stores imported definitions in
 `omp.ModuleDefinitionDocuments`.
 
-A portable module package zip can contain one definition JSON plus optional SQL
-files:
+A portable module-definition package zip can contain one definition JSON plus
+optional SQL files:
 
 ```text
 example_module__module-definition__1.2.3.zip
@@ -79,6 +82,40 @@ should use the manifest envelope. Components with `moduleKey`, `appKey`,
 `packageType`, `targetName`, and `version` in `omp-components.json` are emitted
 as standard artifact package objects by `package-hostagent-first.ps1`.
 
+## Complete Module Package
+
+A complete module package is the preferred handoff object when a whole module
+should be installed, completed, or moved between OMP installations:
+
+```text
+example_module__module-package__1.2.3.zip
+  module-definition/example_module.module-definition.json
+  sql/validate.sql
+  sql/repair.sql
+  artifacts/example_module__example_web__web-app__example-web__1.2.3.zip
+  artifacts/example_module__example_worker__worker__example-worker__1.2.3.zip
+```
+
+The package must contain exactly one module definition JSON document. Artifact
+zips inside the package keep the standard outer artifact filename format. Portal
+and HostAgent normalize package-local SQL references before storing the module
+definition, then import compatible artifact packages for the same `moduleKey`.
+
+Conflict handling is deterministic:
+
+- identical module definitions and identical artifact content are skipped rather
+  than duplicated
+- a package with an older module definition version is stored for review but
+  does not replace a newer applied module definition
+- artifact versions outside the active module definition compatibility range are
+  skipped so exported historical packages remain safe to re-import
+- an existing artifact identity with different content is an error unless an
+  operator explicitly chooses replacement in Portal
+- when a package contains multiple compatible versions for the same
+  app/package/target slot, only the highest compatible version is selected as
+  the desired runtime version; older compatible versions are registered or kept
+  as historical packages
+
 ## Tooling
 
 Portal:
@@ -88,12 +125,13 @@ Portal:
 - `/admin/moduledefinitionedit` can download the stored JSON definition.
 - `/admin/moduledefinitioneditor` opens the browser-based module definition
   editor.
-- `/admin/modulepackageimport` can upload one portable module package zip,
+- `/admin/modulepackageimport` can upload one complete module package zip,
   upload one module definition JSON together with one or more artifact package
   zips, import package-library files from `ArtifactStoreRoot\_available`, and
   export an applied module definition with its active artifact packages. The
   package-library view only offers artifact packages that match the selected
-  module definition's declared compatibility range.
+  module definition's declared compatibility range and shows whether the current
+  installation already has the same, newer, older, or missing artifact versions.
 - `/admin/artifacts` and `/admin/artifactupload` import artifact packages.
 - `/admin/artifactedit` can download an installed artifact as a standard package
   object, including registered configuration files.
@@ -129,9 +167,10 @@ To move a module from one OMP installation to another:
    next cycle.
 
 Portal-driven import can offer operator choices for conflicts. HostAgent folder
-import is intentionally strict and unattended. The same import folder can accept
-module definition JSON files, standard artifact package zips, and module
-package zips containing one module definition JSON plus one or more artifact
-package zips for that module. Invalid filenames, incompatible module/app
-combinations, duplicate versions, and changed hashes for an existing version
-are recorded as import errors instead of silently changing database state.
+import is intentionally strict for unattended decisions, but complete module
+packages are processed item by item. Identical existing artifacts are skipped,
+compatible missing artifacts are imported, and only the highest compatible
+artifact version per app slot is selected automatically. Invalid filenames,
+unknown module/app/package combinations, and changed hashes for an existing
+artifact identity are recorded as import errors instead of silently changing
+database state.

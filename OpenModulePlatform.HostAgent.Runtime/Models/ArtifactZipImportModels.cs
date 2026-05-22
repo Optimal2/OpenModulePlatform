@@ -24,14 +24,18 @@ public sealed record ArtifactZipImportResult(
     int AppInstanceRowsUpdated,
     int WorkerInstanceRowsUpdated,
     int HostAgentDesiredRowsUpdated,
-    bool AdoptedExistingContent);
+    bool AdoptedExistingContent,
+    string Status = "Imported",
+    string? Message = null);
 
 public sealed record ArtifactZipImportDuplicateInfo(
     int ArtifactId,
     string AppKey,
     string Version,
     string PackageType,
-    string? TargetName);
+    string? TargetName,
+    string? RelativePath,
+    string? Sha256);
 
 public sealed record ModuleDefinitionImportDocument(
     string ModuleKey,
@@ -69,4 +73,17 @@ public sealed record ModulePackageImportResult(
     int ModuleDefinitionDocumentId,
     bool Applied,
     int SqlRepairCount,
-    IReadOnlyList<ArtifactZipImportResult> Artifacts);
+    IReadOnlyList<ModulePackageArtifactImportResult> Artifacts)
+{
+    public int ImportedArtifactCount => Artifacts.Count(static item => item.Status is "Imported" or "Replaced");
+
+    public int FailedArtifactCount => Artifacts.Count(static item => item.Status == "Failed");
+
+    public int SkippedArtifactCount => Artifacts.Count(static item => item.Status == "Skipped");
+}
+
+public sealed record ModulePackageArtifactImportResult(
+    string FileName,
+    string Status,
+    string? Message,
+    ArtifactZipImportResult? Artifact);

@@ -1877,11 +1877,13 @@
   <data name="Artifact import details:" xml:space="preserve"><value>Detaljer för artefaktimport:</value></data>
   <data name="Select one available module definition." xml:space="preserve"><value>Välj en tillgänglig moduldefinition.</value></data>
   <data name="Installed same version" xml:space="preserve"><value>Samma version installerad</value></data>
+  <data name="Newer version installed" xml:space="preserve"><value>Nyare version installerad</value></data>
   <data name="Installed other version" xml:space="preserve"><value>Annan version installerad</value></data>
   <data name="Not installed" xml:space="preserve"><value>Inte installerad</value></data>
   <data name="Partially installed" xml:space="preserve"><value>Delvis installerad</value></data>
   <data name="Installed definition" xml:space="preserve"><value>Installerad definition</value></data>
   <data name="Artifacts: {0} same, {1} other, {2} missing." xml:space="preserve"><value>Artefakter: {0} samma, {1} andra, {2} saknas.</value></data>
+  <data name="Artifacts: {0} same, {1} newer installed, {2} older installed, {3} missing." xml:space="preserve"><value>Artefakter: {0} samma, {1} nyare installerade, {2} äldre installerade, {3} saknas.</value></data>
   <data name="No artifact packages are available for this module package." xml:space="preserve"><value>Inga artefaktpaket är tillgängliga för detta modulpaket.</value></data>
   <data name="Importing again should keep unchanged content and skip artifact packages that already exist with identical content." xml:space="preserve"><value>Import igen bör behålla oförändrat innehåll och hoppa över artefaktpaket som redan finns med identiskt innehåll.</value></data>
   <data name="Importing will apply this module definition version and can move matching app instances to the package artifact versions." xml:space="preserve"><value>Import applicerar denna moduldefinitionsversion och kan flytta matchande appinstanser till paketets artefaktversioner.</value></data>
@@ -1943,6 +1945,7 @@
   <data name="Install or complete modules from the package library. This applies the module definition, runs safe SQL repairs, registers artifacts, and updates matching desired app versions." xml:space="preserve"><value>Installera eller komplettera moduler från paketbiblioteket. Detta applicerar moduldefinitionen, kör säkra SQL-rättningar, registrerar artefakter och uppdaterar matchande önskade appversioner.</value></data>
   <data name="The matrix checks module definitions against current OMP metadata, required database objects, declared module dependencies, and current artifact selections. Stored definitions can be applied from the action column." xml:space="preserve"><value>Matrisen kontrollerar moduldefinitioner mot aktuell OMP-metadata, obligatoriska databasobjekt, deklarerade modulberoenden och aktuella artefaktval. Lagrade definitioner kan appliceras från åtgärdskolumnen.</value></data>
   <data name="Importing again keeps unchanged content, skips identical artifacts, and can still execute missing SQL repairs." xml:space="preserve"><value>Import igen behåller oförändrat innehåll, hoppar över identiska artefakter och kan fortfarande köra saknade SQL-rättningar.</value></data>
+  <data name="Importing keeps the newer installed selections and only fills in missing compatible package objects." xml:space="preserve"><value>Import behåller de nyare installerade valen och kompletterar bara saknade kompatibla paketobjekt.</value></data>
   <data name="Install in OMP" xml:space="preserve"><value>Installera i OMP</value></data>
   <data name="Run import/SQL check" xml:space="preserve"><value>Kör import/SQL-kontroll</value></data>
   <data name="Update/complete" xml:space="preserve"><value>Uppdatera/komplettera</value></data>
