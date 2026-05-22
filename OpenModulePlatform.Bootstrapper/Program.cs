@@ -766,13 +766,13 @@ VALUES
                     $"Module definition SQL script '{script.Key}' is not idempotent and cannot be executed by the bootstrapper.");
             }
 
-            var sqlText = ResolvePortableSqlText(script);
-            if (string.IsNullOrWhiteSpace(sqlText))
+            var originalSqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(originalSqlText))
             {
                 continue;
             }
 
-            var scriptSha256 = ComputeTextSha256(sqlText);
+            var scriptSha256 = ComputeTextSha256(originalSqlText);
             if (!string.IsNullOrWhiteSpace(script.Sha256)
                 && !string.Equals(script.Sha256, scriptSha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -780,6 +780,7 @@ VALUES
                     $"Module definition SQL script '{script.Key}' content does not match its declared SHA-256.");
             }
 
+            var sqlText = PatchBootstrapPrincipal(originalSqlText, sql);
             var safety = ValidateSafeModuleDefinitionSql(sqlText);
             if (safety is not null)
             {
