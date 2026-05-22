@@ -57,7 +57,16 @@ public sealed class HostAgentEngine
             leaseSeconds: Math.Max(30, settings.RefreshSeconds * 3),
             cancellationToken);
 
-        if (!lease.Acquired || lease.HostId is null)
+        if (lease.HostId is null)
+        {
+            _logger.LogWarning(
+                "HostAgent skipped cycle because host key is not registered or enabled in the database. HostKey={HostKey}, CurrentService={CurrentService}",
+                hostKey,
+                _process.ServiceName);
+            return;
+        }
+
+        if (!lease.Acquired)
         {
             _logger.LogInformation(
                 "HostAgent skipped cycle because another service owns the host lease. HostKey={HostKey}, CurrentService={CurrentService}, ActiveService={ActiveService}",
