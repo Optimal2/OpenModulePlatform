@@ -82,6 +82,23 @@
                 <section class="panel">
                     <div class="section-heading">
                         <div>
+                            <h2>Installer Secrets</h2>
+                            <p>Portable encryption removes plain-text passwords from bootstrap JSON before HostAgent writes machine-bound credentials.</p>
+                        </div>
+                    </div>
+                    <div class="grid-fields">
+                        <label>Portable encryption key<input id="portableEncryptionKey" type="password" autocomplete="off" spellcheck="false"></label>
+                        <label>Key environment variable<input id="portableEncryptionKeyEnvironmentVariable" autocomplete="off" spellcheck="false" placeholder="OMP_BOOTSTRAP_KEY"></label>
+                    </div>
+                    <div class="check-list">
+                        <button id="generatePortableKeyButton" type="button" class="button button-secondary">Generate key</button>
+                        <button id="protectSecretsButton" type="button" class="button button-secondary">Encrypt password fields</button>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
                             <h2>HostAgent And IIS</h2>
                             <p>HostAgent normally needs a local administrator account so it can manage services and IIS.</p>
                         </div>

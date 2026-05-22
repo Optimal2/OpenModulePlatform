@@ -9,15 +9,18 @@ public sealed class WebAppDeploymentService
 {
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
+    private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<WebAppDeploymentService> _logger;
 
     public WebAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
         OmpHostArtifactRepository repository,
+        HostAgentCredentialStoreService credentialStore,
         ILogger<WebAppDeploymentService> logger)
     {
         _settings = settings;
         _repository = repository;
+        _credentialStore = credentialStore;
         _logger = logger;
     }
 
@@ -75,7 +78,7 @@ public sealed class WebAppDeploymentService
 
             if (settings.EnsureIisSite)
             {
-                EnsureIisApplication(settings, deployment, targetPath, iisAppName, runtimeName);
+                await EnsureIisApplicationAsync(settings, deployment, targetPath, iisAppName, runtimeName, cancellationToken);
             }
 
             var configuredConnectionString = _repository.GetConfiguredConnectionString();
@@ -300,12 +303,13 @@ public sealed class WebAppDeploymentService
             || (!settings.UseAppOfflineForWebAppDeployment
                 && (settings.StopIisAppPoolForWebAppDeployment || settings.StartIisAppPoolAfterWebAppDeployment));
 
-    private static void EnsureIisApplication(
+    private async Task EnsureIisApplicationAsync(
         HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment,
         string targetPath,
         string iisAppName,
-        string appPoolName)
+        string appPoolName,
+        CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(targetPath);
 
@@ -315,15 +319,24 @@ public sealed class WebAppDeploymentService
 
         if (string.IsNullOrWhiteSpace(appPath))
         {
-            EnsureAppPool(settings, appPoolName, ResolveIisAppPoolIdentity(settings, deployment, appPoolName));
+            EnsureAppPool(
+                settings,
+                appPoolName,
+                await ResolveIisAppPoolIdentityAsync(settings, deployment, appPoolName, cancellationToken));
             EnsureIisSite(settings, targetPath, appPoolName);
             return;
         }
 
         var rootAppPoolName = ResolvePortalAppPoolName(settings);
-        EnsureAppPool(settings, rootAppPoolName, ResolveDefaultIisAppPoolIdentity(settings));
+        EnsureAppPool(
+            settings,
+            rootAppPoolName,
+            await ResolveDefaultIisAppPoolIdentityAsync(settings, cancellationToken));
         EnsureIisSite(settings, siteRootPath, rootAppPoolName);
-        EnsureAppPool(settings, appPoolName, ResolveIisAppPoolIdentity(settings, deployment, appPoolName));
+        EnsureAppPool(
+            settings,
+            appPoolName,
+            await ResolveIisAppPoolIdentityAsync(settings, deployment, appPoolName, cancellationToken));
         EnsureIisChildApplication(settings, iisAppName, appPath, targetPath, appPoolName);
     }
 
@@ -448,29 +461,69 @@ public sealed class WebAppDeploymentService
         }
     }
 
-    private static HostAgentIisAppPoolIdentitySettings ResolveIisAppPoolIdentity(
+    private async Task<HostAgentIisAppPoolIdentitySettings> ResolveIisAppPoolIdentityAsync(
         HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment,
-        string appPoolName)
+        string appPoolName,
+        CancellationToken cancellationToken)
     {
         foreach (var key in ResolveIisAppPoolOverrideKeys(deployment, appPoolName))
         {
             if (TryGetIisAppPoolIdentityOverride(settings, key, out var identity)
-                && !string.IsNullOrWhiteSpace(identity.UserName))
+                && HasConfiguredIisAppPoolIdentity(identity))
             {
-                return identity;
+                return await ResolveStoredIisAppPoolPasswordAsync(identity, cancellationToken);
             }
         }
 
-        return ResolveDefaultIisAppPoolIdentity(settings);
+        return await ResolveDefaultIisAppPoolIdentityAsync(settings, cancellationToken);
     }
 
-    private static HostAgentIisAppPoolIdentitySettings ResolveDefaultIisAppPoolIdentity(HostAgentSettings settings)
-        => new()
+    private static bool HasConfiguredIisAppPoolIdentity(HostAgentIisAppPoolIdentitySettings identity)
+        => !string.IsNullOrWhiteSpace(identity.UserName)
+            || !string.IsNullOrWhiteSpace(identity.PasswordCredentialKey);
+
+    private Task<HostAgentIisAppPoolIdentitySettings> ResolveDefaultIisAppPoolIdentityAsync(
+        HostAgentSettings settings,
+        CancellationToken cancellationToken)
+        => ResolveStoredIisAppPoolPasswordAsync(new HostAgentIisAppPoolIdentitySettings
         {
             UserName = settings.IisAppPoolUserName,
-            Password = settings.IisAppPoolPassword
+            Password = settings.IisAppPoolPassword,
+            PasswordCredentialKey = settings.IisAppPoolPasswordCredentialKey
+        }, cancellationToken);
+
+    private async Task<HostAgentIisAppPoolIdentitySettings> ResolveStoredIisAppPoolPasswordAsync(
+        HostAgentIisAppPoolIdentitySettings identity,
+        CancellationToken cancellationToken)
+    {
+        var result = new HostAgentIisAppPoolIdentitySettings
+        {
+            UserName = identity.UserName,
+            Password = identity.Password,
+            PasswordCredentialKey = identity.PasswordCredentialKey
         };
+
+        if (string.IsNullOrWhiteSpace(result.PasswordCredentialKey))
+        {
+            return result;
+        }
+
+        var credential = await _credentialStore.TryReadCredentialAsync(result.PasswordCredentialKey, cancellationToken);
+        if (credential is null)
+        {
+            throw new InvalidOperationException(
+                $"IIS app pool credential '{result.PasswordCredentialKey}' could not be resolved from HostAgent credential store.");
+        }
+
+        if (string.IsNullOrWhiteSpace(result.UserName))
+        {
+            result.UserName = credential.UserName;
+        }
+
+        result.Password = credential.Password;
+        return result;
+    }
 
     private static IEnumerable<string> ResolveIisAppPoolOverrideKeys(
         WebAppDeploymentDescriptor deployment,

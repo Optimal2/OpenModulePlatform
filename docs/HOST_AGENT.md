@@ -103,9 +103,12 @@ configured IIS site, app pools, and IIS applications before it mirrors files.
 This is the normal HostAgent-first bootstrap path for a blank machine. Existing
 installations can leave it disabled when IIS is managed outside HostAgent.
 App pool names are generated from `HostAgent:IisAppPoolNamePrefix` and the OMP
-app instance key; `HostAgent:IisAppPoolUserName` and
-`HostAgent:IisAppPoolPassword` can be set when app pools must run as a specific
-Windows identity.
+app instance key. When app pools must run as a specific Windows identity, set
+`HostAgent:IisAppPoolUserName` plus
+`HostAgent:IisAppPoolPasswordCredentialKey`. The key is resolved from the local
+HostAgent credential store. The legacy `HostAgent:IisAppPoolPassword` setting is
+accepted only for old appsettings files and should not be written by new
+installations.
 
 An app instance with `HostId = NULL` is treated as host-neutral. HostAgent
 deploys that same logical app instance on every enabled host that runs the
@@ -348,20 +351,28 @@ Minimal configuration:
       "InstallRoot": "D:\\OMP\\Services",
       "ServiceNamePrefix": "OpenModulePlatform.HostAgent",
       "ServiceAccountName": "",
-      "ServiceAccountPassword": "",
+      "ServiceAccountPasswordCredentialKey": "",
       "TakeoverStopTimeoutSeconds": 45,
       "DeletePreviousServiceAfterTakeover": true,
       "StartPreparedService": true
+    },
+    "CredentialStore": {
+      "AutomationMode": "Full",
+      "FilePath": "D:\\OMP\\Services\\HostAgent\\hostagent.credentials.json",
+      "ProtectionScope": "LocalMachine",
+      "EntropyPurpose": "OpenModulePlatform.HostAgent.CredentialStore.v1"
     }
   }
 }
 ```
 
-`ServiceAccountName` and `ServiceAccountPassword` are optional. Leave them empty
-for built-in service accounts. If HostAgent runs as a Windows or AD account and
-needs that identity for IIS, SQL, or artifact-store access, the bootstrapper
-should write those values into the protected local HostAgent appsettings file so
-the replacement service is created with the same account.
+`ServiceAccountName` and `ServiceAccountPasswordCredentialKey` are optional.
+Leave them empty for built-in service accounts. If HostAgent runs as a Windows
+or AD account and needs that identity for IIS, SQL, or artifact-store access,
+the bootstrapper writes the password to the local HostAgent credential store and
+puts only the credential key in appsettings. The credential store uses Windows
+DPAPI; with `ProtectionScope = "LocalMachine"` the encrypted password can only
+be decrypted on the same Windows machine.
 
 For a desired upgrade, insert or update one row in
 `omp.HostAgentDesiredStates` for the concrete host and point it at the desired
