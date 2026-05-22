@@ -87,12 +87,21 @@ public sealed class PortalEntry
 /// </summary>
 public sealed record DashboardPortalEntryWidgetList(
     IReadOnlyList<PortalEntry> Entries,
-    bool IsFavoritesList);
+    bool IsFavoritesList,
+    bool ShowSearch = false,
+    string? SectionTitle = null);
+
+/// <summary>
+/// Combined favorite and general Portal Entry list rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardPortalEntryComboWidgetList(
+    IReadOnlyList<PortalEntry> FavoriteEntries,
+    IReadOnlyList<PortalEntry> AllEntries);
 
 /// <summary>
 /// Per-user dashboard behavior preferences.
 /// </summary>
-public sealed record DashboardPreferences(bool AlignToGrid);
+public sealed record DashboardPreferences(bool AlignToGrid, bool ExpandedCanvas);
 
 /// <summary>
 /// Admin list row for Portal Entries.
