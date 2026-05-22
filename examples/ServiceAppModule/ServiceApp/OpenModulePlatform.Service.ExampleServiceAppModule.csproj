@@ -8,7 +8,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="NLog.Extensions.Hosting" />
   </ItemGroup>
 </Project>
