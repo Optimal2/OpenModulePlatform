@@ -34,7 +34,16 @@ function Import-DeploymentConfig {
         return @{}
     }
 
-    $config = Import-PowerShellDataFile -LiteralPath $Path
+    $config = if (Get-Command Import-PowerShellDataFile -ErrorAction SilentlyContinue) {
+        Import-PowerShellDataFile -LiteralPath $Path
+    }
+    else {
+        # Windows PowerShell hosts used by older installer packages may lack
+        # Import-PowerShellDataFile. The package config is a repository-owned
+        # .psd1 data file, so evaluating it as a scriptblock is an acceptable
+        # compatibility fallback for this packaging-only path.
+        & ([scriptblock]::Create((Get-Content -LiteralPath $Path -Raw)))
+    }
     if ($null -eq $config) {
         return @{}
     }
@@ -1355,9 +1364,15 @@ $hostAgentHostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -
 $developerSourceRoot = if ([string]::IsNullOrWhiteSpace($developerSourceRootText)) { $RepositoryRoot } else { $developerSourceRootText }
 $developerPackageConfigPath = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageConfigPath' -DefaultValue $ConfigPath)
 $developerPackageOutputRoot = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageOutputRoot' -DefaultValue $OutputRoot)
+$portableEncryptionKey = [string](Get-NestedConfigValue -Config $config -Section 'Security' -Name 'PortableEncryptionKey' -DefaultValue '')
+$portableEncryptionKeyEnvironmentVariable = [string](Get-NestedConfigValue -Config $config -Section 'Security' -Name 'PortableEncryptionKeyEnvironmentVariable' -DefaultValue '')
 
 $bootstrapConfig = [ordered]@{
     schema = 'OpenModulePlatform.HostAgentFirstBootstrap.v1'
+    security = [ordered]@{
+        portableEncryptionKey = $portableEncryptionKey
+        portableEncryptionKeyEnvironmentVariable = $portableEncryptionKeyEnvironmentVariable
+    }
     developerSource = [ordered]@{
         sourceRoot = $developerSourceRoot
         packageConfigPath = $developerPackageConfigPath
@@ -1417,6 +1432,12 @@ $bootstrapConfig = [ordered]@{
         iisAppPoolOverrides = $iisAppPoolOverrides
         deployServiceApps = $true
         servicesRoot = $servicesRoot
+        credentialStore = [ordered]@{
+            automationMode = ''
+            filePath = ''
+            protectionScope = 'LocalMachine'
+            entropyPurpose = 'OpenModulePlatform.HostAgent.CredentialStore.v1'
+        }
         appSettings = [ordered]@{
             ConnectionStrings = [ordered]@{
                 OmpDb = '{SqlConnectionString}'
@@ -1451,8 +1472,8 @@ $bootstrapConfig = [ordered]@{
                 PortalPhysicalPath = $portalPhysicalPath
                 IisAppPoolNamePrefix = 'OMP_'
                 IisAppPoolUserName = $runAsUser
-                IisAppPoolPassword = $runAsPassword
-                IisAppPoolOverrides = $iisAppPoolOverrides
+                IisAppPoolPasswordCredentialKey = ''
+                IisAppPoolOverrides = @{}
                 WebAppDataProtectionKeyPath = $webAppDataProtectionKeyPath
                 DeployServiceApps = $true
                 ServicesRoot = $servicesRoot
@@ -1462,10 +1483,16 @@ $bootstrapConfig = [ordered]@{
                     InstallRoot = $servicesRoot
                     ServiceNamePrefix = $hostAgentServiceName
                     ServiceAccountName = $runAsUser
-                    ServiceAccountPassword = $runAsPassword
+                    ServiceAccountPasswordCredentialKey = ''
                     TakeoverStopTimeoutSeconds = 45
                     DeletePreviousServiceAfterTakeover = $true
                     StartPreparedService = $true
+                }
+                CredentialStore = [ordered]@{
+                    AutomationMode = ''
+                    FilePath = ''
+                    ProtectionScope = 'LocalMachine'
+                    EntropyPurpose = 'OpenModulePlatform.HostAgent.CredentialStore.v1'
                 }
                 EnableRpc = $true
                 RpcPipeName = ''

@@ -17,6 +17,7 @@ public sealed class HostAgentSelfUpgradeService
     private readonly OmpHostArtifactRepository _repository;
     private readonly ArtifactProvisioner _provisioner;
     private readonly HostAgentProcessContext _process;
+    private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<HostAgentSelfUpgradeService> _logger;
 
     public HostAgentSelfUpgradeService(
@@ -24,12 +25,14 @@ public sealed class HostAgentSelfUpgradeService
         OmpHostArtifactRepository repository,
         ArtifactProvisioner provisioner,
         HostAgentProcessContext process,
+        HostAgentCredentialStoreService credentialStore,
         ILogger<HostAgentSelfUpgradeService> logger)
     {
         _settings = settings;
         _repository = repository;
         _provisioner = provisioner;
         _process = process;
+        _credentialStore = credentialStore;
         _logger = logger;
     }
 
@@ -85,11 +88,12 @@ public sealed class HostAgentSelfUpgradeService
         PrepareInstallDirectory(provisionResult.LocalPath, installPath, cancellationToken);
         var executablePath = FindHostAgentExecutable(installPath);
         WriteTakeoverSettings(settings, installPath, desired, serviceName);
+        var resolvedSelfUpgradeSettings = await ResolveSelfUpgradeSettingsAsync(settings.SelfUpgrade, cancellationToken);
         EnsureService(
             serviceName,
             executablePath,
             CreateTakeoverArguments(serviceName, _process.ServiceName),
-            settings.SelfUpgrade);
+            resolvedSelfUpgradeSettings);
 
         if (settings.SelfUpgrade.StartPreparedService)
         {
@@ -241,10 +245,19 @@ public sealed class HostAgentSelfUpgradeService
         hostAgent["TakeoverFromServiceName"] = _process.ServiceName;
         hostAgent["HostKey"] = settings.HostKey;
         hostAgent["HostName"] = settings.HostName;
+        hostAgent.Remove("IisAppPoolPassword");
+        ScrubPlainTextIisOverridePasswords(hostAgent);
 
         var selfUpgrade = GetOrCreateObject(hostAgent, "SelfUpgrade");
         selfUpgrade["ServiceAccountName"] = settings.SelfUpgrade.ServiceAccountName;
-        selfUpgrade["ServiceAccountPassword"] = settings.SelfUpgrade.ServiceAccountPassword;
+        selfUpgrade["ServiceAccountPasswordCredentialKey"] = settings.SelfUpgrade.ServiceAccountPasswordCredentialKey;
+        selfUpgrade.Remove("ServiceAccountPassword");
+
+        var credentialStore = GetOrCreateObject(hostAgent, "CredentialStore");
+        credentialStore["AutomationMode"] = settings.CredentialStore.AutomationMode;
+        credentialStore["FilePath"] = ResolveCredentialStoreFilePath(settings.CredentialStore);
+        credentialStore["ProtectionScope"] = settings.CredentialStore.ProtectionScope;
+        credentialStore["EntropyPurpose"] = settings.CredentialStore.EntropyPurpose;
 
         var connectionStrings = GetOrCreateObject(json, "ConnectionStrings");
         connectionStrings["OmpDb"] = _repository.GetConfiguredConnectionString();
@@ -255,6 +268,67 @@ public sealed class HostAgentSelfUpgradeService
             json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
+
+    private static void ScrubPlainTextIisOverridePasswords(JsonObject hostAgent)
+    {
+        if (hostAgent["IisAppPoolOverrides"] is not JsonObject overrides)
+        {
+            return;
+        }
+
+        foreach (var pair in overrides.ToArray())
+        {
+            if (pair.Value is JsonObject identity)
+            {
+                identity.Remove("Password");
+            }
+        }
+    }
+
+    private async Task<HostAgentUpgradeSettings> ResolveSelfUpgradeSettingsAsync(
+        HostAgentUpgradeSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var result = new HostAgentUpgradeSettings
+        {
+            IsEnabled = settings.IsEnabled,
+            InstallRoot = settings.InstallRoot,
+            ServiceNamePrefix = settings.ServiceNamePrefix,
+            ServiceAccountName = settings.ServiceAccountName,
+            ServiceAccountPassword = settings.ServiceAccountPassword,
+            ServiceAccountPasswordCredentialKey = settings.ServiceAccountPasswordCredentialKey,
+            TakeoverStopTimeoutSeconds = settings.TakeoverStopTimeoutSeconds,
+            DeletePreviousServiceAfterTakeover = settings.DeletePreviousServiceAfterTakeover,
+            StartPreparedService = settings.StartPreparedService
+        };
+
+        if (string.IsNullOrWhiteSpace(result.ServiceAccountPasswordCredentialKey))
+        {
+            return result;
+        }
+
+        var credential = await _credentialStore.TryReadCredentialAsync(
+            result.ServiceAccountPasswordCredentialKey,
+            cancellationToken);
+        if (credential is null)
+        {
+            throw new InvalidOperationException(
+                $"HostAgent self-upgrade credential '{result.ServiceAccountPasswordCredentialKey}' could not be resolved from HostAgent credential store.");
+        }
+
+        if (string.IsNullOrWhiteSpace(result.ServiceAccountName))
+        {
+            result.ServiceAccountName = credential.UserName;
+        }
+
+        result.ServiceAccountPassword = credential.Password;
+        return result;
+    }
+
+    private static string ResolveCredentialStoreFilePath(HostAgentCredentialStoreSettings settings)
+        => string.IsNullOrWhiteSpace(settings.FilePath)
+            ? Path.Combine(AppContext.BaseDirectory, "hostagent.credentials.json")
+            : settings.FilePath.Trim();
 
     private static void WriteNormalSettings(string installPath, string serviceName)
     {
