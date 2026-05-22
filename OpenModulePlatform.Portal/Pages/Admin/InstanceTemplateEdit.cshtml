@@ -159,6 +159,7 @@
                         <th>@L["Module instance"]</th>
                         <th>@L["Host"]</th>
                         <th>@L["App"]</th>
+                        <th>@L["App type"]</th>
                         <th>@L["App instance key"]</th>
                         <th>@L["Artifact"]</th>
                         <th>@L["Route"]</th>
@@ -175,6 +176,7 @@
                         <td><code>@row.ModuleInstanceKey</code></td>
                         <td><code>@(row.HostKey ?? L["Any host"].Value)</code></td>
                         <td><code>@row.AppKey</code></td>
+                        <td>@L[row.AppType]</td>
                         <td><code>@row.AppInstanceKey</code></td>
                         <td>
                             <div class="artifact-version-cell">
