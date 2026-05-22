@@ -547,12 +547,21 @@ BEGIN
     (
         user_id int NOT NULL,
         align_to_grid bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_align_to_grid DEFAULT(1),
+        expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(0),
         updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_updated_at DEFAULT(SYSUTCDATETIME()),
 
         CONSTRAINT PK_omp_portal_user_dashboard_preferences PRIMARY KEY(user_id),
         CONSTRAINT FK_omp_portal_user_dashboard_preferences_user FOREIGN KEY(user_id)
             REFERENCES omp.users(user_id)
     );
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp_portal.user_dashboard_preferences', N'expanded_canvas') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.user_dashboard_preferences
+        ADD expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(0);
 END
 GO
 
@@ -688,6 +697,13 @@ USING
            N'All portal entries' AS title,
            N'portal' AS widget_type,
            N'portal-entry-list' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'portal-entry-combolist' AS widget_key,
+           N'Combolist' AS title,
+           N'portal' AS widget_type,
+           N'portal-entry-combolist' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
 ) AS source
