@@ -150,15 +150,15 @@ The document shape is versioned. Version 1 uses these top-level fields:
   ],
   "sqlScripts": [
     {
-      "key": "setup",
-      "phase": "setup",
+      "key": "repair",
+      "phase": "repair",
       "scope": "module",
       "order": 10,
-      "path": "ExampleModule/Sql/1-setup-example-module.sql",
+      "path": "sql/repair.sql",
       "execution": "idempotent",
       "inlineSql": null,
-      "contentEncoding": "base64-utf8",
-      "content": "...",
+      "contentEncoding": null,
+      "content": null,
       "sha256": "..."
     }
   ],
@@ -235,24 +235,39 @@ The document shape is versioned. Version 1 uses these top-level fields:
 }
 ```
 
-Module definition documents should be portable. Keep normal `.sql` files in the
-repository for reviewability, but embed the same script content in the JSON
-document before it is uploaded or packaged. The recommended portable form is
-`contentEncoding: "base64-utf8"` plus `content` and `sha256`. `path` remains as
-traceability back to the source repository file. The standalone module
-definition editor in `tools/module-definition-editor/index.html` exposes the
-module app list and decodes SQL entries to clear text for editing. It writes
-SQL back as base64 when the JSON is exported. Portal exposes the same
-client-side editor for
-administrators from `/admin/moduledefinitioneditor`. Portal can also download
-the stored normalized JSON from each module-definition edit page so an applied
-definition can be moved from one OMP installation to another.
+Module definition packages should be portable. The preferred source/package
+shape is a zip containing one module definition JSON file and optional `.sql`
+files referenced by `sqlScripts[].path`:
 
-Use `scripts/dev/embed-module-definition-sql.ps1` to refresh embedded SQL from
-the source `.sql` files. The embed step removes the historical
-`USE [OpenModulePlatform]` development-database switch from embedded content.
-Portal executes repairs on the configured OMP database connection, so module
-definition SQL must not switch databases.
+```text
+example_module__module-definition__1.2.3.zip
+  module-definition/example_module.module-definition.json
+  sql/repair.sql
+  sql/validate.sql
+```
+
+SQL files are optional. A module that only needs OMP module/app metadata and
+artifact compatibility rows does not need a `sql` folder. When Portal or
+HostAgent imports a package zip, each `sqlScripts` entry that has a `path` but
+no embedded content is resolved inside the package, validated against `sha256`
+when present, and normalized into `inlineSql` before the definition is stored in
+`omp.ModuleDefinitionDocuments`. The source package stays reviewable while the
+stored definition remains self-contained for later integrity checks and repairs.
+
+Standalone JSON uploads can still use `inlineSql`, `content`, or the historical
+`contentEncoding: "base64-utf8"` form. Those forms remain supported for
+backward compatibility, but new source packages should prefer external `.sql`
+files. `path` remains as traceability back to the source package file. The
+standalone module definition editor in `tools/module-definition-editor/index.html`
+exposes the module app list and decodes SQL entries to clear text for editing.
+Portal exposes the same client-side editor for administrators from
+`/admin/moduledefinitioneditor`. Portal can also download the stored normalized
+JSON from each module-definition edit page so an applied definition can be moved
+from one OMP installation to another.
+
+The older `scripts/dev/embed-module-definition-sql.ps1` helper is retained only
+for legacy JSON-only definitions. Portal executes repairs on the configured OMP
+database connection, so module definition SQL must not switch databases.
 
 The `compatibleArtifacts` array defines artifact slots, not already-installed
 artifact rows. An artifact zip import uses these rows to validate

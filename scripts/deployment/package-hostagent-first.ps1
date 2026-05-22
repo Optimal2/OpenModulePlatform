@@ -225,6 +225,37 @@ function Copy-ModuleDefinitionsFromManifest {
         $sourcePath = Resolve-DeploymentPath -Path $relativePath -BasePath $RepositoryRoot
         $destinationName = [System.IO.Path]::GetFileName($sourcePath)
         Copy-RequiredFile -Source $sourcePath -Destination (Join-Path $Destination $destinationName)
+
+        $definitionJson = Get-Content -LiteralPath $sourcePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach ($script in @($definitionJson.sqlScripts)) {
+            if ($null -eq $script) {
+                continue
+            }
+
+            $scriptPath = [string]$script.path
+            if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+                continue
+            }
+
+            $normalizedScriptPath = $scriptPath.Replace('\', '/').Trim('/')
+            if ([System.IO.Path]::IsPathRooted($normalizedScriptPath) `
+                    -or $normalizedScriptPath.Contains('../') `
+                    -or $normalizedScriptPath.IndexOf('..\', [StringComparison]::Ordinal) -ge 0) {
+                throw "Module definition SQL path must be relative and stay inside the package: $scriptPath"
+            }
+
+            $resolvedSqlPath = Resolve-DeploymentPath -Path $normalizedScriptPath -BasePath $RepositoryRoot
+            if (Test-Path -LiteralPath $resolvedSqlPath -PathType Leaf) {
+                Copy-RequiredFile -Source $resolvedSqlPath -Destination (Join-Path $Destination $normalizedScriptPath)
+                continue
+            }
+
+            $hasEmbeddedSql = -not [string]::IsNullOrWhiteSpace([string]$script.inlineSql) `
+                -or -not [string]::IsNullOrWhiteSpace([string]$script.content)
+            if (-not $hasEmbeddedSql) {
+                throw "Module definition '$relativePath' references SQL '$scriptPath', but the file was not found and no SQL content is embedded."
+            }
+        }
     }
 }
 

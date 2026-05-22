@@ -21,13 +21,27 @@ the source of truth for:
 - valid artifact slots and compatibility rules
 - module dependencies
 - required schemas, tables, seed rows, settings, permissions, and portal entries
-- idempotent repair SQL embedded directly in the JSON document
+- optional idempotent repair SQL carried as package-local `.sql` files
 
 Every OMP module should keep its latest source definition file at the module
 root and list it in that repository's `omp-components.json`. The generated
 HostAgent-first installer copies those files into the package-local
 `module-definitions` import folder. Portal stores imported definitions in
 `omp.ModuleDefinitionDocuments`.
+
+A portable module package zip can contain one definition JSON plus optional SQL
+files:
+
+```text
+example_module__module-definition__1.2.3.zip
+  module-definition/example_module.module-definition.json
+  sql/repair.sql
+```
+
+The JSON references SQL files through `sqlScripts[].path`. Portal and HostAgent
+resolve those paths inside the package and normalize the SQL into the stored
+definition before execution. Modules that only need OMP module/app metadata and
+artifact slots do not need SQL files.
 
 HostAgent, WorkerManager, and WorkerProcessHost are represented by the
 `omp_core` module definition. The remaining bootstrap exception is operational:
@@ -87,7 +101,7 @@ Standalone browser tools:
 Command-line helpers:
 
 - `scripts/dev/embed-module-definition-sql.ps1` refreshes embedded SQL in a
-  module definition from its source `.sql` files.
+  legacy JSON-only module definition from its source `.sql` files.
 - `scripts/deployment/new-omp-artifact-package.ps1` creates a standard artifact
   package object from a payload folder or payload zip plus optional config files.
 - `scripts/deployment/package-hostagent-first.ps1` builds an installer payload

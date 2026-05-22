@@ -106,7 +106,11 @@ public sealed class PortableModulePackageService
         var definitionsRoot = RequireConfiguredRoot(_options.AvailableModuleDefinitionsRoot, "AvailableModuleDefinitionsRoot");
         var artifactsRoot = RequireConfiguredRoot(_options.AvailableArtifactsRoot, "AvailableArtifactsRoot");
         var definitionPath = ResolveChildFile(definitionsRoot, moduleDefinitionFileName, ".json");
-        var definition = await ReadDefinitionAsync(definitionPath, Path.GetFileName(definitionPath), ct);
+        var definition = await ReadDefinitionAsync(
+            definitionPath,
+            Path.GetFileName(definitionPath),
+            ct,
+            definitionsRoot);
 
         var artifactPaths = Directory.Exists(artifactsRoot)
             ? Directory.EnumerateFiles(artifactsRoot, $"{definition.ModuleKey}__*.zip", SearchOption.TopDirectoryOnly)
@@ -138,7 +142,11 @@ public sealed class PortableModulePackageService
                 ZipFile.ExtractToDirectory(bundlePath, extractedRoot, overwriteFiles: true);
 
                 var definitionPath = FindSingleModuleDefinitionFile(extractedRoot);
-                var definition = await ReadDefinitionAsync(definitionPath, Path.GetFileName(definitionPath), ct);
+                var definition = await ReadDefinitionAsync(
+                    definitionPath,
+                    Path.GetFileName(definitionPath),
+                    ct,
+                    extractedRoot);
                 var packagePaths = Directory.EnumerateFiles(extractedRoot, "*.zip", SearchOption.AllDirectories)
                     .Where(path => !Path.GetFullPath(path).Equals(Path.GetFullPath(bundlePath), StringComparison.OrdinalIgnoreCase))
                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
@@ -586,7 +594,8 @@ public sealed class PortableModulePackageService
     private static async Task<ModuleDefinitionDocumentEditData> ReadDefinitionAsync(
         string path,
         string sourceName,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? externalSqlRoot = null)
     {
         var fileInfo = new FileInfo(path);
         if (fileInfo.Length > MaxDefinitionBytes)
@@ -597,6 +606,13 @@ public sealed class PortableModulePackageService
         var jsonText = await File.ReadAllTextAsync(path, Encoding.UTF8, ct);
         var root = JsonNode.Parse(jsonText)
             ?? throw new InvalidOperationException("The module definition JSON file is empty.");
+        if (!string.IsNullOrWhiteSpace(externalSqlRoot))
+        {
+            root = ModuleDefinitionPackageNormalizer.NormalizeExternalSqlFiles(
+                root,
+                path,
+                externalSqlRoot);
+        }
 
         var moduleKey = GetJsonStringProperty(root, "moduleKey");
         var definitionVersion = GetJsonStringProperty(root, "definitionVersion");

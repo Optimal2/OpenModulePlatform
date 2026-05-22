@@ -212,7 +212,8 @@ public sealed class ArtifactZipImportService
         var definition = await ReadModuleDefinitionAsync(
             definitionPath,
             Path.GetFileName(definitionPath),
-            cancellationToken);
+            cancellationToken,
+            extractionRoot);
 
         var definitionResult = await ImportModuleDefinitionAsync(definition, cancellationToken);
         var artifactResults = new List<ArtifactZipImportResult>();
@@ -485,7 +486,8 @@ public sealed class ArtifactZipImportService
     private static async Task<ModuleDefinitionImportDocument> ReadModuleDefinitionAsync(
         string path,
         string sourceName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? externalSqlRoot = null)
     {
         var fileInfo = new FileInfo(path);
         if (fileInfo.Length > MaxModuleDefinitionBytes)
@@ -497,6 +499,13 @@ public sealed class ArtifactZipImportService
         var jsonText = await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken);
         var root = JsonNode.Parse(jsonText)
             ?? throw new InvalidOperationException("The module definition JSON file is empty.");
+        if (!string.IsNullOrWhiteSpace(externalSqlRoot))
+        {
+            root = ModuleDefinitionPackageNormalizer.NormalizeExternalSqlFiles(
+                root,
+                path,
+                externalSqlRoot);
+        }
 
         var moduleKey = GetJsonStringProperty(root, "moduleKey");
         var definitionVersion = GetJsonStringProperty(root, "definitionVersion");
