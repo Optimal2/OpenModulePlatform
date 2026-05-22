@@ -885,7 +885,7 @@ END;";
         await AcquireModuleDefinitionSqlExecutionLockAsync(connection, sql.CommandTimeoutSeconds);
 
         var executed = 0;
-        foreach (var script in scripts)
+        foreach (var script in scripts.Where(static script => !IsValidationScript(script)))
         {
             if (!string.Equals(script.Execution, "idempotent", StringComparison.OrdinalIgnoreCase))
             {
@@ -995,6 +995,12 @@ END;";
 
         return scripts;
     }
+
+    private static bool IsValidationScript(PortableModuleDefinitionSqlScript script)
+        => string.Equals(script.Phase, "validate", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Phase, "validation", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Execution, "validate", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Execution, "validation", StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)
     {
