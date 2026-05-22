@@ -11,6 +11,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class OmpHostArtifactRepository
 {
+    private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
+
     private readonly SqlConnectionFactory _db;
 
     public OmpHostArtifactRepository(SqlConnectionFactory db)
@@ -652,13 +654,13 @@ WHERE ModuleKey = @ModuleKey;";
                     $"Module definition SQL script '{script.Key}' is not idempotent and cannot be executed by HostAgent folder import.");
             }
 
-            var sqlText = ResolvePortableSqlText(script);
-            if (string.IsNullOrWhiteSpace(sqlText))
+            var originalSqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(originalSqlText))
             {
                 continue;
             }
 
-            var scriptSha256 = ComputeTextSha256(sqlText);
+            var scriptSha256 = ComputeTextSha256(originalSqlText);
             if (!string.IsNullOrWhiteSpace(script.Sha256)
                 && !string.Equals(script.Sha256, scriptSha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -666,6 +668,7 @@ WHERE ModuleKey = @ModuleKey;";
                     $"Module definition SQL script '{script.Key}' content does not match its declared SHA-256.");
             }
 
+            var sqlText = await PatchBootstrapPortalAdminPrincipalAsync(conn, originalSqlText, ct);
             var safety = ValidateSafeModuleDefinitionSql(sqlText);
             if (safety is not null)
             {
@@ -2135,6 +2138,74 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
         return script.Content;
     }
 
+    private static async Task<string> PatchBootstrapPortalAdminPrincipalAsync(
+        SqlConnection conn,
+        string sqlText,
+        CancellationToken ct)
+    {
+        if (!sqlText.Contains(BootstrapPortalAdminPrincipalPlaceholder, StringComparison.Ordinal))
+        {
+            return sqlText;
+        }
+
+        var principal = await ResolveExistingBootstrapPortalAdminPrincipalAsync(conn, ct)
+            ?? throw new InvalidOperationException(
+                "The module definition SQL contains a bootstrap PortalAdmin placeholder, but no existing PortalAdmins principal was found to reuse.");
+
+        var principalLiteral = ToSqlUnicodeLiteral(principal.Principal);
+        var principalTypeLiteral = ToSqlUnicodeLiteral(principal.PrincipalType);
+        var patched = Regex.Replace(
+            sqlText,
+            @"DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';",
+            $"DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = {principalLiteral};",
+            RegexOptions.IgnoreCase);
+
+        // Folder import can execute the same portable SQL as Portal repair. Preserve
+        // the active bootstrap principal type instead of assuming all installs use ADUser.
+        patched = Regex.Replace(
+            patched,
+            @"PrincipalType\s*=\s*N'ADUser'",
+            $"PrincipalType = {principalTypeLiteral}",
+            RegexOptions.IgnoreCase);
+        patched = Regex.Replace(
+            patched,
+            @"VALUES\s*\(\s*@PortalAdminsRoleId\s*,\s*N'ADUser'\s*,\s*@BootstrapPortalAdminPrincipal\s*\)",
+            $"VALUES(@PortalAdminsRoleId, {principalTypeLiteral}, @BootstrapPortalAdminPrincipal)",
+            RegexOptions.IgnoreCase);
+
+        return patched;
+    }
+
+    private static async Task<BootstrapPortalAdminPrincipal?> ResolveExistingBootstrapPortalAdminPrincipalAsync(
+        SqlConnection conn,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1)
+       rp.PrincipalType,
+       rp.Principal
+FROM omp.RolePrincipals rp
+INNER JOIN omp.Roles r ON r.RoleId = rp.RoleId
+WHERE r.Name = N'PortalAdmins'
+  AND NULLIF(LTRIM(RTRIM(rp.PrincipalType)), N'') IS NOT NULL
+  AND NULLIF(LTRIM(RTRIM(rp.Principal)), N'') IS NOT NULL
+  AND rp.Principal NOT IN (N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__', N'REPLACE_ME\UserOrGroup')
+ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE 2 END,
+         rp.Principal;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new BootstrapPortalAdminPrincipal(rdr.GetString(0), rdr.GetString(1));
+    }
+
+    private static string ToSqlUnicodeLiteral(string value)
+        => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+
     private static async Task AcquireModuleDefinitionSqlExecutionLockAsync(SqlConnection conn, CancellationToken ct)
     {
         const string sql = @"
@@ -2389,4 +2460,8 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
         string? ContentEncoding,
         string? Content,
         string? Sha256);
+
+    private sealed record BootstrapPortalAdminPrincipal(
+        string PrincipalType,
+        string Principal);
 }
