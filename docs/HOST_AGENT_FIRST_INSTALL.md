@@ -55,10 +55,10 @@ console usage and troubleshooting.
 The package can be zipped and copied as a single file, or generated as an
 expanded folder by setting `Package.SkipZip = $true` or passing `-SkipZip`.
 The expanded package is self-contained except for environment-specific values in
-the bootstrap configuration files. The graphical installer treats
-`configs\*.json` as selectable installation profiles and keeps the root-level
-`bootstrap.local.sample.json` only for command-line and older automation
-compatibility.
+the bootstrap configuration files. The graphical installer reads
+`configs\*.json` and automatically selects the one profile that matches the
+local computer name. The root-level `bootstrap.local.sample.json` is kept only
+for command-line and older automation compatibility.
 
 ## Environment Configuration Model
 
@@ -145,11 +145,13 @@ be edited later through Portal.
    }
    ```
 
-   When the graphical installer starts without an explicit `--config`, it
-   selects the first profile whose `profile.machineNames`,
-   `hostAgent.hostName`, or `hostAgent.hostKey` matches the local computer
-   name. If no profile matches, the operator must select one manually from the
-   dropdown.
+   When the graphical installer starts, it must find exactly one profile whose
+   `profile.machineNames`, `hostAgent.hostName`, or `hostAgent.hostKey` matches
+   the local computer name. If no profile matches, or if more than one profile
+   matches, the installer stops with instructions instead of falling back to a
+   potentially wrong configuration. Use
+   `tools\bootstrap-config-editor\index.html` to create or adjust a machine-
+   specific config file.
 3. Set at least:
    - `sql.server`
    - `sql.database`
@@ -172,11 +174,30 @@ install-hostagent-first.cmd
 ```
 
 Both entry points open the graphical installer. The EXE requests administrator
-rights, loads `configs\*.json`, lets the operator select an installation
-profile from a dropdown, review common SQL, path, HostAgent, and IIS settings,
-and then run one of the action tabs: install/update, package tools, or
-uninstall. Profile values are read-only in the GUI so operational changes are
-made in the JSON file and then loaded with `Reload config`.
+rights, loads `configs\*.json`, locks onto the profile matching the local
+computer, and shows common SQL, path, HostAgent, and IIS settings as read-only
+values. Operational changes are made in the JSON file and then loaded with
+`Reload config`.
+
+The first visible action is intentionally the safe/common action:
+
+- If no existing installation is detected from the configured HostAgent service,
+  Portal path, or IIS site, the recommended action is `Install OpenModulePlatform`.
+- If an existing installation is detected, the recommended action is
+  `Upgrade existing installation`.
+
+On machines where the matched config resolves valid source repositories, the
+recommended action has a checked option to refresh package objects from source
+before it runs. The refresh copies newer or missing module definitions and
+artifact packages, and treats same-version/different-content packages as
+something to fix before continuing. On production servers without source
+repositories, source-dependent actions are disabled and hidden from the normal
+path.
+
+Advanced actions such as full bootstrap/reinstall, package-only refresh,
+complete package rebuild, and uninstall are behind `Show other functions`.
+They are still available for deliberate maintenance, but the default UI keeps
+them out of the normal operator path.
 
 The `Upgrade / complete` action is a package catch-up action for an existing
 installation. It imports missing, newer, or changed module definition documents,

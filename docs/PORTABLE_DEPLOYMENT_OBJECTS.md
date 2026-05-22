@@ -82,6 +82,7 @@ Standalone browser tools:
 
 - `tools/module-definition-editor/index.html`
 - `tools/artifact-package-editor/index.html`
+- `tools/bootstrap-config-editor/index.html`
 
 Command-line helpers:
 

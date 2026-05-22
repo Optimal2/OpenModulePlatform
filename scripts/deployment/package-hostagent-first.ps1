@@ -1217,6 +1217,10 @@ Set-Content -LiteralPath (Join-Path $sqlRoot 'bootstrap-local.sql') -Value $boot
 Write-Step 'Copying bootstrapper'
 Compress-FolderToZip -Source (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $payloadRoot 'OpenModulePlatform.Bootstrapper.zip')
 Copy-Item -LiteralPath (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper') -Recurse -Force
+$bootstrapConfigEditorSource = Join-Path $RepositoryRoot 'tools\bootstrap-config-editor'
+if (Test-Path -LiteralPath $bootstrapConfigEditorSource -PathType Container) {
+    Copy-Item -LiteralPath $bootstrapConfigEditorSource -Destination (Join-Path $toolsRoot 'bootstrap-config-editor') -Recurse -Force
+}
 
 $rootBootstrapperPublishRoot = Join-Path $buildRoot 'bootstrapper-root'
 Invoke-NativeChecked dotnet 'publish' (Join-Path $RepositoryRoot 'OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.csproj') `
@@ -1478,7 +1482,7 @@ $rootBootstrapConfigPath = Join-Path $packageRoot 'bootstrap.local.sample.json'
 $profileBootstrapConfigPath = Join-Path $configsRoot 'bootstrap.local.sample.json'
 $bootstrapConfigJson | Set-Content -LiteralPath $profileBootstrapConfigPath -Encoding UTF8
 # Keep the root-level file for command-line and older package automation while
-# the GUI now treats configs\*.json as selectable installation profiles.
+# the GUI now locks onto the configs\*.json profile matching the local computer.
 $bootstrapConfigJson | Set-Content -LiteralPath $rootBootstrapConfigPath -Encoding UTF8
 
 $cmd = @'
