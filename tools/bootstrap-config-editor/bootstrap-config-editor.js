@@ -9,6 +9,8 @@ const fields = {
     integratedSecurity: document.getElementById('integratedSecurity'),
     trustServerCertificate: document.getElementById('trustServerCertificate'),
     createDatabase: document.getElementById('createDatabase'),
+    portableEncryptionKey: document.getElementById('portableEncryptionKey'),
+    portableEncryptionKeyEnvironmentVariable: document.getElementById('portableEncryptionKeyEnvironmentVariable'),
     artifactStoreRoot: document.getElementById('artifactStoreRoot'),
     hostAgentInstallPath: document.getElementById('hostAgentInstallPath'),
     localArtifactCacheRoot: document.getElementById('localArtifactCacheRoot'),
@@ -39,6 +41,8 @@ const fileInput = document.getElementById('fileInput');
 const newButton = document.getElementById('newButton');
 const downloadButton = document.getElementById('downloadButton');
 const applyPreviewButton = document.getElementById('applyPreviewButton');
+const generatePortableKeyButton = document.getElementById('generatePortableKeyButton');
+const protectSecretsButton = document.getElementById('protectSecretsButton');
 const jsonPreview = document.getElementById('jsonPreview');
 const message = document.getElementById('message');
 
@@ -47,6 +51,10 @@ function createDefaultConfig() {
         profile: {
             displayName: '',
             machineNames: []
+        },
+        security: {
+            portableEncryptionKey: '',
+            portableEncryptionKeyEnvironmentVariable: ''
         },
         sql: {
             enabled: true,
@@ -78,6 +86,7 @@ function createDefaultConfig() {
             description: 'OpenModulePlatform artifact provisioning agent.',
             serviceAccountName: '',
             serviceAccountPassword: '',
+            serviceAccountCredentialKey: '',
             installPath: 'E:\\OMP\\Services\\HostAgent',
             packagePath: 'payload\\OpenModulePlatform.HostAgent.zip',
             backupExistingInstall: true,
@@ -98,9 +107,16 @@ function createDefaultConfig() {
             iisAppPoolNamePrefix: 'OMP_',
             iisAppPoolUserName: '',
             iisAppPoolPassword: '',
+            iisAppPoolPasswordCredentialKey: '',
             iisAppPoolOverrides: {},
             deployServiceApps: true,
-            servicesRoot: 'E:\\OMP\\Services'
+            servicesRoot: 'E:\\OMP\\Services',
+            credentialStore: {
+                automationMode: '',
+                filePath: '',
+                protectionScope: 'LocalMachine',
+                entropyPurpose: 'OpenModulePlatform.HostAgent.CredentialStore.v1'
+            }
         }
     };
 }
@@ -136,6 +152,7 @@ function getNumber(input, fallback) {
 function loadConfig(config) {
     currentConfig = structuredClone(config);
     const sql = currentConfig.sql ?? {};
+    const security = currentConfig.security ?? {};
     const hostAgent = currentConfig.hostAgent ?? {};
     const profile = currentConfig.profile ?? {};
     const developerSource = currentConfig.developerSource ?? {};
@@ -150,6 +167,8 @@ function loadConfig(config) {
     fields.integratedSecurity.checked = sql.integratedSecurity !== false;
     fields.trustServerCertificate.checked = sql.trustServerCertificate !== false;
     fields.createDatabase.checked = Boolean(sql.createDatabase);
+    fields.portableEncryptionKey.value = security.portableEncryptionKey ?? '';
+    fields.portableEncryptionKeyEnvironmentVariable.value = security.portableEncryptionKeyEnvironmentVariable ?? '';
     fields.artifactStoreRoot.value = currentConfig.artifactStoreRoot ?? '';
     fields.hostAgentInstallPath.value = hostAgent.installPath ?? '';
     fields.localArtifactCacheRoot.value = hostAgent.localArtifactCacheRoot ?? '';
@@ -180,6 +199,7 @@ function loadConfig(config) {
 function buildConfigFromForm() {
     const config = structuredClone(currentConfig);
     config.profile = config.profile ?? {};
+    config.security = config.security ?? {};
     config.sql = config.sql ?? {};
     config.developerSource = config.developerSource ?? {};
     config.hostAgent = config.hostAgent ?? {};
@@ -198,6 +218,8 @@ function buildConfigFromForm() {
     config.sql.scripts = config.sql.scripts ?? [];
     config.sql.artifactVersionOverrides = config.sql.artifactVersionOverrides ?? {};
     config.sql.artifactVersionVariableOverrides = config.sql.artifactVersionVariableOverrides ?? {};
+    config.security.portableEncryptionKey = fields.portableEncryptionKey.value.trim();
+    config.security.portableEncryptionKeyEnvironmentVariable = fields.portableEncryptionKeyEnvironmentVariable.value.trim();
 
     config.developerSource.sourceRoot = fields.developerSourceRoot.value.trim();
     config.developerSource.packageConfigPath = fields.packageConfigPath.value.trim();
@@ -213,6 +235,7 @@ function buildConfigFromForm() {
     config.hostAgent.description = config.hostAgent.description || 'OpenModulePlatform artifact provisioning agent.';
     config.hostAgent.serviceAccountName = fields.serviceAccountName.value.trim();
     config.hostAgent.serviceAccountPassword = fields.serviceAccountPassword.value;
+    config.hostAgent.serviceAccountCredentialKey = config.hostAgent.serviceAccountCredentialKey || '';
     config.hostAgent.installPath = fields.hostAgentInstallPath.value.trim();
     config.hostAgent.packagePath = config.hostAgent.packagePath || 'payload\\OpenModulePlatform.HostAgent.zip';
     config.hostAgent.backupExistingInstall = config.hostAgent.backupExistingInstall !== false;
@@ -233,9 +256,16 @@ function buildConfigFromForm() {
     config.hostAgent.iisAppPoolNamePrefix = fields.iisAppPoolNamePrefix.value.trim();
     config.hostAgent.iisAppPoolUserName = fields.iisAppPoolUserName.value.trim();
     config.hostAgent.iisAppPoolPassword = fields.iisAppPoolPassword.value;
+    config.hostAgent.iisAppPoolPasswordCredentialKey = config.hostAgent.iisAppPoolPasswordCredentialKey || '';
     config.hostAgent.iisAppPoolOverrides = config.hostAgent.iisAppPoolOverrides ?? {};
     config.hostAgent.deployServiceApps = fields.deployServiceApps.checked;
     config.hostAgent.servicesRoot = fields.servicesRoot.value.trim();
+    config.hostAgent.credentialStore = config.hostAgent.credentialStore ?? {
+        automationMode: '',
+        filePath: '',
+        protectionScope: 'LocalMachine',
+        entropyPurpose: 'OpenModulePlatform.HostAgent.CredentialStore.v1'
+    };
     return config;
 }
 
@@ -308,6 +338,98 @@ function downloadJson() {
     showMessage('Bootstrap config JSON downloaded.');
 }
 
+function isEncryptedSecret(value) {
+    return typeof value === 'string' && value.startsWith('enc:aesgcm:v1:');
+}
+
+function bytesToBase64(bytes) {
+    let text = '';
+    for (const byte of bytes) {
+        text += String.fromCharCode(byte);
+    }
+
+    return btoa(text);
+}
+
+function base64ToBytes(value) {
+    const text = atob(value);
+    const bytes = new Uint8Array(text.length);
+    for (let index = 0; index < text.length; index += 1) {
+        bytes[index] = text.charCodeAt(index);
+    }
+
+    return bytes;
+}
+
+async function createPortableKeyBytes(keyText) {
+    const trimmed = keyText.trim();
+    if (!trimmed) {
+        throw new Error('Portable encryption key is required.');
+    }
+
+    if (trimmed.toLowerCase().startsWith('base64:')) {
+        const decoded = base64ToBytes(trimmed.substring('base64:'.length));
+        if (decoded.length !== 32) {
+            throw new Error('Portable encryption key must decode to 32 bytes.');
+        }
+
+        return decoded;
+    }
+
+    const encoded = new TextEncoder().encode(trimmed);
+    return new Uint8Array(await crypto.subtle.digest('SHA-256', encoded));
+}
+
+async function protectPortableSecret(value, keyText) {
+    if (!value || isEncryptedSecret(value)) {
+        return value || '';
+    }
+
+    const keyBytes = await createPortableKeyBytes(keyText);
+    const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt']);
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const plainText = new TextEncoder().encode(value);
+    const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, key, plainText));
+    const cipherText = encrypted.slice(0, encrypted.length - 16);
+    const tag = encrypted.slice(encrypted.length - 16);
+    return `enc:aesgcm:v1:${bytesToBase64(nonce)}:${bytesToBase64(cipherText)}:${bytesToBase64(tag)}`;
+}
+
+async function protectSecrets() {
+    try {
+        const config = buildConfigFromForm();
+        const keyText = config.security?.portableEncryptionKey ?? '';
+        config.hostAgent.serviceAccountPassword = await protectPortableSecret(config.hostAgent.serviceAccountPassword, keyText);
+        config.hostAgent.iisAppPoolPassword = await protectPortableSecret(config.hostAgent.iisAppPoolPassword, keyText);
+
+        for (const identity of Object.values(config.hostAgent.iisAppPoolOverrides ?? {})) {
+            if (identity && typeof identity === 'object') {
+                const hasPascalCasePassword = Object.prototype.hasOwnProperty.call(identity, 'Password')
+                    && !Object.prototype.hasOwnProperty.call(identity, 'password');
+                const password = hasPascalCasePassword ? identity.Password : identity.password;
+                const encrypted = await protectPortableSecret(password ?? '', keyText);
+                if (hasPascalCasePassword) {
+                    identity.Password = encrypted;
+                } else {
+                    identity.password = encrypted;
+                }
+            }
+        }
+
+        loadConfig(config);
+        showMessage('Password fields were encrypted in the JSON preview.');
+    } catch (error) {
+        showMessage(error.message, true);
+    }
+}
+
+function generatePortableKey() {
+    const key = crypto.getRandomValues(new Uint8Array(32));
+    fields.portableEncryptionKey.value = `base64:${bytesToBase64(key)}`;
+    updatePreview();
+    showMessage('Portable encryption key generated.');
+}
+
 fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     if (!file) {
@@ -332,6 +454,8 @@ newButton.addEventListener('click', () => {
 
 downloadButton.addEventListener('click', downloadJson);
 applyPreviewButton.addEventListener('click', applyPreview);
+generatePortableKeyButton.addEventListener('click', generatePortableKey);
+protectSecretsButton.addEventListener('click', protectSecrets);
 
 for (const field of Object.values(fields)) {
     field.addEventListener('input', updatePreview);

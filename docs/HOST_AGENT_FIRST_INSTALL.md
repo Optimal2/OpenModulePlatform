@@ -160,6 +160,8 @@ be edited later through Portal.
    - `hostAgent.serviceName`
    - `hostAgent.serviceAccountName`, when HostAgent must run as a specific
      Windows account instead of LocalSystem
+   - `security.portableEncryptionKey` plus encrypted password values when the
+     config must carry service or IIS app-pool passwords
    - `hostAgent.installPath`
    - `hostAgent.hostKey`, when the environment should use a real host key
      instead of the neutral `sample-host` bootstrap default
@@ -442,10 +444,34 @@ For example, a protected VGR package can set:
 - `HostAgent.IisAppPoolOverrides` when one web app must run under a dedicated
   IIS app-pool account. Override keys are matched against app instance key,
   route path, and final app-pool name; apps without a match
-  keep using the package-level `RunAsUser`/`RunAsPassword` identity.
+  keep using the package-level app-pool identity.
 - `HostAgent:FileMirrors` in `hostAgent.appSettings` for shared Content files
 - separate SQL/bootstrap JSON files for test and production if paths or host
   keys differ
+
+## Password Handling
+
+New HostAgent-first packages should not store clear-text passwords in either
+bootstrap JSON or generated HostAgent appsettings.
+
+The bootstrap JSON may contain portable encrypted values in fields such as
+`hostAgent.serviceAccountPassword`, `hostAgent.iisAppPoolPassword`, and
+`hostAgent.iisAppPoolOverrides.*.password`. Use
+`tools\bootstrap-config-editor\index.html` and its `Encrypt password fields`
+action to produce values in the `enc:aesgcm:v1:...` format. The portable key can
+be stored as `security.portableEncryptionKey` or supplied through
+`security.portableEncryptionKeyEnvironmentVariable`. This encryption is
+package-portable by design so the installer can run on the target machine; keep
+the key with the same care as the installer package.
+
+During installation the bootstrapper decrypts those values only in memory,
+writes them into `hostagent.credentials.json`, and protects that file with
+Windows DPAPI using `HostAgent:CredentialStore:ProtectionScope`. Generated
+HostAgent appsettings contain only credential keys such as
+`HostAgent:IisAppPoolPasswordCredentialKey` and
+`HostAgent:SelfUpgrade:ServiceAccountPasswordCredentialKey`. With the default
+`LocalMachine` protection scope, the stored password cannot be moved to another
+computer and decrypted there.
 
 Only HostAgent should need a manual service bootstrap. Once HostAgent is running,
 application versions should be changed through OMP artifacts and instance

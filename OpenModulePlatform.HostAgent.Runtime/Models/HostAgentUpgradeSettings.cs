@@ -12,6 +12,8 @@ public sealed class HostAgentUpgradeSettings
 
     public string ServiceAccountPassword { get; set; } = string.Empty;
 
+    public string ServiceAccountPasswordCredentialKey { get; set; } = string.Empty;
+
     public int TakeoverStopTimeoutSeconds { get; set; } = 45;
 
     public bool DeletePreviousServiceAfterTakeover { get; set; } = true;

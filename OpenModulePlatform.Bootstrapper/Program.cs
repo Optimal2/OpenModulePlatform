@@ -10,6 +10,8 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
+using OpenModulePlatform.HostAgent.Runtime.Models;
+using OpenModulePlatform.HostAgent.Runtime.Services;
 
 namespace OpenModulePlatform.Bootstrapper;
 
@@ -2245,14 +2247,18 @@ VALUES
             }
 
             RunHostAgentOnce(executablePath, installPath);
+            var serviceAccountPassword = ResolveInstallerSecret(
+                hostAgent.ServiceAccountPassword,
+                config,
+                "HostAgent:ServiceAccountPassword");
 
             if (serviceExists)
             {
-                ConfigureService(hostAgent, executablePath);
+                ConfigureService(hostAgent, executablePath, serviceAccountPassword);
             }
             else
             {
-                CreateService(hostAgent, executablePath);
+                CreateService(hostAgent, executablePath, serviceAccountPassword);
             }
 
             if (hostAgent.StartService)
@@ -2271,6 +2277,7 @@ VALUES
         var hostAgent = config.HostAgent;
         var settings = hostAgent.AppSettings?.DeepClone()
             ?? CreateDefaultHostAgentSettings(config);
+        var credentialPlan = CreateHostAgentCredentialPlan(config, installPath);
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -2284,13 +2291,15 @@ VALUES
         };
 
         ReplaceTokens(settings, tokens);
-        SynchronizeHostAgentSettings(settings, config);
+        SynchronizeHostAgentSettings(settings, config, credentialPlan);
 
         var fileName = string.IsNullOrWhiteSpace(hostAgent.SettingsFileName)
             ? "appsettings.Production.json"
             : hostAgent.SettingsFileName.Trim();
         var path = CombineUnderRoot(installPath, fileName);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        await WriteHostAgentCredentialStoreAsync(credentialPlan);
 
         await File.WriteAllTextAsync(
             path,
@@ -2304,7 +2313,10 @@ VALUES
         RunProcess(executablePath, ["--run-once"], workingDirectory: installPath);
     }
 
-    private static void SynchronizeHostAgentSettings(JsonNode settings, BootstrapConfig config)
+    private static void SynchronizeHostAgentSettings(
+        JsonNode settings,
+        BootstrapConfig config,
+        HostAgentCredentialBootstrapPlan credentialPlan)
     {
         if (settings is not JsonObject root)
         {
@@ -2332,12 +2344,17 @@ VALUES
         hostAgentSettings["PortalPhysicalPath"] = hostAgent.PortalPhysicalPath;
         hostAgentSettings["IisAppPoolNamePrefix"] = hostAgent.IisAppPoolNamePrefix;
         hostAgentSettings["IisAppPoolUserName"] = hostAgent.IisAppPoolUserName;
-        hostAgentSettings["IisAppPoolPassword"] = hostAgent.IisAppPoolPassword;
-        if (hostAgent.IisAppPoolOverrides.Count > 0)
+        hostAgentSettings["IisAppPoolPasswordCredentialKey"] = credentialPlan.DefaultIisAppPoolCredentialKey;
+        hostAgentSettings.Remove("IisAppPoolPassword");
+        if (credentialPlan.IisAppPoolOverrides.Count > 0)
         {
             hostAgentSettings["IisAppPoolOverrides"] = JsonSerializer.SerializeToNode(
-                hostAgent.IisAppPoolOverrides,
+                credentialPlan.IisAppPoolOverrides,
                 JsonOptions);
+        }
+        else
+        {
+            hostAgentSettings.Remove("IisAppPoolOverrides");
         }
 
         hostAgentSettings["DeployServiceApps"] = hostAgent.DeployServiceApps;
@@ -2347,24 +2364,305 @@ VALUES
         selfUpgrade["InstallRoot"] = hostAgent.ServicesRoot;
         selfUpgrade["ServiceNamePrefix"] = hostAgent.ServiceName;
         selfUpgrade["ServiceAccountName"] = hostAgent.ServiceAccountName;
-        selfUpgrade["ServiceAccountPassword"] = hostAgent.ServiceAccountPassword;
+        selfUpgrade["ServiceAccountPasswordCredentialKey"] = credentialPlan.ServiceAccountCredentialKey;
+        selfUpgrade.Remove("ServiceAccountPassword");
 
         var credentialStore = GetOrCreateJsonObject(hostAgentSettings, "CredentialStore");
-        SetJsonValueIfMissing(credentialStore, "AutomationMode", "Disabled");
-        SetJsonValueIfMissing(credentialStore, "FilePath", string.Empty);
-        SetJsonValueIfMissing(credentialStore, "ProtectionScope", "LocalMachine");
-        SetJsonValueIfMissing(
-            credentialStore,
-            "EntropyPurpose",
-            "OpenModulePlatform.HostAgent.CredentialStore.v1");
+        credentialStore["AutomationMode"] = credentialPlan.StoreSettings.AutomationMode;
+        credentialStore["FilePath"] = credentialPlan.StoreSettings.FilePath;
+        credentialStore["ProtectionScope"] = credentialPlan.StoreSettings.ProtectionScope;
+        credentialStore["EntropyPurpose"] = credentialPlan.StoreSettings.EntropyPurpose;
     }
 
-    private static void SetJsonValueIfMissing(JsonObject parent, string propertyName, string value)
+    private static HostAgentCredentialBootstrapPlan CreateHostAgentCredentialPlan(
+        BootstrapConfig config,
+        string installPath)
     {
-        if (!parent.ContainsKey(propertyName))
+        var hostAgent = config.HostAgent;
+        var credentials = new List<HostAgentPlainTextCredential>();
+        var overrides = new Dictionary<string, HostAgentIisAppPoolIdentitySettings>(StringComparer.OrdinalIgnoreCase);
+
+        var serviceAccountPassword = ResolveInstallerSecret(
+            hostAgent.ServiceAccountPassword,
+            config,
+            "HostAgent:ServiceAccountPassword");
+        var serviceAccountCredentialKey = ResolveCredentialKey(
+            hostAgent.ServiceAccountCredentialKey,
+            serviceAccountPassword,
+            "hostagent:self-upgrade");
+        AddCredentialIfConfigured(
+            credentials,
+            serviceAccountCredentialKey,
+            hostAgent.ServiceAccountName,
+            serviceAccountPassword);
+
+        var defaultIisPassword = ResolveInstallerSecret(
+            hostAgent.IisAppPoolPassword,
+            config,
+            "HostAgent:IisAppPoolPassword");
+        var defaultIisCredentialKey = ResolveCredentialKey(
+            hostAgent.IisAppPoolPasswordCredentialKey,
+            defaultIisPassword,
+            "iis:default");
+        AddCredentialIfConfigured(
+            credentials,
+            defaultIisCredentialKey,
+            hostAgent.IisAppPoolUserName,
+            defaultIisPassword);
+
+        foreach (var pair in hostAgent.IisAppPoolOverrides)
         {
-            parent[propertyName] = value;
+            var configured = pair.Value;
+            if (configured is null)
+            {
+                continue;
+            }
+
+            var overridePassword = ResolveInstallerSecret(
+                configured.Password,
+                config,
+                $"HostAgent:IisAppPoolOverrides:{pair.Key}:Password");
+            var overrideCredentialKey = ResolveCredentialKey(
+                configured.PasswordCredentialKey,
+                overridePassword,
+                "iis:override:" + SanitizeCredentialKey(pair.Key));
+
+            AddCredentialIfConfigured(
+                credentials,
+                overrideCredentialKey,
+                configured.UserName,
+                overridePassword);
+
+            overrides[pair.Key] = new HostAgentIisAppPoolIdentitySettings
+            {
+                UserName = configured.UserName,
+                PasswordCredentialKey = overrideCredentialKey
+            };
         }
+
+        var hasCredentialReferences = !string.IsNullOrWhiteSpace(serviceAccountCredentialKey)
+            || !string.IsNullOrWhiteSpace(defaultIisCredentialKey)
+            || overrides.Values.Any(static value => !string.IsNullOrWhiteSpace(value.PasswordCredentialKey));
+        var storeSettings = CreateCredentialStoreSettings(
+            hostAgent.CredentialStore,
+            installPath,
+            credentials.Count > 0 || hasCredentialReferences);
+
+        if (credentials.Count > 0 && !storeSettings.IsEnabled())
+        {
+            throw new InvalidOperationException(
+                "HostAgent credential store must be enabled when installer credentials are configured.");
+        }
+
+        return new HostAgentCredentialBootstrapPlan(
+            storeSettings,
+            serviceAccountCredentialKey,
+            defaultIisCredentialKey,
+            overrides,
+            credentials);
+    }
+
+    private static HostAgentCredentialStoreSettings CreateCredentialStoreSettings(
+        HostAgentCredentialStoreBootstrapOptions options,
+        string installPath,
+        bool isRequired)
+    {
+        var automationMode = string.IsNullOrWhiteSpace(options.AutomationMode)
+            ? (isRequired ? HostAgentCredentialAutomationModes.Full : HostAgentCredentialAutomationModes.Disabled)
+            : options.AutomationMode.Trim();
+
+        var filePath = string.IsNullOrWhiteSpace(options.FilePath) && isRequired
+            ? Path.Combine(Path.GetFullPath(installPath), "hostagent.credentials.json")
+            : options.FilePath?.Trim() ?? string.Empty;
+
+        var settings = new HostAgentCredentialStoreSettings
+        {
+            AutomationMode = automationMode,
+            FilePath = filePath,
+            ProtectionScope = string.IsNullOrWhiteSpace(options.ProtectionScope)
+                ? HostAgentCredentialProtectionScopes.LocalMachine
+                : options.ProtectionScope.Trim(),
+            EntropyPurpose = string.IsNullOrWhiteSpace(options.EntropyPurpose)
+                ? "OpenModulePlatform.HostAgent.CredentialStore.v1"
+                : options.EntropyPurpose.Trim()
+        };
+        settings.Validate();
+        return settings;
+    }
+
+    private static async Task WriteHostAgentCredentialStoreAsync(HostAgentCredentialBootstrapPlan credentialPlan)
+    {
+        if (credentialPlan.Credentials.Count == 0)
+        {
+            return;
+        }
+
+        var settings = credentialPlan.StoreSettings;
+        settings.Validate();
+        var path = settings.ResolveFilePath();
+        var document = File.Exists(path)
+            ? JsonSerializer.Deserialize<HostAgentCredentialStoreDocument>(
+                await File.ReadAllTextAsync(path),
+                JsonOptions) ?? new HostAgentCredentialStoreDocument()
+            : new HostAgentCredentialStoreDocument();
+
+        document.Credentials ??= new Dictionary<string, HostAgentStoredCredentialEntry>(StringComparer.OrdinalIgnoreCase);
+        document.Credentials = new Dictionary<string, HostAgentStoredCredentialEntry>(
+            document.Credentials,
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var credential in credentialPlan.Credentials)
+        {
+            document.Credentials[credential.Key] = new HostAgentStoredCredentialEntry
+            {
+                UserName = credential.UserName,
+                EncryptedPassword = HostAgentCredentialStoreService.ProtectPassword(credential.Password, settings),
+                ProtectionProvider = "WindowsDpapi",
+                ProtectionScope = settings.ProtectionScope,
+                Description = "Written by OpenModulePlatform bootstrapper.",
+                UpdatedUtc = DateTimeOffset.UtcNow
+            };
+        }
+
+        document.UpdatedUtc = DateTimeOffset.UtcNow;
+
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await File.WriteAllTextAsync(
+            path,
+            JsonSerializer.Serialize(document, JsonOptions),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static void AddCredentialIfConfigured(
+        List<HostAgentPlainTextCredential> credentials,
+        string key,
+        string userName,
+        string password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new InvalidOperationException("Credential key must be configured when a password is configured.");
+        }
+
+        credentials.Add(new HostAgentPlainTextCredential(key.Trim(), userName.Trim(), password));
+    }
+
+    private static string ResolveCredentialKey(string configuredKey, string password, string defaultKey)
+        => !string.IsNullOrWhiteSpace(configuredKey)
+            ? configuredKey.Trim()
+            : string.IsNullOrWhiteSpace(password)
+                ? string.Empty
+                : defaultKey;
+
+    private static string SanitizeCredentialKey(string value)
+    {
+        var chars = value
+            .Trim()
+            .Select(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '-' or '_' ? ch : '_')
+            .ToArray();
+        var result = new string(chars).Trim('_');
+        return string.IsNullOrWhiteSpace(result) ? Guid.NewGuid().ToString("N") : result;
+    }
+
+    private static string ResolveInstallerSecret(
+        string? value,
+        BootstrapConfig config,
+        string fieldName)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        if (!IsPortableEncryptedSecret(value))
+        {
+            return value;
+        }
+
+        var key = ResolvePortableEncryptionKey(config, fieldName);
+        return UnprotectPortableInstallerSecret(value.Trim(), key);
+    }
+
+    private static bool IsPortableEncryptedSecret(string value)
+        => value.TrimStart().StartsWith("enc:aesgcm:v1:", StringComparison.Ordinal);
+
+    private static byte[] ResolvePortableEncryptionKey(BootstrapConfig config, string fieldName)
+    {
+        var envName = config.Security.PortableEncryptionKeyEnvironmentVariable?.Trim();
+        var keyText = !string.IsNullOrWhiteSpace(envName)
+            ? Environment.GetEnvironmentVariable(envName)
+            : null;
+        keyText = string.IsNullOrWhiteSpace(keyText)
+            ? config.Security.PortableEncryptionKey
+            : keyText;
+
+        if (string.IsNullOrWhiteSpace(keyText))
+        {
+            throw new InvalidOperationException(
+                $"{fieldName} is encrypted, but Security:PortableEncryptionKey or Security:PortableEncryptionKeyEnvironmentVariable is not configured.");
+        }
+
+        var trimmed = keyText.Trim();
+        if (trimmed.StartsWith("base64:", StringComparison.OrdinalIgnoreCase))
+        {
+            var decoded = Convert.FromBase64String(trimmed["base64:".Length..]);
+            if (decoded.Length != 32)
+            {
+                throw new InvalidOperationException("Security:PortableEncryptionKey base64 value must decode to 32 bytes.");
+            }
+
+            return decoded;
+        }
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(trimmed));
+    }
+
+    private static string UnprotectPortableInstallerSecret(string encryptedValue, byte[] key)
+    {
+        var parts = encryptedValue.Trim().Split(':');
+        if (parts.Length != 6
+            || parts[0] != "enc"
+            || parts[1] != "aesgcm"
+            || parts[2] != "v1")
+        {
+            throw new InvalidOperationException("Encrypted installer secret has an unsupported format.");
+        }
+
+        var nonce = Convert.FromBase64String(parts[3]);
+        var cipherText = Convert.FromBase64String(parts[4]);
+        var tag = Convert.FromBase64String(parts[5]);
+        var plainText = new byte[cipherText.Length];
+        using var aes = new AesGcm(key, tag.Length);
+        aes.Decrypt(nonce, cipherText, tag, plainText);
+        return Encoding.UTF8.GetString(plainText);
+    }
+
+    private static string ProtectPortableInstallerSecret(string value, byte[] key)
+    {
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var plainText = Encoding.UTF8.GetBytes(value);
+        var cipherText = new byte[plainText.Length];
+        var tag = new byte[16];
+        using var aes = new AesGcm(key, tag.Length);
+        aes.Encrypt(nonce, plainText, cipherText, tag);
+        return string.Join(
+            ':',
+            "enc",
+            "aesgcm",
+            "v1",
+            Convert.ToBase64String(nonce),
+            Convert.ToBase64String(cipherText),
+            Convert.ToBase64String(tag));
     }
 
     private static JsonObject GetOrCreateJsonObject(JsonObject parent, string propertyName)
@@ -2436,8 +2734,8 @@ VALUES
                         PortalPhysicalPath = hostAgent.PortalPhysicalPath,
                         IisAppPoolNamePrefix = hostAgent.IisAppPoolNamePrefix,
                         IisAppPoolUserName = hostAgent.IisAppPoolUserName,
-                        IisAppPoolPassword = hostAgent.IisAppPoolPassword,
-                        IisAppPoolOverrides = hostAgent.IisAppPoolOverrides,
+                        IisAppPoolPasswordCredentialKey = string.Empty,
+                        IisAppPoolOverrides = new Dictionary<string, object>(),
                         DeployServiceApps = hostAgent.DeployServiceApps,
                         ServicesRoot = hostAgent.ServicesRoot,
                         SelfUpgrade = new
@@ -2446,7 +2744,7 @@ VALUES
                             InstallRoot = hostAgent.ServicesRoot,
                             ServiceNamePrefix = hostAgent.ServiceName,
                             ServiceAccountName = hostAgent.ServiceAccountName,
-                            ServiceAccountPassword = hostAgent.ServiceAccountPassword,
+                            ServiceAccountPasswordCredentialKey = string.Empty,
                             TakeoverStopTimeoutSeconds = 45,
                             DeletePreviousServiceAfterTakeover = true,
                             StartPreparedService = true
@@ -3044,18 +3342,24 @@ VALUES
         RunProcess(GetScPath(), ["start", serviceName]);
     }
 
-    private static void CreateService(HostAgentInstallOptions hostAgent, string executablePath)
+    private static void CreateService(
+        HostAgentInstallOptions hostAgent,
+        string executablePath,
+        string serviceAccountPassword)
     {
         Console.WriteLine($"> Create service {hostAgent.ServiceName}");
-        var arguments = CreateServiceArguments("create", hostAgent, executablePath);
+        var arguments = CreateServiceArguments("create", hostAgent, executablePath, serviceAccountPassword);
         RunProcess(GetScPath(), arguments);
         SetServiceDescription(hostAgent);
     }
 
-    private static void ConfigureService(HostAgentInstallOptions hostAgent, string executablePath)
+    private static void ConfigureService(
+        HostAgentInstallOptions hostAgent,
+        string executablePath,
+        string serviceAccountPassword)
     {
         Console.WriteLine($"> Configure service {hostAgent.ServiceName}");
-        var arguments = CreateServiceArguments("config", hostAgent, executablePath);
+        var arguments = CreateServiceArguments("config", hostAgent, executablePath, serviceAccountPassword);
         RunProcess(GetScPath(), arguments);
         SetServiceDescription(hostAgent);
     }
@@ -3063,7 +3367,8 @@ VALUES
     private static string[] CreateServiceArguments(
         string verb,
         HostAgentInstallOptions hostAgent,
-        string executablePath)
+        string executablePath,
+        string serviceAccountPassword)
     {
         var arguments = new List<string>
         {
@@ -3082,10 +3387,10 @@ VALUES
             arguments.Add("obj=");
             arguments.Add(hostAgent.ServiceAccountName.Trim());
 
-            if (!string.IsNullOrWhiteSpace(hostAgent.ServiceAccountPassword))
+            if (!string.IsNullOrWhiteSpace(serviceAccountPassword))
             {
                 arguments.Add("password=");
-                arguments.Add(hostAgent.ServiceAccountPassword);
+                arguments.Add(serviceAccountPassword);
             }
         }
 
@@ -3481,6 +3786,8 @@ internal sealed class BootstrapConfig
 {
     public BootstrapProfileOptions Profile { get; set; } = new();
 
+    public BootstrapSecurityOptions Security { get; set; } = new();
+
     public SqlBootstrapOptions Sql { get; set; } = new();
 
     public DeveloperSourceOptions DeveloperSource { get; set; } = new();
@@ -3499,6 +3806,13 @@ internal sealed class BootstrapProfileOptions
     public string DisplayName { get; set; } = string.Empty;
 
     public List<string> MachineNames { get; set; } = [];
+}
+
+internal sealed class BootstrapSecurityOptions
+{
+    public string PortableEncryptionKey { get; set; } = string.Empty;
+
+    public string PortableEncryptionKeyEnvironmentVariable { get; set; } = string.Empty;
 }
 
 internal sealed class DeveloperSourceOptions
@@ -3579,6 +3893,8 @@ internal sealed class HostAgentInstallOptions
 
     public string ServiceAccountPassword { get; set; } = string.Empty;
 
+    public string ServiceAccountCredentialKey { get; set; } = string.Empty;
+
     public string InstallPath { get; set; } = string.Empty;
 
     public string PackagePath { get; set; } = string.Empty;
@@ -3619,11 +3935,15 @@ internal sealed class HostAgentInstallOptions
 
     public string IisAppPoolPassword { get; set; } = string.Empty;
 
+    public string IisAppPoolPasswordCredentialKey { get; set; } = string.Empty;
+
     public Dictionary<string, IisAppPoolIdentityOptions> IisAppPoolOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public bool DeployServiceApps { get; set; } = true;
 
     public string ServicesRoot { get; set; } = string.Empty;
+
+    public HostAgentCredentialStoreBootstrapOptions CredentialStore { get; set; } = new();
 
     public JsonNode? AppSettings { get; set; }
 }
@@ -3633,6 +3953,26 @@ internal sealed class IisAppPoolIdentityOptions
     public string UserName { get; set; } = string.Empty;
 
     public string Password { get; set; } = string.Empty;
+
+    public string PasswordCredentialKey { get; set; } = string.Empty;
 }
+
+internal sealed class HostAgentCredentialStoreBootstrapOptions
+{
+    public string AutomationMode { get; set; } = string.Empty;
+
+    public string FilePath { get; set; } = string.Empty;
+
+    public string ProtectionScope { get; set; } = HostAgentCredentialProtectionScopes.LocalMachine;
+
+    public string EntropyPurpose { get; set; } = "OpenModulePlatform.HostAgent.CredentialStore.v1";
+}
+
+internal sealed record HostAgentCredentialBootstrapPlan(
+    HostAgentCredentialStoreSettings StoreSettings,
+    string ServiceAccountCredentialKey,
+    string DefaultIisAppPoolCredentialKey,
+    IReadOnlyDictionary<string, HostAgentIisAppPoolIdentitySettings> IisAppPoolOverrides,
+    IReadOnlyList<HostAgentPlainTextCredential> Credentials);
 
 internal sealed record ProcessResult(int ExitCode, string StdOut, string StdErr);

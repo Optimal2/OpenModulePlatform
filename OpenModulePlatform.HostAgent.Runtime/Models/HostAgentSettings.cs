@@ -50,6 +50,8 @@ public sealed class HostAgentSettings
 
     public string IisAppPoolPassword { get; set; } = string.Empty;
 
+    public string IisAppPoolPasswordCredentialKey { get; set; } = string.Empty;
+
     public Dictionary<string, HostAgentIisAppPoolIdentitySettings> IisAppPoolOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public string WebAppDataProtectionKeyPath { get; set; } = string.Empty;
@@ -232,6 +234,8 @@ public sealed class HostAgentIisAppPoolIdentitySettings
     public string UserName { get; set; } = string.Empty;
 
     public string Password { get; set; } = string.Empty;
+
+    public string PasswordCredentialKey { get; set; } = string.Empty;
 }
 
 public static class HostAgentCredentialAutomationModes

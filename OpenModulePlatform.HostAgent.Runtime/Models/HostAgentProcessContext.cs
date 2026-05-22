@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Models;
@@ -106,6 +105,6 @@ public sealed class HostAgentProcessContext
             return informational.Trim();
         }
 
-        return FileVersionInfo.GetVersionInfo(assembly.Location).ProductVersion ?? "0.0.0";
+        return assembly.GetName().Version?.ToString() ?? "0.0.0";
     }
 }
