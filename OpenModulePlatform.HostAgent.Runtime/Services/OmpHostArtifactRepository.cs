@@ -645,8 +645,49 @@ WHERE ModuleKey = @ModuleKey;";
         await conn.OpenAsync(ct);
         await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
 
+        var validationScripts = scripts.Where(IsValidationScript).ToList();
+        if (validationScripts.Count > 0)
+        {
+            var needsRepair = false;
+            foreach (var validationScript in validationScripts)
+            {
+                var validationSql = ResolvePortableSqlText(validationScript)
+                    ?? throw new InvalidOperationException(
+                        $"Module definition validation script '{validationScript.Key}' has no SQL content.");
+                var validationSha256 = ComputeTextSha256(validationSql);
+                if (!string.IsNullOrWhiteSpace(validationScript.Sha256)
+                    && !string.Equals(validationScript.Sha256, validationSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Module definition validation script '{validationScript.Key}' content does not match its declared SHA-256.");
+                }
+
+                var validationSafety = ValidateReadOnlyModuleDefinitionSql(validationSql);
+                if (validationSafety is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"Module definition validation script '{validationScript.Key}' was blocked: {validationSafety}");
+                }
+
+                try
+                {
+                    var validation = await ExecuteModuleDefinitionValidationSqlAsync(conn, validationSql, ct);
+                    needsRepair = needsRepair || !validation.IsHealthy;
+                }
+                catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+                {
+                    needsRepair = true;
+                }
+            }
+
+            if (!needsRepair)
+            {
+                return 0;
+            }
+        }
+
         var executed = 0;
-        foreach (var script in scripts)
+        foreach (var script in scripts.Where(static script => !IsValidationScript(script)))
         {
             if (!string.Equals(script.Execution, "idempotent", StringComparison.OrdinalIgnoreCase))
             {
@@ -2147,6 +2188,12 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
         return scripts;
     }
 
+    private static bool IsValidationScript(PortableModuleDefinitionSqlScript script)
+        => string.Equals(script.Phase, "validate", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Phase, "validation", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Execution, "validate", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Execution, "validation", StringComparison.OrdinalIgnoreCase);
+
     private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)
     {
         if (!string.IsNullOrWhiteSpace(script.InlineSql))
@@ -2313,6 +2360,101 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    private static async Task<ModuleDefinitionValidationResult> ExecuteModuleDefinitionValidationSqlAsync(
+        SqlConnection conn,
+        string sqlText,
+        CancellationToken ct)
+    {
+        ModuleDefinitionValidationResult? result = null;
+        foreach (var batch in SplitSqlBatches(sqlText))
+        {
+            if (string.IsNullOrWhiteSpace(batch))
+            {
+                continue;
+            }
+
+            await using var cmd = new SqlCommand(batch, conn)
+            {
+                CommandTimeout = 3600
+            };
+            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            do
+            {
+                if (await rdr.ReadAsync(ct))
+                {
+                    result = ReadModuleDefinitionValidationResult(rdr);
+                }
+            }
+            while (await rdr.NextResultAsync(ct));
+        }
+
+        return result ?? new ModuleDefinitionValidationResult(
+            false,
+            "The validation script did not return a result row.");
+    }
+
+    private static ModuleDefinitionValidationResult ReadModuleDefinitionValidationResult(SqlDataReader rdr)
+    {
+        var healthyOrdinal = TryGetOrdinal(rdr, "IsHealthy") ?? 0;
+        if (healthyOrdinal >= rdr.FieldCount)
+        {
+            throw new InvalidOperationException("The validation result must contain an IsHealthy column or at least one column.");
+        }
+
+        var messageOrdinal = TryGetOrdinal(rdr, "Message");
+        var isHealthy = ConvertValidationBoolean(rdr.GetValue(healthyOrdinal))
+            ?? throw new InvalidOperationException("The validation result IsHealthy value must be true/false or 1/0.");
+        var message = messageOrdinal.HasValue && !rdr.IsDBNull(messageOrdinal.Value)
+            ? Convert.ToString(rdr.GetValue(messageOrdinal.Value))
+            : null;
+
+        return new ModuleDefinitionValidationResult(isHealthy, message);
+    }
+
+    private static int? TryGetOrdinal(SqlDataReader rdr, string name)
+    {
+        for (var index = 0; index < rdr.FieldCount; index++)
+        {
+            if (string.Equals(rdr.GetName(index), name, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool? ConvertValidationBoolean(object? value)
+    {
+        if (value is null or DBNull)
+        {
+            return null;
+        }
+
+        if (value is bool boolean)
+        {
+            return boolean;
+        }
+
+        if (value is byte or short or int or long or decimal)
+        {
+            return Convert.ToDecimal(value) != 0m;
+        }
+
+        var text = Convert.ToString(value)?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return text.ToLowerInvariant() switch
+        {
+            "1" or "true" or "ok" or "healthy" or "pass" or "passed" => true,
+            "0" or "false" or "error" or "unhealthy" or "fail" or "failed" => false,
+            _ => null
+        };
+    }
+
     private static async Task ExecuteSqlBatchesAsync(SqlConnection conn, string sqlText, CancellationToken ct)
     {
         foreach (var batch in SplitSqlBatches(sqlText))
@@ -2377,6 +2519,21 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
         }
 
         return null;
+    }
+
+    private static string? ValidateReadOnlyModuleDefinitionSql(string sqlText)
+    {
+        var safety = ValidateSafeModuleDefinitionSql(sqlText);
+        if (safety is not null)
+        {
+            return safety;
+        }
+
+        return Regex.IsMatch(
+            sqlText,
+            @"(?is)\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE|DENY)\b")
+            ? "Validation SQL must be read-only and return an IsHealthy result."
+            : null;
     }
 
     private static string ComputeTextSha256(string text)
@@ -2489,6 +2646,10 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
         string? ContentEncoding,
         string? Content,
         string? Sha256);
+
+    private sealed record ModuleDefinitionValidationResult(
+        bool IsHealthy,
+        string? Message);
 
     private sealed record BootstrapPortalAdminPrincipal(
         string PrincipalType,

@@ -1983,8 +1983,25 @@ WHERE ModuleKey = @ModuleKey;";
             moduleDefinitionDocumentId,
             ct);
 
+        var orderedScripts = scripts
+            .OrderBy(static item => item.Order)
+            .ThenBy(static item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var validationNeedsRepair = false;
+        var validationBlocked = false;
         var rows = new List<ModuleDefinitionSqlCheckRow>(scripts.Count);
-        foreach (var script in scripts.OrderBy(static item => item.Order).ThenBy(static item => item.Key, StringComparer.OrdinalIgnoreCase))
+        foreach (var script in orderedScripts.Where(IsValidationScript))
+        {
+            var validationRow = await BuildModuleDefinitionValidationSqlCheckAsync(conn, script, ct);
+            validationNeedsRepair = validationNeedsRepair || validationRow.NeedsExecution;
+            validationBlocked = validationBlocked || ModuleDefinitionSqlNeedsReview(validationRow.Status);
+            rows.Add(validationRow);
+        }
+
+        var hasValidationScripts = rows.Count > 0;
+        var validationCanDriveRepair = validationNeedsRepair && !validationBlocked;
+        var validationReportsHealthy = hasValidationScripts && !validationNeedsRepair && !validationBlocked;
+        foreach (var script in orderedScripts.Where(static item => !IsValidationScript(item)))
         {
             var sqlText = ResolvePortableSqlText(script);
             var scriptSha256 = ComputeTextSha256(sqlText ?? string.Empty);
@@ -2031,6 +2048,12 @@ WHERE ModuleKey = @ModuleKey;";
                 status = "Managed by installer";
                 message = "Core platform SQL is validated from declared objects and is not executed from Portal.";
             }
+            else if (validationCanDriveRepair)
+            {
+                status = "Needs repair";
+                message = "A module-specific validation script reports that this module needs repair.";
+                needsExecution = true;
+            }
             else if (missing.Count > 0)
             {
                 status = "Needs repair";
@@ -2043,11 +2066,16 @@ WHERE ModuleKey = @ModuleKey;";
                 message = latest?.ErrorMessage ?? "The last execution failed.";
                 needsExecution = true;
             }
-            else if (!hasSuccessfulExecution)
+            else if (!validationReportsHealthy && !hasSuccessfulExecution)
             {
                 status = "Not recorded";
                 message = "No successful execution has been recorded for this script content.";
                 needsExecution = true;
+            }
+            else if (validationReportsHealthy && !hasSuccessfulExecution)
+            {
+                status = "OK";
+                message = "Module-specific validation reports healthy state; a separate repair execution record is not required.";
             }
             else
             {
@@ -2065,6 +2093,7 @@ WHERE ModuleKey = @ModuleKey;";
                 Path = script.Path,
                 Source = script.Source,
                 ScriptSha256 = scriptSha256,
+                IsValidation = false,
                 HasInlineSql = hasInlineSql,
                 IsSafe = isSafe && isIdempotent && hashMatches,
                 HasSuccessfulExecution = hasSuccessfulExecution,
@@ -2115,7 +2144,7 @@ WHERE ModuleKey = @ModuleKey;";
         await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
 
         var executed = 0;
-        foreach (var script in scripts.Where(script => repairableKeys.Contains(script.Key)))
+        foreach (var script in scripts.Where(script => !IsValidationScript(script) && repairableKeys.Contains(script.Key)))
         {
             var originalSqlText = ResolvePortableSqlText(script);
             if (string.IsNullOrWhiteSpace(originalSqlText))
@@ -3952,6 +3981,90 @@ VALUES
         return required;
     }
 
+    private static bool IsValidationScript(PortableModuleDefinitionSqlScript script)
+        => string.Equals(script.Phase, "validate", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Phase, "validation", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Execution, "validate", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(script.Execution, "validation", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task<ModuleDefinitionSqlCheckRow> BuildModuleDefinitionValidationSqlCheckAsync(
+        SqlConnection conn,
+        PortableModuleDefinitionSqlScript script,
+        CancellationToken ct)
+    {
+        var sqlText = ResolvePortableSqlText(script);
+        var scriptSha256 = ComputeTextSha256(sqlText ?? string.Empty);
+        var suppliedSha256 = NullIfWhiteSpace(script.Sha256);
+        var hasInlineSql = !string.IsNullOrWhiteSpace(sqlText);
+        var hashMatches = suppliedSha256 is null
+            || string.Equals(suppliedSha256, scriptSha256, StringComparison.OrdinalIgnoreCase);
+        var safety = hasInlineSql
+            ? ValidateReadOnlyModuleDefinitionSql(sqlText!)
+            : "The validation script has no embedded SQL content.";
+        var isSafe = safety is null;
+        var status = "OK";
+        var message = "The validation script reports that the module is healthy.";
+        var needsRepair = false;
+
+        if (!hasInlineSql)
+        {
+            status = "Not executable";
+            message = "The validation script has no embedded SQL content.";
+        }
+        else if (!hashMatches)
+        {
+            status = "Invalid content hash";
+            message = "The validation SQL content does not match the declared SHA-256 hash.";
+        }
+        else if (!isSafe)
+        {
+            status = "Blocked";
+            message = safety!;
+        }
+        else
+        {
+            try
+            {
+                var result = await ExecuteModuleDefinitionValidationSqlAsync(conn, sqlText!, ct);
+                if (!result.IsHealthy)
+                {
+                    status = "Needs repair";
+                    message = string.IsNullOrWhiteSpace(result.Message)
+                        ? "The validation script reports that the module needs repair."
+                        : result.Message;
+                    needsRepair = true;
+                }
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+            {
+                status = "Needs repair";
+                message = $"The validation script failed, so the module should be repaired: {ex.Message}";
+                needsRepair = true;
+            }
+        }
+
+        return new ModuleDefinitionSqlCheckRow
+        {
+            Key = script.Key,
+            Phase = script.Phase,
+            Scope = script.Scope,
+            Order = script.Order,
+            Execution = script.Execution,
+            Path = script.Path,
+            Source = script.Source,
+            ScriptSha256 = scriptSha256,
+            IsValidation = true,
+            HasInlineSql = hasInlineSql,
+            IsSafe = isSafe && hashMatches,
+            HasSuccessfulExecution = string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase),
+            NeedsExecution = needsRepair,
+            CanExecute = false,
+            Status = status,
+            StatusMessage = message,
+            MissingRequiredObjects = []
+        };
+    }
+
     private static ExpectedModuleMetadata ReadExpectedModuleMetadata(string definitionJson, string fallbackModuleKey)
     {
         var root = JsonNode.Parse(definitionJson) as JsonObject;
@@ -4109,7 +4222,10 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
         CancellationToken ct)
     {
         var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var fallbackScript = scripts
+        var repairScripts = scripts
+            .Where(static item => !IsValidationScript(item))
+            .ToList();
+        var fallbackScript = repairScripts
             .OrderBy(static item => string.Equals(item.Phase, "setup", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(static item => item.Order)
             .FirstOrDefault();
@@ -4127,7 +4243,7 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
                 continue;
             }
 
-            var owningScript = scripts.FirstOrDefault(script => RequiredObjectMatchesScriptSource(required, script))
+            var owningScript = repairScripts.FirstOrDefault(script => RequiredObjectMatchesScriptSource(required, script))
                 ?? fallbackScript;
             if (owningScript is null)
             {
@@ -4311,6 +4427,101 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    private static async Task<ModuleDefinitionValidationResult> ExecuteModuleDefinitionValidationSqlAsync(
+        SqlConnection conn,
+        string sqlText,
+        CancellationToken ct)
+    {
+        ModuleDefinitionValidationResult? result = null;
+        foreach (var batch in SplitSqlBatches(sqlText))
+        {
+            if (string.IsNullOrWhiteSpace(batch))
+            {
+                continue;
+            }
+
+            await using var cmd = new SqlCommand(batch, conn)
+            {
+                CommandTimeout = 3600
+            };
+            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            do
+            {
+                if (await rdr.ReadAsync(ct))
+                {
+                    result = ReadModuleDefinitionValidationResult(rdr);
+                }
+            }
+            while (await rdr.NextResultAsync(ct));
+        }
+
+        return result ?? new ModuleDefinitionValidationResult(
+            false,
+            "The validation script did not return a result row.");
+    }
+
+    private static ModuleDefinitionValidationResult ReadModuleDefinitionValidationResult(SqlDataReader rdr)
+    {
+        var healthyOrdinal = TryGetOrdinal(rdr, "IsHealthy") ?? 0;
+        if (healthyOrdinal >= rdr.FieldCount)
+        {
+            throw new InvalidOperationException("The validation result must contain an IsHealthy column or at least one column.");
+        }
+
+        var messageOrdinal = TryGetOrdinal(rdr, "Message");
+        var isHealthy = ConvertValidationBoolean(rdr.GetValue(healthyOrdinal))
+            ?? throw new InvalidOperationException("The validation result IsHealthy value must be true/false or 1/0.");
+        var message = messageOrdinal.HasValue && !rdr.IsDBNull(messageOrdinal.Value)
+            ? Convert.ToString(rdr.GetValue(messageOrdinal.Value))
+            : null;
+
+        return new ModuleDefinitionValidationResult(isHealthy, message);
+    }
+
+    private static int? TryGetOrdinal(SqlDataReader rdr, string name)
+    {
+        for (var index = 0; index < rdr.FieldCount; index++)
+        {
+            if (string.Equals(rdr.GetName(index), name, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool? ConvertValidationBoolean(object? value)
+    {
+        if (value is null or DBNull)
+        {
+            return null;
+        }
+
+        if (value is bool boolean)
+        {
+            return boolean;
+        }
+
+        if (value is byte or short or int or long or decimal)
+        {
+            return Convert.ToDecimal(value) != 0m;
+        }
+
+        var text = Convert.ToString(value)?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return text.ToLowerInvariant() switch
+        {
+            "1" or "true" or "ok" or "healthy" or "pass" or "passed" => true,
+            "0" or "false" or "error" or "unhealthy" or "fail" or "failed" => false,
+            _ => null
+        };
+    }
+
     private static async Task ExecuteSqlBatchesAsync(SqlConnection conn, string sqlText, CancellationToken ct)
     {
         foreach (var batch in SplitSqlBatches(sqlText))
@@ -4375,6 +4586,21 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         }
 
         return null;
+    }
+
+    private static string? ValidateReadOnlyModuleDefinitionSql(string sqlText)
+    {
+        var safety = ValidateSafeModuleDefinitionSql(sqlText);
+        if (safety is not null)
+        {
+            return safety;
+        }
+
+        return Regex.IsMatch(
+            sqlText,
+            @"(?is)\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE|DENY)\b")
+            ? "Validation SQL must be read-only and return an IsHealthy result."
+            : null;
     }
 
     private static string ComputeTextSha256(string text)
@@ -4452,6 +4678,10 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         string Schema,
         string? Name,
         string? Source);
+
+    private sealed record ModuleDefinitionValidationResult(
+        bool IsHealthy,
+        string? Message);
 
     private sealed record ExpectedModuleMetadata(
         string ModuleKey,

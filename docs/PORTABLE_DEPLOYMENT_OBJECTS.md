@@ -43,6 +43,13 @@ resolve those paths inside the package and normalize the SQL into the stored
 definition before execution. Modules that only need OMP module/app metadata and
 artifact slots do not need SQL files.
 
+Modules with their own schema or complex seed rules can add a read-only
+validation script using `phase: "validate"`. It returns one row with an
+`IsHealthy` value and optional `Message`. If validation reports unhealthy state,
+Portal and HostAgent run the module's idempotent non-validation SQL scripts as
+the repair path. Generic metadata checks for the OMP module/app rows still run
+for every module, so simple modules can omit validation SQL entirely.
+
 HostAgent, WorkerManager, and WorkerProcessHost are represented by the
 `omp_core` module definition. The remaining bootstrap exception is operational:
 the first HostAgent service install and repair flow still needs a direct

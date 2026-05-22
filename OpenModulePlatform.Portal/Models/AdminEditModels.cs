@@ -298,6 +298,8 @@ public sealed class ModuleDefinitionSqlCheckRow
 
     public string ScriptSha256 { get; set; } = string.Empty;
 
+    public bool IsValidation { get; set; }
+
     public bool HasInlineSql { get; set; }
 
     public bool IsSafe { get; set; }
