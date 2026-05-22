@@ -27,25 +27,98 @@
 </div>
 
 @{
-    var activeIntegrityRows = Model.IntegrityRows.Where(row => row.IsApplied).ToList();
+    var integrityRows = Model.IntegrityRows.ToList();
+    var repairableActiveRows = integrityRows.Where(row => row.IsApplied).ToList();
 }
 
 <section class="card top-gap">
     <div class="section-heading-row">
         <div>
+            <h3>@L["Available package library"]</h3>
+            <p class="lede">@L["Install or complete modules from the package library. This applies the module definition, runs safe SQL repairs, registers artifacts, and updates matching desired app versions."]</p>
+        </div>
+    </div>
+
+    @if (Model.AvailablePackages.Count == 0)
+    {
+        <div class="empty-state">@L["No available module packages found."]</div>
+    }
+    else
+    {
+        <div class="table-scroll module-definitions-scroll">
+            <table class="grid module-definitions-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Module key"]</th>
+                        <th>@L["Definition version"]</th>
+                        <th>@L["Status"]</th>
+                        <th>@L["Artifacts"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var package in Model.AvailablePackages)
+                {
+                    <tr>
+                        <td><code>@package.ModuleKey</code></td>
+                        <td>@package.DefinitionVersion</td>
+                        <td>
+                            <span class="integrity-pill @package.StatusClass">@L[package.StatusLabel]</span>
+                            <div class="muted small-text top-gap">
+                                @L["Installed definition"]:
+                                <strong>@(package.InstalledDefinitionVersion ?? L["None"].Value)</strong>
+                            </div>
+                            <div class="field-help">@L[package.ImportGuidance]</div>
+                        </td>
+                        <td>
+                            <strong>@package.ArtifactFiles.Count</strong>
+                            @if (package.ArtifactFiles.Count > 0)
+                            {
+                                <div class="muted small-text">
+                                    @string.Format(
+                                        L["Artifacts: {0} same, {1} other, {2} missing."].Value,
+                                        package.SameArtifactVersionCount,
+                                        package.OtherArtifactVersionCount,
+                                        package.MissingArtifactCount)
+                                </div>
+                                <div class="muted small-text">
+                                    @string.Join(", ", package.ArtifactFiles
+                                        .Take(4)
+                                        .Select(file => $"{file.AppKey} {file.Version}"))
+                                    @(package.ArtifactFiles.Count > 4 ? " ..." : string.Empty)
+                                </div>
+                            }
+                        </td>
+                        <td class="admin-action-cell">
+                            <form method="post" asp-page-handler="ImportAvailable" class="inline-form">
+                                <input type="hidden" name="moduleDefinitionFileName" value="@package.ModuleDefinitionFileName" />
+                                <button type="submit">@L[package.ActionLabel]</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="card top-gap">
+    <div class="section-heading-row">
+        <div>
             <h3>@L["Module integrity matrix"]</h3>
-            <p class="lede">@L["The matrix checks active module definitions against current OMP metadata, required database objects, declared module dependencies, and current artifact selections."]</p>
+            <p class="lede">@L["The matrix checks module definitions against current OMP metadata, required database objects, declared module dependencies, and current artifact selections. Stored definitions can be applied from the action column."]</p>
         </div>
         <form method="post" asp-page-handler="RepairAllSql">
-            <button type="submit" disabled="@(activeIntegrityRows.All(row => row.RepairableSqlScriptCount == 0) ? "disabled" : null)">
+            <button type="submit" disabled="@(repairableActiveRows.All(row => row.RepairableSqlScriptCount == 0) ? "disabled" : null)">
                 @L["Execute detected SQL repairs for all modules"]
             </button>
         </form>
     </div>
 
-    @if (activeIntegrityRows.Count == 0)
+    @if (integrityRows.Count == 0)
     {
-        <div class="empty-state">@L["No active module definitions found."]</div>
+        <div class="empty-state">@L["No module definitions found."]</div>
     }
     else
     {
@@ -66,7 +139,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var row in activeIntegrityRows)
+                @foreach (var row in integrityRows)
                 {
                     <tr>
                         <td><code>@row.ModuleKey</code></td>
@@ -119,6 +192,20 @@
                             }
                         </td>
                         <td class="admin-action-cell">
+                            @if (!row.IsApplied)
+                            {
+                                <form method="post" asp-page-handler="ApplyAndRepair" class="inline-form">
+                                    <input type="hidden" name="moduleDefinitionDocumentId" value="@row.ModuleDefinitionDocumentId" />
+                                    <button type="submit">@L["Apply + SQL"]</button>
+                                </form>
+                            }
+                            else if (row.RepairableSqlScriptCount > 0)
+                            {
+                                <form method="post" asp-page-handler="RepairSql" class="inline-form">
+                                    <input type="hidden" name="moduleDefinitionDocumentId" value="@row.ModuleDefinitionDocumentId" />
+                                    <button type="submit">@L["Run SQL"]</button>
+                                </form>
+                            }
                             <a class="action-link admin-icon-button admin-icon-button--clarify"
                                href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId"
                                title="@L["View"]"
