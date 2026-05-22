@@ -164,9 +164,10 @@
                             {
                                 <div class="muted small-text">
                                     @string.Format(
-                                        L["Artifacts: {0} same, {1} other, {2} missing."].Value,
+                                        L["Artifacts: {0} same, {1} newer installed, {2} older installed, {3} missing."].Value,
                                         package.SameArtifactVersionCount,
-                                        package.OtherArtifactVersionCount,
+                                        package.NewerArtifactVersionCount,
+                                        package.OlderArtifactVersionCount + package.OtherArtifactVersionCount,
                                         package.MissingArtifactCount)
                                 </div>
                             }

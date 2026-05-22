@@ -126,8 +126,9 @@ public sealed class ArtifactZipImportService
                     Path.Combine(stagingPath, "artifact"),
                     cancellationToken);
                 _logger.LogInformation(
-                    "Imported artifact zip. Zip={ImportPath}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, AdoptedExistingContent={AdoptedExistingContent}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}",
+                    "Imported artifact zip. Zip={ImportPath}, Status={Status}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, AdoptedExistingContent={AdoptedExistingContent}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}, Message={Message}",
                     importPath,
+                    result.Status,
                     result.ArtifactId,
                     result.Version,
                     result.RelativePath,
@@ -136,7 +137,8 @@ public sealed class ArtifactZipImportService
                     result.TemplateAppRowsUpdated,
                     result.AppInstanceRowsUpdated,
                     result.WorkerInstanceRowsUpdated,
-                    result.HostAgentDesiredRowsUpdated);
+                    result.HostAgentDesiredRowsUpdated,
+                    result.Message);
             }
             else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -147,14 +149,16 @@ public sealed class ArtifactZipImportService
                     Path.Combine(stagingPath, "module-package"),
                     cancellationToken);
                 _logger.LogInformation(
-                    "Imported module package from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}, ArtifactCount={ArtifactCount}",
+                    "Imported module package from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}, ImportedArtifacts={ImportedArtifacts}, SkippedArtifacts={SkippedArtifacts}, FailedArtifacts={FailedArtifacts}",
                     importPath,
                     result.ModuleKey,
                     result.DefinitionVersion,
                     result.ModuleDefinitionDocumentId,
                     result.Applied,
                     result.SqlRepairCount,
-                    result.Artifacts.Count);
+                    result.ImportedArtifactCount,
+                    result.SkippedArtifactCount,
+                    result.FailedArtifactCount);
             }
             else
             {
@@ -216,29 +220,106 @@ public sealed class ArtifactZipImportService
             extractionRoot);
 
         var definitionResult = await ImportModuleDefinitionAsync(definition, cancellationToken);
-        var artifactResults = new List<ArtifactZipImportResult>();
         var artifactPaths = Directory.EnumerateFiles(extractionRoot, "*.zip", SearchOption.AllDirectories)
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var artifactPlans = CreateModulePackageArtifactPlans(definition, artifactPaths);
+        var activationKeys = SelectLatestActivationKeys(artifactPlans);
+        var artifactResults = new List<ModulePackageArtifactImportResult>();
 
-        foreach (var artifactPath in artifactPaths)
+        foreach (var plan in artifactPlans)
         {
-            var metadata = TryParseFilenameMetadata(Path.GetFileName(artifactPath))
-                ?? throw new InvalidOperationException(
-                    $"Module package artifact '{Path.GetFileName(artifactPath)}' does not follow moduleKey__appKey__packageType__targetName__version.zip.");
-            if (!metadata.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(plan.FailureMessage))
             {
-                throw new InvalidOperationException(
-                    $"Module package artifact '{Path.GetFileName(artifactPath)}' belongs to module '{metadata.ModuleKey}', not '{definition.ModuleKey}'.");
+                artifactResults.Add(new ModulePackageArtifactImportResult(
+                    Path.GetFileName(plan.Path),
+                    "Failed",
+                    plan.FailureMessage,
+                    null));
+                _logger.LogWarning(
+                    "Rejected artifact from HostAgent module package import. File={ArtifactFile}, Reason={Reason}",
+                    Path.GetFileName(plan.Path),
+                    plan.FailureMessage);
+                continue;
             }
 
-            artifactResults.Add(await ImportArtifactPackageAsync(
-                settings,
-                importSettings,
-                metadata,
-                artifactPath,
-                Path.Combine(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
-                cancellationToken));
+            if (plan.Metadata is null || !string.IsNullOrWhiteSpace(plan.SkipMessage))
+            {
+                artifactResults.Add(new ModulePackageArtifactImportResult(
+                    Path.GetFileName(plan.Path),
+                    "Skipped",
+                    plan.SkipMessage ?? "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
+                    null));
+                _logger.LogInformation(
+                    "Skipped artifact from HostAgent module package import. File={ArtifactFile}, Reason={Reason}",
+                    Path.GetFileName(plan.Path),
+                    plan.SkipMessage);
+                continue;
+            }
+
+            var activateArtifact = activationKeys.Contains(BuildArtifactActivationKey(plan.Metadata));
+            try
+            {
+                var artifact = await ImportArtifactPackageAsync(
+                    settings,
+                    importSettings,
+                    plan.Metadata,
+                    plan.Path,
+                    Path.Combine(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
+                    cancellationToken,
+                    allowExistingIdentical: true,
+                    applyToMatchingApplications: activateArtifact);
+
+                var status = artifact.Status;
+                var message = artifact.Message;
+                if (!activateArtifact && status is "Imported" or "Replaced" or "Skipped")
+                {
+                    message = AppendWarning(
+                        message ?? string.Empty,
+                        "The artifact was kept as a historical package and was not selected because a newer compatible artifact for the same app slot exists in this module package.");
+                }
+
+                artifactResults.Add(new ModulePackageArtifactImportResult(
+                    Path.GetFileName(plan.Path),
+                    status,
+                    message,
+                    artifact));
+            }
+            catch (Exception ex) when (IsExpectedImportFailure(ex))
+            {
+                var status = IsArtifactCompatibilityFailure(ex) ? "Skipped" : "Failed";
+                artifactResults.Add(new ModulePackageArtifactImportResult(
+                    Path.GetFileName(plan.Path),
+                    status,
+                    ex.Message,
+                    null));
+                if (status == "Skipped")
+                {
+                    _logger.LogInformation(
+                        "Skipped artifact from HostAgent module package import. File={ArtifactFile}, Reason={Reason}",
+                        Path.GetFileName(plan.Path),
+                        ex.Message);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to import artifact from HostAgent module package import. File={ArtifactFile}",
+                        Path.GetFileName(plan.Path));
+                }
+            }
+        }
+
+        var failedArtifacts = artifactResults
+            .Where(static result => result.Status == "Failed")
+            .ToList();
+        if (failedArtifacts.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Module package import completed with failed artifact package(s): " +
+                string.Join(
+                    " | ",
+                    failedArtifacts.Select(static result => $"{result.FileName}: {result.Message}")));
         }
 
         return new ModulePackageImportResult(
@@ -258,6 +339,20 @@ public sealed class ArtifactZipImportService
             definition,
             replaceExisting: false,
             cancellationToken);
+        var appliedVersion = await _repository.GetAppliedModuleDefinitionVersionAsync(
+            definition.ModuleKey,
+            cancellationToken);
+        if (!string.IsNullOrWhiteSpace(appliedVersion)
+            && CompareArtifactVersions(appliedVersion, definition.DefinitionVersion) > 0)
+        {
+            return new ModuleDefinitionImportResult(
+                definition.ModuleKey,
+                definition.DefinitionVersion,
+                saveResult.ModuleDefinitionDocumentId,
+                Applied: false,
+                SqlRepairCount: 0);
+        }
+
         var applied = await _repository.ApplyImportedModuleDefinitionAsync(
             saveResult.ModuleDefinitionDocumentId,
             cancellationToken);
@@ -281,7 +376,9 @@ public sealed class ArtifactZipImportService
         FilenameMetadata metadata,
         string packagePath,
         string stagingPath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowExistingIdentical = false,
+        bool applyToMatchingApplications = true)
     {
         var storeRoot = Path.GetFullPath(settings.CentralArtifactRoot.Trim());
         string? finalPath = null;
@@ -311,6 +408,11 @@ public sealed class ArtifactZipImportService
                 metadata.PackageType,
                 metadata.Version);
 
+            finalPath = ResolveUnderRoot(storeRoot, relativePath);
+            var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
+                .Extract(packagePath, stagingPath);
+            var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
+
             var existingIdentity = await _repository.FindImportedArtifactByIdentityAsync(
                 app.AppId,
                 metadata.Version,
@@ -319,16 +421,46 @@ public sealed class ArtifactZipImportService
                 cancellationToken);
             if (existingIdentity is not null)
             {
+                if (allowExistingIdentical
+                    && string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    var existingApplication = applyToMatchingApplications
+                        ? await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(
+                            existingIdentity.ArtifactId,
+                            cancellationToken)
+                        : (TemplateAppRowsUpdated: 0, AppInstanceRowsUpdated: 0, WorkerInstanceRowsUpdated: 0);
+                    var existingHostAgentDesiredRows = 0;
+                    if (applyToMatchingApplications
+                        && string.Equals(metadata.PackageType, "host-agent", StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingHostAgentDesiredRows = await _repository.ApplyImportedHostAgentArtifactToCurrentHostAsync(
+                            existingIdentity.ArtifactId,
+                            settings.ResolveHostKey(),
+                            settings.SelfUpgrade.ServiceNamePrefix,
+                            settings.SelfUpgrade.InstallRoot,
+                            cancellationToken);
+                    }
+
+                    return new ArtifactZipImportResult(
+                        existingIdentity.ArtifactId,
+                        existingIdentity.Version,
+                        existingIdentity.RelativePath ?? relativePath,
+                        0,
+                        existingApplication.TemplateAppRowsUpdated,
+                        existingApplication.AppInstanceRowsUpdated,
+                        existingApplication.WorkerInstanceRowsUpdated,
+                        existingHostAgentDesiredRows,
+                        AdoptedExistingContent: true,
+                        Status: "Skipped",
+                        Message: "The same artifact identity and content already exists.");
+                }
+
                 throw new InvalidOperationException(
                     "An artifact for this app, package type, target, and version already exists: " +
                     $"{existingIdentity.AppKey} {existingIdentity.Version} ({existingIdentity.PackageType}). " +
                     "Use a new version number for changed artifact content.");
             }
 
-            finalPath = ResolveUnderRoot(storeRoot, relativePath);
-            var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
-                .Extract(packagePath, stagingPath);
-            var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
             if (Directory.Exists(finalPath) || File.Exists(finalPath))
             {
                 if (File.Exists(finalPath))
@@ -389,11 +521,14 @@ public sealed class ArtifactZipImportService
                     cancellationToken);
             }
 
-            var application = await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(
-                artifactId,
-                cancellationToken);
+            var application = applyToMatchingApplications
+                ? await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(
+                    artifactId,
+                    cancellationToken)
+                : (TemplateAppRowsUpdated: 0, AppInstanceRowsUpdated: 0, WorkerInstanceRowsUpdated: 0);
             var hostAgentDesiredRows = 0;
-            if (string.Equals(metadata.PackageType, "host-agent", StringComparison.OrdinalIgnoreCase))
+            if (applyToMatchingApplications
+                && string.Equals(metadata.PackageType, "host-agent", StringComparison.OrdinalIgnoreCase))
             {
                 hostAgentDesiredRows = await _repository.ApplyImportedHostAgentArtifactToCurrentHostAsync(
                     artifactId,
@@ -555,6 +690,114 @@ public sealed class ArtifactZipImportService
         return entries;
     }
 
+    private static IReadOnlyList<ModulePackageArtifactPlan> CreateModulePackageArtifactPlans(
+        ModuleDefinitionImportDocument definition,
+        IReadOnlyList<string> artifactPaths)
+    {
+        var plans = new List<ModulePackageArtifactPlan>();
+        foreach (var artifactPath in artifactPaths)
+        {
+            var metadata = TryParseFilenameMetadata(Path.GetFileName(artifactPath));
+            if (metadata is null)
+            {
+                plans.Add(new ModulePackageArtifactPlan(
+                    artifactPath,
+                    null,
+                    null,
+                    "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format."));
+                continue;
+            }
+
+            if (!metadata.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+            {
+                plans.Add(new ModulePackageArtifactPlan(
+                    artifactPath,
+                    metadata,
+                    null,
+                    $"The artifact belongs to module '{metadata.ModuleKey}', not '{definition.ModuleKey}'."));
+                continue;
+            }
+
+            if (!IsCompatibleWithDefinition(metadata, definition.CompatibleArtifacts))
+            {
+                plans.Add(new ModulePackageArtifactPlan(
+                    artifactPath,
+                    metadata,
+                    $"Artifact version {metadata.Version} is not compatible with module definition '{definition.ModuleKey}' version {definition.DefinitionVersion}.",
+                    null));
+                continue;
+            }
+
+            plans.Add(new ModulePackageArtifactPlan(artifactPath, metadata, null, null));
+        }
+
+        return plans;
+    }
+
+    private static HashSet<string> SelectLatestActivationKeys(IReadOnlyList<ModulePackageArtifactPlan> plans)
+    {
+        return plans
+            .Where(static plan => plan.Metadata is not null && string.IsNullOrWhiteSpace(plan.SkipMessage))
+            .GroupBy(static plan => BuildArtifactSlotKey(plan.Metadata!), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderByDescending(static plan => plan.Metadata!.Version, ArtifactVersionComparer.Instance)
+                .First())
+            .Select(static plan => BuildArtifactActivationKey(plan.Metadata!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCompatibleWithDefinition(
+        FilenameMetadata artifact,
+        IReadOnlyList<ModuleDefinitionArtifactCompatibilityEntry> compatibility)
+        => compatibility.Any(slot =>
+            slot.AppKey.Equals(artifact.AppKey, StringComparison.OrdinalIgnoreCase)
+            && slot.PackageType.Equals(artifact.PackageType, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(slot.TargetName ?? string.Empty, artifact.TargetName, StringComparison.OrdinalIgnoreCase)
+            && IsVersionInRange(artifact.Version, slot.MinArtifactVersion, slot.MaxArtifactVersion));
+
+    private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(minVersion)
+            && CompareArtifactVersions(version, minVersion) < 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(maxVersion)
+            && CompareArtifactVersions(version, maxVersion) > 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int CompareArtifactVersions(string left, string right)
+    {
+        if (TryParseComparableVersion(left, out var leftVersion)
+            && TryParseComparableVersion(right, out var rightVersion))
+        {
+            return leftVersion.CompareTo(rightVersion);
+        }
+
+        return string.Compare(
+            left?.Trim(),
+            right?.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseComparableVersion(string? value, out Version version)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        var suffixIndex = text.IndexOfAny(['-', '+']);
+        if (suffixIndex >= 0)
+        {
+            text = text[..suffixIndex];
+        }
+
+        return Version.TryParse(text, out version!);
+    }
+
     private static string FindSingleModuleDefinitionFile(string root)
     {
         var candidates = Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
@@ -650,6 +893,12 @@ public sealed class ArtifactZipImportService
             .Replace("{version}", SanitizePathSegment(version), StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string BuildArtifactSlotKey(FilenameMetadata artifact)
+        => string.Join('\u001f', artifact.ModuleKey, artifact.AppKey, artifact.PackageType, artifact.TargetName);
+
+    private static string BuildArtifactActivationKey(FilenameMetadata artifact)
+        => string.Join('\u001f', BuildArtifactSlotKey(artifact), artifact.Version);
+
     private static string GetPackagePathSegment(string packageType)
         => packageType.Trim().ToLowerInvariant() switch
         {
@@ -740,6 +989,11 @@ public sealed class ArtifactZipImportService
             or IOException
             or SqlException
             or UnauthorizedAccessException;
+
+    private static bool IsArtifactCompatibilityFailure(Exception exception)
+        => exception is InvalidOperationException
+            && (exception.Message.Contains("not compatible with module definition", StringComparison.OrdinalIgnoreCase)
+                || exception.Message.Contains("does not allow artifacts", StringComparison.OrdinalIgnoreCase));
 
     private static void ExtractZipToDirectory(string zipPath, string destinationRoot)
     {
@@ -915,6 +1169,23 @@ public sealed class ArtifactZipImportService
         }
 
         return text.Length <= maxLength ? text : text[..maxLength];
+    }
+
+    private static string AppendWarning(string current, string next)
+        => string.IsNullOrWhiteSpace(current) ? next : current + " " + next;
+
+    private sealed record ModulePackageArtifactPlan(
+        string Path,
+        FilenameMetadata? Metadata,
+        string? SkipMessage,
+        string? FailureMessage);
+
+    private sealed class ArtifactVersionComparer : IComparer<string>
+    {
+        public static readonly ArtifactVersionComparer Instance = new();
+
+        public int Compare(string? x, string? y)
+            => CompareArtifactVersions(x ?? string.Empty, y ?? string.Empty);
     }
 
     private sealed record FilenameMetadata(

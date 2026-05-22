@@ -493,6 +493,28 @@ WHERE ModuleKey = @moduleKey
         }
     }
 
+    public async Task<string?> GetAppliedModuleDefinitionVersionAsync(
+        string moduleKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1) DefinitionVersion
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleKey = @moduleKey
+  AND IsApplied = 1
+ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@moduleKey", moduleKey);
+
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is string version && !string.IsNullOrWhiteSpace(version)
+            ? version
+            : null;
+    }
+
     public async Task<bool> ApplyImportedModuleDefinitionAsync(
         int moduleDefinitionDocumentId,
         CancellationToken ct)
@@ -785,7 +807,9 @@ SELECT TOP (1)
        a.AppKey,
        ar.Version,
        ar.PackageType,
-       ar.TargetName
+       ar.TargetName,
+       ar.RelativePath,
+       ar.Sha256
 FROM omp.Artifacts ar
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
 WHERE ar.Sha256 = @sha256
@@ -807,7 +831,9 @@ ORDER BY ar.ArtifactId;";
             rdr.GetString(1),
             rdr.GetString(2),
             rdr.GetString(3),
-            rdr.IsDBNull(4) ? null : rdr.GetString(4));
+            rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            rdr.IsDBNull(6) ? null : rdr.GetString(6));
     }
 
     public async Task<ArtifactZipImportDuplicateInfo?> FindImportedArtifactByIdentityAsync(
@@ -823,7 +849,9 @@ SELECT TOP (1)
        a.AppKey,
        ar.Version,
        ar.PackageType,
-       ar.TargetName
+       ar.TargetName,
+       ar.RelativePath,
+       ar.Sha256
 FROM omp.Artifacts ar
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
 WHERE ar.AppId = @appId
@@ -851,7 +879,9 @@ ORDER BY ar.ArtifactId;";
             rdr.GetString(1),
             rdr.GetString(2),
             rdr.GetString(3),
-            rdr.IsDBNull(4) ? null : rdr.GetString(4));
+            rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            rdr.IsDBNull(6) ? null : rdr.GetString(6));
     }
 
     public async Task<int> RegisterImportedArtifactAsync(
