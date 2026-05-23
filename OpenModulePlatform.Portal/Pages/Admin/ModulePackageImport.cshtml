@@ -85,7 +85,7 @@
             </button>
             <button type="button" class="workflow-choice" data-workflow-action="export-widgets" aria-pressed="false">
                 <span class="workflow-choice__title">@L["Widgets"]</span>
-                <span class="workflow-choice__text">@L["Export all widgets or widgets owned by one module."]</span>
+                <span class="workflow-choice__text">@L["Export all widgets or one selected dashboard widget."]</span>
             </button>
         </div>
     </div>
@@ -413,16 +413,16 @@
 
     <section class="card workflow-panel" data-workflow-panel="export-widgets" hidden>
         <h3>@L["Export widgets"]</h3>
-        <p class="muted">@L["Export all widgets or only the widgets owned by one module key."]</p>
+        <p class="muted">@L["Export all widgets or choose one of the widgets available in this OMP installation."]</p>
 
         <form method="get" asp-page-handler="ExportWidgets" class="form-grid top-gap">
             <div class="form-field">
-                <label for="widgetModuleKey">@L["Module key"]</label>
-                <select id="widgetModuleKey" name="moduleKey">
-                    <option value="">@L["All modules"]</option>
-                    @foreach (var moduleKey in Model.WidgetModuleKeys)
+                <label for="widgetId">@L["Widget"]</label>
+                <select id="widgetId" name="widgetId">
+                    <option value="">@L["All widgets"]</option>
+                    @foreach (var widget in Model.WidgetRows)
                     {
-                        <option value="@moduleKey">@moduleKey</option>
+                        <option value="@widget.WidgetId">@widget.Title (@widget.WidgetKey)</option>
                     }
                 </select>
             </div>
