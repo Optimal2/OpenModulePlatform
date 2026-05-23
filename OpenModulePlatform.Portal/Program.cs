@@ -23,6 +23,7 @@ builder.Services.AddScoped<PortalDashboardWidgetPackageService>();
 builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<RbacAdminRepository>();
 builder.Services.AddScoped<PortableModulePackageService>();
+builder.Services.AddScoped<ConfigOverlayObjectService>();
 builder.Services.Configure<ArtifactUploadOptions>(
     builder.Configuration.GetSection(ArtifactUploadOptions.SectionName));
 builder.Services.Configure<FormOptions>(options =>

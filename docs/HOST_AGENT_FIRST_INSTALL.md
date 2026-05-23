@@ -69,11 +69,12 @@ OpenModulePlatformHostAgentFirst-<version>/
 ```
 
 The package has two data levels: `data/global` contains portable objects shared
-by every host profile in the package, while `data/profiles/<config-file-name>`
-contains only host-specific SQL, artifact-package overrides, and file payload.
-The selected file in
-`configs` is the host profile; there is no separate installation-instance layer
-in the package layout.
+by every host in the package, while `data/hosts/<config-file-name-without-extension>`
+contains only bootstrap helper files that are unique to that host. The selected
+file in `configs` is the host profile; there is no separate
+installation-instance layer in the package layout. Runtime differences that
+belong to modules or artifacts are represented as host configuration and config
+overlay objects rather than by duplicating global module or artifact packages.
 
 The package library has no separate `initial` and `available` folders. All
 portable module definitions and artifact package objects live in
@@ -283,14 +284,19 @@ HostAgent-first packages keep one shared portable object library under
 - `module-definitions` contains module definitions that the bootstrapper can
   import and Portal can later present as package-library items.
 - `artifacts` contains artifact package objects that the bootstrapper can copy
-  into ArtifactStore and Portal can later import. During bootstrap these files
-  are copied, without deleting older files, into
+  into ArtifactStore and Portal can later import.
+- `host-configs` contains host configuration JSON/zip objects.
+- `config-overlays` contains host-specific config overlay JSON/zip objects.
+
+During bootstrap these files are copied, without deleting older files, into
   `ArtifactStoreRoot\_available\module-definitions` and
-  `ArtifactStoreRoot\_available\artifacts`. Portal reads those folders from the
-  `ArtifactUpload:AvailableModuleDefinitionsRoot` and
-  `ArtifactUpload:AvailableArtifactsRoot` settings so admins can import modules
-  after the base installation is complete. External module artifacts are copied
-  here from `HostAgentFirst.AvailableArtifactArchiveRoots` and from
+  `ArtifactStoreRoot\_available\artifacts`,
+  `ArtifactStoreRoot\_available\host-configs`, and
+  `ArtifactStoreRoot\_available\config-overlays`. Portal reads those folders
+  from the `ArtifactUpload` settings so admins can import modules and
+  host-specific overlays after the base installation is complete. External
+  module artifacts are copied here from
+  `HostAgentFirst.AvailableArtifactArchiveRoots` and from
   `RuntimeRoot\ArtifactArchive`. The package builder also scans `artifacts`
   folders below the configured source repositories. Matching standard
   artifact-package file names are copied when found.
@@ -300,12 +306,10 @@ The same shape is used by repository-level object generation. Run
 `scripts/omp/build-repository-objects.ps1` from the OpenModulePlatform
 repository with `-RepositoryRoot`, and use the package's `data/global` folder as
 `-OutputRoot` when the generated objects should be added to an installer
-package. Host-specific files are passed as `-ArtifactConfigurationFile`
-mappings so sensitive data can live in the private DEV repository or another
-controlled profile location instead of in the code repository.
-When those files must be bundled with a specific outer artifact package, store
-that package in `data/profiles/<config-file-name>/artifacts` and reference it
-as `artifacts/<package>.zip` from the matching bootstrap profile.
+package. Host-specific values live in the selected `configs\<host>.json` file
+and in generated host config/config overlay objects, not in the global module
+definition or artifact package. If the bootstrapper itself needs host-local
+helper files, place them below `data/hosts/<config-file-name-without-extension>`.
 
 The GUI action `Sync package objects` is the lightweight alternative to
 `Create updated installer package`. It uses the same source manifest comparison
@@ -478,21 +482,23 @@ HostAgentFirst = @{
 }
 ```
 
-The package script copies host-specific SQL files into the active profile data
-folder and adds those files as separate bootstrap SQL steps after the neutral
-OMP initialization script. Module-definition source files normally live at each
-module root and are listed in `omp-components.json`; the package script copies
-module definitions into `data/global/module-definitions`. Additional artifact
-files are copied into `data/global/artifacts` and listed in the matching config
-file. The installer executable is unchanged and only the shared data/config
-profile differs between environments.
+The package script copies host-specific bootstrap SQL files into the active
+host data folder and adds those files as separate bootstrap SQL steps after the
+neutral OMP initialization script. Module-definition source files normally live
+at each module root and are listed in `omp-components.json`; the package script
+copies module definitions into `data/global/module-definitions`. Additional
+artifact files are copied into `data/global/artifacts` and listed in the
+matching config file. Host configuration and config overlay objects are copied
+into `data/global/host-configs` and `data/global/config-overlays`. The installer
+executable is unchanged and only the selected host config differs between
+environments.
 
 Artifact source paths in a bootstrap config can also be written relative to the
 selected data level, for example `artifacts/<package>.zip`. The bootstrapper
-looks below `data/profiles/<config-file-name>` first and then falls back to
-`data/global`. Use that only when the outer artifact package needs
-environment-specific configuration files; the inner binary artifact should stay
-the same across environments.
+looks below `data/hosts/<config-file-name-without-extension>` first and then
+falls back to `data/global`. Runtime configuration differences should normally
+be captured as config overlay objects in the central library; host-local
+artifact overrides should be reserved for bootstrap repair scenarios.
 
 For example, a protected VGR package can set:
 

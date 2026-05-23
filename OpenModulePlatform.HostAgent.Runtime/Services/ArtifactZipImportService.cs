@@ -101,19 +101,7 @@ public sealed class ArtifactZipImportService
             var extension = Path.GetExtension(importPath);
             if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
             {
-                var definition = await ReadModuleDefinitionAsync(
-                    tempImportPath,
-                    Path.GetFileName(importPath),
-                    cancellationToken);
-                var result = await ImportModuleDefinitionAsync(definition, cancellationToken);
-                _logger.LogInformation(
-                    "Imported module definition from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}",
-                    importPath,
-                    result.ModuleKey,
-                    result.DefinitionVersion,
-                    result.ModuleDefinitionDocumentId,
-                    result.Applied,
-                    result.SqlRepairCount);
+                await ImportJsonObjectAsync(tempImportPath, Path.GetFileName(importPath), importPath, cancellationToken);
             }
             else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
                      && TryParseFilenameMetadata(Path.GetFileName(importPath)) is { } metadata)
@@ -142,6 +130,51 @@ public sealed class ArtifactZipImportService
             }
             else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
             {
+                var packageKind = ConfigOverlayPackageReader.DetectFileKind(tempImportPath);
+                if (packageKind is PortableConfigObjectKind.HostConfigurationPackage)
+                {
+                    var reader = new ConfigOverlayPackageReader();
+                    var hostConfiguration = await reader.ReadHostConfigurationAsync(
+                        tempImportPath,
+                        Path.GetFileName(importPath),
+                        cancellationToken);
+                    var saveResult = await _repository.SaveImportedHostConfigurationAsync(
+                        hostConfiguration,
+                        replaceExisting: false,
+                        cancellationToken);
+                    _logger.LogInformation(
+                        "Imported host configuration package from HostAgent import folder. File={ImportPath}, Host={HostKey}, Version={ConfigurationVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}",
+                        importPath,
+                        hostConfiguration.HostKey,
+                        hostConfiguration.ConfigurationVersion,
+                        saveResult.DocumentId,
+                        saveResult.Created,
+                        saveResult.WasIdentical);
+                }
+                else if (packageKind is PortableConfigObjectKind.ConfigOverlayPackage)
+                {
+                    var reader = new ConfigOverlayPackageReader();
+                    var overlay = await reader.ReadConfigOverlayAsync(
+                        tempImportPath,
+                        Path.GetFileName(importPath),
+                        cancellationToken);
+                    var saveResult = await _repository.SaveImportedConfigOverlayAsync(
+                        overlay,
+                        replaceExisting: false,
+                        cancellationToken);
+                    _logger.LogInformation(
+                        "Imported config overlay package from HostAgent import folder. File={ImportPath}, Overlay={OverlayKey}, Host={HostKey}, Version={OverlayVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}, ConfigurationFiles={ConfigurationFileCount}",
+                        importPath,
+                        overlay.OverlayKey,
+                        overlay.HostKey,
+                        overlay.OverlayVersion,
+                        saveResult.DocumentId,
+                        saveResult.Created,
+                        saveResult.WasIdentical,
+                        overlay.ConfigurationFiles.Count);
+                }
+                else
+                {
                 var result = await ImportModulePackageZipAsync(
                     settings,
                     importSettings,
@@ -159,11 +192,12 @@ public sealed class ArtifactZipImportService
                     result.ImportedArtifactCount,
                     result.SkippedArtifactCount,
                     result.FailedArtifactCount);
+                }
             }
             else
             {
                 throw new InvalidOperationException(
-                    "Unsupported HostAgent import file. Expected .json module definition, standard artifact .zip, or module package .zip.");
+                    "Unsupported HostAgent import file. Expected .json module definition, .json host configuration, .json config overlay, standard artifact .zip, config overlay .zip, or module package .zip.");
             }
 
             MoveImportFile(importPath, processedPath, null);
@@ -178,6 +212,77 @@ public sealed class ArtifactZipImportService
             TryDelete(tempImportPath);
             TryDelete(stagingPath);
         }
+    }
+
+    private async Task ImportJsonObjectAsync(
+        string tempImportPath,
+        string sourceName,
+        string originalImportPath,
+        CancellationToken cancellationToken)
+    {
+        var kind = ConfigOverlayPackageReader.DetectFileKind(tempImportPath);
+        if (kind is PortableConfigObjectKind.ModuleDefinition)
+        {
+            var definition = await ReadModuleDefinitionAsync(tempImportPath, sourceName, cancellationToken);
+            var result = await ImportModuleDefinitionAsync(definition, cancellationToken);
+            _logger.LogInformation(
+                "Imported module definition from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}",
+                originalImportPath,
+                result.ModuleKey,
+                result.DefinitionVersion,
+                result.ModuleDefinitionDocumentId,
+                result.Applied,
+                result.SqlRepairCount);
+            return;
+        }
+
+        var reader = new ConfigOverlayPackageReader();
+        if (kind is PortableConfigObjectKind.HostConfiguration)
+        {
+            var hostConfiguration = await reader.ReadHostConfigurationAsync(
+                tempImportPath,
+                sourceName,
+                cancellationToken);
+            var saveResult = await _repository.SaveImportedHostConfigurationAsync(
+                hostConfiguration,
+                replaceExisting: false,
+                cancellationToken);
+            _logger.LogInformation(
+                "Imported host configuration from HostAgent import folder. File={ImportPath}, Host={HostKey}, Version={ConfigurationVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}",
+                originalImportPath,
+                hostConfiguration.HostKey,
+                hostConfiguration.ConfigurationVersion,
+                saveResult.DocumentId,
+                saveResult.Created,
+                saveResult.WasIdentical);
+            return;
+        }
+
+        if (kind is PortableConfigObjectKind.ConfigOverlay)
+        {
+            var overlay = await reader.ReadConfigOverlayAsync(
+                tempImportPath,
+                sourceName,
+                cancellationToken);
+            var saveResult = await _repository.SaveImportedConfigOverlayAsync(
+                overlay,
+                replaceExisting: false,
+                cancellationToken);
+            _logger.LogInformation(
+                "Imported config overlay from HostAgent import folder. File={ImportPath}, Overlay={OverlayKey}, Host={HostKey}, Version={OverlayVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}, ConfigurationFiles={ConfigurationFileCount}",
+                originalImportPath,
+                overlay.OverlayKey,
+                overlay.HostKey,
+                overlay.OverlayVersion,
+                saveResult.DocumentId,
+                saveResult.Created,
+                saveResult.WasIdentical,
+                overlay.ConfigurationFiles.Count);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Unsupported JSON object. Expected a module definition, host configuration, or config overlay JSON document.");
     }
 
     private async Task<bool> TryCopyReadyFileAsync(

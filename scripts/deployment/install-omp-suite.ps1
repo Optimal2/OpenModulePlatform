@@ -1680,6 +1680,8 @@ function Write-RuntimeConfiguration {
                 ArtifactStoreRoot = $script:ArtifactStoreRoot
                 AvailableModuleDefinitionsRoot = Join-Path $script:ArtifactStoreRoot '_available\module-definitions'
                 AvailableArtifactsRoot = Join-Path $script:ArtifactStoreRoot '_available\artifacts'
+                AvailableHostConfigurationsRoot = Join-Path $script:ArtifactStoreRoot '_available\host-configs'
+                AvailableConfigOverlaysRoot = Join-Path $script:ArtifactStoreRoot '_available\config-overlays'
                 MaxUploadBytes = 536870912
             }
         }

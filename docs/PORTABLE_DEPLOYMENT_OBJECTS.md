@@ -1,11 +1,14 @@
 # Portable Deployment Objects
 
-OMP uses two portable object types for everything that should move between
-installations:
+OMP uses global portable objects plus host-specific overlay objects for
+everything that should move between installations:
 
 - **Module definition objects** describe database and metadata state.
 - **Artifact package objects** describe one deployable runtime package and the
-  runtime configuration files that belong to that artifact version.
+  artifact-owned runtime configuration files that belong to that artifact
+  version.
+- **Host configuration objects** and **config overlay objects** keep
+  host-specific configuration outside global module and artifact packages.
 
 Together they replace module-specific installation scripts for normal
 application deployment. A new environment should first import module
@@ -13,7 +16,7 @@ definitions, then import artifact packages that are compatible with those
 definitions, then let HostAgent materialize the desired runtime state. When a
 module should move as one unit, use a complete module package: one zip that
 contains the module definition plus the outer artifact package zips for that
-module.
+module. Host-specific files are added separately through config overlays.
 
 ## Module Definition Object
 
@@ -84,11 +87,22 @@ should use the manifest envelope; older root-payload zips should be rewrapped
 before being added to a package library.
 
 HostAgent-first packages keep normal artifact packages in
-`data/global/artifacts`. If an outer artifact package must carry
-environment-specific configuration files, put that package below
-`data/profiles/<config-file-name>/artifacts` and reference it from that
-profile's bootstrap config as `artifacts/<package>.zip`; the bootstrapper checks
-the selected profile folder before falling back to the global library.
+`data/global/artifacts`. Artifact packages should stay global whenever possible.
+If configuration differs by host, keep the binary artifact package global and
+put the host-specific files in a config overlay instead of creating a second
+artifact package with the same identity.
+
+## Host Configuration And Config Overlay Objects
+
+Host configuration and config overlay objects are documented in
+[`CONFIG_OVERLAYS.md`](CONFIG_OVERLAYS.md). They solve the case where a module
+or artifact needs environment-specific SQL, JavaScript, JSON, XML, paths,
+service accounts, or URLs without duplicating the global module definition or
+artifact package.
+
+HostAgent applies matching overlay configuration files after artifact-owned
+configuration files. A matching overlay row therefore wins for that host when it
+uses the same relative path.
 
 ## Complete Module Package
 
@@ -133,12 +147,12 @@ Portal:
   host-role placement.
 - `/admin/modulepackageimport` is the package workflow page. It can upload one
   complete module package zip, upload one module definition JSON together with
-  one or more artifact package zips, import package-library files from
-  `ArtifactStoreRoot\_available`, and export an applied module definition with
-  its active artifact packages. The package-library view only offers artifact
-  packages that match the selected module definition's declared compatibility
-  range and shows whether the current installation already has the same, newer,
-  older, or missing artifact versions.
+  one or more artifact package zips, upload host configuration and config
+  overlay objects, import package-library files from `ArtifactStoreRoot\_available`,
+  and export installed portable objects. The package-library view only offers
+  artifact packages that match the selected module definition's declared
+  compatibility range and shows whether the current installation already has
+  the same, newer, older, or missing artifact versions.
 - `/admin/hostdeployments` is the operations page. It shows HostAgent app
   deployments, artifact provisioning, runtime identity checks, and explicit
   installation materialization requests.
@@ -152,11 +166,14 @@ Portal:
 - `/admin/artifactedit` can download an installed artifact as a standard package
   object, including registered configuration files.
 - `/admin/artifactpackageeditor` opens the browser-based artifact package editor.
+- `/admin/configoverlayeditor` opens the browser-based host configuration and
+  config overlay editor.
 
 Standalone browser tools:
 
 - `tools/module-definition-editor/index.html`
 - `tools/artifact-package-editor/index.html`
+- `tools/config-overlay-editor/index.html`
 - `tools/bootstrap-config-editor/index.html`
 
 Command-line helpers:
@@ -174,7 +191,8 @@ Command-line helpers:
 - `scripts/deployment/new-omp-artifact-package.ps1` creates a standard artifact
   package object from a payload folder or payload zip plus optional config files.
 - `scripts/deployment/package-hostagent-first.ps1` builds an installer payload
-  that contains module definitions and artifact package objects.
+  that contains module definitions, artifact package objects, host
+  configurations, and config overlays.
 
 ## Export And Import Flow
 

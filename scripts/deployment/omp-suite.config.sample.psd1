@@ -183,6 +183,20 @@
         # package-local data/global/module-definitions library.
         AdditionalModuleDefinitionFiles = @()
 
+        # Optional portable host configuration objects. These are copied to
+        # data/global/host-configs and later published to
+        # ArtifactStoreRoot\_available\host-configs. They describe one host's
+        # installer/runtime configuration but do not duplicate module or
+        # artifact package data.
+        AdditionalHostConfigurationFiles = @()
+
+        # Optional portable config overlay objects. These are copied to
+        # data/global/config-overlays and later published to
+        # ArtifactStoreRoot\_available\config-overlays. Overlays provide
+        # host-specific runtime files for otherwise global module/artifact
+        # packages.
+        AdditionalConfigOverlayFiles = @()
+
         # Optional prebuilt artifact zip files from external module repositories.
         # Source is resolved relative to this config file. Payload is the package
         # relative path used by the bootstrap config. Target is the

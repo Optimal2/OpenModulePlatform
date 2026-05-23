@@ -64,7 +64,25 @@ internal static partial class Program
                 return 1;
             }
 
-            return await RunBootstrapAsync(cli);
+            var configPath = Path.GetFullPath(cli.ConfigPath);
+            var config = await ReadJsonAsync<BootstrapConfig>(configPath);
+            var payloadRoot = ResolvePayloadRoot(cli, configPath);
+            if (cli.Uninstall)
+            {
+                return await RunUninstallAsync(
+                    config,
+                    configPath,
+                    cli.RemoveRuntimeFiles,
+                    cli.RemoveDatabaseObjects,
+                    cli.Yes);
+            }
+
+            if (cli.UpgradeOrComplete)
+            {
+                return await RunUpgradeOrCompleteAsync(config, configPath, payloadRoot, cli.PayloadZipPath);
+            }
+
+            return await RunBootstrapAsync(config, configPath, payloadRoot, cli.PayloadZipPath, cli.Yes);
         }
         catch (JsonException ex)
         {
@@ -336,6 +354,8 @@ internal static partial class Program
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--yes]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --upgrade-or-complete [--payload-root <path>] [--payload-zip <zip>]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --uninstall [--remove-runtime-files] [--remove-database-objects] [--yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui [--config <bootstrap.json> | --config-dir <configs>] [--payload-root <path>] [--payload-zip <zip>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> --payload-root <path> [--parent-process-id <pid>] [--restart-gui]");
         Console.WriteLine();
@@ -388,6 +408,7 @@ internal static partial class Program
             return;
         }
 
+        var configuredModuleKeys = ResolveConfiguredModuleKeys(config);
         Console.WriteLine("> Module definitions");
 
         await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
@@ -396,6 +417,11 @@ internal static partial class Program
         foreach (var definitionPath in definitionPaths)
         {
             var definition = await ReadModuleDefinitionAsync(definitionPath);
+            if (configuredModuleKeys.Count > 0 && !configuredModuleKeys.Contains(definition.ModuleKey))
+            {
+                continue;
+            }
+
             if (onlyNewerOrChanged)
             {
                 var current = await QueryAppliedModuleDefinitionAsync(
@@ -486,6 +512,26 @@ internal static partial class Program
                     ? $"  {definition.ModuleKey} {definition.DefinitionVersion}; executed {repairCount} SQL repair script(s)."
                     : $"  {definition.ModuleKey} {definition.DefinitionVersion}");
         }
+    }
+
+    private static IReadOnlySet<string> ResolveConfiguredModuleKeys(BootstrapConfig config)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var artifact in config.Artifacts.Where(static item => item.Enabled))
+        {
+            if (artifact.IsExample && !config.IncludeExampleApps)
+            {
+                continue;
+            }
+
+            var identity = ParseConfiguredArtifactIdentity(artifact.Source);
+            if (identity is not null)
+            {
+                keys.Add(identity.ModuleKey);
+            }
+        }
+
+        return keys;
     }
 
     private static async Task<AppliedModuleDefinition?> QueryAppliedModuleDefinitionAsync(
@@ -2313,11 +2359,25 @@ SELECT @templateAppRowsUpdated,
             Path.Join(availableRoot, "artifacts"),
             "*.zip",
             overwrite);
+        var hostConfigsCopied = CopyAvailableDeploymentObjects(
+            ResolvePackageHostConfigurationsRoot(payloadRoot),
+            Path.Join(availableRoot, "host-configs"),
+            "*.*",
+            overwrite,
+            static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        var configOverlaysCopied = CopyAvailableDeploymentObjects(
+            ResolvePackageConfigOverlaysRoot(payloadRoot),
+            Path.Join(availableRoot, "config-overlays"),
+            "*.*",
+            overwrite,
+            static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
 
-        if (definitionsCopied > 0 || artifactsCopied > 0)
+        if (definitionsCopied > 0 || artifactsCopied > 0 || hostConfigsCopied > 0 || configOverlaysCopied > 0)
         {
             Console.WriteLine(
-                $"> Available package library: {definitionsCopied} module definition(s), {artifactsCopied} artifact package(s)");
+                $"> Available package library: {definitionsCopied} module definition(s), {artifactsCopied} artifact package(s), {hostConfigsCopied} host config(s), {configOverlaysCopied} config overlay(s)");
         }
     }
 
@@ -2325,7 +2385,8 @@ SELECT @templateAppRowsUpdated,
         string sourceRoot,
         string targetRoot,
         string searchPattern,
-        bool overwrite)
+        bool overwrite,
+        Func<string, bool>? filter = null)
     {
         if (!Directory.Exists(sourceRoot))
         {
@@ -2336,6 +2397,11 @@ SELECT @templateAppRowsUpdated,
         var copied = 0;
         foreach (var sourcePath in Directory.EnumerateFiles(sourceRoot, searchPattern, SearchOption.TopDirectoryOnly))
         {
+            if (filter is not null && !filter(sourcePath))
+            {
+                continue;
+            }
+
             var targetPath = Path.Join(targetRoot, Path.GetFileName(sourcePath));
             if (!overwrite && File.Exists(targetPath))
             {
@@ -3915,11 +3981,18 @@ VALUES
     private static string ResolvePackageArtifactsRoot(string packageRoot)
         => ResolvePath(packageRoot, Path.Join("data", "global", "artifacts"));
 
+    private static string ResolvePackageHostConfigurationsRoot(string packageRoot)
+        => ResolvePath(packageRoot, Path.Join("data", "global", "host-configs"));
+
+    private static string ResolvePackageConfigOverlaysRoot(string packageRoot)
+        => ResolvePath(packageRoot, Path.Join("data", "global", "config-overlays"));
+
     private static IEnumerable<string> EnumerateHostAndGlobalDataRoots(string packageRoot, string configPath)
     {
         var configKey = Path.GetFileNameWithoutExtension(configPath);
         if (!string.IsNullOrWhiteSpace(configKey))
         {
+            yield return Path.Join(packageRoot, "data", "hosts", configKey);
             yield return Path.Join(packageRoot, "data", "profiles", configKey);
         }
 
@@ -4036,6 +4109,14 @@ internal sealed class CliOptions
 
     public bool RefreshInstallerPackage { get; private init; }
 
+    public bool UpgradeOrComplete { get; private init; }
+
+    public bool Uninstall { get; private init; }
+
+    public bool RemoveRuntimeFiles { get; private init; }
+
+    public bool RemoveDatabaseObjects { get; private init; }
+
     public int ParentProcessId { get; private init; }
 
     public bool RestartGui { get; private init; }
@@ -4074,6 +4155,18 @@ internal sealed class CliOptions
                     break;
                 case "--refresh-installer-package":
                     options.RefreshInstallerPackage = true;
+                    break;
+                case "--upgrade-or-complete":
+                    options.UpgradeOrComplete = true;
+                    break;
+                case "--uninstall":
+                    options.Uninstall = true;
+                    break;
+                case "--remove-runtime-files":
+                    options.RemoveRuntimeFiles = true;
+                    break;
+                case "--remove-database-objects":
+                    options.RemoveDatabaseObjects = true;
                     break;
                 case "--parent-process-id":
                     options.ParentProcessId = int.Parse(ReadValue(args, ref i, arg));
@@ -4118,12 +4211,33 @@ internal sealed class CliOptions
 
         public bool RefreshInstallerPackage { get; set; }
 
+        public bool UpgradeOrComplete { get; set; }
+
+        public bool Uninstall { get; set; }
+
+        public bool RemoveRuntimeFiles { get; set; }
+
+        public bool RemoveDatabaseObjects { get; set; }
+
         public int ParentProcessId { get; set; }
 
         public bool RestartGui { get; set; }
 
         public CliOptions ToOptions()
-            => new()
+        {
+            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage }
+                .Count(static item => item);
+            if (selectedModes > 1)
+            {
+                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, or refresh-installer-package.");
+            }
+
+            if ((RemoveRuntimeFiles || RemoveDatabaseObjects) && !Uninstall)
+            {
+                throw new InvalidOperationException("--remove-runtime-files and --remove-database-objects can only be used with --uninstall.");
+            }
+
+            return new()
             {
                 ConfigPath = ConfigPath,
                 ConfigDirectory = ConfigDirectory,
@@ -4133,9 +4247,14 @@ internal sealed class CliOptions
                 Gui = Gui,
                 ShowHelp = ShowHelp,
                 RefreshInstallerPackage = RefreshInstallerPackage,
+                UpgradeOrComplete = UpgradeOrComplete,
+                Uninstall = Uninstall,
+                RemoveRuntimeFiles = RemoveRuntimeFiles,
+                RemoveDatabaseObjects = RemoveDatabaseObjects,
                 ParentProcessId = ParentProcessId,
                 RestartGui = RestartGui
             };
+        }
     }
 }
 

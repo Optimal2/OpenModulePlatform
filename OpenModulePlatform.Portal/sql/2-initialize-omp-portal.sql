@@ -207,6 +207,8 @@ USING
     "ArtifactStoreRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}",
     "AvailableModuleDefinitionsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\module-definitions",
     "AvailableArtifactsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\artifacts",
+    "AvailableHostConfigurationsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\host-configs",
+    "AvailableConfigOverlaysRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\config-overlays",
     "MaxUploadBytes": 536870912
   },
   "Logging": {

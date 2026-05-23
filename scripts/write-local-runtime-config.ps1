@@ -126,6 +126,8 @@ $portalConfig = [ordered]@{
         ArtifactStoreRoot = $artifactStoreRoot
         AvailableModuleDefinitionsRoot = Join-Path $artifactStoreRoot '_available\module-definitions'
         AvailableArtifactsRoot = Join-Path $artifactStoreRoot '_available\artifacts'
+        AvailableHostConfigurationsRoot = Join-Path $artifactStoreRoot '_available\host-configs'
+        AvailableConfigOverlaysRoot = Join-Path $artifactStoreRoot '_available\config-overlays'
         MaxUploadBytes = 536870912
     }
     Logging = [ordered]@{

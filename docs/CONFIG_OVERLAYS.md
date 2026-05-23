@@ -1,0 +1,173 @@
+# Host Configurations And Config Overlays
+
+OMP keeps global deployment objects separate from host-specific configuration.
+That separation avoids duplicating module definitions and artifact binaries when
+only a server name, path, account, URL, or customer value differs.
+
+## Object Types
+
+There are two host-specific portable object types:
+
+- **Host configuration** is one JSON document per host. It contains the host key
+  and an opaque `values` object that generator scripts can use to create
+  overlays.
+- **Config overlay** is a JSON document or zip package that targets one host and
+  optionally narrows itself to a module, app, package type, target name, or
+  artifact version. HostAgent applies matching overlay configuration files on
+  top of artifact-owned configuration files during deployment.
+
+Both object types can be imported through Portal, imported by the HostAgent
+folder watcher, or copied into an installer package library.
+
+## Host Configuration JSON
+
+```json
+{
+  "formatVersion": 1,
+  "objectType": "host-configuration",
+  "hostKey": "DESKTOP-EXAMPLE",
+  "configurationVersion": "1.0.0",
+  "displayName": "Example host",
+  "description": "Host-level input for overlay generation.",
+  "values": {
+    "paths": {
+      "dataRoot": "E:\\OMP\\Data"
+    },
+    "identity": {
+      "defaultServiceAccountKey": "default-service"
+    }
+  }
+}
+```
+
+Host configuration imports are stored in `omp.HostConfigurationDocuments`.
+OMP core does not interpret the `values` object directly. Repository-level or
+customer-specific generation scripts decide which values are meaningful.
+
+## Config Overlay JSON
+
+```json
+{
+  "formatVersion": 1,
+  "objectType": "config-overlay",
+  "overlayKey": "opendocviewer-site-config",
+  "overlayVersion": "1.0.0",
+  "hostKey": "DESKTOP-EXAMPLE",
+  "moduleKey": "opendocviewer",
+  "appKey": "opendocviewer_webapp",
+  "packageType": "web-app",
+  "targetName": "opendocviewer",
+  "artifactVersion": "2.0.3",
+  "configurationFiles": [
+    {
+      "relativePath": "odv.site.config.js",
+      "fileContent": "window.OpenDocViewerSiteConfig = { apiBaseUrl: '/OpenDocViewer' };"
+    }
+  ],
+  "sqlScripts": []
+}
+```
+
+The selectors are intentionally optional except for `overlayKey`,
+`overlayVersion`, and `hostKey`.
+
+- If `moduleKey` is omitted, the overlay can match any module on that host.
+- If `appKey` is omitted, it can match any app in the selected module scope.
+- If `packageType`, `targetName`, or `artifactVersion` are omitted, those
+  fields do not constrain the match.
+
+Configuration files are stored in `omp.ConfigOverlayConfigurationFiles`.
+HostAgent loads artifact-owned configuration first, then matching overlay files.
+If both define the same `relativePath`, the overlay wins for that host.
+
+## Config Overlay Package Zip
+
+Use a zip package when the overlay contains JavaScript, HTML, XML, or other text
+that security products may block as raw form posts, or when the overlay should
+keep reviewable sidecar files.
+
+```text
+DESKTOP-EXAMPLE__opendocviewer-site-config__overlay__1.0.0.zip
+  omp-config-overlay.json
+  files/odv.site.config.js
+  sql/repair.sql
+```
+
+The manifest can reference files with `source` or `path`:
+
+```json
+{
+  "formatVersion": 1,
+  "objectType": "config-overlay",
+  "overlayKey": "opendocviewer-site-config",
+  "overlayVersion": "1.0.0",
+  "hostKey": "DESKTOP-EXAMPLE",
+  "moduleKey": "opendocviewer",
+  "appKey": "opendocviewer_webapp",
+  "packageType": "web-app",
+  "configurationFiles": [
+    {
+      "relativePath": "odv.site.config.js",
+      "source": "files/odv.site.config.js"
+    }
+  ],
+  "sqlScripts": [
+    {
+      "key": "customer-repair",
+      "phase": "repair",
+      "execution": "idempotent",
+      "source": "sql/repair.sql"
+    }
+  ]
+}
+```
+
+Portal and HostAgent normalize referenced files into the stored JSON before the
+object is saved. The stored object is therefore self-contained even if the
+source zip used separate files for code review.
+
+## Installer Package Layout
+
+HostAgent-first packages use one global portable object library:
+
+```text
+data/global/module-definitions
+data/global/artifacts
+data/global/host-configs
+data/global/config-overlays
+```
+
+The selected host config file under `configs` contains all host-specific
+installer settings. If a package must carry host-only helper files for the
+bootstrapper itself, place them below:
+
+```text
+data/hosts/<config-file-name-without-extension>
+```
+
+The bootstrapper copies the global library into:
+
+```text
+ArtifactStoreRoot\_available\module-definitions
+ArtifactStoreRoot\_available\artifacts
+ArtifactStoreRoot\_available\host-configs
+ArtifactStoreRoot\_available\config-overlays
+```
+
+Portal reads these folders from the `ArtifactUpload` settings and offers the
+objects for later import. HostAgent import-folder processing accepts the same
+object formats directly.
+
+## Tooling
+
+- Portal: `/admin/modulepackageimport` imports and exports host configurations
+  and config overlays.
+- Portal: `/admin/configoverlayeditor` hosts the browser editor for creating
+  host configuration and overlay JSON.
+- Standalone: `tools/config-overlay-editor/index.html` runs without IIS or
+  .NET and can be used from a package `tools` folder.
+
+Repository build scripts should create global module definitions and artifact
+packages from neutral source data. Customer or host-specific values should live
+in the private installation repository and be passed to generator scripts that
+write host configurations or config overlays.

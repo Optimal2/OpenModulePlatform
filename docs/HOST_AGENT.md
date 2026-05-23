@@ -157,6 +157,14 @@ uses this for deployment-owned runtime files, for example a site-local
 `odv.site.config.js`, without requiring a new artifact zip for every
 configuration change.
 
+Host-specific config overlays are applied after artifact-owned configuration
+files. Matching enabled rows in `omp.ConfigOverlayDocuments` and
+`omp.ConfigOverlayConfigurationFiles` are selected for the current host and the
+artifact being deployed. If an overlay file uses the same relative path as an
+artifact-owned file, the overlay wins for that host. This is the preferred
+model for customer, server, or environment values that should not be bundled
+with a global artifact package.
+
 New artifact packages can carry those files in the manifest envelope documented
 in [`ARTIFACT_PACKAGES.md`](ARTIFACT_PACKAGES.md). HostAgent registers the
 configuration rows during import and only extracts the declared payload to the
