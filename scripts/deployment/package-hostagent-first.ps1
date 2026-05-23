@@ -1372,6 +1372,7 @@ $additionalServiceNamesToRemove = [System.Collections.Generic.List[string]]::new
 foreach ($name in @(
         [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'WorkerManager' -DefaultValue 'OMP.WorkerManager'),
         [string](Get-NestedConfigValue -Config $config -Section 'Services' -Name 'ExampleService' -DefaultValue 'OMP.Service.ExampleServiceAppModule'),
+        'OMP.Service.ExampleServiceAppModule',
         'OpenModulePlatform.HostAgent',
         'OpenModulePlatform.WorkerManager',
         'OpenModulePlatform.Service.ExampleServiceAppModule'
