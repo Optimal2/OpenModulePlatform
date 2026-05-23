@@ -162,9 +162,9 @@ To move a module from one OMP installation to another:
    `/admin/modulepackageimport`.
 3. Validate the module definition matrix and run required safe repairs when the
    import did not execute them immediately.
-4. Review the desired template state. When "use imported artifacts immediately"
-   was enabled during import, HostAgent deploys the selected versions on its
-   next cycle.
+4. Review the desired installation state. When "use imported artifacts
+   immediately" was enabled during import, HostAgent deploys the selected
+   versions on its next cycle.
 
 Portal-driven import can offer operator choices for conflicts. HostAgent folder
 import is intentionally strict for unattended decisions, but complete module

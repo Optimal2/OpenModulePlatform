@@ -6,7 +6,7 @@
         <div class="eyebrow">@L["Runtime result"]</div>
         <h2>@L["App instances"]</h2>
         <p class="lede">
-            @L["App instances show the materialized runtime state. For template-managed apps, change host placement, version and desired state on the instance template instead."]
+            @L["App instances show the materialized runtime state. For installation-managed apps, change host placement, version and desired state from System > Installation."]
         </p>
     </div>
 </section>
@@ -70,7 +70,7 @@ else
                               asp-page-handler="DeleteRuntime"
                               asp-route-appInstanceId="@row.AppInstanceId"
                               class="inline-form"
-                              onsubmit="return confirm('@L["Delete this runtime row? If the instance template still expects it, HostAgent may recreate it."]');">
+                              onsubmit="return confirm('@L["Delete this runtime row? If the installation topology still expects it, HostAgent may recreate it."]');">
                             <button type="submit"
                                     class="btn btn-link-danger admin-icon-button admin-icon-button--delete"
                                     title="@L["Delete runtime row"]"

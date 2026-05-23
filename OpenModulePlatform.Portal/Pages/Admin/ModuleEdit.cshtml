@@ -29,7 +29,7 @@
         <div class="form-field">
             <label asp-for="Input.ModuleKey"></label>
             <input asp-for="Input.ModuleKey" />
-            <div class="field-help">@L["Stable definition key used by apps and instance templates."]</div>
+            <div class="field-help">@L["Stable definition key used by apps and installation topology."]</div>
             <span asp-validation-for="Input.ModuleKey" class="field-validation-error"></span>
         </div>
 
@@ -91,7 +91,7 @@
         <input type="hidden" asp-for="Input.ModuleId" />
         <h3>@L["Danger zone"]</h3>
         <p class="muted">
-            @L["Deleting a module is only possible when dependent apps, module instances and template rows are already gone."]
+            @L["Deleting a module is only possible when dependent apps, module instances and desired installation rows are already gone."]
         </p>
         <button type="submit" class="btn btn-danger">@L["Delete module"]</button>
     </form>
