@@ -1285,11 +1285,86 @@ SELECT TOP (100)
        s.LocalPath,
        s.LastCheckedUtc,
        s.LastProvisionedUtc,
-       s.LastError
+       s.LastError,
+       CAST(CASE WHEN desired.ArtifactId IS NULL THEN 0 ELSE 1 END AS bit) AS IsCurrentlyDesired
 FROM omp.HostArtifactStates s
 INNER JOIN omp.Hosts h ON h.HostId = s.HostId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = s.ArtifactId
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+OUTER APPLY
+(
+    SELECT TOP (1) desiredArtifacts.ArtifactId
+    FROM
+    (
+        SELECT arApp.ArtifactId
+        FROM omp.AppInstances ai
+        INNER JOIN omp.Artifacts arApp ON arApp.ArtifactId = ai.ArtifactId
+        WHERE arApp.ArtifactId = s.ArtifactId
+          AND ai.IsEnabled = 1
+          AND ai.IsAllowed = 1
+          AND arApp.IsEnabled = 1
+          AND
+          (
+              ai.HostId = s.HostId
+              OR (ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL)
+              OR
+              (
+                  ai.HostId IS NULL
+                  AND ai.TargetHostTemplateId IS NOT NULL
+                  AND EXISTS
+                  (
+                      SELECT 1
+                      FROM omp.HostDeploymentAssignments hda
+                      WHERE hda.HostId = s.HostId
+                        AND hda.HostTemplateId = ai.TargetHostTemplateId
+                        AND hda.IsActive = 1
+                  )
+              )
+          )
+
+        UNION ALL
+
+        SELECT arWorker.ArtifactId
+        FROM omp.WorkerInstances wi
+        INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
+        INNER JOIN omp.Artifacts arWorker ON arWorker.ArtifactId = COALESCE(wi.ArtifactId, ai.ArtifactId)
+        WHERE arWorker.ArtifactId = s.ArtifactId
+          AND ai.IsEnabled = 1
+          AND ai.IsAllowed = 1
+          AND wi.IsEnabled = 1
+          AND wi.IsAllowed = 1
+          AND arWorker.IsEnabled = 1
+          AND
+          (
+              wi.HostId = s.HostId
+              OR (wi.HostId IS NULL AND ai.HostId = s.HostId)
+              OR
+              (
+                  wi.HostId IS NULL
+                  AND ai.HostId IS NULL
+                  AND ai.TargetHostTemplateId IS NOT NULL
+                  AND EXISTS
+                  (
+                      SELECT 1
+                      FROM omp.HostDeploymentAssignments hda
+                      WHERE hda.HostId = s.HostId
+                        AND hda.HostTemplateId = ai.TargetHostTemplateId
+                        AND hda.IsActive = 1
+                  )
+              )
+          )
+
+        UNION ALL
+
+        SELECT arRequirement.ArtifactId
+        FROM omp.HostArtifactRequirements har
+        INNER JOIN omp.Artifacts arRequirement ON arRequirement.ArtifactId = har.ArtifactId
+        WHERE arRequirement.ArtifactId = s.ArtifactId
+          AND har.HostId = s.HostId
+          AND har.IsEnabled = 1
+          AND arRequirement.IsEnabled = 1
+    ) desiredArtifacts
+) desired
 ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey, a.AppKey, ar.Version DESC;";
 
         var rows = new List<HostArtifactStateRow>();
@@ -1310,7 +1385,8 @@ ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey,
                 LocalPath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
                 LastCheckedUtc = rdr.IsDBNull(7) ? null : rdr.GetDateTime(7),
                 LastProvisionedUtc = rdr.IsDBNull(8) ? null : rdr.GetDateTime(8),
-                LastError = rdr.IsDBNull(9) ? null : rdr.GetString(9)
+                LastError = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                IsCurrentlyDesired = rdr.GetBoolean(10)
             });
         }
         return rows;

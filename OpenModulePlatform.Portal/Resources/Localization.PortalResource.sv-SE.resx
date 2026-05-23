@@ -2130,4 +2130,5 @@
   <data name="Last 24 hours" xml:space="preserve"><value>Senaste 24 timmarna</value></data>
   <data name="Last 7 days" xml:space="preserve"><value>Senaste 7 dagarna</value></data>
   <data name="Last 30 days" xml:space="preserve"><value>Senaste 30 dagarna</value></data>
+  <data name="Only currently desired artifacts" xml:space="preserve"><value>Bara artefakter som fortfarande är önskade</value></data>
 </root>

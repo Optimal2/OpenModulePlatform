@@ -173,6 +173,10 @@
                 <input type="checkbox" data-ops-interesting checked />
                 <span>@L["Only rows that need attention"]</span>
             </label>
+            <label class="checkbox-row table-tools__check">
+                <input type="checkbox" data-ops-current checked />
+                <span>@L["Only currently desired artifacts"]</span>
+            </label>
             <span class="muted table-tools__count" data-ops-count></span>
         </div>
         <div class="table-scroll">
@@ -195,6 +199,7 @@
                     <tr data-state="@row.ProvisioningState"
                         data-row-time="@HostDeploymentsModel.ToUnixTimeMilliseconds(row.LastCheckedUtc)"
                         data-interesting="@HostDeploymentsModel.IsInterestingArtifactState(row).ToString().ToLowerInvariant()"
+                        data-current="@row.IsCurrentlyDesired.ToString().ToLowerInvariant()"
                         data-search="@($"{row.HostKey} {row.AppKey} {row.ArtifactVersion} {row.PackageType} {row.TargetName} {row.LocalPath} {row.LastError}")">
                         <td><code>@row.HostKey</code></td>
                         <td><code>@row.AppKey</code></td>
@@ -233,6 +238,7 @@
         const status = controls.querySelector('[data-ops-status]')?.value ?? '';
         const sinceHours = Number(controls.querySelector('[data-ops-since]')?.value || 0);
         const onlyInteresting = controls.querySelector('[data-ops-interesting]')?.checked ?? false;
+        const onlyCurrent = controls.querySelector('[data-ops-current]')?.checked ?? false;
         const threshold = sinceHours > 0 ? now - (sinceHours * 60 * 60 * 1000) : 0;
         let visible = 0;
         let total = 0;
@@ -243,8 +249,9 @@
             const matchesSearch = !search || normalize(row.dataset.search).includes(search);
             const matchesStatus = !status || row.dataset.state === status;
             const matchesInteresting = !onlyInteresting || row.dataset.interesting === 'true';
+            const matchesCurrent = !onlyCurrent || row.dataset.current === 'true';
             const matchesTime = !sinceHours || (rowTime > 0 && rowTime >= threshold);
-            const show = matchesSearch && matchesStatus && matchesInteresting && matchesTime;
+            const show = matchesSearch && matchesStatus && matchesInteresting && matchesCurrent && matchesTime;
             row.hidden = !show;
             if (show) {
                 visible++;
