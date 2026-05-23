@@ -16,36 +16,71 @@ of in one-off PowerShell installation logic.
 
 ## Package Layout
 
-`scripts/deployment/package-hostagent-first.ps1` creates a package with this
-shape:
+The bootstrapper supports this package shape, and new package builds should
+produce it:
 
 ```text
 OpenModulePlatformHostAgentFirst-<version>/
   OpenModulePlatform.Bootstrapper.exe
-  bootstrap.local.sample.json
   configs/
-    bootstrap.local.sample.json
+    linus.json
+    alfons.json
+    vgr-production-1825.json
+    vgr-production-1826.json
+  data/
+    global/
+      artifacts/
+        initial/
+          omp_portal__omp_portal__web-app__omp-portal__<version>.zip
+          content_webapp__content_webapp_webapp__web-app__content-webapp__<version>.zip
+          opendocviewer__opendocviewer_webapp__web-app__opendocviewer__<version>.zip
+          ...
+        available/
+          <module artifact packages available for later Portal import>
+      module-definitions/
+        initial/
+          omp_core.module-definition.json
+          omp_portal.module-definition.json
+          ...
+        available/
+          <module definitions available for later Portal import>
+      sql/
+        bootstrap-local.sql
+      tools/
+        bootstrap-config-editor/
+          index.html
+    profiles/
+      linus/
+        sql/
+        files/
+      alfons/
+        sql/
+        files/
+      vgr-production-1825/
+        sql/
+        files/
   install-hostagent-first.cmd
   install-hostagent-first-console.cmd
   uninstall-hostagent-first.cmd
   uninstall-hostagent-first-clean.cmd
   uninstall-hostagent-first.ps1
   manifest.json
-  payload/
-    OpenModulePlatform.HostAgent.WindowsService.zip
-    omp_portal__omp_portal__web-app__omp-portal__<version>.zip
-    content_webapp__content_webapp_webapp__web-app__content-webapp__<version>.zip
-    opendocviewer__opendocviewer_webapp__web-app__opendocviewer__<version>.zip
-    ...
-  sql/
-    bootstrap-local.sql
-    OpenModulePlatform/
-    OpenModulePlatform.Portal/
-    ...
   tools/
     OpenModulePlatform.Bootstrapper/
       OpenModulePlatform.Bootstrapper.exe
 ```
+
+The package has two data levels: `data/global` contains portable objects shared
+by every host profile in the package, while `data/profiles/<config-file-name>`
+contains only host-specific SQL and file payload. The selected file in
+`configs` is the host profile; there is no separate installation-instance layer
+in the package layout.
+
+Older packages used top-level `payload`, `module-definitions`,
+`available-artifacts`, `available-module-definitions`, and `sql` folders. The
+bootstrapper still reads that layout for compatibility, but new packages should
+write portable objects below `data/global` and host-specific additions below
+`data/profiles`.
 
 The root bootstrapper is published separately with single-file settings so the
 operator entry point stays as small and obvious as the .NET runtime allows. The
@@ -242,12 +277,13 @@ be included in the source comparison. This developer workflow is intentionally
 local; production updates should still use controlled artifact/module-definition
 packages.
 
-HostAgent-first packages keep two sets of portable objects:
+HostAgent-first packages keep two sets of portable objects under
+`data/global`:
 
-- `module-definitions` and `payload` contain the module definitions and artifact
-  packages that the bootstrapper imports or copies during the initial
-  installation.
-- `available-module-definitions` and `available-artifacts` contain module
+- `module-definitions/initial` and `artifacts/initial` contain the module
+  definitions and artifact packages that the bootstrapper imports or copies
+  during the initial installation.
+- `module-definitions/available` and `artifacts/available` contain module
   definitions and artifact packages that are packaged for later Portal-driven
   installation. During bootstrap these files are copied, without deleting older
   files, into `ArtifactStoreRoot\_available\module-definitions` and
@@ -263,8 +299,8 @@ HostAgent-first packages keep two sets of portable objects:
 The GUI action `Sync package objects` is the lightweight alternative to
 `Create updated installer package`. It uses the same source manifest comparison
 as `Check source objects`, then updates module-definition JSON files and copies
-already-built standard artifact packages into `payload` or
-`available-artifacts` as needed. When a required standard artifact package is
+already-built standard artifact packages into the initial or available artifact
+package library as needed. When a required standard artifact package is
 missing and the component manifest points at a single .NET project through
 `projectPath`, the bootstrapper publishes only that project, wraps the publish
 output as an OMP artifact package, and writes it to `RuntimeRoot\ArtifactArchive`
@@ -424,22 +460,23 @@ HostAgentFirst = @{
     AdditionalArtifactFiles = @(
         @{
             Source = '..\IbsPackager\artifacts\archive\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
-            Payload = 'payload\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
+            Payload = 'data\global\artifacts\available\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
             Target = 'ibs-packager/web/0.3.3'
         }
     )
 }
 ```
 
-The package script copies those files into `sql/Customer` by default and appends
-the SQL files after the neutral OMP initialization scripts in
-`sql/bootstrap-local.sql`. Module-definition source files normally live at each
+The package script copies host-specific SQL files into the active profile data
+folder when the new layout is used, and appends them after the neutral OMP
+initialization scripts. Module-definition source files normally live at each
 module root and are listed in `omp-components.json`; the package script copies
-them into the package-local `module-definitions` import folder and imports them
-after SQL initialization so artifact import can validate versions against the
-applied definitions. Additional artifact files are copied into the same package
-payload and listed in `bootstrap.local.sample.json`; the installer executable is
-unchanged and only the payload/config differs between environments.
+initial definitions into `data/global/module-definitions/initial` and later
+installable definitions into `data/global/module-definitions/available`.
+Additional artifact files are copied into `data/global/artifacts/initial` or
+`data/global/artifacts/available` and listed in the matching config file. The
+installer executable is unchanged and only the shared data/config profile
+differs between environments.
 
 For example, a protected VGR package can set:
 

@@ -115,7 +115,7 @@ internal static partial class Program
 
             if (config.Sql.Enabled)
             {
-                await RunSqlAsync(config, payloadRoot);
+                await RunSqlAsync(config, configPath, payloadRoot);
                 await ImportModuleDefinitionsAsync(config, payloadRoot);
             }
 
@@ -334,7 +334,7 @@ internal static partial class Program
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
 
-    private static async Task RunSqlAsync(BootstrapConfig config, string payloadRoot)
+    private static async Task RunSqlAsync(BootstrapConfig config, string configPath, string payloadRoot)
     {
         var sql = config.Sql;
         if (string.IsNullOrWhiteSpace(sql.Database))
@@ -354,7 +354,7 @@ internal static partial class Program
                 throw new InvalidOperationException("Sql:Scripts contains an enabled entry without Path.");
             }
 
-            var scriptPath = ResolvePath(payloadRoot, script.Path);
+            var scriptPath = ResolvePackageDataPath(payloadRoot, configPath, script.Path);
             Console.WriteLine($"> SQL {scriptPath}");
             var sqlText = ReadSqlFile(scriptPath, sql, payloadRoot, config.IncludeExampleApps, []);
             await ExecuteSqlBatchesAsync(sql, sql.Database, sqlText, scriptPath);
@@ -366,7 +366,7 @@ internal static partial class Program
         string payloadRoot,
         bool onlyNewerOrChanged = false)
     {
-        var definitionsRoot = Path.Combine(payloadRoot, "module-definitions");
+        var definitionsRoot = ResolveInitialModuleDefinitionsRoot(payloadRoot);
         if (!Directory.Exists(definitionsRoot))
         {
             return;
@@ -1905,7 +1905,7 @@ END;
                 throw new InvalidOperationException("Artifacts contains an enabled entry without Source or Target.");
             }
 
-            var source = ResolvePath(payloadRoot, artifact.Source);
+            var source = ResolvePackageDataPath(payloadRoot, artifact.Source);
             var target = CombineUnderRoot(artifactStoreRoot, artifact.Target);
             if (mode == ArtifactPreparationMode.AddMissingOnly
                 && (File.Exists(target) || Directory.Exists(target)))
@@ -2295,12 +2295,12 @@ SELECT @templateAppRowsUpdated,
         var artifactStoreRoot = Path.GetFullPath(config.ArtifactStoreRoot.Trim());
         var availableRoot = Path.Combine(artifactStoreRoot, "_available");
         var definitionsCopied = CopyAvailableDeploymentObjects(
-            Path.Combine(payloadRoot, "available-module-definitions"),
+            ResolveAvailableModuleDefinitionsRoot(payloadRoot),
             Path.Combine(availableRoot, "module-definitions"),
             "*.json",
             overwrite);
         var artifactsCopied = CopyAvailableDeploymentObjects(
-            Path.Combine(payloadRoot, "available-artifacts"),
+            ResolveAvailableArtifactsRoot(payloadRoot),
             Path.Combine(availableRoot, "artifacts"),
             "*.zip",
             overwrite);
@@ -2488,7 +2488,7 @@ VALUES
             throw new InvalidOperationException("HostAgent:PackagePath must be configured.");
         }
 
-        var packagePath = ResolvePath(payloadRoot, hostAgent.PackagePath);
+        var packagePath = ResolvePackageDataPath(payloadRoot, hostAgent.PackagePath);
         var installPath = Path.GetFullPath(hostAgent.InstallPath.Trim());
         var stagingRoot = Path.Combine(Path.GetTempPath(), "OMP.HostAgent", Guid.NewGuid().ToString("N"));
         var sourceDirectory = packagePath;
@@ -3891,6 +3891,113 @@ VALUES
         => Path.IsPathRooted(path)
             ? Path.GetFullPath(path)
             : Path.GetFullPath(Path.Combine(root, path));
+
+    private static string ResolvePackageDataPath(string packageRoot, string path)
+    {
+        var direct = ResolvePath(packageRoot, path);
+        if (Path.IsPathRooted(path) || File.Exists(direct) || Directory.Exists(direct))
+        {
+            return direct;
+        }
+
+        var mapped = ResolveLegacyPackageDataPath(packageRoot, path);
+        return mapped ?? direct;
+    }
+
+    private static string ResolvePackageDataPath(string packageRoot, string configPath, string path)
+    {
+        if (Path.IsPathRooted(path))
+        {
+            return Path.GetFullPath(path);
+        }
+
+        foreach (var root in EnumerateHostAndGlobalDataRoots(packageRoot, configPath))
+        {
+            var candidate = Path.GetFullPath(Path.Combine(root, path));
+            if (File.Exists(candidate) || Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        var direct = ResolvePackageDataPath(packageRoot, path);
+        return direct;
+    }
+
+    private static string ResolveInitialModuleDefinitionsRoot(string packageRoot)
+        => ResolvePackageDirectory(
+            packageRoot,
+            Path.Combine("data", "global", "module-definitions", "initial"),
+            "module-definitions");
+
+    private static string ResolveAvailableModuleDefinitionsRoot(string packageRoot)
+        => ResolvePackageDirectory(
+            packageRoot,
+            Path.Combine("data", "global", "module-definitions", "available"),
+            "available-module-definitions");
+
+    private static string ResolveInitialArtifactsRoot(string packageRoot)
+        => ResolvePackageDirectory(
+            packageRoot,
+            Path.Combine("data", "global", "artifacts", "initial"),
+            "payload");
+
+    private static string ResolveAvailableArtifactsRoot(string packageRoot)
+        => ResolvePackageDirectory(
+            packageRoot,
+            Path.Combine("data", "global", "artifacts", "available"),
+            "available-artifacts");
+
+    private static string ResolvePackageDirectory(string packageRoot, string preferredRelativePath, string legacyRelativePath)
+    {
+        var preferred = ResolvePath(packageRoot, preferredRelativePath);
+        return Directory.Exists(preferred)
+            ? preferred
+            : ResolvePath(packageRoot, legacyRelativePath);
+    }
+
+    private static string? ResolveLegacyPackageDataPath(string packageRoot, string path)
+    {
+        var normalized = NormalizePathForMatch(path);
+        var fileName = Path.GetFileName(path);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        string? candidate = null;
+        if (normalized.StartsWith("payload/", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = Path.Combine(ResolveInitialArtifactsRoot(packageRoot), fileName);
+        }
+        else if (normalized.StartsWith("available-artifacts/", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = Path.Combine(ResolveAvailableArtifactsRoot(packageRoot), fileName);
+        }
+        else if (normalized.StartsWith("module-definitions/", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = Path.Combine(ResolveInitialModuleDefinitionsRoot(packageRoot), fileName);
+        }
+        else if (normalized.StartsWith("available-module-definitions/", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = Path.Combine(ResolveAvailableModuleDefinitionsRoot(packageRoot), fileName);
+        }
+
+        return candidate is not null && (File.Exists(candidate) || Directory.Exists(candidate))
+            ? candidate
+            : null;
+    }
+
+    private static IEnumerable<string> EnumerateHostAndGlobalDataRoots(string packageRoot, string configPath)
+    {
+        var configKey = Path.GetFileNameWithoutExtension(configPath);
+        if (!string.IsNullOrWhiteSpace(configKey))
+        {
+            yield return Path.Combine(packageRoot, "data", "profiles", configKey);
+        }
+
+        yield return Path.Combine(packageRoot, "data", "global");
+    }
 
     private static string CombineUnderRoot(string root, string relative)
     {
