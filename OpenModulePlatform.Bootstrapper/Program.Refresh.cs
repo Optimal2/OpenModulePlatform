@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows.Forms;
 
 namespace OpenModulePlatform.Bootstrapper;
@@ -200,6 +201,7 @@ internal static partial class Program
 
         Console.WriteLine($"Generated package: {generatedPackageRoot}");
         await MergeCurrentBootstrapConfigAsync(config, configPath, payloadRoot, generatedPackageRoot);
+        MergeCurrentPackageData(payloadRoot, generatedPackageRoot, configPath);
         ReplaceDirectory(generatedPackageRoot, payloadRoot);
 
         var destinationLogPath = Path.Join(payloadRoot, "installer-refresh.log");
@@ -293,18 +295,136 @@ internal static partial class Program
     {
         var generatedTemplateConfigPath = ResolveGeneratedTemplateConfigPath(generatedPackageRoot);
         var generatedConfig = await ReadJsonAsync<BootstrapConfig>(generatedTemplateConfigPath);
-        currentConfig.Artifacts = generatedConfig.Artifacts;
-        currentConfig.Sql.ArtifactVersionOverrides = generatedConfig.Sql.ArtifactVersionOverrides;
-        currentConfig.Sql.ArtifactVersionVariableOverrides = generatedConfig.Sql.ArtifactVersionVariableOverrides;
+        var currentConfigRoot = Path.Join(currentPackageRoot, "configs");
+        var configsToMerge = Directory.Exists(currentConfigRoot)
+            ? Directory.EnumerateFiles(currentConfigRoot, "*.json", SearchOption.TopDirectoryOnly)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : [currentConfigPath];
 
-        var generatedConfigPath = ResolveGeneratedCurrentConfigPath(
-            currentConfigPath,
+        var wroteAnyConfig = false;
+        foreach (var configPath in configsToMerge)
+        {
+            var profileConfig = string.Equals(
+                Path.GetFullPath(configPath),
+                Path.GetFullPath(currentConfigPath),
+                StringComparison.OrdinalIgnoreCase)
+                    ? currentConfig
+                    : await ReadJsonAsync<BootstrapConfig>(configPath);
+
+            ApplyGeneratedPayloadMetadata(profileConfig, generatedConfig);
+            var generatedConfigPath = ResolveGeneratedCurrentConfigPath(
+                configPath,
+                currentPackageRoot,
+                generatedPackageRoot,
+                generatedTemplateConfigPath);
+            var json = JsonSerializer.Serialize(profileConfig, JsonOptions);
+            Directory.CreateDirectory(Path.GetDirectoryName(generatedConfigPath)!);
+            await File.WriteAllTextAsync(generatedConfigPath, json + Environment.NewLine, Encoding.UTF8);
+            wroteAnyConfig = true;
+        }
+
+        var generatedSampleProfile = Path.Join(generatedPackageRoot, "configs", "bootstrap.local.sample.json");
+        if (wroteAnyConfig
+            && !configsToMerge.Any(path =>
+                Path.GetFileName(path).Equals("bootstrap.local.sample.json", StringComparison.OrdinalIgnoreCase))
+            && File.Exists(generatedSampleProfile))
+        {
+            File.Delete(generatedSampleProfile);
+        }
+    }
+
+    private static void ApplyGeneratedPayloadMetadata(BootstrapConfig profileConfig, BootstrapConfig generatedConfig)
+    {
+        profileConfig.Artifacts = generatedConfig.Artifacts;
+        profileConfig.Sql.ArtifactVersionOverrides = generatedConfig.Sql.ArtifactVersionOverrides;
+        profileConfig.Sql.ArtifactVersionVariableOverrides = generatedConfig.Sql.ArtifactVersionVariableOverrides;
+
+        var generatedHostAgentSettings = generatedConfig.HostAgent.AppSettings?["HostAgent"] as JsonObject;
+        var profileHostAgentSettings = profileConfig.HostAgent.AppSettings?["HostAgent"] as JsonObject;
+        if (generatedHostAgentSettings is null || profileHostAgentSettings is null)
+        {
+            return;
+        }
+
+        if (generatedHostAgentSettings.TryGetPropertyValue("Version", out var generatedVersion)
+            && generatedVersion is not null)
+        {
+            profileHostAgentSettings["Version"] = generatedVersion.DeepClone();
+        }
+    }
+
+    private static void MergeCurrentPackageData(
+        string currentPackageRoot,
+        string generatedPackageRoot,
+        string currentConfigPath)
+    {
+        MergeCurrentGlobalConfigObjectLibrary(
             currentPackageRoot,
             generatedPackageRoot,
-            generatedTemplateConfigPath);
-        var json = JsonSerializer.Serialize(currentConfig, JsonOptions);
-        Directory.CreateDirectory(Path.GetDirectoryName(generatedConfigPath)!);
-        await File.WriteAllTextAsync(generatedConfigPath, json + Environment.NewLine, Encoding.UTF8);
+            "host-configs");
+        MergeCurrentGlobalConfigObjectLibrary(
+            currentPackageRoot,
+            generatedPackageRoot,
+            "config-overlays");
+
+        var generatedHostsRoot = Path.Join(generatedPackageRoot, "data", "hosts");
+        var generatedSampleHostRoot = Path.Join(generatedHostsRoot, "bootstrap.local.sample");
+        var activeConfigKey = Path.GetFileNameWithoutExtension(currentConfigPath);
+
+        CopyCurrentHostData(currentPackageRoot, generatedPackageRoot, activeConfigKey);
+
+        if (!string.IsNullOrWhiteSpace(activeConfigKey)
+            && Directory.Exists(generatedSampleHostRoot)
+            && !activeConfigKey.Equals("bootstrap.local.sample", StringComparison.OrdinalIgnoreCase))
+        {
+            CopyDirectoryRecursive(
+                generatedSampleHostRoot,
+                Path.Join(generatedHostsRoot, activeConfigKey));
+        }
+    }
+
+    private static void MergeCurrentGlobalConfigObjectLibrary(
+        string currentPackageRoot,
+        string generatedPackageRoot,
+        string libraryName)
+    {
+        var currentLibraryRoot = Path.Join(currentPackageRoot, "data", "global", libraryName);
+        if (!Directory.Exists(currentLibraryRoot))
+        {
+            return;
+        }
+
+        CopyDirectoryRecursive(
+            currentLibraryRoot,
+            Path.Join(generatedPackageRoot, "data", "global", libraryName));
+    }
+
+    private static void CopyCurrentHostData(
+        string currentPackageRoot,
+        string generatedPackageRoot,
+        string activeConfigKey)
+    {
+        var currentHostsRoot = Path.Join(currentPackageRoot, "data", "hosts");
+        if (!Directory.Exists(currentHostsRoot))
+        {
+            return;
+        }
+
+        foreach (var currentHostRoot in Directory.EnumerateDirectories(currentHostsRoot, "*", SearchOption.TopDirectoryOnly))
+        {
+            var configKey = Path.GetFileName(currentHostRoot);
+            if (configKey.Equals("bootstrap.local.sample", StringComparison.OrdinalIgnoreCase)
+                || (!string.IsNullOrWhiteSpace(activeConfigKey)
+                    && configKey.Equals(activeConfigKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            CopyDirectoryRecursive(
+                currentHostRoot,
+                Path.Join(generatedPackageRoot, "data", "hosts", configKey));
+        }
     }
 
     private static string ResolveGeneratedTemplateConfigPath(string generatedPackageRoot)

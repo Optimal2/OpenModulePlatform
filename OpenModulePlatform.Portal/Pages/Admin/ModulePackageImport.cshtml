@@ -86,11 +86,25 @@
                     <span class="workflow-choice__text">@L["Import dashboard widget definitions from JSON."]</span>
                 </span>
             </button>
+            <button type="button" class="workflow-choice" data-workflow-action="import-host-config" aria-pressed="false">
+                <span class="workflow-choice__icon" aria-hidden="true">⌂</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Host config"]</span>
+                    <span class="workflow-choice__text">@L["Import one host configuration object."]</span>
+                </span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="import-config-overlay" aria-pressed="false">
+                <span class="workflow-choice__icon" aria-hidden="true">▦</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Config overlay"]</span>
+                    <span class="workflow-choice__text">@L["Import host-specific module or artifact configuration."]</span>
+                </span>
+            </button>
             <button type="button" class="workflow-choice" data-workflow-action="import-library" aria-pressed="false">
                 <span class="workflow-choice__icon" aria-hidden="true">LIB</span>
                 <span class="workflow-choice__content">
                     <span class="workflow-choice__title">@L["Available package library"]</span>
-                    <span class="workflow-choice__text">@L["Import a module package already stored in the shared package library."]</span>
+                    <span class="workflow-choice__text">@L["Import objects already stored in the shared package library."]</span>
                 </span>
             </button>
         </div>
@@ -115,6 +129,20 @@
                 <span class="workflow-choice__content">
                     <span class="workflow-choice__title">@L["Widgets"]</span>
                     <span class="workflow-choice__text">@L["Export all widgets or one selected dashboard widget."]</span>
+                </span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="export-host-config" aria-pressed="false">
+                <span class="workflow-choice__icon" aria-hidden="true">⌂</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Host config"]</span>
+                    <span class="workflow-choice__text">@L["Export one stored host configuration object."]</span>
+                </span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="export-config-overlay" aria-pressed="false">
+                <span class="workflow-choice__icon" aria-hidden="true">▦</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Config overlay"]</span>
+                    <span class="workflow-choice__text">@L["Export one host-specific configuration overlay."]</span>
                 </span>
             </button>
         </div>
@@ -293,11 +321,55 @@
         </form>
     </section>
 
+    <section class="card workflow-panel" data-workflow-panel="import-host-config" hidden>
+        <h3>@L["Import host configuration"]</h3>
+        <p class="muted">@L["Host configurations are host-level inputs used to generate environment-specific overlays without duplicating global module or artifact packages."]</p>
+
+        <form method="post" asp-page-handler="ImportHostConfiguration" enctype="multipart/form-data" class="form-grid top-gap">
+            <div class="form-field">
+                <label asp-for="HostConfigurationUploadInput.File">@L["Host configuration file"]</label>
+                <input asp-for="HostConfigurationUploadInput.File" type="file" accept=".json,.zip,application/json,application/zip" />
+                <div class="field-help">@L["Use a host configuration JSON file or a zip containing omp-host-config.json."]</div>
+            </div>
+
+            <label class="checkbox-row checkbox-row--boxed">
+                <input asp-for="HostConfigurationUploadInput.ReplaceExisting" type="checkbox" />
+                <span>@L["Replace existing object with the same host key and version"]</span>
+            </label>
+
+            <div class="toolbar">
+                <button type="submit">@L["Import host configuration"]</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card workflow-panel" data-workflow-panel="import-config-overlay" hidden>
+        <h3>@L["Import config overlay"]</h3>
+        <p class="muted">@L["Config overlays add host-specific files or SQL on top of global module definitions and artifact binaries."]</p>
+
+        <form method="post" asp-page-handler="ImportConfigOverlay" enctype="multipart/form-data" class="form-grid top-gap">
+            <div class="form-field">
+                <label asp-for="ConfigOverlayUploadInput.File">@L["Config overlay file"]</label>
+                <input asp-for="ConfigOverlayUploadInput.File" type="file" accept=".json,.zip,application/json,application/zip" />
+                <div class="field-help">@L["Use a config overlay JSON file or a zip containing omp-config-overlay.json plus referenced files."]</div>
+            </div>
+
+            <label class="checkbox-row checkbox-row--boxed">
+                <input asp-for="ConfigOverlayUploadInput.ReplaceExisting" type="checkbox" />
+                <span>@L["Replace existing object with the same overlay key, host key, and version"]</span>
+            </label>
+
+            <div class="toolbar">
+                <button type="submit">@L["Import config overlay"]</button>
+            </div>
+        </form>
+    </section>
+
     <section class="card workflow-panel" data-workflow-panel="import-library" hidden>
         <div class="section-heading-row">
             <div>
                 <h3>@L["Available package library"]</h3>
-                <p class="lede">@L["These module definitions and artifact packages were installed into the shared artifact store for later import."]</p>
+                <p class="lede">@L["These module definitions, artifact packages, host configurations, and config overlays were installed into the shared artifact store for later import."]</p>
             </div>
         </div>
 
@@ -369,6 +441,96 @@
                                     <input type="hidden" name="ImportInput.AllowTemporaryIncompatibleArtifacts" value="true" />
                                     <input type="hidden" name="ImportInput.CopyConfigurationFilesFromPreviousVersion" value="true" />
                                     <input type="hidden" name="ImportInput.UseArtifactsImmediately" value="true" />
+                                    <button type="submit">@L["Import"]</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <div class="section-heading-row top-gap">
+            <div>
+                <h4>@L["Available host configurations"]</h4>
+                <p class="muted">@L["Host-level inputs that can be used to generate config overlays for one specific server."]</p>
+            </div>
+        </div>
+
+        @if (Model.AvailableHostConfigurations.Count == 0)
+        {
+            <div class="empty-state">@L["No available host configurations found."]</div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>@L["Host"]</th>
+                            <th>@L["Version"]</th>
+                            <th>@L["File"]</th>
+                            <th>@L["Actions"]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in Model.AvailableHostConfigurations)
+                    {
+                        <tr>
+                            <td><code>@item.HostKey</code></td>
+                            <td>@item.ConfigurationVersion</td>
+                            <td><code>@item.FileName</code></td>
+                            <td>
+                                <form method="post" asp-page-handler="ImportAvailableHostConfiguration" class="inline-form">
+                                    <input type="hidden" name="HostConfigurationLibraryInput.FileName" value="@item.FileName" />
+                                    <button type="submit">@L["Import"]</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <div class="section-heading-row top-gap">
+            <div>
+                <h4>@L["Available config overlays"]</h4>
+                <p class="muted">@L["Host-specific layers that are applied during deployment when their selectors match the artifact being deployed."]</p>
+            </div>
+        </div>
+
+        @if (Model.AvailableConfigOverlays.Count == 0)
+        {
+            <div class="empty-state">@L["No available config overlays found."]</div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>@L["Overlay"]</th>
+                            <th>@L["Host"]</th>
+                            <th>@L["Module/app"]</th>
+                            <th>@L["Artifact version"]</th>
+                            <th>@L["File"]</th>
+                            <th>@L["Actions"]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in Model.AvailableConfigOverlays)
+                    {
+                        <tr>
+                            <td>@item.OverlayKey <span class="muted">@item.OverlayVersion</span></td>
+                            <td><code>@item.HostKey</code></td>
+                            <td><code>@(item.ModuleKey ?? "*") / @(item.AppKey ?? "*")</code></td>
+                            <td>@(item.ArtifactVersion ?? "*")</td>
+                            <td><code>@item.FileName</code></td>
+                            <td>
+                                <form method="post" asp-page-handler="ImportAvailableConfigOverlay" class="inline-form">
+                                    <input type="hidden" name="ConfigOverlayLibraryInput.FileName" value="@item.FileName" />
                                     <button type="submit">@L["Import"]</button>
                                 </form>
                             </td>
@@ -461,6 +623,62 @@
                 <button type="submit">@L["Export widgets"]</button>
             </div>
         </form>
+    </section>
+
+    <section class="card workflow-panel" data-workflow-panel="export-host-config" hidden>
+        <h3>@L["Export host configuration"]</h3>
+        <p class="muted">@L["Download one stored host configuration object as JSON."]</p>
+
+        @if (Model.HostConfigurationRows.Count == 0)
+        {
+            <div class="empty-state top-gap">@L["No host configurations found."]</div>
+        }
+        else
+        {
+            <form method="get" asp-page-handler="ExportHostConfiguration" class="form-grid top-gap">
+                <div class="form-field">
+                    <label for="hostConfigDocumentId">@L["Host configuration"]</label>
+                    <select id="hostConfigDocumentId" name="documentId">
+                        @foreach (var item in Model.HostConfigurationRows)
+                        {
+                            <option value="@item.HostConfigurationDocumentId">@item.HostKey / @item.ConfigurationVersion</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Export host configuration"]</button>
+                </div>
+            </form>
+        }
+    </section>
+
+    <section class="card workflow-panel" data-workflow-panel="export-config-overlay" hidden>
+        <h3>@L["Export config overlay"]</h3>
+        <p class="muted">@L["Download one stored config overlay as JSON."]</p>
+
+        @if (Model.ConfigOverlayRows.Count == 0)
+        {
+            <div class="empty-state top-gap">@L["No config overlays found."]</div>
+        }
+        else
+        {
+            <form method="get" asp-page-handler="ExportConfigOverlay" class="form-grid top-gap">
+                <div class="form-field">
+                    <label for="configOverlayDocumentId">@L["Config overlay"]</label>
+                    <select id="configOverlayDocumentId" name="documentId">
+                        @foreach (var item in Model.ConfigOverlayRows)
+                        {
+                            <option value="@item.ConfigOverlayDocumentId">@item.HostKey / @item.OverlayKey / @item.OverlayVersion</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Export config overlay"]</button>
+                </div>
+            </form>
+        }
     </section>
 </section>
 

@@ -84,6 +84,7 @@ public sealed class WebAppDeploymentService
             var configuredConnectionString = _repository.GetConfiguredConnectionString();
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
                 deployment.ArtifactId,
+                deployment.HostKey,
                 cancellationToken);
             configurationFiles = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
                 configurationFiles,

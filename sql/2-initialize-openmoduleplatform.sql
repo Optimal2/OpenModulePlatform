@@ -51,6 +51,9 @@ DECLARE @AuthenticatedUsersRoleId int;
 DECLARE @ArtifactVersion nvarchar(50) = N'0.3.20';
 DECLARE @WorkerManagerArtifactVersion nvarchar(50) = N'0.3.4';
 DECLARE @WorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @DefaultHostKey nvarchar(128) = N'sample-host';
+DECLARE @DefaultHostDisplayName nvarchar(200) = N'Sample Host';
+DECLARE @DefaultHostEnvironment nvarchar(50) = N'Development';
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
 -- automation should patch it from a protected environment-specific value; the
@@ -280,23 +283,23 @@ END
 SELECT @DefaultHostId = HostId
 FROM omp.Hosts
 WHERE InstanceId = @DefaultInstanceId
-  AND HostKey = N'sample-host';
+  AND HostKey = @DefaultHostKey;
 
 IF @DefaultHostId IS NULL
 BEGIN
     SET @DefaultHostId = NEWID();
 
     INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture)
-    VALUES(@DefaultHostId, @DefaultInstanceId, N'sample-host', N'Sample Host', NULL, N'Development', N'Windows', @DefaultHostArchitecture);
+    VALUES(@DefaultHostId, @DefaultInstanceId, @DefaultHostKey, @DefaultHostDisplayName, NULL, @DefaultHostEnvironment, N'Windows', @DefaultHostArchitecture);
 END
 ELSE
 BEGIN
     UPDATE omp.Hosts
     SET InstanceId = @DefaultInstanceId,
-        HostKey = N'sample-host',
-        DisplayName = N'Sample Host',
+        HostKey = @DefaultHostKey,
+        DisplayName = @DefaultHostDisplayName,
         BaseUrl = NULL,
-        Environment = N'Development',
+        Environment = @DefaultHostEnvironment,
         OsFamily = N'Windows',
         Architecture = @DefaultHostArchitecture,
         IsEnabled = 1,
@@ -304,10 +307,10 @@ BEGIN
     WHERE HostId = @DefaultHostId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateHosts WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = N'sample-host')
+IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateHosts WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = @DefaultHostKey)
 BEGIN
     INSERT INTO omp.InstanceTemplateHosts(InstanceTemplateId, HostTemplateId, HostKey, DisplayName, Environment, SortOrder)
-    VALUES(@DefaultInstanceTemplateId, @DefaultHostTemplateId, N'sample-host', N'Sample Host', N'Development', 100);
+    VALUES(@DefaultInstanceTemplateId, @DefaultHostTemplateId, @DefaultHostKey, @DefaultHostDisplayName, @DefaultHostEnvironment, 100);
 END
 
 MERGE omp.HostDeploymentAssignments AS target
@@ -508,7 +511,7 @@ ORDER BY InstanceTemplateModuleInstanceId;
 SELECT TOP (1) @DefaultInstanceTemplateHostId = InstanceTemplateHostId
 FROM omp.InstanceTemplateHosts
 WHERE InstanceTemplateId = @DefaultInstanceTemplateId
-  AND HostKey = N'sample-host'
+  AND HostKey = @DefaultHostKey
 ORDER BY InstanceTemplateHostId;
 
 IF @CoreTemplateModuleInstanceId IS NOT NULL

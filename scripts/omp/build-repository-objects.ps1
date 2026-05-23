@@ -8,11 +8,15 @@ files plus selected artifact package zips to a common output shape:
 
   module-definitions/
   artifacts/
+  host-configs/
+  config-overlays/
 
 Runtime/customer configuration is supplied as command-line mappings instead of
 being stored in the source repository:
 
   -ArtifactConfigurationFile 'component-key:relative/path.ext=C:\secure\file.ext'
+  -HostConfigurationFile 'C:\secure\host.json'
+  -ConfigOverlayFile 'C:\secure\overlay.zip'
 
 Point OutputRoot at an installer package's data/global folder to refresh that
 package library directly.
@@ -26,7 +30,9 @@ param(
     [switch]$AllComponents,
     [switch]$BuildArtifacts,
     [string]$Configuration = 'Release',
-    [string[]]$ArtifactConfigurationFile = @()
+    [string[]]$ArtifactConfigurationFile = @(),
+    [string[]]$HostConfigurationFile = @(),
+    [string[]]$ConfigOverlayFile = @()
 )
 
 Set-StrictMode -Version Latest
@@ -187,6 +193,44 @@ function Remove-RuntimeConfigurationFilesFromFolder {
     } | Remove-Item -Force
 }
 
+function Copy-PortableObjectFiles {
+    param(
+        [string[]]$Files,
+        [string]$DestinationRoot,
+        [string]$ObjectName
+    )
+
+    foreach ($entry in $Files) {
+        if ([string]::IsNullOrWhiteSpace($entry)) {
+            continue
+        }
+
+        $sourcePath = $entry
+        $destinationName = ''
+        $equalsIndex = $entry.IndexOf('=')
+        if ($equalsIndex -gt 0 -and $equalsIndex -lt ($entry.Length - 1)) {
+            $destinationName = $entry.Substring(0, $equalsIndex).Trim()
+            $sourcePath = $entry.Substring($equalsIndex + 1).Trim()
+        }
+
+        $resolvedSource = Resolve-PathFromBase -Path $sourcePath -BasePath $repositoryRoot
+        if (-not (Test-Path -LiteralPath $resolvedSource -PathType Leaf)) {
+            throw "$ObjectName file was not found: $resolvedSource"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($destinationName)) {
+            $destinationName = [System.IO.Path]::GetFileName($resolvedSource)
+        }
+
+        $extension = [System.IO.Path]::GetExtension($destinationName)
+        if (-not ($extension.Equals('.json', [StringComparison]::OrdinalIgnoreCase) -or $extension.Equals('.zip', [StringComparison]::OrdinalIgnoreCase))) {
+            throw "$ObjectName files must be JSON or zip files: $destinationName"
+        }
+
+        Copy-Item -LiteralPath $resolvedSource -Destination (Join-Path $DestinationRoot $destinationName) -Force
+    }
+}
+
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
 $manifestPath = Join-Path $repositoryRoot 'omp-components.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
@@ -199,8 +243,12 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
 $outputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 $definitionsRoot = Join-Path $outputRoot 'module-definitions'
 $artifactsRoot = Join-Path $outputRoot 'artifacts'
+$hostConfigsRoot = Join-Path $outputRoot 'host-configs'
+$configOverlaysRoot = Join-Path $outputRoot 'config-overlays'
 New-Item -ItemType Directory -Path $definitionsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $artifactsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $hostConfigsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $configOverlaysRoot -Force | Out-Null
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
@@ -290,5 +338,10 @@ finally {
     Remove-Item -LiteralPath $buildRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+Copy-PortableObjectFiles -Files $HostConfigurationFile -DestinationRoot $hostConfigsRoot -ObjectName 'Host configuration'
+Copy-PortableObjectFiles -Files $ConfigOverlayFile -DestinationRoot $configOverlaysRoot -ObjectName 'Config overlay'
+
 Write-Host "OMP module definitions: $definitionsRoot"
 Write-Host "OMP artifact packages:   $artifactsRoot"
+Write-Host "OMP host configs:        $hostConfigsRoot"
+Write-Host "OMP config overlays:     $configOverlaysRoot"

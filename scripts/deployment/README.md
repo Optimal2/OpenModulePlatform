@@ -12,26 +12,29 @@ The current package layout keeps shared portable objects in:
 ```text
 data/global/module-definitions
 data/global/artifacts
-data/global/sql
+data/global/host-configs
+data/global/config-overlays
 ```
 
-Host-specific additions belong under the matching bootstrap profile:
+Host-specific bootstrap helper files belong under the matching host profile:
 
 ```text
-data/profiles/<config-file-name>/sql
-data/profiles/<config-file-name>/artifacts
-data/profiles/<config-file-name>/files
+data/hosts/<config-file-name-without-extension>/sql
+data/hosts/<config-file-name-without-extension>/artifacts
+data/hosts/<config-file-name-without-extension>/files
 ```
 
 The bootstrap JSON in `configs` decides which global artifact packages should
 be installed immediately and which host-specific SQL files should run for the
 selected machine. There is no separate `initial`/`available` folder split in
-the package; everything in `data/global` is the package library.
+the package; everything in `data/global` is the package library. Host-specific
+runtime differences should be expressed as host configuration and config overlay
+objects, not as duplicated module or artifact packages.
 
 When a bootstrap config references `artifacts/<package>.zip`, the bootstrapper
-checks the selected profile folder first and then falls back to `data/global`.
-Use profile artifacts only for environment-specific outer packages, such as
-different runtime configuration files around the same binary payload.
+checks the selected host folder first and then falls back to `data/global`. Use
+host-local artifacts only for bootstrap repair scenarios; normal runtime
+configuration belongs in config overlays.
 
 Older `*-omp-suite*` scripts are retained only as migration references for
 pre-HostAgent-first packages. Do not use them for new local, test, production,

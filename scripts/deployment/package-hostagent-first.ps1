@@ -887,13 +887,15 @@ $OutputRoot = Resolve-DeploymentPath -Path $OutputRoot -BasePath $RepositoryRoot
 $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version")
 $globalDataRoot = Join-Path (Join-Path $packageRoot 'data') 'global'
 $defaultProfileName = 'bootstrap.local.sample'
-$defaultProfileDataRoot = Join-Path (Join-Path (Join-Path $packageRoot 'data') 'profiles') $defaultProfileName
+$defaultProfileDataRoot = Join-Path (Join-Path (Join-Path $packageRoot 'data') 'hosts') $defaultProfileName
 $payloadRoot = Join-Path $globalDataRoot 'artifacts'
 $sqlRoot = Join-Path $globalDataRoot 'sql'
 $profileSqlRoot = Join-Path $defaultProfileDataRoot 'sql'
 $toolsRoot = Join-Path $packageRoot 'tools'
 $availableModuleDefinitionsRoot = Join-Path $globalDataRoot 'module-definitions'
 $availableArtifactsRoot = $payloadRoot
+$availableHostConfigurationsRoot = Join-Path $globalDataRoot 'host-configs'
+$availableConfigOverlaysRoot = Join-Path $globalDataRoot 'config-overlays'
 $availableArtifactPackageFiles = @{}
 $buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-hostagent-first-build-' + [Guid]::NewGuid().ToString('N'))
 $zipPath = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version.zip")
@@ -907,6 +909,8 @@ New-Item -ItemType Directory -Path $profileSqlRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $toolsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $availableModuleDefinitionsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $availableArtifactsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $availableHostConfigurationsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $availableConfigOverlaysRoot -Force | Out-Null
 
 Write-Step 'Publishing OpenModulePlatform'
 $publishScript = Join-Path $RepositoryRoot 'publish-all.ps1'
@@ -1194,6 +1198,54 @@ foreach ($entry in $additionalModuleDefinitionFiles) {
     Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $moduleDefinitionsDestination $destinationName)
 }
 
+$additionalHostConfigurationFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalHostConfigurationFiles' -DefaultValue @()))
+foreach ($entry in $additionalHostConfigurationFiles) {
+    $sourcePath = ''
+    $destinationName = ''
+    if ($entry -is [hashtable]) {
+        $sourcePath = [string]$entry.Source
+        $destinationName = [string]$entry.Destination
+    }
+    else {
+        $sourcePath = [string]$entry
+    }
+
+    if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+        continue
+    }
+
+    $resolvedSource = Resolve-DeploymentPath -Path $sourcePath -BasePath $configDirectory
+    if ([string]::IsNullOrWhiteSpace($destinationName)) {
+        $destinationName = [System.IO.Path]::GetFileName($resolvedSource)
+    }
+
+    Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $availableHostConfigurationsRoot $destinationName)
+}
+
+$additionalConfigOverlayFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalConfigOverlayFiles' -DefaultValue @()))
+foreach ($entry in $additionalConfigOverlayFiles) {
+    $sourcePath = ''
+    $destinationName = ''
+    if ($entry -is [hashtable]) {
+        $sourcePath = [string]$entry.Source
+        $destinationName = [string]$entry.Destination
+    }
+    else {
+        $sourcePath = [string]$entry
+    }
+
+    if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+        continue
+    }
+
+    $resolvedSource = Resolve-DeploymentPath -Path $sourcePath -BasePath $configDirectory
+    if ([string]::IsNullOrWhiteSpace($destinationName)) {
+        $destinationName = [System.IO.Path]::GetFileName($resolvedSource)
+    }
+
+    Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $availableConfigOverlaysRoot $destinationName)
+}
+
 $additionalSqlScriptPaths = @()
 $additionalSqlFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalSqlFiles' -DefaultValue @()))
 foreach ($entry in $additionalSqlFiles) {
@@ -1263,6 +1315,10 @@ Copy-Item -LiteralPath (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper'
 $bootstrapConfigEditorSource = Join-Path $RepositoryRoot 'tools\bootstrap-config-editor'
 if (Test-Path -LiteralPath $bootstrapConfigEditorSource -PathType Container) {
     Copy-Item -LiteralPath $bootstrapConfigEditorSource -Destination (Join-Path $toolsRoot 'bootstrap-config-editor') -Recurse -Force
+}
+$configOverlayEditorSource = Join-Path $RepositoryRoot 'tools\config-overlay-editor'
+if (Test-Path -LiteralPath $configOverlayEditorSource -PathType Container) {
+    Copy-Item -LiteralPath $configOverlayEditorSource -Destination (Join-Path $toolsRoot 'config-overlay-editor') -Recurse -Force
 }
 
 $rootBootstrapperPublishRoot = Join-Path $buildRoot 'bootstrapper-root'
@@ -1399,6 +1455,11 @@ if ([string]::IsNullOrWhiteSpace($hostAgentHostKey)) {
     $hostAgentHostKey = 'sample-host'
 }
 $hostAgentHostName = [string](Get-ConfigValue -Config $config -Name 'HostName' -DefaultValue '')
+$hostDisplayName = if ([string]::IsNullOrWhiteSpace($hostAgentHostName)) { $hostAgentHostKey } else { $hostAgentHostName }
+$hostEnvironmentName = [string](Get-ConfigValue -Config $config -Name 'EnvironmentName' -DefaultValue 'Development')
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -VariableName 'DefaultHostKey' -Version $hostAgentHostKey
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -VariableName 'DefaultHostDisplayName' -Version $hostDisplayName
+Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'OpenModulePlatform/2-initialize-openmoduleplatform.sql' -VariableName 'DefaultHostEnvironment' -Version $hostEnvironmentName
 $developerSourceRoot = if ([string]::IsNullOrWhiteSpace($developerSourceRootText)) { $RepositoryRoot } else { $developerSourceRootText }
 $developerPackageConfigPath = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageConfigPath' -DefaultValue $ConfigPath)
 $developerPackageOutputRoot = [string](Get-NestedConfigValue -Config $config -Section 'DeveloperSource' -Name 'PackageOutputRoot' -DefaultValue $OutputRoot)
@@ -1835,6 +1896,18 @@ $manifest = [ordered]@{
         Get-ChildItem -LiteralPath $availableArtifactsRoot -Filter '*.zip' -File |
             Sort-Object Name |
             ForEach-Object { 'data/global/artifacts/' + $_.Name }
+    )
+    availableHostConfigurations = @(
+        Get-ChildItem -LiteralPath $availableHostConfigurationsRoot -File |
+            Where-Object { $_.Extension -in @('.json', '.zip') } |
+            Sort-Object Name |
+            ForEach-Object { 'data/global/host-configs/' + $_.Name }
+    )
+    availableConfigOverlays = @(
+        Get-ChildItem -LiteralPath $availableConfigOverlaysRoot -File |
+            Where-Object { $_.Extension -in @('.json', '.zip') } |
+            Sort-Object Name |
+            ForEach-Object { 'data/global/config-overlays/' + $_.Name }
     )
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'manifest.json') -Encoding UTF8
