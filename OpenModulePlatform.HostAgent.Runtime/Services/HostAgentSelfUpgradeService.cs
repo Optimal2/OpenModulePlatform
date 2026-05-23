@@ -437,7 +437,7 @@ public sealed class HostAgentSelfUpgradeService
                 "start=",
                 "auto",
                 "DisplayName=",
-                serviceName
+                ResolveServiceDisplayName(serviceName)
             };
             AddServiceAccountArguments(createArguments, upgradeSettings);
             RunScChecked(createArguments.ToArray());
@@ -465,7 +465,7 @@ public sealed class HostAgentSelfUpgradeService
             "start=",
             "auto",
             "DisplayName=",
-            serviceName
+            ResolveServiceDisplayName(serviceName)
         };
         if (upgradeSettings is not null)
         {
@@ -474,6 +474,11 @@ public sealed class HostAgentSelfUpgradeService
 
         RunScChecked(configArguments.ToArray());
     }
+
+    private static string ResolveServiceDisplayName(string serviceName)
+        => serviceName.StartsWith("OMP", StringComparison.OrdinalIgnoreCase)
+            ? serviceName
+            : $"OMP {serviceName}";
 
     private static void AddServiceAccountArguments(List<string> arguments, HostAgentUpgradeSettings upgradeSettings)
     {
