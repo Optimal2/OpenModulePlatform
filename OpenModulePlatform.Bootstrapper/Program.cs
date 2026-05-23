@@ -127,6 +127,7 @@ internal static partial class Program
 
             var preparedArtifactConfigurationFiles = PrepareArtifacts(
                 config,
+                configPath,
                 payloadRoot,
                 ArtifactPreparationMode.InstallOrUpdate);
             await RegisterPackageArtifactsAsync(config);
@@ -181,6 +182,7 @@ internal static partial class Program
 
             var preparedArtifactConfigurationFiles = PrepareArtifacts(
                 config,
+                configPath,
                 payloadRoot,
                 ArtifactPreparationMode.AddMissingOnly);
             await RegisterPackageArtifactsAsync(config);
@@ -372,7 +374,7 @@ internal static partial class Program
         string payloadRoot,
         bool onlyNewerOrChanged = false)
     {
-        var definitionsRoot = ResolveInitialModuleDefinitionsRoot(payloadRoot);
+        var definitionsRoot = ResolvePackageModuleDefinitionsRoot(payloadRoot);
         if (!Directory.Exists(definitionsRoot))
         {
             return;
@@ -1887,6 +1889,7 @@ END;
 
     private static IReadOnlyList<PreparedArtifactConfigurationFiles> PrepareArtifacts(
         BootstrapConfig config,
+        string configPath,
         string payloadRoot,
         ArtifactPreparationMode mode)
     {
@@ -1911,7 +1914,7 @@ END;
                 throw new InvalidOperationException("Artifacts contains an enabled entry without Source or Target.");
             }
 
-            var source = ResolvePackageDataPath(payloadRoot, artifact.Source);
+            var source = ResolvePackageDataPath(payloadRoot, configPath, artifact.Source);
             var target = CombineUnderRoot(artifactStoreRoot, artifact.Target);
             if (mode == ArtifactPreparationMode.AddMissingOnly
                 && (File.Exists(target) || Directory.Exists(target)))
@@ -2301,12 +2304,12 @@ SELECT @templateAppRowsUpdated,
         var artifactStoreRoot = Path.GetFullPath(config.ArtifactStoreRoot.Trim());
         var availableRoot = Path.Join(artifactStoreRoot, "_available");
         var definitionsCopied = CopyAvailableDeploymentObjects(
-            ResolveAvailableModuleDefinitionsRoot(payloadRoot),
+            ResolvePackageModuleDefinitionsRoot(payloadRoot),
             Path.Join(availableRoot, "module-definitions"),
             "*.json",
             overwrite);
         var artifactsCopied = CopyAvailableDeploymentObjects(
-            ResolveAvailableArtifactsRoot(payloadRoot),
+            ResolvePackageArtifactsRoot(payloadRoot),
             Path.Join(availableRoot, "artifacts"),
             "*.zip",
             overwrite);
@@ -3890,16 +3893,7 @@ VALUES
             : Path.GetFullPath(Path.Join(root, path));
 
     private static string ResolvePackageDataPath(string packageRoot, string path)
-    {
-        var direct = ResolvePath(packageRoot, path);
-        if (Path.IsPathRooted(path) || File.Exists(direct) || Directory.Exists(direct))
-        {
-            return direct;
-        }
-
-        var mapped = ResolveLegacyPackageDataPath(packageRoot, path);
-        return mapped ?? direct;
-    }
+        => ResolvePath(packageRoot, path);
 
     private static string ResolvePackageDataPath(string packageRoot, string configPath, string path)
     {
@@ -3915,73 +3909,11 @@ VALUES
         return candidate ?? ResolvePackageDataPath(packageRoot, path);
     }
 
-    private static string ResolveInitialModuleDefinitionsRoot(string packageRoot)
-        => ResolvePackageDirectory(
-            packageRoot,
-            Path.Join("data", "global", "module-definitions"),
-            Path.Join("data", "global", "module-definitions", "initial"),
-            "module-definitions");
+    private static string ResolvePackageModuleDefinitionsRoot(string packageRoot)
+        => ResolvePath(packageRoot, Path.Join("data", "global", "module-definitions"));
 
-    private static string ResolveAvailableModuleDefinitionsRoot(string packageRoot)
-        => ResolvePackageDirectory(
-            packageRoot,
-            Path.Join("data", "global", "module-definitions"),
-            Path.Join("data", "global", "module-definitions", "available"),
-            "available-module-definitions");
-
-    private static string ResolveInitialArtifactsRoot(string packageRoot)
-        => ResolvePackageDirectory(
-            packageRoot,
-            Path.Join("data", "global", "artifacts"),
-            Path.Join("data", "global", "artifacts", "initial"),
-            "payload");
-
-    private static string ResolveAvailableArtifactsRoot(string packageRoot)
-        => ResolvePackageDirectory(
-            packageRoot,
-            Path.Join("data", "global", "artifacts"),
-            Path.Join("data", "global", "artifacts", "available"),
-            "available-artifacts");
-
-    private static string ResolvePackageDirectory(string packageRoot, params string[] relativePaths)
-    {
-        return relativePaths
-            .Select(relativePath => ResolvePath(packageRoot, relativePath))
-            .FirstOrDefault(Directory.Exists)
-            ?? ResolvePath(packageRoot, relativePaths[0]);
-    }
-
-    private static string? ResolveLegacyPackageDataPath(string packageRoot, string path)
-    {
-        var normalized = NormalizePathForMatch(path);
-        var fileName = Path.GetFileName(path);
-        if (string.IsNullOrWhiteSpace(fileName))
-        {
-            return null;
-        }
-
-        string? candidate = null;
-        if (normalized.StartsWith("payload/", StringComparison.OrdinalIgnoreCase))
-        {
-            candidate = Path.Join(ResolveInitialArtifactsRoot(packageRoot), fileName);
-        }
-        else if (normalized.StartsWith("available-artifacts/", StringComparison.OrdinalIgnoreCase))
-        {
-            candidate = Path.Join(ResolveAvailableArtifactsRoot(packageRoot), fileName);
-        }
-        else if (normalized.StartsWith("module-definitions/", StringComparison.OrdinalIgnoreCase))
-        {
-            candidate = Path.Join(ResolveInitialModuleDefinitionsRoot(packageRoot), fileName);
-        }
-        else if (normalized.StartsWith("available-module-definitions/", StringComparison.OrdinalIgnoreCase))
-        {
-            candidate = Path.Join(ResolveAvailableModuleDefinitionsRoot(packageRoot), fileName);
-        }
-
-        return candidate is not null && (File.Exists(candidate) || Directory.Exists(candidate))
-            ? candidate
-            : null;
-    }
+    private static string ResolvePackageArtifactsRoot(string packageRoot)
+        => ResolvePath(packageRoot, Path.Join("data", "global", "artifacts"));
 
     private static IEnumerable<string> EnumerateHostAndGlobalDataRoots(string packageRoot, string configPath)
     {
