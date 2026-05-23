@@ -32,12 +32,18 @@
 
         <div class="workflow-choice-grid workflow-choice-grid--primary">
             <button type="button" class="workflow-choice" data-workflow-kind="import" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Import"]</span>
-                <span class="workflow-choice__text">@L["Add or update portable objects in this installation."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">↓</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Import"]</span>
+                    <span class="workflow-choice__text">@L["Add or update portable objects in this installation."]</span>
+                </span>
             </button>
             <button type="button" class="workflow-choice" data-workflow-kind="export" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Export"]</span>
-                <span class="workflow-choice__text">@L["Download portable objects from this installation."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">↑</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Export"]</span>
+                    <span class="workflow-choice__text">@L["Download portable objects from this installation."]</span>
+                </span>
             </button>
         </div>
     </div>
@@ -51,41 +57,65 @@
             </div>
         </div>
 
-        <div class="workflow-choice-grid" data-workflow-options="import" hidden>
+        <div class="workflow-choice-grid workflow-choice-grid--dense" data-workflow-options="import" hidden>
             <button type="button" class="workflow-choice" data-workflow-action="import-bundle" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Package zip"]</span>
-                <span class="workflow-choice__text">@L["Import one outer zip that contains a module definition and artifact packages."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">▣</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Package zip"]</span>
+                    <span class="workflow-choice__text">@L["Import one outer zip that contains a module definition and artifact packages."]</span>
+                </span>
             </button>
             <button type="button" class="workflow-choice" data-workflow-action="import-files" aria-pressed="false">
-                <span class="workflow-choice__title">@L["JSON plus artifact zips"]</span>
-                <span class="workflow-choice__text">@L["Import a module definition JSON together with one or more artifact package zips."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">{ }</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["JSON plus artifact zips"]</span>
+                    <span class="workflow-choice__text">@L["Import a module definition JSON together with one or more artifact package zips."]</span>
+                </span>
             </button>
             <button type="button" class="workflow-choice" data-workflow-action="import-artifacts" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Artifact zips"]</span>
-                <span class="workflow-choice__text">@L["Import one or more artifact package zips without changing a module definition."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">ZIP</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Artifact zips"]</span>
+                    <span class="workflow-choice__text">@L["Import one or more artifact package zips without changing a module definition."]</span>
+                </span>
             </button>
             <button type="button" class="workflow-choice" data-workflow-action="import-widgets" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Widget JSON"]</span>
-                <span class="workflow-choice__text">@L["Import dashboard widget definitions from JSON."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">◫</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Widget JSON"]</span>
+                    <span class="workflow-choice__text">@L["Import dashboard widget definitions from JSON."]</span>
+                </span>
             </button>
             <button type="button" class="workflow-choice" data-workflow-action="import-library" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Available package library"]</span>
-                <span class="workflow-choice__text">@L["Import a module package already stored in the shared package library."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">LIB</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Available package library"]</span>
+                    <span class="workflow-choice__text">@L["Import a module package already stored in the shared package library."]</span>
+                </span>
             </button>
         </div>
 
-        <div class="workflow-choice-grid" data-workflow-options="export" hidden>
+        <div class="workflow-choice-grid workflow-choice-grid--dense" data-workflow-options="export" hidden>
             <button type="button" class="workflow-choice" data-workflow-action="export-module" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Module package"]</span>
-                <span class="workflow-choice__text">@L["Export a module definition with the artifact packages it references."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">▣</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Module package"]</span>
+                    <span class="workflow-choice__text">@L["Export a module definition with the artifact packages it references."]</span>
+                </span>
             </button>
             <button type="button" class="workflow-choice" data-workflow-action="export-artifact" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Artifact package"]</span>
-                <span class="workflow-choice__text">@L["Export one installed artifact package."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">ZIP</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Artifact package"]</span>
+                    <span class="workflow-choice__text">@L["Export one installed artifact package."]</span>
+                </span>
             </button>
             <button type="button" class="workflow-choice" data-workflow-action="export-widgets" aria-pressed="false">
-                <span class="workflow-choice__title">@L["Widgets"]</span>
-                <span class="workflow-choice__text">@L["Export all widgets or one selected dashboard widget."]</span>
+                <span class="workflow-choice__icon" aria-hidden="true">◫</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Widgets"]</span>
+                    <span class="workflow-choice__text">@L["Export all widgets or one selected dashboard widget."]</span>
+                </span>
             </button>
         </div>
     </div>

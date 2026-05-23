@@ -169,14 +169,16 @@
                     <option value="720">@L["Last 30 days"]</option>
                 </select>
             </div>
-            <label class="checkbox-row table-tools__check">
-                <input type="checkbox" data-ops-interesting checked />
-                <span>@L["Only rows that need attention"]</span>
-            </label>
-            <label class="checkbox-row table-tools__check">
-                <input type="checkbox" data-ops-current checked />
-                <span>@L["Only currently desired artifacts"]</span>
-            </label>
+            <div class="table-tools__checks">
+                <label class="checkbox-row table-tools__check">
+                    <input type="checkbox" data-ops-interesting checked />
+                    <span>@L["Only rows that need attention"]</span>
+                </label>
+                <label class="checkbox-row table-tools__check">
+                    <input type="checkbox" data-ops-current checked />
+                    <span>@L["Only currently desired artifacts"]</span>
+                </label>
+            </div>
             <span class="muted table-tools__count" data-ops-count></span>
         </div>
         <div class="table-scroll">
