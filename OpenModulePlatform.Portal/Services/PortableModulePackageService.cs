@@ -652,14 +652,12 @@ public sealed class PortableModulePackageService
                 if (movedExistingToBackup)
                 {
                     RestoreExistingArtifactBackup(backupPath, finalPath);
-                    movedExistingToBackup = false;
                 }
                 else if (movedArtifactToFinal)
                 {
                     TryDelete(finalPath);
                 }
 
-                movedArtifactToFinal = false;
                 return new PortableModulePackageArtifactImportResult(
                     identity.FileName,
                     "Failed",

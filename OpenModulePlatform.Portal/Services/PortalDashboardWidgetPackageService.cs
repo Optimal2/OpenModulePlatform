@@ -193,6 +193,7 @@ ORDER BY w.module_key,
         try
         {
             var result = new DashboardWidgetImportResult();
+            // Widget import performs database lookups and writes per item, so the loop stays explicit instead of using Select.
             foreach (var item in document.Widgets)
             {
                 var normalized = Normalize(document, item);

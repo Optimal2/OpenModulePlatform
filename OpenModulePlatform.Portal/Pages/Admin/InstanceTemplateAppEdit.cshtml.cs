@@ -251,7 +251,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
             return;
         }
 
-        if (app.ModuleId != templateModule.ModuleId)
+        if (app.ModuleId != templateModule!.ModuleId)
         {
             ModelState.AddModelError(
                 nameof(Input.AppId),

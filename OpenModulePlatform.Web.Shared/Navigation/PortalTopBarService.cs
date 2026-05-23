@@ -794,9 +794,12 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
 
         var result = await cmd.ExecuteScalarAsync(ct);
-        return result is bool openOnHover
-            ? openOnHover
-            : true;
+        if (result is bool openOnHover)
+        {
+            return openOnHover;
+        }
+
+        return true;
     }
 
     private string GetLogoutUrl()

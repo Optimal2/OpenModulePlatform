@@ -226,6 +226,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         try
         {
             var result = await _packages.ExportArtifactPackageAsync(artifactId, ct);
+            // ASP.NET Core owns and disposes this stream after the file response is sent; disposing it here would close the response body early.
             var stream = new FileStream(
                 result.PackagePath,
                 FileMode.Open,
@@ -282,6 +283,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         try
         {
             var result = await _packages.ExportModulePackageAsync(moduleKey.Trim(), includeAllVersions, ct);
+            // ASP.NET Core owns and disposes this stream after the file response is sent; disposing it here would close the response body early.
             var stream = new FileStream(
                 result.PackagePath,
                 FileMode.Open,

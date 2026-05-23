@@ -98,37 +98,35 @@ public sealed class ServiceAppDeploymentService
                 configuredConnectionString,
                 settings);
 
-            if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath))
+            if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath)
+                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
             {
-                if (ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
+                EnsureWindowsService(deployment, serviceName, targetExecutablePath);
+
+                var identityCheck = await EnsureServiceIdentityAsync(
+                    settings,
+                    deployment,
+                    serviceName,
+                    serviceIdentity,
+                    cancellationToken);
+                if (!string.IsNullOrWhiteSpace(identityCheck.WarningMessage))
                 {
-                    EnsureWindowsService(deployment, serviceName, targetExecutablePath);
-
-                    var identityCheck = await EnsureServiceIdentityAsync(
-                        settings,
-                        deployment,
-                        serviceName,
-                        serviceIdentity,
-                        cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(identityCheck.WarningMessage))
-                    {
-                        await _repository.PublishAppDeploymentResultAsync(
-                            deployment,
-                            AddIdentityCheck(
-                                AppDeploymentResult.Warning(targetPath, serviceName, identityCheck.WarningMessage),
-                                identityCheck),
-                            cancellationToken);
-                        return;
-                    }
-
                     await _repository.PublishAppDeploymentResultAsync(
                         deployment,
                         AddIdentityCheck(
-                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
+                            AppDeploymentResult.Warning(targetPath, serviceName, identityCheck.WarningMessage),
                             identityCheck),
                         cancellationToken);
                     return;
                 }
+
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    AddIdentityCheck(
+                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
+                        identityCheck),
+                    cancellationToken);
+                return;
             }
 
             await _repository.PublishAppDeploymentResultAsync(

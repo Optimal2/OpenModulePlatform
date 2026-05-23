@@ -225,6 +225,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
             tempPackagePath,
             packageConfigurationFiles);
 
+        // ASP.NET Core owns and disposes this stream after the file response is sent; disposing it here would close the response body early.
         var stream = new FileStream(
             tempPackagePath,
             FileMode.Open,

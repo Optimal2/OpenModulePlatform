@@ -155,6 +155,7 @@ public static class ModuleDefinitionPackageNormalizer
 
     private static string? GetString(JsonObject obj, string propertyName)
     {
+        // JsonObject lookups are case-sensitive; iterate explicitly so package documents can use case-insensitive field names.
         foreach (var property in obj)
         {
             if (property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase)
