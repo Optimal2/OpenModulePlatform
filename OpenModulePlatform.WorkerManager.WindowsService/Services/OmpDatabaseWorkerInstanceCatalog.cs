@@ -59,7 +59,14 @@ BEGIN
     RETURN;
 END;
 
-WITH WorkerRows AS
+WITH HostRoles AS
+(
+    SELECT HostTemplateId
+    FROM omp.HostDeploymentAssignments
+    WHERE HostId = @hostId
+      AND IsActive = 1
+),
+WorkerRows AS
 (
     SELECT
         ai.AppInstanceId,
@@ -78,10 +85,25 @@ WITH WorkerRows AS
     INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
     INNER JOIN omp.Artifacts ar ON ar.ArtifactId = COALESCE(wi.ArtifactId, ai.ArtifactId)
     LEFT JOIN omp.HostArtifactStates has
-        ON has.HostId = COALESCE(wi.HostId, ai.HostId)
+        ON has.HostId = CASE
+            WHEN wi.HostId IS NOT NULL THEN wi.HostId
+            WHEN ai.HostId IS NOT NULL THEN ai.HostId
+            ELSE @hostId
+        END
        AND has.ArtifactId = ar.ArtifactId
        AND has.ProvisioningState = 2
-    WHERE COALESCE(wi.HostId, ai.HostId) = @hostId
+    WHERE
+      (
+          wi.HostId = @hostId
+          OR (wi.HostId IS NULL AND ai.HostId = @hostId)
+          OR
+          (
+              wi.HostId IS NULL
+              AND ai.HostId IS NULL
+              AND ai.TargetHostTemplateId IS NOT NULL
+              AND EXISTS (SELECT 1 FROM HostRoles hr WHERE hr.HostTemplateId = ai.TargetHostTemplateId)
+          )
+      )
       AND a.IsEnabled = 1
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1
@@ -111,10 +133,19 @@ WITH WorkerRows AS
     INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
     INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
     LEFT JOIN omp.HostArtifactStates has
-        ON has.HostId = ai.HostId
+        ON has.HostId = CASE WHEN ai.HostId IS NOT NULL THEN ai.HostId ELSE @hostId END
        AND has.ArtifactId = ar.ArtifactId
        AND has.ProvisioningState = 2
-    WHERE ai.HostId = @hostId
+    WHERE
+      (
+          ai.HostId = @hostId
+          OR
+          (
+              ai.HostId IS NULL
+              AND ai.TargetHostTemplateId IS NOT NULL
+              AND EXISTS (SELECT 1 FROM HostRoles hr WHERE hr.HostTemplateId = ai.TargetHostTemplateId)
+          )
+      )
       AND a.IsEnabled = 1
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1

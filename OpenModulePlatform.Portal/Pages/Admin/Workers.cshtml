@@ -133,7 +133,20 @@
                         <div class="muted small-text">@row.DisplayName</div>
                     </td>
                     <td><code>@row.AppInstanceKey</code></td>
-                    <td><code>@row.HostKey</code></td>
+                    <td>
+                        @if (!string.IsNullOrWhiteSpace(row.HostKey))
+                        {
+                            <code>@row.HostKey</code>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(row.TargetHostTemplateKey))
+                        {
+                            <code>@L["Host role"]: @row.TargetHostTemplateKey</code>
+                        }
+                        else
+                        {
+                            <code>@L["Any host"]</code>
+                        }
+                    </td>
                     <td><span class="pill">@Model.GetDesiredStateLabel(row.DesiredState, row.IsAllowed)</span></td>
                     <td>
                         <div><span class="pill">@Model.GetObservedStateLabel(row.ObservedState)</span></div>

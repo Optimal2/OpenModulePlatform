@@ -49,6 +49,10 @@ single local host or a web node. The database table is still named
 `omp.HostTemplates`, but Portal presents it as a host role rather than a second
 visible template layer.
 
+Desired app rows can target a host role. HostAgent and WorkerManager then apply
+that desired app only on concrete hosts that have the matching active host role
+assignment.
+
 ## Installation topology
 
 A collective term for the tables that describe the desired structure in the

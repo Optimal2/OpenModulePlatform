@@ -546,6 +546,7 @@ SELECT tai.InstanceTemplateAppInstanceId,
        tmi.InstanceTemplateId,
        tai.InstanceTemplateModuleInstanceId,
        tai.InstanceTemplateHostId,
+       tai.TargetHostTemplateId,
        tai.AppId,
        tai.AppInstanceKey,
        tai.DisplayName,
@@ -585,23 +586,24 @@ WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             InstanceTemplateId = rdr.GetInt32(1),
             InstanceTemplateModuleInstanceId = rdr.GetInt32(2),
             InstanceTemplateHostId = rdr.IsDBNull(3) ? null : rdr.GetInt32(3),
-            AppId = rdr.GetInt32(4),
-            AppInstanceKey = rdr.GetString(5),
-            DisplayName = rdr.GetString(6),
-            Description = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-            RoutePath = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-            PublicUrl = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-            InstallPath = rdr.IsDBNull(10) ? null : rdr.GetString(10),
-            InstallationName = rdr.IsDBNull(11) ? null : rdr.GetString(11),
-            DesiredArtifactId = rdr.IsDBNull(12) ? null : rdr.GetInt32(12),
-            DesiredConfigId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
-            ExpectedLogin = rdr.IsDBNull(14) ? null : rdr.GetString(14),
-            ExpectedClientHostName = rdr.IsDBNull(15) ? null : rdr.GetString(15),
-            ExpectedClientIp = rdr.IsDBNull(16) ? null : rdr.GetString(16),
-            IsEnabled = rdr.GetBoolean(17),
-            IsAllowed = rdr.GetBoolean(18),
-            DesiredState = rdr.GetByte(19),
-            SortOrder = rdr.GetInt32(20)
+            TargetHostTemplateId = rdr.IsDBNull(4) ? null : rdr.GetInt32(4),
+            AppId = rdr.GetInt32(5),
+            AppInstanceKey = rdr.GetString(6),
+            DisplayName = rdr.GetString(7),
+            Description = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+            RoutePath = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+            PublicUrl = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+            InstallPath = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+            InstallationName = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+            DesiredArtifactId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
+            DesiredConfigId = rdr.IsDBNull(14) ? null : rdr.GetInt32(14),
+            ExpectedLogin = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+            ExpectedClientHostName = rdr.IsDBNull(16) ? null : rdr.GetString(16),
+            ExpectedClientIp = rdr.IsDBNull(17) ? null : rdr.GetString(17),
+            IsEnabled = rdr.GetBoolean(18),
+            IsAllowed = rdr.GetBoolean(19),
+            DesiredState = rdr.GetByte(20),
+            SortOrder = rdr.GetInt32(21)
         };
     }
 
@@ -619,6 +621,7 @@ INSERT INTO omp.InstanceTemplateAppInstances
 (
     InstanceTemplateModuleInstanceId,
     InstanceTemplateHostId,
+    TargetHostTemplateId,
     AppId,
     AppInstanceKey,
     DisplayName,
@@ -641,6 +644,7 @@ VALUES
 (
     @InstanceTemplateModuleInstanceId,
     @InstanceTemplateHostId,
+    @TargetHostTemplateId,
     @AppId,
     @AppInstanceKey,
     @DisplayName,
@@ -671,6 +675,7 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
 UPDATE omp.InstanceTemplateAppInstances
 SET InstanceTemplateModuleInstanceId = @InstanceTemplateModuleInstanceId,
     InstanceTemplateHostId = @InstanceTemplateHostId,
+    TargetHostTemplateId = @TargetHostTemplateId,
     AppId = @AppId,
     AppInstanceKey = @AppInstanceKey,
     DisplayName = @DisplayName,
@@ -3057,8 +3062,20 @@ WHERE ai.AppInstanceId <> @AppInstanceId
   AND
   (
       (@HostId IS NULL)
-      OR ai.HostId IS NULL
+      OR (ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL)
       OR ai.HostId = @HostId
+      OR
+      (
+          ai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp.HostDeploymentAssignments hda
+              WHERE hda.HostId = @HostId
+                AND hda.HostTemplateId = ai.TargetHostTemplateId
+                AND hda.IsActive = 1
+          )
+      )
   );";
 
         await using var conn = _db.Create();
@@ -3077,6 +3094,7 @@ WHERE ai.AppInstanceId <> @AppInstanceId
         int instanceTemplateAppInstanceId,
         int instanceTemplateModuleInstanceId,
         int? instanceTemplateHostId,
+        int? targetHostTemplateId,
         int appId,
         CancellationToken ct)
     {
@@ -3095,9 +3113,34 @@ WHERE tai.InstanceTemplateAppInstanceId <> @InstanceTemplateAppInstanceId
   AND tai.DesiredState = 1
   AND
   (
-      (@InstanceTemplateHostId IS NULL)
-      OR tai.InstanceTemplateHostId IS NULL
-      OR tai.InstanceTemplateHostId = @InstanceTemplateHostId
+      (@InstanceTemplateHostId IS NULL AND @TargetHostTemplateId IS NULL)
+      OR (tai.InstanceTemplateHostId IS NULL AND tai.TargetHostTemplateId IS NULL)
+      OR (tai.InstanceTemplateHostId IS NOT NULL AND tai.InstanceTemplateHostId = @InstanceTemplateHostId)
+      OR (tai.TargetHostTemplateId IS NOT NULL AND tai.TargetHostTemplateId = @TargetHostTemplateId)
+      OR
+      (
+          @InstanceTemplateHostId IS NOT NULL
+          AND tai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp.InstanceTemplateHosts ith
+              WHERE ith.InstanceTemplateHostId = @InstanceTemplateHostId
+                AND ith.HostTemplateId = tai.TargetHostTemplateId
+          )
+      )
+      OR
+      (
+          @TargetHostTemplateId IS NOT NULL
+          AND tai.InstanceTemplateHostId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp.InstanceTemplateHosts ith
+              WHERE ith.InstanceTemplateHostId = tai.InstanceTemplateHostId
+                AND ith.HostTemplateId = @TargetHostTemplateId
+          )
+      )
   );";
 
         await using var conn = _db.Create();
@@ -3107,6 +3150,8 @@ WHERE tai.InstanceTemplateAppInstanceId <> @InstanceTemplateAppInstanceId
         Add(cmd, "@InstanceTemplateModuleInstanceId", instanceTemplateModuleInstanceId);
         cmd.Parameters.Add("@InstanceTemplateHostId", SqlDbType.Int).Value =
             instanceTemplateHostId.HasValue ? instanceTemplateHostId.Value : DBNull.Value;
+        cmd.Parameters.Add("@TargetHostTemplateId", SqlDbType.Int).Value =
+            targetHostTemplateId.HasValue ? targetHostTemplateId.Value : DBNull.Value;
         Add(cmd, "@AppId", appId);
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
@@ -3731,6 +3776,7 @@ VALUES
 
         Add(cmd, "@InstanceTemplateModuleInstanceId", input.InstanceTemplateModuleInstanceId);
         Add(cmd, "@InstanceTemplateHostId", input.InstanceTemplateHostId);
+        Add(cmd, "@TargetHostTemplateId", input.TargetHostTemplateId);
         Add(cmd, "@AppId", input.AppId);
         Add(cmd, "@AppInstanceKey", input.AppInstanceKey);
         Add(cmd, "@DisplayName", input.DisplayName);

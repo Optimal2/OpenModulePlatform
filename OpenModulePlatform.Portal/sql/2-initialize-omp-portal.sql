@@ -356,6 +356,7 @@ END
 
 UPDATE omp.InstanceTemplateAppInstances
 SET InstanceTemplateHostId = NULL,
+    TargetHostTemplateId = NULL,
     DesiredArtifactId = @PortalArtifactId
 WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId
   AND AppInstanceKey = N'omp_portal';

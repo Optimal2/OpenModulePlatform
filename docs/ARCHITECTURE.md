@@ -167,6 +167,12 @@ artifact versions, placement, routes, paths, and runtime policy. HostAgent reads
 those rows and materializes concrete `Hosts`, `ModuleInstances`, and
 `AppInstances`, then provisions matching artifacts on each host.
 
+Desired app placement can target one concrete host, one host role, or no host.
+A host-role placement remains one logical app instance; HostAgent and
+WorkerManager deploy or run it only on hosts with the selected active role.
+Host-neutral placement is reserved for web apps that intentionally share one
+load-balanced identity.
+
 ## Request flow in web applications
 
 1. The application starts with shared hosting defaults from `OpenModulePlatform.Web.Shared`.

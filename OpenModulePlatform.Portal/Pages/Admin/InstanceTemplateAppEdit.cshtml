@@ -93,7 +93,7 @@
         <textarea asp-for="Input.Description"></textarea>
     </div>
 
-    <div class="field-grid field-grid--2">
+    <div class="field-grid field-grid--3">
         <div class="form-field">
             <label asp-for="Input.InstanceTemplateHostId"></label>
             <select asp-for="Input.InstanceTemplateHostId">
@@ -103,8 +103,21 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">@L["Leave host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one host."]</div>
+            <div class="field-help">@L["Choose a specific host when only one named host should run this app."]</div>
             <span asp-validation-for="Input.InstanceTemplateHostId" class="field-validation-error"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.TargetHostTemplateId"></label>
+            <select asp-for="Input.TargetHostTemplateId">
+                <option value="">@L["No host role"]</option>
+                @foreach (var option in Model.HostRoleOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["Choose a host role when every host with that role should run this app. Leave both placement fields empty only for host-neutral web apps behind a load balancer."]</div>
+            <span asp-validation-for="Input.TargetHostTemplateId" class="field-validation-error"></span>
         </div>
 
         <div class="form-field">

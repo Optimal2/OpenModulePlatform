@@ -483,6 +483,8 @@ public sealed class AppWorkerRuntimeRow
 
     public string? HostKey { get; set; }
 
+    public string? TargetHostTemplateKey { get; set; }
+
     public bool IsAllowed { get; set; }
 
     public byte DesiredState { get; set; }
@@ -528,6 +530,8 @@ public sealed class AppInstanceRow
     public string AppType { get; set; } = string.Empty;
 
     public string? HostKey { get; set; }
+
+    public string? TargetHostTemplateKey { get; set; }
 
     public string? RoutePath { get; set; }
 
@@ -772,6 +776,8 @@ public sealed class InstanceTemplateAppTopologyRow
     public string ModuleInstanceKey { get; set; } = string.Empty;
 
     public string? HostKey { get; set; }
+
+    public string? TargetHostTemplateKey { get; set; }
 
     public string AppKey { get; set; } = string.Empty;
 

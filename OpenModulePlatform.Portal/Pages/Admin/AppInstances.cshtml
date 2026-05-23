@@ -52,7 +52,20 @@ else
                 <td><code>@row.ModuleInstanceKey</code></td>
                 <td><code>@row.AppKey</code></td>
                 <td><code>@row.AppInstanceKey</code></td>
-                <td><code>@row.HostKey</code></td>
+                <td>
+                    @if (!string.IsNullOrWhiteSpace(row.HostKey))
+                    {
+                        <code>@row.HostKey</code>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(row.TargetHostTemplateKey))
+                    {
+                        <code>@L["Host role"]: @row.TargetHostTemplateKey</code>
+                    }
+                    else
+                    {
+                        <code>@L["Any host"]</code>
+                    }
+                </td>
                 <td>@row.RoutePath</td>
                 <td>@row.InstallationName</td>
                 <td>@row.ArtifactVersion</td>

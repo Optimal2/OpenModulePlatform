@@ -216,6 +216,7 @@ SELECT ai.AppInstanceId,
        ai.AppInstanceKey,
        ai.DisplayName,
        h.HostKey,
+       ht.TemplateKey AS TargetHostTemplateKey,
        ai.IsAllowed,
        ai.DesiredState,
        awd.RuntimeKind,
@@ -234,6 +235,7 @@ INNER JOIN omp.Instances i ON i.InstanceId = mi.InstanceId
 INNER JOIN omp.Apps a ON a.AppId = ai.AppId
 INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
 LEFT JOIN omp.Hosts h ON h.HostId = ai.HostId
+LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = ai.TargetHostTemplateId
 LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId
 LEFT JOIN omp.InstanceTemplateModuleInstances tmi
     ON tmi.InstanceTemplateId = i.InstanceTemplateId
@@ -281,18 +283,19 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
                 AppInstanceKey = rdr.GetString(6),
                 DisplayName = rdr.GetString(7),
                 HostKey = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-                IsAllowed = rdr.GetBoolean(9),
-                DesiredState = rdr.GetByte(10),
-                RuntimeKind = rdr.IsDBNull(11) ? string.Empty : rdr.GetString(11),
-                WorkerTypeKey = rdr.IsDBNull(12) ? string.Empty : rdr.GetString(12),
-                PluginRelativePath = rdr.IsDBNull(13) ? string.Empty : rdr.GetString(13),
-                ObservedState = rdr.GetByte(14),
-                ProcessId = rdr.IsDBNull(15) ? null : rdr.GetInt32(15),
-                StartedUtc = rdr.IsDBNull(16) ? null : rdr.GetDateTime(16),
-                LastSeenUtc = rdr.IsDBNull(17) ? null : rdr.GetDateTime(17),
-                LastExitUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
-                LastExitCode = rdr.IsDBNull(19) ? null : rdr.GetInt32(19),
-                StatusMessage = rdr.IsDBNull(20) ? null : rdr.GetString(20)
+                TargetHostTemplateKey = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                IsAllowed = rdr.GetBoolean(10),
+                DesiredState = rdr.GetByte(11),
+                RuntimeKind = rdr.IsDBNull(12) ? string.Empty : rdr.GetString(12),
+                WorkerTypeKey = rdr.IsDBNull(13) ? string.Empty : rdr.GetString(13),
+                PluginRelativePath = rdr.IsDBNull(14) ? string.Empty : rdr.GetString(14),
+                ObservedState = rdr.GetByte(15),
+                ProcessId = rdr.IsDBNull(16) ? null : rdr.GetInt32(16),
+                StartedUtc = rdr.IsDBNull(17) ? null : rdr.GetDateTime(17),
+                LastSeenUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
+                LastExitUtc = rdr.IsDBNull(19) ? null : rdr.GetDateTime(19),
+                LastExitCode = rdr.IsDBNull(20) ? null : rdr.GetInt32(20),
+                StatusMessage = rdr.IsDBNull(21) ? null : rdr.GetString(21)
             });
         }
 
@@ -310,6 +313,7 @@ SELECT ai.AppInstanceId,
        ai.DisplayName,
        a.AppType,
        h.HostKey,
+       ht.TemplateKey AS TargetHostTemplateKey,
        ai.RoutePath,
        ai.InstallationName,
        ai.ArtifactId,
@@ -323,6 +327,7 @@ INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
 INNER JOIN omp.Instances i ON i.InstanceId = mi.InstanceId
 INNER JOIN omp.Apps a ON a.AppId = ai.AppId
 LEFT JOIN omp.Hosts h ON h.HostId = ai.HostId
+LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = ai.TargetHostTemplateId
 LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
 ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
 
@@ -343,14 +348,15 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
                 DisplayName = rdr.GetString(5),
                 AppType = rdr.GetString(6),
                 HostKey = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                RoutePath = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-                InstallationName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-                ArtifactId = rdr.IsDBNull(10) ? null : rdr.GetInt32(10),
-                ArtifactVersion = rdr.IsDBNull(11) ? null : rdr.GetString(11),
-                IsAllowed = rdr.GetBoolean(12),
-                DesiredState = rdr.GetByte(13),
-                LastSeenUtc = rdr.IsDBNull(14) ? null : rdr.GetDateTime(14),
-                VerificationStatus = rdr.GetByte(15)
+                TargetHostTemplateKey = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                RoutePath = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                InstallationName = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                ArtifactId = rdr.IsDBNull(11) ? null : rdr.GetInt32(11),
+                ArtifactVersion = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                IsAllowed = rdr.GetBoolean(13),
+                DesiredState = rdr.GetByte(14),
+                LastSeenUtc = rdr.IsDBNull(15) ? null : rdr.GetDateTime(15),
+                VerificationStatus = rdr.GetByte(16)
             });
         }
         return rows;
@@ -939,6 +945,7 @@ ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey;";
 SELECT tai.InstanceTemplateAppInstanceId,
        tmi.ModuleInstanceKey,
        ith.HostKey,
+       ht.TemplateKey AS TargetHostTemplateKey,
        a.AppKey,
        a.AppType,
        tai.AppInstanceKey,
@@ -957,6 +964,8 @@ INNER JOIN omp.InstanceTemplateModuleInstances tmi
 INNER JOIN omp.Apps a ON a.AppId = tai.AppId
 LEFT JOIN omp.InstanceTemplateHosts ith
     ON ith.InstanceTemplateHostId = tai.InstanceTemplateHostId
+LEFT JOIN omp.HostTemplates ht
+    ON ht.HostTemplateId = tai.TargetHostTemplateId
 LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = tai.DesiredArtifactId
 WHERE tmi.InstanceTemplateId = @InstanceTemplateId
 ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey, tai.SortOrder, tai.AppInstanceKey;";
@@ -975,18 +984,19 @@ ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey, tai.SortOrder, tai.AppInstanceKey
                     InstanceTemplateAppInstanceId = rdr.GetInt32(0),
                     ModuleInstanceKey = rdr.GetString(1),
                     HostKey = rdr.IsDBNull(2) ? null : rdr.GetString(2),
-                    AppKey = rdr.GetString(3),
-                    AppType = rdr.GetString(4),
-                    AppInstanceKey = rdr.GetString(5),
-                    DisplayName = rdr.GetString(6),
-                    RoutePath = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                    InstallationName = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-                    ArtifactId = rdr.IsDBNull(9) ? null : rdr.GetInt32(9),
-                    ArtifactVersion = rdr.IsDBNull(10) ? null : rdr.GetString(10),
-                    IsEnabled = rdr.GetBoolean(11),
-                    IsAllowed = rdr.GetBoolean(12),
-                    DesiredState = rdr.GetByte(13),
-                    SortOrder = rdr.GetInt32(14)
+                    TargetHostTemplateKey = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                    AppKey = rdr.GetString(4),
+                    AppType = rdr.GetString(5),
+                    AppInstanceKey = rdr.GetString(6),
+                    DisplayName = rdr.GetString(7),
+                    RoutePath = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                    InstallationName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                    ArtifactId = rdr.IsDBNull(10) ? null : rdr.GetInt32(10),
+                    ArtifactVersion = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+                    IsEnabled = rdr.GetBoolean(12),
+                    IsAllowed = rdr.GetBoolean(13),
+                    DesiredState = rdr.GetByte(14),
+                    SortOrder = rdr.GetInt32(15)
                 });
             }
         }
