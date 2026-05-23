@@ -1,4 +1,5 @@
 @page
+@using System.Text.Encodings.Web
 @model OpenModulePlatform.Portal.Pages.Admin.ModulePackageImportModel
 
 <section class="page-header">
@@ -19,17 +20,141 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
-<div class="section-grid section-grid--wide top-gap">
-    <section class="card section-card">
-        <h3>@L["Import module package"]</h3>
-        <p class="muted">@L["Upload either one package zip containing a module definition JSON and artifact zips, or upload the JSON and artifact zips separately."]</p>
+<section class="import-export-wizard top-gap" data-import-export-wizard data-initial-panel="@Model.ActivePanel">
+    <div class="workflow-step">
+        <div class="workflow-step__label">@L["Step 1"]</div>
+        <div class="workflow-step__header">
+            <div>
+                <h3>@L["Choose direction"]</h3>
+                <p class="muted">@L["Start by choosing whether you want to import something into this OMP installation or export something from it."]</p>
+            </div>
+        </div>
 
-        <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="form-grid">
+        <div class="workflow-choice-grid workflow-choice-grid--primary">
+            <button type="button" class="workflow-choice" data-workflow-kind="import" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Import"]</span>
+                <span class="workflow-choice__text">@L["Add or update portable objects in this installation."]</span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-kind="export" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Export"]</span>
+                <span class="workflow-choice__text">@L["Download portable objects from this installation."]</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="workflow-step" data-workflow-step="action" hidden>
+        <div class="workflow-step__label">@L["Step 2"]</div>
+        <div class="workflow-step__header">
+            <div>
+                <h3 data-workflow-action-title>@L["Choose action"]</h3>
+                <p class="muted" data-workflow-action-help>@L["Choose one action. Only that form will be shown."]</p>
+            </div>
+        </div>
+
+        <div class="workflow-choice-grid" data-workflow-options="import" hidden>
+            <button type="button" class="workflow-choice" data-workflow-action="import-bundle" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Package zip"]</span>
+                <span class="workflow-choice__text">@L["Import one outer zip that contains a module definition and artifact packages."]</span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="import-files" aria-pressed="false">
+                <span class="workflow-choice__title">@L["JSON plus artifact zips"]</span>
+                <span class="workflow-choice__text">@L["Import a module definition JSON together with one or more artifact package zips."]</span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="import-artifacts" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Artifact zips"]</span>
+                <span class="workflow-choice__text">@L["Import one or more artifact package zips without changing a module definition."]</span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="import-widgets" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Widget JSON"]</span>
+                <span class="workflow-choice__text">@L["Import dashboard widget definitions from JSON."]</span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="import-library" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Available package library"]</span>
+                <span class="workflow-choice__text">@L["Import a module package already stored in the shared package library."]</span>
+            </button>
+        </div>
+
+        <div class="workflow-choice-grid" data-workflow-options="export" hidden>
+            <button type="button" class="workflow-choice" data-workflow-action="export-module" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Module package"]</span>
+                <span class="workflow-choice__text">@L["Export a module definition with the artifact packages it references."]</span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="export-artifact" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Artifact package"]</span>
+                <span class="workflow-choice__text">@L["Export one installed artifact package."]</span>
+            </button>
+            <button type="button" class="workflow-choice" data-workflow-action="export-widgets" aria-pressed="false">
+                <span class="workflow-choice__title">@L["Widgets"]</span>
+                <span class="workflow-choice__text">@L["Export all widgets or widgets owned by one module."]</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="workflow-empty-state" data-workflow-empty>
+        @L["Choose import or export to continue."]
+    </div>
+
+    <section class="card workflow-panel" data-workflow-panel="import-bundle" hidden>
+        <h3>@L["Import package zip"]</h3>
+        <p class="muted">@L["Use this when the JSON and artifact packages are bundled in one zip."]</p>
+
+        <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="form-grid top-gap">
+            <input type="hidden" name="UploadInput.Flow" value="bundle" />
+
             <div class="form-field">
                 <label asp-for="UploadInput.BundleFile">@L["Package zip"]</label>
                 <input asp-for="UploadInput.BundleFile" type="file" accept=".zip,application/zip" />
-                <div class="field-help">@L["Use this when the JSON and artifact packages are bundled in one zip."]</div>
             </div>
+
+            <div class="field-grid field-grid--2">
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ApplyModuleDefinition" type="checkbox" />
+                    <span>@L["Apply module definition"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ExecuteSqlRepairs" type="checkbox" />
+                    <span>@L["Execute detected SQL repairs"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.UseArtifactsImmediately" type="checkbox" />
+                    <span>@L["Use imported artifacts immediately"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.CopyConfigurationFilesFromPreviousVersion" type="checkbox" />
+                    <span>@L["Copy configuration files from previous version"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.AllowTemporaryIncompatibleArtifacts" type="checkbox" />
+                    <span>@L["Allow temporary incompatible artifact selections"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ReplaceExistingModuleDefinition" type="checkbox" />
+                    <span>@L["Replace existing definition with same module key and version"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UploadInput.ReplaceExistingArtifacts" type="checkbox" />
+                    <span>@L["Replace existing artifacts with same identity"]</span>
+                </label>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Import package zip"]</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card workflow-panel" data-workflow-panel="import-files" hidden>
+        <h3>@L["Import JSON plus artifact zips"]</h3>
+        <p class="muted">@L["Use this when the module definition JSON and artifact packages are separate files."]</p>
+
+        <form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="form-grid top-gap">
+            <input type="hidden" name="UploadInput.Flow" value="files" />
 
             <div class="field-grid field-grid--2">
                 <div class="form-field">
@@ -82,16 +207,16 @@
             </div>
 
             <div class="toolbar">
-                <button type="submit">@L["Import module package"]</button>
+                <button type="submit">@L["Import JSON plus artifact zips"]</button>
             </div>
         </form>
     </section>
 
-    <section class="card section-card">
+    <section class="card workflow-panel" data-workflow-panel="import-artifacts" hidden>
         <h3>@L["Import artifact packages"]</h3>
         <p class="muted">@L["Upload one or more standard artifact package zips without changing any module definition."]</p>
 
-        <form method="post" asp-page-handler="ImportArtifacts" enctype="multipart/form-data" class="form-grid">
+        <form method="post" asp-page-handler="ImportArtifacts" enctype="multipart/form-data" class="form-grid top-gap">
             <div class="form-field">
                 <label asp-for="ArtifactUploadInput.ArtifactPackages">@L["Artifact packages"]</label>
                 <input asp-for="ArtifactUploadInput.ArtifactPackages" type="file" accept=".zip,application/zip" multiple />
@@ -121,11 +246,11 @@
         </form>
     </section>
 
-    <section class="card section-card">
+    <section class="card workflow-panel" data-workflow-panel="import-widgets" hidden>
         <h3>@L["Import widgets"]</h3>
         <p class="muted">@L["Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created."]</p>
 
-        <form method="post" asp-page-handler="ImportWidgets" enctype="multipart/form-data" class="form-grid">
+        <form method="post" asp-page-handler="ImportWidgets" enctype="multipart/form-data" class="form-grid top-gap">
             <div class="form-field">
                 <label asp-for="WidgetUploadInput.JsonFile">@L["Widget JSON"]</label>
                 <input asp-for="WidgetUploadInput.JsonFile" type="file" accept=".json,application/json" />
@@ -137,20 +262,105 @@
             </div>
         </form>
     </section>
-</div>
 
-<div class="section-grid section-grid--wide top-gap">
-    <section class="card section-card">
+    <section class="card workflow-panel" data-workflow-panel="import-library" hidden>
+        <div class="section-heading-row">
+            <div>
+                <h3>@L["Available package library"]</h3>
+                <p class="lede">@L["These module definitions and artifact packages were installed into the shared artifact store for later import."]</p>
+            </div>
+        </div>
+
+        @if (Model.AvailablePackages.Count == 0)
+        {
+            <div class="empty-state">@L["No available module packages found."]</div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>@L["Module key"]</th>
+                            <th>@L["Definition version"]</th>
+                            <th>@L["Module definition"]</th>
+                            <th>@L["Status"]</th>
+                            <th>@L["Artifacts"]</th>
+                            <th>@L["Actions"]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var package in Model.AvailablePackages)
+                    {
+                        <tr>
+                            <td><code>@package.ModuleKey</code></td>
+                            <td>@package.DefinitionVersion</td>
+                            <td><code>@package.ModuleDefinitionFileName</code></td>
+                            <td>
+                                <span class="integrity-pill @package.StatusClass">@L[package.StatusLabel]</span>
+                                <div class="muted small-text top-gap">
+                                    @L["Installed definition"]:
+                                    <strong>@(package.InstalledDefinitionVersion ?? L["None"].Value)</strong>
+                                </div>
+                                @if (package.ArtifactFiles.Count > 0)
+                                {
+                                    <div class="muted small-text">
+                                        @string.Format(
+                                            L["Artifacts: {0} same, {1} newer installed, {2} older installed, {3} missing."].Value,
+                                            package.SameArtifactVersionCount,
+                                            package.NewerArtifactVersionCount,
+                                            package.OlderArtifactVersionCount + package.OtherArtifactVersionCount,
+                                            package.MissingArtifactCount)
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="muted small-text">@L["No artifact packages are available for this module package."]</div>
+                                }
+                                <div class="field-help">@L[package.ImportGuidance]</div>
+                            </td>
+                            <td>
+                                <strong>@package.ArtifactFiles.Count</strong>
+                                @if (package.ArtifactFiles.Count > 0)
+                                {
+                                    <div class="muted">
+                                        @string.Join(", ", package.ArtifactFiles
+                                            .Take(4)
+                                            .Select(file => $"{file.AppKey} {file.Version}"))
+                                        @(package.ArtifactFiles.Count > 4 ? " ..." : string.Empty)
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <form method="post" asp-page-handler="ImportAvailable" class="inline-form">
+                                    <input type="hidden" name="ImportInput.ModuleDefinitionFileName" value="@package.ModuleDefinitionFileName" />
+                                    <input type="hidden" name="ImportInput.ApplyModuleDefinition" value="true" />
+                                    <input type="hidden" name="ImportInput.ExecuteSqlRepairs" value="true" />
+                                    <input type="hidden" name="ImportInput.AllowTemporaryIncompatibleArtifacts" value="true" />
+                                    <input type="hidden" name="ImportInput.CopyConfigurationFilesFromPreviousVersion" value="true" />
+                                    <input type="hidden" name="ImportInput.UseArtifactsImmediately" value="true" />
+                                    <button type="submit">@L["Import"]</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="card workflow-panel" data-workflow-panel="export-module" hidden>
         <h3>@L["Export module package"]</h3>
         <p class="muted">@L["Export the active module definition together with the artifact packages currently referenced by the installation template and runtime rows."]</p>
 
         @if (Model.AppliedDefinitions.Count == 0)
         {
-            <div class="empty-state">@L["No active module definitions found."]</div>
+            <div class="empty-state top-gap">@L["No active module definitions found."]</div>
         }
         else
         {
-            <form method="get" asp-page-handler="Export" class="form-grid">
+            <form method="get" asp-page-handler="Export" class="form-grid top-gap">
                 <div class="form-field">
                     <label for="moduleKey">@L["Module key"]</label>
                     <select id="moduleKey" name="moduleKey">
@@ -173,17 +383,17 @@
         }
     </section>
 
-    <section class="card section-card">
+    <section class="card workflow-panel" data-workflow-panel="export-artifact" hidden>
         <h3>@L["Export artifact package"]</h3>
         <p class="muted">@L["Export one installed artifact as a standard artifact package zip, including artifact-owned configuration files."]</p>
 
         @if (Model.ArtifactRows.Count == 0)
         {
-            <div class="empty-state">@L["No artifacts found."]</div>
+            <div class="empty-state top-gap">@L["No artifacts found."]</div>
         }
         else
         {
-            <form method="get" asp-page-handler="ExportArtifact" class="form-grid">
+            <form method="get" asp-page-handler="ExportArtifact" class="form-grid top-gap">
                 <div class="form-field">
                     <label for="artifactId">@L["Artifact"]</label>
                     <select id="artifactId" name="artifactId">
@@ -201,11 +411,11 @@
         }
     </section>
 
-    <section class="card section-card">
+    <section class="card workflow-panel" data-workflow-panel="export-widgets" hidden>
         <h3>@L["Export widgets"]</h3>
         <p class="muted">@L["Export all widgets or only the widgets owned by one module key."]</p>
 
-        <form method="get" asp-page-handler="ExportWidgets" class="form-grid">
+        <form method="get" asp-page-handler="ExportWidgets" class="form-grid top-gap">
             <div class="form-field">
                 <label for="widgetModuleKey">@L["Module key"]</label>
                 <select id="widgetModuleKey" name="moduleKey">
@@ -222,91 +432,112 @@
             </div>
         </form>
     </section>
-</div>
-
-<section class="card top-gap">
-    <div class="section-heading-row">
-        <div>
-            <h3>@L["Available package library"]</h3>
-            <p class="lede">@L["These module definitions and artifact packages were installed into the shared artifact store for later import."]</p>
-        </div>
-    </div>
-
-    @if (Model.AvailablePackages.Count == 0)
-    {
-        <div class="empty-state">@L["No available module packages found."]</div>
-    }
-    else
-    {
-        <div class="table-scroll">
-            <table class="grid">
-                <thead>
-                    <tr>
-                        <th>@L["Module key"]</th>
-                        <th>@L["Definition version"]</th>
-                        <th>@L["Module definition"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Artifacts"]</th>
-                        <th>@L["Actions"]</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach (var package in Model.AvailablePackages)
-                {
-                    <tr>
-                        <td><code>@package.ModuleKey</code></td>
-                        <td>@package.DefinitionVersion</td>
-                        <td><code>@package.ModuleDefinitionFileName</code></td>
-                        <td>
-                            <span class="integrity-pill @package.StatusClass">@L[package.StatusLabel]</span>
-                            <div class="muted small-text top-gap">
-                                @L["Installed definition"]:
-                                <strong>@(package.InstalledDefinitionVersion ?? L["None"].Value)</strong>
-                            </div>
-                            @if (package.ArtifactFiles.Count > 0)
-                            {
-                                <div class="muted small-text">
-                                    @string.Format(
-                                        L["Artifacts: {0} same, {1} newer installed, {2} older installed, {3} missing."].Value,
-                                        package.SameArtifactVersionCount,
-                                        package.NewerArtifactVersionCount,
-                                        package.OlderArtifactVersionCount + package.OtherArtifactVersionCount,
-                                        package.MissingArtifactCount)
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="muted small-text">@L["No artifact packages are available for this module package."]</div>
-                            }
-                            <div class="field-help">@L[package.ImportGuidance]</div>
-                        </td>
-                        <td>
-                            <strong>@package.ArtifactFiles.Count</strong>
-                            @if (package.ArtifactFiles.Count > 0)
-                            {
-                                <div class="muted">
-                                    @string.Join(", ", package.ArtifactFiles
-                                        .Take(4)
-                                        .Select(file => $"{file.AppKey} {file.Version}"))
-                                    @(package.ArtifactFiles.Count > 4 ? " ..." : string.Empty)
-                                </div>
-                            }
-                        </td>
-                        <td>
-                            <form method="post" asp-page-handler="ImportAvailable" class="inline-form">
-                                <input type="hidden" name="ImportInput.ModuleDefinitionFileName" value="@package.ModuleDefinitionFileName" />
-                                <input type="hidden" name="ImportInput.ApplyModuleDefinition" value="true" />
-                                <input type="hidden" name="ImportInput.ExecuteSqlRepairs" value="true" />
-                                <input type="hidden" name="ImportInput.AllowTemporaryIncompatibleArtifacts" value="true" />
-                                <input type="hidden" name="ImportInput.CopyConfigurationFilesFromPreviousVersion" value="true" />
-                                <input type="hidden" name="ImportInput.UseArtifactsImmediately" value="true" />
-                                <button type="submit">@L["Import"]</button>
-                            </form>
-                        </td>
-                    </tr>
-                }
-                </tbody>
-            </table>
-        </div>
-    }
 </section>
+
+<script>
+(() => {
+    const root = document.querySelector('[data-import-export-wizard]');
+    if (!root) {
+        return;
+    }
+
+    const kindButtons = Array.from(root.querySelectorAll('[data-workflow-kind]'));
+    const optionGroups = Array.from(root.querySelectorAll('[data-workflow-options]'));
+    const actionButtons = Array.from(root.querySelectorAll('[data-workflow-action]'));
+    const panels = Array.from(root.querySelectorAll('[data-workflow-panel]'));
+    const actionStep = root.querySelector('[data-workflow-step="action"]');
+    const emptyState = root.querySelector('[data-workflow-empty]');
+    const actionTitle = root.querySelector('[data-workflow-action-title]');
+    const actionHelp = root.querySelector('[data-workflow-action-help]');
+
+    const setPressed = (buttons, activeButton) => {
+        buttons.forEach(button => {
+            button.setAttribute('aria-pressed', button === activeButton ? 'true' : 'false');
+        });
+    };
+
+    const updateActionText = kind => {
+        if (actionTitle) {
+            actionTitle.textContent = kind === 'export'
+                ? '@Html.Raw(JavaScriptEncoder.Default.Encode(L["Choose export type"].Value))'
+                : '@Html.Raw(JavaScriptEncoder.Default.Encode(L["Choose import type"].Value))';
+        }
+
+        if (actionHelp) {
+            actionHelp.textContent = '@Html.Raw(JavaScriptEncoder.Default.Encode(L["Choose one action. Only that form will be shown."].Value))';
+        }
+    };
+
+    const showPanel = panelName => {
+        const actionButton = actionButtons.find(button => button.dataset.workflowAction === panelName);
+        if (!actionButton) {
+            return;
+        }
+
+        const group = actionButton.closest('[data-workflow-options]');
+        const kind = group?.dataset.workflowOptions;
+        const kindButton = kindButtons.find(button => button.dataset.workflowKind === kind);
+
+        if (kindButton) {
+            setPressed(kindButtons, kindButton);
+        }
+
+        optionGroups.forEach(optionGroup => {
+            optionGroup.hidden = optionGroup.dataset.workflowOptions !== kind;
+        });
+
+        if (actionStep) {
+            actionStep.hidden = false;
+        }
+
+        updateActionText(kind);
+        setPressed(actionButtons, actionButton);
+        panels.forEach(panel => {
+            panel.hidden = panel.dataset.workflowPanel !== panelName;
+        });
+
+        if (emptyState) {
+            emptyState.hidden = true;
+        }
+    };
+
+    const showKind = kind => {
+        const kindButton = kindButtons.find(button => button.dataset.workflowKind === kind);
+        if (kindButton) {
+            setPressed(kindButtons, kindButton);
+        }
+
+        optionGroups.forEach(optionGroup => {
+            optionGroup.hidden = optionGroup.dataset.workflowOptions !== kind;
+        });
+
+        if (actionStep) {
+            actionStep.hidden = false;
+        }
+
+        updateActionText(kind);
+
+        setPressed(actionButtons, null);
+        panels.forEach(panel => {
+            panel.hidden = true;
+        });
+
+        if (emptyState) {
+            emptyState.hidden = false;
+            emptyState.textContent = '@Html.Raw(JavaScriptEncoder.Default.Encode(L["Choose an action to continue."].Value))';
+        }
+    };
+
+    kindButtons.forEach(button => {
+        button.addEventListener('click', () => showKind(button.dataset.workflowKind));
+    });
+
+    actionButtons.forEach(button => {
+        button.addEventListener('click', () => showPanel(button.dataset.workflowAction));
+    });
+
+    if (root.dataset.initialPanel) {
+        showPanel(root.dataset.initialPanel);
+    }
+})();
+</script>

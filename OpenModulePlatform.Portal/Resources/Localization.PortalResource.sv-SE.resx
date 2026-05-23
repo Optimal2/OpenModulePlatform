@@ -2085,4 +2085,33 @@
   <data name="Export artifact package" xml:space="preserve"><value>Exportera artefaktpaket</value></data>
   <data name="Export one installed artifact as a standard artifact package zip, including artifact-owned configuration files." xml:space="preserve"><value>Exportera en installerad artefakt som ett standardiserat artefaktpaket i zip-format, inklusive artefaktens konfigurationsfiler.</value></data>
   <data name="Artifact packages imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artefaktpaket importerade eller ersatta: {0}. Misslyckade: {1}.</value></data>
+  <data name="Step 1" xml:space="preserve"><value>Steg 1</value></data>
+  <data name="Step 2" xml:space="preserve"><value>Steg 2</value></data>
+  <data name="Choose direction" xml:space="preserve"><value>Välj riktning</value></data>
+  <data name="Start by choosing whether you want to import something into this OMP installation or export something from it." xml:space="preserve"><value>Börja med att välja om du vill importera något till den här OMP-installationen eller exportera något från den.</value></data>
+  <data name="Export" xml:space="preserve"><value>Exportera</value></data>
+  <data name="Add or update portable objects in this installation." xml:space="preserve"><value>Lägg till eller uppdatera portabla objekt i den här installationen.</value></data>
+  <data name="Download portable objects from this installation." xml:space="preserve"><value>Ladda ner portabla objekt från den här installationen.</value></data>
+  <data name="Choose action" xml:space="preserve"><value>Välj åtgärd</value></data>
+  <data name="Choose one action. Only that form will be shown." xml:space="preserve"><value>Välj en åtgärd. Bara det formuläret visas.</value></data>
+  <data name="Choose import type" xml:space="preserve"><value>Välj importtyp</value></data>
+  <data name="Choose export type" xml:space="preserve"><value>Välj exporttyp</value></data>
+  <data name="Choose import or export to continue." xml:space="preserve"><value>Välj import eller export för att fortsätta.</value></data>
+  <data name="Choose an action to continue." xml:space="preserve"><value>Välj en åtgärd för att fortsätta.</value></data>
+  <data name="Import one outer zip that contains a module definition and artifact packages." xml:space="preserve"><value>Importera en yttre zip som innehåller en moduldefinition och artefaktpaket.</value></data>
+  <data name="JSON plus artifact zips" xml:space="preserve"><value>JSON plus artefaktzippar</value></data>
+  <data name="Import a module definition JSON together with one or more artifact package zips." xml:space="preserve"><value>Importera en moduldefinitions-JSON tillsammans med ett eller flera artefaktpaket i zip-format.</value></data>
+  <data name="Artifact zips" xml:space="preserve"><value>Artefaktzippar</value></data>
+  <data name="Import one or more artifact package zips without changing a module definition." xml:space="preserve"><value>Importera ett eller flera artefaktpaket i zip-format utan att ändra någon moduldefinition.</value></data>
+  <data name="Import dashboard widget definitions from JSON." xml:space="preserve"><value>Importera dashboard-widgetdefinitioner från JSON.</value></data>
+  <data name="Import a module package already stored in the shared package library." xml:space="preserve"><value>Importera ett modulpaket som redan finns i det gemensamma paketbiblioteket.</value></data>
+  <data name="Module package" xml:space="preserve"><value>Modulpaket</value></data>
+  <data name="Export a module definition with the artifact packages it references." xml:space="preserve"><value>Exportera en moduldefinition med artefaktpaketen den refererar till.</value></data>
+  <data name="Artifact package" xml:space="preserve"><value>Artefaktpaket</value></data>
+  <data name="Export one installed artifact package." xml:space="preserve"><value>Exportera ett installerat artefaktpaket.</value></data>
+  <data name="Widgets" xml:space="preserve"><value>Widgets</value></data>
+  <data name="Export all widgets or widgets owned by one module." xml:space="preserve"><value>Exportera alla widgets eller widgets som tillhör en modul.</value></data>
+  <data name="Import package zip" xml:space="preserve"><value>Importera paket-zip</value></data>
+  <data name="Use this when the module definition JSON and artifact packages are separate files." xml:space="preserve"><value>Använd detta när moduldefinitions-JSON och artefaktpaket är separata filer.</value></data>
+  <data name="Import JSON plus artifact zips" xml:space="preserve"><value>Importera JSON plus artefaktzippar</value></data>
 </root>
