@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OMP config overlay editor</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #fff;
+      --line: #d5dde8;
+      --text: #182230;
+      --muted: #5e6b7a;
+      --accent: #1769aa;
+      --accent-soft: #e6f2fb;
+      --danger: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 22px;
+    }
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 18px; }
+    p { margin: 6px 0 0; color: var(--muted); }
+    .tabs, .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font: inherit;
+    }
+    button:hover { border-color: var(--accent); }
+    button.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .field {
+      display: grid;
+      gap: 5px;
+      margin-top: 11px;
+    }
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #253244;
+    }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 9px;
+      font: inherit;
+      background: #fff;
+    }
+    textarea {
+      min-height: 120px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+      resize: vertical;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .output {
+      min-height: 430px;
+      white-space: pre;
+    }
+    .list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .list-item {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #fbfcfe;
+    }
+    .list-item .toolbar { margin-top: 8px; }
+    .hint { font-size: 12px; color: var(--muted); }
+    .error { color: var(--danger); font-weight: 600; }
+    @media (max-width: 800px) {
+      .grid, .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>OMP config overlay editor</h1>
+    <p>Create host configuration JSON and config overlay JSON. These objects stay separate from global module definitions and artifact binaries.</p>
+  </header>
+
+  <div class="tabs">
+    <button type="button" class="active" data-mode="host">Host configuration</button>
+    <button type="button" data-mode="overlay">Config overlay</button>
+  </div>
+
+  <section class="grid">
+    <div class="panel" data-panel="host">
+      <h2>Host configuration</h2>
+      <p>Use this as the input for generating host-specific overlays.</p>
+      <div class="row">
+        <div class="field">
+          <label for="hostKey">Host key</label>
+          <input id="hostKey" value="DESKTOP-EXAMPLE">
+        </div>
+        <div class="field">
+          <label for="hostVersion">Configuration version</label>
+          <input id="hostVersion" value="1.0.0">
+        </div>
+        <div class="field">
+          <label for="hostDisplayName">Display name</label>
+          <input id="hostDisplayName" value="Example host">
+        </div>
+      </div>
+      <div class="field">
+        <label for="hostDescription">Description</label>
+        <input id="hostDescription" value="Host-level configuration used to generate OMP config overlays.">
+      </div>
+      <div class="field">
+        <label for="hostValues">Values JSON</label>
+        <textarea id="hostValues">{
+  "paths": {
+    "dataRoot": "E:\\OMP\\Data"
+  },
+  "identity": {
+    "defaultServiceAccountKey": "default-service"
+  }
+}</textarea>
+        <div class="hint">This object is intentionally opaque to OMP core. Generator scripts can decide which values they need.</div>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="overlay" hidden>
+      <h2>Config overlay</h2>
+      <p>Use this when a host needs configuration files or SQL that must not be part of the global artifact/module object.</p>
+      <div class="row">
+        <div class="field">
+          <label for="overlayKey">Overlay key</label>
+          <input id="overlayKey" value="opendocviewer-site-config">
+        </div>
+        <div class="field">
+          <label for="overlayVersion">Overlay version</label>
+          <input id="overlayVersion" value="1.0.0">
+        </div>
+        <div class="field">
+          <label for="overlayHostKey">Host key</label>
+          <input id="overlayHostKey" value="DESKTOP-EXAMPLE">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="moduleKey">Module key</label>
+          <input id="moduleKey" value="opendocviewer">
+        </div>
+        <div class="field">
+          <label for="appKey">App key</label>
+          <input id="appKey" value="opendocviewer_webapp">
+        </div>
+        <div class="field">
+          <label for="packageType">Package type</label>
+          <input id="packageType" value="web-app">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="targetName">Target name</label>
+          <input id="targetName" value="opendocviewer">
+        </div>
+        <div class="field">
+          <label for="artifactVersion">Artifact version</label>
+          <input id="artifactVersion" placeholder="Optional">
+        </div>
+        <div class="field">
+          <label for="moduleDefinitionVersion">Module definition version</label>
+          <input id="moduleDefinitionVersion" placeholder="Optional">
+        </div>
+      </div>
+      <div class="field">
+        <label for="configFiles">Configuration files JSON array</label>
+        <textarea id="configFiles">[
+  {
+    "relativePath": "odv.site.config.js",
+    "fileContent": "window.OpenDocViewerSiteConfig = { apiBaseUrl: '/OpenDocViewer' };"
+  }
+]</textarea>
+      </div>
+      <div class="field">
+        <label for="sqlScripts">SQL scripts JSON array</label>
+        <textarea id="sqlScripts">[]</textarea>
+        <div class="hint">For zip packages you may use source/path. Standalone JSON should use inlineSql.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Output</h2>
+      <p>The generated JSON can be imported through Portal, the HostAgent import folder, or an installer package library.</p>
+      <textarea id="output" class="output" spellcheck="false"></textarea>
+      <div id="message" class="hint"></div>
+      <div class="toolbar">
+        <button type="button" class="primary" id="generate">Generate JSON</button>
+        <button type="button" id="copy">Copy</button>
+        <button type="button" id="download">Download</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = { mode: 'host' };
+  const buttons = Array.from(document.querySelectorAll('[data-mode]'));
+  const panels = Array.from(document.querySelectorAll('[data-panel]'));
+
+  const parseJson = (id, fallback) => {
+    const text = $(id).value.trim();
+    if (!text) {
+      return fallback;
+    }
+    return JSON.parse(text);
+  };
+
+  const blankToUndefined = value => {
+    const text = String(value || '').trim();
+    return text.length === 0 ? undefined : text;
+  };
+
+  const compact = obj => {
+    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
+    return obj;
+  };
+
+  const buildHostConfig = () => compact({
+    formatVersion: 1,
+    objectType: 'host-configuration',
+    hostKey: blankToUndefined($('hostKey').value),
+    configurationVersion: blankToUndefined($('hostVersion').value),
+    displayName: blankToUndefined($('hostDisplayName').value),
+    description: blankToUndefined($('hostDescription').value),
+    values: parseJson('hostValues', {})
+  });
+
+  const buildOverlay = () => compact({
+    formatVersion: 1,
+    objectType: 'config-overlay',
+    overlayKey: blankToUndefined($('overlayKey').value),
+    overlayVersion: blankToUndefined($('overlayVersion').value),
+    hostKey: blankToUndefined($('overlayHostKey').value),
+    moduleKey: blankToUndefined($('moduleKey').value),
+    moduleDefinitionVersion: blankToUndefined($('moduleDefinitionVersion').value),
+    appKey: blankToUndefined($('appKey').value),
+    packageType: blankToUndefined($('packageType').value),
+    targetName: blankToUndefined($('targetName').value),
+    artifactVersion: blankToUndefined($('artifactVersion').value),
+    configurationFiles: parseJson('configFiles', []),
+    sqlScripts: parseJson('sqlScripts', [])
+  });
+
+  const fileName = () => {
+    if (state.mode === 'host') {
+      return `${blankToUndefined($('hostKey').value) || 'host'}__host-config__${blankToUndefined($('hostVersion').value) || '1.0.0'}.json`;
+    }
+
+    return `${blankToUndefined($('overlayHostKey').value) || 'host'}__${blankToUndefined($('overlayKey').value) || 'overlay'}__overlay__${blankToUndefined($('overlayVersion').value) || '1.0.0'}.json`;
+  };
+
+  const render = () => {
+    try {
+      const obj = state.mode === 'host' ? buildHostConfig() : buildOverlay();
+      $('output').value = JSON.stringify(obj, null, 2);
+      $('message').textContent = `Suggested file name: ${fileName()}`;
+      $('message').className = 'hint';
+    } catch (err) {
+      $('message').textContent = err.message;
+      $('message').className = 'error';
+    }
+  };
+
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      state.mode = button.dataset.mode;
+      buttons.forEach(item => item.classList.toggle('active', item === button));
+      panels.forEach(panel => {
+        panel.hidden = panel.dataset.panel !== state.mode;
+      });
+      render();
+    });
+  });
+
+  document.querySelectorAll('input, textarea').forEach(input => {
+    input.addEventListener('input', render);
+  });
+
+  $('generate').addEventListener('click', render);
+  $('copy').addEventListener('click', async () => {
+    await navigator.clipboard.writeText($('output').value);
+    $('message').textContent = 'Copied JSON to clipboard.';
+  });
+  $('download').addEventListener('click', () => {
+    const blob = new Blob([$('output').value], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName();
+    link.click();
+    URL.revokeObjectURL(url);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

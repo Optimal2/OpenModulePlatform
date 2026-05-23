@@ -26,6 +26,16 @@ public sealed class ArtifactUploadOptions
     public string AvailableArtifactsRoot { get; set; } = string.Empty;
 
     /// <summary>
+    /// Optional folder containing host configuration JSON files available for later Portal import.
+    /// </summary>
+    public string AvailableHostConfigurationsRoot { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional folder containing host-specific config overlay JSON files or zip packages.
+    /// </summary>
+    public string AvailableConfigOverlaysRoot { get; set; } = string.Empty;
+
+    /// <summary>
     /// Maximum accepted zip upload size in bytes.
     /// </summary>
     public long MaxUploadBytes { get; set; } = DefaultMaxUploadBytes;

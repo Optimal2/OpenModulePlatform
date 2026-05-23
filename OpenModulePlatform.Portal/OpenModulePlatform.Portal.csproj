@@ -24,5 +24,9 @@
              Link="wwwroot\tools\bootstrap-config-editor\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\tools\config-overlay-editor\**\*.*"
+             Link="wwwroot\tools\config-overlay-editor\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

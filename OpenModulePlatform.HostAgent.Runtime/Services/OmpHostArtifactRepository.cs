@@ -493,6 +493,121 @@ WHERE ModuleKey = @moduleKey
         }
     }
 
+    public async Task<(int DocumentId, bool Created, bool Replaced, bool WasIdentical)> SaveImportedHostConfigurationAsync(
+        PortableHostConfigurationDocument input,
+        bool replaceExisting,
+        CancellationToken ct)
+    {
+        const string findSql = @"
+SELECT HostConfigurationDocumentId,
+       ConfigurationSha256
+FROM omp.HostConfigurationDocuments
+WHERE HostKey = @hostKey
+  AND ConfigurationVersion = @configurationVersion;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            int? existingId = null;
+            string? existingSha256 = null;
+            await using (var find = new SqlCommand(findSql, conn, tx))
+            {
+                Add(find, "@hostKey", input.HostKey);
+                Add(find, "@configurationVersion", input.ConfigurationVersion);
+                await using var rdr = await find.ExecuteReaderAsync(ct);
+                if (await rdr.ReadAsync(ct))
+                {
+                    existingId = rdr.GetInt32(0);
+                    existingSha256 = rdr.GetString(1);
+                }
+            }
+
+            var isIdentical = existingId.HasValue
+                && string.Equals(existingSha256, input.ConfigurationSha256, StringComparison.OrdinalIgnoreCase);
+            if (existingId.HasValue && !replaceExisting && !isIdentical)
+            {
+                throw new InvalidOperationException(
+                    "A host configuration with the same host key and version already exists, but the imported JSON is different. Use a new configuration version for unattended HostAgent folder imports.");
+            }
+
+            var documentId = existingId ?? await InsertHostConfigurationDocumentAsync(conn, tx, input, ct);
+            if (existingId.HasValue && (replaceExisting || !isIdentical))
+            {
+                await UpdateHostConfigurationDocumentAsync(conn, tx, documentId, input, ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return (documentId, !existingId.HasValue, existingId.HasValue && replaceExisting && !isIdentical, existingId.HasValue && isIdentical);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<(int DocumentId, bool Created, bool Replaced, bool WasIdentical)> SaveImportedConfigOverlayAsync(
+        PortableConfigOverlayDocument input,
+        bool replaceExisting,
+        CancellationToken ct)
+    {
+        const string findSql = @"
+SELECT ConfigOverlayDocumentId,
+       OverlaySha256
+FROM omp.ConfigOverlayDocuments
+WHERE OverlayKey = @overlayKey
+  AND HostKey = @hostKey
+  AND OverlayVersion = @overlayVersion;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            int? existingId = null;
+            string? existingSha256 = null;
+            await using (var find = new SqlCommand(findSql, conn, tx))
+            {
+                Add(find, "@overlayKey", input.OverlayKey);
+                Add(find, "@hostKey", input.HostKey);
+                Add(find, "@overlayVersion", input.OverlayVersion);
+                await using var rdr = await find.ExecuteReaderAsync(ct);
+                if (await rdr.ReadAsync(ct))
+                {
+                    existingId = rdr.GetInt32(0);
+                    existingSha256 = rdr.GetString(1);
+                }
+            }
+
+            var isIdentical = existingId.HasValue
+                && string.Equals(existingSha256, input.OverlaySha256, StringComparison.OrdinalIgnoreCase);
+            if (existingId.HasValue && !replaceExisting && !isIdentical)
+            {
+                throw new InvalidOperationException(
+                    "A config overlay with the same overlay key, host key, and version already exists, but the imported JSON is different. Use a new overlay version for unattended HostAgent folder imports.");
+            }
+
+            var documentId = existingId ?? await InsertConfigOverlayDocumentAsync(conn, tx, input, ct);
+            if (existingId.HasValue && (replaceExisting || !isIdentical))
+            {
+                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, ct);
+            }
+
+            await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
+            await tx.CommitAsync(ct);
+            return (documentId, !existingId.HasValue, existingId.HasValue && replaceExisting && !isIdentical, existingId.HasValue && isIdentical);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<string?> GetAppliedModuleDefinitionVersionAsync(
         string moduleKey,
         CancellationToken ct)
@@ -1437,6 +1552,7 @@ WHERE ar.ArtifactId = @artifactId
 
     public async Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
         int artifactId,
+        string hostKey,
         CancellationToken ct)
     {
         const string sql = @"
@@ -1446,38 +1562,98 @@ BEGIN
         CAST(NULL AS int) AS ArtifactConfigurationFileId,
         CAST(NULL AS int) AS ArtifactId,
         CAST(NULL AS nvarchar(400)) AS RelativePath,
-        CAST(NULL AS nvarchar(max)) AS FileContent;
+        CAST(NULL AS nvarchar(max)) AS FileContent,
+        CAST(NULL AS int) AS SourcePriority,
+        CAST(NULL AS datetime2(3)) AS SourceUpdatedUtc;
+    RETURN;
+END;
+
+DECLARE @ModuleKey nvarchar(100);
+DECLARE @AppKey nvarchar(100);
+DECLARE @Version nvarchar(50);
+DECLARE @PackageType nvarchar(50);
+DECLARE @TargetName nvarchar(100);
+
+SELECT @ModuleKey = m.ModuleKey,
+       @AppKey = app.AppKey,
+       @Version = ar.Version,
+       @PackageType = ar.PackageType,
+       @TargetName = ar.TargetName
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps app ON app.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = app.ModuleId
+WHERE ar.ArtifactId = @artifactId;
+
+IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NULL
+   OR OBJECT_ID(N'omp.ConfigOverlayConfigurationFiles', N'U') IS NULL
+BEGIN
+    SELECT ArtifactConfigurationFileId,
+           ArtifactId,
+           RelativePath,
+           FileContent,
+           CAST(0 AS int) AS SourcePriority,
+           UpdatedUtc AS SourceUpdatedUtc
+    FROM omp.ArtifactConfigurationFiles
+    WHERE ArtifactId = @artifactId
+      AND IsEnabled = 1
+    ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;
     RETURN;
 END;
 
 SELECT ArtifactConfigurationFileId,
        ArtifactId,
        RelativePath,
-       FileContent
+       FileContent,
+       CAST(0 AS int) AS SourcePriority,
+       UpdatedUtc AS SourceUpdatedUtc
 FROM omp.ArtifactConfigurationFiles
 WHERE ArtifactId = @artifactId
   AND IsEnabled = 1
-ORDER BY RelativePath, ArtifactConfigurationFileId;";
 
-        var rows = new List<ArtifactConfigurationFileDescriptor>();
+UNION ALL
+
+SELECT overlayFile.ConfigOverlayConfigurationFileId AS ArtifactConfigurationFileId,
+       @artifactId AS ArtifactId,
+       overlayFile.RelativePath,
+       overlayFile.FileContent,
+       CAST(1 AS int) AS SourcePriority,
+       overlay.UpdatedUtc AS SourceUpdatedUtc
+FROM omp.ConfigOverlayDocuments overlay
+INNER JOIN omp.ConfigOverlayConfigurationFiles overlayFile
+    ON overlayFile.ConfigOverlayDocumentId = overlay.ConfigOverlayDocumentId
+WHERE overlay.IsEnabled = 1
+  AND overlayFile.IsEnabled = 1
+  AND overlay.HostKey = @hostKey
+  AND (overlay.ModuleKey IS NULL OR overlay.ModuleKey = @ModuleKey)
+  AND (overlay.AppKey IS NULL OR overlay.AppKey = @AppKey)
+  AND (overlay.PackageType IS NULL OR overlay.PackageType = @PackageType)
+  AND (overlay.TargetName IS NULL OR overlay.TargetName = @TargetName)
+  AND (overlay.ArtifactVersion IS NULL OR overlay.ArtifactVersion = @Version)
+ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;";
+
+        var rows = new Dictionary<string, ArtifactConfigurationFileDescriptor>(StringComparer.OrdinalIgnoreCase);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            rows.Add(new ArtifactConfigurationFileDescriptor
+            var descriptor = new ArtifactConfigurationFileDescriptor
             {
                 ArtifactConfigurationFileId = rdr.GetInt32(0),
                 ArtifactId = rdr.GetInt32(1),
                 RelativePath = rdr.GetString(2),
                 FileContent = rdr.GetString(3)
-            });
+            };
+            rows[descriptor.RelativePath] = descriptor;
         }
 
-        return rows;
+        return rows.Values
+            .OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<ArtifactDescriptor>> GetDesiredArtifactsAsync(
@@ -2246,6 +2422,219 @@ VALUES
         Add(cmd, "@formatVersion", input.FormatVersion);
         Add(cmd, "@definitionJson", input.DefinitionJson);
         Add(cmd, "@definitionSha256", input.DefinitionSha256);
+        Add(cmd, "@sourceName", input.SourceName);
+    }
+
+    private static async Task<int> InsertHostConfigurationDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableHostConfigurationDocument input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.HostConfigurationDocuments
+(
+    HostKey,
+    ConfigurationVersion,
+    FormatVersion,
+    ConfigurationJson,
+    ConfigurationSha256,
+    DisplayName,
+    Description,
+    SourceName,
+    IsActive
+)
+VALUES
+(
+    @hostKey,
+    @configurationVersion,
+    @formatVersion,
+    @configurationJson,
+    @configurationSha256,
+    @displayName,
+    @description,
+    @sourceName,
+    1
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        BindHostConfigurationDocument(cmd, input);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task UpdateHostConfigurationDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        PortableHostConfigurationDocument input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.HostConfigurationDocuments
+SET FormatVersion = @formatVersion,
+    ConfigurationJson = @configurationJson,
+    ConfigurationSha256 = @configurationSha256,
+    DisplayName = @displayName,
+    Description = @description,
+    SourceName = @sourceName,
+    IsActive = 1,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostConfigurationDocumentId = @hostConfigurationDocumentId;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@hostConfigurationDocumentId", documentId);
+        BindHostConfigurationDocument(cmd, input);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static void BindHostConfigurationDocument(SqlCommand cmd, PortableHostConfigurationDocument input)
+    {
+        Add(cmd, "@hostKey", input.HostKey);
+        Add(cmd, "@configurationVersion", input.ConfigurationVersion);
+        Add(cmd, "@formatVersion", input.FormatVersion);
+        Add(cmd, "@configurationJson", input.ConfigurationJson);
+        Add(cmd, "@configurationSha256", input.ConfigurationSha256);
+        Add(cmd, "@displayName", input.DisplayName);
+        Add(cmd, "@description", input.Description);
+        Add(cmd, "@sourceName", input.SourceName);
+    }
+
+    private static async Task<int> InsertConfigOverlayDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableConfigOverlayDocument input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.ConfigOverlayDocuments
+(
+    OverlayKey,
+    OverlayVersion,
+    HostKey,
+    ModuleKey,
+    ModuleDefinitionVersion,
+    AppKey,
+    PackageType,
+    TargetName,
+    ArtifactVersion,
+    FormatVersion,
+    OverlayJson,
+    OverlaySha256,
+    SourceName,
+    IsEnabled
+)
+VALUES
+(
+    @overlayKey,
+    @overlayVersion,
+    @hostKey,
+    @moduleKey,
+    @moduleDefinitionVersion,
+    @appKey,
+    @packageType,
+    @targetName,
+    @artifactVersion,
+    @formatVersion,
+    @overlayJson,
+    @overlaySha256,
+    @sourceName,
+    1
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        BindConfigOverlayDocument(cmd, input);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task UpdateConfigOverlayDocumentAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        PortableConfigOverlayDocument input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.ConfigOverlayDocuments
+SET ModuleKey = @moduleKey,
+    ModuleDefinitionVersion = @moduleDefinitionVersion,
+    AppKey = @appKey,
+    PackageType = @packageType,
+    TargetName = @targetName,
+    ArtifactVersion = @artifactVersion,
+    FormatVersion = @formatVersion,
+    OverlayJson = @overlayJson,
+    OverlaySha256 = @overlaySha256,
+    SourceName = @sourceName,
+    IsEnabled = 1,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ConfigOverlayDocumentId = @configOverlayDocumentId;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@configOverlayDocumentId", documentId);
+        BindConfigOverlayDocument(cmd, input);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ReplaceConfigOverlayConfigurationFilesAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        IReadOnlyList<PortableConfigOverlayConfigurationFile> configurationFiles,
+        CancellationToken ct)
+    {
+        await using (var delete = new SqlCommand(
+            "DELETE FROM omp.ConfigOverlayConfigurationFiles WHERE ConfigOverlayDocumentId = @configOverlayDocumentId;",
+            conn,
+            tx))
+        {
+            Add(delete, "@configOverlayDocumentId", documentId);
+            await delete.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSql = @"
+INSERT INTO omp.ConfigOverlayConfigurationFiles
+(
+    ConfigOverlayDocumentId,
+    RelativePath,
+    FileContent,
+    IsEnabled
+)
+VALUES
+(
+    @configOverlayDocumentId,
+    @relativePath,
+    @fileContent,
+    1
+);";
+
+        foreach (var configurationFile in configurationFiles)
+        {
+            await using var insert = new SqlCommand(insertSql, conn, tx);
+            Add(insert, "@configOverlayDocumentId", documentId);
+            Add(insert, "@relativePath", configurationFile.RelativePath);
+            Add(insert, "@fileContent", configurationFile.FileContent);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static void BindConfigOverlayDocument(SqlCommand cmd, PortableConfigOverlayDocument input)
+    {
+        Add(cmd, "@overlayKey", input.OverlayKey);
+        Add(cmd, "@overlayVersion", input.OverlayVersion);
+        Add(cmd, "@hostKey", input.HostKey);
+        Add(cmd, "@moduleKey", input.ModuleKey);
+        Add(cmd, "@moduleDefinitionVersion", input.ModuleDefinitionVersion);
+        Add(cmd, "@appKey", input.AppKey);
+        Add(cmd, "@packageType", input.PackageType);
+        Add(cmd, "@targetName", input.TargetName);
+        Add(cmd, "@artifactVersion", input.ArtifactVersion);
+        Add(cmd, "@formatVersion", input.FormatVersion);
+        Add(cmd, "@overlayJson", input.OverlayJson);
+        Add(cmd, "@overlaySha256", input.OverlaySha256);
         Add(cmd, "@sourceName", input.SourceName);
     }
 

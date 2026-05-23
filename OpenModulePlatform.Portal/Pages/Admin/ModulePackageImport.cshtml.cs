@@ -21,18 +21,21 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     private readonly OmpAdminRepository _repo;
     private readonly PortableModulePackageService _packages;
     private readonly PortalDashboardWidgetPackageService _widgets;
+    private readonly ConfigOverlayObjectService _configObjects;
 
     public ModulePackageImportModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
         OmpAdminRepository repo,
         PortableModulePackageService packages,
-        PortalDashboardWidgetPackageService widgets)
+        PortalDashboardWidgetPackageService widgets,
+        ConfigOverlayObjectService configObjects)
         : base(options, rbac)
     {
         _repo = repo;
         _packages = packages;
         _widgets = widgets;
+        _configObjects = configObjects;
     }
 
     [BindProperty]
@@ -45,15 +48,35 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     public WidgetUploadInputModel WidgetUploadInput { get; set; } = new();
 
     [BindProperty]
+    public ConfigObjectUploadInputModel HostConfigurationUploadInput { get; set; } = new();
+
+    [BindProperty]
+    public ConfigObjectUploadInputModel ConfigOverlayUploadInput { get; set; } = new();
+
+    [BindProperty]
     public ImportInputModel ImportInput { get; set; } = new();
 
+    [BindProperty]
+    public ConfigObjectLibraryImportInputModel HostConfigurationLibraryInput { get; set; } = new();
+
+    [BindProperty]
+    public ConfigObjectLibraryImportInputModel ConfigOverlayLibraryInput { get; set; } = new();
+
     public IReadOnlyList<AvailablePackageRowModel> AvailablePackages { get; private set; } = [];
+
+    public IReadOnlyList<AvailableHostConfigurationObject> AvailableHostConfigurations { get; private set; } = [];
+
+    public IReadOnlyList<AvailableConfigOverlayObject> AvailableConfigOverlays { get; private set; } = [];
 
     public IReadOnlyList<ModuleDefinitionDocumentRow> AppliedDefinitions { get; private set; } = [];
 
     public IReadOnlyList<ArtifactRow> ArtifactRows { get; private set; } = [];
 
     public IReadOnlyList<DashboardWidgetAdminRow> WidgetRows { get; private set; } = [];
+
+    public IReadOnlyList<HostConfigurationDocumentRow> HostConfigurationRows { get; private set; } = [];
+
+    public IReadOnlyList<ConfigOverlayDocumentRow> ConfigOverlayRows { get; private set; } = [];
 
     public string ActivePanel { get; private set; } = string.Empty;
 
@@ -174,6 +197,76 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnPostImportHostConfiguration(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        if (HostConfigurationUploadInput.File is null || HostConfigurationUploadInput.File.Length == 0)
+        {
+            ActivePanel = "import-host-config";
+            ModelState.AddModelError(nameof(HostConfigurationUploadInput.File), T("Select one host configuration JSON or zip file."));
+            await LoadAsync(ct);
+            return Page();
+        }
+
+        try
+        {
+            var result = await _configObjects.ImportHostConfigurationUploadAsync(
+                HostConfigurationUploadInput.File,
+                HostConfigurationUploadInput.ReplaceExisting,
+                ct);
+            StatusMessage = BuildConfigObjectStatus(result);
+            return RedirectToPage("/Admin/ModulePackageImport");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
+        {
+            ActivePanel = "import-host-config";
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostImportConfigOverlay(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        if (ConfigOverlayUploadInput.File is null || ConfigOverlayUploadInput.File.Length == 0)
+        {
+            ActivePanel = "import-config-overlay";
+            ModelState.AddModelError(nameof(ConfigOverlayUploadInput.File), T("Select one config overlay JSON or zip file."));
+            await LoadAsync(ct);
+            return Page();
+        }
+
+        try
+        {
+            var result = await _configObjects.ImportConfigOverlayUploadAsync(
+                ConfigOverlayUploadInput.File,
+                ConfigOverlayUploadInput.ReplaceExisting,
+                ct);
+            StatusMessage = BuildConfigObjectStatus(result);
+            return RedirectToPage("/Admin/ModulePackageImport");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
+        {
+            ActivePanel = "import-config-overlay";
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
     public async Task<IActionResult> OnPostImportAvailable(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -199,6 +292,76 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 ct);
 
             StatusMessage = BuildImportStatus(result);
+            return RedirectToPage("/Admin/ModulePackageImport");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
+        {
+            ActivePanel = "import-library";
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostImportAvailableHostConfiguration(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        if (string.IsNullOrWhiteSpace(HostConfigurationLibraryInput.FileName))
+        {
+            ActivePanel = "import-library";
+            ModelState.AddModelError(nameof(HostConfigurationLibraryInput.FileName), T("Select one available host configuration."));
+            await LoadAsync(ct);
+            return Page();
+        }
+
+        try
+        {
+            var result = await _configObjects.ImportHostConfigurationFromLibraryAsync(
+                HostConfigurationLibraryInput.FileName,
+                HostConfigurationLibraryInput.ReplaceExisting,
+                ct);
+            StatusMessage = BuildConfigObjectStatus(result);
+            return RedirectToPage("/Admin/ModulePackageImport");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
+        {
+            ActivePanel = "import-library";
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostImportAvailableConfigOverlay(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        if (string.IsNullOrWhiteSpace(ConfigOverlayLibraryInput.FileName))
+        {
+            ActivePanel = "import-library";
+            ModelState.AddModelError(nameof(ConfigOverlayLibraryInput.FileName), T("Select one available config overlay."));
+            await LoadAsync(ct);
+            return Page();
+        }
+
+        try
+        {
+            var result = await _configObjects.ImportConfigOverlayFromLibraryAsync(
+                ConfigOverlayLibraryInput.FileName,
+                ConfigOverlayLibraryInput.ReplaceExisting,
+                ct);
+            StatusMessage = BuildConfigObjectStatus(result);
             return RedirectToPage("/Admin/ModulePackageImport");
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
@@ -261,6 +424,42 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnGetExportHostConfiguration(int documentId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var row = await _repo.GetHostConfigurationJsonAsync(documentId, ct);
+        if (row is null)
+        {
+            return NotFound(T("Host configuration was not found."));
+        }
+
+        var fileName = $"{row.Value.HostKey}__host-config__{row.Value.ConfigurationVersion}.json";
+        return File(System.Text.Encoding.UTF8.GetBytes(row.Value.Json), "application/json; charset=utf-8", fileName);
+    }
+
+    public async Task<IActionResult> OnGetExportConfigOverlay(int documentId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var row = await _repo.GetConfigOverlayJsonAsync(documentId, ct);
+        if (row is null)
+        {
+            return NotFound(T("Config overlay was not found."));
+        }
+
+        var fileName = $"{row.Value.HostKey}__{row.Value.OverlayKey}__overlay__{row.Value.OverlayVersion}.json";
+        return File(System.Text.Encoding.UTF8.GetBytes(row.Value.Json), "application/json; charset=utf-8", fileName);
+    }
+
     public async Task<IActionResult> OnGetExport(
         string moduleKey,
         bool includeAllVersions,
@@ -297,8 +496,12 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     private async Task LoadAsync(CancellationToken ct)
     {
         var availablePackages = _packages.GetAvailablePackages();
+        AvailableHostConfigurations = await _configObjects.GetAvailableHostConfigurationsAsync(ct);
+        AvailableConfigOverlays = await _configObjects.GetAvailableConfigOverlaysAsync(ct);
         var definitions = await _repo.GetModuleDefinitionDocumentsAsync(ct);
         ArtifactRows = await _repo.GetArtifactsAsync(ct);
+        HostConfigurationRows = await _repo.GetHostConfigurationDocumentsAsync(ct);
+        ConfigOverlayRows = await _repo.GetConfigOverlayDocumentsAsync(ct);
         var widgets = await _widgets.GetWidgetsAsync(null, ct);
         WidgetRows = widgets
             .OrderBy(static row => row.Title, StringComparer.OrdinalIgnoreCase)
@@ -391,6 +594,32 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         if (detailRows.Length > 0)
         {
             message += " " + T("Artifact import details:") + " " + string.Join(" | ", detailRows);
+        }
+
+        return message;
+    }
+
+    private string BuildConfigObjectStatus(ConfigObjectImportResult result)
+    {
+        var action = result.WasIdentical
+            ? T("Skipped because the same object already exists.")
+            : result.Replaced
+                ? T("Replaced an existing object with the same key and version.")
+                : result.Created
+                    ? T("Created a new object.")
+                    : T("Updated the existing object.");
+
+        var message = string.Format(
+            T("Imported {0} {1}. {2}"),
+            result.ObjectKind,
+            result.DisplayName,
+            action);
+
+        if (result.ConfigurationFileCount > 0)
+        {
+            message += " " + string.Format(
+                T("Configuration files: {0}."),
+                result.ConfigurationFileCount);
         }
 
         return message;
@@ -507,6 +736,20 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     public sealed class WidgetUploadInputModel
     {
         public IFormFile? JsonFile { get; set; }
+    }
+
+    public sealed class ConfigObjectUploadInputModel
+    {
+        public IFormFile? File { get; set; }
+
+        public bool ReplaceExisting { get; set; }
+    }
+
+    public sealed class ConfigObjectLibraryImportInputModel
+    {
+        public string FileName { get; set; } = string.Empty;
+
+        public bool ReplaceExisting { get; set; }
     }
 
     public sealed class ImportInputModel

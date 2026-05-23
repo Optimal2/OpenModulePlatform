@@ -450,6 +450,97 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.HostConfigurationDocuments', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostConfigurationDocuments
+    (
+        HostConfigurationDocumentId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_HostConfigurationDocuments PRIMARY KEY,
+        HostKey nvarchar(128) NOT NULL,
+        ConfigurationVersion nvarchar(50) NOT NULL,
+        FormatVersion int NOT NULL CONSTRAINT DF_omp_HostConfigurationDocuments_FormatVersion DEFAULT(1),
+        ConfigurationJson nvarchar(max) NOT NULL,
+        ConfigurationSha256 nvarchar(128) NOT NULL,
+        DisplayName nvarchar(200) NULL,
+        Description nvarchar(500) NULL,
+        SourceName nvarchar(400) NULL,
+        IsActive bit NOT NULL CONSTRAINT DF_omp_HostConfigurationDocuments_IsActive DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostConfigurationDocuments_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostConfigurationDocuments_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UQ_omp_HostConfigurationDocuments_Host_Version
+            UNIQUE(HostKey, ConfigurationVersion),
+        CONSTRAINT CK_omp_HostConfigurationDocuments_Json
+            CHECK(ISJSON(ConfigurationJson) = 1)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ConfigOverlayDocuments
+    (
+        ConfigOverlayDocumentId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ConfigOverlayDocuments PRIMARY KEY,
+        OverlayKey nvarchar(200) NOT NULL,
+        OverlayVersion nvarchar(50) NOT NULL,
+        HostKey nvarchar(128) NOT NULL,
+        ModuleKey nvarchar(100) NULL,
+        ModuleDefinitionVersion nvarchar(50) NULL,
+        AppKey nvarchar(100) NULL,
+        PackageType nvarchar(50) NULL,
+        TargetName nvarchar(100) NULL,
+        ArtifactVersion nvarchar(50) NULL,
+        FormatVersion int NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_FormatVersion DEFAULT(1),
+        OverlayJson nvarchar(max) NOT NULL,
+        OverlaySha256 nvarchar(128) NOT NULL,
+        SourceName nvarchar(400) NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UQ_omp_ConfigOverlayDocuments_Key_Host_Version
+            UNIQUE(OverlayKey, HostKey, OverlayVersion),
+        CONSTRAINT CK_omp_ConfigOverlayDocuments_Json
+            CHECK(ISJSON(OverlayJson) = 1)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.ConfigOverlayConfigurationFiles', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ConfigOverlayConfigurationFiles
+    (
+        ConfigOverlayConfigurationFileId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ConfigOverlayConfigurationFiles PRIMARY KEY,
+        ConfigOverlayDocumentId int NOT NULL,
+        RelativePath nvarchar(400) NOT NULL,
+        FileContent nvarchar(max) NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_FileContent DEFAULT(N''),
+        IsEnabled bit NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_IsEnabled DEFAULT(1),
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_ConfigOverlayConfigurationFiles_Document
+            FOREIGN KEY(ConfigOverlayDocumentId)
+            REFERENCES omp.ConfigOverlayDocuments(ConfigOverlayDocumentId)
+            ON DELETE CASCADE,
+        CONSTRAINT UQ_omp_ConfigOverlayConfigurationFiles_Document_Path
+            UNIQUE(ConfigOverlayDocumentId, RelativePath)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
+      AND name = N'IX_omp_ConfigOverlayDocuments_Match'
+)
+BEGIN
+    CREATE INDEX IX_omp_ConfigOverlayDocuments_Match
+        ON omp.ConfigOverlayDocuments(HostKey, ModuleKey, AppKey, PackageType, TargetName, ArtifactVersion, IsEnabled)
+        INCLUDE(OverlayVersion, ModuleDefinitionVersion, UpdatedUtc);
+END
+GO
+
 IF OBJECT_ID(N'omp.Hosts', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.Hosts
