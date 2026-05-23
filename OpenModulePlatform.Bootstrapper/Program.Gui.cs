@@ -902,7 +902,7 @@ internal static partial class Program
                 _installationStatusLabel.Text = "Current status: an existing OpenModulePlatform installation was detected.";
                 _primaryActionButton.Text = "Upgrade existing installation";
                 _primaryActionDescriptionLabel.Text =
-                    "Applies newer or missing package objects from this installer package and installs HostAgent only if the configured service is missing.";
+                    "Applies newer or missing module packages, artifact packages and host-role topology data from this installer package. HostAgent is installed only if the configured service is missing.";
             }
             else
             {
@@ -910,7 +910,7 @@ internal static partial class Program
                 _installationStatusLabel.Text = "Current status: no existing OpenModulePlatform installation was detected.";
                 _primaryActionButton.Text = "Install OpenModulePlatform";
                 _primaryActionDescriptionLabel.Text =
-                    "Runs the initial SQL bootstrap, prepares ArtifactStore and package-library objects, and installs HostAgent for this computer.";
+                    "Runs the initial SQL bootstrap, prepares ArtifactStore, standard host roles, package-library objects, and HostAgent for this computer.";
             }
 
             if (!string.IsNullOrWhiteSpace(installationDetails))

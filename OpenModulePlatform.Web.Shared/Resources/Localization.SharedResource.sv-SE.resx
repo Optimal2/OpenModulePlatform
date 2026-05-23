@@ -27,4 +27,10 @@
   <data name="Collapse" xml:space="preserve"><value>Fäll ihop</value></data>
   <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
   <data name="Artifact package editor" xml:space="preserve"><value>Artefaktpaketseditor</value></data>
+  <data name="Packages" xml:space="preserve"><value>Paket</value></data>
+  <data name="Operations" xml:space="preserve"><value>Drift</value></data>
+  <data name="Tools" xml:space="preserve"><value>Verktyg</value></data>
+  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard-widgets</value></data>
+  <data name="Module definition editor" xml:space="preserve"><value>Moduldefinitionseditor</value></data>
+  <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap-konfigurationseditor</value></data>
 </root>

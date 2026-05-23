@@ -9,7 +9,7 @@
         <div class="eyebrow">@L["Administration"]</div>
         <h2>@ompBranding.ApplyPlatformName(L["OMP admin overview"].Value)</h2>
         <p class="lede">
-            @ompBranding.ApplyPlatformName(L["The admin area is organized around one OMP installation. Use Installation for desired topology, System for artifacts and deployment status, and Administration for configuration and access."].Value)
+            @ompBranding.ApplyPlatformName(L["The admin area is organized around one OMP installation. Use Installation for desired topology, Packages for portable objects, and Operations for HostAgent troubleshooting."].Value)
         </p>
     </div>
 </section>
@@ -17,32 +17,26 @@
 
 <div class="section-grid section-grid--wide top-gap">
     <section class="card section-card">
-        <h3>@L["Core administration"]</h3>
+        <h3>@L["Installation workflow"]</h3>
         <p class="muted">
-            @ompBranding.ApplyPlatformName(L["These pages are the main workflow when setting up and maintaining the OMP installation."].Value)
+            @ompBranding.ApplyPlatformName(L["These are the normal pages for setup, upgrade, import, export and troubleshooting."].Value)
         </p>
         <div class="toolbar">
             <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Installation"]</a>
-            <a class="action-link" href="~/admin/modules">@L["Modules"]</a>
-            <a class="action-link" href="~/admin/moduleinstances">@L["Module instances"]</a>
-            <a class="action-link" href="~/admin/apps">@L["Apps"]</a>
-            <a class="action-link" href="~/admin/appinstances">@L["App instances"]</a>
-            <a class="action-link" href="~/admin/workers">@L["Workers"]</a>
-            <a class="action-link" href="~/admin/artifacts">@L["Artifacts"]</a>
-            <a class="action-link" href="~/admin/modulepackageimport">@L["Module packages"]</a>
-            <a class="action-link" href="~/admin/dashboardwidgets">@L["Dashboard widgets"]</a>
-            <a class="action-link" href="~/admin/configsettings">@L["Config settings"]</a>
+            <a class="action-link" href="~/admin/modulepackageimport">@L["Packages"]</a>
+            <a class="action-link" href="~/admin/hostdeployments">@L["Operations"]</a>
         </div>
     </section>
 
     <section class="card section-card">
-        <h3>@L["HostAgent"]</h3>
+        <h3>@L["Object tools"]</h3>
         <p class="muted">
-            @L["HostAgent follows the desired installation state, deploys artifact versions and records deployment attempts for review."]
+            @L["Use these standalone-compatible editors when preparing module definitions, artifact packages or machine-specific installer profiles."]
         </p>
         <div class="toolbar">
-            <a class="action-link" href="~/admin/hostdeployments">@L["Open deployment log"]</a>
-            <a class="action-link" href="~/admin/artifacts">@L["Artifacts"]</a>
+            <a class="action-link" href="~/admin/moduledefinitioneditor">@L["Module definition editor"]</a>
+            <a class="action-link" href="~/admin/artifactpackageeditor">@L["Artifact package editor"]</a>
+            <a class="action-link" href="~/admin/bootstrapconfigeditor">@L["Bootstrap config editor"]</a>
         </div>
     </section>
 

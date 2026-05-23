@@ -377,4 +377,21 @@
   <data name="Choose either one specific host or one host role, not both." xml:space="preserve"><value>Choose either one specific host or one host role, not both.</value></data>
   <data name="Selected host role was not found." xml:space="preserve"><value>Selected host role was not found.</value></data>
   <data name="Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer.</value></data>
+  <data name="Packages" xml:space="preserve"><value>Packages</value></data>
+  <data name="Operations" xml:space="preserve"><value>Operations</value></data>
+  <data name="Installation workflow" xml:space="preserve"><value>Installation workflow</value></data>
+  <data name="Object tools" xml:space="preserve"><value>Object tools</value></data>
+  <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Packages for portable objects, and Operations for HostAgent troubleshooting." xml:space="preserve"><value>The admin area is organized around one OMP installation. Use Installation for desired topology, Packages for portable objects, and Operations for HostAgent troubleshooting.</value></data>
+  <data name="These are the normal pages for setup, upgrade, import, export and troubleshooting." xml:space="preserve"><value>These are the normal pages for setup, upgrade, import, export and troubleshooting.</value></data>
+  <data name="Use these standalone-compatible editors when preparing module definitions, artifact packages or machine-specific installer profiles." xml:space="preserve"><value>Use these standalone-compatible editors when preparing module definitions, artifact packages or machine-specific installer profiles.</value></data>
+  <data name="Automation pages now live under System so the admin flow follows the current model: installation topology, package import/export, and HostAgent operations." xml:space="preserve"><value>Automation pages now live under System so the admin flow follows the current model: installation topology, package import/export, and HostAgent operations.</value></data>
+  <data name="Import, export and install portable module packages containing one module definition JSON and compatible artifact package zips." xml:space="preserve"><value>Import, export and install portable module packages containing one module definition JSON and compatible artifact package zips.</value></data>
+  <data name="Related workflow" xml:space="preserve"><value>Related workflow</value></data>
+  <data name="Packages are the portable object boundary. Installation controls desired topology and Operations shows what HostAgent did with the selected objects." xml:space="preserve"><value>Packages are the portable object boundary. Installation controls desired topology and Operations shows what HostAgent did with the selected objects.</value></data>
+  <data name="Module integrity" xml:space="preserve"><value>Module integrity</value></data>
+  <data name="Artifact catalog" xml:space="preserve"><value>Artifact catalog</value></data>
+  <data name="These editors can also run as standalone HTML tools from the package tools folder." xml:space="preserve"><value>These editors can also run as standalone HTML tools from the package tools folder.</value></data>
+  <data name="Back to packages" xml:space="preserve"><value>Back to packages</value></data>
+  <data name="Back to operations" xml:space="preserve"><value>Back to operations</value></data>
+  <data name="Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests." xml:space="preserve"><value>Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests.</value></data>
 </root>

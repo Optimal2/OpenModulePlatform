@@ -51,7 +51,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Module packages");
+        SetTitles("Packages");
         await LoadAsync(ct);
         return Page();
     }
@@ -64,7 +64,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Module packages");
+        SetTitles("Packages");
         try
         {
             var result = await _packages.ImportUploadsAsync(
@@ -93,7 +93,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Module packages");
+        SetTitles("Packages");
         if (string.IsNullOrWhiteSpace(ImportInput.ModuleDefinitionFileName))
         {
             ModelState.AddModelError(nameof(ImportInput.ModuleDefinitionFileName), T("Select one available module definition."));
