@@ -2075,6 +2075,7 @@ function Stop-ExistingRuntime {
             $script:Services.HostAgent,
             $script:Services.WorkerManager,
             $script:Services.ExampleService,
+            'OMP.Service.ExampleServiceAppModule',
             'OpenModulePlatform.HostAgent',
             'OpenModulePlatform.WorkerManager',
             'OpenModulePlatform.Service.ExampleServiceAppModule')) {

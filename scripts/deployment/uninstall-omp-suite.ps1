@@ -227,6 +227,7 @@ function Remove-Services {
             $script:Services.ExampleService,
             $script:Services.WorkerManager,
             $script:Services.HostAgent,
+            'OMP.Service.ExampleServiceAppModule',
             'OpenModulePlatform.Service.ExampleServiceAppModule',
             'OpenModulePlatform.WorkerManager',
             'OpenModulePlatform.HostAgent')) {

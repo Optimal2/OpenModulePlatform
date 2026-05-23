@@ -169,6 +169,7 @@
         # below ServicesRoot automatically. Keep explicit names here for older
         # service names that may no longer point at the configured runtime root.
         AdditionalServiceNamesToRemove = @(
+            'OMP.Service.ExampleServiceAppModule',
             'OpenModulePlatform.HostAgent',
             'OpenModulePlatform.WorkerManager',
             'OpenModulePlatform.Service.ExampleServiceAppModule'
