@@ -1471,7 +1471,7 @@ internal static partial class Program
 
                 if (current is not null)
                 {
-                    var expectedSource = $"payload/{packageName}";
+                    var expectedSource = $"data/global/artifacts/{packageName}";
                     var payloadPath = ResolvePackagePath(expectedSource);
                     var targetMatches = string.Equals(
                         NormalizePathForMatch(current.Target),
@@ -1500,7 +1500,7 @@ internal static partial class Program
                         CopyFileIfDifferent(sourcePackage, Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
                         current.Source = expectedSource;
                         current.Target = expectedTarget;
-                        lines.Add($"  UPDATED {component.ComponentKey}: copied {packageName} and updated initial artifact target to {expectedTarget}.");
+                        lines.Add($"  UPDATED {component.ComponentKey}: copied {packageName} and updated artifact target to {expectedTarget}.");
                         updated++;
                         configUpdated = true;
                         continue;
@@ -1510,7 +1510,7 @@ internal static partial class Program
                     {
                         // Existing same-target packages are treated as immutable. Refresh should add missing or newer
                         // versions, not rewrite bytes for an already versioned artifact and create noisy binary diffs.
-                        lines.Add($"  OK      {component.ComponentKey}: initial artifact package is present.");
+                        lines.Add($"  OK      {component.ComponentKey}: artifact package is present.");
                         unchanged++;
 
                         var availableMirrorPath = Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
@@ -1550,7 +1550,7 @@ internal static partial class Program
                     CopyFileIfDifferent(sourcePackage, Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
                     current.Source = expectedSource;
                     current.Target = expectedTarget;
-                    lines.Add($"  UPDATED {component.ComponentKey}: restored missing initial artifact package {packageName}.");
+                    lines.Add($"  UPDATED {component.ComponentKey}: restored missing artifact package {packageName}.");
                     updated++;
                     configUpdated = true;
                     continue;
@@ -1559,7 +1559,7 @@ internal static partial class Program
                 var availablePath = Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
                 if (File.Exists(availablePath))
                 {
-                    // Available packages follow the same immutable-version rule as initial payload packages.
+                    // Package library entries follow the same immutable-version rule as configured artifact packages.
                     lines.Add($"  OK      {component.ComponentKey}: available artifact package is present.");
                     unchanged++;
 
@@ -1623,6 +1623,7 @@ internal static partial class Program
                 AddIfDirectory(Path.Combine(sourceRoot, "artifacts"));
             }
 
+            AddIfDirectory(Path.Combine(_payloadRoot, "data", "global", "artifacts"));
             AddIfDirectory(Path.Combine(_payloadRoot, "data", "global", "artifacts", "available"));
             AddIfDirectory(Path.Combine(_payloadRoot, "available-artifacts"));
             AddIfDirectory(Path.Combine(_payloadRoot, "data", "global", "artifacts", "initial"));
@@ -1818,9 +1819,25 @@ internal static partial class Program
             }
 
             var normalized = NormalizePathForMatch(packageRelativePath);
+            var direct = Path.GetFullPath(Path.Combine(
+                _payloadRoot,
+                packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            if (File.Exists(direct) || Directory.Exists(direct))
+            {
+                return direct;
+            }
+
             var fileName = Path.GetFileName(packageRelativePath);
             if (!string.IsNullOrWhiteSpace(fileName))
             {
+                if (normalized.StartsWith("data/global/artifacts/", StringComparison.OrdinalIgnoreCase)
+                    || normalized.StartsWith("data/global/module-definitions/", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.GetFullPath(Path.Combine(
+                        _payloadRoot,
+                        packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+                }
+
                 if (normalized.StartsWith("payload/", StringComparison.OrdinalIgnoreCase))
                 {
                     return Path.Combine(ResolveInitialArtifactsRoot(_payloadRoot), fileName);
@@ -1842,9 +1859,7 @@ internal static partial class Program
                 }
             }
 
-            return Path.GetFullPath(Path.Combine(
-                _payloadRoot,
-                packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            return direct;
         }
 
         private static bool CopyFileIfDifferent(string sourcePath, string targetPath)
@@ -2020,6 +2035,7 @@ ORDER BY ar.ArtifactId DESC;
             var fileName = Path.GetFileName(definition.Path);
             var candidates = new[]
             {
+                Path.Combine(_payloadRoot, "data", "global", "module-definitions", fileName),
                 Path.Combine(_payloadRoot, "data", "global", "module-definitions", "initial", fileName),
                 Path.Combine(_payloadRoot, "module-definitions", fileName),
                 Path.Combine(_payloadRoot, "data", "global", "module-definitions", "available", fileName),
@@ -2034,6 +2050,7 @@ ORDER BY ar.ArtifactId DESC;
             var packageName = GetArtifactPackageFileName(component);
             var candidates = new[]
             {
+                Path.Combine(_payloadRoot, "data", "global", "artifacts", packageName),
                 Path.Combine(_payloadRoot, "data", "global", "artifacts", "available", packageName),
                 Path.Combine(_payloadRoot, "available-artifacts", packageName),
                 Path.Combine(_payloadRoot, "data", "global", "artifacts", "initial", packageName),
@@ -2053,7 +2070,8 @@ ORDER BY ar.ArtifactId DESC;
                 component.Version) + ".zip";
 
         private bool IsAvailablePackagePath(string path)
-            => IsSameOrChildPath(Path.Combine(_payloadRoot, "data", "global", "module-definitions", "available"), path)
+            => IsSameOrChildPath(Path.Combine(_payloadRoot, "data", "global", "module-definitions"), path)
+                || IsSameOrChildPath(Path.Combine(_payloadRoot, "data", "global", "module-definitions", "available"), path)
                 || IsSameOrChildPath(Path.Combine(_payloadRoot, "available-module-definitions"), path);
 
         private static ArtifactPackageIdentity? ParseArtifactPackageIdentity(string source)

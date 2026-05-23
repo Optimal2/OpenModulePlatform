@@ -79,3 +79,23 @@ module-definition JSON and standard artifact package zips into the current
 installer package, and when a missing artifact has a resolvable .NET
 `projectPath`, it publishes only that component and stores the generated
 artifact package in `RuntimeRoot\ArtifactArchive`.
+
+Repositories can also build their own portable objects without a full installer
+refresh:
+
+```powershell
+.\build-omp-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -AllComponents
+.\build-omp-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -ComponentKey content-webapp -BuildArtifacts
+.\build-omp-objects.ps1 `
+  -OutputRoot E:\OMP\ObjectBuild `
+  -ComponentKey opendocviewer-web `
+  -BuildArtifacts `
+  -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'
+```
+
+The output shape is always `module-definitions` and `artifacts`. Point
+`OutputRoot` at an installer package's `data/global` folder to refresh the
+shared package library directly. Customer or host-specific configuration is
+passed as arguments and must not be committed to source repositories; the DEV
+repository is the appropriate place to keep private profile files and the
+commands that pass those files into object generation.

@@ -3946,33 +3946,43 @@ VALUES
     private static string ResolveInitialModuleDefinitionsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
+            Path.Combine("data", "global", "module-definitions"),
             Path.Combine("data", "global", "module-definitions", "initial"),
             "module-definitions");
 
     private static string ResolveAvailableModuleDefinitionsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
+            Path.Combine("data", "global", "module-definitions"),
             Path.Combine("data", "global", "module-definitions", "available"),
             "available-module-definitions");
 
     private static string ResolveInitialArtifactsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
+            Path.Combine("data", "global", "artifacts"),
             Path.Combine("data", "global", "artifacts", "initial"),
             "payload");
 
     private static string ResolveAvailableArtifactsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
+            Path.Combine("data", "global", "artifacts"),
             Path.Combine("data", "global", "artifacts", "available"),
             "available-artifacts");
 
-    private static string ResolvePackageDirectory(string packageRoot, string preferredRelativePath, string legacyRelativePath)
+    private static string ResolvePackageDirectory(string packageRoot, params string[] relativePaths)
     {
-        var preferred = ResolvePath(packageRoot, preferredRelativePath);
-        return Directory.Exists(preferred)
-            ? preferred
-            : ResolvePath(packageRoot, legacyRelativePath);
+        foreach (var relativePath in relativePaths)
+        {
+            var candidate = ResolvePath(packageRoot, relativePath);
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return ResolvePath(packageRoot, relativePaths[0]);
     }
 
     private static string? ResolveLegacyPackageDataPath(string packageRoot, string path)

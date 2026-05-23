@@ -30,20 +30,14 @@ OpenModulePlatformHostAgentFirst-<version>/
   data/
     global/
       artifacts/
-        initial/
-          omp_portal__omp_portal__web-app__omp-portal__<version>.zip
-          content_webapp__content_webapp_webapp__web-app__content-webapp__<version>.zip
-          opendocviewer__opendocviewer_webapp__web-app__opendocviewer__<version>.zip
-          ...
-        available/
-          <module artifact packages available for later Portal import>
+        omp_portal__omp_portal__web-app__omp-portal__<version>.zip
+        content_webapp__content_webapp_webapp__web-app__content-webapp__<version>.zip
+        opendocviewer__opendocviewer_webapp__web-app__opendocviewer__<version>.zip
+        <other module artifact packages available for install/import>
       module-definitions/
-        initial/
-          omp_core.module-definition.json
-          omp_portal.module-definition.json
-          ...
-        available/
-          <module definitions available for later Portal import>
+        omp_core.module-definition.json
+        omp_portal.module-definition.json
+        <other module definitions available for install/import>
       sql/
         bootstrap-local.sql
       tools/
@@ -77,10 +71,11 @@ contains only host-specific SQL and file payload. The selected file in
 in the package layout.
 
 Older packages used top-level `payload`, `module-definitions`,
-`available-artifacts`, `available-module-definitions`, and `sql` folders. The
-bootstrapper still reads that layout for compatibility, but new packages should
-write portable objects below `data/global` and host-specific additions below
-`data/profiles`.
+`available-artifacts`, `available-module-definitions`, and `sql` folders. A
+short transition build also used `data/global/*/initial` and
+`data/global/*/available`. The bootstrapper still reads those layouts for
+compatibility, but new packages should keep one shared object library below
+`data/global` and host-specific additions below `data/profiles`.
 
 The root bootstrapper is published separately with single-file settings so the
 operator entry point stays as small and obvious as the .NET runtime allows. The
@@ -277,16 +272,15 @@ be included in the source comparison. This developer workflow is intentionally
 local; production updates should still use controlled artifact/module-definition
 packages.
 
-HostAgent-first packages keep two sets of portable objects under
+HostAgent-first packages keep one shared portable object library under
 `data/global`:
 
-- `module-definitions/initial` and `artifacts/initial` contain the module
-  definitions and artifact packages that the bootstrapper imports or copies
-  during the initial installation.
-- `module-definitions/available` and `artifacts/available` contain module
-  definitions and artifact packages that are packaged for later Portal-driven
-  installation. During bootstrap these files are copied, without deleting older
-  files, into `ArtifactStoreRoot\_available\module-definitions` and
+- `module-definitions` contains module definitions that the bootstrapper can
+  import and Portal can later present as package-library items.
+- `artifacts` contains artifact package objects that the bootstrapper can copy
+  into ArtifactStore and Portal can later import. During bootstrap these files
+  are copied, without deleting older files, into
+  `ArtifactStoreRoot\_available\module-definitions` and
   `ArtifactStoreRoot\_available\artifacts`. Portal reads those folders from the
   `ArtifactUpload:AvailableModuleDefinitionsRoot` and
   `ArtifactUpload:AvailableArtifactsRoot` settings so admins can import modules
@@ -296,11 +290,20 @@ HostAgent-first packages keep two sets of portable objects under
   folders below the configured source repositories. Matching standard
   artifact-package file names are copied when found.
 
+The same shape is used by repository-level object generation. Run
+`build-omp-objects.ps1` from an OMP-related repository, or call
+`scripts/omp/build-repository-objects.ps1` from the OpenModulePlatform
+repository with `-RepositoryRoot`, and use the package's `data/global` folder as
+`-OutputRoot` when the generated objects should be added to an installer
+package. Host-specific files are passed as `-ArtifactConfigurationFile`
+mappings so sensitive data can live in the private DEV repository or another
+controlled profile location instead of in the code repository.
+
 The GUI action `Sync package objects` is the lightweight alternative to
 `Create updated installer package`. It uses the same source manifest comparison
 as `Check source objects`, then updates module-definition JSON files and copies
-already-built standard artifact packages into the initial or available artifact
-package library as needed. When a required standard artifact package is
+already-built standard artifact packages into the shared package library as
+needed. When a required standard artifact package is
 missing and the component manifest points at a single .NET project through
 `projectPath`, the bootstrapper publishes only that project, wraps the publish
 output as an OMP artifact package, and writes it to `RuntimeRoot\ArtifactArchive`
@@ -471,12 +474,10 @@ The package script copies host-specific SQL files into the active profile data
 folder when the new layout is used, and appends them after the neutral OMP
 initialization scripts. Module-definition source files normally live at each
 module root and are listed in `omp-components.json`; the package script copies
-initial definitions into `data/global/module-definitions/initial` and later
-installable definitions into `data/global/module-definitions/available`.
-Additional artifact files are copied into `data/global/artifacts/initial` or
-`data/global/artifacts/available` and listed in the matching config file. The
-installer executable is unchanged and only the shared data/config profile
-differs between environments.
+module definitions into `data/global/module-definitions`. Additional artifact
+files are copied into `data/global/artifacts` and listed in the matching config
+file. The installer executable is unchanged and only the shared data/config
+profile differs between environments.
 
 For example, a protected VGR package can set:
 
