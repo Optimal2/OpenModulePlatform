@@ -371,4 +371,10 @@
   <data name="ManualActionRequired" xml:space="preserve"><value>Manual action required</value></data>
   <data name="RepairFailed" xml:space="preserve"><value>Repair failed</value></data>
   <data name="Service identity repair was requested. HostAgent will apply it during its next cycle when credential automation is set to PortalAdminApproved." xml:space="preserve"><value>Service identity repair was requested. HostAgent will apply it during its next cycle when credential automation is set to PortalAdminApproved.</value></data>
+  <data name="No host role" xml:space="preserve"><value>No host role</value></data>
+  <data name="Choose a specific host when only one named host should run this app." xml:space="preserve"><value>Choose a specific host when only one named host should run this app.</value></data>
+  <data name="Choose a host role when every host with that role should run this app. Leave both placement fields empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Choose a host role when every host with that role should run this app. Leave both placement fields empty only for host-neutral web apps behind a load balancer.</value></data>
+  <data name="Choose either one specific host or one host role, not both." xml:space="preserve"><value>Choose either one specific host or one host role, not both.</value></data>
+  <data name="Selected host role was not found." xml:space="preserve"><value>Selected host role was not found.</value></data>
+  <data name="Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer.</value></data>
 </root>

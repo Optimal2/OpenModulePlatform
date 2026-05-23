@@ -1512,8 +1512,26 @@ WITH Desired AS
     INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
     WHERE @includeAppInstanceArtifacts = 1
       -- Host-neutral app instances are provisioned on every enabled host while
-      -- still remaining one logical app entry in the portal/topbar.
-      AND (ai.HostId = @hostId OR ai.HostId IS NULL)
+      -- host-role app instances are provisioned only on hosts with that role.
+      -- Both remain one logical app entry in Portal.
+      AND
+      (
+          ai.HostId = @hostId
+          OR (ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL)
+          OR
+          (
+              ai.HostId IS NULL
+              AND ai.TargetHostTemplateId IS NOT NULL
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostDeploymentAssignments hda
+                  WHERE hda.HostId = @hostId
+                    AND hda.HostTemplateId = ai.TargetHostTemplateId
+                    AND hda.IsActive = 1
+              )
+          )
+      )
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1
       AND ar.IsEnabled = 1
@@ -1523,7 +1541,11 @@ WITH Desired AS
     UNION ALL
 
     SELECT
-        COALESCE(wi.HostId, ai.HostId) AS HostId,
+        CASE
+            WHEN wi.HostId IS NOT NULL THEN wi.HostId
+            WHEN ai.HostId IS NOT NULL THEN ai.HostId
+            ELSE @hostId
+        END AS HostId,
         ar.ArtifactId,
         ar.Version,
         ar.PackageType,
@@ -1536,7 +1558,25 @@ WITH Desired AS
     INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
     INNER JOIN omp.Artifacts ar ON ar.ArtifactId = COALESCE(wi.ArtifactId, ai.ArtifactId)
     WHERE @includeAppInstanceArtifacts = 1
-      AND COALESCE(wi.HostId, ai.HostId) = @hostId
+      AND
+      (
+          wi.HostId = @hostId
+          OR (wi.HostId IS NULL AND ai.HostId = @hostId)
+          OR
+          (
+              wi.HostId IS NULL
+              AND ai.HostId IS NULL
+              AND ai.TargetHostTemplateId IS NOT NULL
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostDeploymentAssignments hda
+                  WHERE hda.HostId = @hostId
+                    AND hda.HostTemplateId = ai.TargetHostTemplateId
+                    AND hda.IsActive = 1
+              )
+          )
+      )
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1
       AND wi.IsEnabled = 1
@@ -1676,7 +1716,24 @@ LEFT JOIN omp.HostAppDeploymentStates hds
    AND hds.AppInstanceId = ai.AppInstanceId
 -- Host-neutral web apps are still applied per host through
 -- HostAppDeploymentStates(HostId, AppInstanceId).
-WHERE (ai.HostId = @hostId OR ai.HostId IS NULL)
+WHERE
+  (
+      ai.HostId = @hostId
+      OR (ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL)
+      OR
+      (
+          ai.HostId IS NULL
+          AND ai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp.HostDeploymentAssignments hda
+              WHERE hda.HostId = @hostId
+                AND hda.HostTemplateId = ai.TargetHostTemplateId
+                AND hda.IsActive = 1
+          )
+      )
+  )
   AND ai.IsEnabled = 1
   AND ai.IsAllowed = 1
   AND ai.DesiredState = 1
@@ -1793,7 +1850,23 @@ INNER JOIN omp.HostArtifactStates has
 LEFT JOIN omp.HostAppDeploymentStates hds
     ON hds.HostId = @hostId
    AND hds.AppInstanceId = ai.AppInstanceId
-WHERE ai.HostId = @hostId
+WHERE
+  (
+      ai.HostId = @hostId
+      OR
+      (
+          ai.HostId IS NULL
+          AND ai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp.HostDeploymentAssignments hda
+              WHERE hda.HostId = @hostId
+                AND hda.HostTemplateId = ai.TargetHostTemplateId
+                AND hda.IsActive = 1
+          )
+      )
+  )
   AND ai.IsEnabled = 1
   AND ai.IsAllowed = 1
   AND ai.DesiredState = 1

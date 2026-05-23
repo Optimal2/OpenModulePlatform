@@ -161,6 +161,16 @@ From the installation page, a Portal admin manages:
 - desired apps, including artifact version, host placement, route, install path,
   and runtime policy
 
+Desired app host placement has three modes:
+
+- specific host: one named host in the installation runs the app
+- host role: every host with that role runs the app
+- host-neutral: one logical web app behind a load-balanced public identity
+
+Use host-role placement when the same app should run on every host in a class,
+for example `IISHost` for IIS applications or `ServiceHost` for Windows
+services and workers.
+
 HostAgent materializes that desired topology into the concrete runtime tables:
 
 - `omp.Hosts`

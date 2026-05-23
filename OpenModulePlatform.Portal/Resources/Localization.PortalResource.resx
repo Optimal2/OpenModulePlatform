@@ -1921,4 +1921,10 @@
   <data name="Deleting a module is only possible when dependent apps, module instances and desired installation rows are already gone." xml:space="preserve"><value>Deleting a module is only possible when dependent apps, module instances and desired installation rows are already gone.</value></data>
   <data name="Installation materialization requests" xml:space="preserve"><value>Installation materialization requests</value></data>
   <data name="These rows are explicit installation-topology materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty." xml:space="preserve"><value>These rows are explicit installation-topology materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty.</value></data>
+  <data name="No host role" xml:space="preserve"><value>No host role</value></data>
+  <data name="Choose a specific host when only one named host should run this app." xml:space="preserve"><value>Choose a specific host when only one named host should run this app.</value></data>
+  <data name="Choose a host role when every host with that role should run this app. Leave both placement fields empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Choose a host role when every host with that role should run this app. Leave both placement fields empty only for host-neutral web apps behind a load balancer.</value></data>
+  <data name="Choose either one specific host or one host role, not both." xml:space="preserve"><value>Choose either one specific host or one host role, not both.</value></data>
+  <data name="Selected host role was not found." xml:space="preserve"><value>Selected host role was not found.</value></data>
+  <data name="Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer.</value></data>
 </root>

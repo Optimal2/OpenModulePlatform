@@ -43,6 +43,8 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> TemplateHostOptions { get; private set; } = [];
 
+    public IReadOnlyList<OptionItem> HostRoleOptions { get; private set; } = [];
+
     public IReadOnlyList<OptionItem> AppOptions { get; private set; } = [];
 
     public IReadOnlyList<ArtifactSelectionOption> ArtifactOptions { get; private set; } = [];
@@ -121,6 +123,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
                     InstanceTemplateId = Input.InstanceTemplateId,
                     InstanceTemplateModuleInstanceId = Input.InstanceTemplateModuleInstanceId,
                     InstanceTemplateHostId = Input.InstanceTemplateHostId,
+                    TargetHostTemplateId = Input.TargetHostTemplateId,
                     AppId = Input.AppId,
                     AppInstanceKey = Input.AppInstanceKey.Trim(),
                     DisplayName = Input.DisplayName.Trim(),
@@ -187,6 +190,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
 
         TemplateModuleOptions = await _repo.GetInstanceTemplateModuleOptionsAsync(Input.InstanceTemplateId, ct);
         TemplateHostOptions = await _repo.GetInstanceTemplateHostOptionsAsync(Input.InstanceTemplateId, ct);
+        HostRoleOptions = await _repo.GetHostTemplateOptionsAsync(ct);
         AppOptions = await _repo.GetAppOptionsAsync(ct);
         ArtifactOptions = await _repo.GetArtifactOptionsAsync(ct);
     }
@@ -225,6 +229,21 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
             }
         }
 
+        if (Input.InstanceTemplateHostId.HasValue && Input.TargetHostTemplateId.HasValue)
+        {
+            ModelState.AddModelError(
+                nameof(Input.TargetHostTemplateId),
+                T("Choose either one specific host or one host role, not both."));
+        }
+
+        if (Input.TargetHostTemplateId.HasValue
+            && !HostRoleOptions.Any(option => string.Equals(option.Value, Input.TargetHostTemplateId.Value.ToString(), StringComparison.Ordinal)))
+        {
+            ModelState.AddModelError(
+                nameof(Input.TargetHostTemplateId),
+                T("Selected host role was not found."));
+        }
+
         var app = await _repo.GetAppContextAsync(Input.AppId, ct);
         if (app is null)
         {
@@ -245,11 +264,12 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
 
         if (isActiveDesired
             && !Input.InstanceTemplateHostId.HasValue
+            && !Input.TargetHostTemplateId.HasValue
             && !AllowsHostNeutralPlacement(app))
         {
             ModelState.AddModelError(
                 nameof(Input.InstanceTemplateHostId),
-                T("Choose a host for runtime apps. Leave host empty only for host-neutral web apps behind a load balancer."));
+                T("Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer."));
         }
 
         if (Input.DesiredArtifactId.HasValue)
@@ -272,6 +292,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
                 Input.InstanceTemplateAppInstanceId,
                 Input.InstanceTemplateModuleInstanceId,
                 Input.InstanceTemplateHostId,
+                Input.TargetHostTemplateId,
                 Input.AppId,
                 ct))
         {
@@ -323,6 +344,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
             InstanceTemplateId = row.InstanceTemplateId,
             InstanceTemplateModuleInstanceId = row.InstanceTemplateModuleInstanceId,
             InstanceTemplateHostId = row.InstanceTemplateHostId,
+            TargetHostTemplateId = row.TargetHostTemplateId,
             AppId = row.AppId,
             AppInstanceKey = row.AppInstanceKey,
             DisplayName = row.DisplayName,
@@ -357,7 +379,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         => ex.Number switch
         {
             2601 or 2627 => "A desired app with the same key or active host placement already exists.",
-            >= 51050 and <= 51057 => "Only one active desired app row can exist for the selected app and host placement.",
+            >= 51050 and <= 51061 => "Only one active desired app row can exist for the selected app and host placement.",
             547 => "Update dependent references first.",
             _ => "The desired app could not be saved."
         };
@@ -374,6 +396,9 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
 
         [Display(Name = "Host")]
         public int? InstanceTemplateHostId { get; set; }
+
+        [Display(Name = "Host role")]
+        public int? TargetHostTemplateId { get; set; }
 
         [Required]
         [Display(Name = "App definition")]
