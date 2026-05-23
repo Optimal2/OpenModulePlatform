@@ -267,6 +267,13 @@ a:hover {
     margin-bottom: 4px;
 }
 
+.metric-card__label {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 .user {
     margin-left: auto;
     font-size: 0.9rem;
@@ -333,6 +340,10 @@ a:hover {
 
 .section-grid--wide {
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.section-grid--4 {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .section-card {
@@ -1807,6 +1818,20 @@ button {
     gap: 14px;
 }
 
+.portal-entry-create-panel > summary {
+    cursor: pointer;
+    font-weight: 700;
+    list-style: none;
+}
+
+.portal-entry-create-panel > summary::-webkit-details-marker {
+    display: none;
+}
+
+.portal-entry-create-panel[open] > summary {
+    margin-bottom: 16px;
+}
+
 .portal-entry-layout-list {
     display: grid;
     gap: 6px;
@@ -1838,7 +1863,7 @@ button {
     color: var(--text-muted);
     cursor: grab;
     font-weight: 700;
-    letter-spacing: -0.12em;
+    letter-spacing: 0;
     user-select: none;
 }
 

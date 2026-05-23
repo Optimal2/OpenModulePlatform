@@ -33,4 +33,5 @@
   <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard widgets</value></data>
   <data name="Module definition editor" xml:space="preserve"><value>Module definition editor</value></data>
   <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap config editor</value></data>
+  <data name="Navigation" xml:space="preserve"><value>Navigation</value></data>
 </root>
