@@ -43,6 +43,8 @@ DECLARE @DefaultHostId uniqueidentifier;
 DECLARE @DefaultHostArchitecture nvarchar(20) = N'x64';
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultHostTemplateId int;
+DECLARE @IisHostTemplateId int;
+DECLARE @ServiceHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
@@ -177,6 +179,24 @@ BEGIN
     VALUES(N'default-host', N'Default Host Template', N'Minimal baseline host template for development and examples');
 END
 
+MERGE omp.HostTemplates AS target
+USING
+(
+    VALUES
+        (N'IISHost', N'IIS Host', N'Hosts that run IIS web applications for this OMP installation.', 100, CONVERT(bit, 1)),
+        (N'ServiceHost', N'Service Host', N'Hosts that run Windows services and worker runtimes for this OMP installation.', 200, CONVERT(bit, 1))
+) AS source(TemplateKey, DisplayName, Description, SortOrder, IsEnabled)
+ON target.TemplateKey = source.TemplateKey
+WHEN MATCHED THEN
+    UPDATE SET DisplayName = source.DisplayName,
+               Description = source.Description,
+               SortOrder = source.SortOrder,
+               IsEnabled = source.IsEnabled,
+               UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(TemplateKey, DisplayName, Description, SortOrder, IsEnabled)
+    VALUES(source.TemplateKey, source.DisplayName, source.Description, source.SortOrder, source.IsEnabled);
+
 SELECT TOP (1) @DefaultInstanceTemplateId = InstanceTemplateId
 FROM @InsertedInstanceTemplateIds;
 
@@ -207,6 +227,21 @@ END
 IF @DefaultHostTemplateId IS NULL
 BEGIN
     THROW 51002, 'Unable to resolve the default host template id after seeding omp.HostTemplates.', 1;
+END
+
+SELECT TOP (1) @IisHostTemplateId = HostTemplateId
+FROM omp.HostTemplates
+WHERE TemplateKey = N'IISHost'
+ORDER BY HostTemplateId;
+
+SELECT TOP (1) @ServiceHostTemplateId = HostTemplateId
+FROM omp.HostTemplates
+WHERE TemplateKey = N'ServiceHost'
+ORDER BY HostTemplateId;
+
+IF @IisHostTemplateId IS NULL OR @ServiceHostTemplateId IS NULL
+BEGIN
+    THROW 51003, 'Unable to resolve the standard IISHost and ServiceHost role ids after seeding omp.HostTemplates.', 1;
 END
 
 SELECT @DefaultInstanceId = InstanceId
@@ -275,11 +310,22 @@ BEGIN
     VALUES(@DefaultInstanceTemplateId, @DefaultHostTemplateId, N'sample-host', N'Sample Host', N'Development', 100);
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.HostDeploymentAssignments WHERE HostId = @DefaultHostId AND HostTemplateId = @DefaultHostTemplateId)
-BEGIN
-    INSERT INTO omp.HostDeploymentAssignments(HostId, HostTemplateId, AssignedBy, IsActive)
-    VALUES(@DefaultHostId, @DefaultHostTemplateId, N'install-script', 1);
-END
+MERGE omp.HostDeploymentAssignments AS target
+USING
+(
+    VALUES
+        (@DefaultHostId, @DefaultHostTemplateId, N'install-script', CONVERT(bit, 1)),
+        (@DefaultHostId, @IisHostTemplateId, N'install-script', CONVERT(bit, 1)),
+        (@DefaultHostId, @ServiceHostTemplateId, N'install-script', CONVERT(bit, 1))
+) AS source(HostId, HostTemplateId, AssignedBy, IsActive)
+ON target.HostId = source.HostId
+AND target.HostTemplateId = source.HostTemplateId
+WHEN MATCHED THEN
+    UPDATE SET AssignedBy = source.AssignedBy,
+               IsActive = source.IsActive
+WHEN NOT MATCHED THEN
+    INSERT(HostId, HostTemplateId, AssignedBy, IsActive)
+    VALUES(source.HostId, source.HostTemplateId, source.AssignedBy, source.IsActive);
 
 -------------------------------------------------------------------------------
 -- Seed core module metadata
@@ -466,19 +512,20 @@ WHERE InstanceTemplateId = @DefaultInstanceTemplateId
 ORDER BY InstanceTemplateHostId;
 
 IF @CoreTemplateModuleInstanceId IS NOT NULL
-   AND @DefaultInstanceTemplateHostId IS NOT NULL
+   AND @ServiceHostTemplateId IS NOT NULL
 BEGIN
     MERGE omp.InstanceTemplateAppInstances AS target
     USING
     (
         VALUES
-            (@CoreTemplateModuleInstanceId, @DefaultInstanceTemplateHostId, @WorkerProcessHostAppId, N'omp_workerprocesshost', N'OMP Worker Process Host', N'Host-local executable used by WorkerManager to run worker plugin artifacts.', NULL, NULL, NULL, NULL, @WorkerProcessHostArtifactId, 1, 20, CONVERT(bit, 1), CONVERT(bit, 1)),
-            (@CoreTemplateModuleInstanceId, @DefaultInstanceTemplateHostId, @WorkerManagerAppId, N'omp_workermanager', N'OMP WorkerManager', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', NULL, NULL, N'WorkerManager', N'OMP.WorkerManager', @WorkerManagerArtifactId, 1, 30, CONVERT(bit, 1), CONVERT(bit, 1))
-    ) AS source(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
+            (@CoreTemplateModuleInstanceId, NULL, @ServiceHostTemplateId, @WorkerProcessHostAppId, N'omp_workerprocesshost', N'OMP Worker Process Host', N'Host-local executable used by WorkerManager to run worker plugin artifacts.', NULL, NULL, NULL, NULL, @WorkerProcessHostArtifactId, 1, 20, CONVERT(bit, 1), CONVERT(bit, 1)),
+            (@CoreTemplateModuleInstanceId, NULL, @ServiceHostTemplateId, @WorkerManagerAppId, N'omp_workermanager', N'OMP WorkerManager', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', NULL, NULL, N'WorkerManager', N'OMP.WorkerManager', @WorkerManagerArtifactId, 1, 30, CONVERT(bit, 1), CONVERT(bit, 1))
+    ) AS source(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
     ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
     AND target.AppInstanceKey = source.AppInstanceKey
     WHEN MATCHED THEN
         UPDATE SET InstanceTemplateHostId = source.InstanceTemplateHostId,
+                   TargetHostTemplateId = source.TargetHostTemplateId,
                    AppId = source.AppId,
                    DisplayName = source.DisplayName,
                    Description = source.Description,
@@ -493,8 +540,8 @@ BEGIN
                    IsAllowed = source.IsAllowed,
                    UpdatedUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
-        INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
-        VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.DesiredArtifactId, source.DesiredState, source.SortOrder, source.IsEnabled, source.IsAllowed);
+        INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
+        VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.TargetHostTemplateId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.DesiredArtifactId, source.DesiredState, source.SortOrder, source.IsEnabled, source.IsAllowed);
 END
 
 -------------------------------------------------------------------------------

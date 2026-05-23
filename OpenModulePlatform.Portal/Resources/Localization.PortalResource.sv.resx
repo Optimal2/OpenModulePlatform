@@ -2030,4 +2030,21 @@
   <data name="Choose either one specific host or one host role, not both." xml:space="preserve"><value>Välj antingen en specifik värd eller en värdroll, inte båda.</value></data>
   <data name="Selected host role was not found." xml:space="preserve"><value>Vald värdroll hittades inte.</value></data>
   <data name="Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Välj en värd eller värdroll för runtime-appar. Lämna båda tomma bara för värdneutrala webbappar bakom en lastbalanserare.</value></data>
+  <data name="Packages" xml:space="preserve"><value>Paket</value></data>
+  <data name="Operations" xml:space="preserve"><value>Drift</value></data>
+  <data name="Installation workflow" xml:space="preserve"><value>Installationsflöde</value></data>
+  <data name="Object tools" xml:space="preserve"><value>Objektverktyg</value></data>
+  <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Packages for portable objects, and Operations for HostAgent troubleshooting." xml:space="preserve"><value>Adminytan är organiserad runt en OMP-installation. Använd Installation för önskad topologi, Paket för portabla objekt och Drift för HostAgent-felsökning.</value></data>
+  <data name="These are the normal pages for setup, upgrade, import, export and troubleshooting." xml:space="preserve"><value>Detta är de normala sidorna för installation, uppgradering, import, export och felsökning.</value></data>
+  <data name="Use these standalone-compatible editors when preparing module definitions, artifact packages or machine-specific installer profiles." xml:space="preserve"><value>Använd dessa fristående kompatibla editorer när du förbereder moduldefinitioner, artefaktpaket eller maskinspecifika installationsprofiler.</value></data>
+  <data name="Automation pages now live under System so the admin flow follows the current model: installation topology, package import/export, and HostAgent operations." xml:space="preserve"><value>Automatiseringssidorna finns nu under System så att adminflödet följer den aktuella modellen: installationstopologi, paketimport/export och HostAgent-drift.</value></data>
+  <data name="Import, export and install portable module packages containing one module definition JSON and compatible artifact package zips." xml:space="preserve"><value>Importera, exportera och installera portabla modulpaket med en moduldefinitions-JSON och kompatibla artefaktpaket i zip-format.</value></data>
+  <data name="Related workflow" xml:space="preserve"><value>Relaterat flöde</value></data>
+  <data name="Packages are the portable object boundary. Installation controls desired topology and Operations shows what HostAgent did with the selected objects." xml:space="preserve"><value>Paket är gränsen för portabla objekt. Installation styr önskad topologi och Drift visar vad HostAgent gjorde med de valda objekten.</value></data>
+  <data name="Module integrity" xml:space="preserve"><value>Modulintegritet</value></data>
+  <data name="Artifact catalog" xml:space="preserve"><value>Artefaktkatalog</value></data>
+  <data name="These editors can also run as standalone HTML tools from the package tools folder." xml:space="preserve"><value>Dessa editorer kan också köras som fristående HTML-verktyg från paketets verktygsmapp.</value></data>
+  <data name="Back to packages" xml:space="preserve"><value>Tillbaka till paket</value></data>
+  <data name="Back to operations" xml:space="preserve"><value>Tillbaka till drift</value></data>
+  <data name="Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisionering, runtime-identitetskontroller och explicita materialiseringsbegäranden för installationen.</value></data>
 </root>

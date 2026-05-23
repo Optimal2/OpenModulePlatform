@@ -24,4 +24,10 @@
   <data name="Collapse" xml:space="preserve"><value>Collapse</value></data>
   <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
   <data name="Artifact package editor" xml:space="preserve"><value>Artifact package editor</value></data>
+  <data name="Packages" xml:space="preserve"><value>Packages</value></data>
+  <data name="Operations" xml:space="preserve"><value>Operations</value></data>
+  <data name="Tools" xml:space="preserve"><value>Tools</value></data>
+  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard widgets</value></data>
+  <data name="Module definition editor" xml:space="preserve"><value>Module definition editor</value></data>
+  <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap config editor</value></data>
 </root>

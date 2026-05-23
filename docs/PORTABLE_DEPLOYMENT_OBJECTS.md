@@ -120,18 +120,26 @@ Conflict handling is deterministic:
 
 Portal:
 
+- `/admin/instancetemplateedit?id=1` is the normal installation-topology page.
+  It owns desired module instances, desired app versions, concrete hosts, and
+  host-role placement.
+- `/admin/modulepackageimport` is the package workflow page. It can upload one
+  complete module package zip, upload one module definition JSON together with
+  one or more artifact package zips, import package-library files from
+  `ArtifactStoreRoot\_available`, and export an applied module definition with
+  its active artifact packages. The package-library view only offers artifact
+  packages that match the selected module definition's declared compatibility
+  range and shows whether the current installation already has the same, newer,
+  older, or missing artifact versions.
+- `/admin/hostdeployments` is the operations page. It shows HostAgent app
+  deployments, artifact provisioning, runtime identity checks, and explicit
+  installation materialization requests.
 - `/admin/moduledefinitions` validates all active module definitions and can run
-  safe repairs.
+  safe repairs. It remains the deeper module-integrity view linked from the
+  package workflow.
 - `/admin/moduledefinitionedit` can download the stored JSON definition.
 - `/admin/moduledefinitioneditor` opens the browser-based module definition
   editor.
-- `/admin/modulepackageimport` can upload one complete module package zip,
-  upload one module definition JSON together with one or more artifact package
-  zips, import package-library files from `ArtifactStoreRoot\_available`, and
-  export an applied module definition with its active artifact packages. The
-  package-library view only offers artifact packages that match the selected
-  module definition's declared compatibility range and shows whether the current
-  installation already has the same, newer, older, or missing artifact versions.
 - `/admin/artifacts` and `/admin/artifactupload` import artifact packages.
 - `/admin/artifactedit` can download an installed artifact as a standard package
   object, including registered configuration files.

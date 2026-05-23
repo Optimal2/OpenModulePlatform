@@ -188,6 +188,10 @@ The first visible action is intentionally the safe/common action:
 - If an existing installation is detected, the recommended action is
   `Upgrade existing installation`.
 
+The initial bootstrap seeds the standard host roles `IISHost` and `ServiceHost`
+alongside the default development host. Local single-machine installs assign the
+same concrete host to both roles so role-targeted desired apps work immediately.
+
 On machines where the matched config resolves valid source repositories, the
 recommended action has a checked option to refresh package objects from source
 before it runs. The refresh copies newer or missing module definitions and
@@ -208,6 +212,10 @@ files, and installs HostAgent only if the configured service is absent. Existing
 artifact folders and an existing HostAgent service are deliberately left
 unchanged; use `Install or update` when a full bootstrap/reconfiguration pass is
 intended.
+
+When imported module definitions include validation SQL, the bootstrapper runs
+the read-only validation script first. Idempotent repair SQL runs only when the
+validation reports an unhealthy state or the validation itself cannot complete.
 
 On a development machine where the installer package still lives below an
 OpenModulePlatform source checkout, the graphical installer can also compare

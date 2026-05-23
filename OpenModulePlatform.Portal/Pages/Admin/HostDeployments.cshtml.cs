@@ -48,7 +48,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     private async Task LoadAsync(CancellationToken ct)
     {
-        SetTitles("Host deployments");
+        SetTitles("Operations");
         Rows = await _repo.GetHostDeploymentsAsync(ct);
         AppDeploymentStates = await _repo.GetHostAppDeploymentStatesAsync(ct);
         ArtifactStates = await _repo.GetHostArtifactStatesAsync(ct);
