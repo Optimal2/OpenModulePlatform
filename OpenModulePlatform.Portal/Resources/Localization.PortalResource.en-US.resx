@@ -441,4 +441,33 @@
   <data name="Export artifact package" xml:space="preserve"><value>Export artifact package</value></data>
   <data name="Export one installed artifact as a standard artifact package zip, including artifact-owned configuration files." xml:space="preserve"><value>Export one installed artifact as a standard artifact package zip, including artifact-owned configuration files.</value></data>
   <data name="Artifact packages imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artifact packages imported or replaced: {0}. Failed: {1}.</value></data>
+  <data name="Step 1" xml:space="preserve"><value>Step 1</value></data>
+  <data name="Step 2" xml:space="preserve"><value>Step 2</value></data>
+  <data name="Choose direction" xml:space="preserve"><value>Choose direction</value></data>
+  <data name="Start by choosing whether you want to import something into this OMP installation or export something from it." xml:space="preserve"><value>Start by choosing whether you want to import something into this OMP installation or export something from it.</value></data>
+  <data name="Export" xml:space="preserve"><value>Export</value></data>
+  <data name="Add or update portable objects in this installation." xml:space="preserve"><value>Add or update portable objects in this installation.</value></data>
+  <data name="Download portable objects from this installation." xml:space="preserve"><value>Download portable objects from this installation.</value></data>
+  <data name="Choose action" xml:space="preserve"><value>Choose action</value></data>
+  <data name="Choose one action. Only that form will be shown." xml:space="preserve"><value>Choose one action. Only that form will be shown.</value></data>
+  <data name="Choose import type" xml:space="preserve"><value>Choose import type</value></data>
+  <data name="Choose export type" xml:space="preserve"><value>Choose export type</value></data>
+  <data name="Choose import or export to continue." xml:space="preserve"><value>Choose import or export to continue.</value></data>
+  <data name="Choose an action to continue." xml:space="preserve"><value>Choose an action to continue.</value></data>
+  <data name="Import one outer zip that contains a module definition and artifact packages." xml:space="preserve"><value>Import one outer zip that contains a module definition and artifact packages.</value></data>
+  <data name="JSON plus artifact zips" xml:space="preserve"><value>JSON plus artifact zips</value></data>
+  <data name="Import a module definition JSON together with one or more artifact package zips." xml:space="preserve"><value>Import a module definition JSON together with one or more artifact package zips.</value></data>
+  <data name="Artifact zips" xml:space="preserve"><value>Artifact zips</value></data>
+  <data name="Import one or more artifact package zips without changing a module definition." xml:space="preserve"><value>Import one or more artifact package zips without changing a module definition.</value></data>
+  <data name="Import dashboard widget definitions from JSON." xml:space="preserve"><value>Import dashboard widget definitions from JSON.</value></data>
+  <data name="Import a module package already stored in the shared package library." xml:space="preserve"><value>Import a module package already stored in the shared package library.</value></data>
+  <data name="Module package" xml:space="preserve"><value>Module package</value></data>
+  <data name="Export a module definition with the artifact packages it references." xml:space="preserve"><value>Export a module definition with the artifact packages it references.</value></data>
+  <data name="Artifact package" xml:space="preserve"><value>Artifact package</value></data>
+  <data name="Export one installed artifact package." xml:space="preserve"><value>Export one installed artifact package.</value></data>
+  <data name="Widgets" xml:space="preserve"><value>Widgets</value></data>
+  <data name="Export all widgets or widgets owned by one module." xml:space="preserve"><value>Export all widgets or widgets owned by one module.</value></data>
+  <data name="Import package zip" xml:space="preserve"><value>Import package zip</value></data>
+  <data name="Use this when the module definition JSON and artifact packages are separate files." xml:space="preserve"><value>Use this when the module definition JSON and artifact packages are separate files.</value></data>
+  <data name="Import JSON plus artifact zips" xml:space="preserve"><value>Import JSON plus artifact zips</value></data>
 </root>

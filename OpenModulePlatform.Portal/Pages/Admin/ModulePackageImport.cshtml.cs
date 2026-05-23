@@ -55,6 +55,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     public IReadOnlyList<string> WidgetModuleKeys { get; private set; } = [];
 
+    public string ActivePanel { get; private set; } = string.Empty;
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -94,6 +96,12 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
+            ActivePanel = UploadInput.Flow switch
+            {
+                "bundle" => "import-bundle",
+                "files" => "import-files",
+                _ => "import-bundle"
+            };
             ModelState.AddModelError(string.Empty, T(ex.Message));
             await LoadAsync(ct);
             return Page();
@@ -121,6 +129,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
+            ActivePanel = "import-artifacts";
             ModelState.AddModelError(string.Empty, T(ex.Message));
             await LoadAsync(ct);
             return Page();
@@ -139,6 +148,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         ValidateWidgetUpload();
         if (!ModelState.IsValid)
         {
+            ActivePanel = "import-widgets";
             await LoadAsync(ct);
             return Page();
         }
@@ -157,6 +167,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonException or SqlException)
         {
+            ActivePanel = "import-widgets";
             ModelState.AddModelError(string.Empty, T(ex.Message));
             await LoadAsync(ct);
             return Page();
@@ -174,6 +185,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         SetTitles("Import/export");
         if (string.IsNullOrWhiteSpace(ImportInput.ModuleDefinitionFileName))
         {
+            ActivePanel = "import-library";
             ModelState.AddModelError(nameof(ImportInput.ModuleDefinitionFileName), T("Select one available module definition."));
             await LoadAsync(ct);
             return Page();
@@ -191,6 +203,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
+            ActivePanel = "import-library";
             ModelState.AddModelError(string.Empty, T(ex.Message));
             await LoadAsync(ct);
             return Page();
@@ -442,6 +455,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     public sealed class UploadInputModel
     {
+        public string Flow { get; set; } = string.Empty;
+
         public IFormFile? BundleFile { get; set; }
 
         public IFormFile? ModuleDefinitionJson { get; set; }
