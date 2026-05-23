@@ -2137,12 +2137,9 @@ ORDER BY ar.ArtifactId DESC;
         private static IEnumerable<string> EnumerateDeveloperManifestRoots(IReadOnlyList<string> sourceRoots)
         {
             var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var sourceRoot in sourceRoots)
+            foreach (var sourceRoot in sourceRoots.Where(emitted.Add))
             {
-                if (emitted.Add(sourceRoot))
-                {
-                    yield return sourceRoot;
-                }
+                yield return sourceRoot;
             }
 
             var primarySourceRoot = sourceRoots.FirstOrDefault();

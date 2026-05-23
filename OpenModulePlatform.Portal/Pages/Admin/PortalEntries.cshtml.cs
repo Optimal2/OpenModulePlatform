@@ -35,6 +35,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
     public IReadOnlyList<PortalEntryAdminRow> Rows { get; private set; } = [];
 
+    public IReadOnlyDictionary<int, int> RowDepths { get; private set; } = new Dictionary<int, int>();
+
     public IReadOnlyList<OptionItem> ParentOptions { get; private set; } = [];
 
     public bool OpenCreatePanel { get; private set; }
@@ -211,8 +213,18 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
     }
 
     public int GetDepth(PortalEntryAdminRow row)
+        => RowDepths.TryGetValue(row.PortalEntryId, out var depth) ? depth : 0;
+
+    private static IReadOnlyDictionary<int, int> BuildDepthLookup(IReadOnlyList<PortalEntryAdminRow> rows)
     {
-        var rowsById = Rows.ToDictionary(item => item.PortalEntryId);
+        var rowsById = rows.ToDictionary(item => item.PortalEntryId);
+        return rows.ToDictionary(row => row.PortalEntryId, row => CalculateDepth(row, rowsById));
+    }
+
+    private static int CalculateDepth(
+        PortalEntryAdminRow row,
+        IReadOnlyDictionary<int, PortalEntryAdminRow> rowsById)
+    {
         var visited = new HashSet<int> { row.PortalEntryId };
         var depth = 0;
         var parentId = row.ParentEntryId;
@@ -238,6 +250,7 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
     private async Task LoadAsync(CancellationToken ct)
     {
         Rows = await _portalEntries.GetAdminRowsAsync(ct);
+        RowDepths = BuildDepthLookup(Rows);
         ParentOptions = await _portalEntries.GetParentOptionsAsync(null, ct);
         LayoutEntries = Rows
             .Select((row, index) => new LayoutEntryInput

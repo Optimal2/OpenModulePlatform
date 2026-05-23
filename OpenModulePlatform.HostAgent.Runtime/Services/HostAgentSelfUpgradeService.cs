@@ -277,12 +277,9 @@ public sealed class HostAgentSelfUpgradeService
         }
 
         // Materialize before removal so the JsonObject collection is not mutated during enumeration.
-        foreach (var pair in overrides.ToArray())
+        foreach (var identity in overrides.ToArray().Select(pair => pair.Value).OfType<JsonObject>())
         {
-            if (pair.Value is JsonObject identity)
-            {
-                identity.Remove("Password");
-            }
+            identity.Remove("Password");
         }
     }
 

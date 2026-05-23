@@ -193,10 +193,10 @@ ORDER BY w.module_key,
         try
         {
             var result = new DashboardWidgetImportResult();
-            // Widget import performs database lookups and writes per item, so the loop stays explicit instead of using Select.
-            foreach (var item in document.Widgets)
+            // The database work stays sequential so import results and transaction
+            // behavior remain deterministic, while normalization is a pure projection.
+            foreach (var normalized in document.Widgets.Select(item => Normalize(document, item)))
             {
-                var normalized = Normalize(document, item);
                 var permissionIds = await ResolvePermissionIdsAsync(conn, tx, normalized.PermissionNames, ct);
                 var roleIds = await ResolveRoleIdsAsync(conn, tx, normalized.RoleNames, ct);
                 var widgetId = await FindWidgetIdAsync(conn, tx, normalized, ct);

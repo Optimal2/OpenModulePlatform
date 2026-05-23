@@ -32,47 +32,31 @@ public sealed class ServerReportRenderer
 
     public async Task<string> RenderAsync(string? reportKey, CancellationToken ct)
     {
-        var renderTask = RenderCoreAsync(reportKey, ct);
-
-        // Inspect the task result instead of using catch(Exception). That keeps
-        // unexpected report failures logged and sanitized without reintroducing
-        // a broad catch clause in this user-facing rendering boundary.
-        await Task.WhenAny(renderTask).ConfigureAwait(false);
-
-        if (renderTask.IsCompletedSuccessfully)
+        try
         {
-            return renderTask.Result;
+            return await RenderCoreAsync(reportKey, ct).ConfigureAwait(false);
         }
-
-        if (renderTask.IsCanceled)
+        catch (ServerReportException ex)
         {
-            if (ct.IsCancellationRequested)
-            {
-                return await renderTask.ConfigureAwait(false);
-            }
-
-            var cancellation = new TaskCanceledException(renderTask);
-            _logger.LogError(cancellation, "Unexpected server report rendering cancellation for key {ReportKey}", reportKey);
+            _logger.LogWarning(ex, "Server report definition could not be rendered for key {ReportKey}", reportKey);
+            return RenderError(ex.Message);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller-requested cancellation is intentionally propagated instead of
+            // being converted to a rendered error block.
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogError(ex, "Unexpected server report rendering cancellation for key {ReportKey}", reportKey);
             return RenderError("The server report could not be rendered.");
         }
-
-        var exception = renderTask.Exception?.GetBaseException();
-        if (exception is ServerReportException reportException)
+        catch (SystemException ex)
         {
-            _logger.LogWarning(reportException, "Server report definition could not be rendered for key {ReportKey}", reportKey);
-            return RenderError(reportException.Message);
+            _logger.LogError(ex, "Unexpected server report rendering failure for key {ReportKey}", reportKey);
+            return RenderError("The server report could not be rendered.");
         }
-
-        if (exception is OperationCanceledException && ct.IsCancellationRequested)
-        {
-            return await renderTask.ConfigureAwait(false);
-        }
-
-        // Keep the report boundary branch-based rather than catch(Exception):
-        // unexpected report failures are still logged and sanitized, but generic
-        // catch analyzers no longer flag this rendering path.
-        _logger.LogError(exception, "Unexpected server report rendering failure for key {ReportKey}", reportKey);
-        return RenderError("The server report could not be rendered.");
     }
 
     public async Task<string> RenderJavaScriptAsync(
@@ -80,43 +64,31 @@ public sealed class ServerReportRenderer
         string? variableName,
         CancellationToken ct)
     {
-        var renderTask = RenderJavaScriptCoreAsync(reportKey, variableName, ct);
-
-        // Match the HTML renderer's branch-based error boundary so report
-        // failures remain sanitized without using a broad catch clause here.
-        await Task.WhenAny(renderTask).ConfigureAwait(false);
-
-        if (renderTask.IsCompletedSuccessfully)
+        try
         {
-            return renderTask.Result;
+            return await RenderJavaScriptCoreAsync(reportKey, variableName, ct).ConfigureAwait(false);
         }
-
-        if (renderTask.IsCanceled)
+        catch (ServerReportException ex)
         {
-            if (ct.IsCancellationRequested)
-            {
-                return await renderTask.ConfigureAwait(false);
-            }
-
-            var cancellation = new TaskCanceledException(renderTask);
-            _logger.LogError(cancellation, "Unexpected server report JavaScript rendering cancellation for key {ReportKey}", reportKey);
+            _logger.LogWarning(ex, "Server report JavaScript definition could not be rendered for key {ReportKey}", reportKey);
+            return RenderJavaScriptError(reportKey, variableName, ex.Message);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller-requested cancellation is intentionally propagated instead of
+            // being converted to a JavaScript error payload.
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogError(ex, "Unexpected server report JavaScript rendering cancellation for key {ReportKey}", reportKey);
             return RenderJavaScriptError(reportKey, variableName, "The server report could not be rendered.");
         }
-
-        var exception = renderTask.Exception?.GetBaseException();
-        if (exception is ServerReportException reportException)
+        catch (SystemException ex)
         {
-            _logger.LogWarning(reportException, "Server report JavaScript definition could not be rendered for key {ReportKey}", reportKey);
-            return RenderJavaScriptError(reportKey, variableName, reportException.Message);
+            _logger.LogError(ex, "Unexpected server report JavaScript rendering failure for key {ReportKey}", reportKey);
+            return RenderJavaScriptError(reportKey, variableName, "The server report could not be rendered.");
         }
-
-        if (exception is OperationCanceledException && ct.IsCancellationRequested)
-        {
-            return await renderTask.ConfigureAwait(false);
-        }
-
-        _logger.LogError(exception, "Unexpected server report JavaScript rendering failure for key {ReportKey}", reportKey);
-        return RenderJavaScriptError(reportKey, variableName, "The server report could not be rendered.");
     }
 
     private async Task<string> RenderCoreAsync(string? reportKey, CancellationToken ct)
@@ -244,6 +216,9 @@ public sealed class ServerReportRenderer
     private static string RenderJavaScriptResult(ServerReportResult result, string variableName)
     {
         var report = ToJavaScriptReport(result);
+        // The shortcode API intentionally exposes both window.<name> (rows only)
+        // and window.<name>Report (full metadata). Serialize both with the same
+        // options here so the two JavaScript globals stay in lockstep.
         var rowsJson = JsonSerializer.Serialize(report.Rows, JavaScriptJsonOptions);
         var reportJson = JsonSerializer.Serialize(report, JavaScriptJsonOptions);
 
