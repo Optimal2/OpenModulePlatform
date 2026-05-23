@@ -29,7 +29,7 @@ the source of truth for:
 Every OMP module should keep its latest source definition file at the module
 root and list it in that repository's `omp-components.json`. The generated
 HostAgent-first installer copies those files into the package-local
-`module-definitions` import folder. Portal stores imported definitions in
+`data/global/module-definitions` library. Portal stores imported definitions in
 `omp.ModuleDefinitionDocuments`.
 
 A portable module-definition package zip can contain one definition JSON plus
@@ -77,10 +77,18 @@ example__example_web__web-app__example-web__1.2.3.zip
   configuration/site.config.json
 ```
 
-Legacy root-payload zips are still accepted for compatibility, but new packages
-should use the manifest envelope. Components with `moduleKey`, `appKey`,
-`packageType`, `targetName`, and `version` in `omp-components.json` are emitted
-as standard artifact package objects by `package-hostagent-first.ps1`.
+Components with `moduleKey`, `appKey`, `packageType`, `targetName`, and
+`version` in `omp-components.json` are emitted as standard artifact package
+objects by `package-hostagent-first.ps1`. New imports and installer packages
+should use the manifest envelope; older root-payload zips should be rewrapped
+before being added to a package library.
+
+HostAgent-first packages keep normal artifact packages in
+`data/global/artifacts`. If an outer artifact package must carry
+environment-specific configuration files, put that package below
+`data/profiles/<config-file-name>/artifacts` and reference it from that
+profile's bootstrap config as `artifacts/<package>.zip`; the bootstrapper checks
+the selected profile folder before falling back to the global library.
 
 ## Complete Module Package
 
