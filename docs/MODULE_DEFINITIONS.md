@@ -79,10 +79,10 @@ repository's `omp-components.json`. For example, the Content web app module owns
 next to its module source, and a standalone module repository can keep
 `my_module.module-definition.json` directly in the repository root.
 
-The HostAgent-first bootstrap package still imports JSON files from its
-package-local `module-definitions` folder after SQL initialization. That folder
-is a generated import payload, not the source layout. The package script copies
-definition files from `omp-components.json` into the package-local folder.
+The HostAgent-first bootstrap package imports JSON files from
+`data/global/module-definitions` after SQL initialization. That folder is a
+generated package library, not the source layout. The package script copies
+definition files from `omp-components.json` into the package library.
 Protected/customer package configs can add module-definition files from module
 repositories through `HostAgentFirst.AdditionalModuleDefinitionFiles`.
 

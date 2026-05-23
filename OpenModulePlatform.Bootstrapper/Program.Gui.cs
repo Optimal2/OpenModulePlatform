@@ -1382,8 +1382,7 @@ internal static partial class Program
                 }
                 else
                 {
-                    var location = IsAvailablePackagePath(packagePath) ? "available" : "initial";
-                    lines.Add($"  OK      {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion} ({location}).");
+                    lines.Add($"  OK      {definition.ModuleKey}: package library {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
                 }
             }
 
@@ -1398,11 +1397,11 @@ internal static partial class Program
                     var availablePath = FindAvailableArtifactPackage(component);
                     if (!string.IsNullOrWhiteSpace(availablePath))
                     {
-                        lines.Add($"  OK      {component.ComponentKey}: available for later install ({Path.GetFileName(availablePath)}).");
+                        lines.Add($"  OK      {component.ComponentKey}: package library artifact is available ({Path.GetFileName(availablePath)}).");
                         continue;
                     }
 
-                    lines.Add($"  UPDATE  {component.ComponentKey}: package has no initial or available artifact for {component.ModuleKey}/{component.AppKey}/{component.PackageType}/{component.TargetName}.");
+                    lines.Add($"  UPDATE  {component.ComponentKey}: package has no configured or library artifact for {component.ModuleKey}/{component.AppKey}/{component.PackageType}/{component.TargetName}.");
                     hasPackageUpdates = true;
                     continue;
                 }
@@ -1425,8 +1424,8 @@ internal static partial class Program
             lines.Add(hasPackageUpdates
                 ? "Result: source contains module definitions or artifact entries that are newer/different than this installer package."
                 : hasInstalledUpdates
-                    ? "Result: this installer package matches the source manifest. The installed database has pending updates for initial modules or artifacts."
-                    : "Result: this installer package matches the source manifest. Installed initial modules and artifacts are up to date.");
+                    ? "Result: this installer package matches the source manifest. The installed database has pending updates for configured modules or artifacts."
+                    : "Result: this installer package matches the source manifest. Installed configured modules and artifacts are up to date.");
 
             return new DeveloperSourceCheckResult(hasPackageUpdates || hasInstalledUpdates, lines);
         }
@@ -1471,8 +1470,7 @@ internal static partial class Program
                 var packagePath = FindPackageModuleDefinitionPath(definition);
                 if (await CopyModuleDefinitionIfDifferentAsync(sourcePath, packagePath))
                 {
-                    var location = IsAvailablePackagePath(packagePath) ? "available" : "initial";
-                    lines.Add($"  UPDATED {definition.ModuleKey}: copied {definition.DefinitionVersion} to {location} package library.");
+                    lines.Add($"  UPDATED {definition.ModuleKey}: copied {definition.DefinitionVersion} to the package library.");
                     updated++;
                 }
                 else
@@ -1519,7 +1517,7 @@ internal static partial class Program
                         }
 
                         CopyFileIfDifferent(sourcePackage, payloadPath);
-                        CopyFileIfDifferent(sourcePackage, Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
+                        CopyFileIfDifferent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
                         current.Source = expectedSource;
                         current.Target = expectedTarget;
                         lines.Add($"  UPDATED {component.ComponentKey}: copied {packageName} and updated artifact target to {expectedTarget}.");
@@ -1535,10 +1533,10 @@ internal static partial class Program
                         lines.Add($"  OK      {component.ComponentKey}: artifact package is present.");
                         unchanged++;
 
-                        var availableMirrorPath = Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
-                        if (!File.Exists(availableMirrorPath))
+                        var mirroredLibraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
+                        if (!File.Exists(mirroredLibraryPath))
                         {
-                            CopyFileIfDifferent(payloadPath, availableMirrorPath);
+                            CopyFileIfDifferent(payloadPath, mirroredLibraryPath);
                         }
 
                         continue;
@@ -1569,7 +1567,7 @@ internal static partial class Program
                     }
 
                     CopyFileIfDifferent(sourcePackage, payloadPath);
-                    CopyFileIfDifferent(sourcePackage, Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
+                    CopyFileIfDifferent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
                     current.Source = expectedSource;
                     current.Target = expectedTarget;
                     lines.Add($"  UPDATED {component.ComponentKey}: restored missing artifact package {packageName}.");
@@ -1578,11 +1576,11 @@ internal static partial class Program
                     continue;
                 }
 
-                var availablePath = Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
-                if (File.Exists(availablePath))
+                var libraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
+                if (File.Exists(libraryPath))
                 {
                     // Package library entries follow the same immutable-version rule as configured artifact packages.
-                    lines.Add($"  OK      {component.ComponentKey}: available artifact package is present.");
+                    lines.Add($"  OK      {component.ComponentKey}: package library artifact is present.");
                     unchanged++;
 
                     continue;
@@ -1604,8 +1602,8 @@ internal static partial class Program
                     }
                 }
 
-                CopyFileIfDifferent(sourcePackage, availablePath);
-                lines.Add($"  UPDATED {component.ComponentKey}: copied available artifact package {packageName}.");
+                CopyFileIfDifferent(sourcePackage, libraryPath);
+                lines.Add($"  UPDATED {component.ComponentKey}: copied package library artifact {packageName}.");
                 updated++;
             }
 
@@ -1645,11 +1643,7 @@ internal static partial class Program
                 AddIfDirectory(artifactPath);
             }
 
-            AddIfDirectory(Path.Join(_payloadRoot, "data", "global", "artifacts"));
-            AddIfDirectory(Path.Join(_payloadRoot, "data", "global", "artifacts", "available"));
-            AddIfDirectory(Path.Join(_payloadRoot, "available-artifacts"));
-            AddIfDirectory(Path.Join(_payloadRoot, "data", "global", "artifacts", "initial"));
-            AddIfDirectory(Path.Join(_payloadRoot, "payload"));
+            AddIfDirectory(ResolvePackageArtifactsRoot(_payloadRoot));
 
             return roots;
         }
@@ -1833,47 +1827,9 @@ internal static partial class Program
                 throw new InvalidOperationException("Package object sources must be relative to the installer package root.");
             }
 
-            var normalized = NormalizePathForMatch(packageRelativePath);
             var direct = Path.GetFullPath(Path.Join(
                 _payloadRoot,
                 packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
-            if (File.Exists(direct) || Directory.Exists(direct))
-            {
-                return direct;
-            }
-
-            var fileName = Path.GetFileName(packageRelativePath);
-            if (!string.IsNullOrWhiteSpace(fileName))
-            {
-                if (normalized.StartsWith("data/global/artifacts/", StringComparison.OrdinalIgnoreCase)
-                    || normalized.StartsWith("data/global/module-definitions/", StringComparison.OrdinalIgnoreCase))
-                {
-                    return Path.GetFullPath(Path.Join(
-                        _payloadRoot,
-                        packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
-                }
-
-                if (normalized.StartsWith("payload/", StringComparison.OrdinalIgnoreCase))
-                {
-                    return Path.Join(ResolveInitialArtifactsRoot(_payloadRoot), fileName);
-                }
-
-                if (normalized.StartsWith("available-artifacts/", StringComparison.OrdinalIgnoreCase))
-                {
-                    return Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), fileName);
-                }
-
-                if (normalized.StartsWith("module-definitions/", StringComparison.OrdinalIgnoreCase))
-                {
-                    return Path.Join(ResolveInitialModuleDefinitionsRoot(_payloadRoot), fileName);
-                }
-
-                if (normalized.StartsWith("available-module-definitions/", StringComparison.OrdinalIgnoreCase))
-                {
-                    return Path.Join(ResolveAvailableModuleDefinitionsRoot(_payloadRoot), fileName);
-                }
-            }
-
             return direct;
         }
 
@@ -1940,8 +1896,6 @@ internal static partial class Program
 
                 foreach (var definition in sourceDefinitions)
                 {
-                    var packagePath = FindPackageModuleDefinitionPath(definition);
-                    var isAvailableOnly = File.Exists(packagePath) && IsAvailablePackagePath(packagePath);
                     var installedVersion = await QueryScalarStringAsync(
                         connection,
                         """
@@ -1953,15 +1907,8 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;
 """,
                         command => command.Parameters.AddWithValue("@moduleKey", definition.ModuleKey));
                     var status = CompareInstalledVersion(installedVersion, definition.DefinitionVersion);
-                    if (string.IsNullOrWhiteSpace(installedVersion) && isAvailableOnly)
-                    {
-                        lines.Add($"  INFO    module {definition.ModuleKey}: not installed, source {definition.DefinitionVersion} is available for later import.");
-                    }
-                    else
-                    {
-                        hasUpdates |= IsDeveloperUpdateStatus(status);
-                        lines.Add($"  {status,-7} module {definition.ModuleKey}: installed {installedVersion ?? "(missing)"}, source {definition.DefinitionVersion}.");
-                    }
+                    hasUpdates |= IsDeveloperUpdateStatus(status);
+                    lines.Add($"  {status,-7} module {definition.ModuleKey}: installed {installedVersion ?? "(missing)"}, source {definition.DefinitionVersion}.");
                 }
 
                 foreach (var component in sourceComponents)
@@ -2048,31 +1995,14 @@ ORDER BY ar.ArtifactId DESC;
         private string FindPackageModuleDefinitionPath(ManifestModuleDefinition definition)
         {
             var fileName = Path.GetFileName(definition.Path);
-            var candidates = new[]
-            {
-                Path.Join(_payloadRoot, "data", "global", "module-definitions", fileName),
-                Path.Join(_payloadRoot, "data", "global", "module-definitions", "initial", fileName),
-                Path.Join(_payloadRoot, "module-definitions", fileName),
-                Path.Join(_payloadRoot, "data", "global", "module-definitions", "available", fileName),
-                Path.Join(_payloadRoot, "available-module-definitions", fileName)
-            };
-
-            return candidates.FirstOrDefault(File.Exists) ?? candidates[2];
+            return Path.Join(ResolvePackageModuleDefinitionsRoot(_payloadRoot), fileName);
         }
 
         private string? FindAvailableArtifactPackage(ManifestComponent component)
         {
             var packageName = GetArtifactPackageFileName(component);
-            var candidates = new[]
-            {
-                Path.Join(_payloadRoot, "data", "global", "artifacts", packageName),
-                Path.Join(_payloadRoot, "data", "global", "artifacts", "available", packageName),
-                Path.Join(_payloadRoot, "available-artifacts", packageName),
-                Path.Join(_payloadRoot, "data", "global", "artifacts", "initial", packageName),
-                Path.Join(_payloadRoot, "payload", packageName)
-            };
-
-            return candidates.FirstOrDefault(File.Exists);
+            var candidate = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
+            return File.Exists(candidate) ? candidate : null;
         }
 
         private static string GetArtifactPackageFileName(ManifestComponent component)
@@ -2083,11 +2013,6 @@ ORDER BY ar.ArtifactId DESC;
                 component.PackageType,
                 component.TargetName,
                 component.Version) + ".zip";
-
-        private bool IsAvailablePackagePath(string path)
-            => IsSameOrChildPath(Path.Join(_payloadRoot, "data", "global", "module-definitions"), path)
-                || IsSameOrChildPath(Path.Join(_payloadRoot, "data", "global", "module-definitions", "available"), path)
-                || IsSameOrChildPath(Path.Join(_payloadRoot, "available-module-definitions"), path);
 
         private static ArtifactPackageIdentity? ParseArtifactPackageIdentity(string source)
         {

@@ -886,8 +886,11 @@ if (-not $PSBoundParameters.ContainsKey('KeepStaging')) {
 $OutputRoot = Resolve-DeploymentPath -Path $OutputRoot -BasePath $RepositoryRoot
 $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version")
 $globalDataRoot = Join-Path (Join-Path $packageRoot 'data') 'global'
+$defaultProfileName = 'bootstrap.local.sample'
+$defaultProfileDataRoot = Join-Path (Join-Path (Join-Path $packageRoot 'data') 'profiles') $defaultProfileName
 $payloadRoot = Join-Path $globalDataRoot 'artifacts'
 $sqlRoot = Join-Path $globalDataRoot 'sql'
+$profileSqlRoot = Join-Path $defaultProfileDataRoot 'sql'
 $toolsRoot = Join-Path $packageRoot 'tools'
 $availableModuleDefinitionsRoot = Join-Path $globalDataRoot 'module-definitions'
 $availableArtifactsRoot = $payloadRoot
@@ -900,6 +903,7 @@ if (Test-Path -LiteralPath $packageRoot) {
 }
 New-Item -ItemType Directory -Path $payloadRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $sqlRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $profileSqlRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $toolsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $availableModuleDefinitionsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $availableArtifactsRoot -Force | Out-Null
@@ -1190,7 +1194,7 @@ foreach ($entry in $additionalModuleDefinitionFiles) {
     Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $moduleDefinitionsDestination $destinationName)
 }
 
-$additionalSqlIncludes = @()
+$additionalSqlScriptPaths = @()
 $additionalSqlFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalSqlFiles' -DefaultValue @()))
 foreach ($entry in $additionalSqlFiles) {
     $sourcePath = ''
@@ -1212,8 +1216,8 @@ foreach ($entry in $additionalSqlFiles) {
         $destinationName = Join-Path 'Customer' ([System.IO.Path]::GetFileName($resolvedSource))
     }
 
-    Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $sqlRoot $destinationName)
-    $additionalSqlIncludes += ':r ' + $destinationName.Replace('/', '\')
+    Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $profileSqlRoot $destinationName)
+    $additionalSqlScriptPaths += 'sql/' + $destinationName.Replace('\', '/')
 }
 
 $bootstrapSql = @'
@@ -1246,13 +1250,6 @@ bootstrap.local.sample.json.
 :r examples\WorkerAppModule\1-setup-example-workerapp.sql
 :r examples\WorkerAppModule\2-initialize-example-workerapp.sql
 '@
-if ($additionalSqlIncludes.Count -gt 0) {
-    $bootstrapSql += [Environment]::NewLine
-    $bootstrapSql += '/* Package-specific SQL extensions. */'
-    $bootstrapSql += [Environment]::NewLine
-    $bootstrapSql += [string]::Join([Environment]::NewLine, $additionalSqlIncludes)
-    $bootstrapSql += [Environment]::NewLine
-}
 $bootstrapSql += [Environment]::NewLine
 $bootstrapSql += '/* Final Portal navigation sync after all app instances have been registered. */'
 $bootstrapSql += [Environment]::NewLine
@@ -1408,6 +1405,12 @@ $developerPackageOutputRoot = [string](Get-NestedConfigValue -Config $config -Se
 $portableEncryptionKey = [string](Get-NestedConfigValue -Config $config -Section 'Security' -Name 'PortableEncryptionKey' -DefaultValue '')
 $portableEncryptionKeyEnvironmentVariable = [string](Get-NestedConfigValue -Config $config -Section 'Security' -Name 'PortableEncryptionKeyEnvironmentVariable' -DefaultValue '')
 
+$bootstrapSqlScripts = [System.Collections.Generic.List[object]]::new()
+$bootstrapSqlScripts.Add([ordered]@{ path = 'sql/bootstrap-local.sql' }) | Out-Null
+foreach ($scriptPath in $additionalSqlScriptPaths) {
+    $bootstrapSqlScripts.Add([ordered]@{ path = $scriptPath }) | Out-Null
+}
+
 $bootstrapConfig = [ordered]@{
     schema = 'OpenModulePlatform.HostAgentFirstBootstrap.v1'
     security = [ordered]@{
@@ -1431,11 +1434,7 @@ $bootstrapConfig = [ordered]@{
         commandTimeoutSeconds = 3600
         bootstrapPortalAdminPrincipal = [string]$bootstrapPrincipal
         bootstrapPortalAdminPrincipalType = $bootstrapPrincipalType
-        scripts = @(
-            [ordered]@{
-                path = 'sql/bootstrap-local.sql'
-            }
-        )
+        scripts = @($bootstrapSqlScripts)
         artifactVersionOverrides = $versionOverrides
         artifactVersionVariableOverrides = $versionVariableOverrides
     }

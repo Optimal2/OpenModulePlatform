@@ -40,19 +40,21 @@ OpenModulePlatformHostAgentFirst-<version>/
         <other module definitions available for install/import>
       sql/
         bootstrap-local.sql
-      tools/
-        bootstrap-config-editor/
-          index.html
     profiles/
       linus/
         sql/
+        artifacts/
         files/
       alfons/
         sql/
+        artifacts/
         files/
       vgr-production-1825/
         sql/
+        artifacts/
         files/
+  payload/
+    OpenModulePlatform.HostAgent.WindowsService.zip
   install-hostagent-first.cmd
   install-hostagent-first-console.cmd
   uninstall-hostagent-first.cmd
@@ -60,22 +62,25 @@ OpenModulePlatformHostAgentFirst-<version>/
   uninstall-hostagent-first.ps1
   manifest.json
   tools/
+    bootstrap-config-editor/
+      index.html
     OpenModulePlatform.Bootstrapper/
       OpenModulePlatform.Bootstrapper.exe
 ```
 
 The package has two data levels: `data/global` contains portable objects shared
 by every host profile in the package, while `data/profiles/<config-file-name>`
-contains only host-specific SQL and file payload. The selected file in
+contains only host-specific SQL, artifact-package overrides, and file payload.
+The selected file in
 `configs` is the host profile; there is no separate installation-instance layer
 in the package layout.
 
-Older packages used top-level `payload`, `module-definitions`,
-`available-artifacts`, `available-module-definitions`, and `sql` folders. A
-short transition build also used `data/global/*/initial` and
-`data/global/*/available`. The bootstrapper still reads those layouts for
-compatibility, but new packages should keep one shared object library below
-`data/global` and host-specific additions below `data/profiles`.
+The package library has no separate `initial` and `available` folders. All
+portable module definitions and artifact package objects live in
+`data/global`; the selected bootstrap configuration decides which artifact
+versions should be installed or selected immediately. Top-level `payload` is
+reserved for the direct HostAgent service zip needed before HostAgent can deploy
+itself from an artifact package.
 
 The root bootstrapper is published separately with single-file settings so the
 operator entry point stays as small and obvious as the .NET runtime allows. The
@@ -237,8 +242,8 @@ them out of the normal operator path.
 
 The `Upgrade / complete` action is a package catch-up action for an existing
 installation. It imports missing, newer, or changed module definition documents,
-copies missing artifact folders, publishes missing available package-library
-files, and installs HostAgent only if the configured service is absent. Existing
+copies missing artifact folders, publishes missing package-library files, and
+installs HostAgent only if the configured service is absent. Existing
 artifact folders and an existing HostAgent service are deliberately left
 unchanged; use `Install or update` when a full bootstrap/reconfiguration pass is
 intended.
@@ -298,6 +303,9 @@ repository with `-RepositoryRoot`, and use the package's `data/global` folder as
 package. Host-specific files are passed as `-ArtifactConfigurationFile`
 mappings so sensitive data can live in the private DEV repository or another
 controlled profile location instead of in the code repository.
+When those files must be bundled with a specific outer artifact package, store
+that package in `data/profiles/<config-file-name>/artifacts` and reference it
+as `artifacts/<package>.zip` from the matching bootstrap profile.
 
 The GUI action `Sync package objects` is the lightweight alternative to
 `Create updated installer package`. It uses the same source manifest comparison
@@ -463,7 +471,7 @@ HostAgentFirst = @{
     AdditionalArtifactFiles = @(
         @{
             Source = '..\IbsPackager\artifacts\archive\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
-            Payload = 'data\global\artifacts\available\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
+            Payload = 'data\global\artifacts\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
             Target = 'ibs-packager/web/0.3.3'
         }
     )
@@ -471,13 +479,20 @@ HostAgentFirst = @{
 ```
 
 The package script copies host-specific SQL files into the active profile data
-folder when the new layout is used, and appends them after the neutral OMP
-initialization scripts. Module-definition source files normally live at each
+folder and adds those files as separate bootstrap SQL steps after the neutral
+OMP initialization script. Module-definition source files normally live at each
 module root and are listed in `omp-components.json`; the package script copies
 module definitions into `data/global/module-definitions`. Additional artifact
 files are copied into `data/global/artifacts` and listed in the matching config
 file. The installer executable is unchanged and only the shared data/config
 profile differs between environments.
+
+Artifact source paths in a bootstrap config can also be written relative to the
+selected data level, for example `artifacts/<package>.zip`. The bootstrapper
+looks below `data/profiles/<config-file-name>` first and then falls back to
+`data/global`. Use that only when the outer artifact package needs
+environment-specific configuration files; the inner binary artifact should stay
+the same across environments.
 
 For example, a protected VGR package can set:
 
