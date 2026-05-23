@@ -1839,6 +1839,7 @@ button {
     gap: 14px;
 }
 
+.admin-add-button,
 .portal-entry-add-button {
     width: 34px;
     min-width: 34px;
@@ -1849,6 +1850,7 @@ button {
     font-size: 24px;
     font-weight: 700;
     line-height: 1;
+    text-decoration: none;
 }
 
 .portal-entry-create-panel > summary {

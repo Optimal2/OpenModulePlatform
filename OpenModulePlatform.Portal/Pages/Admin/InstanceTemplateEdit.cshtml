@@ -23,33 +23,18 @@
 }
 
 <section class="card section-card section-card--wide">
-    <div class="detail-grid">
-        <div>
-            <div class="muted">@L["Installation profile"]</div>
-            <span>@Model.Template.DisplayName</span>
-        </div>
-        <div>
-            <div class="muted">@L["Installation profile key"]</div>
-            <code>@Model.Template.TemplateKey</code>
-        </div>
-        <div>
-            <div class="muted">@L["Enabled"]</div>
-            <span class="pill">@(Model.Template.IsEnabled ? L["Enabled"] : L["Disabled"])</span>
-        </div>
-        <div>
-            <div class="muted">@L["Description"]</div>
-            <span>@Model.Template.Description</span>
-        </div>
-    </div>
-</section>
-
-<section class="card section-card section-card--wide">
     <div class="section-heading-row">
         <div>
             <h3>@L["Hosts"]</h3>
             <p class="muted">@L["Hosts define the host keys that belong to this installation. Concrete machines report in with matching host keys."]</p>
         </div>
-        <a class="action-link" href="~/admin/instancetemplatehostedit?templateId=@Model.Template.InstanceTemplateId">@L["Add host"]</a>
+        <a class="action-link admin-add-button"
+           href="~/admin/instancetemplatehostedit?templateId=@Model.Template.InstanceTemplateId"
+           title="@L["Add host"]"
+           aria-label="@L["Add host"]">
+            <span aria-hidden="true">+</span>
+            <span class="visually-hidden">@L["Add host"]</span>
+        </a>
     </div>
 
     @if (Model.Hosts.Count == 0)
@@ -99,7 +84,13 @@
             <h3>@L["Module instances"]</h3>
             <p class="muted">@L["Module instances are desired module slots for this installation. Desired apps attach to them before HostAgent creates runtime module instances."]</p>
         </div>
-        <a class="action-link" href="~/admin/instancetemplatemoduleedit?templateId=@Model.Template.InstanceTemplateId">@L["Add module instance"]</a>
+        <a class="action-link admin-add-button"
+           href="~/admin/instancetemplatemoduleedit?templateId=@Model.Template.InstanceTemplateId"
+           title="@L["Add module instance"]"
+           aria-label="@L["Add module instance"]">
+            <span aria-hidden="true">+</span>
+            <span class="visually-hidden">@L["Add module instance"]</span>
+        </a>
     </div>
 
     @if (Model.Modules.Count == 0)
@@ -147,7 +138,13 @@
             <h3>@L["Desired apps"]</h3>
             <p class="muted">@L["Change versions, placement and desired runtime policy here. HostAgent updates the concrete app instances after its next cycle."]</p>
         </div>
-        <a class="action-link" href="~/admin/instancetemplateappedit?templateId=@Model.Template.InstanceTemplateId">@L["Add desired app"]</a>
+        <a class="action-link admin-add-button"
+           href="~/admin/instancetemplateappedit?templateId=@Model.Template.InstanceTemplateId"
+           title="@L["Add desired app"]"
+           aria-label="@L["Add desired app"]">
+            <span aria-hidden="true">+</span>
+            <span class="visually-hidden">@L["Add desired app"]</span>
+        </a>
     </div>
 
     @if (Model.Apps.Count == 0)
@@ -223,7 +220,7 @@
                         <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
                         <td><span class="pill">@row.DesiredState</span></td>
                         <td>
-                            <div class="stacked-actions">
+                            <div class="admin-icon-actions">
                                 <a class="action-link admin-icon-button admin-icon-button--edit"
                                    href="~/admin/instancetemplateappedit?id=@row.InstanceTemplateAppInstanceId"
                                    title="@L["Edit desired state"]"
@@ -235,8 +232,13 @@
                                       asp-route-id="@row.InstanceTemplateAppInstanceId"
                                       asp-route-templateId="@Model.Template.InstanceTemplateId"
                                       class="inline-form"
-                                      onsubmit="return confirm('@L["Remove this desired app from the installation?"]');">
-                                    <button type="submit" class="btn btn-link-danger">@L["Remove desired app"]</button>
+                                      data-confirm-submit="@L["Remove this desired app from the installation?"]">
+                                    <button type="submit"
+                                            class="btn-link-danger admin-icon-button admin-icon-button--delete"
+                                            title="@L["Remove desired app"]"
+                                            aria-label="@L["Remove desired app"]">
+                                        <span class="visually-hidden">@L["Remove desired app"]</span>
+                                    </button>
                                 </form>
                             </div>
                         </td>
@@ -248,7 +250,16 @@
     }
 </section>
 
-<div class="toolbar">
-    <a class="action-link" href="~/admin">@L["Back to admin overview"]</a>
-    <a class="action-link" href="~/admin/appinstances">@L["View materialized app instances"]</a>
-</div>
+<script>
+    document.addEventListener("submit", event => {
+        const form = event.target.closest("[data-confirm-submit]");
+        if (!form) {
+            return;
+        }
+
+        const message = form.dataset.confirmSubmit || "";
+        if (message && !window.confirm(message)) {
+            event.preventDefault();
+        }
+    });
+</script>
