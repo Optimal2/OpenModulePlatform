@@ -3745,7 +3745,7 @@ VALUES
             "start=",
             "auto",
             "DisplayName=",
-            hostAgent.DisplayName
+            ResolveSystemServiceDisplayName(hostAgent.DisplayName, hostAgent.ServiceName)
         };
 
         if (!string.IsNullOrWhiteSpace(hostAgent.ServiceAccountName))
@@ -3777,6 +3777,25 @@ VALUES
         {
             RunProcess(GetScPath(), ["description", hostAgent.ServiceName, hostAgent.Description]);
         }
+    }
+
+    private static string ResolveSystemServiceDisplayName(string configuredDisplayName, string serviceName)
+    {
+        var displayName = string.IsNullOrWhiteSpace(configuredDisplayName)
+            ? serviceName.Trim()
+            : configuredDisplayName.Trim();
+
+        if (displayName.StartsWith("OMP", StringComparison.OrdinalIgnoreCase))
+        {
+            return displayName;
+        }
+
+        if (displayName.StartsWith("OpenModulePlatform ", StringComparison.OrdinalIgnoreCase))
+        {
+            return "OMP " + displayName["OpenModulePlatform ".Length..];
+        }
+
+        return "OMP " + displayName;
     }
 
     private static void WaitForServiceState(string serviceName, string expectedState, TimeSpan timeout)
@@ -4368,7 +4387,7 @@ internal sealed class HostAgentInstallOptions
 
     public List<string> AdditionalServiceNamesToRemove { get; set; } = [];
 
-    public string DisplayName { get; set; } = "OpenModulePlatform HostAgent";
+    public string DisplayName { get; set; } = "OMP HostAgent";
 
     public string Description { get; set; } = "OpenModulePlatform artifact provisioning agent.";
 

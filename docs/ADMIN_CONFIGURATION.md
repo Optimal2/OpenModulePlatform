@@ -78,6 +78,10 @@ Deployment configs can seed or update them through `ConfigSettings`. VGR uses
 `EMP` as the platform name, while the local developer install can use `LOMP` to
 make branding substitutions easy to verify. Technical identifiers, permission
 names, schemas, cookies, and assembly names keep their stable OMP names.
+Windows service names, Windows service display names, IIS app-pool names, table
+names, and other system-facing identifiers also keep OMP naming. Customer or
+environment branding is user-facing only and must not rename operational
+objects that technicians sort, script, monitor, or troubleshoot.
 
 Portal administrators can maintain the concrete values from
 `/admin/configsettings`. The page intentionally does not allow editing the list

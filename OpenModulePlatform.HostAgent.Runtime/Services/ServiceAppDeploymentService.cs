@@ -102,6 +102,8 @@ public sealed class ServiceAppDeploymentService
             {
                 if (ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
                 {
+                    EnsureWindowsService(deployment, serviceName, targetExecutablePath);
+
                     var identityCheck = await EnsureServiceIdentityAsync(
                         settings,
                         deployment,
@@ -312,7 +314,7 @@ public sealed class ServiceAppDeploymentService
         }
 
         var binaryPath = Quote(executablePath);
-        var displayName = string.IsNullOrWhiteSpace(deployment.DisplayName) ? serviceName : deployment.DisplayName.Trim();
+        var displayName = ResolveServiceDisplayName(deployment, serviceName);
         var description = string.IsNullOrWhiteSpace(deployment.Description)
             ? $"OMP service app instance {deployment.AppInstanceKey}."
             : deployment.Description.Trim();
@@ -343,6 +345,17 @@ public sealed class ServiceAppDeploymentService
         }
 
         RunScChecked("description", serviceName, description);
+    }
+
+    private static string ResolveServiceDisplayName(ServiceAppDeploymentDescriptor deployment, string serviceName)
+    {
+        var displayName = string.IsNullOrWhiteSpace(deployment.DisplayName)
+            ? serviceName
+            : deployment.DisplayName.Trim();
+
+        return displayName.StartsWith("OMP", StringComparison.OrdinalIgnoreCase)
+            ? displayName
+            : $"OMP {displayName}";
     }
 
     private async Task<ServiceIdentityCheckResult> EnsureServiceIdentityAsync(
