@@ -236,8 +236,8 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
                 T("Choose either one specific host or one host role, not both."));
         }
 
-        if (Input.TargetHostTemplateId.HasValue
-            && !HostRoleOptions.Any(option => string.Equals(option.Value, Input.TargetHostTemplateId.Value.ToString(), StringComparison.Ordinal)))
+        if (Input.TargetHostTemplateId is int targetHostTemplateId
+            && !HostRoleOptions.Any(option => string.Equals(option.Value, targetHostTemplateId.ToString(), StringComparison.Ordinal)))
         {
             ModelState.AddModelError(
                 nameof(Input.TargetHostTemplateId),

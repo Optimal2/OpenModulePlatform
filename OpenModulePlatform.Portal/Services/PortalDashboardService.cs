@@ -400,12 +400,14 @@ ORDER BY w.title,
             }
         }
 
-        foreach (var definition in definitions.Values.ToArray())
+        var inaccessibleWidgetIds = definitions.Values
+            .Where(definition => !CanAccessWidget(definition.WidgetId, restrictions, roleIds, permissions))
+            .Select(definition => definition.WidgetId)
+            .ToArray();
+
+        foreach (var widgetId in inaccessibleWidgetIds)
         {
-            if (!CanAccessWidget(definition.WidgetId, restrictions, roleIds, permissions))
-            {
-                definitions.Remove(definition.WidgetId);
-            }
+            definitions.Remove(widgetId);
         }
 
         return definitions;

@@ -210,7 +210,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
             row.PackageType,
             row.TargetName,
             row.Version);
-        var tempPackagePath = Path.Combine(
+        var tempPackagePath = Path.Join(
             Path.GetTempPath(),
             "OpenModulePlatform",
             "ArtifactPackageExports",
@@ -305,7 +305,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
     private static string ResolveUnderRoot(string rootPath, string relativePath)
     {
         var fullRoot = Path.GetFullPath(rootPath);
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;

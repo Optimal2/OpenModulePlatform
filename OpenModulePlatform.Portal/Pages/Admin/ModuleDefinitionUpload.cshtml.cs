@@ -227,15 +227,7 @@ public sealed class ModuleDefinitionUploadModel : OmpPortalPageModel
             return null;
         }
 
-        foreach (var property in obj)
-        {
-            if (property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                return property.Value;
-            }
-        }
-
-        return null;
+        return obj.FirstOrDefault(property => property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase)).Value;
     }
 
     private static string GetJsonStringProperty(JsonNode? node, string propertyName)

@@ -467,14 +467,14 @@ public sealed class WebAppDeploymentService
         string appPoolName,
         CancellationToken cancellationToken)
     {
-        // Keep this loop explicit because the first matching override may require asynchronous password resolution.
-        foreach (var key in ResolveIisAppPoolOverrideKeys(deployment, appPoolName))
+        var configuredOverride = ResolveIisAppPoolOverrideKeys(deployment, appPoolName)
+            .Select(key => TryGetIisAppPoolIdentityOverride(settings, key, out var identity)
+                ? identity
+                : null)
+            .FirstOrDefault(identity => identity is not null && HasConfiguredIisAppPoolIdentity(identity));
+        if (configuredOverride is not null)
         {
-            if (TryGetIisAppPoolIdentityOverride(settings, key, out var identity)
-                && HasConfiguredIisAppPoolIdentity(identity))
-            {
-                return await ResolveStoredIisAppPoolPasswordAsync(identity, cancellationToken);
-            }
+            return await ResolveStoredIisAppPoolPasswordAsync(configuredOverride, cancellationToken);
         }
 
         return await ResolveDefaultIisAppPoolIdentityAsync(settings, cancellationToken);
@@ -558,14 +558,13 @@ public sealed class WebAppDeploymentService
             return true;
         }
 
-        foreach (var pair in overrides)
+        var pair = overrides.FirstOrDefault(pair =>
+            pair.Value is not null
+            && string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase));
+        if (pair.Value is not null)
         {
-            if (pair.Value is not null
-                && string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
-            {
-                identity = pair.Value;
-                return true;
-            }
+            identity = pair.Value;
+            return true;
         }
 
         identity = new HostAgentIisAppPoolIdentitySettings();
@@ -620,7 +619,7 @@ public sealed class WebAppDeploymentService
         WebAppDeploymentDescriptor deployment)
     {
         Directory.CreateDirectory(targetPath);
-        var path = Path.Combine(targetPath, "app_offline.htm");
+        var path = Path.Join(targetPath, "app_offline.htm");
         var content = $"""
 <!doctype html>
 <html lang="en">

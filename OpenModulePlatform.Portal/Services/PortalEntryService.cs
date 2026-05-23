@@ -126,16 +126,12 @@ public sealed class PortalEntryService
         }
 
         var entriesByKey = entries.ToDictionary(entry => entry.EntryKey, StringComparer.OrdinalIgnoreCase);
-        var favorites = new List<PortalEntry>();
-        foreach (var entryKey in await GetNavigationFavoriteEntryKeysAsync(userId, ct))
-        {
-            if (favoriteEntryKeys.Contains(entryKey) && entriesByKey.TryGetValue(entryKey, out var entry))
-            {
-                favorites.Add(entry);
-            }
-        }
-
-        return favorites;
+        return (await GetNavigationFavoriteEntryKeysAsync(userId, ct))
+            .Where(favoriteEntryKeys.Contains)
+            .Select(entryKey => entriesByKey.TryGetValue(entryKey, out var entry) ? entry : null)
+            .Where(entry => entry is not null)
+            .Select(entry => entry!)
+            .ToArray();
     }
 
     public async Task<IReadOnlyList<PortalEntryAdminRow>> GetAdminRowsAsync(CancellationToken ct)
@@ -1012,14 +1008,10 @@ ORDER BY pe.default_sort_order,
 
     private static bool HasInferredAdminAccess(PortalAppEntry app, IReadOnlySet<string> permissions)
     {
-        var candidatePermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var permission in app.RequiredPermissions)
-        {
-            if (permission.EndsWith(".View", StringComparison.OrdinalIgnoreCase))
-            {
-                candidatePermissions.Add($"{permission[..^5]}.Admin");
-            }
-        }
+        var candidatePermissions = app.RequiredPermissions
+            .Where(permission => permission.EndsWith(".View", StringComparison.OrdinalIgnoreCase))
+            .Select(permission => $"{permission[..^5]}.Admin")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         candidatePermissions.Add($"{app.AppKey}.Admin");
         candidatePermissions.Add($"{app.AppInstanceKey}.Admin");

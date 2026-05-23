@@ -236,7 +236,7 @@ public sealed class HostAgentSelfUpgradeService
         HostAgentUpgradeDescriptor desired,
         string serviceName)
     {
-        var targetSettingsPath = Path.Combine(installPath, "appsettings.Production.json");
+        var targetSettingsPath = Path.Join(installPath, "appsettings.Production.json");
         var json = LoadCurrentSettingsJson() ?? new JsonObject();
         var hostAgent = GetOrCreateObject(json, "HostAgent");
         hostAgent["ServiceName"] = serviceName;
@@ -328,12 +328,12 @@ public sealed class HostAgentSelfUpgradeService
 
     private static string ResolveCredentialStoreFilePath(HostAgentCredentialStoreSettings settings)
         => string.IsNullOrWhiteSpace(settings.FilePath)
-            ? Path.Combine(AppContext.BaseDirectory, "hostagent.credentials.json")
+            ? Path.Join(AppContext.BaseDirectory, "hostagent.credentials.json")
             : settings.FilePath.Trim();
 
     private static void WriteNormalSettings(string installPath, string serviceName)
     {
-        var targetSettingsPath = Path.Combine(installPath, "appsettings.Production.json");
+        var targetSettingsPath = Path.Join(installPath, "appsettings.Production.json");
         if (!File.Exists(targetSettingsPath))
         {
             return;
@@ -358,22 +358,13 @@ public sealed class HostAgentSelfUpgradeService
 
     private static JsonObject? LoadCurrentSettingsJson()
     {
-        foreach (var fileName in new[] { "appsettings.Production.json", "appsettings.json" })
-        {
-            var path = Path.Join(AppContext.BaseDirectory, fileName);
-            if (!File.Exists(path))
-            {
-                continue;
-            }
-
-            var node = JsonNode.Parse(File.ReadAllText(path));
-            if (node is JsonObject obj)
-            {
-                return obj.DeepClone().AsObject();
-            }
-        }
-
-        return null;
+        return new[] { "appsettings.Production.json", "appsettings.json" }
+            .Select(fileName => Path.Join(AppContext.BaseDirectory, fileName))
+            .Where(File.Exists)
+            .Select(path => JsonNode.Parse(File.ReadAllText(path)))
+            .OfType<JsonObject>()
+            .Select(obj => obj.DeepClone().AsObject())
+            .FirstOrDefault();
     }
 
     private static JsonObject GetOrCreateObject(JsonObject parent, string propertyName)
@@ -390,7 +381,7 @@ public sealed class HostAgentSelfUpgradeService
 
     private static string FindHostAgentExecutable(string root)
     {
-        var direct = Path.Combine(root, "OpenModulePlatform.HostAgent.WindowsService.exe");
+        var direct = Path.Join(root, "OpenModulePlatform.HostAgent.WindowsService.exe");
         if (File.Exists(direct))
         {
             return direct;

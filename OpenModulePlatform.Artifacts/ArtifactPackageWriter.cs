@@ -27,7 +27,7 @@ public sealed class ArtifactPackageWriter
             throw new DirectoryNotFoundException($"Artifact payload directory was not found: {payloadDirectoryPath}");
         }
 
-        var tempPayloadZipPath = Path.Combine(
+        var tempPayloadZipPath = Path.Join(
             Path.GetTempPath(),
             "OpenModulePlatform",
             "ArtifactPackages",
