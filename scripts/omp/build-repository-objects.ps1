@@ -1,0 +1,294 @@
+<#
+.SYNOPSIS
+Builds portable OMP objects from a repository manifest.
+
+.DESCRIPTION
+Reads a repository's omp-components.json and writes the module definition JSON
+files plus selected artifact package zips to a common output shape:
+
+  module-definitions/
+  artifacts/
+
+Runtime/customer configuration is supplied as command-line mappings instead of
+being stored in the source repository:
+
+  -ArtifactConfigurationFile 'component-key:relative/path.ext=C:\secure\file.ext'
+
+Point OutputRoot at an installer package's data/global folder to refresh that
+package library directly.
+#>
+[CmdletBinding()]
+param(
+    [string]$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [string]$OutputRoot = '',
+    [string]$OmpRepositoryRoot = '',
+    [string[]]$ComponentKey = @(),
+    [switch]$AllComponents,
+    [switch]$BuildArtifacts,
+    [string]$Configuration = 'Release',
+    [string[]]$ArtifactConfigurationFile = @()
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function Resolve-PathFromBase {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$BasePath
+    )
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BasePath $Path))
+}
+
+function Find-OmpRepositoryRoot {
+    param(
+        [string]$ConfiguredRoot,
+        [string]$CurrentRepositoryRoot
+    )
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($ConfiguredRoot)) {
+        $candidates += $ConfiguredRoot
+    }
+
+    $candidates += $CurrentRepositoryRoot
+    $parent = Split-Path -Parent $CurrentRepositoryRoot
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        $candidates += (Join-Path $parent 'OpenModulePlatform')
+    }
+
+    foreach ($candidate in $candidates) {
+        $resolved = Resolve-PathFromBase -Path $candidate -BasePath $CurrentRepositoryRoot
+        if (Test-Path -LiteralPath (Join-Path $resolved 'scripts\deployment\new-omp-artifact-package.ps1') -PathType Leaf) {
+            return $resolved
+        }
+    }
+
+    throw 'Could not locate an OpenModulePlatform repository with scripts\deployment\new-omp-artifact-package.ps1.'
+}
+
+function Get-JsonPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)][object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return $property.Value
+}
+
+function Test-ArtifactComponent {
+    param([object]$Component)
+
+    return -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'moduleKey')) `
+        -and -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'appKey')) `
+        -and -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'packageType')) `
+        -and -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'targetName')) `
+        -and -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'version'))
+}
+
+function Get-ArtifactPackageName {
+    param([object]$Component)
+
+    return '{0}__{1}__{2}__{3}__{4}.zip' -f `
+        [string]$Component.moduleKey,
+        [string]$Component.appKey,
+        [string]$Component.packageType,
+        [string]$Component.targetName,
+        [string]$Component.version
+}
+
+function Read-ConfigurationMappings {
+    param([string[]]$Mappings)
+
+    $result = @{}
+    foreach ($mapping in $Mappings) {
+        if ([string]::IsNullOrWhiteSpace($mapping)) {
+            continue
+        }
+
+        $colonIndex = $mapping.IndexOf(':')
+        $equalsIndex = $mapping.IndexOf('=')
+        if ($colonIndex -le 0 -or $equalsIndex -le ($colonIndex + 1) -or $equalsIndex -eq ($mapping.Length - 1)) {
+            throw "ArtifactConfigurationFile entries must use component-key:relative-path=source-path syntax: $mapping"
+        }
+
+        $componentKey = $mapping.Substring(0, $colonIndex).Trim()
+        $relativePath = $mapping.Substring($colonIndex + 1, $equalsIndex - $colonIndex - 1).Trim()
+        $sourcePath = [System.IO.Path]::GetFullPath($mapping.Substring($equalsIndex + 1).Trim())
+
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            throw "Artifact configuration source file was not found: $sourcePath"
+        }
+
+        if (-not $result.ContainsKey($componentKey)) {
+            $result[$componentKey] = [System.Collections.Generic.List[string]]::new()
+        }
+
+        $result[$componentKey].Add("$relativePath=$sourcePath")
+    }
+
+    return $result
+}
+
+function Publish-DotNetComponent {
+    param(
+        [Parameter(Mandatory = $true)][object]$Component,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$BuildRoot,
+        [Parameter(Mandatory = $true)][string]$Configuration
+    )
+
+    $projectPath = [string](Get-JsonPropertyValue -Object $Component -Name 'projectPath')
+    if ([string]::IsNullOrWhiteSpace($projectPath)) {
+        return ''
+    }
+
+    $projectRoot = Resolve-PathFromBase -Path $projectPath -BasePath $RepositoryRoot
+    if (-not (Test-Path -LiteralPath $projectRoot)) {
+        return ''
+    }
+
+    $projectFile = if (Test-Path -LiteralPath $projectRoot -PathType Leaf) {
+        $projectRoot
+    }
+    else {
+        @(Get-ChildItem -LiteralPath $projectRoot -Filter '*.csproj' -File | Sort-Object Name | Select-Object -First 1).FullName
+    }
+
+    if ([string]::IsNullOrWhiteSpace($projectFile)) {
+        return ''
+    }
+
+    $outputPath = Join-Path $BuildRoot ([string]$Component.componentKey)
+    & dotnet publish $projectFile -c $Configuration -o $outputPath | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet publish failed for component '$($Component.componentKey)'."
+    }
+
+    return $outputPath
+}
+
+function Remove-RuntimeConfigurationFilesFromFolder {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    Get-ChildItem -LiteralPath $Path -File -Recurse | Where-Object {
+        [string]::Equals($_.Name, 'appsettings.json', [StringComparison]::OrdinalIgnoreCase) -or
+        ($_.Name.StartsWith('appsettings.', [StringComparison]::OrdinalIgnoreCase) -and $_.Name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase))
+    } | Remove-Item -Force
+}
+
+$repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
+$manifestPath = Join-Path $repositoryRoot 'omp-components.json'
+if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw "Component manifest was not found: $manifestPath"
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    $OutputRoot = Join-Path $repositoryRoot 'artifacts\omp-objects'
+}
+$outputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
+$definitionsRoot = Join-Path $outputRoot 'module-definitions'
+$artifactsRoot = Join-Path $outputRoot 'artifacts'
+New-Item -ItemType Directory -Path $definitionsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $artifactsRoot -Force | Out-Null
+
+$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+foreach ($definition in @($manifest.moduleDefinitions)) {
+    if ($null -eq $definition) {
+        continue
+    }
+
+    $definitionPath = Resolve-PathFromBase -Path ([string]$definition.path) -BasePath $repositoryRoot
+    if (-not (Test-Path -LiteralPath $definitionPath -PathType Leaf)) {
+        throw "Module definition file was not found: $definitionPath"
+    }
+
+    Copy-Item -LiteralPath $definitionPath -Destination (Join-Path $definitionsRoot ([System.IO.Path]::GetFileName($definitionPath))) -Force
+}
+
+$selectedComponents = @($manifest.components | Where-Object { Test-ArtifactComponent -Component $_ })
+if ($ComponentKey.Count -gt 0) {
+    $keySet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($key in $ComponentKey) {
+        [void]$keySet.Add($key)
+    }
+
+    $selectedComponents = @($selectedComponents | Where-Object { $keySet.Contains([string]$_.componentKey) })
+}
+elseif (-not $AllComponents) {
+    $selectedComponents = @()
+}
+
+$configurationMappings = Read-ConfigurationMappings -Mappings $ArtifactConfigurationFile
+$ompRoot = Find-OmpRepositoryRoot -ConfiguredRoot $OmpRepositoryRoot -CurrentRepositoryRoot $repositoryRoot
+$newArtifactPackageScript = Join-Path $ompRoot 'scripts\deployment\new-omp-artifact-package.ps1'
+$buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-repository-objects-' + [Guid]::NewGuid().ToString('N'))
+
+try {
+    foreach ($component in $selectedComponents) {
+        $packageName = Get-ArtifactPackageName -Component $component
+        $existingPackage = @(
+            Join-Path $repositoryRoot "artifacts\$packageName"
+            Join-Path $repositoryRoot "artifacts\archive\$packageName"
+            Join-Path $artifactsRoot $packageName
+        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+
+        if (-not [string]::IsNullOrWhiteSpace($existingPackage) -and -not $BuildArtifacts) {
+            Copy-Item -LiteralPath $existingPackage -Destination (Join-Path $artifactsRoot $packageName) -Force
+            continue
+        }
+
+        $payloadPath = Publish-DotNetComponent `
+            -Component $component `
+            -RepositoryRoot $repositoryRoot `
+            -BuildRoot $buildRoot `
+            -Configuration $Configuration
+
+        if ([string]::IsNullOrWhiteSpace($payloadPath)) {
+            if (-not [string]::IsNullOrWhiteSpace($existingPackage)) {
+                Copy-Item -LiteralPath $existingPackage -Destination (Join-Path $artifactsRoot $packageName) -Force
+                continue
+            }
+
+            Write-Warning "Skipping component '$($component.componentKey)' because no existing package was found and no publishable .NET projectPath is configured."
+            continue
+        }
+
+        Remove-RuntimeConfigurationFilesFromFolder -Path $payloadPath
+
+        $configurationFileArgs = @()
+        if ($configurationMappings.ContainsKey([string]$component.componentKey)) {
+            $configurationFileArgs = @($configurationMappings[[string]$component.componentKey])
+        }
+
+        & $newArtifactPackageScript `
+            -ModuleKey ([string]$component.moduleKey) `
+            -AppKey ([string]$component.appKey) `
+            -PackageType ([string]$component.packageType) `
+            -TargetName ([string]$component.targetName) `
+            -Version ([string]$component.version) `
+            -PayloadPath $payloadPath `
+            -OutputPath $artifactsRoot `
+            -ConfigurationFile $configurationFileArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Artifact package creation failed for component '$($component.componentKey)'."
+        }
+    }
+}
+finally {
+    Remove-Item -LiteralPath $buildRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host "OMP module definitions: $definitionsRoot"
+Write-Host "OMP artifact packages:   $artifactsRoot"
