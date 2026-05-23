@@ -3,22 +3,22 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Desired topology"]</div>
-        <h2>@L["Instance templates"]</h2>
-        <p class="lede">@L["Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows."]</p>
+        <div class="eyebrow">@L["Installation"]</div>
+        <h2>@L["Installation profiles"]</h2>
+        <p class="lede">@L["The database can store multiple installation profiles, but the current Portal workflow uses one default installation. Use System > Installation for normal administration."]</p>
     </div>
 </section>
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">@L["No instance templates found."]</div>
+    <div class="empty-state">@L["No installation profiles found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>@L["Template key"]</th>
+                <th>@L["Installation profile key"]</th>
                 <th>@L["Display name"]</th>
                 <th>@L["Enabled"]</th>
                 <th>@L["Description"]</th>
@@ -33,7 +33,7 @@ else
                 <td>@row.DisplayName</td>
                 <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
                 <td>@row.Description</td>
-                <td><a class="action-link" href="~/admin/instancetemplateedit?id=@row.InstanceTemplateId">@L["Open template"]</a></td>
+                <td><a class="action-link" href="~/admin/instancetemplateedit?id=@row.InstanceTemplateId">@L["Open installation"]</a></td>
             </tr>
         }
         </tbody>

@@ -10,7 +10,7 @@ using OpenModulePlatform.Web.Shared.Services;
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
 /// <summary>
-/// Shows the desired topology stored in an instance template.
+/// Shows the desired topology stored in the current installation profile.
 /// This is the admin-facing source of truth that HostAgent materializes into runtime rows.
 /// </summary>
 public sealed class InstanceTemplateEditModel : OmpPortalPageModel
@@ -55,7 +55,7 @@ public sealed class InstanceTemplateEditModel : OmpPortalPageModel
         Modules = await _repo.GetInstanceTemplateModulesAsync(id, ct);
         Apps = await _repo.GetInstanceTemplateAppsAsync(id, ct);
 
-        SetTitles("Instance template");
+        SetTitles("Installation");
         return Page();
     }
 

@@ -3,9 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Desired topology"]</div>
-        <h2>@(Model.IsCreate ? L["Add template host"] : L["Edit template host"])</h2>
-        <p class="lede">@L["Template hosts define the host keys that HostAgent materializes for instances using this template."]</p>
+        <div class="eyebrow">@L["Installation"]</div>
+        <h2>@(Model.IsCreate ? L["Add host"] : L["Edit host"])</h2>
+        <p class="lede">@L["Hosts define the host keys that HostAgent materializes for this installation."]</p>
     </div>
 </section>
 
@@ -14,11 +14,11 @@
     <section class="card section-card section-card--wide">
         <div class="detail-grid">
             <div>
-                <div class="muted">@L["Instance template"]</div>
+                <div class="muted">@L["Installation"]</div>
                 <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Template.InstanceTemplateId">@Model.Template.DisplayName</a>
             </div>
             <div>
-                <div class="muted">@L["Template key"]</div>
+                <div class="muted">@L["Installation profile key"]</div>
                 <code>@Model.Template.TemplateKey</code>
             </div>
         </div>
@@ -43,7 +43,7 @@
         <div class="form-field">
             <label asp-for="Input.HostTemplateId"></label>
             <select asp-for="Input.HostTemplateId">
-                <option value="">@L["Select host template"]</option>
+                <option value="">@L["Select host role"]</option>
                 @foreach (var option in Model.HostTemplateOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
@@ -89,8 +89,8 @@
     </div>
 
     <div class="toolbar">
-        <button type="submit">@L["Save template host"]</button>
-        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to template"]</a>
+        <button type="submit">@L["Save host"]</button>
+        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to installation"]</a>
     </div>
 </form>
 
@@ -100,11 +100,11 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Remove this template host? Desired app rows using it must be moved or removed first."]');">
+        onsubmit="return confirm('@L["Remove this host from the installation? Desired app rows using it must be moved or removed first."]');">
         <input type="hidden" asp-for="Input.InstanceTemplateHostId" />
         <input type="hidden" asp-for="Input.InstanceTemplateId" />
         <h3>@L["Danger zone"]</h3>
-        <p class="muted">@L["Removing a template host does not delete existing runtime hosts. Move or remove desired app rows that are pinned to this host first."]</p>
-        <button type="submit" class="btn btn-danger">@L["Remove template host"]</button>
+        <p class="muted">@L["Removing a host does not delete existing runtime hosts. Move or remove desired app rows that are pinned to this host first."]</p>
+        <button type="submit" class="btn btn-danger">@L["Remove host"]</button>
     </form>
 }

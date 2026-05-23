@@ -3,16 +3,16 @@
 
 @if (Model.Template is null)
 {
-    <div class="empty-state">@L["Instance template was not found."]</div>
+    <div class="empty-state">@L["Installation topology was not found."]</div>
     return;
 }
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Desired topology"]</div>
-        <h2>@Model.Template.DisplayName</h2>
+        <div class="eyebrow">@L["Installation"]</div>
+        <h2>@L["Installation"]</h2>
         <p class="lede">
-            @L["This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances."]
+            @L["This page is the desired state for the current OMP installation. HostAgent materializes these rows into concrete hosts, module instances and app instances."]
         </p>
     </div>
 </section>
@@ -25,7 +25,11 @@
 <section class="card section-card section-card--wide">
     <div class="detail-grid">
         <div>
-            <div class="muted">@L["Template key"]</div>
+            <div class="muted">@L["Installation profile"]</div>
+            <span>@Model.Template.DisplayName</span>
+        </div>
+        <div>
+            <div class="muted">@L["Installation profile key"]</div>
             <code>@Model.Template.TemplateKey</code>
         </div>
         <div>
@@ -42,15 +46,15 @@
 <section class="card section-card section-card--wide">
     <div class="section-heading-row">
         <div>
-            <h3>@L["Template hosts"]</h3>
-            <p class="muted">@L["Template hosts define the host keys that should exist inside each OMP instance using this template. Concrete hosts report in with the same host key."]</p>
+            <h3>@L["Hosts"]</h3>
+            <p class="muted">@L["Hosts define the host keys that belong to this installation. Concrete machines report in with matching host keys."]</p>
         </div>
-        <a class="action-link" href="~/admin/instancetemplatehostedit?templateId=@Model.Template.InstanceTemplateId">@L["Add template host"]</a>
+        <a class="action-link" href="~/admin/instancetemplatehostedit?templateId=@Model.Template.InstanceTemplateId">@L["Add host"]</a>
     </div>
 
     @if (Model.Hosts.Count == 0)
     {
-        <div class="empty-state">@L["No template hosts found."]</div>
+        <div class="empty-state">@L["No hosts found."]</div>
     }
     else
     {
@@ -58,7 +62,7 @@
             <thead>
                 <tr>
                     <th>@L["Host key"]</th>
-                    <th>@L["Host template"]</th>
+                    <th>@L["Host role"]</th>
                     <th>@L["Display name"]</th>
                     <th>@L["Environment"]</th>
                     <th>@L["Enabled"]</th>
@@ -92,15 +96,15 @@
 <section class="card section-card section-card--wide">
     <div class="section-heading-row">
         <div>
-            <h3>@L["Template module instances"]</h3>
-            <p class="muted">@L["Module instances are materialized before desired app rows, so apps have a stable module slot to attach to."]</p>
+            <h3>@L["Module instances"]</h3>
+            <p class="muted">@L["Module instances are desired module slots for this installation. Desired apps attach to them before HostAgent creates runtime module instances."]</p>
         </div>
-        <a class="action-link" href="~/admin/instancetemplatemoduleedit?templateId=@Model.Template.InstanceTemplateId">@L["Add template module instance"]</a>
+        <a class="action-link" href="~/admin/instancetemplatemoduleedit?templateId=@Model.Template.InstanceTemplateId">@L["Add module instance"]</a>
     </div>
 
     @if (Model.Modules.Count == 0)
     {
-        <div class="empty-state">@L["No template module instances found."]</div>
+        <div class="empty-state">@L["No module instances found."]</div>
     }
     else
     {
@@ -218,7 +222,7 @@
                                       asp-route-id="@row.InstanceTemplateAppInstanceId"
                                       asp-route-templateId="@Model.Template.InstanceTemplateId"
                                       class="inline-form"
-                                      onsubmit="return confirm('@L["Remove this desired app from the template?"]');">
+                                      onsubmit="return confirm('@L["Remove this desired app from the installation?"]');">
                                     <button type="submit" class="btn btn-link-danger">@L["Remove desired app"]</button>
                                 </form>
                             </div>

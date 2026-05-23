@@ -129,7 +129,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
             {
                 ModelState.AddModelError(
                     string.Empty,
-                    T("This app instance is managed by an instance template. Change the desired template app instead and let HostAgent update the runtime row."));
+                    T("This app instance is managed by the installation topology. Change the desired app from System > Installation and let HostAgent update the runtime row."));
                 return Page();
             }
         }

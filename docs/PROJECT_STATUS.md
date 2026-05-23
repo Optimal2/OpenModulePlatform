@@ -22,15 +22,18 @@ The repository is now aligned on `.NET 10`, a pinned .NET 10 SDK line in `global
 - a manager-driven worker example built on the same `AppInstance` model
 - SQL scripts for both core and example setup
 - an implemented Windows worker runtime track with manager, child host, plugin contracts, and runtime observation
+- a HostAgent-first installation topology where one default installation
+  profile is materialized into runtime hosts, module instances, and app
+  instances
 
 ## Areas that are still incomplete
 
-- final template materialization
-- desired topology versus actual runtime reconciliation
-- explicit origin linkage between template objects and materialized objects
-- more complete operational use of the deployment tables
+- deeper desired topology versus actual runtime reconciliation views
+- explicit origin linkage between installation topology rows and materialized objects
+- more complete operational use of the deployment history tables
 - a stronger core-level model for configuration concepts
-- the future HostAgent implementation
+- multi-profile administration when one database must contain several OMP
+  installations
 
 ## Model maturity
 
@@ -42,17 +45,18 @@ The repository is now aligned on `.NET 10`, a pinned .NET 10 SDK line in `global
 - `ModuleInstances` as concrete module instances
 - `AppInstances` as runtime-level app instances
 - Portal-based manual administration and RBAC management
+- one default installation profile as the desired topology surface
+- HostAgent as the host-local artifact and runtime deployment executor
 
 ### Still under design
 
-- the template chain from `InstanceTemplate` to real rows
-- deployment and assignment flows
-- the HostAgent contract
+- explicit origin tracking between installation topology and runtime rows
+- multi-profile deployment and assignment flows
 - richer lifecycle and health semantics for the generic worker runtime
 
 ## Recommended priorities
 
-1. complete the topology and materialization data model
+1. keep System > Installation as the primary desired-topology workflow
 2. clarify desired state versus observed state
-3. implement HostAgent only after those foundations are stable
+3. improve HostAgent drift, rollout, rollback, and status views
 4. continue improving Portal workflows, documentation, and operational guidance

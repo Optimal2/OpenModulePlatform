@@ -144,9 +144,12 @@ RBAC is built on four core tables:
 
 The Portal and module UIs read effective permissions through `RbacService`. `RolePrincipals` can target first-class OMP users with `PrincipalType = 'OmpUser'`, direct AD users with `PrincipalType = 'ADUser'`, large AD groups with `PrincipalType = 'ADGroup'`, or other provider-specific principal types such as `LocalUser`. This lets an administrator grant access to an AD group with many users without creating one `omp.users` row per member.
 
-### Templates and deployment
+### Installation topology and deployment
 
-The following tables already exist:
+The current automation model uses one default installation profile as the
+admin-facing desired state for the OMP installation. The database still uses the
+historical table names and can store more than one profile, but the Portal
+workflow is intentionally scoped to one active installation profile for now:
 
 - `omp.InstanceTemplates`
 - `omp.HostTemplates`
@@ -156,7 +159,13 @@ The following tables already exist:
 - `omp.HostDeploymentAssignments`
 - `omp.HostDeployments`
 
-These show the intended direction, but the full materialization model is not yet complete.
+`InstanceTemplates` is the installation profile. `HostTemplates` is treated as a
+host-role lookup inside that profile, not as a separate visible template layer.
+The rows in `InstanceTemplateHosts`, `InstanceTemplateModuleInstances`, and
+`InstanceTemplateAppInstances` define desired hosts, module instances, desired
+artifact versions, placement, routes, paths, and runtime policy. HostAgent reads
+those rows and materializes concrete `Hosts`, `ModuleInstances`, and
+`AppInstances`, then provisions matching artifacts on each host.
 
 ## Request flow in web applications
 
@@ -193,16 +202,20 @@ These show the intended direction, but the full materialization model is not yet
 
 ## Known limitations
 
-- the template model exists in the schema but is not yet fully operationalized
+- the schema can represent several installation profiles, but Portal currently
+  exposes one default installation profile
 - origin tracking between template rows and materialized runtime rows is not yet explicit
 - `ConfigId` is functional but still semantically thin at the core-model level
 - the Portal administrative workflows are better than before but still table-centric
-- there is not yet a real reconcile or materialization engine between desired topology and actual runtime state
+- deeper drift reporting between desired topology and actual runtime state is
+  still evolving
 
 ## Recommended direction
 
 1. Keep `AppInstance` as the central runtime unit.
-2. Complete the materialization model from templates to real `Hosts`, `ModuleInstances`, and `AppInstances`.
+2. Keep System > Installation as the main desired-topology surface for normal
+   administration.
 3. Make origin tracking explicit in the database.
 4. Clarify desired state versus observed state further.
-5. Build HostAgent only after those pieces are stable.
+5. Add multi-profile support only when there is a concrete need for several OMP
+   installations in one database/runtime set.

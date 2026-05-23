@@ -26,7 +26,7 @@ public sealed class InstanceTemplatesModel : OmpPortalPageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("Instance templates");
+        SetTitles("Installation profiles");
         Rows = await _repo.GetInstanceTemplatesAsync(ct);
         return Page();
     }

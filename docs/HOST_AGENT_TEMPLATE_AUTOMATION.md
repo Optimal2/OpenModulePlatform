@@ -1,105 +1,79 @@
-# HostAgent Template Automation
+# HostAgent Installation Automation
 
-This document tracks the path from the current metadata model to full
-HostAgent-driven deployment automation.
+This document describes the current desired-topology model that HostAgent
+materializes into concrete runtime rows and deployed files.
 
 Artifact versioning and stable identity rules are defined in
-`docs/VERSIONING_AND_IDENTITIES.md`. This automation flow assumes that
-templates use stable text keys for matching and that version changes are made by
-selecting a new artifact in OMP metadata.
+`docs/VERSIONING_AND_IDENTITIES.md`.
 
-## Target Flow
+## Current Model
 
-1. SQL setup and module installers register modules, apps, artifacts, instance
-   templates, host templates, and template app instances.
-2. An OMP instance is assigned an instance template.
-3. Hosts are registered in the instance and assigned host templates.
-4. HostAgent materializes the matching template topology into concrete
-   `omp.ModuleInstances` and `omp.AppInstances` rows for its host.
-5. HostAgent provisions the desired artifacts into the local artifact cache.
-6. Package-type handlers use the cached artifacts to install or update IIS
-   applications, Windows services, and worker plugins.
+The current Portal workflow uses one default installation profile. The database
+table is still named `omp.InstanceTemplates` and the schema can store several
+profiles, but the product currently treats one OMP database/runtime set as one
+OMP installation.
+
+System > Installation is the admin-facing source of truth for:
+
+- desired hosts
+- desired module instances
+- desired app rows
+- desired artifact versions
+- host placement, route, path, and runtime policy
+
+`omp.HostTemplates` remains in the schema, but Portal presents those rows as
+host roles. They are not a separate visible host-template workflow.
+
+## Materialization Flow
+
+1. SQL setup, module definition imports, or module packages register modules,
+   apps, artifacts, and the installation profile rows.
+2. A Portal admin changes desired hosts, module instances, or app versions from
+   System > Installation.
+3. HostAgent reads the desired topology for its configured host key.
+4. HostAgent materializes enabled desired rows into concrete `omp.Hosts`,
+   `omp.ModuleInstances`, and `omp.AppInstances`.
+5. HostAgent provisions desired artifacts into the local artifact cache.
+6. Package-type handlers install or update IIS applications, Windows services,
+   worker hosts, and worker plugins.
 
 ## Implemented Baseline
 
-HostAgent now has `HostAgent:MaterializeTemplates` and
-`HostAgent:ProcessHostDeployments` settings, both enabled by default. At the
-start of each cycle it can claim one pending `omp.HostDeployments` row for its
-configured `HostKey`, materialize that requested host/template combination, and
-mark the deployment as succeeded or failed. It then calls
-`omp.MaterializeInstanceTemplate` for its configured `HostKey` so normal
-template drift is also corrected before artifact provisioning.
+HostAgent runs a reconciliation cycle that can:
 
-Portal or scripts can enqueue a deployment by calling
-`omp.RequestHostDeployment`.
+- materialize installation topology for its configured host
+- provision artifact content from the central artifact store
+- deploy `web-app` artifacts to IIS runtime folders
+- deploy `service-app` artifacts as Windows services
+- deploy worker manager, worker process host, and worker plugin artifacts
+- repair artifact-owned configuration files after deployment
+- record outcomes in `omp.HostAppDeploymentStates`
 
-The stored procedure is intentionally conservative:
-
-- It only materializes enabled instances, templates, modules, apps, hosts, and
-  active host-template assignments.
-- It upserts concrete module and app instances without deleting rows that no
-  longer appear in a template.
-- It updates only metadata fields owned by templates and leaves runtime
-  observation fields intact.
-- It maps template hosts to concrete hosts by matching `HostKey` inside the
-  same OMP instance and by requiring an active `HostDeploymentAssignments` row
-  for the host template.
-
-This closes the first automation gap: HostAgent can now create the concrete
-`AppInstances` that its existing artifact provisioning query already consumes.
-
-HostAgent also has package-type handlers for IIS web apps and Windows service
-apps. When `HostAgent:DeployWebApps` is enabled, provisioned `web-app`
-artifacts are mirrored to the configured IIS runtime folders. When
-`HostAgent:DeployServiceApps` is enabled, provisioned `service-app` artifacts
-are mirrored to service runtime folders and the Windows services are created or
-updated through `sc.exe`. Both handlers record outcomes in
-`omp.HostAppDeploymentStates`. Local runtime configuration, logs, and
-application data are excluded from the mirror by default.
-
-OpenDocViewer, Portal, Content, and iFrame are registered as OMP web
-applications with `web-app` artifacts. Their concrete app instances are
-host-neutral (`HostId = NULL`) so each HostAgent can deploy them locally while
-the portal still presents one logical app entry. This supports both a single
-local development host and multi-node IIS deployments behind one load-balanced
-public URL.
-
-Services, worker runtimes, and web apps that are not behind a load-balanced
-identity should be template-host-specific instead. A single app definition may
-be active once per concrete host, giving each runtime its own `AppInstanceId`,
-but a module instance must not mix host-neutral and host-specific desired rows
-for the same app definition.
+Host-neutral web apps are used for apps that sit behind one load-balanced public
+identity. Runtime apps and web apps without that load-balanced identity should
+be host-specific so each concrete runtime gets its own `AppInstanceId`.
 
 ## Remaining Steps
 
-1. Add Portal actions for previewing and enqueuing host deployments from the
-   template/admin pages.
-2. Improve drift/status views for worker-plugin and worker-host artifacts so
-   operators can see the provisioned WorkerManager, WorkerProcessHost, and
-   plugin paths together.
-3. Add drift detection for IIS apps, Windows services, artifact versions, and
-   runtime paths so operators can see whether a host matches the desired
-   template.
-4. Add rollback and rollout policy metadata: desired artifact version, canary or
-   per-host sequencing, maintenance windows, and restart behavior.
-5. Extend the HostAgent self-upgrade baseline with Portal controls and rollout
-   policy. The runtime can now prepare a versioned HostAgent service and hand
-   over through the `host-agent` artifact path, but operators still need a
-   friendlier admin surface for selecting desired HostAgent versions per host.
-6. Extend Portal admin pages with preview/apply actions for instance templates,
-   host template assignments, and host deployments.
+1. Improve Portal drift/status views so operators can see desired versus
+   observed artifact, IIS, service, and worker state in one place.
+2. Add friendlier Portal controls for HostAgent self-upgrade rollout policy.
+3. Make origin tracking between desired topology rows and materialized runtime
+   rows explicit in the database.
+4. Revisit multiple installation profiles only when there is a concrete need to
+   run several independent OMP installations in one database/runtime set.
 
 ## Script Boundary
 
 Once a host is bootstrapped, regular artifact version changes should flow
 through OMP metadata and HostAgent instead of repeated package installer runs.
-The PowerShell packages still have a role for first install, database schema
-changes, HostAgent installation or repair, IIS site creation, service account
+Installer packages still have a role for first install, database bootstrap,
+HostAgent installation or repair, IIS site creation, service account
 configuration, ACLs, and disaster recovery.
 
 ## Design Boundary
 
-Templates describe desired metadata and placement. HostAgent should be the
-host-local executor. It should not contain customer-specific module rules; module
-installers must keep registering neutral artifacts and template rows that
+Installation topology describes desired metadata and placement. HostAgent is the
+host-local executor. It must not contain customer-specific module rules; module
+definitions and artifact packages must keep registering neutral data that
 HostAgent can consume generically.

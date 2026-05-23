@@ -12,7 +12,7 @@ using OpenModulePlatform.Web.Shared.Services;
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
 /// <summary>
-/// Edits a desired host row on an instance template.
+/// Edits a desired host row on the current installation profile.
 /// </summary>
 public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
 {
@@ -81,7 +81,7 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
         }
 
         await LoadAsync(ct);
-        SetTitles(IsCreate ? "Add template host" : "Edit template host");
+        SetTitles(IsCreate ? "Add host" : "Edit host");
         return Page();
     }
 
@@ -94,7 +94,7 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
         }
 
         await LoadAsync(ct);
-        SetTitles(IsCreate ? "Add template host" : "Edit template host");
+        SetTitles(IsCreate ? "Add host" : "Edit host");
 
         ValidateInput();
         if (!ModelState.IsValid)
@@ -118,7 +118,7 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
                 },
                 ct);
 
-            StatusMessage = IsCreate ? T("Template host added.") : T("Template host updated.");
+            StatusMessage = IsCreate ? T("Host added.") : T("Host updated.");
             return RedirectToPage("/Admin/InstanceTemplateHostEdit", new { id });
         }
         catch (SqlException ex)
@@ -141,13 +141,13 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
         try
         {
             await _repo.DeleteInstanceTemplateHostAsync(Input.InstanceTemplateHostId, ct);
-            StatusMessage = T("Template host removed.");
+            StatusMessage = T("Host removed.");
             return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });
         }
         catch (SqlException ex)
         {
             await LoadAsync(ct);
-            SetTitles("Edit template host");
+            SetTitles("Edit host");
             ModelState.AddModelError(string.Empty, T(ToFriendlySqlMessage(ex)));
             return Page();
         }
@@ -158,7 +158,7 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
         Template = await _repo.GetInstanceTemplateAsync(Input.InstanceTemplateId, ct);
         if (Template is null)
         {
-            ModelState.AddModelError(string.Empty, T("Instance template was not found."));
+            ModelState.AddModelError(string.Empty, T("Installation topology was not found."));
         }
 
         HostTemplateOptions = await _repo.GetHostTemplateOptionsAsync(ct);
@@ -168,12 +168,12 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
     {
         if (Input.InstanceTemplateId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.InstanceTemplateId), T("Select an instance template."));
+            ModelState.AddModelError(nameof(Input.InstanceTemplateId), T("Select an installation."));
         }
 
         if (Input.HostTemplateId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.HostTemplateId), T("Select a host template."));
+            ModelState.AddModelError(nameof(Input.HostTemplateId), T("Select a host role."));
         }
 
         if (!KeyPattern.IsMatch(Input.HostKey ?? string.Empty))
@@ -206,9 +206,9 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
     private static string ToFriendlySqlMessage(SqlException ex)
         => ex.Number switch
         {
-            2601 or 2627 => "A template host with the same key already exists in this template.",
-            547 => "Move or delete desired app rows that use this template host first.",
-            _ => "The template host could not be saved."
+            2601 or 2627 => "A host with the same key already exists in this installation.",
+            547 => "Move or delete desired app rows that use this host first.",
+            _ => "The host could not be saved."
         };
 
     public sealed class InputModel
@@ -218,7 +218,7 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
         public int InstanceTemplateId { get; set; }
 
         [Required]
-        [Display(Name = "Host template")]
+        [Display(Name = "Host role")]
         public int HostTemplateId { get; set; }
 
         [Required]

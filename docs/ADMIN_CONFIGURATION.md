@@ -143,26 +143,36 @@ restrictions, even when the widget moves from module-owned to global or the
 other way around. Use empty `permissionNames` and `roleNames` arrays only when
 the widget should be available to every signed-in OMP user.
 
-### 2. Create or adjust the instance
+### 2. Manage the installation topology
 
-An `Instance` is the highest manual scope in OMP.
+The normal administration surface is System > Installation
+(`/admin/instancetemplateedit?id=1`). It is the desired state for the current
+OMP installation.
 
-It should normally exist before you add:
+The database can store several instance-template rows, but the current Portal
+workflow intentionally uses one default installation profile. Treat one OMP
+database/runtime set as one OMP installation unless a future requirement
+explicitly reintroduces several profiles.
 
-- hosts
-- module instances
-- app instances
+From the installation page, a Portal admin manages:
 
-### 3. Add hosts
+- hosts that belong to the installation
+- module instances that should exist
+- desired apps, including artifact version, host placement, route, install path,
+  and runtime policy
 
-Hosts belong to a specific `Instance`.
+HostAgent materializes that desired topology into the concrete runtime tables:
 
-For a manual installation, this is part of the core runtime model.
-Template-related host rows are not required to make the system function manually.
+- `omp.Hosts`
+- `omp.ModuleInstances`
+- `omp.AppInstances`
+
+`omp.HostTemplates` is still the database name, but Portal presents those rows
+as host roles. They are not a second visible template layer.
 
 If a web app instance uses a relative `RoutePath`, Portal resolves it relative to `Hosts.BaseUrl` when that value is set. When `Hosts.BaseUrl` is empty, Portal assumes the app is reachable through the same public base URL as Portal. Set `Hosts.BaseUrl` to an absolute root URL, including scheme, host, and optional port, only when that host must resolve through a different public base URL.
 
-### 4. Verify or create modules and apps
+### 3. Verify or create modules and apps
 
 This is the definition level of the model.
 
@@ -254,9 +264,9 @@ If the uploaded artifact package declares configuration files, those packaged
 files are registered for the artifact and the previous-version copy is skipped.
 
 The upload form also has an enabled-by-default option to use the uploaded
-artifact immediately. When selected, Portal updates matching desired template
-app rows and already materialized app rows to the new artifact. HostAgent then
-provisions and deploys the version on its next cycle.
+artifact immediately. When selected, Portal updates matching desired
+installation app rows and already materialized app rows to the new artifact.
+HostAgent then provisions and deploys the version on its next cycle.
 
 HostAgent can optionally import portable deployment objects from a local or
 shared folder without a Portal upload. Configure this under
@@ -292,35 +302,17 @@ Typical examples:
 - deployment-specific JSON/XML/text files that are not part of the immutable app
   package
 
-### 5. Create module instances
+## Runtime rows and deployment history
 
-This is where a module definition is placed into a concrete OMP instance.
+The concrete `Hosts`, `ModuleInstances`, and `AppInstances` rows are the
+materialized result of the installation topology. They are useful for
+diagnostics and runtime state, but admins should normally change desired
+versions and placement from System > Installation so HostAgent can reconcile the
+runtime rows consistently.
 
-### 6. Create app instances
-
-This is the most important runtime level for manual operation.
-
-At the `AppInstance` level you specify, among other things:
-
-- which module instance it belongs to
-- which host it runs on
-- which app definition it represents
-- which artifact it uses
-- which route, path, or public URL applies
-- which configuration applies
-- which desired state and verification policy apply
-
-## When the template and deployment pages matter
-
-These areas mainly belong to automation and the future HostAgent flow:
-
-- instance templates
-- host templates
-- template topology
-- host deployment assignments
-- host deployments
-
-For a purely manual installation, those areas can usually be left alone.
+Host deployment assignments and host deployments are retained for deployment
+history and future rollout workflows. They are not a separate day-to-day
+configuration surface for the current one-installation model.
 
 ## Practical guidance
 

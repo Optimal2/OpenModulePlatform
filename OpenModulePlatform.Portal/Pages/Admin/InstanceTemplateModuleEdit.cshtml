@@ -3,9 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Desired topology"]</div>
-        <h2>@(Model.IsCreate ? L["Add template module instance"] : L["Edit template module instance"])</h2>
-        <p class="lede">@L["Template module instances are desired module slots. Desired app rows attach to them before HostAgent creates runtime module instances."]</p>
+        <div class="eyebrow">@L["Installation"]</div>
+        <h2>@(Model.IsCreate ? L["Add module instance"] : L["Edit module instance"])</h2>
+        <p class="lede">@L["Module instances are desired module slots for this installation. Desired app rows attach to them before HostAgent creates runtime module instances."]</p>
     </div>
 </section>
 
@@ -14,11 +14,11 @@
     <section class="card section-card section-card--wide">
         <div class="detail-grid">
             <div>
-                <div class="muted">@L["Instance template"]</div>
+                <div class="muted">@L["Installation"]</div>
                 <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Template.InstanceTemplateId">@Model.Template.DisplayName</a>
             </div>
             <div>
-                <div class="muted">@L["Template key"]</div>
+                <div class="muted">@L["Installation profile key"]</div>
                 <code>@Model.Template.TemplateKey</code>
             </div>
         </div>
@@ -83,8 +83,8 @@
     </div>
 
     <div class="toolbar">
-        <button type="submit">@L["Save template module instance"]</button>
-        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to template"]</a>
+        <button type="submit">@L["Save module instance"]</button>
+        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to installation"]</a>
     </div>
 </form>
 
@@ -94,11 +94,11 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Remove this template module instance? Desired app rows using it must be removed first."]');">
+        onsubmit="return confirm('@L["Remove this module instance from the installation? Desired app rows using it must be removed first."]');">
         <input type="hidden" asp-for="Input.InstanceTemplateModuleInstanceId" />
         <input type="hidden" asp-for="Input.InstanceTemplateId" />
         <h3>@L["Danger zone"]</h3>
-        <p class="muted">@L["Removing a template module instance stops future materialization from this template. Existing runtime rows are not removed by this action."]</p>
-        <button type="submit" class="btn btn-danger">@L["Remove template module instance"]</button>
+        <p class="muted">@L["Removing a module instance stops future materialization from this installation. Existing runtime rows are not removed by this action."]</p>
+        <button type="submit" class="btn btn-danger">@L["Remove module instance"]</button>
     </form>
 }

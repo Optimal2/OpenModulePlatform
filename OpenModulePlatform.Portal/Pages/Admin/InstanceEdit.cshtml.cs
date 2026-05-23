@@ -13,7 +13,7 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 
 /// <summary>
 /// Edits a top-level OMP instance.
-/// The page intentionally treats template linkage as optional because manual setup is a first-class scenario.
+/// The page keeps the historical instance/profile link visible for diagnostics.
 /// </summary>
 public sealed class InstanceEditModel : OmpPortalPageModel
 {
@@ -194,7 +194,7 @@ public sealed class InstanceEditModel : OmpPortalPageModel
         [StringLength(500)]
         public string? Description { get; set; }
 
-        [Display(Name = "Instance template")]
+        [Display(Name = "Installation profile")]
         public int? InstanceTemplateId { get; set; }
 
         [Display(Name = "Enabled")]

@@ -33,17 +33,26 @@ A deployable build product for an app definition, such as a published folder, zi
 
 A concrete runtime target inside an OMP instance. A host can carry zero or more app instances.
 
-## Instance template
+## Installation profile
 
-A template that describes how an OMP instance is expected to look structurally.
+The desired topology for an OMP installation.
 
-## Host template
+The database table is still named `omp.InstanceTemplates`, and the schema can
+store more than one profile. The current Portal workflow intentionally exposes
+one default installation profile and treats one OMP database/runtime set as one
+OMP installation.
 
-A template for a host role within an instance template.
+## Host role
 
-## Template topology
+A reusable classification for a host inside the installation profile, such as a
+single local host or a web node. The database table is still named
+`omp.HostTemplates`, but Portal presents it as a host role rather than a second
+visible template layer.
 
-A collective term for the tables that describe desired structure in a template:
+## Installation topology
+
+A collective term for the tables that describe the desired structure in the
+installation profile:
 
 - `InstanceTemplateHosts`
 - `InstanceTemplateModuleInstances`
@@ -51,8 +60,9 @@ A collective term for the tables that describe desired structure in a template:
 
 ## Host deployment assignment
 
-A link between a concrete host and a host template.
-This is an automation-related part of the model, not a required part of manual installation.
+A compatibility link between a concrete host and a host role. It is retained for
+automation history and future multi-profile scenarios, but the normal
+administration flow is System > Installation.
 
 ## Host deployment
 
@@ -64,4 +74,6 @@ The shared web UI for navigation and administration in OMP.
 
 ## OMP HostAgent
 
-A future optional automation component that can read desired topology and deployment state and execute or verify actions on hosts.
+The host-local automation component that reads installation topology, provisions
+artifacts, writes runtime configuration, and creates or updates IIS apps,
+Windows services, and worker runtimes.

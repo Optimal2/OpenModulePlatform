@@ -12,7 +12,7 @@ using OpenModulePlatform.Web.Shared.Services;
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
 /// <summary>
-/// Edits the desired app row on an instance template.
+/// Edits the desired app row on the current installation profile.
 /// HostAgent materializes these values into concrete app instances; app instance pages show the result.
 /// </summary>
 public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
@@ -181,7 +181,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         Template = await _repo.GetInstanceTemplateAsync(Input.InstanceTemplateId, ct);
         if (Template is null)
         {
-            ModelState.AddModelError(string.Empty, T("Instance template was not found."));
+            ModelState.AddModelError(string.Empty, T("Installation topology was not found."));
             return;
         }
 
@@ -207,7 +207,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 nameof(Input.InstanceTemplateModuleInstanceId),
-                T("Selected template module instance was not found in this template."));
+                T("Selected module instance was not found in this installation."));
             return;
         }
 
@@ -221,7 +221,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
             {
                 ModelState.AddModelError(
                     nameof(Input.InstanceTemplateHostId),
-                    T("Selected template host was not found in this template."));
+                    T("Selected host was not found in this installation."));
             }
         }
 
@@ -236,7 +236,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 nameof(Input.AppId),
-                T("The selected app does not belong to the selected template module instance's module."));
+                T("The selected app does not belong to the selected module instance's module."));
         }
 
         var isActiveDesired = Input.IsEnabled
@@ -249,7 +249,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 nameof(Input.InstanceTemplateHostId),
-                T("Choose a template host for runtime apps. Leave host empty only for host-neutral web apps behind a load balancer."));
+                T("Choose a host for runtime apps. Leave host empty only for host-neutral web apps behind a load balancer."));
         }
 
         if (Input.DesiredArtifactId.HasValue)
@@ -285,14 +285,14 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
     {
         if (Input.InstanceTemplateId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.InstanceTemplateId), T("Select an instance template."));
+            ModelState.AddModelError(nameof(Input.InstanceTemplateId), T("Select an installation."));
         }
 
         if (Input.InstanceTemplateModuleInstanceId <= 0)
         {
             ModelState.AddModelError(
                 nameof(Input.InstanceTemplateModuleInstanceId),
-                T("Select a template module instance."));
+                T("Select a module instance."));
         }
 
         if (Input.AppId <= 0)
@@ -369,10 +369,10 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         public int InstanceTemplateId { get; set; }
 
         [Required]
-        [Display(Name = "Template module instance")]
+        [Display(Name = "Module instance")]
         public int InstanceTemplateModuleInstanceId { get; set; }
 
-        [Display(Name = "Template host")]
+        [Display(Name = "Host")]
         public int? InstanceTemplateHostId { get; set; }
 
         [Required]
