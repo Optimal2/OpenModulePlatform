@@ -2016,4 +2016,10 @@
   <data name="Deleting a module is only possible when dependent apps, module instances and desired installation rows are already gone." xml:space="preserve"><value>En modul kan bara tas bort när beroende appar, modulinstanser och önskade installationsrader redan är borta.</value></data>
   <data name="Installation materialization requests" xml:space="preserve"><value>Materialiseringsbegäranden för installation</value></data>
   <data name="These rows are explicit installation-topology materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty." xml:space="preserve"><value>Dessa rader är explicita materialiseringsbegäranden för installationstopologin. Normala HostAgent-appuppgraderingar visas ovan även när listan är tom.</value></data>
+  <data name="No host role" xml:space="preserve"><value>Ingen värdroll</value></data>
+  <data name="Choose a specific host when only one named host should run this app." xml:space="preserve"><value>Välj en specifik värd när bara en namngiven värd ska köra appen.</value></data>
+  <data name="Choose a host role when every host with that role should run this app. Leave both placement fields empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Välj en värdroll när alla värdar med den rollen ska köra appen. Lämna båda placeringsfälten tomma bara för värdneutrala webbappar bakom en lastbalanserare.</value></data>
+  <data name="Choose either one specific host or one host role, not both." xml:space="preserve"><value>Välj antingen en specifik värd eller en värdroll, inte båda.</value></data>
+  <data name="Selected host role was not found." xml:space="preserve"><value>Vald värdroll hittades inte.</value></data>
+  <data name="Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Välj en värd eller värdroll för runtime-appar. Lämna båda tomma bara för värdneutrala webbappar bakom en lastbalanserare.</value></data>
 </root>

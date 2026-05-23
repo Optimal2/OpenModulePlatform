@@ -24,6 +24,17 @@ System > Installation is the admin-facing source of truth for:
 `omp.HostTemplates` remains in the schema, but Portal presents those rows as
 host roles. They are not a separate visible host-template workflow.
 
+Desired app placement supports three modes:
+
+- a specific host in the installation
+- a host role, such as `IISHost` or `ServiceHost`
+- host-neutral placement for web apps that intentionally share one
+  load-balanced public identity
+
+Host-role placement stays one logical desired app row. HostAgent, service-app
+deployment, and WorkerManager expand that row at runtime by checking whether
+the current host has the selected active host role assignment.
+
 ## Materialization Flow
 
 1. SQL setup, module definition imports, or module packages register modules,
@@ -51,7 +62,9 @@ HostAgent runs a reconciliation cycle that can:
 
 Host-neutral web apps are used for apps that sit behind one load-balanced public
 identity. Runtime apps and web apps without that load-balanced identity should
-be host-specific so each concrete runtime gets its own `AppInstanceId`.
+target either a specific host or a host role. For example, all IIS applications
+can target an `IISHost` role while service apps and workers target a
+`ServiceHost` role.
 
 ## Remaining Steps
 

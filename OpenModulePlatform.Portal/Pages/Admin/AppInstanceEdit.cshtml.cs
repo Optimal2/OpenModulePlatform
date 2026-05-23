@@ -380,7 +380,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         => ex.Number switch
         {
             2601 or 2627 => "An app instance with the same key or active host placement already exists.",
-            >= 51050 and <= 51057 => "Only one active desired app row can exist for the selected app and host placement.",
+            >= 51050 and <= 51061 => "Only one active desired app row can exist for the selected app and host placement.",
             547 => "Update dependent references first.",
             _ => fallback
         };

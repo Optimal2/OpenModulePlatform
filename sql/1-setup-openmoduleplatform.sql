@@ -481,6 +481,7 @@ BEGIN
         AppInstanceId uniqueidentifier NOT NULL CONSTRAINT PK_omp_AppInstances PRIMARY KEY,
         ModuleInstanceId uniqueidentifier NOT NULL,
         HostId uniqueidentifier NULL,
+        TargetHostTemplateId int NULL,
         AppId int NOT NULL,
         AppInstanceKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
@@ -512,6 +513,13 @@ BEGIN
         CONSTRAINT FK_omp_AppInstances_Artifact FOREIGN KEY(ArtifactId) REFERENCES omp.Artifacts(ArtifactId),
         CONSTRAINT UQ_omp_AppInstances_ModuleInstance_AppInstanceKey UNIQUE(ModuleInstanceId, AppInstanceKey)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.AppInstances', N'TargetHostTemplateId') IS NULL
+BEGIN
+    ALTER TABLE omp.AppInstances
+        ADD TargetHostTemplateId int NULL;
 END
 GO
 
@@ -834,6 +842,7 @@ BEGIN
         InstanceTemplateAppInstanceId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
         InstanceTemplateModuleInstanceId int NOT NULL,
         InstanceTemplateHostId int NULL,
+        TargetHostTemplateId int NULL,
         AppId int NOT NULL,
         AppInstanceKey nvarchar(100) NOT NULL,
         DisplayName nvarchar(200) NOT NULL,
@@ -859,6 +868,9 @@ BEGIN
         CONSTRAINT FK_omp_InstanceTemplateAppInstances_Host
             FOREIGN KEY(InstanceTemplateHostId)
             REFERENCES omp.InstanceTemplateHosts(InstanceTemplateHostId),
+        CONSTRAINT FK_omp_InstanceTemplateAppInstances_TargetHostTemplate
+            FOREIGN KEY(TargetHostTemplateId)
+            REFERENCES omp.HostTemplates(HostTemplateId),
         CONSTRAINT FK_omp_InstanceTemplateAppInstances_App
             FOREIGN KEY(AppId)
             REFERENCES omp.Apps(AppId),
@@ -871,10 +883,75 @@ BEGIN
 END
 GO
 
+IF COL_LENGTH(N'omp.InstanceTemplateAppInstances', N'TargetHostTemplateId') IS NULL
+BEGIN
+    ALTER TABLE omp.InstanceTemplateAppInstances
+        ADD TargetHostTemplateId int NULL;
+END
+GO
+
 IF COL_LENGTH(N'omp.InstanceTemplateAppInstances', N'IsAllowed') IS NULL
 BEGIN
     ALTER TABLE omp.InstanceTemplateAppInstances
         ADD IsAllowed bit NOT NULL CONSTRAINT DF_omp_InstanceTemplateAppInstances_IsAllowed DEFAULT(1) WITH VALUES;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = N'FK_omp_AppInstances_TargetHostTemplate'
+      AND parent_object_id = OBJECT_ID(N'omp.AppInstances')
+)
+BEGIN
+    ALTER TABLE omp.AppInstances
+        ADD CONSTRAINT FK_omp_AppInstances_TargetHostTemplate
+            FOREIGN KEY(TargetHostTemplateId)
+            REFERENCES omp.HostTemplates(HostTemplateId);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = N'FK_omp_InstanceTemplateAppInstances_TargetHostTemplate'
+      AND parent_object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+)
+BEGIN
+    ALTER TABLE omp.InstanceTemplateAppInstances
+        ADD CONSTRAINT FK_omp_InstanceTemplateAppInstances_TargetHostTemplate
+            FOREIGN KEY(TargetHostTemplateId)
+            REFERENCES omp.HostTemplates(HostTemplateId);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = N'CK_omp_AppInstances_OneHostPlacement'
+      AND parent_object_id = OBJECT_ID(N'omp.AppInstances')
+)
+BEGIN
+    ALTER TABLE omp.AppInstances
+        ADD CONSTRAINT CK_omp_AppInstances_OneHostPlacement
+            CHECK (HostId IS NULL OR TargetHostTemplateId IS NULL);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = N'CK_omp_InstanceTemplateAppInstances_OneHostPlacement'
+      AND parent_object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+)
+BEGIN
+    ALTER TABLE omp.InstanceTemplateAppInstances
+        ADD CONSTRAINT CK_omp_InstanceTemplateAppInstances_OneHostPlacement
+            CHECK (InstanceTemplateHostId IS NULL OR TargetHostTemplateId IS NULL);
 END
 GO
 
@@ -887,6 +964,7 @@ IF EXISTS
     FROM omp.AppInstances ai
     INNER JOIN omp.Apps a ON a.AppId = ai.AppId
     WHERE ai.HostId IS NOT NULL
+      AND ai.TargetHostTemplateId IS NULL
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1
       AND ai.DesiredState = 1
@@ -906,6 +984,7 @@ IF EXISTS
     FROM omp.AppInstances ai
     INNER JOIN omp.Apps a ON a.AppId = ai.AppId
     WHERE ai.HostId IS NULL
+      AND ai.TargetHostTemplateId IS NULL
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1
       AND ai.DesiredState = 1
@@ -916,6 +995,26 @@ IF EXISTS
 )
 BEGIN
     THROW 51051, 'Duplicate active host-neutral web app instances exist. Keep only one active desired host-neutral row per module instance and web app definition.', 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+    WHERE ai.HostId IS NULL
+      AND ai.TargetHostTemplateId IS NOT NULL
+      AND ai.IsEnabled = 1
+      AND ai.IsAllowed = 1
+      AND ai.DesiredState = 1
+      AND a.AppType IN (N'Portal', N'WebApp')
+      AND a.AllowMultipleActiveInstances = 0
+    GROUP BY ai.ModuleInstanceId, ai.TargetHostTemplateId, ai.AppId
+    HAVING COUNT(1) > 1
+)
+BEGIN
+    THROW 51058, 'Duplicate active host-role web app instances exist. Keep only one active desired row per module instance, web app definition and host role.', 1;
 END
 GO
 
@@ -943,6 +1042,19 @@ BEGIN
 END
 GO
 
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.AppInstances')
+      AND name = N'IX_omp_AppInstances_Active_Module_Host_App'
+      AND ISNULL(filter_definition, N'') NOT LIKE N'%TargetHostTemplateId%'
+)
+BEGIN
+    DROP INDEX IX_omp_AppInstances_Active_Module_Host_App ON omp.AppInstances;
+END
+GO
+
 IF NOT EXISTS
 (
     SELECT 1
@@ -954,9 +1066,23 @@ BEGIN
     CREATE INDEX IX_omp_AppInstances_Active_Module_Host_App
         ON omp.AppInstances(ModuleInstanceId, HostId, AppId, AppInstanceKey)
         WHERE HostId IS NOT NULL
+          AND TargetHostTemplateId IS NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
           AND DesiredState = 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.AppInstances')
+      AND name = N'IX_omp_AppInstances_Active_Module_HostNeutral_App'
+      AND ISNULL(filter_definition, N'') NOT LIKE N'%TargetHostTemplateId%'
+)
+BEGIN
+    DROP INDEX IX_omp_AppInstances_Active_Module_HostNeutral_App ON omp.AppInstances;
 END
 GO
 
@@ -971,9 +1097,43 @@ BEGIN
     CREATE INDEX IX_omp_AppInstances_Active_Module_HostNeutral_App
         ON omp.AppInstances(ModuleInstanceId, AppId, AppInstanceKey)
         WHERE HostId IS NULL
+          AND TargetHostTemplateId IS NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
           AND DesiredState = 1;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.AppInstances')
+      AND name = N'IX_omp_AppInstances_Active_Module_HostRole_App'
+)
+BEGIN
+    CREATE INDEX IX_omp_AppInstances_Active_Module_HostRole_App
+        ON omp.AppInstances(ModuleInstanceId, TargetHostTemplateId, AppId, AppInstanceKey)
+        WHERE TargetHostTemplateId IS NOT NULL
+          AND IsEnabled = 1
+          AND IsAllowed = 1
+          AND DesiredState = 1;
+END
+GO
+
+IF OBJECT_ID(N'omp.HostDeploymentAssignments', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostDeploymentAssignments
+    (
+        HostDeploymentAssignmentId bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        HostId uniqueidentifier NOT NULL,
+        HostTemplateId int NOT NULL,
+        AssignedBy nvarchar(256) NULL,
+        AssignedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostDeploymentAssignments_AssignedUtc DEFAULT SYSUTCDATETIME(),
+        IsActive bit NOT NULL CONSTRAINT DF_omp_HostDeploymentAssignments_IsActive DEFAULT(1),
+        CONSTRAINT FK_omp_HostDeploymentAssignments_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_HostDeploymentAssignments_HostTemplate FOREIGN KEY(HostTemplateId) REFERENCES omp.HostTemplates(HostTemplateId)
+    );
 END
 GO
 
@@ -1002,8 +1162,9 @@ BEGIN
            AND existing.AppInstanceId <> i.AppInstanceId
            AND
            (
-               (i.HostId IS NULL AND existing.HostId IS NULL)
+               (i.HostId IS NULL AND i.TargetHostTemplateId IS NULL AND existing.HostId IS NULL AND existing.TargetHostTemplateId IS NULL)
                OR (i.HostId IS NOT NULL AND existing.HostId = i.HostId)
+               OR (i.TargetHostTemplateId IS NOT NULL AND existing.TargetHostTemplateId = i.TargetHostTemplateId)
            )
         WHERE i.IsEnabled = 1
           AND i.IsAllowed = 1
@@ -1030,8 +1191,8 @@ BEGIN
            AND existing.AppInstanceId <> i.AppInstanceId
            AND
            (
-               (i.HostId IS NULL AND existing.HostId IS NOT NULL)
-               OR (i.HostId IS NOT NULL AND existing.HostId IS NULL)
+               (i.HostId IS NULL AND i.TargetHostTemplateId IS NULL AND (existing.HostId IS NOT NULL OR existing.TargetHostTemplateId IS NOT NULL))
+               OR ((i.HostId IS NOT NULL OR i.TargetHostTemplateId IS NOT NULL) AND existing.HostId IS NULL AND existing.TargetHostTemplateId IS NULL)
            )
         WHERE i.IsEnabled = 1
           AND i.IsAllowed = 1
@@ -1041,7 +1202,58 @@ BEGIN
           AND existing.DesiredState = 1
     )
     BEGIN
-        THROW 51053, 'Do not mix active host-neutral and host-specific web app instances for the same module instance and web app definition.', 1;
+        THROW 51053, 'Do not mix active host-neutral and targeted web app instances for the same module instance and web app definition.', 1;
+    END;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN omp.Apps a
+            ON a.AppId = i.AppId
+           AND a.AppType IN (N'Portal', N'WebApp')
+           AND a.AllowMultipleActiveInstances = 0
+        INNER JOIN omp.AppInstances existing
+            ON existing.ModuleInstanceId = i.ModuleInstanceId
+           AND existing.AppId = i.AppId
+           AND existing.AppInstanceId <> i.AppInstanceId
+        WHERE i.IsEnabled = 1
+          AND i.IsAllowed = 1
+          AND i.DesiredState = 1
+          AND existing.IsEnabled = 1
+          AND existing.IsAllowed = 1
+          AND existing.DesiredState = 1
+          AND
+          (
+              (
+                  i.HostId IS NOT NULL
+                  AND existing.TargetHostTemplateId IS NOT NULL
+                  AND EXISTS
+                  (
+                      SELECT 1
+                      FROM omp.HostDeploymentAssignments hda
+                      WHERE hda.HostId = i.HostId
+                        AND hda.HostTemplateId = existing.TargetHostTemplateId
+                        AND hda.IsActive = 1
+                  )
+              )
+              OR
+              (
+                  i.TargetHostTemplateId IS NOT NULL
+                  AND existing.HostId IS NOT NULL
+                  AND EXISTS
+                  (
+                      SELECT 1
+                      FROM omp.HostDeploymentAssignments hda
+                      WHERE hda.HostId = existing.HostId
+                        AND hda.HostTemplateId = i.TargetHostTemplateId
+                        AND hda.IsActive = 1
+                  )
+              )
+          )
+    )
+    BEGIN
+        THROW 51059, 'Do not mix active host-role and overlapping host-specific web app instances for the same module instance and web app definition.', 1;
     END;
 END
 GO
@@ -1052,6 +1264,7 @@ IF EXISTS
     FROM omp.InstanceTemplateAppInstances tai
     INNER JOIN omp.Apps a ON a.AppId = tai.AppId
     WHERE tai.InstanceTemplateHostId IS NOT NULL
+      AND tai.TargetHostTemplateId IS NULL
       AND tai.IsEnabled = 1
       AND tai.IsAllowed = 1
       AND tai.DesiredState = 1
@@ -1071,6 +1284,7 @@ IF EXISTS
     FROM omp.InstanceTemplateAppInstances tai
     INNER JOIN omp.Apps a ON a.AppId = tai.AppId
     WHERE tai.InstanceTemplateHostId IS NULL
+      AND tai.TargetHostTemplateId IS NULL
       AND tai.IsEnabled = 1
       AND tai.IsAllowed = 1
       AND tai.DesiredState = 1
@@ -1081,6 +1295,26 @@ IF EXISTS
 )
 BEGIN
     THROW 51055, 'Duplicate active host-neutral template web app rows exist. Keep only one active desired host-neutral row per template module and web app definition.', 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM omp.InstanceTemplateAppInstances tai
+    INNER JOIN omp.Apps a ON a.AppId = tai.AppId
+    WHERE tai.InstanceTemplateHostId IS NULL
+      AND tai.TargetHostTemplateId IS NOT NULL
+      AND tai.IsEnabled = 1
+      AND tai.IsAllowed = 1
+      AND tai.DesiredState = 1
+      AND a.AppType IN (N'Portal', N'WebApp')
+      AND a.AllowMultipleActiveInstances = 0
+    GROUP BY tai.InstanceTemplateModuleInstanceId, tai.TargetHostTemplateId, tai.AppId
+    HAVING COUNT(1) > 1
+)
+BEGIN
+    THROW 51060, 'Duplicate active host-role template web app rows exist. Keep only one active desired row per template module, web app definition and host role.', 1;
 END
 GO
 
@@ -1108,6 +1342,19 @@ BEGIN
 END
 GO
 
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+      AND name = N'IX_omp_InstanceTemplateAppInstances_Active_Module_Host_App'
+      AND ISNULL(filter_definition, N'') NOT LIKE N'%TargetHostTemplateId%'
+)
+BEGIN
+    DROP INDEX IX_omp_InstanceTemplateAppInstances_Active_Module_Host_App ON omp.InstanceTemplateAppInstances;
+END
+GO
+
 IF NOT EXISTS
 (
     SELECT 1
@@ -1119,6 +1366,37 @@ BEGIN
     CREATE INDEX IX_omp_InstanceTemplateAppInstances_Active_Module_Host_App
         ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey)
         WHERE InstanceTemplateHostId IS NOT NULL
+          AND TargetHostTemplateId IS NULL
+          AND IsEnabled = 1
+          AND IsAllowed = 1
+          AND DesiredState = 1;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+      AND name = N'IX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App'
+      AND ISNULL(filter_definition, N'') NOT LIKE N'%TargetHostTemplateId%'
+)
+BEGIN
+    DROP INDEX IX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App ON omp.InstanceTemplateAppInstances;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.InstanceTemplateAppInstances')
+      AND name = N'IX_omp_InstanceTemplateAppInstances_Active_Module_HostRole_App'
+)
+BEGIN
+    CREATE INDEX IX_omp_InstanceTemplateAppInstances_Active_Module_HostRole_App
+        ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, TargetHostTemplateId, AppId, AppInstanceKey)
+        WHERE TargetHostTemplateId IS NOT NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
           AND DesiredState = 1;
@@ -1136,6 +1414,7 @@ BEGIN
     CREATE INDEX IX_omp_InstanceTemplateAppInstances_Active_Module_HostNeutral_App
         ON omp.InstanceTemplateAppInstances(InstanceTemplateModuleInstanceId, AppId, AppInstanceKey)
         WHERE InstanceTemplateHostId IS NULL
+          AND TargetHostTemplateId IS NULL
           AND IsEnabled = 1
           AND IsAllowed = 1
           AND DesiredState = 1;
@@ -1167,8 +1446,9 @@ BEGIN
            AND existing.InstanceTemplateAppInstanceId <> i.InstanceTemplateAppInstanceId
            AND
            (
-               (i.InstanceTemplateHostId IS NULL AND existing.InstanceTemplateHostId IS NULL)
+               (i.InstanceTemplateHostId IS NULL AND i.TargetHostTemplateId IS NULL AND existing.InstanceTemplateHostId IS NULL AND existing.TargetHostTemplateId IS NULL)
                OR (i.InstanceTemplateHostId IS NOT NULL AND existing.InstanceTemplateHostId = i.InstanceTemplateHostId)
+               OR (i.TargetHostTemplateId IS NOT NULL AND existing.TargetHostTemplateId = i.TargetHostTemplateId)
            )
         WHERE i.IsEnabled = 1
           AND i.IsAllowed = 1
@@ -1195,8 +1475,8 @@ BEGIN
            AND existing.InstanceTemplateAppInstanceId <> i.InstanceTemplateAppInstanceId
            AND
            (
-               (i.InstanceTemplateHostId IS NULL AND existing.InstanceTemplateHostId IS NOT NULL)
-               OR (i.InstanceTemplateHostId IS NOT NULL AND existing.InstanceTemplateHostId IS NULL)
+               (i.InstanceTemplateHostId IS NULL AND i.TargetHostTemplateId IS NULL AND (existing.InstanceTemplateHostId IS NOT NULL OR existing.TargetHostTemplateId IS NOT NULL))
+               OR ((i.InstanceTemplateHostId IS NOT NULL OR i.TargetHostTemplateId IS NOT NULL) AND existing.InstanceTemplateHostId IS NULL AND existing.TargetHostTemplateId IS NULL)
            )
         WHERE i.IsEnabled = 1
           AND i.IsAllowed = 1
@@ -1206,24 +1486,57 @@ BEGIN
           AND existing.DesiredState = 1
     )
     BEGIN
-        THROW 51057, 'Do not mix active host-neutral and host-specific template web app rows for the same template module and web app definition.', 1;
+        THROW 51057, 'Do not mix active host-neutral and targeted template web app rows for the same template module and web app definition.', 1;
     END;
-END
-GO
 
-IF OBJECT_ID(N'omp.HostDeploymentAssignments', N'U') IS NULL
-BEGIN
-    CREATE TABLE omp.HostDeploymentAssignments
+    IF EXISTS
     (
-        HostDeploymentAssignmentId bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        HostId uniqueidentifier NOT NULL,
-        HostTemplateId int NOT NULL,
-        AssignedBy nvarchar(256) NULL,
-        AssignedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostDeploymentAssignments_AssignedUtc DEFAULT SYSUTCDATETIME(),
-        IsActive bit NOT NULL CONSTRAINT DF_omp_HostDeploymentAssignments_IsActive DEFAULT(1),
-        CONSTRAINT FK_omp_HostDeploymentAssignments_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
-        CONSTRAINT FK_omp_HostDeploymentAssignments_HostTemplate FOREIGN KEY(HostTemplateId) REFERENCES omp.HostTemplates(HostTemplateId)
-    );
+        SELECT 1
+        FROM inserted i
+        INNER JOIN omp.Apps a
+            ON a.AppId = i.AppId
+           AND a.AppType IN (N'Portal', N'WebApp')
+           AND a.AllowMultipleActiveInstances = 0
+        INNER JOIN omp.InstanceTemplateAppInstances existing
+            ON existing.InstanceTemplateModuleInstanceId = i.InstanceTemplateModuleInstanceId
+           AND existing.AppId = i.AppId
+           AND existing.InstanceTemplateAppInstanceId <> i.InstanceTemplateAppInstanceId
+        WHERE i.IsEnabled = 1
+          AND i.IsAllowed = 1
+          AND i.DesiredState = 1
+          AND existing.IsEnabled = 1
+          AND existing.IsAllowed = 1
+          AND existing.DesiredState = 1
+          AND
+          (
+              (
+                  i.InstanceTemplateHostId IS NOT NULL
+                  AND existing.TargetHostTemplateId IS NOT NULL
+                  AND EXISTS
+                  (
+                      SELECT 1
+                      FROM omp.InstanceTemplateHosts ith
+                      WHERE ith.InstanceTemplateHostId = i.InstanceTemplateHostId
+                        AND ith.HostTemplateId = existing.TargetHostTemplateId
+                  )
+              )
+              OR
+              (
+                  i.TargetHostTemplateId IS NOT NULL
+                  AND existing.InstanceTemplateHostId IS NOT NULL
+                  AND EXISTS
+                  (
+                      SELECT 1
+                      FROM omp.InstanceTemplateHosts ith
+                      WHERE ith.InstanceTemplateHostId = existing.InstanceTemplateHostId
+                        AND ith.HostTemplateId = i.TargetHostTemplateId
+                  )
+              )
+          )
+    )
+    BEGIN
+        THROW 51061, 'Do not mix active host-role and overlapping host-specific template web app rows for the same template module and web app definition.', 1;
+    END;
 END
 GO
 
@@ -1378,6 +1691,7 @@ BEGIN
         SELECT
             i.InstanceId,
             ith.InstanceTemplateHostId,
+            ith.HostTemplateId,
             h.HostId
         FROM omp.Instances i
         INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
@@ -1402,6 +1716,7 @@ BEGIN
         SELECT
             cm.ModuleInstanceId,
             hm.HostId,
+            tai.TargetHostTemplateId,
             tai.AppId,
             tai.AppInstanceKey,
             tai.DisplayName,
@@ -1428,12 +1743,14 @@ BEGIN
            AND hm.InstanceTemplateHostId = tai.InstanceTemplateHostId
         WHERE tai.IsEnabled = 1
           AND a.IsEnabled = 1
-          -- Host-neutral template apps must materialize even when a HostAgent
-          -- requests only the concrete host it is currently managing.
+          -- Host-neutral and host-role template apps are logical desired app rows.
+          -- They must materialize even when a HostAgent requests only the
+          -- concrete host it is currently managing. HostAgent later checks the
+          -- current host's active role assignment before deployment.
           AND
           (
-              (@HostKey IS NULL AND (tai.InstanceTemplateHostId IS NULL OR hm.HostId IS NOT NULL))
-              OR (@HostKey IS NOT NULL AND (tai.InstanceTemplateHostId IS NULL OR hm.HostId IS NOT NULL))
+              tai.InstanceTemplateHostId IS NULL
+              OR hm.HostId IS NOT NULL
           )
     )
     MERGE omp.AppInstances AS target
@@ -1443,6 +1760,7 @@ BEGIN
     WHEN MATCHED AND
     (
         ISNULL(target.HostId, '00000000-0000-0000-0000-000000000000') <> ISNULL(source.HostId, '00000000-0000-0000-0000-000000000000')
+        OR ISNULL(target.TargetHostTemplateId, -1) <> ISNULL(source.TargetHostTemplateId, -1)
         OR target.AppId <> source.AppId
         OR target.DisplayName <> source.DisplayName
         OR ISNULL(target.Description, N'') <> ISNULL(source.Description, N'')
@@ -1461,6 +1779,7 @@ BEGIN
         OR target.SortOrder <> source.SortOrder
     ) THEN
         UPDATE SET HostId = source.HostId,
+                   TargetHostTemplateId = source.TargetHostTemplateId,
                    AppId = source.AppId,
                    DisplayName = source.DisplayName,
                    Description = source.Description,
@@ -1483,6 +1802,7 @@ BEGIN
             AppInstanceId,
             ModuleInstanceId,
             HostId,
+            TargetHostTemplateId,
             AppId,
             AppInstanceKey,
             DisplayName,
@@ -1504,6 +1824,7 @@ BEGIN
             NEWID(),
             source.ModuleInstanceId,
             source.HostId,
+            source.TargetHostTemplateId,
             source.AppId,
             source.AppInstanceKey,
             source.DisplayName,

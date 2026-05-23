@@ -490,6 +490,8 @@ public sealed class InstanceTemplateAppInstanceEditData
 
     public int? InstanceTemplateHostId { get; set; }
 
+    public int? TargetHostTemplateId { get; set; }
+
     public int AppId { get; set; }
 
     public string AppInstanceKey { get; set; } = string.Empty;
