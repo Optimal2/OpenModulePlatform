@@ -2023,4 +2023,16 @@
   <data name="Export all widgets or choose one of the widgets available in this OMP installation." xml:space="preserve"><value>Export all widgets or choose one of the widgets available in this OMP installation.</value></data>
   <data name="Widget" xml:space="preserve"><value>Widget</value></data>
   <data name="All widgets" xml:space="preserve"><value>All widgets</value></data>
+  <data name="Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks." xml:space="preserve"><value>Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks.</value></data>
+  <data name="Filter" xml:space="preserve"><value>Filter</value></data>
+  <data name="Search rows" xml:space="preserve"><value>Search rows</value></data>
+  <data name="All statuses" xml:space="preserve"><value>All statuses</value></data>
+  <data name="Only rows that need attention" xml:space="preserve"><value>Only rows that need attention</value></data>
+  <data name="Artifact provisioning history" xml:space="preserve"><value>Artifact provisioning history</value></data>
+  <data name="These rows show the latest HostAgent artifact download and verification result per host. The default view shows rows from the last 24 hours that may need attention." xml:space="preserve"><value>These rows show the latest HostAgent artifact download and verification result per host. The default view shows rows from the last 24 hours that may need attention.</value></data>
+  <data name="Time span" xml:space="preserve"><value>Time span</value></data>
+  <data name="All time" xml:space="preserve"><value>All time</value></data>
+  <data name="Last 24 hours" xml:space="preserve"><value>Last 24 hours</value></data>
+  <data name="Last 7 days" xml:space="preserve"><value>Last 7 days</value></data>
+  <data name="Last 30 days" xml:space="preserve"><value>Last 30 days</value></data>
 </root>
