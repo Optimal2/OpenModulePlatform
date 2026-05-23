@@ -931,7 +931,7 @@ public sealed class ArtifactZipImportService
         }
 
         var fullRoot = Path.GetFullPath(rootPath);
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath));
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, relativePath));
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -1076,13 +1076,13 @@ public sealed class ArtifactZipImportService
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
         {
             var relativeDirectory = Path.GetRelativePath(source, directory);
-            Directory.CreateDirectory(Path.Combine(destination, relativeDirectory));
+            Directory.CreateDirectory(Path.Join(destination, relativeDirectory));
         }
 
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
             var relativeFile = Path.GetRelativePath(source, file);
-            var targetFile = Path.Combine(destination, relativeFile);
+            var targetFile = Path.Join(destination, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
             File.Copy(file, targetFile, overwrite: false);
         }

@@ -125,7 +125,7 @@ internal static partial class Program
 
         foreach (var root in ResolveDeveloperSourceRoots(config, payloadRoot, configPath))
         {
-            var embedScript = Path.Combine(root, "scripts", "dev", "embed-module-definition-sql.ps1");
+            var embedScript = Path.Join(root, "scripts", "dev", "embed-module-definition-sql.ps1");
             if (!File.Exists(embedScript))
             {
                 continue;
@@ -364,13 +364,13 @@ internal static partial class Program
             return configured;
         }
 
-        var local = Path.Combine(sourceRoot, "scripts", "deployment", "omp-suite.local.psd1");
+        var local = Path.Join(sourceRoot, "scripts", "deployment", "omp-suite.local.psd1");
         if (File.Exists(local))
         {
             return local;
         }
 
-        var sample = Path.Combine(sourceRoot, "scripts", "deployment", "omp-suite.config.sample.psd1");
+        var sample = Path.Join(sourceRoot, "scripts", "deployment", "omp-suite.config.sample.psd1");
         if (File.Exists(sample))
         {
             return sample;
@@ -385,7 +385,7 @@ internal static partial class Program
         string payloadRoot)
     {
         var configured = string.IsNullOrWhiteSpace(config.DeveloperSource.PackageOutputRoot)
-            ? Path.Combine(ResolveShortInstallerRefreshBaseRoot(config, sourceRoot), "PackageRefresh")
+            ? Path.Join(ResolveShortInstallerRefreshBaseRoot(config, sourceRoot), "PackageRefresh")
             : Path.GetFullPath(config.DeveloperSource.PackageOutputRoot);
         if (!PathOverlaps(configured, payloadRoot) && !RisksInstallerRefreshPathLimit(configured))
         {
@@ -525,7 +525,7 @@ internal static partial class Program
 
     private static void StartInstallerGui(string packageRoot)
     {
-        var executable = Path.Combine(packageRoot, "OpenModulePlatform.Bootstrapper.exe");
+        var executable = Path.Join(packageRoot, "OpenModulePlatform.Bootstrapper.exe");
         if (!File.Exists(executable))
         {
             throw new FileNotFoundException("Updated installer executable was not found.", executable);

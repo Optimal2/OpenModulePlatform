@@ -360,7 +360,7 @@ public sealed class HostAgentSelfUpgradeService
     {
         foreach (var fileName in new[] { "appsettings.Production.json", "appsettings.json" })
         {
-            var path = Path.Combine(AppContext.BaseDirectory, fileName);
+            var path = Path.Join(AppContext.BaseDirectory, fileName);
             if (!File.Exists(path))
             {
                 continue;
@@ -600,7 +600,7 @@ public sealed class HostAgentSelfUpgradeService
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
+            FileName = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,

@@ -1248,7 +1248,7 @@ internal static partial class Program
         {
             var currentExecutable = Environment.ProcessPath
                 ?? throw new InvalidOperationException("Could not resolve the running installer executable path.");
-            var runnerRoot = Path.Combine(
+            var runnerRoot = Path.Join(
                 Path.GetTempPath(),
                 "omp-installer-refresh-runner-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(runnerRoot);
@@ -1286,8 +1286,8 @@ internal static partial class Program
                 ?? throw new InvalidOperationException("Could not resolve the running installer directory.");
             var baseName = Path.GetFileNameWithoutExtension(currentExecutable);
             var hasFrameworkDependentFiles =
-                File.Exists(Path.Combine(executableDirectory, baseName + ".deps.json"))
-                || File.Exists(Path.Combine(executableDirectory, baseName + ".runtimeconfig.json"));
+                File.Exists(Path.Join(executableDirectory, baseName + ".deps.json"))
+                || File.Exists(Path.Join(executableDirectory, baseName + ".runtimeconfig.json"));
 
             if (!hasFrameworkDependentFiles)
             {
@@ -2038,11 +2038,11 @@ ORDER BY ar.ArtifactId DESC;
             var fileName = Path.GetFileName(definition.Path);
             var candidates = new[]
             {
-                Path.Combine(_payloadRoot, "data", "global", "module-definitions", fileName),
-                Path.Combine(_payloadRoot, "data", "global", "module-definitions", "initial", fileName),
-                Path.Combine(_payloadRoot, "module-definitions", fileName),
-                Path.Combine(_payloadRoot, "data", "global", "module-definitions", "available", fileName),
-                Path.Combine(_payloadRoot, "available-module-definitions", fileName)
+                Path.Join(_payloadRoot, "data", "global", "module-definitions", fileName),
+                Path.Join(_payloadRoot, "data", "global", "module-definitions", "initial", fileName),
+                Path.Join(_payloadRoot, "module-definitions", fileName),
+                Path.Join(_payloadRoot, "data", "global", "module-definitions", "available", fileName),
+                Path.Join(_payloadRoot, "available-module-definitions", fileName)
             };
 
             return candidates.FirstOrDefault(File.Exists) ?? candidates[2];
@@ -2053,11 +2053,11 @@ ORDER BY ar.ArtifactId DESC;
             var packageName = GetArtifactPackageFileName(component);
             var candidates = new[]
             {
-                Path.Combine(_payloadRoot, "data", "global", "artifacts", packageName),
-                Path.Combine(_payloadRoot, "data", "global", "artifacts", "available", packageName),
-                Path.Combine(_payloadRoot, "available-artifacts", packageName),
-                Path.Combine(_payloadRoot, "data", "global", "artifacts", "initial", packageName),
-                Path.Combine(_payloadRoot, "payload", packageName)
+                Path.Join(_payloadRoot, "data", "global", "artifacts", packageName),
+                Path.Join(_payloadRoot, "data", "global", "artifacts", "available", packageName),
+                Path.Join(_payloadRoot, "available-artifacts", packageName),
+                Path.Join(_payloadRoot, "data", "global", "artifacts", "initial", packageName),
+                Path.Join(_payloadRoot, "payload", packageName)
             };
 
             return candidates.FirstOrDefault(File.Exists);
@@ -2288,9 +2288,9 @@ ORDER BY ar.ArtifactId DESC;
         }
 
         private static bool IsDeveloperSourceRoot(string path)
-            => File.Exists(Path.Combine(path, "omp-components.json"))
-                && File.Exists(Path.Combine(path, "OpenModulePlatform.slnx"))
-                && File.Exists(Path.Combine(path, "scripts", "deployment", "package-hostagent-first.ps1"));
+            => File.Exists(Path.Join(path, "omp-components.json"))
+                && File.Exists(Path.Join(path, "OpenModulePlatform.slnx"))
+                && File.Exists(Path.Join(path, "scripts", "deployment", "package-hostagent-first.ps1"));
 
         private async Task SaveCurrentConfigAsync()
         {
