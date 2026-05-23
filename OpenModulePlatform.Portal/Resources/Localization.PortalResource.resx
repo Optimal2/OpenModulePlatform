@@ -1975,4 +1975,13 @@
   <data name="The selected parent would create a navigation cycle." xml:space="preserve"><value>The selected parent would create a navigation cycle.</value></data>
   <data name="A navigation entry cannot be its own parent." xml:space="preserve"><value>A navigation entry cannot be its own parent.</value></data>
   <data name="The layout update would create a navigation cycle." xml:space="preserve"><value>The layout update would create a navigation cycle.</value></data>
+  <data name="Import/export" xml:space="preserve"><value>Import/export</value></data>
+  <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Import/export for portable objects, and Operations for HostAgent troubleshooting." xml:space="preserve"><value>The admin area is organized around one OMP installation. Use Installation for desired topology, Import/export for portable objects, and Operations for HostAgent troubleshooting.</value></data>
+  <data name="Import and export OMP installation objects: module definitions, artifact packages, module packages, and dashboard widgets." xml:space="preserve"><value>Import and export OMP installation objects: module definitions, artifact packages, module packages, and dashboard widgets.</value></data>
+  <data name="Import module package" xml:space="preserve"><value>Import module package</value></data>
+  <data name="Upload one or more standard artifact package zips without changing any module definition." xml:space="preserve"><value>Upload one or more standard artifact package zips without changing any module definition.</value></data>
+  <data name="Import artifact packages" xml:space="preserve"><value>Import artifact packages</value></data>
+  <data name="Export artifact package" xml:space="preserve"><value>Export artifact package</value></data>
+  <data name="Export one installed artifact as a standard artifact package zip, including artifact-owned configuration files." xml:space="preserve"><value>Export one installed artifact as a standard artifact package zip, including artifact-owned configuration files.</value></data>
+  <data name="Artifact packages imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artifact packages imported or replaced: {0}. Failed: {1}.</value></data>
 </root>

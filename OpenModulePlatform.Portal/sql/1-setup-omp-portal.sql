@@ -331,8 +331,7 @@ GO
         (N'omp_portal', N'portal:admin-users', N'Users', N'Manage OMP users and auth links.', N'/admin/users', 30),
         (N'omp_portal', N'portal:admin-security', N'Security', N'Manage roles and permissions.', N'/admin/security', 40),
         (N'omp_portal', N'portal:admin-config-settings', N'Config settings', N'Manage OMP configuration settings.', N'/admin/configsettings', 50),
-        (N'omp_portal', N'portal:admin-module-packages', N'Module packages', N'Import and export portable module packages.', N'/admin/modulepackageimport', 60),
-        (N'omp_portal', N'portal:admin-dashboard-widgets', N'Dashboard widgets', N'Import and export Portal dashboard widgets.', N'/admin/dashboardwidgets', 70),
+        (N'omp_portal', N'portal:admin-module-packages', N'Import/export', N'Import and export OMP installation objects.', N'/admin/modulepackageimport', 60),
 
         (N'content_webapp_webapp', N'content:admin', N'Admin', N'Manage content pages.', N'/content/admin', 10),
         (N'content_webapp_webapp', N'content:create', N'Create page', N'Create a new content page.', N'/content/admin/create', 20),
@@ -385,6 +384,12 @@ WHEN MATCHED THEN
 WHEN NOT MATCHED BY TARGET THEN
     INSERT(entry_key, parent_entry_id, display_name, description, target_url, is_enabled, default_sort_order)
     VALUES(source.entry_key, source.parent_entry_id, source.display_name, source.description, source.target_url, 1, source.default_sort_order);
+GO
+
+UPDATE omp_portal.portal_entries
+SET is_enabled = 0,
+    updated_at = SYSUTCDATETIME()
+WHERE entry_key = N'portal:admin-dashboard-widgets';
 GO
 
 IF OBJECT_ID(N'omp_portal.widgets', N'U') IS NULL

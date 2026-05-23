@@ -28,6 +28,7 @@
   <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
   <data name="Artifact package editor" xml:space="preserve"><value>Artifact package editor</value></data>
   <data name="Packages" xml:space="preserve"><value>Packages</value></data>
+  <data name="Import/export" xml:space="preserve"><value>Import/export</value></data>
   <data name="Operations" xml:space="preserve"><value>Operations</value></data>
   <data name="Tools" xml:space="preserve"><value>Tools</value></data>
   <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard widgets</value></data>

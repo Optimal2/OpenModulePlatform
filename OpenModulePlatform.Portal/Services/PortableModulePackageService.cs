@@ -188,6 +188,78 @@ public sealed class PortableModulePackageService
         }
     }
 
+    public async Task<IReadOnlyList<PortableModulePackageArtifactImportResult>> ImportArtifactUploadsAsync(
+        IReadOnlyList<IFormFile> artifactFiles,
+        PortableModulePackageImportOptions options,
+        CancellationToken ct)
+    {
+        if (artifactFiles.Count == 0 || artifactFiles.All(static file => file.Length == 0))
+        {
+            throw new InvalidOperationException("Select at least one artifact package zip.");
+        }
+
+        var tempRoot = CreateTempRoot("portal-artifact-package-upload");
+        try
+        {
+            var packageUploadPaths = new List<string>();
+            foreach (var file in artifactFiles.Where(static file => file.Length > 0))
+            {
+                if (!file.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Artifact package uploads must be .zip files.");
+                }
+
+                var packagePath = Path.Combine(tempRoot, Path.GetFileName(file.FileName));
+                await CopyUploadToFileAsync(file, packagePath, _options.MaxUploadBytes, ct);
+                packageUploadPaths.Add(packagePath);
+            }
+
+            var plans = packageUploadPaths
+                .Select(path => new ArtifactImportPlan(path, TryReadArtifactPackageFile(path), null))
+                .ToArray();
+            var activationKeys = options.UseArtifactsImmediately
+                ? SelectLatestActivationKeys(plans)
+                : [];
+
+            var results = new List<PortableModulePackageArtifactImportResult>();
+            foreach (var plan in plans)
+            {
+                if (plan.Identity is null)
+                {
+                    results.Add(new PortableModulePackageArtifactImportResult(
+                        Path.GetFileName(plan.Path),
+                        "Failed",
+                        "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
+                        null));
+                    continue;
+                }
+
+                var activateArtifact = activationKeys.Contains(BuildArtifactActivationKey(plan.Identity));
+                var artifactOptions = options with { UseArtifactsImmediately = activateArtifact };
+                var result = await ImportArtifactPackageAsync(plan.Identity, plan.Path, artifactOptions, ct);
+                if (options.UseArtifactsImmediately
+                    && !activateArtifact
+                    && result.Status is "Imported" or "Replaced" or "Skipped")
+                {
+                    result = result with
+                    {
+                        Message = AppendWarning(
+                            result.Message ?? string.Empty,
+                            "The artifact was kept as a historical package and was not selected because a newer artifact for the same app slot was uploaded in the same batch.")
+                    };
+                }
+
+                results.Add(result);
+            }
+
+            return results;
+        }
+        finally
+        {
+            TryDelete(tempRoot);
+        }
+    }
+
     public async Task<PortableModulePackageExportResult> ExportModulePackageAsync(
         string moduleKey,
         bool includeAllArtifactVersions,
@@ -273,6 +345,64 @@ public sealed class PortableModulePackageService
         catch
         {
             TryDelete(tempRoot);
+            TryDelete(packagePath);
+            throw;
+        }
+    }
+
+    public async Task<PortableModulePackageExportResult> ExportArtifactPackageAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        var artifact = await _repo.GetArtifactAsync(artifactId, ct)
+            ?? throw new InvalidOperationException("The selected artifact was not found.");
+        if (string.IsNullOrWhiteSpace(artifact.RelativePath))
+        {
+            throw new InvalidOperationException("The selected artifact has no relative payload path.");
+        }
+
+        if (string.IsNullOrWhiteSpace(artifact.TargetName))
+        {
+            throw new InvalidOperationException("The selected artifact has no target name and cannot be exported as a standard artifact package.");
+        }
+
+        var normalizedRelativePath = NormalizeRelativePath(artifact.RelativePath);
+        if (normalizedRelativePath is null)
+        {
+            throw new InvalidOperationException("The selected artifact has an invalid relative payload path.");
+        }
+
+        var storeRoot = RequireConfiguredRoot(_options.ArtifactStoreRoot, "ArtifactStoreRoot");
+        var payloadPath = ResolveUnderRoot(storeRoot, normalizedRelativePath);
+        if (!Directory.Exists(payloadPath))
+        {
+            throw new InvalidOperationException($"Artifact payload path does not exist: '{payloadPath}'.");
+        }
+
+        var packageFileName = CreateArtifactPackageFileName(
+            artifact.ModuleKey,
+            artifact.AppKey,
+            artifact.PackageType,
+            artifact.TargetName,
+            artifact.Version);
+        var downloadRoot = Path.Combine(Path.GetTempPath(), "OpenModulePlatform", "portal-artifact-package-downloads");
+        Directory.CreateDirectory(downloadRoot);
+        var packagePath = Path.Combine(downloadRoot, $"{Guid.NewGuid():N}-{packageFileName}");
+
+        try
+        {
+            var configurationFiles = await _repo.GetArtifactConfigurationFileContentsAsync(artifact.ArtifactId, ct);
+            new ArtifactPackageWriter().CreateFromPayloadDirectory(
+                payloadPath,
+                packagePath,
+                configurationFiles
+                    .Select(file => new ArtifactPackageConfigurationFile(file.RelativePath, file.FileContent))
+                    .ToArray());
+
+            return new PortableModulePackageExportResult(packagePath, packageFileName);
+        }
+        catch
+        {
             TryDelete(packagePath);
             throw;
         }

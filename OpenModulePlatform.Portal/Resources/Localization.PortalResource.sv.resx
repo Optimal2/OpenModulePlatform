@@ -2078,4 +2078,13 @@
   <data name="The selected parent would create a navigation cycle." xml:space="preserve"><value>Vald förälder skulle skapa en cirkel i navigeringen.</value></data>
   <data name="A navigation entry cannot be its own parent." xml:space="preserve"><value>En navigeringspost kan inte vara sin egen förälder.</value></data>
   <data name="The layout update would create a navigation cycle." xml:space="preserve"><value>Layoutändringen skulle skapa en cirkel i navigeringen.</value></data>
+  <data name="Import/export" xml:space="preserve"><value>Import/export</value></data>
+  <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Import/export for portable objects, and Operations for HostAgent troubleshooting." xml:space="preserve"><value>Adminytan är organiserad runt en OMP-installation. Använd Installation för önskad topologi, Import/export för portabla objekt och Drift för HostAgent-felsökning.</value></data>
+  <data name="Import and export OMP installation objects: module definitions, artifact packages, module packages, and dashboard widgets." xml:space="preserve"><value>Importera och exportera OMP-installationsobjekt: moduldefinitioner, artefaktpaket, modulpaket och dashboard-widgets.</value></data>
+  <data name="Import module package" xml:space="preserve"><value>Importera modulpaket</value></data>
+  <data name="Upload one or more standard artifact package zips without changing any module definition." xml:space="preserve"><value>Ladda upp ett eller flera standardiserade artefaktpaket som zip utan att ändra någon moduldefinition.</value></data>
+  <data name="Import artifact packages" xml:space="preserve"><value>Importera artefaktpaket</value></data>
+  <data name="Export artifact package" xml:space="preserve"><value>Exportera artefaktpaket</value></data>
+  <data name="Export one installed artifact as a standard artifact package zip, including artifact-owned configuration files." xml:space="preserve"><value>Exportera en installerad artefakt som ett standardiserat artefaktpaket i zip-format, inklusive artefaktens konfigurationsfiler.</value></data>
+  <data name="Artifact packages imported or replaced: {0}. Failed: {1}." xml:space="preserve"><value>Artefaktpaket importerade eller ersatta: {0}. Misslyckade: {1}.</value></data>
 </root>
