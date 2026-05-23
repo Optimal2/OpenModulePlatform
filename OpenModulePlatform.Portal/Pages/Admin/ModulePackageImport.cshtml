@@ -3,9 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Modules"]</div>
-        <h2>@L["Module packages"]</h2>
-        <p class="lede">@L["Import or export a portable module package containing one module definition JSON and the compatible artifact package zips."]</p>
+        <div class="eyebrow">@L["System"]</div>
+        <h2>@L["Packages"]</h2>
+        <p class="lede">@L["Import, export and install portable module packages containing one module definition JSON and compatible artifact package zips."]</p>
     </div>
 </section>
 
@@ -18,6 +18,29 @@
 {
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
+
+<div class="section-grid section-grid--wide top-gap">
+    <section class="card section-card">
+        <h3>@L["Related workflow"]</h3>
+        <p class="muted">@L["Packages are the portable object boundary. Installation controls desired topology and Operations shows what HostAgent did with the selected objects."]</p>
+        <div class="toolbar">
+            <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Installation"]</a>
+            <a class="action-link" href="~/admin/hostdeployments">@L["Operations"]</a>
+            <a class="action-link" href="~/admin/moduledefinitions">@L["Module integrity"]</a>
+            <a class="action-link" href="~/admin/artifacts">@L["Artifact catalog"]</a>
+        </div>
+    </section>
+
+    <section class="card section-card">
+        <h3>@L["Object tools"]</h3>
+        <p class="muted">@L["These editors can also run as standalone HTML tools from the package tools folder."]</p>
+        <div class="toolbar">
+            <a class="action-link" href="~/admin/moduledefinitioneditor">@L["Module definition editor"]</a>
+            <a class="action-link" href="~/admin/artifactpackageeditor">@L["Artifact package editor"]</a>
+            <a class="action-link" href="~/admin/bootstrapconfigeditor">@L["Bootstrap config editor"]</a>
+        </div>
+    </section>
+</div>
 
 <div class="section-grid section-grid--wide top-gap">
     <section class="card section-card">
@@ -209,6 +232,6 @@
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/moduledefinitions">@L["Back to module definitions"]</a>
-    <a class="action-link" href="~/admin/artifacts">@L["Back to artifacts"]</a>
+    <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Back to installation"]</a>
+    <a class="action-link" href="~/admin/hostdeployments">@L["Back to operations"]</a>
 </div>
