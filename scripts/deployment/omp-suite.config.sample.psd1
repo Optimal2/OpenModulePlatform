@@ -179,29 +179,26 @@
         # Optional module definition JSON files from customer/module repositories.
         # The source file should live at the module root and be listed in that
         # repository's omp-components.json. These extra files are copied to the
-        # package-local module-definitions import folder and imported by the
-        # bootstrapper after SQL initialization.
+        # package-local data/global/module-definitions library.
         AdditionalModuleDefinitionFiles = @()
 
         # Optional prebuilt artifact zip files from external module repositories.
         # Source is resolved relative to this config file. Payload is the package
-        # relative path used by bootstrap.local.sample.json. Target is the
+        # relative path used by the bootstrap config. Target is the
         # ArtifactStore relative folder where the extracted artifact is copied.
-        # These artifacts are also copied to available-artifacts so they remain
-        # available for later Portal-driven module installation.
+        # Leave Payload empty to use data/global/artifacts/<source file name>.
         AdditionalArtifactFiles = @(
             # @{
             #     Source = '..\SomeModule\artifacts\SomeModule.Web.zip'
-            #     Payload = 'payload\some_module__some_app__web-app__some-target__1.0.0.zip'
+            #     Payload = 'data\global\artifacts\some_module__some_app__web-app__some-target__1.0.0.zip'
             #     Target = 'some-module/web/1.0.0'
             # }
         )
 
         # Optional folders containing standard OMP artifact package zips for
-        # modules that should be available in the package but not necessarily
-        # installed during the initial bootstrap. RuntimeRoot\ArtifactArchive is
-        # also scanned automatically when it exists, as are artifacts folders
-        # below configured DeveloperSource repository roots.
+        # modules that should be available in the package library. RuntimeRoot
+        # \ArtifactArchive is also scanned automatically when it exists, as are
+        # artifacts folders below configured DeveloperSource repository roots.
         AvailableArtifactArchiveRoots = @()
     }
 

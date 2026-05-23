@@ -363,7 +363,13 @@ function Copy-AvailableArtifactPackage {
         return
     }
 
-    Copy-RequiredFile -Source $Source -Destination (Join-Path $DestinationRoot $fileName)
+    $destination = Join-Path $DestinationRoot $fileName
+    $sourceFullPath = [System.IO.Path]::GetFullPath($Source)
+    $destinationFullPath = [System.IO.Path]::GetFullPath($destination)
+    if (-not [string]::Equals($sourceFullPath, $destinationFullPath, [StringComparison]::OrdinalIgnoreCase)) {
+        Copy-RequiredFile -Source $Source -Destination $destination
+    }
+
     $CopiedFiles[$fileName] = $true
 }
 
@@ -702,7 +708,7 @@ function Copy-AdditionalArtifactFiles {
     param(
         [object[]]$Entries,
         [Parameter(Mandatory = $true)][string]$ConfigDirectory,
-        [Parameter(Mandatory = $true)][string]$PayloadRoot,
+        [Parameter(Mandatory = $true)][string]$PackageRoot,
         [Parameter(Mandatory = $true)][System.Collections.ArrayList]$Artifacts,
         [Parameter(Mandatory = $true)][string]$AvailableArtifactsRoot,
         [Parameter(Mandatory = $true)][hashtable]$AvailableArtifactPackageFiles
@@ -743,7 +749,7 @@ function Copy-AdditionalArtifactFiles {
 
         $resolvedSource = Resolve-DeploymentPath -Path $sourcePath -BasePath $ConfigDirectory
         if ([string]::IsNullOrWhiteSpace($payloadPath)) {
-            $payloadPath = 'payload/' + [System.IO.Path]::GetFileName($resolvedSource)
+            $payloadPath = 'data/global/artifacts/' + [System.IO.Path]::GetFileName($resolvedSource)
         }
 
         $payloadPath = $payloadPath.Replace('\', '/')
@@ -753,7 +759,7 @@ function Copy-AdditionalArtifactFiles {
             throw "Additional artifact payload path must be relative and stay inside the package: $payloadPath"
         }
 
-        $destination = Join-Path (Split-Path -Parent $PayloadRoot) $payloadPath
+        $destination = Join-Path $PackageRoot $payloadPath
         Copy-RequiredFile -Source $resolvedSource -Destination $destination
         Add-ArtifactEntry `
             -Artifacts $Artifacts `
@@ -879,11 +885,12 @@ if (-not $PSBoundParameters.ContainsKey('KeepStaging')) {
 
 $OutputRoot = Resolve-DeploymentPath -Path $OutputRoot -BasePath $RepositoryRoot
 $packageRoot = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version")
-$payloadRoot = Join-Path $packageRoot 'payload'
-$sqlRoot = Join-Path $packageRoot 'sql'
+$globalDataRoot = Join-Path (Join-Path $packageRoot 'data') 'global'
+$payloadRoot = Join-Path $globalDataRoot 'artifacts'
+$sqlRoot = Join-Path $globalDataRoot 'sql'
 $toolsRoot = Join-Path $packageRoot 'tools'
-$availableModuleDefinitionsRoot = Join-Path $packageRoot 'available-module-definitions'
-$availableArtifactsRoot = Join-Path $packageRoot 'available-artifacts'
+$availableModuleDefinitionsRoot = Join-Path $globalDataRoot 'module-definitions'
+$availableArtifactsRoot = $payloadRoot
 $availableArtifactPackageFiles = @{}
 $buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-hostagent-first-build-' + [Guid]::NewGuid().ToString('N'))
 $zipPath = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version.zip")
@@ -1046,7 +1053,7 @@ foreach ($component in $components) {
 
         New-ArtifactPackage -PayloadZip $artifactPayloadZip -Destination $destination -BuildRoot $buildRoot -ConfigurationFiles $configurationFiles
         Copy-AvailableArtifactPackage -Source $destination -DestinationRoot $availableArtifactsRoot -CopiedFiles $availableArtifactPackageFiles
-        $componentPayloadSources[$componentKey] = "payload/$artifactPackageName"
+        $componentPayloadSources[$componentKey] = "data/global/artifacts/$artifactPackageName"
 
         if ([string]::Equals($componentKey, 'omp-hostagent-service', [StringComparison]::OrdinalIgnoreCase)) {
             # The bootstrapper itself still needs a direct HostAgent service zip
@@ -1148,7 +1155,7 @@ foreach ($file in $sqlFiles) {
 }
 
 Write-Step 'Copying module definitions'
-$moduleDefinitionsDestination = Join-Path $packageRoot 'module-definitions'
+$moduleDefinitionsDestination = $availableModuleDefinitionsRoot
 New-Item -ItemType Directory -Path $moduleDefinitionsDestination -Force | Out-Null
 Copy-ModuleDefinitionsFromManifest -ManifestPath $componentManifestPath -RepositoryRoot $RepositoryRoot -Destination $moduleDefinitionsDestination
 Copy-ModuleDefinitionsFromManifest -ManifestPath (Join-Path $OpenDocViewerRoot 'omp-components.json') -RepositoryRoot $OpenDocViewerRoot -Destination $moduleDefinitionsDestination
@@ -1181,7 +1188,6 @@ foreach ($entry in $additionalModuleDefinitionFiles) {
     }
 
     Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $moduleDefinitionsDestination $destinationName)
-    Copy-RequiredFile -Source $resolvedSource -Destination (Join-Path $availableModuleDefinitionsRoot $destinationName)
 }
 
 $additionalSqlIncludes = @()
@@ -1255,7 +1261,7 @@ $bootstrapSql += [Environment]::NewLine
 Set-Content -LiteralPath (Join-Path $sqlRoot 'bootstrap-local.sql') -Value $bootstrapSql -Encoding UTF8
 
 Write-Step 'Copying bootstrapper'
-Compress-FolderToZip -Source (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $payloadRoot 'OpenModulePlatform.Bootstrapper.zip')
+Compress-FolderToZip -Source (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper.zip')
 Copy-Item -LiteralPath (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper') -Recurse -Force
 $bootstrapConfigEditorSource = Join-Path $RepositoryRoot 'tools\bootstrap-config-editor'
 if (Test-Path -LiteralPath $bootstrapConfigEditorSource -PathType Container) {
@@ -1293,13 +1299,13 @@ foreach ($component in $components) {
     $isExample = $packageTemplate -like '*Example*' -or $relativeTemplate -like '*example-*'
     Add-ArtifactEntry -Artifacts $artifacts -Source $artifactSource -Target ($relativeTemplate.Replace('{version}', $componentVersion)) -IsExample $isExample
 }
-Add-ArtifactEntry -Artifacts $artifacts -Source "payload/$openDocViewerArtifactPackageName" -Target "opendocviewer/web/$openDocViewerVersion"
+Add-ArtifactEntry -Artifacts $artifacts -Source "data/global/artifacts/$openDocViewerArtifactPackageName" -Target "opendocviewer/web/$openDocViewerVersion"
 
 $additionalArtifactFiles = @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AdditionalArtifactFiles' -DefaultValue @()))
 Copy-AdditionalArtifactFiles `
     -Entries $additionalArtifactFiles `
     -ConfigDirectory $configDirectory `
-    -PayloadRoot $payloadRoot `
+    -PackageRoot $packageRoot `
     -Artifacts $artifacts `
     -AvailableArtifactsRoot $availableArtifactsRoot `
     -AvailableArtifactPackageFiles $availableArtifactPackageFiles
@@ -1823,12 +1829,12 @@ $manifest = [ordered]@{
     availableModuleDefinitions = @(
         Get-ChildItem -LiteralPath $availableModuleDefinitionsRoot -Filter '*.json' -File |
             Sort-Object Name |
-            ForEach-Object { 'available-module-definitions/' + $_.Name }
+            ForEach-Object { 'data/global/module-definitions/' + $_.Name }
     )
     availableArtifactPackages = @(
         Get-ChildItem -LiteralPath $availableArtifactsRoot -Filter '*.zip' -File |
             Sort-Object Name |
-            ForEach-Object { 'available-artifacts/' + $_.Name }
+            ForEach-Object { 'data/global/artifacts/' + $_.Name }
     )
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'manifest.json') -Encoding UTF8

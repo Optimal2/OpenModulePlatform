@@ -153,6 +153,14 @@ Standalone browser tools:
 
 Command-line helpers:
 
+- `build-omp-objects.ps1` is the standard repository entry point. It reads the
+  repository's `omp-components.json` and writes portable module definitions and
+  artifact packages to `module-definitions` and `artifacts` below the chosen
+  output folder.
+- `scripts/omp/build-repository-objects.ps1` is the canonical implementation
+  used by repository wrappers. Other OMP-related repositories should keep only a
+  thin root wrapper and should pass customer or host-specific configuration
+  files as arguments.
 - `scripts/dev/embed-module-definition-sql.ps1` refreshes embedded SQL in a
   legacy JSON-only module definition from its source `.sql` files.
 - `scripts/deployment/new-omp-artifact-package.ps1` creates a standard artifact
