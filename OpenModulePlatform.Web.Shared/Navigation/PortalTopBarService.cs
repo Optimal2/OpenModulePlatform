@@ -623,14 +623,6 @@ public sealed class PortalTopBarService
     private static string BuildPortalEntrySearchText(TopBarPortalEntryRow row, string? href)
         => $"{row.DisplayName} {row.Description} {href} {row.EntryKey} {row.TargetEntryKey}".Trim();
 
-    private static IReadOnlyList<PortalTopBarNavigationEntry> BuildFavoriteEntries(
-        IReadOnlyList<PortalTopBarNavigationGroup> groups)
-        => FlattenNavigationGroups(groups)
-            .Where(entry => entry.IsFavorite)
-            .OrderBy(entry => entry.GroupTitle, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(entry => entry.TextKey, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
     private static void ApplyFavorites(
         IReadOnlyList<PortalTopBarNavigationGroup> groups,
         IReadOnlyList<FavoriteRef> favorites)
