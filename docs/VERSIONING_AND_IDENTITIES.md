@@ -52,13 +52,13 @@ configuration is written by the bootstrap/deployment layer, and app-specific
 deployment-owned files belong in `omp.ArtifactConfigurationFiles`.
 
 `Desired artifact` is the artifact currently selected by an app instance,
-template app instance, worker instance, or host artifact requirement. HostAgent
+desired installation app row, worker instance, or host artifact requirement. HostAgent
 deploys that selected artifact. It does not choose the highest version on its
 own.
 
 `Stable key` is a text key such as `ModuleKey`, `AppKey`, `InstanceKey`,
 `ModuleInstanceKey`, `AppInstanceKey`, `HostKey`, or `WorkerInstanceKey`.
-Installers, templates, and administrators should use these keys to match
+Installers, installation topology, and administrators should use these keys to match
 existing rows across reruns.
 
 `Database identity` is the primary key persisted in OMP. Definition and
@@ -82,8 +82,8 @@ human review, but OMP must register artifacts by component version.
 For example, a repository containing a web app and a backend service should be
 able to register a new `service-app` artifact without registering a new
 `web-app` artifact. The web app instance keeps pointing to its existing
-`ArtifactId`, while the service app instance or template app instance is moved
-to the new service artifact.
+`ArtifactId`, while the service app instance or desired installation app row is
+moved to the new service artifact.
 
 Repositories should keep a root `omp-components.json` manifest. The recommended
 shape for multi-app repositories is a component list keyed by stable OMP
@@ -118,7 +118,7 @@ When a new version is produced:
 1. Publish or copy the package contents into the central artifact store.
 2. Register a new `omp.Artifacts` row with the app, version, package type,
    relative path, and content hash.
-3. Point the desired app instance or template app instance to the new
+3. Point the desired app instance or desired installation app row to the new
    `ArtifactId`.
 4. Let HostAgent provision and deploy the selected artifact on each matching
    host.
@@ -156,7 +156,7 @@ be documented next to the seed data.
 Use generated GUIDs for:
 
 - administrator-created instances, hosts, app instances, and worker instances;
-- rows materialized from templates when no matching stable key already exists;
+- rows materialized from installation topology when no matching stable key already exists;
 - environment-specific rows created by local or deployment configuration.
 
 Do not copy obvious placeholder or test GUIDs into production-oriented module
@@ -176,13 +176,13 @@ that may already be referenced by runtime state, portal entries, permissions,
 logs, or HostAgent deployment state.
 
 HostAgent should not invent application identities during deployment. It may
-materialize template rows through OMP stored procedures, and those procedures
+materialize installation topology rows through OMP stored procedures, and those procedures
 may generate GUIDs for new concrete rows after matching by stable keys.
 
-## Template and HostAgent Rules
+## Installation Topology and HostAgent Rules
 
-Templates describe desired metadata and placement. Concrete rows are matched by
-stable keys:
+Installation topology describes desired metadata and placement. Concrete rows
+are matched by stable keys:
 
 - module instances by `(InstanceId, ModuleInstanceKey)`;
 - app instances by `(ModuleInstanceId, AppInstanceKey)`;
@@ -233,7 +233,7 @@ template can write the correct runtime identity for each concrete deployment.
    for the same app/version/package/target combination when that can be done
    without breaking existing installations.
 4. Improve Portal artifact administration so selecting a new artifact for an
-   app instance or template app instance is the standard upgrade path.
+   app instance or desired installation app row is the standard upgrade path.
 5. Improve Portal and stored-procedure creation flows so new GUID identities are
    generated consistently and placeholder GUIDs are not needed in configuration.
 6. Add drift, rollout, rollback, and retention views around HostAgent

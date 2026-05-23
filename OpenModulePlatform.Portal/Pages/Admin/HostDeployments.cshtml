@@ -159,8 +159,8 @@
 </section>
 
 <section class="card section-card section-card--wide">
-    <h3>@L["Template deployment requests"]</h3>
-    <p class="muted">@L["These rows are explicit template materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty."]</p>
+    <h3>@L["Installation materialization requests"]</h3>
+    <p class="muted">@L["These rows are explicit installation-topology materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty."]</p>
 
     @if (Model.Rows.Count == 0)
     {
@@ -173,7 +173,7 @@
                 <thead>
                     <tr>
                         <th>@L["Host key"]</th>
-                        <th>@L["Host template"]</th>
+                        <th>@L["Host role"]</th>
                         <th>@L["Status"]</th>
                         <th>@L["Requested by"]</th>
                         <th>@L["Requested UTC"]</th>

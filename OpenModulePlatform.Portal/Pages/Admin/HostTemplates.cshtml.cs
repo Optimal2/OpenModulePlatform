@@ -26,7 +26,7 @@ public sealed class HostTemplatesModel : OmpPortalPageModel
         if (guard is not null)
             return guard;
 
-        SetTitles("Host templates");
+        SetTitles("Host roles");
         Rows = await _repo.GetHostTemplatesAsync(ct);
         return Page();
     }

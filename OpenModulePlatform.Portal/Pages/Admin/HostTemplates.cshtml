@@ -3,9 +3,9 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Desired topology"]</div>
-        <h2>@L["Host templates"]</h2>
-        <p class="lede">@L["Host templates describe reusable host roles. Assign a host template to a concrete host so HostAgent knows which desired topology applies there."]</p>
+        <div class="eyebrow">@L["Installation"]</div>
+        <h2>@L["Host roles"]</h2>
+        <p class="lede">@L["Host roles classify hosts inside the installation topology. They are retained as a lookup, not as a separate visible template workflow."]</p>
     </div>
 </section>
 
@@ -16,14 +16,14 @@
 
 @if (Model.Rows.Count == 0)
 {
-    <div class="empty-state">@L["No host templates found."]</div>
+    <div class="empty-state">@L["No host roles found."]</div>
 }
 else
 {
     <table class="grid">
         <thead>
             <tr>
-                <th>@L["Template key"]</th>
+                <th>@L["Host role key"]</th>
                 <th>@L["Display name"]</th>
                 <th>@L["Enabled"]</th>
                 <th>@L["Description"]</th>

@@ -100,7 +100,7 @@
         onsubmit="return confirm('@L["Delete this app definition? Related artifacts and app instances must be removed first."]');">
         <input type="hidden" asp-for="Input.AppId" />
         <h3>@L["Danger zone"]</h3>
-        <p class="muted">@L["Delete is blocked while artifacts, app instances or template rows still reference the app."]</p>
+        <p class="muted">@L["Delete is blocked while artifacts, app instances or desired installation rows still reference the app."]</p>
         <button type="submit" class="btn btn-danger">@L["Delete app"]</button>
     </form>
 }

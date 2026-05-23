@@ -14,7 +14,7 @@ plugins.
 
 Applying a module definition must be useful even before runtime code has been
 uploaded. The definition should be able to register the module, its apps,
-permissions, setting definitions, portal entries, desired template rows, and
+permissions, setting definitions, portal entries, desired installation rows, and
 artifact slots in OMP. The actual `omp.Artifacts` rows are created later when
 matching artifact zip files are imported.
 
@@ -347,7 +347,7 @@ SQL script. It should not try to serialize every column definition or every
 environment-specific row. Keep it focused on durable requirements:
 
 - module-owned schemas and tables
-- OMP module, app, permission, worker definition, instance template, and desired
+- OMP module, app, permission, worker definition, installation topology, and desired
   runtime rows that make the module deployable
 - module-owned setting definitions, channel type metadata, portal entry rows,
   or other seed rows that application code expects to exist
@@ -392,7 +392,7 @@ The long-term installation model is intentionally split:
    available yet.
 2. Import artifact zip files. The import validates each zip against the module
    definition's artifact slots, creates or updates `omp.Artifacts`, and allows
-   desired app/template rows to point to the imported versions.
+   desired installation app rows to point to the imported versions.
 
 With this split, a base OMP installation can be limited to the core `omp`
 schema, Portal, and HostAgent. Remaining modules can then be added from Portal,

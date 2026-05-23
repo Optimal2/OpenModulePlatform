@@ -12,7 +12,7 @@ using OpenModulePlatform.Web.Shared.Services;
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
 /// <summary>
-/// Edits a desired module-instance row on an instance template.
+/// Edits a desired module-instance row on the current installation profile.
 /// </summary>
 public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
 {
@@ -73,7 +73,7 @@ public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
         }
 
         await LoadAsync(ct);
-        SetTitles(IsCreate ? "Add template module instance" : "Edit template module instance");
+        SetTitles(IsCreate ? "Add module instance" : "Edit module instance");
         return Page();
     }
 
@@ -86,7 +86,7 @@ public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
         }
 
         await LoadAsync(ct);
-        SetTitles(IsCreate ? "Add template module instance" : "Edit template module instance");
+        SetTitles(IsCreate ? "Add module instance" : "Edit module instance");
 
         ValidateInput();
         if (!ModelState.IsValid)
@@ -110,7 +110,7 @@ public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
                 },
                 ct);
 
-            StatusMessage = IsCreate ? T("Template module instance added.") : T("Template module instance updated.");
+            StatusMessage = IsCreate ? T("Module instance added.") : T("Module instance updated.");
             return RedirectToPage("/Admin/InstanceTemplateModuleEdit", new { id });
         }
         catch (SqlException ex)
@@ -133,13 +133,13 @@ public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
         try
         {
             await _repo.DeleteInstanceTemplateModuleAsync(Input.InstanceTemplateModuleInstanceId, ct);
-            StatusMessage = T("Template module instance removed.");
+            StatusMessage = T("Module instance removed.");
             return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });
         }
         catch (SqlException ex)
         {
             await LoadAsync(ct);
-            SetTitles("Edit template module instance");
+            SetTitles("Edit module instance");
             ModelState.AddModelError(string.Empty, T(ToFriendlySqlMessage(ex)));
             return Page();
         }
@@ -150,7 +150,7 @@ public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
         Template = await _repo.GetInstanceTemplateAsync(Input.InstanceTemplateId, ct);
         if (Template is null)
         {
-            ModelState.AddModelError(string.Empty, T("Instance template was not found."));
+            ModelState.AddModelError(string.Empty, T("Installation topology was not found."));
         }
 
         ModuleOptions = await _repo.GetModuleOptionsAsync(ct);
@@ -160,7 +160,7 @@ public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
     {
         if (Input.InstanceTemplateId <= 0)
         {
-            ModelState.AddModelError(nameof(Input.InstanceTemplateId), T("Select an instance template."));
+            ModelState.AddModelError(nameof(Input.InstanceTemplateId), T("Select an installation."));
         }
 
         if (Input.ModuleId <= 0)
@@ -195,9 +195,9 @@ public sealed class InstanceTemplateModuleEditModel : OmpPortalPageModel
     private static string ToFriendlySqlMessage(SqlException ex)
         => ex.Number switch
         {
-            2601 or 2627 => "A template module instance with the same key already exists in this template.",
-            547 => "Delete desired app rows that use this template module instance first.",
-            _ => "The template module instance could not be saved."
+            2601 or 2627 => "A module instance with the same key already exists in this installation.",
+            547 => "Delete desired app rows that use this module instance first.",
+            _ => "The module instance could not be saved."
         };
 
     public sealed class InputModel

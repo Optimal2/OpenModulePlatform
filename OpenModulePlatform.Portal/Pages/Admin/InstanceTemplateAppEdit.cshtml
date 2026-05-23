@@ -3,10 +3,10 @@
 
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Desired topology"]</div>
+        <div class="eyebrow">@L["Installation"]</div>
         <h2>@(Model.IsCreate ? L["Add desired app"] : L["Edit desired app"])</h2>
         <p class="lede">
-            @L["This edits the template row that HostAgent watches. The concrete app instance changes only after HostAgent has materialized the template."]
+            @L["This edits the desired app row that HostAgent watches. The concrete app instance changes only after HostAgent has materialized the installation."]
         </p>
     </div>
 </section>
@@ -16,11 +16,11 @@
     <section class="card section-card section-card--wide">
         <div class="detail-grid">
             <div>
-                <div class="muted">@L["Instance template"]</div>
+                <div class="muted">@L["Installation"]</div>
                 <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Template.InstanceTemplateId">@Model.Template.DisplayName</a>
             </div>
             <div>
-                <div class="muted">@L["Template key"]</div>
+                <div class="muted">@L["Installation profile key"]</div>
                 <code>@Model.Template.TemplateKey</code>
             </div>
         </div>
@@ -45,13 +45,13 @@
         <div class="form-field">
             <label asp-for="Input.InstanceTemplateModuleInstanceId"></label>
             <select asp-for="Input.InstanceTemplateModuleInstanceId">
-                <option value="">@L["Select template module instance"]</option>
+                <option value="">@L["Select module instance"]</option>
                 @foreach (var option in Model.TemplateModuleOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">@L["The desired app will be attached to this module instance when HostAgent materializes the template."]</div>
+            <div class="field-help">@L["The desired app will be attached to this module instance when HostAgent materializes the installation."]</div>
             <span asp-validation-for="Input.InstanceTemplateModuleInstanceId" class="field-validation-error"></span>
         </div>
 
@@ -64,7 +64,7 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">@L["The app definition must belong to the selected template module instance's module."]</div>
+            <div class="field-help">@L["The app definition must belong to the selected module instance's module."]</div>
             <span asp-validation-for="Input.AppId" class="field-validation-error"></span>
         </div>
     </div>
@@ -103,7 +103,7 @@
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">@L["Leave template host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one template host."]</div>
+            <div class="field-help">@L["Leave host empty only for host-neutral web apps behind a load balancer. Runtime apps and non-load-balanced web apps should choose one host."]</div>
             <span asp-validation-for="Input.InstanceTemplateHostId" class="field-validation-error"></span>
         </div>
 
@@ -200,7 +200,7 @@
 
     <div class="toolbar">
         <button type="submit">@L["Save desired app"]</button>
-        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to template"]</a>
+        <a class="action-link" href="~/admin/instancetemplateedit?id=@Model.Input.InstanceTemplateId">@L["Back to installation"]</a>
     </div>
 </form>
 
@@ -210,11 +210,11 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Remove this desired app from the template?"]');">
+        onsubmit="return confirm('@L["Remove this desired app from the installation?"]');">
         <input type="hidden" asp-for="Input.InstanceTemplateAppInstanceId" />
         <input type="hidden" asp-for="Input.InstanceTemplateId" />
         <h3>@L["Danger zone"]</h3>
-        <p class="muted">@L["Removing the desired app stops future materialization from this template. Existing runtime rows are not removed by this action."]</p>
+        <p class="muted">@L["Removing the desired app stops future materialization from this installation. Existing runtime rows are not removed by this action."]</p>
         <button type="submit" class="btn btn-danger">@L["Remove desired app"]</button>
     </form>
 }
