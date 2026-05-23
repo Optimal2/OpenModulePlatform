@@ -32,13 +32,13 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'user_setting_definitions', N'value_kind'),
         (N'omp_portal', N'portal_entries', N'entry_key'),
         (N'omp_portal', N'portal_entries', N'parent_entry_id'),
-        (N'omp_portal', N'portal_entries', N'url'),
+        (N'omp_portal', N'portal_entries', N'target_url'),
         (N'omp_portal', N'portal_entries', N'is_enabled'),
         (N'omp_portal', N'widgets', N'widget_key'),
         (N'omp_portal', N'widgets', N'module_key'),
         (N'omp_portal', N'widgets', N'title'),
         (N'omp_portal', N'widgets', N'widget_type'),
-        (N'omp_portal', N'widgets', N'config_json'),
+        (N'omp_portal', N'widgets', N'payload'),
         (N'omp_portal', N'widget_permissions', N'widget_id'),
         (N'omp_portal', N'widget_permissions', N'permission_id'),
         (N'omp_portal', N'widget_permissions', N'role_id'),
@@ -93,7 +93,7 @@ BEGIN
     SELECT @Missing = @Missing + CASE
         WHEN EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:home')
          AND EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:admin')
-         AND EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:admin-dashboard-widgets')
+         AND EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:admin-module-packages')
         THEN 0 ELSE 1 END;
 END;
 
