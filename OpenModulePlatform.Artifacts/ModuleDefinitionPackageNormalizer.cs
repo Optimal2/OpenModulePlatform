@@ -130,7 +130,7 @@ public static class ModuleDefinitionPackageNormalizer
     private static string ResolveUnderRoot(string root, string relativePath)
     {
         var fullRoot = Path.GetFullPath(root);
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsUnderRoot(fullPath, fullRoot))
         {
             throw new InvalidOperationException("Module definition SQL path escapes the package root.");
@@ -155,18 +155,15 @@ public static class ModuleDefinitionPackageNormalizer
 
     private static string? GetString(JsonObject obj, string propertyName)
     {
-        // JsonObject lookups are case-sensitive; iterate explicitly so package documents can use case-insensitive field names.
-        foreach (var property in obj)
-        {
-            if (property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase)
-                && property.Value is JsonValue value
-                && value.TryGetValue<string>(out var text))
-            {
-                return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
-            }
-        }
-
-        return null;
+        // JsonObject lookups are case-sensitive; enumerate once so package documents can use case-insensitive field names.
+        return obj
+            .Where(property => property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+            .Select(property => property.Value)
+            .OfType<JsonValue>()
+            .Select(static value => value.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text)
+                ? text.Trim()
+                : null)
+            .FirstOrDefault(static text => text is not null);
     }
 
     private static string ComputeSha256(string text)

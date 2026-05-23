@@ -175,7 +175,7 @@ public sealed class PortableModulePackageService
                     throw new InvalidOperationException("Artifact package uploads must be .zip files.");
                 }
 
-                var packagePath = Path.Combine(tempRoot, "artifacts", Path.GetFileName(file.FileName));
+                var packagePath = Path.Join(tempRoot, "artifacts", Path.GetFileName(file.FileName));
                 await CopyUploadToFileAsync(file, packagePath, _options.MaxUploadBytes, ct);
                 packageUploadPaths.Add(packagePath);
             }
@@ -209,7 +209,7 @@ public sealed class PortableModulePackageService
                     throw new InvalidOperationException("Artifact package uploads must be .zip files.");
                 }
 
-                var packagePath = Path.Combine(tempRoot, Path.GetFileName(file.FileName));
+                var packagePath = Path.Join(tempRoot, Path.GetFileName(file.FileName));
                 await CopyUploadToFileAsync(file, packagePath, _options.MaxUploadBytes, ct);
                 packageUploadPaths.Add(packagePath);
             }
@@ -276,9 +276,9 @@ public sealed class PortableModulePackageService
         var storeRoot = RequireConfiguredRoot(_options.ArtifactStoreRoot, "ArtifactStoreRoot");
         var tempRoot = CreateTempRoot("portal-module-package-export");
         var packageFileName = $"{SanitizePathSegment(moduleKey)}__module-package__{SanitizePathSegment(definition.DefinitionVersion)}.zip";
-        var downloadRoot = Path.Combine(Path.GetTempPath(), "OpenModulePlatform", "portal-module-package-downloads");
+        var downloadRoot = Path.Join(Path.GetTempPath(), "OpenModulePlatform", "portal-module-package-downloads");
         Directory.CreateDirectory(downloadRoot);
-        var packagePath = Path.Combine(downloadRoot, $"{Guid.NewGuid():N}-{packageFileName}");
+        var packagePath = Path.Join(downloadRoot, $"{Guid.NewGuid():N}-{packageFileName}");
 
         try
         {
@@ -314,7 +314,7 @@ public sealed class PortableModulePackageService
                     }
 
                     var configurationFiles = await _repo.GetArtifactConfigurationFileContentsAsync(artifact.ArtifactId, ct);
-                    var artifactPackagePath = Path.Combine(
+                    var artifactPackagePath = Path.Join(
                         tempRoot,
                         $"{Guid.NewGuid():N}.artifact.zip");
 
@@ -385,9 +385,9 @@ public sealed class PortableModulePackageService
             artifact.PackageType,
             artifact.TargetName,
             artifact.Version);
-        var downloadRoot = Path.Combine(Path.GetTempPath(), "OpenModulePlatform", "portal-artifact-package-downloads");
+        var downloadRoot = Path.Join(Path.GetTempPath(), "OpenModulePlatform", "portal-artifact-package-downloads");
         Directory.CreateDirectory(downloadRoot);
-        var packagePath = Path.Combine(downloadRoot, $"{Guid.NewGuid():N}-{packageFileName}");
+        var packagePath = Path.Join(downloadRoot, $"{Guid.NewGuid():N}-{packageFileName}");
 
         try
         {
@@ -520,8 +520,8 @@ public sealed class PortableModulePackageService
 
         var storeRoot = RequireConfiguredRoot(_options.ArtifactStoreRoot, "ArtifactStoreRoot");
         var tempRoot = CreateTempRoot("portal-artifact-package-import");
-        var stagingPath = Path.Combine(tempRoot, "artifact");
-        var backupPath = Path.Combine(tempRoot, "backup");
+        var stagingPath = Path.Join(tempRoot, "artifact");
+        var backupPath = Path.Join(tempRoot, "backup");
         var movedExistingToBackup = false;
         var movedArtifactToFinal = false;
         var adoptedExistingContent = false;
@@ -1089,7 +1089,7 @@ public sealed class PortableModulePackageService
     private static string ResolveUnderRoot(string rootPath, string relativePath)
     {
         var fullRoot = Path.GetFullPath(rootPath);
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -1139,7 +1139,7 @@ public sealed class PortableModulePackageService
 
     private static string CreateTempRoot(string name)
     {
-        var path = Path.Combine(Path.GetTempPath(), "OpenModulePlatform", name, Guid.NewGuid().ToString("N"));
+        var path = Path.Join(Path.GetTempPath(), "OpenModulePlatform", name, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
@@ -1270,18 +1270,20 @@ public sealed class PortableModulePackageService
     private static void CopyDirectory(string source, string destination)
     {
         Directory.CreateDirectory(destination);
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeDirectory in Directory
+            .EnumerateDirectories(source, "*", SearchOption.AllDirectories)
+            .Select(directory => Path.GetRelativePath(source, directory)))
         {
-            var relativeDirectory = Path.GetRelativePath(source, directory);
             Directory.CreateDirectory(Path.Join(destination, relativeDirectory));
         }
 
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeFile in Directory
+            .EnumerateFiles(source, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(source, file)))
         {
-            var relativeFile = Path.GetRelativePath(source, file);
             var targetFile = Path.Join(destination, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
-            File.Copy(file, targetFile, overwrite: false);
+            File.Copy(Path.Join(source, relativeFile), targetFile, overwrite: false);
         }
     }
 
@@ -1304,15 +1306,7 @@ public sealed class PortableModulePackageService
             return null;
         }
 
-        foreach (var property in obj)
-        {
-            if (property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                return property.Value;
-            }
-        }
-
-        return null;
+        return obj.FirstOrDefault(property => property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase)).Value;
     }
 
     private static string GetJsonStringProperty(JsonNode? node, string propertyName)

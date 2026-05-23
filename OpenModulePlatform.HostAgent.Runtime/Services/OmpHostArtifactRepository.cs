@@ -2626,13 +2626,13 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
             return "The script contains TRUNCATE TABLE.";
         }
 
-        foreach (Match match in Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)"))
+        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")
+            .Cast<Match>()
+            .Select(static match => match.Groups["statement"].Value)
+            .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
+        if (unsafeDeleteStatement is not null)
         {
-            var statement = match.Groups["statement"].Value;
-            if (!Regex.IsMatch(statement, @"(?is)\bWHERE\b"))
-            {
-                return "The script contains DELETE FROM without a WHERE clause.";
-            }
+            return "The script contains DELETE FROM without a WHERE clause.";
         }
 
         return null;

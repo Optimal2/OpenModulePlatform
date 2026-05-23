@@ -313,15 +313,11 @@ public sealed class ServerReportRenderer
                     ErrorMessage = query.ErrorMessage
                 });
 
-            foreach (var row in rows)
+            flatRows.AddRange(rows.Select(row => new Dictionary<string, string?>(row, StringComparer.OrdinalIgnoreCase)
             {
-                var flatRow = new Dictionary<string, string?>(row, StringComparer.OrdinalIgnoreCase)
-                {
-                    ["__queryName"] = query.Name,
-                    ["__queryTitle"] = query.Title
-                };
-                flatRows.Add(flatRow);
-            }
+                ["__queryName"] = query.Name,
+                ["__queryTitle"] = query.Title
+            }));
         }
 
         return new JavaScriptServerReport

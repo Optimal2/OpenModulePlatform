@@ -464,13 +464,14 @@ public sealed class ServiceAppDeploymentService
         string serviceName,
         CancellationToken cancellationToken)
     {
-        foreach (var key in ResolveServiceAppIdentityOverrideKeys(deployment, serviceName))
+        var configuredOverride = ResolveServiceAppIdentityOverrideKeys(deployment, serviceName)
+            .Select(key => TryGetServiceAppIdentityOverride(settings, key, out var identity)
+                ? identity
+                : null)
+            .FirstOrDefault(identity => identity is not null && HasConfiguredServiceAppIdentity(identity));
+        if (configuredOverride is not null)
         {
-            if (TryGetServiceAppIdentityOverride(settings, key, out var identity)
-                && HasConfiguredServiceAppIdentity(identity))
-            {
-                return await ResolveStoredServiceAppPasswordAsync(identity, cancellationToken);
-            }
+            return await ResolveStoredServiceAppPasswordAsync(configuredOverride, cancellationToken);
         }
 
         var defaultIdentity = new HostAgentServiceAppIdentitySettings
@@ -559,14 +560,14 @@ public sealed class ServiceAppDeploymentService
             return true;
         }
 
-        foreach (var pair in overrides)
+        var trimmedKey = key.Trim();
+        var pair = overrides.FirstOrDefault(pair =>
+            string.Equals(pair.Key?.Trim(), trimmedKey, StringComparison.OrdinalIgnoreCase)
+            && pair.Value is not null);
+        if (pair.Value is not null)
         {
-            if (string.Equals(pair.Key?.Trim(), key.Trim(), StringComparison.OrdinalIgnoreCase)
-                && pair.Value is not null)
-            {
-                identity = pair.Value;
-                return true;
-            }
+            identity = pair.Value;
+            return true;
         }
 
         identity = new HostAgentServiceAppIdentitySettings();

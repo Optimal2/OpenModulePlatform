@@ -34,7 +34,17 @@ internal static partial class Program
             Application.Run(form);
             return form.ExitCode;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
+        {
+            // Top-level WinForms boundary: keep startup failures in the installer UI instead of crashing without context.
+            MessageBox.Show(
+                ex.Message,
+                "OpenModulePlatform installer",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return 1;
+        }
+        catch (SystemException ex)
         {
             // Top-level WinForms boundary: keep startup failures in the installer UI instead of crashing without context.
             MessageBox.Show(
@@ -236,23 +246,23 @@ internal static partial class Program
             && Path.GetDirectoryName(cli.ConfigPath) is { } explicitConfigDirectory)
         {
             yield return explicitConfigDirectory;
-            yield return Path.Combine(explicitConfigDirectory, "configs");
+            yield return Path.Join(explicitConfigDirectory, "configs");
         }
 
-        yield return Path.Combine(Environment.CurrentDirectory, "configs");
-        yield return Path.Combine(AppContext.BaseDirectory, "configs");
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "configs"));
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "configs"));
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "configs"));
+        yield return Path.Join(Environment.CurrentDirectory, "configs");
+        yield return Path.Join(AppContext.BaseDirectory, "configs");
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "configs"));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "configs"));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", "configs"));
     }
 
     private static IEnumerable<string> EnumerateLegacyGuiConfigFiles()
     {
         yield return Path.Join(Environment.CurrentDirectory, "bootstrap.local.sample.json");
         yield return Path.Join(AppContext.BaseDirectory, "bootstrap.local.sample.json");
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "bootstrap.local.sample.json"));
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "bootstrap.local.sample.json"));
-        yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "bootstrap.local.sample.json"));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "bootstrap.local.sample.json"));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "bootstrap.local.sample.json"));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", "bootstrap.local.sample.json"));
     }
 
     private sealed record BootstrapConfigProfile(
@@ -509,7 +519,16 @@ internal static partial class Program
                 _logBox.Clear();
                 SetReadyStatus(statusText);
             }
-            catch (Exception ex)
+            catch (JsonException ex)
+            {
+                // Reload is a user-triggered operation; surface the exact configuration error and leave the current profile active.
+                MessageBox.Show(
+                    ex.Message,
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            catch (SystemException ex)
             {
                 // Reload is a user-triggered operation; surface the exact configuration error and leave the current profile active.
                 MessageBox.Show(
@@ -966,7 +985,7 @@ internal static partial class Program
 
             if (!string.IsNullOrWhiteSpace(_config.HostAgent.PortalPhysicalPath))
             {
-                var portalDll = Path.Combine(
+                var portalDll = Path.Join(
                     Path.GetFullPath(_config.HostAgent.PortalPhysicalPath),
                     "OpenModulePlatform.Portal.dll");
                 if (File.Exists(portalDll))
@@ -1233,7 +1252,7 @@ internal static partial class Program
                 ExitCode = 0;
                 Close();
             }
-            catch (Exception ex)
+            catch (SystemException ex)
             {
                 // This operation hands off to a detached process, so any launch/setup failure must be shown before the form closes.
                 MessageBox.Show(
@@ -1253,7 +1272,7 @@ internal static partial class Program
                 "omp-installer-refresh-runner-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(runnerRoot);
 
-            var runnerExecutable = Path.Combine(runnerRoot, Path.GetFileName(currentExecutable));
+            var runnerExecutable = Path.Join(runnerRoot, Path.GetFileName(currentExecutable));
             CopyInstallerRunnerFiles(currentExecutable, runnerRoot);
 
             var process = Process.Start(new ProcessStartInfo(runnerExecutable)
@@ -1291,7 +1310,7 @@ internal static partial class Program
 
             if (!hasFrameworkDependentFiles)
             {
-                File.Copy(currentExecutable, Path.Combine(runnerRoot, Path.GetFileName(currentExecutable)), overwrite: true);
+                File.Copy(currentExecutable, Path.Join(runnerRoot, Path.GetFileName(currentExecutable)), overwrite: true);
                 return;
             }
 
@@ -1334,7 +1353,7 @@ internal static partial class Program
             lines.Add("Module definitions:");
             foreach (var definition in sourceDefinitions)
             {
-                var sourcePath = Path.Combine(definition.SourceRoot, definition.Path);
+                var sourcePath = Path.Join(definition.SourceRoot, definition.Path);
                 var sourceDocument = await ReadModuleDefinitionAsync(sourcePath);
                 var packagePath = FindPackageModuleDefinitionPath(definition);
                 if (!File.Exists(packagePath))
@@ -1441,7 +1460,7 @@ internal static partial class Program
             lines.Add("Module definitions:");
             foreach (var definition in sourceDefinitions)
             {
-                var sourcePath = Path.Combine(definition.SourceRoot, definition.Path);
+                var sourcePath = Path.Join(definition.SourceRoot, definition.Path);
                 if (!File.Exists(sourcePath))
                 {
                     lines.Add($"  WARN    {definition.ModuleKey}: source file was not found ({sourcePath}).");
@@ -1500,7 +1519,7 @@ internal static partial class Program
                         }
 
                         CopyFileIfDifferent(sourcePackage, payloadPath);
-                        CopyFileIfDifferent(sourcePackage, Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
+                        CopyFileIfDifferent(sourcePackage, Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
                         current.Source = expectedSource;
                         current.Target = expectedTarget;
                         lines.Add($"  UPDATED {component.ComponentKey}: copied {packageName} and updated artifact target to {expectedTarget}.");
@@ -1516,7 +1535,7 @@ internal static partial class Program
                         lines.Add($"  OK      {component.ComponentKey}: artifact package is present.");
                         unchanged++;
 
-                        var availableMirrorPath = Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
+                        var availableMirrorPath = Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
                         if (!File.Exists(availableMirrorPath))
                         {
                             CopyFileIfDifferent(payloadPath, availableMirrorPath);
@@ -1550,7 +1569,7 @@ internal static partial class Program
                     }
 
                     CopyFileIfDifferent(sourcePackage, payloadPath);
-                    CopyFileIfDifferent(sourcePackage, Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
+                    CopyFileIfDifferent(sourcePackage, Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName));
                     current.Source = expectedSource;
                     current.Target = expectedTarget;
                     lines.Add($"  UPDATED {component.ComponentKey}: restored missing artifact package {packageName}.");
@@ -1559,7 +1578,7 @@ internal static partial class Program
                     continue;
                 }
 
-                var availablePath = Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
+                var availablePath = Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), packageName);
                 if (File.Exists(availablePath))
                 {
                     // Package library entries follow the same immutable-version rule as configured artifact packages.
@@ -1617,20 +1636,20 @@ internal static partial class Program
             {
                 var artifactStoreRoot = Path.GetFullPath(_config.ArtifactStoreRoot);
                 var runtimeRoot = Directory.GetParent(artifactStoreRoot)?.FullName;
-                AddIfDirectory(Path.Combine(runtimeRoot ?? string.Empty, "ArtifactArchive"));
-                AddIfDirectory(Path.Combine(artifactStoreRoot, "_available", "artifacts"));
+                AddIfDirectory(Path.Join(runtimeRoot ?? string.Empty, "ArtifactArchive"));
+                AddIfDirectory(Path.Join(artifactStoreRoot, "_available", "artifacts"));
             }
 
-            foreach (var sourceRoot in sourceRoots)
+            foreach (var artifactPath in sourceRoots.Select(sourceRoot => Path.Join(sourceRoot, "artifacts")))
             {
-                AddIfDirectory(Path.Combine(sourceRoot, "artifacts"));
+                AddIfDirectory(artifactPath);
             }
 
-            AddIfDirectory(Path.Combine(_payloadRoot, "data", "global", "artifacts"));
-            AddIfDirectory(Path.Combine(_payloadRoot, "data", "global", "artifacts", "available"));
-            AddIfDirectory(Path.Combine(_payloadRoot, "available-artifacts"));
-            AddIfDirectory(Path.Combine(_payloadRoot, "data", "global", "artifacts", "initial"));
-            AddIfDirectory(Path.Combine(_payloadRoot, "payload"));
+            AddIfDirectory(Path.Join(_payloadRoot, "data", "global", "artifacts"));
+            AddIfDirectory(Path.Join(_payloadRoot, "data", "global", "artifacts", "available"));
+            AddIfDirectory(Path.Join(_payloadRoot, "available-artifacts"));
+            AddIfDirectory(Path.Join(_payloadRoot, "data", "global", "artifacts", "initial"));
+            AddIfDirectory(Path.Join(_payloadRoot, "payload"));
 
             return roots;
         }
@@ -1639,16 +1658,9 @@ internal static partial class Program
             string packageName,
             IReadOnlyList<string> artifactSearchRoots)
         {
-            foreach (var root in artifactSearchRoots)
-            {
-                var candidate = Path.Combine(root, packageName);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-
-            return null;
+            return artifactSearchRoots
+                .Select(root => Path.Join(root, packageName))
+                .FirstOrDefault(File.Exists);
         }
 
         private string? ResolveOrBuildSourceArtifactPackage(
@@ -1703,11 +1715,11 @@ internal static partial class Program
             }
 
             var outputRoot = ResolveSelectiveArtifactOutputRoot(component);
-            var destination = Path.Combine(outputRoot, packageName);
-            var tempRoot = Path.Combine(
+            var destination = Path.Join(outputRoot, packageName);
+            var tempRoot = Path.Join(
                 Path.GetTempPath(),
                 "omp-selective-artifact-build-" + Guid.NewGuid().ToString("N"));
-            var publishRoot = Path.Combine(tempRoot, "publish");
+            var publishRoot = Path.Join(tempRoot, "publish");
 
             try
             {
@@ -1756,16 +1768,16 @@ internal static partial class Program
                 var runtimeRoot = Directory.GetParent(artifactStoreRoot)?.FullName;
                 if (!string.IsNullOrWhiteSpace(runtimeRoot))
                 {
-                    return Path.Combine(runtimeRoot, "ArtifactArchive");
+                    return Path.Join(runtimeRoot, "ArtifactArchive");
                 }
             }
 
-            return Path.Combine(component.SourceRoot, "artifacts");
+            return Path.Join(component.SourceRoot, "artifacts");
         }
 
         private static string? ResolveComponentProjectFile(ManifestComponent component)
         {
-            var projectPath = Path.GetFullPath(Path.Combine(
+            var projectPath = Path.GetFullPath(Path.Join(
                 component.SourceRoot,
                 component.ProjectPath.Replace('/', Path.DirectorySeparatorChar)));
             if (!IsSameOrChildPath(component.SourceRoot, projectPath))
@@ -1788,7 +1800,7 @@ internal static partial class Program
             var directoryName = Path.GetFileName(Path.TrimEndingDirectorySeparator(projectPath));
             if (!string.IsNullOrWhiteSpace(directoryName))
             {
-                var preferredProject = Path.Combine(projectPath, directoryName + ".csproj");
+                var preferredProject = Path.Join(projectPath, directoryName + ".csproj");
                 if (File.Exists(preferredProject))
                 {
                     return preferredProject;
@@ -1822,7 +1834,7 @@ internal static partial class Program
             }
 
             var normalized = NormalizePathForMatch(packageRelativePath);
-            var direct = Path.GetFullPath(Path.Combine(
+            var direct = Path.GetFullPath(Path.Join(
                 _payloadRoot,
                 packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
             if (File.Exists(direct) || Directory.Exists(direct))
@@ -1836,29 +1848,29 @@ internal static partial class Program
                 if (normalized.StartsWith("data/global/artifacts/", StringComparison.OrdinalIgnoreCase)
                     || normalized.StartsWith("data/global/module-definitions/", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Path.GetFullPath(Path.Combine(
+                    return Path.GetFullPath(Path.Join(
                         _payloadRoot,
                         packageRelativePath.Replace('/', Path.DirectorySeparatorChar)));
                 }
 
                 if (normalized.StartsWith("payload/", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Path.Combine(ResolveInitialArtifactsRoot(_payloadRoot), fileName);
+                    return Path.Join(ResolveInitialArtifactsRoot(_payloadRoot), fileName);
                 }
 
                 if (normalized.StartsWith("available-artifacts/", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Path.Combine(ResolveAvailableArtifactsRoot(_payloadRoot), fileName);
+                    return Path.Join(ResolveAvailableArtifactsRoot(_payloadRoot), fileName);
                 }
 
                 if (normalized.StartsWith("module-definitions/", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Path.Combine(ResolveInitialModuleDefinitionsRoot(_payloadRoot), fileName);
+                    return Path.Join(ResolveInitialModuleDefinitionsRoot(_payloadRoot), fileName);
                 }
 
                 if (normalized.StartsWith("available-module-definitions/", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Path.Combine(ResolveAvailableModuleDefinitionsRoot(_payloadRoot), fileName);
+                    return Path.Join(ResolveAvailableModuleDefinitionsRoot(_payloadRoot), fileName);
                 }
             }
 
@@ -2073,9 +2085,9 @@ ORDER BY ar.ArtifactId DESC;
                 component.Version) + ".zip";
 
         private bool IsAvailablePackagePath(string path)
-            => IsSameOrChildPath(Path.Combine(_payloadRoot, "data", "global", "module-definitions"), path)
-                || IsSameOrChildPath(Path.Combine(_payloadRoot, "data", "global", "module-definitions", "available"), path)
-                || IsSameOrChildPath(Path.Combine(_payloadRoot, "available-module-definitions"), path);
+            => IsSameOrChildPath(Path.Join(_payloadRoot, "data", "global", "module-definitions"), path)
+                || IsSameOrChildPath(Path.Join(_payloadRoot, "data", "global", "module-definitions", "available"), path)
+                || IsSameOrChildPath(Path.Join(_payloadRoot, "available-module-definitions"), path);
 
         private static ArtifactPackageIdentity? ParseArtifactPackageIdentity(string source)
         {
@@ -2109,7 +2121,7 @@ ORDER BY ar.ArtifactId DESC;
             var manifests = new List<DeveloperManifest>();
             foreach (var root in EnumerateDeveloperManifestRoots(sourceRoots))
             {
-                var manifestPath = Path.Combine(root, "omp-components.json");
+                var manifestPath = Path.Join(root, "omp-components.json");
                 var json = await ReadJsonNodeAsync(manifestPath);
                 var repositoryKey = GetJsonStringProperty(json, "repositoryKey");
                 manifests.Add(new DeveloperManifest(
@@ -2145,8 +2157,8 @@ ORDER BY ar.ArtifactId DESC;
                 yield break;
             }
 
-            var openDocViewerRoot = Path.Combine(workspaceRoot, "OpenDocViewer");
-            if (File.Exists(Path.Combine(openDocViewerRoot, "omp-components.json")) && emitted.Add(openDocViewerRoot))
+            var openDocViewerRoot = Path.Join(workspaceRoot, "OpenDocViewer");
+            if (File.Exists(Path.Join(openDocViewerRoot, "omp-components.json")) && emitted.Add(openDocViewerRoot))
             {
                 yield return openDocViewerRoot;
             }
@@ -2206,24 +2218,20 @@ ORDER BY ar.ArtifactId DESC;
 
         private string? ResolveDeveloperSourceRoot(bool throwIfMissing)
         {
-            foreach (var sourceRoot in ParseConfiguredDeveloperSourceRoots(_config.DeveloperSource.SourceRoot))
+            var configuredRoot = ParseConfiguredDeveloperSourceRoots(_config.DeveloperSource.SourceRoot)
+                .Select(Path.GetFullPath)
+                .FirstOrDefault(IsDeveloperSourceRoot);
+            if (configuredRoot is not null)
             {
-                var resolved = Path.GetFullPath(sourceRoot);
-                if (IsDeveloperSourceRoot(resolved))
-                {
-                    return resolved;
-                }
+                return configuredRoot;
             }
 
-            foreach (var start in GetDeveloperSourceSearchStarts())
+            var discoveredRoot = GetDeveloperSourceSearchStarts()
+                .SelectMany(EnumerateSelfAndParents)
+                .FirstOrDefault(IsDeveloperSourceRoot);
+            if (discoveredRoot is not null)
             {
-                foreach (var candidate in EnumerateSelfAndParents(start))
-                {
-                    if (IsDeveloperSourceRoot(candidate))
-                    {
-                        return candidate;
-                    }
-                }
+                return discoveredRoot;
             }
 
             if (throwIfMissing)
@@ -2242,7 +2250,7 @@ ORDER BY ar.ArtifactId DESC;
             if (configuredRoots.Length > 0)
             {
                 var validRoots = configuredRoots
-                    .Where(root => File.Exists(Path.Combine(root, "omp-components.json")))
+                    .Where(root => File.Exists(Path.Join(root, "omp-components.json")))
                     .ToArray();
                 if (validRoots.Any(root => IsDeveloperSourceRoot(root)))
                 {
@@ -2383,7 +2391,20 @@ ORDER BY ar.ArtifactId DESC;
                     MessageBoxButtons.OK,
                     ExitCode == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
-            catch (Exception ex)
+            catch (JsonException ex)
+            {
+                ExitCode = 1;
+                // Action execution is the main GUI boundary; log and show the failure so the operator has both summary and details.
+                writer.WriteLine(failureText);
+                writer.WriteLine(ex.Message);
+                SetReadyStatus(failureText);
+                MessageBox.Show(
+                    ex.Message,
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            catch (SystemException ex)
             {
                 ExitCode = 1;
                 // Action execution is the main GUI boundary; log and show the failure so the operator has both summary and details.

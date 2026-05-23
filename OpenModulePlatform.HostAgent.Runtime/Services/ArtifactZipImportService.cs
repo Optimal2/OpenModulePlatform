@@ -85,11 +85,11 @@ public sealed class ArtifactZipImportService
         CancellationToken cancellationToken)
     {
         var storeRoot = Path.GetFullPath(settings.CentralArtifactRoot.Trim());
-        var tempRoot = Path.Combine(storeRoot, ".hostagent-import-staging");
+        var tempRoot = Path.Join(storeRoot, ".hostagent-import-staging");
         Directory.CreateDirectory(tempRoot);
 
-        var tempImportPath = Path.Combine(tempRoot, $"{Guid.NewGuid():N}{Path.GetExtension(importPath)}");
-        var stagingPath = Path.Combine(tempRoot, $"import-{Guid.NewGuid():N}");
+        var tempImportPath = Path.Join(tempRoot, $"{Guid.NewGuid():N}{Path.GetExtension(importPath)}");
+        var stagingPath = Path.Join(tempRoot, $"import-{Guid.NewGuid():N}");
 
         try
         {
@@ -123,7 +123,7 @@ public sealed class ArtifactZipImportService
                     importSettings,
                     metadata,
                     tempImportPath,
-                    Path.Combine(stagingPath, "artifact"),
+                    Path.Join(stagingPath, "artifact"),
                     cancellationToken);
                 _logger.LogInformation(
                     "Imported artifact zip. Zip={ImportPath}, Status={Status}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, AdoptedExistingContent={AdoptedExistingContent}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}, Message={Message}",
@@ -146,7 +146,7 @@ public sealed class ArtifactZipImportService
                     settings,
                     importSettings,
                     tempImportPath,
-                    Path.Combine(stagingPath, "module-package"),
+                    Path.Join(stagingPath, "module-package"),
                     cancellationToken);
                 _logger.LogInformation(
                     "Imported module package from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}, ImportedArtifacts={ImportedArtifacts}, SkippedArtifacts={SkippedArtifacts}, FailedArtifacts={FailedArtifacts}",
@@ -265,7 +265,7 @@ public sealed class ArtifactZipImportService
                     importSettings,
                     plan.Metadata,
                     plan.Path,
-                    Path.Combine(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
+                    Path.Join(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
                     cancellationToken,
                     allowExistingIdentical: true,
                     applyToMatchingApplications: activateArtifact);
@@ -953,7 +953,7 @@ public sealed class ArtifactZipImportService
         try
         {
             Directory.CreateDirectory(destinationRoot);
-            var destination = Path.Combine(
+            var destination = Path.Join(
                 destinationRoot,
                 $"{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}-{Path.GetFileName(importPath)}");
 
@@ -1073,18 +1073,20 @@ public sealed class ArtifactZipImportService
     private static void CopyDirectory(string source, string destination)
     {
         Directory.CreateDirectory(destination);
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeDirectory in Directory
+            .EnumerateDirectories(source, "*", SearchOption.AllDirectories)
+            .Select(directory => Path.GetRelativePath(source, directory)))
         {
-            var relativeDirectory = Path.GetRelativePath(source, directory);
             Directory.CreateDirectory(Path.Join(destination, relativeDirectory));
         }
 
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeFile in Directory
+            .EnumerateFiles(source, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(source, file)))
         {
-            var relativeFile = Path.GetRelativePath(source, file);
             var targetFile = Path.Join(destination, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
-            File.Copy(file, targetFile, overwrite: false);
+            File.Copy(Path.Join(source, relativeFile), targetFile, overwrite: false);
         }
     }
 

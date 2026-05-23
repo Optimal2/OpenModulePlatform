@@ -5,7 +5,7 @@
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.30",
+      "definitionVersion": "0.3.31",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.59",
+      "definitionVersion": "0.3.60",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -25,7 +25,7 @@
     },
     {
       "moduleKey": "content_webapp",
-      "definitionVersion": "0.3.14",
+      "definitionVersion": "0.3.15",
       "path": "OpenModulePlatform.Web.ContentWebAppModule/content_webapp.module-definition.json"
     },
     {
@@ -57,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.58",
+      "version": "0.3.59",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip"
@@ -82,7 +82,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.26",
+      "version": "0.3.27",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
@@ -118,7 +118,7 @@
       "appKey": "content_webapp_webapp",
       "packageType": "web-app",
       "targetName": "content-webapp",
-      "version": "0.3.12",
+      "version": "0.3.13",
       "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
       "relativePathTemplate": "content-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip"
