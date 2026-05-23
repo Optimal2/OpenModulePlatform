@@ -36,6 +36,7 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
+            // Top-level WinForms boundary: keep startup failures in the installer UI instead of crashing without context.
             MessageBox.Show(
                 ex.Message,
                 "OpenModulePlatform installer",
@@ -247,8 +248,8 @@ internal static partial class Program
 
     private static IEnumerable<string> EnumerateLegacyGuiConfigFiles()
     {
-        yield return Path.Combine(Environment.CurrentDirectory, "bootstrap.local.sample.json");
-        yield return Path.Combine(AppContext.BaseDirectory, "bootstrap.local.sample.json");
+        yield return Path.Join(Environment.CurrentDirectory, "bootstrap.local.sample.json");
+        yield return Path.Join(AppContext.BaseDirectory, "bootstrap.local.sample.json");
         yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "bootstrap.local.sample.json"));
         yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "bootstrap.local.sample.json"));
         yield return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "bootstrap.local.sample.json"));
@@ -261,9 +262,9 @@ internal static partial class Program
 
     private sealed class InstallerForm : Form
     {
-        private IReadOnlyList<BootstrapConfigProfile> _configProfiles;
+        private readonly IReadOnlyList<BootstrapConfigProfile> _configProfiles;
         private BootstrapConfig _config;
-        private string _configPath;
+        private readonly string _configPath;
         private string _payloadRoot;
         private readonly CliOptions _cli;
         private readonly string _payloadZipPath;
@@ -510,6 +511,7 @@ internal static partial class Program
             }
             catch (Exception ex)
             {
+                // Reload is a user-triggered operation; surface the exact configuration error and leave the current profile active.
                 MessageBox.Show(
                     ex.Message,
                     "OpenModulePlatform installer",
@@ -1233,6 +1235,7 @@ internal static partial class Program
             }
             catch (Exception ex)
             {
+                // This operation hands off to a detached process, so any launch/setup failure must be shown before the form closes.
                 MessageBox.Show(
                     ex.Message,
                     "OpenModulePlatform installer",
@@ -2383,6 +2386,7 @@ ORDER BY ar.ArtifactId DESC;
             catch (Exception ex)
             {
                 ExitCode = 1;
+                // Action execution is the main GUI boundary; log and show the failure so the operator has both summary and details.
                 writer.WriteLine(failureText);
                 writer.WriteLine(ex.Message);
                 SetReadyStatus(failureText);

@@ -70,6 +70,7 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
+            // Top-level console boundary: report any installer failure as a clean exit code.
             Console.Error.WriteLine("Bootstrap failed.");
             Console.Error.WriteLine(ex.Message);
             return 1;
@@ -2293,15 +2294,15 @@ SELECT @templateAppRowsUpdated,
         }
 
         var artifactStoreRoot = Path.GetFullPath(config.ArtifactStoreRoot.Trim());
-        var availableRoot = Path.Combine(artifactStoreRoot, "_available");
+        var availableRoot = Path.Join(artifactStoreRoot, "_available");
         var definitionsCopied = CopyAvailableDeploymentObjects(
             ResolveAvailableModuleDefinitionsRoot(payloadRoot),
-            Path.Combine(availableRoot, "module-definitions"),
+            Path.Join(availableRoot, "module-definitions"),
             "*.json",
             overwrite);
         var artifactsCopied = CopyAvailableDeploymentObjects(
             ResolveAvailableArtifactsRoot(payloadRoot),
-            Path.Combine(availableRoot, "artifacts"),
+            Path.Join(availableRoot, "artifacts"),
             "*.zip",
             overwrite);
 
@@ -3554,7 +3555,7 @@ VALUES
     private static string TryGetAppCmdPath()
     {
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var appCmdPath = Path.Combine(windows, "System32", "inetsrv", "appcmd.exe");
+        var appCmdPath = Path.Join(windows, "System32", "inetsrv", "appcmd.exe");
         return File.Exists(appCmdPath) ? appCmdPath : string.Empty;
     }
 
@@ -3932,6 +3933,7 @@ VALUES
 
         foreach (var root in EnumerateHostAndGlobalDataRoots(packageRoot, configPath))
         {
+            // Rooted profile paths are rejected above; this combine intentionally resolves a package-relative path under each data root.
             var candidate = Path.GetFullPath(Path.Combine(root, path));
             if (File.Exists(candidate) || Directory.Exists(candidate))
             {
@@ -4113,9 +4115,11 @@ VALUES
     [GeneratedRegex(@"DECLARE\s+@BootstrapPortalAdminPrincipalType\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';")]
     private static partial Regex BootstrapPrincipalTypeDeclarationRegex();
 
+    // The GUI bootstrapper can be launched from a console; these Windows interop calls attach to that console for log output.
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool AttachConsole(int processId);
 
+    // Used only when no parent console exists and the installer needs a visible console for command-line output.
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool AllocConsole();
 }

@@ -34,6 +34,7 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
+            // Detached refresh process boundary: write full diagnostics to the log and return a failure code to the launcher.
             Console.Error.WriteLine("Installer package refresh failed.");
             Console.Error.WriteLine(ex);
             await log.FlushAsync();
@@ -74,6 +75,7 @@ internal static partial class Program
             }
             catch (Exception ex)
             {
+                // Progress UI boundary: keep the background refresh failure visible while preserving the detailed log file.
                 Console.Error.WriteLine("Installer package refresh failed.");
                 Console.Error.WriteLine(ex);
                 form.SetStatus("Installer package refresh failed.");
@@ -442,9 +444,12 @@ internal static partial class Program
     }
 
     private static bool IsOpenModulePlatformSourceRoot(string path)
-        => File.Exists(Path.Combine(path, "omp-components.json"))
-            && File.Exists(Path.Combine(path, "OpenModulePlatform.slnx"))
-            && File.Exists(Path.Combine(path, "scripts", "deployment", "package-hostagent-first.ps1"));
+    {
+        // The child segments are fixed repository-relative names; rooted values here would be source bugs, not user input.
+        return File.Exists(Path.Join(path, "omp-components.json"))
+            && File.Exists(Path.Join(path, "OpenModulePlatform.slnx"))
+            && File.Exists(Path.Join(path, "scripts", "deployment", "package-hostagent-first.ps1"));
+    }
 
     private static void ReplaceDirectory(string source, string destination)
     {

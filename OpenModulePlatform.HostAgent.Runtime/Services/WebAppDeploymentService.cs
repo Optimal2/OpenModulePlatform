@@ -467,6 +467,7 @@ public sealed class WebAppDeploymentService
         string appPoolName,
         CancellationToken cancellationToken)
     {
+        // Keep this loop explicit because the first matching override may require asynchronous password resolution.
         foreach (var key in ResolveIisAppPoolOverrideKeys(deployment, appPoolName))
         {
             if (TryGetIisAppPoolIdentityOverride(settings, key, out var identity)

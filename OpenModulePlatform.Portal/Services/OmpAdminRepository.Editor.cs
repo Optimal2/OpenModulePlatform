@@ -2088,6 +2088,10 @@ WHERE ModuleKey = @ModuleKey;";
                 message = "The script content has a successful execution record and declared objects are present.";
             }
 
+            // Reaching a branch that sets needsExecution means the script has already passed the inline SQL,
+            // hash, idempotency, and safety gates above.
+            var canExecute = needsExecution;
+
             rows.Add(new ModuleDefinitionSqlCheckRow
             {
                 Key = script.Key,
@@ -2103,7 +2107,7 @@ WHERE ModuleKey = @ModuleKey;";
                 IsSafe = isSafe && isIdempotent && hashMatches,
                 HasSuccessfulExecution = hasSuccessfulExecution,
                 NeedsExecution = needsExecution,
-                CanExecute = needsExecution && hasInlineSql && isSafe && isIdempotent && hashMatches,
+                CanExecute = canExecute,
                 Status = status,
                 StatusMessage = message,
                 LastCompletedUtc = latest?.CompletedUtc,
@@ -3997,6 +4001,7 @@ VALUES
         var required = new List<RequiredDatabaseObject>();
         if (integrity["requiredSchemas"] is JsonArray schemas)
         {
+            // Keep the normalization explicit because malformed/null JSON entries are ignored rather than failing the whole definition.
             foreach (var item in schemas)
             {
                 var schema = item?.GetValue<string>();
@@ -4123,6 +4128,7 @@ VALUES
         var appKeys = new List<string>();
         if (root["apps"] is JsonArray apps)
         {
+            // Keep the loop explicit so invalid app objects are skipped while preserving app order from the definition document.
             foreach (var item in apps.OfType<JsonObject>())
             {
                 var appKey = NullIfWhiteSpace(GetJsonString(item, "appKey"));

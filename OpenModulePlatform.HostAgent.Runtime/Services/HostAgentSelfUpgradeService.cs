@@ -276,6 +276,7 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
+        // Materialize before removal so the JsonObject collection is not mutated during enumeration.
         foreach (var pair in overrides.ToArray())
         {
             if (pair.Value is JsonObject identity)
@@ -666,9 +667,11 @@ public sealed class HostAgentSelfUpgradeService
         }
         catch (IOException)
         {
+            // Best-effort staging cleanup: the next upgrade creates a unique staging folder, so locked leftovers are harmless.
         }
         catch (UnauthorizedAccessException)
         {
+            // Best-effort staging cleanup: lack of delete permission should not mask the actual self-upgrade result.
         }
     }
 
