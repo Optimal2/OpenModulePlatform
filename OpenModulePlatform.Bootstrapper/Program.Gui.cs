@@ -2379,7 +2379,7 @@ ORDER BY ar.ArtifactId DESC;
 
             try
             {
-                ExitCode = await Task.Run(() => operation().GetAwaiter().GetResult());
+                ExitCode = await Task.Run(operation);
                 SetReadyStatus(ExitCode == 0 ? successText : incompleteText);
 
                 MessageBox.Show(

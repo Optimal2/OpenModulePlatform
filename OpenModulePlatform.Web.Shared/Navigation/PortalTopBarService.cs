@@ -642,60 +642,6 @@ public sealed class PortalTopBarService
         }
     }
 
-    private static List<PortalTopBarNavigationEntry> BuildNavigationEntries(
-        IReadOnlyList<TopBarAppEntry> apps,
-        IReadOnlySet<string> permissions,
-        Func<TopBarAppEntry, string?> resolveHref)
-    {
-        var entries = new List<PortalTopBarNavigationEntry>();
-        foreach (var app in apps)
-        {
-            var appHref = resolveHref(app);
-            if (string.IsNullOrWhiteSpace(appHref))
-            {
-                continue;
-            }
-
-            if (IsContentWebApp(app))
-            {
-                AddEntry(entries, app, "pages", "Pages", appHref, app.SortOrder * 100);
-
-                if (permissions.Contains(ContentManagePermission))
-                {
-                    AddEntry(entries, app, "admin", "Admin", CombineEntryHref(appHref, "admin"), (app.SortOrder * 100) + 10);
-                    AddEntry(entries, app, "create", "Create page", CombineEntryHref(appHref, "admin/create"), (app.SortOrder * 100) + 20);
-                }
-
-                continue;
-            }
-
-            AddEntry(entries, app, "home", "Home", appHref, app.SortOrder * 100);
-        }
-
-        return entries
-            .OrderBy(entry => entry.SortOrder)
-            .ThenBy(entry => entry.GroupTitle, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(entry => entry.TextKey, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static IReadOnlyList<PortalTopBarNavigationGroup> BuildNavigationGroups(
-        IReadOnlyList<PortalTopBarNavigationEntry> entries)
-        => entries
-            .GroupBy(entry => new { entry.GroupKey, entry.GroupTitle })
-            .Select(group => new PortalTopBarNavigationGroup
-            {
-                GroupKey = group.Key.GroupKey,
-                Title = group.Key.GroupTitle,
-                Entries = group
-                    .OrderBy(entry => entry.SortOrder)
-                    .ThenBy(entry => entry.TextKey, StringComparer.OrdinalIgnoreCase)
-                    .ToArray()
-            })
-            .OrderBy(group => group.Entries.Min(entry => entry.SortOrder))
-            .ThenBy(group => group.Title, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
     private static IReadOnlyList<PortalTopBarNavigationEntry> BuildFavoriteEntries(
         IReadOnlyList<PortalTopBarNavigationEntry> entries)
         => entries
@@ -703,53 +649,6 @@ public sealed class PortalTopBarService
             .OrderBy(entry => entry.GroupTitle, StringComparer.OrdinalIgnoreCase)
             .ThenBy(entry => entry.TextKey, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-
-    private static void ApplyFavorites(
-        IReadOnlyList<PortalTopBarNavigationEntry> entries,
-        IReadOnlyList<FavoriteRef> favorites)
-    {
-        foreach (var entry in entries)
-        {
-            entry.IsFavorite = favorites.Any(favorite =>
-                string.Equals(favorite.EntryKey, entry.EntryKey, StringComparison.Ordinal)
-                && (!favorite.AppInstanceId.HasValue || favorite.AppInstanceId == entry.AppInstanceId));
-        }
-    }
-
-    private static void AddEntry(
-        List<PortalTopBarNavigationEntry> entries,
-        TopBarAppEntry app,
-        string entryName,
-        string textKey,
-        string href,
-        int sortOrder)
-    {
-        var groupTitle = string.IsNullOrWhiteSpace(app.DisplayName)
-            ? app.ModuleDisplayName
-            : app.DisplayName;
-        var entryKey = $"app:{app.AppInstanceId:N}:{entryName}";
-        entries.Add(new PortalTopBarNavigationEntry
-        {
-            EntryKey = entryKey,
-            AppInstanceId = app.AppInstanceId,
-            GroupKey = $"app:{app.AppInstanceId:N}",
-            GroupTitle = groupTitle,
-            TextKey = textKey,
-            Href = href,
-            SortOrder = sortOrder,
-            IsFavoritable = true,
-            SearchText = $"{groupTitle} {textKey} {href} {entryKey} {app.ModuleKey} {app.ModuleInstanceKey} {app.AppKey} {app.AppInstanceKey}"
-        });
-    }
-
-    private static string CombineEntryHref(string appHref, string relativePath)
-    {
-        var trimmedHref = appHref.TrimEnd('/');
-        var trimmedRelativePath = relativePath.Trim('/');
-        return string.IsNullOrWhiteSpace(trimmedRelativePath)
-            ? trimmedHref
-            : $"{trimmedHref}/{trimmedRelativePath}";
-    }
 
     private static bool IsContentWebApp(TopBarAppEntry app)
         => string.Equals(app.AppKey, "content_webapp_webapp", StringComparison.OrdinalIgnoreCase)
