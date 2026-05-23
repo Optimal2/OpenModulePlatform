@@ -2239,10 +2239,16 @@ button {
     gap: 14px;
 }
 
+.import-export-wizard [hidden] {
+    display: none !important;
+}
+
 .workflow-step {
     display: grid;
-    gap: 12px;
-    padding: 14px;
+    grid-template-columns: minmax(170px, 260px) minmax(0, 1fr);
+    gap: 6px 16px;
+    align-items: start;
+    padding: 12px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
@@ -2250,8 +2256,10 @@ button {
 }
 
 .workflow-step__label {
+    grid-column: 1;
+    grid-row: 1;
     width: fit-content;
-    padding: 3px 8px;
+    padding: 2px 8px;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface-muted);
@@ -2261,19 +2269,27 @@ button {
 }
 
 .workflow-step__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    grid-column: 1;
+    grid-row: 2;
+    display: block;
 }
 
 .workflow-step__header h3 {
     margin: 0 0 4px;
 }
 
+.workflow-step__header .muted {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+
 .workflow-choice-grid {
+    grid-column: 2;
+    grid-row: 1 / span 2;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+    align-self: stretch;
     gap: 10px;
 }
 
@@ -2284,9 +2300,9 @@ button {
 .workflow-choice {
     display: grid;
     align-content: start;
-    gap: 6px;
-    min-height: 92px;
-    padding: 14px;
+    gap: 4px;
+    min-height: 66px;
+    padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface-muted);
@@ -2312,7 +2328,7 @@ button {
 
 .workflow-choice__text {
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     font-weight: 400;
     line-height: 1.4;
 }
@@ -2330,6 +2346,17 @@ button {
 }
 
 @media (max-width: 720px) {
+    .workflow-step {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow-step__label,
+    .workflow-step__header,
+    .workflow-choice-grid {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
     .workers-grid th:last-child,
     .workers-grid td:last-child {
         width: 8.5rem;

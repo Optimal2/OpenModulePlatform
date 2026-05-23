@@ -53,7 +53,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     public IReadOnlyList<ArtifactRow> ArtifactRows { get; private set; } = [];
 
-    public IReadOnlyList<string> WidgetModuleKeys { get; private set; } = [];
+    public IReadOnlyList<DashboardWidgetAdminRow> WidgetRows { get; private set; } = [];
 
     public string ActivePanel { get; private set; } = string.Empty;
 
@@ -242,7 +242,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
     }
 
-    public async Task<IActionResult> OnGetExportWidgets(string? moduleKey, CancellationToken ct)
+    public async Task<IActionResult> OnGetExportWidgets(int? widgetId, string? moduleKey, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
@@ -252,7 +252,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
         try
         {
-            var result = await _widgets.ExportAsync(moduleKey, ct);
+            var result = widgetId.HasValue && widgetId.Value > 0
+                ? await _widgets.ExportWidgetAsync(widgetId.Value, ct)
+                : await _widgets.ExportAsync(moduleKey, ct);
             return File(result.Content, "application/json; charset=utf-8", result.FileName);
         }
         catch (InvalidOperationException ex)
@@ -302,11 +304,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         var definitions = await _repo.GetModuleDefinitionDocumentsAsync(ct);
         ArtifactRows = await _repo.GetArtifactsAsync(ct);
         var widgets = await _widgets.GetWidgetsAsync(null, ct);
-        WidgetModuleKeys = widgets
-            .Select(static row => row.ModuleKey)
-            .Where(static key => !string.IsNullOrWhiteSpace(key))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
+        WidgetRows = widgets
+            .OrderBy(static row => row.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static row => row.WidgetKey, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         AppliedDefinitions = definitions
