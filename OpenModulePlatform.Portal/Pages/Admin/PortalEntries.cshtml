@@ -5,7 +5,7 @@
     <div>
         <div class="eyebrow">@L["Portal"]</div>
         <h2>@L["Navigation"]</h2>
-        <p class="lede">@L["Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts."]</p>
+        <p class="lede">@L["Manage the shared All modules menu. Users pick their own favorites from these entries."]</p>
     </div>
 </section>
 
@@ -19,40 +19,101 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
-<nav class="settings-tabs" aria-label="@L["Navigation"]">
-    <a class="settings-tabs__link@(Model.IsAllModulesTab ? " is-active" : string.Empty)" asp-page="/Admin/PortalEntries">@L["All modules"]</a>
-    <a class="settings-tabs__link@(Model.IsFavoritesTab ? " is-active" : string.Empty)" asp-page="/Admin/PortalEntries" asp-route-tab="favorites">@L["Favorites"]</a>
-</nav>
-
-@if (Model.IsAllModulesTab)
-{
-<section class="section-grid section-grid--4 top-gap">
-    <div class="card metric-card">
-        <span class="metric-card__label">@L["Enabled entries"]</span>
-        <strong>@Model.EnabledEntryCount</strong>
-    </div>
-    <div class="card metric-card">
-        <span class="metric-card__label">@L["Top-level entries"]</span>
-        <strong>@Model.TopLevelEntryCount</strong>
-    </div>
-    <div class="card metric-card">
-        <span class="metric-card__label">@L["App entries"]</span>
-        <strong>@Model.AppEntryCount</strong>
-    </div>
-    <div class="card metric-card">
-        <span class="metric-card__label">@L["Custom links"]</span>
-        <strong>@Model.CustomEntryCount</strong>
-    </div>
-</section>
-
 <section class="card top-gap portal-entry-layout-admin">
     <div class="section-header">
         <div>
             <h3>@L["All modules"]</h3>
-            <p class="muted">
-                @L["Choose which entries are visible in All modules and adjust the parent-child layout. Drop a leaf entry on a top-level entry to make it a child."]
-            </p>
         </div>
+        <button type="button"
+                class="portal-entry-add-button"
+                data-portal-entry-create-toggle
+                aria-controls="portal-entry-create-row"
+                aria-expanded="@Model.OpenCreatePanel.ToString().ToLowerInvariant()"
+                title="@L["Add navigation entry"]"
+                aria-label="@L["Add navigation entry"]">
+            <span aria-hidden="true">+</span>
+        </button>
+    </div>
+
+    <form id="portalEntryLayoutForm" method="post" asp-page-handler="Layout"></form>
+
+    <div class="portal-entry-create-row" id="portal-entry-create-row" data-portal-entry-create-row hidden="@(!Model.OpenCreatePanel)">
+        <form method="post" asp-page-handler="Create" class="portal-entry-editor-form">
+            <div class="portal-entry-editor-form__heading">
+                <strong>@L["New navigation entry"]</strong>
+                <button type="button" class="action-link" data-portal-entry-create-close>@L["Cancel"]</button>
+            </div>
+
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="Input.DisplayName"></label>
+                    <input asp-for="Input.DisplayName" />
+                    <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
+                </div>
+
+                <div class="form-field">
+                    <label asp-for="Input.DefaultSortOrder"></label>
+                    <input asp-for="Input.DefaultSortOrder" type="number" />
+                </div>
+            </div>
+
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="Input.ParentEntryId"></label>
+                    <select asp-for="Input.ParentEntryId">
+                        <option value="">@L["None"]</option>
+                        @foreach (var option in Model.ParentOptions)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </select>
+                    <span asp-validation-for="Input.ParentEntryId" class="field-validation-error"></span>
+                </div>
+
+                <div class="form-field checkbox-row checkbox-row--boxed">
+                    <input asp-for="Input.IsEnabled" type="checkbox" />
+                    <label asp-for="Input.IsEnabled"></label>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="Input.Description"></label>
+                <textarea asp-for="Input.Description"></textarea>
+                <span asp-validation-for="Input.Description" class="field-validation-error"></span>
+            </div>
+
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="Input.TargetUrl"></label>
+                    <input asp-for="Input.TargetUrl" placeholder="/content/ex2" />
+                    <span asp-validation-for="Input.TargetUrl" class="field-validation-error"></span>
+                </div>
+
+                <div class="form-field">
+                    <label asp-for="Input.TargetEntryKey"></label>
+                    <input asp-for="Input.TargetEntryKey" />
+                    <span asp-validation-for="Input.TargetEntryKey" class="field-validation-error"></span>
+                </div>
+            </div>
+
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="Input.LogoUrl"></label>
+                    <input asp-for="Input.LogoUrl" />
+                    <span asp-validation-for="Input.LogoUrl" class="field-validation-error"></span>
+                </div>
+
+                <div class="form-field">
+                    <label asp-for="Input.IconKey"></label>
+                    <input asp-for="Input.IconKey" />
+                    <span asp-validation-for="Input.IconKey" class="field-validation-error"></span>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit" class="btn btn-primary">@L["Create entry"]</button>
+            </div>
+        </form>
     </div>
 
     @if (Model.Rows.Count == 0)
@@ -62,269 +123,207 @@
     else
     {
         var layoutIndex = 0;
-        <form method="post" asp-page-handler="Layout" data-portal-entry-layout-form>
-            <div class="portal-entry-layout-list" data-portal-entry-layout-list>
-                @foreach (var row in Model.Rows)
-                {
-                    var layoutEntry = Model.LayoutEntries.FirstOrDefault(entry => entry.PortalEntryId == row.PortalEntryId);
-                    var parentEntryId = layoutEntry?.ParentEntryId ?? row.ParentEntryId;
-                    var isEnabled = layoutEntry?.IsEnabled ?? row.IsEnabled;
-                    var sortOrder = layoutEntry?.SortOrder ?? row.DefaultSortOrder;
-                    var depth = Model.GetDepth(row);
-                    var hasChildren = Model.Rows.Any(entry => entry.ParentEntryId == row.PortalEntryId);
-                    <div class="portal-entry-layout-row"
-                         draggable="true"
-                         style="--portal-entry-depth: @depth"
-                         data-portal-entry-layout-row
-                         data-entry-id="@row.PortalEntryId"
-                         data-parent-id="@(parentEntryId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)"
-                         data-has-children="@hasChildren.ToString().ToLowerInvariant()">
-                        <input type="hidden" name="LayoutEntries[@layoutIndex].PortalEntryId" value="@row.PortalEntryId" />
-                        <input type="hidden" name="LayoutEntries[@layoutIndex].ParentEntryId" value="@(parentEntryId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)" data-portal-entry-parent-input />
-                        <input type="hidden" name="LayoutEntries[@layoutIndex].SortOrder" value="@sortOrder" data-portal-entry-sort-input />
-                        <span class="portal-entry-layout-row__handle" aria-hidden="true">⋮⋮</span>
-                        <label class="portal-entry-layout-row__visible">
-                            <input type="checkbox" name="LayoutEntries[@layoutIndex].IsEnabled" value="true" checked="@isEnabled" />
-                            <input type="hidden" name="LayoutEntries[@layoutIndex].IsEnabled" value="false" />
-                            <span>@L["Visible"]</span>
-                        </label>
-                        <div class="portal-entry-layout-row__main">
-                            <strong>@row.DisplayName</strong>
-                            <div class="muted small-text">
-                                @if (!string.IsNullOrWhiteSpace(row.ParentDisplayName))
-                                {
-                                    <span>@L["Child of"] @row.ParentDisplayName</span>
-                                }
-                                else
-                                {
-                                    <span>@L["Top-level entry"]</span>
-                                }
-                                <span> · </span>
-                                <code>@row.EntryKey</code>
-                                <span> · </span>
-                                <span>@(row.SourceAppInstanceId.HasValue ? L["App entry"] : L["Custom link"])</span>
-                            </div>
-                        </div>
-                        <div class="portal-entry-layout-row__target">
-                            @if (!string.IsNullOrWhiteSpace(row.TargetUrl))
+        <div class="portal-entry-layout-list" data-portal-entry-layout-list>
+            @foreach (var row in Model.Rows)
+            {
+                var layoutEntry = Model.LayoutEntries.FirstOrDefault(entry => entry.PortalEntryId == row.PortalEntryId);
+                var parentEntryId = layoutEntry?.ParentEntryId ?? row.ParentEntryId;
+                var isEnabled = layoutEntry?.IsEnabled ?? row.IsEnabled;
+                var sortOrder = layoutEntry?.SortOrder ?? row.DefaultSortOrder;
+                var depth = Model.GetDepth(row);
+                var hasChildren = Model.Rows.Any(entry => entry.ParentEntryId == row.PortalEntryId);
+                var parentValue = parentEntryId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+                var editorId = $"portal-entry-editor-{row.PortalEntryId}";
+                <div class="portal-entry-layout-row"
+                     style="--portal-entry-depth: @depth"
+                     data-portal-entry-layout-row
+                     data-entry-id="@row.PortalEntryId"
+                     data-parent-id="@parentValue"
+                     data-has-children="@hasChildren.ToString().ToLowerInvariant()">
+                    <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].PortalEntryId" value="@row.PortalEntryId" />
+                    <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].ParentEntryId" value="@parentValue" data-portal-entry-parent-input />
+                    <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].SortOrder" value="@sortOrder" data-portal-entry-sort-input />
+                    <span class="portal-entry-layout-row__handle" draggable="true" data-portal-entry-drag-handle aria-hidden="true">⋮⋮</span>
+                    <label class="portal-entry-layout-row__visible">
+                        <input form="portalEntryLayoutForm" type="checkbox" name="LayoutEntries[@layoutIndex].IsEnabled" value="true" checked="@isEnabled" />
+                        <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].IsEnabled" value="false" />
+                        <span>@L["Visible"]</span>
+                    </label>
+                    <div class="portal-entry-layout-row__main">
+                        <strong>@row.DisplayName</strong>
+                        <div class="muted small-text">
+                            @if (!string.IsNullOrWhiteSpace(row.ParentDisplayName))
                             {
-                                <code>@row.TargetUrl</code>
+                                <span>@row.ParentDisplayName</span>
                             }
-                            else if (!string.IsNullOrWhiteSpace(row.TargetEntryKey))
+                            else
                             {
-                                <code>@row.TargetEntryKey</code>
+                                <span>@L["Top-level entry"]</span>
                             }
+                            <span> · </span>
+                            <code>@row.EntryKey</code>
+                            <span> · </span>
+                            <span>@(row.SourceAppInstanceId.HasValue ? L["App entry"] : L["Custom link"])</span>
                         </div>
-                        <div class="portal-entry-layout-row__actions">
-                            <button type="button" class="button secondary" data-portal-entry-clear-parent>@L["Make top-level"]</button>
-                            <a class="action-link admin-icon-button admin-icon-button--edit"
-                               asp-page="/Admin/PortalEntryEdit"
-                               asp-route-portalEntryId="@row.PortalEntryId"
-                               title="@L["Edit"]"
-                               aria-label="@L["Edit"]">
-                                <span class="visually-hidden">@L["Edit"]</span>
-                            </a>
+                    </div>
+                    <div class="portal-entry-layout-row__target">
+                        @if (!string.IsNullOrWhiteSpace(row.TargetUrl))
+                        {
+                            <code>@row.TargetUrl</code>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(row.TargetEntryKey))
+                        {
+                            <code>@row.TargetEntryKey</code>
+                        }
+                    </div>
+                    <div class="portal-entry-layout-row__actions">
+                        <button type="button" class="button secondary" data-portal-entry-clear-parent>@L["Make top-level"]</button>
+                        <button type="button"
+                                class="action-link admin-icon-button admin-icon-button--edit"
+                                data-portal-entry-editor-toggle
+                                aria-controls="@editorId"
+                                aria-expanded="@((Model.OpenEditorPortalEntryId == row.PortalEntryId).ToString().ToLowerInvariant())"
+                                title="@L["Edit"]"
+                                aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </button>
+                        <form method="post" asp-page-handler="Delete" asp-route-portalEntryId="@row.PortalEntryId">
                             <button type="submit"
                                     class="btn-danger-subtle admin-icon-button admin-icon-button--delete"
-                                    asp-page-handler="Delete"
-                                    asp-route-portalEntryId="@row.PortalEntryId"
                                     data-confirm="@L["Remove this navigation entry?"]"
                                     title="@L["Remove"]"
                                     aria-label="@L["Remove"]">
                                 <span class="visually-hidden">@L["Remove"]</span>
                             </button>
-                        </div>
+                        </form>
                     </div>
-                    layoutIndex++;
-                }
-            </div>
 
-            <div class="toolbar">
-                <button type="submit" class="btn btn-primary">@L["Save All modules"]</button>
-            </div>
-        </form>
-    }
-</section>
+                    <div class="portal-entry-inline-editor" id="@editorId" hidden="@(Model.OpenEditorPortalEntryId != row.PortalEntryId)">
+                        <form method="post" asp-page-handler="Update" class="portal-entry-editor-form">
+                            <input type="hidden" name="EditInput.PortalEntryId" value="@row.PortalEntryId" />
 
-<details class="card top-gap portal-entry-create-panel" open="@(!ViewContext.ModelState.IsValid)">
-    <summary>@L["Add custom link"]</summary>
-    <form method="post" asp-page-handler="Create" class="form-grid">
-        <p class="muted">@L["Use custom links for destinations that are not created automatically from installed apps."]</p>
+                            <div class="portal-entry-editor-form__heading">
+                                <strong>@L["Edit entry"]</strong>
+                                <button type="button" class="action-link" data-portal-entry-editor-close>@L["Cancel"]</button>
+                            </div>
 
-        <div class="field-grid field-grid--2">
-            <div class="form-field">
-                <label asp-for="Input.DisplayName"></label>
-                <input asp-for="Input.DisplayName" />
-                <span asp-validation-for="Input.DisplayName" class="field-validation-error"></span>
-            </div>
+                            <div class="field-grid field-grid--2">
+                                <div class="form-field">
+                                    <label for="EditInput_DisplayName_@row.PortalEntryId">@L["Display name"]</label>
+                                    <input id="EditInput_DisplayName_@row.PortalEntryId" name="EditInput.DisplayName" value="@row.DisplayName" />
+                                </div>
 
-            <div class="form-field">
-                <label asp-for="Input.DefaultSortOrder"></label>
-                <input asp-for="Input.DefaultSortOrder" type="number" />
-            </div>
-        </div>
+                                <div class="form-field">
+                                    <label for="EditInput_DefaultSortOrder_@row.PortalEntryId">@L["Default sort order"]</label>
+                                    <input id="EditInput_DefaultSortOrder_@row.PortalEntryId" name="EditInput.DefaultSortOrder" type="number" value="@row.DefaultSortOrder" />
+                                </div>
+                            </div>
 
-        <div class="form-field">
-            <label asp-for="Input.ParentEntryId"></label>
-            <select asp-for="Input.ParentEntryId">
-                <option value="">@L["None"]</option>
-                @foreach (var option in Model.ParentOptions)
-                {
-                    <option value="@option.Value">@option.Label</option>
-                }
-            </select>
-            <div class="field-help">@L["Leave empty for a top-level entry. Choose a parent to show the link under that group."]</div>
-            <span asp-validation-for="Input.ParentEntryId" class="field-validation-error"></span>
-        </div>
+                            <div class="field-grid field-grid--2">
+                                <div class="form-field">
+                                    <label for="EditInput_ParentEntryId_@row.PortalEntryId">@L["Parent entry"]</label>
+                                    <select id="EditInput_ParentEntryId_@row.PortalEntryId" name="EditInput.ParentEntryId">
+                                        @if (row.ParentEntryId is null)
+                                        {
+                                            <option value="" selected>@L["None"]</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="">@L["None"]</option>
+                                        }
+                                        @foreach (var option in Model.ParentOptions.Where(option => !string.Equals(option.Value, row.PortalEntryId.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)))
+                                        {
+                                            if (string.Equals(option.Value, parentValue, StringComparison.Ordinal))
+                                            {
+                                                <option value="@option.Value" selected>@option.Label</option>
+                                            }
+                                            else
+                                            {
+                                                <option value="@option.Value">@option.Label</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
 
-        <div class="form-field">
-            <label asp-for="Input.Description"></label>
-            <textarea asp-for="Input.Description"></textarea>
-            <span asp-validation-for="Input.Description" class="field-validation-error"></span>
-        </div>
+                                <div class="form-field checkbox-row checkbox-row--boxed">
+                                    <input id="EditInput_IsEnabled_@row.PortalEntryId" name="EditInput.IsEnabled" type="checkbox" value="true" checked="@row.IsEnabled" />
+                                    <input name="EditInput.IsEnabled" type="hidden" value="false" />
+                                    <label for="EditInput_IsEnabled_@row.PortalEntryId">@L["Enabled"]</label>
+                                </div>
+                            </div>
 
-        <div class="field-grid field-grid--2">
-            <div class="form-field">
-                <label asp-for="Input.TargetUrl"></label>
-                <input asp-for="Input.TargetUrl" placeholder="/content/ex2" />
-                <div class="field-help">@L["Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL."]</div>
-                <span asp-validation-for="Input.TargetUrl" class="field-validation-error"></span>
-            </div>
+                            <div class="form-field">
+                                <label for="EditInput_Description_@row.PortalEntryId">@L["Description"]</label>
+                                <textarea id="EditInput_Description_@row.PortalEntryId" name="EditInput.Description">@row.Description</textarea>
+                            </div>
 
-            <div class="form-field">
-                <label asp-for="Input.TargetEntryKey"></label>
-                <input asp-for="Input.TargetEntryKey" />
-                <div class="field-help">@L["Optional stable navigation entry key. Leave empty when target URL is enough."]</div>
-                <span asp-validation-for="Input.TargetEntryKey" class="field-validation-error"></span>
-            </div>
-        </div>
+                            <div class="field-grid field-grid--2">
+                                <div class="form-field">
+                                    <label for="EditInput_TargetUrl_@row.PortalEntryId">@L["Target URL"]</label>
+                                    <input id="EditInput_TargetUrl_@row.PortalEntryId" name="EditInput.TargetUrl" value="@row.TargetUrl" />
+                                </div>
 
-        <div class="field-grid field-grid--3">
-            <div class="form-field">
-                <label asp-for="Input.LogoUrl"></label>
-                <input asp-for="Input.LogoUrl" />
-                <span asp-validation-for="Input.LogoUrl" class="field-validation-error"></span>
-            </div>
+                                <div class="form-field">
+                                    <label for="EditInput_TargetEntryKey_@row.PortalEntryId">@L["Target entry key"]</label>
+                                    <input id="EditInput_TargetEntryKey_@row.PortalEntryId" name="EditInput.TargetEntryKey" value="@row.TargetEntryKey" />
+                                </div>
+                            </div>
 
-            <div class="form-field">
-                <label asp-for="Input.IconKey"></label>
-                <input asp-for="Input.IconKey" />
-                <span asp-validation-for="Input.IconKey" class="field-validation-error"></span>
-            </div>
+                            <div class="field-grid field-grid--2">
+                                <div class="form-field">
+                                    <label for="EditInput_LogoUrl_@row.PortalEntryId">@L["Logo URL"]</label>
+                                    <input id="EditInput_LogoUrl_@row.PortalEntryId" name="EditInput.LogoUrl" value="@row.LogoUrl" />
+                                </div>
 
-            <div class="form-field checkbox-row checkbox-row--boxed">
-                <input asp-for="Input.IsEnabled" type="checkbox" />
-                <label asp-for="Input.IsEnabled"></label>
-            </div>
+                                <div class="form-field">
+                                    <label for="EditInput_IconKey_@row.PortalEntryId">@L["Icon key"]</label>
+                                    <input id="EditInput_IconKey_@row.PortalEntryId" name="EditInput.IconKey" value="@row.IconKey" />
+                                </div>
+                            </div>
+
+                            <div class="toolbar">
+                                <button type="submit" class="btn btn-primary">@L["Save changes"]</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                layoutIndex++;
+            }
         </div>
 
         <div class="toolbar">
-            <button type="submit" class="btn btn-primary">@L["Add custom link"]</button>
-            <a class="action-link" href="~/">@L["Back to portal"]</a>
-        </div>
-    </form>
-</details>
-}
-
-@if (Model.IsFavoritesTab)
-{
-<section class="card top-gap">
-    <div class="section-header">
-        <div>
-            <h3>@L["Favorites"]</h3>
-            <p class="muted">@L["Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections."]</p>
-        </div>
-        <a class="action-link" asp-page="/Admin/DashboardWidgets">@L["Open dashboard widget settings"]</a>
-    </div>
-    <p class="muted">@L["Admins control which entries can be selected as favorites by enabling or disabling them in All modules."]</p>
-</section>
-
-<section class="top-gap">
-    <h3>@L["Available favorite entries"]</h3>
-    @{
-        var availableFavoriteEntries = Model.Rows.Where(row => row.IsEnabled).ToArray();
-    }
-    @if (availableFavoriteEntries.Length == 0)
-    {
-        <div class="empty-state">@L["No entries to show"]</div>
-    }
-    else
-    {
-        <div class="table-scroll portal-entries-admin-scroll">
-            <table class="grid portal-entries-admin-grid">
-                <colgroup>
-                    <col class="portal-entries-admin-grid__name" />
-                    <col class="portal-entries-admin-grid__parent" />
-                    <col class="portal-entries-admin-grid__key" />
-                    <col class="portal-entries-admin-grid__target" />
-                    <col class="portal-entries-admin-grid__sort" />
-                    <col class="portal-entries-admin-grid__actions" />
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th>@L["Display name"]</th>
-                        <th>@L["Group"]</th>
-                        <th>@L["Entry key"]</th>
-                        <th>@L["Target"]</th>
-                        <th>@L["Sort order"]</th>
-                        <th>@L["Actions"]</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach (var row in availableFavoriteEntries)
-                {
-                    <tr>
-                        <td>
-                            <strong>@row.DisplayName</strong>
-                            @if (!string.IsNullOrWhiteSpace(row.Description))
-                            {
-                                <div class="muted small-text">@row.Description</div>
-                            }
-                        </td>
-                        <td>
-                            @if (!string.IsNullOrWhiteSpace(row.ParentDisplayName))
-                            {
-                                @row.ParentDisplayName
-                            }
-                            else
-                            {
-                                <span class="muted">@L["None"]</span>
-                            }
-                        </td>
-                        <td><code>@row.EntryKey</code></td>
-                        <td>
-                            @if (!string.IsNullOrWhiteSpace(row.TargetUrl))
-                            {
-                                <code>@row.TargetUrl</code>
-                            }
-                            else if (!string.IsNullOrWhiteSpace(row.TargetEntryKey))
-                            {
-                                <code>@row.TargetEntryKey</code>
-                            }
-                        </td>
-                        <td>@row.DefaultSortOrder</td>
-                        <td>
-                            <a class="action-link admin-icon-button admin-icon-button--edit"
-                               asp-page="/Admin/PortalEntryEdit"
-                               asp-route-portalEntryId="@row.PortalEntryId"
-                               title="@L["Edit"]"
-                               aria-label="@L["Edit"]">
-                                <span class="visually-hidden">@L["Edit"]</span>
-                            </a>
-                        </td>
-                    </tr>
-                }
-                </tbody>
-            </table>
+            <button type="submit" form="portalEntryLayoutForm" class="btn btn-primary">@L["Save All modules"]</button>
         </div>
     }
 </section>
-}
 
 @section Scripts {
     <script>
         (() => {
+            const createRow = document.querySelector("[data-portal-entry-create-row]");
+            const createToggle = document.querySelector("[data-portal-entry-create-toggle]");
+            const createClose = document.querySelector("[data-portal-entry-create-close]");
             const list = document.querySelector("[data-portal-entry-layout-list]");
+
+            const setPanelOpen = (panel, toggle, open) => {
+                if (!panel) {
+                    return;
+                }
+
+                panel.hidden = !open;
+                toggle?.setAttribute("aria-expanded", String(open));
+            };
+
+            createToggle?.addEventListener("click", () => {
+                const open = createRow?.hidden ?? true;
+                setPanelOpen(createRow, createToggle, open);
+                if (open) {
+                    createRow?.querySelector("input, select, textarea, button")?.focus();
+                }
+            });
+
+            createClose?.addEventListener("click", () => setPanelOpen(createRow, createToggle, false));
+
             if (!list) {
                 return;
             }
@@ -350,6 +349,10 @@
             };
 
             list.addEventListener("dragstart", event => {
+                if (!event.target.closest("[data-portal-entry-drag-handle]")) {
+                    return;
+                }
+
                 const row = event.target.closest("[data-portal-entry-layout-row]");
                 if (!row) {
                     return;
@@ -411,6 +414,27 @@
                 const confirmTarget = event.target.closest("[data-confirm]");
                 if (confirmTarget && !window.confirm(confirmTarget.dataset.confirm)) {
                     event.preventDefault();
+                    return;
+                }
+
+                const editorToggle = event.target.closest("[data-portal-entry-editor-toggle]");
+                if (editorToggle) {
+                    const panel = document.getElementById(editorToggle.getAttribute("aria-controls"));
+                    const open = panel?.hidden ?? true;
+                    setPanelOpen(panel, editorToggle, open);
+                    if (open) {
+                        panel?.querySelector("input, select, textarea, button")?.focus();
+                    }
+                    return;
+                }
+
+                const editorClose = event.target.closest("[data-portal-entry-editor-close]");
+                if (editorClose) {
+                    const panel = editorClose.closest(".portal-entry-inline-editor");
+                    const toggle = panel?.id
+                        ? list.querySelector(`[data-portal-entry-editor-toggle][aria-controls="${panel.id}"]`)
+                        : null;
+                    setPanelOpen(panel, toggle, false);
                     return;
                 }
 

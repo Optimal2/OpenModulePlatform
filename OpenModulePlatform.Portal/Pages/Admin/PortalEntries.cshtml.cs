@@ -12,9 +12,6 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 
 public sealed class PortalEntriesModel : OmpPortalPageModel
 {
-    private const string AllModulesTab = "all";
-    private const string FavoritesTab = "favorites";
-
     private readonly PortalEntryService _portalEntries;
 
     public PortalEntriesModel(
@@ -28,6 +25,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
     public InputModel Input { get; set; } = new();
 
+    public EditInputModel EditInput { get; set; } = new();
+
     [BindProperty]
     public List<LayoutEntryInput> LayoutEntries { get; set; } = [];
 
@@ -38,21 +37,11 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> ParentOptions { get; private set; } = [];
 
-    public string ActiveTab { get; private set; } = AllModulesTab;
+    public bool OpenCreatePanel { get; private set; }
 
-    public bool IsAllModulesTab => string.Equals(ActiveTab, AllModulesTab, StringComparison.Ordinal);
+    public int? OpenEditorPortalEntryId { get; private set; }
 
-    public bool IsFavoritesTab => string.Equals(ActiveTab, FavoritesTab, StringComparison.Ordinal);
-
-    public int EnabledEntryCount => Rows.Count(row => row.IsEnabled);
-
-    public int TopLevelEntryCount => Rows.Count(row => row.ParentEntryId is null);
-
-    public int AppEntryCount => Rows.Count(row => row.SourceAppInstanceId.HasValue);
-
-    public int CustomEntryCount => Rows.Count(row => !row.SourceAppInstanceId.HasValue);
-
-    public async Task<IActionResult> OnGet(string? tab, CancellationToken ct)
+    public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
@@ -60,7 +49,6 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             return guard;
         }
 
-        SetActiveTab(tab);
         await LoadAsync(ct);
         SetTitles("Navigation");
         Input.IsEnabled = true;
@@ -75,11 +63,11 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             return guard;
         }
 
-        ActiveTab = AllModulesTab;
         Input = input;
+        OpenCreatePanel = true;
         await LoadAsync(ct);
         SetTitles("Navigation");
-        ValidateInput();
+        ValidateCreateInput();
 
         if (!ModelState.IsValid)
         {
@@ -105,6 +93,61 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
         return RedirectToPage("/Admin/PortalEntries");
     }
 
+    public async Task<IActionResult> OnPostUpdate([Bind(Prefix = nameof(EditInput))] EditInputModel input, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        EditInput = input;
+        OpenEditorPortalEntryId = input.PortalEntryId;
+        await LoadAsync(ct);
+        SetTitles("Navigation");
+
+        var existing = Rows.FirstOrDefault(row => row.PortalEntryId == input.PortalEntryId);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        ValidateEditInput(existing);
+        if (await _portalEntries.WouldCreateCycleAsync(EditInput.PortalEntryId, EditInput.ParentEntryId, ct))
+        {
+            ModelState.AddModelError($"{nameof(EditInput)}.{nameof(EditInput.ParentEntryId)}", T("The selected parent would create a navigation cycle."));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+
+        var updated = await _portalEntries.UpdateAsync(
+            new PortalEntryEditData
+            {
+                PortalEntryId = EditInput.PortalEntryId,
+                ParentEntryId = EditInput.ParentEntryId,
+                DisplayName = EditInput.DisplayName.Trim(),
+                Description = Clean(EditInput.Description),
+                LogoUrl = Clean(EditInput.LogoUrl),
+                IconKey = Clean(EditInput.IconKey),
+                TargetUrl = Clean(EditInput.TargetUrl),
+                TargetEntryKey = Clean(EditInput.TargetEntryKey),
+                IsEnabled = EditInput.IsEnabled,
+                DefaultSortOrder = EditInput.DefaultSortOrder
+            },
+            ct);
+
+        if (!updated)
+        {
+            return NotFound();
+        }
+
+        StatusMessage = T("Navigation entry updated.");
+        return RedirectToPage("/Admin/PortalEntries");
+    }
+
     public async Task<IActionResult> OnPostLayout(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -113,8 +156,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             return guard;
         }
 
-        ActiveTab = AllModulesTab;
         RemoveModelStatePrefix(nameof(Input));
+        RemoveModelStatePrefix(nameof(EditInput));
 
         if (LayoutEntries.Count == 0)
         {
@@ -183,21 +226,6 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
         return Math.Min(depth, 3);
     }
 
-    private void SetActiveTab(string? tab)
-    {
-        var candidate = Clean(tab);
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            candidate = Clean(Request.Query["handler"].ToString());
-        }
-
-        ActiveTab = candidate?.ToLowerInvariant() switch
-        {
-            FavoritesTab => FavoritesTab,
-            _ => AllModulesTab
-        };
-    }
-
     private void RemoveModelStatePrefix(string prefix)
     {
         var prefixWithDot = prefix + ".";
@@ -222,24 +250,47 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             .ToList();
     }
 
-    private void ValidateInput()
+    private void ValidateCreateInput()
     {
-        Input.DisplayName = Input.DisplayName.Trim();
+        Input.DisplayName = Input.DisplayName?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(Input.TargetUrl) && string.IsNullOrWhiteSpace(Input.TargetEntryKey))
         {
-            ModelState.AddModelError(nameof(Input.TargetUrl), T("Enter a target URL or target entry key."));
+            ModelState.AddModelError($"{nameof(Input)}.{nameof(Input.TargetUrl)}", T("Enter a target URL or target entry key."));
         }
 
         if (!string.IsNullOrWhiteSpace(Input.TargetUrl) && !IsSafeTargetUrl(Input.TargetUrl))
         {
-            ModelState.AddModelError(nameof(Input.TargetUrl), T("Use an absolute http/https URL, a local path starting with /, or a relative path."));
+            ModelState.AddModelError($"{nameof(Input)}.{nameof(Input.TargetUrl)}", T("Use an absolute http/https URL, a local path starting with /, or a relative path."));
         }
 
         if (Input.ParentEntryId is int parentEntryId
             && !ParentOptions.Any(option => string.Equals(option.Value, parentEntryId.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)))
         {
-            ModelState.AddModelError(nameof(Input.ParentEntryId), T("Select a valid parent entry."));
+            ModelState.AddModelError($"{nameof(Input)}.{nameof(Input.ParentEntryId)}", T("Select a valid parent entry."));
+        }
+    }
+
+    private void ValidateEditInput(PortalEntryAdminRow existing)
+    {
+        EditInput.DisplayName = EditInput.DisplayName?.Trim() ?? string.Empty;
+
+        if (!existing.SourceAppInstanceId.HasValue
+            && string.IsNullOrWhiteSpace(EditInput.TargetUrl)
+            && string.IsNullOrWhiteSpace(EditInput.TargetEntryKey))
+        {
+            ModelState.AddModelError($"{nameof(EditInput)}.{nameof(EditInput.TargetUrl)}", T("Enter a target URL or target entry key."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(EditInput.TargetUrl) && !IsSafeTargetUrl(EditInput.TargetUrl))
+        {
+            ModelState.AddModelError($"{nameof(EditInput)}.{nameof(EditInput.TargetUrl)}", T("Use an absolute http/https URL, a local path starting with /, or a relative path."));
+        }
+
+        if (EditInput.ParentEntryId is int parentEntryId
+            && !ParentOptions.Any(option => string.Equals(option.Value, parentEntryId.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)))
+        {
+            ModelState.AddModelError($"{nameof(EditInput)}.{nameof(EditInput.ParentEntryId)}", T("Select a valid parent entry."));
         }
     }
 
@@ -264,6 +315,45 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
     public sealed class InputModel
     {
+        [Required]
+        [StringLength(200)]
+        [Display(Name = "Display name")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Display(Name = "Parent entry")]
+        public int? ParentEntryId { get; set; }
+
+        [StringLength(1000)]
+        [Display(Name = "Description")]
+        public string? Description { get; set; }
+
+        [StringLength(600)]
+        [Display(Name = "Logo URL")]
+        public string? LogoUrl { get; set; }
+
+        [StringLength(100)]
+        [Display(Name = "Icon key")]
+        public string? IconKey { get; set; }
+
+        [StringLength(600)]
+        [Display(Name = "Target URL")]
+        public string? TargetUrl { get; set; }
+
+        [StringLength(200)]
+        [Display(Name = "Target entry key")]
+        public string? TargetEntryKey { get; set; }
+
+        [Display(Name = "Enabled")]
+        public bool IsEnabled { get; set; } = true;
+
+        [Display(Name = "Default sort order")]
+        public int DefaultSortOrder { get; set; } = 1000;
+    }
+
+    public sealed class EditInputModel
+    {
+        public int PortalEntryId { get; set; }
+
         [Required]
         [StringLength(200)]
         [Display(Name = "Display name")]

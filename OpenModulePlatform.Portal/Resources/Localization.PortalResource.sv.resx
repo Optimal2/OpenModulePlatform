@@ -2049,6 +2049,12 @@
   <data name="Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisionering, runtime-identitetskontroller och explicita materialiseringsbegäranden för installationen.</value></data>
   <data name="Navigation" xml:space="preserve"><value>Navigering</value></data>
   <data name="Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts." xml:space="preserve"><value>Hantera den gemensamma menyn Alla moduler. Användare väljer Favoriter från samma poster och dashboard-widgets återanvänder båda begreppen.</value></data>
+  <data name="Manage the shared All modules menu. Users pick their own favorites from these entries." xml:space="preserve"><value>Hantera den gemensamma menyn Alla moduler. Användare väljer själva sina favoriter från dessa poster.</value></data>
+  <data name="Add navigation entry" xml:space="preserve"><value>Lägg till navigeringspost</value></data>
+  <data name="New navigation entry" xml:space="preserve"><value>Ny navigeringspost</value></data>
+  <data name="Create entry" xml:space="preserve"><value>Skapa post</value></data>
+  <data name="Edit entry" xml:space="preserve"><value>Redigera post</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Avbryt</value></data>
   <data name="Enabled entries" xml:space="preserve"><value>Aktiverade poster</value></data>
   <data name="Top-level entries" xml:space="preserve"><value>Poster på toppnivå</value></data>
   <data name="App entries" xml:space="preserve"><value>Appposter</value></data>
