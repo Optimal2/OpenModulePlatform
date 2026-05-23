@@ -2122,4 +2122,8 @@
   <data name="Import package zip" xml:space="preserve"><value>Importera paket-zip</value></data>
   <data name="Use this when the module definition JSON and artifact packages are separate files." xml:space="preserve"><value>Använd detta när moduldefinitions-JSON och artefaktpaket är separata filer.</value></data>
   <data name="Import JSON plus artifact zips" xml:space="preserve"><value>Importera JSON plus artefaktzippar</value></data>
+  <data name="Export all widgets or one selected dashboard widget." xml:space="preserve"><value>Exportera alla widgets eller en vald dashboard-widget.</value></data>
+  <data name="Export all widgets or choose one of the widgets available in this OMP installation." xml:space="preserve"><value>Exportera alla widgets eller välj en av de widgets som finns i den här OMP-installationen.</value></data>
+  <data name="Widget" xml:space="preserve"><value>Widget</value></data>
+  <data name="All widgets" xml:space="preserve"><value>Alla widgets</value></data>
 </root>

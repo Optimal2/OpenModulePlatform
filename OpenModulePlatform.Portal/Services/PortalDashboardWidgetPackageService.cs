@@ -114,11 +114,30 @@ ORDER BY w.module_key,
     {
         var rows = await GetWidgetsAsync(moduleKey, ct);
         var trimmedModuleKey = string.IsNullOrWhiteSpace(moduleKey) ? null : moduleKey.Trim();
+        return ExportRows(rows, trimmedModuleKey, trimmedModuleKey ?? "all");
+    }
+
+    public async Task<(byte[] Content, string FileName)> ExportWidgetAsync(
+        int widgetId,
+        CancellationToken ct)
+    {
+        var rows = await GetWidgetsAsync(null, ct);
+        var row = rows.FirstOrDefault(item => item.WidgetId == widgetId)
+            ?? throw new InvalidOperationException("The selected dashboard widget was not found.");
+
+        return ExportRows([row], null, row.WidgetKey);
+    }
+
+    private static (byte[] Content, string FileName) ExportRows(
+        IReadOnlyList<DashboardWidgetAdminRow> rows,
+        string? documentModuleKey,
+        string fileNameKey)
+    {
         var document = new DashboardWidgetDocument
         {
             Format = FormatName,
             FormatVersion = FormatVersion,
-            ModuleKey = trimmedModuleKey,
+            ModuleKey = documentModuleKey,
             ExportedAtUtc = DateTime.UtcNow,
             Widgets = rows
                 .OrderBy(static row => row.ModuleKey, StringComparer.OrdinalIgnoreCase)
@@ -129,7 +148,7 @@ ORDER BY w.module_key,
                     Title = row.Title,
                     WidgetType = row.WidgetType,
                     Payload = row.Payload,
-                    ModuleKey = GetExportItemModuleKey(row.ModuleKey, trimmedModuleKey),
+                    ModuleKey = GetExportItemModuleKey(row.ModuleKey, documentModuleKey),
                     Author = row.Author,
                     PermissionNames = row.PermissionNames
                         .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
@@ -142,7 +161,7 @@ ORDER BY w.module_key,
         };
 
         var json = JsonSerializer.Serialize(document, JsonOptions);
-        var fileName = $"omp-dashboard-widgets-{SanitizeFileName(trimmedModuleKey ?? "all")}-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
+        var fileName = $"omp-dashboard-widgets-{SanitizeFileName(fileNameKey)}-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
         return (Encoding.UTF8.GetBytes(json), fileName);
     }
 
