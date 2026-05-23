@@ -1966,7 +1966,7 @@ END;
                 }
 
                 Directory.CreateDirectory(target);
-                File.Copy(source, Path.Combine(target, Path.GetFileName(source)), overwrite: true);
+                File.Copy(source, Path.Join(target, Path.GetFileName(source)), overwrite: true);
             }
             else
             {
@@ -2328,7 +2328,7 @@ SELECT @templateAppRowsUpdated,
         var copied = 0;
         foreach (var sourcePath in Directory.EnumerateFiles(sourceRoot, searchPattern, SearchOption.TopDirectoryOnly))
         {
-            var targetPath = Path.Combine(targetRoot, Path.GetFileName(sourcePath));
+            var targetPath = Path.Join(targetRoot, Path.GetFileName(sourcePath));
             if (!overwrite && File.Exists(targetPath))
             {
                 continue;
@@ -2491,7 +2491,7 @@ VALUES
 
         var packagePath = ResolvePackageDataPath(payloadRoot, hostAgent.PackagePath);
         var installPath = Path.GetFullPath(hostAgent.InstallPath.Trim());
-        var stagingRoot = Path.Combine(Path.GetTempPath(), "OMP.HostAgent", Guid.NewGuid().ToString("N"));
+        var stagingRoot = Path.Join(Path.GetTempPath(), "OMP.HostAgent", Guid.NewGuid().ToString("N"));
         var sourceDirectory = packagePath;
 
         try
@@ -3878,7 +3878,7 @@ VALUES
         var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(installPath))
             ?? throw new InvalidOperationException($"Cannot resolve parent folder for {installPath}.");
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(installPath));
-        return Path.Combine(parent + "Backups", $"{name}-{DateTime.Now:yyyyMMdd-HHmmss}");
+        return Path.Join(parent + "Backups", $"{name}-{DateTime.Now:yyyyMMdd-HHmmss}");
     }
 
     private static void CopyDirectory(string sourceDirectory, string targetDirectory)
@@ -3887,13 +3887,13 @@ VALUES
         foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(sourceDirectory, directory);
-            Directory.CreateDirectory(Path.Combine(targetDirectory, relative));
+            Directory.CreateDirectory(Path.Join(targetDirectory, relative));
         }
 
         foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(sourceDirectory, file);
-            var target = Path.Combine(targetDirectory, relative);
+            var target = Path.Join(targetDirectory, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, overwrite: true);
         }
@@ -4006,19 +4006,19 @@ VALUES
         string? candidate = null;
         if (normalized.StartsWith("payload/", StringComparison.OrdinalIgnoreCase))
         {
-            candidate = Path.Combine(ResolveInitialArtifactsRoot(packageRoot), fileName);
+            candidate = Path.Join(ResolveInitialArtifactsRoot(packageRoot), fileName);
         }
         else if (normalized.StartsWith("available-artifacts/", StringComparison.OrdinalIgnoreCase))
         {
-            candidate = Path.Combine(ResolveAvailableArtifactsRoot(packageRoot), fileName);
+            candidate = Path.Join(ResolveAvailableArtifactsRoot(packageRoot), fileName);
         }
         else if (normalized.StartsWith("module-definitions/", StringComparison.OrdinalIgnoreCase))
         {
-            candidate = Path.Combine(ResolveInitialModuleDefinitionsRoot(packageRoot), fileName);
+            candidate = Path.Join(ResolveInitialModuleDefinitionsRoot(packageRoot), fileName);
         }
         else if (normalized.StartsWith("available-module-definitions/", StringComparison.OrdinalIgnoreCase))
         {
-            candidate = Path.Combine(ResolveAvailableModuleDefinitionsRoot(packageRoot), fileName);
+            candidate = Path.Join(ResolveAvailableModuleDefinitionsRoot(packageRoot), fileName);
         }
 
         return candidate is not null && (File.Exists(candidate) || Directory.Exists(candidate))
@@ -4031,16 +4031,16 @@ VALUES
         var configKey = Path.GetFileNameWithoutExtension(configPath);
         if (!string.IsNullOrWhiteSpace(configKey))
         {
-            yield return Path.Combine(packageRoot, "data", "profiles", configKey);
+            yield return Path.Join(packageRoot, "data", "profiles", configKey);
         }
 
-        yield return Path.Combine(packageRoot, "data", "global");
+        yield return Path.Join(packageRoot, "data", "global");
     }
 
     private static string CombineUnderRoot(string root, string relative)
     {
         var fullRoot = Path.GetFullPath(root.Trim());
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relative.Trim().Replace('/', Path.DirectorySeparatorChar)));
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, relative.Trim().Replace('/', Path.DirectorySeparatorChar)));
         if (!IsSameOrChildPath(fullRoot, fullPath))
         {
             throw new InvalidOperationException($"Path '{relative}' escapes root path '{fullRoot}'.");

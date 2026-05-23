@@ -226,16 +226,13 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         try
         {
             var result = await _packages.ExportArtifactPackageAsync(artifactId, ct);
-            // ASP.NET Core owns and disposes this stream after the file response is sent; disposing it here would close the response body early.
-            var stream = new FileStream(
-                result.PackagePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 1024 * 128,
-                FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+            Response.OnCompleted(static state =>
+            {
+                TryDeleteTemporaryFile((string)state);
+                return Task.CompletedTask;
+            }, result.PackagePath);
 
-            return File(stream, "application/zip", result.FileName);
+            return PhysicalFile(result.PackagePath, "application/zip", result.FileName);
         }
         catch (InvalidOperationException ex)
         {
@@ -283,16 +280,13 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         try
         {
             var result = await _packages.ExportModulePackageAsync(moduleKey.Trim(), includeAllVersions, ct);
-            // ASP.NET Core owns and disposes this stream after the file response is sent; disposing it here would close the response body early.
-            var stream = new FileStream(
-                result.PackagePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 1024 * 128,
-                FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+            Response.OnCompleted(static state =>
+            {
+                TryDeleteTemporaryFile((string)state);
+                return Task.CompletedTask;
+            }, result.PackagePath);
 
-            return File(stream, "application/zip", result.FileName);
+            return PhysicalFile(result.PackagePath, "application/zip", result.FileName);
         }
         catch (InvalidOperationException ex)
         {
@@ -454,6 +448,25 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             ReplaceExistingArtifacts: input.ReplaceExistingArtifacts,
             CopyConfigurationFilesFromPreviousVersion: input.CopyConfigurationFilesFromPreviousVersion,
             UseArtifactsImmediately: input.UseArtifactsImmediately);
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            if (System.IO.File.Exists(path))
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup for a temporary export file; a later temp cleanup can remove it if the file is still locked.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best-effort cleanup for a temporary export file; failing the completed response would not help the operator.
+        }
+    }
 
     public sealed class UploadInputModel
     {
