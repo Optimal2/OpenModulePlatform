@@ -3331,6 +3331,12 @@ VALUES
             || value.Equals("LocalService", StringComparison.OrdinalIgnoreCase)
             || value.Equals("NetworkService", StringComparison.OrdinalIgnoreCase);
 
+    private static readonly string[] ProductOwnedServiceNamePrefixes =
+    [
+        "OMP.",
+        "OpenModulePlatform."
+    ];
+
     private static void RemoveWindowsServices(BootstrapConfig config)
     {
         var serviceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3341,16 +3347,14 @@ VALUES
         }
 
         var runtimeRoots = GetServiceRuntimeRoots(config.HostAgent);
-        if (runtimeRoots.Count > 0)
+        foreach (var serviceName in EnumerateWindowsServiceNames())
         {
-            foreach (var serviceName in EnumerateWindowsServiceNames())
+            var executablePath = GetWindowsServiceExecutablePath(serviceName);
+            if (IsProductOwnedServiceName(serviceName)
+                || (!string.IsNullOrWhiteSpace(executablePath)
+                    && runtimeRoots.Any(root => IsSameOrChildPath(root, executablePath))))
             {
-                var executablePath = GetWindowsServiceExecutablePath(serviceName);
-                if (!string.IsNullOrWhiteSpace(executablePath)
-                    && runtimeRoots.Any(root => IsSameOrChildPath(root, executablePath)))
-                {
-                    serviceNames.Add(serviceName);
-                }
+                serviceNames.Add(serviceName);
             }
         }
 
@@ -3374,6 +3378,9 @@ VALUES
             serviceNames.Add(serviceName.Trim());
         }
     }
+
+    private static bool IsProductOwnedServiceName(string serviceName)
+        => ProductOwnedServiceNamePrefixes.Any(prefix => serviceName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static List<string> GetServiceRuntimeRoots(HostAgentInstallOptions hostAgent)
     {
