@@ -5,7 +5,7 @@
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.29",
+      "definitionVersion": "0.3.30",
       "path": "omp_core.module-definition.json"
     },
     {
