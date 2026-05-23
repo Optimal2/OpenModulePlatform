@@ -225,16 +225,13 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
             tempPackagePath,
             packageConfigurationFiles);
 
-        // ASP.NET Core owns and disposes this stream after the file response is sent; disposing it here would close the response body early.
-        var stream = new FileStream(
-            tempPackagePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 1024 * 128,
-            FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+        Response.OnCompleted(static state =>
+        {
+            TryDeleteTemporaryFile((string)state);
+            return Task.CompletedTask;
+        }, tempPackagePath);
 
-        return File(stream, "application/zip", packageFileName);
+        return PhysicalFile(tempPackagePath, "application/zip", packageFileName);
     }
 
     private async Task LoadAsync(CancellationToken ct)
@@ -331,6 +328,25 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         string targetName,
         string version)
         => $"{moduleKey}__{appKey}__{packageType}__{targetName}__{version}.zip";
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            if (System.IO.File.Exists(path))
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup for a temporary export file; a later temp cleanup can remove it if the file is still locked.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best-effort cleanup for a temporary export file; failing the completed response would not help the operator.
+        }
+    }
 
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
         => ex.Number == 547

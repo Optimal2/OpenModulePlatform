@@ -136,9 +136,9 @@ public sealed class PortableModulePackageService
         {
             if (bundleFile is not null && bundleFile.Length > 0)
             {
-                var bundlePath = Path.Combine(tempRoot, Path.GetFileName(bundleFile.FileName));
+                var bundlePath = Path.Join(tempRoot, Path.GetFileName(bundleFile.FileName));
                 await CopyUploadToFileAsync(bundleFile, bundlePath, _options.MaxUploadBytes, ct);
-                var extractedRoot = Path.Combine(tempRoot, "bundle");
+                var extractedRoot = Path.Join(tempRoot, "bundle");
                 ZipFile.ExtractToDirectory(bundlePath, extractedRoot, overwriteFiles: true);
 
                 var definitionPath = FindSingleModuleDefinitionFile(extractedRoot);
@@ -160,7 +160,7 @@ public sealed class PortableModulePackageService
                 throw new InvalidOperationException("Select either one portable module package zip or one module definition JSON file.");
             }
 
-            var definitionUploadPath = Path.Combine(tempRoot, Path.GetFileName(definitionFile.FileName));
+            var definitionUploadPath = Path.Join(tempRoot, Path.GetFileName(definitionFile.FileName));
             await CopyUploadToFileAsync(definitionFile, definitionUploadPath, MaxDefinitionBytes, ct);
             var uploadedDefinition = await ReadDefinitionAsync(
                 definitionUploadPath,
@@ -1273,13 +1273,13 @@ public sealed class PortableModulePackageService
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
         {
             var relativeDirectory = Path.GetRelativePath(source, directory);
-            Directory.CreateDirectory(Path.Combine(destination, relativeDirectory));
+            Directory.CreateDirectory(Path.Join(destination, relativeDirectory));
         }
 
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
             var relativeFile = Path.GetRelativePath(source, file);
-            var targetFile = Path.Combine(destination, relativeFile);
+            var targetFile = Path.Join(destination, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
             File.Copy(file, targetFile, overwrite: false);
         }

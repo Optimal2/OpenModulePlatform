@@ -70,7 +70,7 @@ public sealed class ArtifactPackageExtractor
                 ?? throw new InvalidOperationException("Artifact package payload.path is required."));
         var payloadType = payload["type"]?.GetValue<string>()?.Trim();
 
-        var artifactContentPath = Path.Combine(stagingPath, "artifact-content");
+        var artifactContentPath = Path.Join(stagingPath, "artifact-content");
         var fileCount = IsZipPayload(payloadPath, payloadType)
             ? ExtractNestedPayloadZip(archive, payloadPath, artifactContentPath, stagingPath)
             : ExtractArchiveEntries(archive, artifactContentPath, EnsureDirectoryPrefix(payloadPath), _validatePayloadEntry);
@@ -93,7 +93,7 @@ public sealed class ArtifactPackageExtractor
         string stagingPath)
     {
         var payloadEntry = FindRequiredFileEntry(archive, payloadPath);
-        var nestedZipPath = Path.Combine(stagingPath, "artifact-payload.zip");
+        var nestedZipPath = Path.Join(stagingPath, "artifact-payload.zip");
         Directory.CreateDirectory(Path.GetDirectoryName(nestedZipPath)!);
 
         using (var source = payloadEntry.Open())
