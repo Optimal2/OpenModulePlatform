@@ -322,7 +322,7 @@ public sealed class ArtifactPackageExtractor
         }
 
         var fullRoot = Path.GetFullPath(rootPath);
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativeEntryPath.Replace('/', Path.DirectorySeparatorChar)));
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, relativeEntryPath.Replace('/', Path.DirectorySeparatorChar)));
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;

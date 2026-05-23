@@ -4001,32 +4001,25 @@ VALUES
         var required = new List<RequiredDatabaseObject>();
         if (integrity["requiredSchemas"] is JsonArray schemas)
         {
-            // Keep the normalization explicit because malformed/null JSON entries are ignored rather than failing the whole definition.
-            foreach (var item in schemas)
-            {
-                var schema = item?.GetValue<string>();
-                if (!string.IsNullOrWhiteSpace(schema))
-                {
-                    required.Add(new RequiredDatabaseObject("schema", schema.Trim(), null, null));
-                }
-            }
+            // Malformed/null JSON entries are ignored rather than failing the whole definition.
+            required.AddRange(schemas
+                .Select(item => item?.GetValue<string>())
+                .Where(schema => !string.IsNullOrWhiteSpace(schema))
+                .Select(schema => new RequiredDatabaseObject("schema", schema!.Trim(), null, null)));
         }
 
         if (integrity["requiredTables"] is JsonArray tables)
         {
-            foreach (var item in tables.OfType<JsonObject>())
-            {
-                var schema = GetJsonString(item, "schema");
-                var name = GetJsonString(item, "name");
-                if (!string.IsNullOrWhiteSpace(schema) && !string.IsNullOrWhiteSpace(name))
+            required.AddRange(tables
+                .OfType<JsonObject>()
+                .Select(item => new
                 {
-                    required.Add(new RequiredDatabaseObject(
-                        "table",
-                        schema,
-                        name,
-                        NullIfWhiteSpace(GetJsonString(item, "source"))));
-                }
-            }
+                    Schema = GetJsonString(item, "schema"),
+                    Name = GetJsonString(item, "name"),
+                    Source = NullIfWhiteSpace(GetJsonString(item, "source"))
+                })
+                .Where(item => !string.IsNullOrWhiteSpace(item.Schema) && !string.IsNullOrWhiteSpace(item.Name))
+                .Select(item => new RequiredDatabaseObject("table", item.Schema, item.Name, item.Source)));
         }
 
         return required;
@@ -4125,19 +4118,14 @@ VALUES
         }
 
         var moduleKey = NullIfWhiteSpace(GetJsonString(root, "moduleKey")) ?? fallbackModuleKey;
-        var appKeys = new List<string>();
-        if (root["apps"] is JsonArray apps)
-        {
-            // Keep the loop explicit so invalid app objects are skipped while preserving app order from the definition document.
-            foreach (var item in apps.OfType<JsonObject>())
-            {
-                var appKey = NullIfWhiteSpace(GetJsonString(item, "appKey"));
-                if (appKey is not null)
-                {
-                    appKeys.Add(appKey);
-                }
-            }
-        }
+        var appKeys = root["apps"] is JsonArray apps
+            ? apps
+                .OfType<JsonObject>()
+                .Select(item => NullIfWhiteSpace(GetJsonString(item, "appKey")))
+                .Where(appKey => appKey is not null)
+                .Select(appKey => appKey!)
+                .ToList()
+            : [];
 
         var expectsModule = root["module"] is JsonObject || appKeys.Count > 0;
         return new ExpectedModuleMetadata(moduleKey, expectsModule, appKeys);
@@ -4151,24 +4139,24 @@ VALUES
             return [];
         }
 
-        var result = new List<ModuleDefinitionDependencySpec>();
-        foreach (var item in dependencies.OfType<JsonObject>())
-        {
-            var moduleKey = NullIfWhiteSpace(GetJsonString(item, "moduleKey"));
-            if (moduleKey is null)
+        return dependencies
+            .OfType<JsonObject>()
+            .Select(item => new
             {
-                continue;
-            }
-
-            result.Add(new ModuleDefinitionDependencySpec(
-                moduleKey,
-                NullIfWhiteSpace(GetJsonString(item, "minDefinitionVersion")),
-                NullIfWhiteSpace(GetJsonString(item, "maxDefinitionVersion")),
-                GetJsonBool(item, "required", true),
-                NullIfWhiteSpace(GetJsonString(item, "reason"))));
-        }
-
-        return result;
+                ModuleKey = NullIfWhiteSpace(GetJsonString(item, "moduleKey")),
+                MinDefinitionVersion = NullIfWhiteSpace(GetJsonString(item, "minDefinitionVersion")),
+                MaxDefinitionVersion = NullIfWhiteSpace(GetJsonString(item, "maxDefinitionVersion")),
+                Required = GetJsonBool(item, "required", true),
+                Reason = NullIfWhiteSpace(GetJsonString(item, "reason"))
+            })
+            .Where(item => item.ModuleKey is not null)
+            .Select(item => new ModuleDefinitionDependencySpec(
+                item.ModuleKey!,
+                item.MinDefinitionVersion,
+                item.MaxDefinitionVersion,
+                item.Required,
+                item.Reason))
+            .ToArray();
     }
 
     private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
@@ -4628,13 +4616,13 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
             return "The script contains TRUNCATE TABLE, which is not allowed for Portal repair.";
         }
 
-        foreach (Match match in Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)"))
+        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")
+            .Cast<Match>()
+            .Select(static match => match.Groups["statement"].Value)
+            .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
+        if (unsafeDeleteStatement is not null)
         {
-            var statement = match.Groups["statement"].Value;
-            if (!Regex.IsMatch(statement, @"(?is)\bWHERE\b"))
-            {
-                return "The script contains DELETE FROM without a WHERE clause, which is not allowed for Portal repair.";
-            }
+            return "The script contains DELETE FROM without a WHERE clause, which is not allowed for Portal repair.";
         }
 
         return null;

@@ -14,7 +14,7 @@ internal static partial class Program
 
     private static async Task<int> RunInstallerPackageRefreshAsync(CliOptions cli)
     {
-        var logPath = Path.Combine(
+        var logPath = Path.Join(
             Path.GetTempPath(),
             "omp-installer-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + ".log");
 
@@ -32,7 +32,25 @@ internal static partial class Program
             await RunInstallerPackageRefreshCoreAsync(cli, logPath);
             return 0;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
+        {
+            // Detached refresh process boundary: write full diagnostics to the log and return a failure code to the launcher.
+            Console.Error.WriteLine("Installer package refresh failed.");
+            Console.Error.WriteLine(ex);
+            await log.FlushAsync();
+
+            if (OperatingSystem.IsWindows() && Environment.UserInteractive)
+            {
+                MessageBox.Show(
+                    $"Installer package refresh failed. Details were written to:{Environment.NewLine}{logPath}{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+
+            return 1;
+        }
+        catch (SystemException ex)
         {
             // Detached refresh process boundary: write full diagnostics to the log and return a failure code to the launcher.
             Console.Error.WriteLine("Installer package refresh failed.");
@@ -73,7 +91,20 @@ internal static partial class Program
                 exitCode = 0;
                 form.SetStatus("Updated installer package created. Starting installer...");
             }
-            catch (Exception ex)
+            catch (JsonException ex)
+            {
+                // Progress UI boundary: keep the background refresh failure visible while preserving the detailed log file.
+                Console.Error.WriteLine("Installer package refresh failed.");
+                Console.Error.WriteLine(ex);
+                form.SetStatus("Installer package refresh failed.");
+                MessageBox.Show(
+                    form,
+                    $"Installer package refresh failed. Details were written to:{Environment.NewLine}{logPath}{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            catch (SystemException ex)
             {
                 // Progress UI boundary: keep the background refresh failure visible while preserving the detailed log file.
                 Console.Error.WriteLine("Installer package refresh failed.");
@@ -150,7 +181,7 @@ internal static partial class Program
             [
                 "-NoProfile",
                 "-File",
-                Path.Combine(sourceRoot, "scripts", "deployment", "package-hostagent-first.ps1"),
+                Path.Join(sourceRoot, "scripts", "deployment", "package-hostagent-first.ps1"),
                 "-ConfigPath",
                 packageConfigPath,
                 "-OutputRoot",
@@ -171,7 +202,7 @@ internal static partial class Program
         await MergeCurrentBootstrapConfigAsync(config, configPath, payloadRoot, generatedPackageRoot);
         ReplaceDirectory(generatedPackageRoot, payloadRoot);
 
-        var destinationLogPath = Path.Combine(payloadRoot, "installer-refresh.log");
+        var destinationLogPath = Path.Join(payloadRoot, "installer-refresh.log");
         Console.Out.Flush();
         File.Copy(logPath, destinationLogPath, overwrite: true);
 
@@ -280,8 +311,8 @@ internal static partial class Program
     {
         var candidates = new[]
         {
-            Path.Combine(generatedPackageRoot, "configs", "bootstrap.local.sample.json"),
-            Path.Combine(generatedPackageRoot, "bootstrap.local.sample.json")
+            Path.Join(generatedPackageRoot, "configs", "bootstrap.local.sample.json"),
+            Path.Join(generatedPackageRoot, "bootstrap.local.sample.json")
         };
 
         return candidates.FirstOrDefault(File.Exists)
@@ -299,7 +330,7 @@ internal static partial class Program
         if (IsSameOrChildPath(currentRoot, currentFullPath))
         {
             var relativePath = Path.GetRelativePath(currentRoot, currentFullPath);
-            return Path.GetFullPath(Path.Combine(generatedPackageRoot, relativePath));
+            return Path.GetFullPath(Path.Join(generatedPackageRoot, relativePath));
         }
 
         return fallbackGeneratedConfigPath;
@@ -312,7 +343,7 @@ internal static partial class Program
     {
         var configuredRoots = ParseDeveloperSourceRoots(config.DeveloperSource.SourceRoot)
             .Select(Path.GetFullPath)
-            .Where(root => File.Exists(Path.Combine(root, "omp-components.json")))
+            .Where(root => File.Exists(Path.Join(root, "omp-components.json")))
             .ToList();
 
         if (configuredRoots.Any(IsOpenModulePlatformSourceRoot))
@@ -320,16 +351,13 @@ internal static partial class Program
             return configuredRoots;
         }
 
-        foreach (var start in GetDeveloperSourceSearchStarts(payloadRoot, configPath))
+        var discoveredRoot = GetDeveloperSourceSearchStarts(payloadRoot, configPath)
+            .SelectMany(EnumerateSelfAndParents)
+            .FirstOrDefault(IsOpenModulePlatformSourceRoot);
+        if (discoveredRoot is not null)
         {
-            foreach (var candidate in EnumerateSelfAndParents(start))
-            {
-                if (IsOpenModulePlatformSourceRoot(candidate))
-                {
-                    configuredRoots.Insert(0, candidate);
-                    return configuredRoots;
-                }
-            }
+            configuredRoots.Insert(0, discoveredRoot);
+            return configuredRoots;
         }
 
         throw new DirectoryNotFoundException("Developer source roots must include an OpenModulePlatform source repository.");
@@ -340,12 +368,11 @@ internal static partial class Program
         string payloadRoot,
         string configPath)
     {
-        foreach (var sourceRoot in ResolveDeveloperSourceRoots(config, payloadRoot, configPath))
+        var primaryRoot = ResolveDeveloperSourceRoots(config, payloadRoot, configPath)
+            .FirstOrDefault(IsOpenModulePlatformSourceRoot);
+        if (primaryRoot is not null)
         {
-            if (IsOpenModulePlatformSourceRoot(sourceRoot))
-            {
-                return sourceRoot;
-            }
+            return primaryRoot;
         }
 
         throw new DirectoryNotFoundException("Developer source roots must include an OpenModulePlatform source repository.");
@@ -392,7 +419,7 @@ internal static partial class Program
             return configured;
         }
 
-        return Path.Combine(
+        return Path.Join(
             ResolveShortInstallerRefreshBaseRoot(config, sourceRoot),
             "PackageRefresh",
             DateTime.UtcNow.ToString("yyyyMMddHHmmss"));
@@ -410,7 +437,7 @@ internal static partial class Program
         }
 
         var sourceDrive = Path.GetPathRoot(Path.GetFullPath(sourceRoot));
-        return Path.Combine(
+        return Path.Join(
             string.IsNullOrWhiteSpace(sourceDrive) ? Path.GetPathRoot(Path.GetTempPath()) ?? Path.GetTempPath() : sourceDrive,
             "OMP");
     }
@@ -488,16 +515,20 @@ internal static partial class Program
     private static void CopyDirectoryRecursive(string source, string destination)
     {
         Directory.CreateDirectory(destination);
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeDirectory in Directory
+            .EnumerateDirectories(source, "*", SearchOption.AllDirectories)
+            .Select(directory => Path.GetRelativePath(source, directory)))
         {
-            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, directory)));
+            Directory.CreateDirectory(Path.Join(destination, relativeDirectory));
         }
 
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeFile in Directory
+            .EnumerateFiles(source, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(source, file)))
         {
-            var target = Path.Combine(destination, Path.GetRelativePath(source, file));
+            var target = Path.Join(destination, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(target) ?? destination);
-            File.Copy(file, target, overwrite: true);
+            File.Copy(Path.Join(source, relativeFile), target, overwrite: true);
         }
     }
 

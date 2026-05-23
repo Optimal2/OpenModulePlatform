@@ -356,6 +356,6 @@ internal static class ArtifactConfigurationFileWriter
         var runtimeRoot = Directory.GetParent(webAppsRoot)?.FullName;
         return string.IsNullOrWhiteSpace(runtimeRoot)
             ? string.Empty
-            : Path.Combine(runtimeRoot, "DataProtectionKeys");
+            : Path.Join(runtimeRoot, "DataProtectionKeys");
     }
 }

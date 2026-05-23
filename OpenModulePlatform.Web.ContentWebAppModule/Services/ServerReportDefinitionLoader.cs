@@ -90,16 +90,9 @@ public sealed partial class ServerReportDefinitionLoader
 
     private string? TryResolveExistingReportPath(string reportKey)
     {
-        foreach (var directory in GetReportsDirectories())
-        {
-            var fullPath = ResolveReportPath(directory, reportKey);
-            if (File.Exists(fullPath))
-            {
-                return fullPath;
-            }
-        }
-
-        return null;
+        return GetReportsDirectories()
+            .Select(directory => ResolveReportPath(directory, reportKey))
+            .FirstOrDefault(File.Exists);
     }
 
     private IReadOnlyList<string> GetReportsDirectories()

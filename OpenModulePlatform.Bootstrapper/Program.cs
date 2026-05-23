@@ -68,7 +68,14 @@ internal static partial class Program
 
             return await RunBootstrapAsync(cli);
         }
-        catch (Exception ex)
+        catch (JsonException ex)
+        {
+            // Top-level console boundary: report installer configuration failures as a clean exit code.
+            Console.Error.WriteLine("Bootstrap failed.");
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (SystemException ex)
         {
             // Top-level console boundary: report any installer failure as a clean exit code.
             Console.Error.WriteLine("Bootstrap failed.");
@@ -98,7 +105,7 @@ internal static partial class Program
         {
             if (!string.IsNullOrWhiteSpace(payloadZipPath))
             {
-                temporaryPayloadRoot = Path.Combine(
+                temporaryPayloadRoot = Path.Join(
                     Path.GetTempPath(),
                     "OpenModulePlatform.Bootstrapper",
                     Guid.NewGuid().ToString("N"));
@@ -158,7 +165,7 @@ internal static partial class Program
         {
             if (!string.IsNullOrWhiteSpace(payloadZipPath))
             {
-                temporaryPayloadRoot = Path.Combine(
+                temporaryPayloadRoot = Path.Join(
                     Path.GetTempPath(),
                     "OpenModulePlatform.Bootstrapper",
                     Guid.NewGuid().ToString("N"));
@@ -1297,13 +1304,13 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
             return "The script contains TRUNCATE TABLE.";
         }
 
-        foreach (Match match in Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)"))
+        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")
+            .Cast<Match>()
+            .Select(static match => match.Groups["statement"].Value)
+            .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
+        if (unsafeDeleteStatement is not null)
         {
-            var statement = match.Groups["statement"].Value;
-            if (!Regex.IsMatch(statement, @"(?is)\bWHERE\b"))
-            {
-                return "The script contains DELETE FROM without a WHERE clause.";
-            }
+            return "The script contains DELETE FROM without a WHERE clause.";
         }
 
         return null;
@@ -1374,7 +1381,7 @@ END
                 if (include.Success)
                 {
                     var includePath = include.Groups["path"].Value.Trim().Trim('"');
-                    var resolvedInclude = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullPath)!, includePath));
+                    var resolvedInclude = Path.GetFullPath(Path.Join(Path.GetDirectoryName(fullPath)!, includePath));
                     if (!includeExampleApps && IsExampleSqlPath(resolvedInclude, payloadRoot))
                     {
                         continue;
@@ -1928,7 +1935,7 @@ END;
             }
             else if (File.Exists(source) && source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                var stagingPath = Path.Combine(
+                var stagingPath = Path.Join(
                     artifactStoreRoot,
                     ".bootstrapper-artifact-staging",
                     Guid.NewGuid().ToString("N"));
@@ -2526,7 +2533,7 @@ VALUES
             CopyDirectory(sourceDirectory, installPath);
             await WriteHostAgentSettingsAsync(config, installPath);
 
-            var executablePath = Path.Combine(installPath, "OpenModulePlatform.HostAgent.WindowsService.exe");
+            var executablePath = Path.Join(installPath, "OpenModulePlatform.HostAgent.WindowsService.exe");
             if (!File.Exists(executablePath))
             {
                 throw new FileNotFoundException("HostAgent executable was not found after installation.", executablePath);
@@ -2834,7 +2841,7 @@ VALUES
             : options.AutomationMode.Trim();
 
         var filePath = string.IsNullOrWhiteSpace(options.FilePath) && isRequired
-            ? Path.Combine(Path.GetFullPath(installPath), "hostagent.credentials.json")
+            ? Path.Join(Path.GetFullPath(installPath), "hostagent.credentials.json")
             : options.FilePath?.Trim() ?? string.Empty;
 
         var settings = new HostAgentCredentialStoreSettings
@@ -3054,7 +3061,7 @@ VALUES
     {
         var hostAgent = config.HostAgent;
         var localArtifactCacheRoot = string.IsNullOrWhiteSpace(hostAgent.LocalArtifactCacheRoot)
-            ? Path.Combine(Path.GetFullPath(hostAgent.InstallPath.Trim()), "ArtifactCache")
+            ? Path.Join(Path.GetFullPath(hostAgent.InstallPath.Trim()), "ArtifactCache")
             : hostAgent.LocalArtifactCacheRoot.Trim();
 
         return JsonNode.Parse(
@@ -3249,30 +3256,16 @@ VALUES
                 return false;
             }
 
-            var inMemberList = false;
-            foreach (var rawLine in result.StdOut.Split([Environment.NewLine], StringSplitOptions.None))
-            {
-                var line = rawLine.Trim();
-                if (line.Length == 0)
-                {
-                    continue;
-                }
-
-                if (line.StartsWith("---", StringComparison.Ordinal))
-                {
-                    inMemberList = true;
-                    continue;
-                }
-
-                if (!inMemberList
-                    || line.Contains("command completed", StringComparison.OrdinalIgnoreCase)
-                    || line.Contains("kommandot slutf", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                members.Add(NormalizeWindowsAccount(line));
-            }
+            members.AddRange(
+                result.StdOut
+                    .Split([Environment.NewLine], StringSplitOptions.None)
+                    .Select(static rawLine => rawLine.Trim())
+                    .SkipWhile(static line => !line.StartsWith("---", StringComparison.Ordinal))
+                    .Skip(1)
+                    .Where(static line => line.Length > 0
+                        && !line.Contains("command completed", StringComparison.OrdinalIgnoreCase)
+                        && !line.Contains("kommandot slutf", StringComparison.OrdinalIgnoreCase))
+                    .Select(NormalizeWindowsAccount));
 
             return true;
         }
@@ -3413,20 +3406,12 @@ VALUES
                 $"sc.exe failed with exit code {result.ExitCode} while listing Windows services: {result.StdOut}{result.StdErr}");
         }
 
-        foreach (var rawLine in result.StdOut.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var line = rawLine.Trim();
-            if (!line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var serviceName = line["SERVICE_NAME:".Length..].Trim();
-            if (!string.IsNullOrWhiteSpace(serviceName))
-            {
-                yield return serviceName;
-            }
-        }
+        return result.StdOut
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(static rawLine => rawLine.Trim())
+            .Where(static line => line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
+            .Select(static line => line["SERVICE_NAME:".Length..].Trim())
+            .Where(static serviceName => !string.IsNullOrWhiteSpace(serviceName));
     }
 
     private static string GetWindowsServiceExecutablePath(string serviceName)
@@ -3437,14 +3422,12 @@ VALUES
             return string.Empty;
         }
 
-        foreach (var rawLine in result.StdOut.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        var line = result.StdOut
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(static rawLine => rawLine.Trim())
+            .FirstOrDefault(static line => line.StartsWith("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase));
+        if (line is not null)
         {
-            var line = rawLine.Trim();
-            if (!line.StartsWith("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
             var separator = line.IndexOf(':', StringComparison.Ordinal);
             if (separator < 0)
             {
@@ -3591,38 +3574,29 @@ VALUES
     private static IEnumerable<string> GetRuntimeDirectories(BootstrapConfig config)
     {
         var hostAgent = config.HostAgent;
-        foreach (var path in new[]
-        {
-            hostAgent.PortalPhysicalPath,
-            hostAgent.WebAppsRoot,
-            hostAgent.LocalArtifactCacheRoot,
-            config.ArtifactStoreRoot,
-            hostAgent.InstallPath,
-            hostAgent.ServicesRoot
-        })
-        {
-            if (!string.IsNullOrWhiteSpace(path))
+        var configuredPaths = new[]
             {
-                yield return path.Trim();
+                hostAgent.PortalPhysicalPath,
+                hostAgent.WebAppsRoot,
+                hostAgent.LocalArtifactCacheRoot,
+                config.ArtifactStoreRoot,
+                hostAgent.InstallPath,
+                hostAgent.ServicesRoot
             }
-        }
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => path.Trim());
 
         var hostAgentSettings = GetJsonObjectProperty(hostAgent.AppSettings, "HostAgent");
         var dataProtectionPath = GetJsonStringProperty(hostAgentSettings, "WebAppDataProtectionKeyPath");
-        if (!string.IsNullOrWhiteSpace(dataProtectionPath))
-        {
-            yield return dataProtectionPath;
-        }
 
         var artifactZipImport = GetJsonObjectProperty(hostAgentSettings, "ArtifactZipImport");
-        foreach (var property in new[] { "ImportPath", "ProcessedPath", "FailedPath" })
-        {
-            var path = GetJsonStringProperty(artifactZipImport, property);
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                yield return path;
-            }
-        }
+        var importPaths = new[] { "ImportPath", "ProcessedPath", "FailedPath" }
+            .Select(property => GetJsonStringProperty(artifactZipImport, property))
+            .Where(static path => !string.IsNullOrWhiteSpace(path));
+
+        return configuredPaths
+            .Concat(string.IsNullOrWhiteSpace(dataProtectionPath) ? [] : [dataProtectionPath])
+            .Concat(importPaths);
     }
 
     private static JsonNode? GetJsonObjectProperty(JsonNode? node, string propertyName)
@@ -3632,15 +3606,7 @@ VALUES
             return null;
         }
 
-        foreach (var property in obj)
-        {
-            if (property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                return property.Value;
-            }
-        }
-
-        return null;
+        return obj.FirstOrDefault(property => property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase)).Value;
     }
 
     private static string GetJsonStringProperty(JsonNode? node, string propertyName)
@@ -3870,7 +3836,7 @@ VALUES
     private static string GetScPath()
     {
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        return Path.Combine(windows, "System32", "sc.exe");
+        return Path.Join(windows, "System32", "sc.exe");
     }
 
     private static string CreateBackupPath(string installPath)
@@ -3884,40 +3850,46 @@ VALUES
     private static void CopyDirectory(string sourceDirectory, string targetDirectory)
     {
         Directory.CreateDirectory(targetDirectory);
-        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (var relativeDirectory in Directory
+            .EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories)
+            .Select(directory => Path.GetRelativePath(sourceDirectory, directory)))
         {
-            var relative = Path.GetRelativePath(sourceDirectory, directory);
-            Directory.CreateDirectory(Path.Join(targetDirectory, relative));
+            Directory.CreateDirectory(Path.Join(targetDirectory, relativeDirectory));
         }
 
-        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (var relativeFile in Directory
+            .EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(sourceDirectory, file)))
         {
-            var relative = Path.GetRelativePath(sourceDirectory, file);
-            var target = Path.Join(targetDirectory, relative);
+            var target = Path.Join(targetDirectory, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(file, target, overwrite: true);
+            File.Copy(Path.Join(sourceDirectory, relativeFile), target, overwrite: true);
         }
     }
 
     private static void RemoveRuntimeConfigurationFiles(string root)
     {
-        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-        {
-            var fileName = Path.GetFileName(file);
-            if (fileName.Equals("appsettings.json", StringComparison.OrdinalIgnoreCase)
-                || (fileName.StartsWith("appsettings.", StringComparison.OrdinalIgnoreCase)
-                    && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                || fileName.Equals("odv.site.config.js", StringComparison.OrdinalIgnoreCase))
+        var runtimeConfigurationFiles = Directory
+            .EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Where(file =>
             {
-                File.Delete(file);
-            }
+                var fileName = Path.GetFileName(file);
+                return fileName.Equals("appsettings.json", StringComparison.OrdinalIgnoreCase)
+                    || (fileName.StartsWith("appsettings.", StringComparison.OrdinalIgnoreCase)
+                        && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    || fileName.Equals("odv.site.config.js", StringComparison.OrdinalIgnoreCase);
+            });
+
+        foreach (var file in runtimeConfigurationFiles)
+        {
+            File.Delete(file);
         }
     }
 
     private static string ResolvePath(string root, string path)
         => Path.IsPathRooted(path)
             ? Path.GetFullPath(path)
-            : Path.GetFullPath(Path.Combine(root, path));
+            : Path.GetFullPath(Path.Join(root, path));
 
     private static string ResolvePackageDataPath(string packageRoot, string path)
     {
@@ -3940,8 +3912,7 @@ VALUES
 
         foreach (var root in EnumerateHostAndGlobalDataRoots(packageRoot, configPath))
         {
-            // Rooted profile paths are rejected above; this combine intentionally resolves a package-relative path under each data root.
-            var candidate = Path.GetFullPath(Path.Combine(root, path));
+            var candidate = Path.GetFullPath(Path.Join(root, path));
             if (File.Exists(candidate) || Directory.Exists(candidate))
             {
                 return candidate;
@@ -3955,43 +3926,37 @@ VALUES
     private static string ResolveInitialModuleDefinitionsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
-            Path.Combine("data", "global", "module-definitions"),
-            Path.Combine("data", "global", "module-definitions", "initial"),
+            Path.Join("data", "global", "module-definitions"),
+            Path.Join("data", "global", "module-definitions", "initial"),
             "module-definitions");
 
     private static string ResolveAvailableModuleDefinitionsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
-            Path.Combine("data", "global", "module-definitions"),
-            Path.Combine("data", "global", "module-definitions", "available"),
+            Path.Join("data", "global", "module-definitions"),
+            Path.Join("data", "global", "module-definitions", "available"),
             "available-module-definitions");
 
     private static string ResolveInitialArtifactsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
-            Path.Combine("data", "global", "artifacts"),
-            Path.Combine("data", "global", "artifacts", "initial"),
+            Path.Join("data", "global", "artifacts"),
+            Path.Join("data", "global", "artifacts", "initial"),
             "payload");
 
     private static string ResolveAvailableArtifactsRoot(string packageRoot)
         => ResolvePackageDirectory(
             packageRoot,
-            Path.Combine("data", "global", "artifacts"),
-            Path.Combine("data", "global", "artifacts", "available"),
+            Path.Join("data", "global", "artifacts"),
+            Path.Join("data", "global", "artifacts", "available"),
             "available-artifacts");
 
     private static string ResolvePackageDirectory(string packageRoot, params string[] relativePaths)
     {
-        foreach (var relativePath in relativePaths)
-        {
-            var candidate = ResolvePath(packageRoot, relativePath);
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return ResolvePath(packageRoot, relativePaths[0]);
+        return relativePaths
+            .Select(relativePath => ResolvePath(packageRoot, relativePath))
+            .FirstOrDefault(Directory.Exists)
+            ?? ResolvePath(packageRoot, relativePaths[0]);
     }
 
     private static string? ResolveLegacyPackageDataPath(string packageRoot, string path)
@@ -4092,8 +4057,10 @@ VALUES
             return;
         }
 
+        // lgtm[cs/call-to-unmanaged-code] Windows-only console interop is limited to attaching command-line output for the installer.
         if (!AttachConsole(AttachParentProcess))
         {
+            // lgtm[cs/call-to-unmanaged-code] AllocConsole is the documented fallback when no parent console is available.
             AllocConsole();
         }
     }
@@ -4122,11 +4089,15 @@ VALUES
     [GeneratedRegex(@"DECLARE\s+@BootstrapPortalAdminPrincipalType\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';")]
     private static partial Regex BootstrapPrincipalTypeDeclarationRegex();
 
+    // lgtm[cs/unmanaged-code] The bootstrapper uses kernel32 console APIs only for Windows command-line log visibility.
     // The GUI bootstrapper can be launched from a console; these Windows interop calls attach to that console for log output.
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool AttachConsole(int processId);
 
+    // lgtm[cs/unmanaged-code] The bootstrapper uses kernel32 console APIs only for Windows command-line log visibility.
     // Used only when no parent console exists and the installer needs a visible console for command-line output.
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool AllocConsole();
 }

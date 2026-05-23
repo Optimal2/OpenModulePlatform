@@ -128,13 +128,13 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             return Page();
         }
 
-        var tempRoot = Path.Combine(storeRoot, ".portal-upload-staging");
+        var tempRoot = Path.Join(storeRoot, ".portal-upload-staging");
         Directory.CreateDirectory(tempRoot);
 
-        var tempZipPath = Path.Combine(tempRoot, $"{Guid.NewGuid():N}.zip");
-        var stagingPath = Path.Combine(tempRoot, $"artifact-{Guid.NewGuid():N}");
+        var tempZipPath = Path.Join(tempRoot, $"{Guid.NewGuid():N}.zip");
+        var stagingPath = Path.Join(tempRoot, $"artifact-{Guid.NewGuid():N}");
         var finalPath = ResolveUnderRoot(storeRoot, relativePath);
-        var backupPath = Path.Combine(tempRoot, $"artifact-backup-{Guid.NewGuid():N}");
+        var backupPath = Path.Join(tempRoot, $"artifact-backup-{Guid.NewGuid():N}");
         var movedExistingToBackup = false;
 
         try
@@ -574,7 +574,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         }
 
         var fullRoot = Path.GetFullPath(rootPath);
-        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, relativePath));
+        var fullPath = Path.GetFullPath(Path.Join(fullRoot, relativePath));
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -839,18 +839,20 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
     private static void CopyDirectory(string source, string destination)
     {
         Directory.CreateDirectory(destination);
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeDirectory in Directory
+            .EnumerateDirectories(source, "*", SearchOption.AllDirectories)
+            .Select(directory => Path.GetRelativePath(source, directory)))
         {
-            var relativeDirectory = Path.GetRelativePath(source, directory);
-            Directory.CreateDirectory(Path.Combine(destination, relativeDirectory));
+            Directory.CreateDirectory(Path.Join(destination, relativeDirectory));
         }
 
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        foreach (var relativeFile in Directory
+            .EnumerateFiles(source, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(source, file)))
         {
-            var relativeFile = Path.GetRelativePath(source, file);
-            var targetFile = Path.Combine(destination, relativeFile);
+            var targetFile = Path.Join(destination, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
-            System.IO.File.Copy(file, targetFile, overwrite: false);
+            System.IO.File.Copy(Path.Join(source, relativeFile), targetFile, overwrite: false);
         }
     }
 

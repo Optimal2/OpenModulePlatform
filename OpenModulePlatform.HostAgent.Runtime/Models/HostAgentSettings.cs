@@ -325,7 +325,7 @@ public sealed class HostAgentCredentialStoreSettings
 
     public string ResolveFilePath()
         => string.IsNullOrWhiteSpace(FilePath)
-            ? Path.Combine(AppContext.BaseDirectory, "hostagent.credentials.json")
+            ? Path.Join(AppContext.BaseDirectory, "hostagent.credentials.json")
             : FilePath.Trim();
 }
 
@@ -393,12 +393,12 @@ public sealed class HostAgentArtifactZipImportSettings
 
     public string ResolveProcessedPath()
         => string.IsNullOrWhiteSpace(ProcessedPath)
-            ? Path.Combine(ImportPath, "processed")
+            ? Path.Join(ImportPath, "processed")
             : ProcessedPath.Trim();
 
     public string ResolveFailedPath()
         => string.IsNullOrWhiteSpace(FailedPath)
-            ? Path.Combine(ImportPath, "failed")
+            ? Path.Join(ImportPath, "failed")
             : FailedPath.Trim();
 }
 

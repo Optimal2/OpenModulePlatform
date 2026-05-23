@@ -242,10 +242,9 @@ ORDER BY w.module_key,
             throw new InvalidOperationException("Dashboard widget JSON must contain at least one widget.");
         }
 
-        foreach (var item in document.Widgets)
-        {
-            _ = Normalize(document, item);
-        }
+        _ = document.Widgets
+            .Select(item => Normalize(document, item))
+            .ToArray();
     }
 
     private static NormalizedDashboardWidget Normalize(
@@ -517,17 +516,12 @@ VALUES(@widget_id, @permission_id, @role_id);";
             return [];
         }
 
-        var result = new List<string>();
-        foreach (var value in values)
-        {
-            var text = CleanOptionalText(value, propertyName, 200);
-            if (text is not null && !result.Contains(text, StringComparer.OrdinalIgnoreCase))
-            {
-                result.Add(text);
-            }
-        }
-
-        return result;
+        return values
+            .Select(value => CleanOptionalText(value, propertyName, 200))
+            .Where(text => text is not null)
+            .Select(text => text!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string CreateFallbackWidgetKey(DashboardWidgetAdminRow row)
