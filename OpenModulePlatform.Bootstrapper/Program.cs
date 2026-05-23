@@ -2034,7 +2034,7 @@ END;
 
             var relativePath = NormalizePathForMatch(artifact.Target);
             var sha256 = ComputeDirectorySha256(targetPath);
-            await UpsertArtifactMetadataAsync(
+            var artifactId = await UpsertArtifactMetadataAsync(
                 connection,
                 appId.Value,
                 identity.Version,
@@ -2042,6 +2042,16 @@ END;
                 identity.TargetName,
                 relativePath,
                 sha256);
+
+            var updates = await ApplyConfiguredArtifactToMatchingApplicationsAsync(
+                connection,
+                artifactId,
+                identity.PackageType);
+            if (updates.TemplateAppRowsUpdated + updates.AppInstanceRowsUpdated + updates.WorkerInstanceRowsUpdated > 0)
+            {
+                Console.WriteLine(
+                    $"> Artifact desired state {artifact.Target}: updated {updates.TemplateAppRowsUpdated} template row(s), {updates.AppInstanceRowsUpdated} app instance row(s), {updates.WorkerInstanceRowsUpdated} worker row(s).");
+            }
 
             registered++;
         }
@@ -2156,6 +2166,93 @@ SELECT @artifactId;
         command.Parameters.AddWithValue("@sha256", sha256);
 
         return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyConfiguredArtifactToMatchingApplicationsAsync(
+        SqlConnection connection,
+        int artifactId,
+        string packageType)
+    {
+        const string sql = """
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ARITHABORT ON;
+SET NUMERIC_ROUNDABORT OFF;
+
+DECLARE @appId int;
+DECLARE @appType nvarchar(50);
+DECLARE @templateAppRowsUpdated int = 0;
+DECLARE @appInstanceRowsUpdated int = 0;
+DECLARE @workerInstanceRowsUpdated int = 0;
+
+SELECT @appId = app.AppId,
+       @appType = app.AppType
+FROM omp.Artifacts artifact
+INNER JOIN omp.Apps app ON app.AppId = artifact.AppId
+WHERE artifact.ArtifactId = @artifactId
+  AND artifact.IsEnabled = 1
+  AND app.IsEnabled = 1;
+
+IF @appId IS NOT NULL
+   AND
+   (
+       (@packageType = N'web-app' AND @appType IN (N'Portal', N'WebApp'))
+       OR (@packageType = N'service-app' AND @appType = N'ServiceApp')
+       OR (@packageType = N'worker' AND @appType = N'Worker')
+       OR (@packageType = N'host-agent' AND @appType = N'HostAgent')
+       OR (@packageType = N'worker-host' AND @appType = N'WorkerHost')
+   )
+BEGIN
+    UPDATE omp.InstanceTemplateAppInstances
+    SET DesiredArtifactId = @artifactId,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE AppId = @appId
+      AND IsEnabled = 1
+      AND ISNULL(DesiredArtifactId, -1) <> @artifactId;
+
+    SET @templateAppRowsUpdated = @@ROWCOUNT;
+
+    UPDATE omp.AppInstances
+    SET ArtifactId = @artifactId,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE AppId = @appId
+      AND IsEnabled = 1
+      AND ISNULL(ArtifactId, -1) <> @artifactId;
+
+    SET @appInstanceRowsUpdated = @@ROWCOUNT;
+
+    UPDATE worker
+    SET ArtifactId = @artifactId,
+        UpdatedUtc = SYSUTCDATETIME()
+    FROM omp.WorkerInstances worker
+    INNER JOIN omp.AppInstances appInstance ON appInstance.AppInstanceId = worker.AppInstanceId
+    WHERE appInstance.AppId = @appId
+      AND worker.IsEnabled = 1
+      AND worker.ArtifactId IS NOT NULL
+      AND worker.ArtifactId <> @artifactId;
+
+    SET @workerInstanceRowsUpdated = @@ROWCOUNT;
+END;
+
+SELECT @templateAppRowsUpdated,
+       @appInstanceRowsUpdated,
+       @workerInstanceRowsUpdated;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@artifactId", artifactId);
+        command.Parameters.AddWithValue("@packageType", packageType.Trim());
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return (0, 0, 0);
+        }
+
+        return (reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
     }
 
     private static string ComputeDirectorySha256(string path)
