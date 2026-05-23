@@ -1049,16 +1049,30 @@ VALUES
     {
         const string sql = @"
 DECLARE @AppId int;
+DECLARE @AppType nvarchar(50);
+DECLARE @PackageType nvarchar(50);
 DECLARE @TemplateAppRowsUpdated int = 0;
 DECLARE @AppInstanceRowsUpdated int = 0;
 DECLARE @WorkerInstanceRowsUpdated int = 0;
 
-SELECT @AppId = AppId
-FROM omp.Artifacts
-WHERE ArtifactId = @artifactId
-  AND IsEnabled = 1;
+SELECT @AppId = app.AppId,
+       @AppType = app.AppType,
+       @PackageType = artifact.PackageType
+FROM omp.Artifacts artifact
+INNER JOIN omp.Apps app ON app.AppId = artifact.AppId
+WHERE artifact.ArtifactId = @artifactId
+  AND artifact.IsEnabled = 1
+  AND app.IsEnabled = 1;
 
 IF @AppId IS NOT NULL
+   AND
+   (
+       (@PackageType = N'web-app' AND @AppType IN (N'Portal', N'WebApp'))
+       OR (@PackageType = N'service-app' AND @AppType = N'ServiceApp')
+       OR (@PackageType = N'worker' AND @AppType = N'Worker')
+       OR (@PackageType = N'host-agent' AND @AppType = N'HostAgent')
+       OR (@PackageType = N'worker-host' AND @AppType = N'WorkerHost')
+   )
 BEGIN
     UPDATE omp.InstanceTemplateAppInstances
     SET DesiredArtifactId = @artifactId,
