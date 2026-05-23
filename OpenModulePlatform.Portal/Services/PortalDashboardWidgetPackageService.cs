@@ -175,13 +175,7 @@ ORDER BY w.module_key,
             throw new InvalidOperationException("The dashboard widget JSON stream is not readable.");
         }
 
-        if (stream.Length > MaxJsonBytes)
-        {
-            throw new InvalidOperationException($"The dashboard widget JSON exceeds the limit of {MaxJsonBytes} bytes.");
-        }
-
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-        var json = await reader.ReadToEndAsync(ct);
+        var json = await ReadJsonWithSizeLimitAsync(stream, ct);
         var document = JsonSerializer.Deserialize<DashboardWidgetDocument>(json, JsonOptions)
             ?? throw new InvalidOperationException("The dashboard widget JSON file is empty.");
         ValidateDocument(document, sourceName);
@@ -245,6 +239,31 @@ ORDER BY w.module_key,
         _ = document.Widgets
             .Select(item => Normalize(document, item))
             .ToArray();
+    }
+
+    private static async Task<string> ReadJsonWithSizeLimitAsync(Stream stream, CancellationToken ct)
+    {
+        using var buffer = new MemoryStream();
+        var scratch = new byte[81920];
+        while (true)
+        {
+            var read = await stream.ReadAsync(scratch.AsMemory(0, scratch.Length), ct);
+            if (read == 0)
+            {
+                break;
+            }
+
+            if (buffer.Length + read > MaxJsonBytes)
+            {
+                throw new InvalidOperationException($"The dashboard widget JSON exceeds the limit of {MaxJsonBytes} bytes.");
+            }
+
+            buffer.Write(scratch, 0, read);
+        }
+
+        buffer.Position = 0;
+        using var reader = new StreamReader(buffer, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return await reader.ReadToEndAsync(ct);
     }
 
     private static NormalizedDashboardWidget Normalize(
