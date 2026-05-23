@@ -1818,6 +1818,18 @@ button {
     gap: 14px;
 }
 
+.portal-entry-add-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border-radius: 10px;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1;
+}
+
 .portal-entry-create-panel > summary {
     cursor: pointer;
     font-weight: 700;
@@ -1837,6 +1849,13 @@ button {
     gap: 6px;
 }
 
+.portal-entry-create-row {
+    padding: 12px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface-muted);
+}
+
 .portal-entry-layout-row {
     display: grid;
     grid-template-columns: 28px minmax(84px, auto) minmax(180px, 1fr) minmax(160px, 0.8fr) auto;
@@ -1845,7 +1864,7 @@ button {
     min-height: 54px;
     padding: 8px 10px 8px calc(10px + (var(--portal-entry-depth, 0) * 28px));
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 8px;
     background: var(--surface);
     transition: border-color 120ms ease, background-color 120ms ease, opacity 120ms ease;
 }
@@ -1892,6 +1911,11 @@ button {
     min-width: 0;
 }
 
+.portal-entry-layout-row__actions form {
+    display: inline-flex;
+    margin: 0;
+}
+
 .portal-entry-layout-row__actions .button,
 .portal-entry-layout-row__actions .action-link,
 .portal-entry-layout-row__actions button {
@@ -1901,13 +1925,41 @@ button {
     white-space: nowrap;
 }
 
+.portal-entry-inline-editor {
+    grid-column: 1 / -1;
+    min-width: 0;
+    margin-top: 4px;
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-muted);
+}
+
+.portal-entry-editor-form {
+    display: grid;
+    gap: 12px;
+}
+
+.portal-entry-editor-form__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.portal-entry-editor-form__heading .action-link {
+    min-height: 32px;
+    padding: 6px 9px;
+    border-radius: 9px;
+}
+
 @media (max-width: 980px) {
     .portal-entry-layout-row {
         grid-template-columns: 28px minmax(84px, auto) minmax(180px, 1fr);
     }
 
     .portal-entry-layout-row__target,
-    .portal-entry-layout-row__actions {
+    .portal-entry-layout-row__actions,
+    .portal-entry-inline-editor {
         grid-column: 3;
     }
 

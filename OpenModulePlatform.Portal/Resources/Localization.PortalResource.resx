@@ -1946,6 +1946,12 @@
   <data name="Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests." xml:space="preserve"><value>Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests.</value></data>
   <data name="Navigation" xml:space="preserve"><value>Navigation</value></data>
   <data name="Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts." xml:space="preserve"><value>Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts.</value></data>
+  <data name="Manage the shared All modules menu. Users pick their own favorites from these entries." xml:space="preserve"><value>Manage the shared All modules menu. Users pick their own favorites from these entries.</value></data>
+  <data name="Add navigation entry" xml:space="preserve"><value>Add navigation entry</value></data>
+  <data name="New navigation entry" xml:space="preserve"><value>New navigation entry</value></data>
+  <data name="Create entry" xml:space="preserve"><value>Create entry</value></data>
+  <data name="Edit entry" xml:space="preserve"><value>Edit entry</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Enabled entries" xml:space="preserve"><value>Enabled entries</value></data>
   <data name="Top-level entries" xml:space="preserve"><value>Top-level entries</value></data>
   <data name="App entries" xml:space="preserve"><value>App entries</value></data>
