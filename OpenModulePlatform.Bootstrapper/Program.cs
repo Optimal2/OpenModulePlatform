@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -21,7 +20,6 @@ internal static partial class Program
     private const int SqlDeadlockErrorNumber = 1205;
     private const int SqlDeadlockRetryCount = 3;
     private const int ServiceStopTimeoutSeconds = 60;
-    private const int AttachParentProcess = -1;
     private const int ArtifactHashBufferSize = 64 * 1024;
     private static readonly IReadOnlyDictionary<string, string> EmptyStringDictionary =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -3910,17 +3908,11 @@ VALUES
             return Path.GetFullPath(path);
         }
 
-        foreach (var root in EnumerateHostAndGlobalDataRoots(packageRoot, configPath))
-        {
-            var candidate = Path.GetFullPath(Path.Join(root, path));
-            if (File.Exists(candidate) || Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
+        var candidate = EnumerateHostAndGlobalDataRoots(packageRoot, configPath)
+            .Select(root => Path.GetFullPath(Path.Join(root, path)))
+            .FirstOrDefault(candidate => File.Exists(candidate) || Directory.Exists(candidate));
 
-        var direct = ResolvePackageDataPath(packageRoot, path);
-        return direct;
+        return candidate ?? ResolvePackageDataPath(packageRoot, path);
     }
 
     private static string ResolveInitialModuleDefinitionsRoot(string packageRoot)
@@ -4052,17 +4044,9 @@ VALUES
 
     private static void EnsureConsole()
     {
-        if (!OperatingSystem.IsWindows() || !Environment.UserInteractive)
-        {
-            return;
-        }
-
-        // lgtm[cs/call-to-unmanaged-code] Windows-only console interop is limited to attaching command-line output for the installer.
-        if (!AttachConsole(AttachParentProcess))
-        {
-            // lgtm[cs/call-to-unmanaged-code] AllocConsole is the documented fallback when no parent console is available.
-            AllocConsole();
-        }
+        // Intentionally managed-only: older versions attached the WinExe bootstrapper
+        // to the parent console with kernel32, but the installer now uses GUI status
+        // and log files as its supported diagnostic surface.
     }
 
     private static string ConvertToSqlBracketName(string value)
@@ -4089,17 +4073,6 @@ VALUES
     [GeneratedRegex(@"DECLARE\s+@BootstrapPortalAdminPrincipalType\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';")]
     private static partial Regex BootstrapPrincipalTypeDeclarationRegex();
 
-    // lgtm[cs/unmanaged-code] The bootstrapper uses kernel32 console APIs only for Windows command-line log visibility.
-    // The GUI bootstrapper can be launched from a console; these Windows interop calls attach to that console for log output.
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AttachConsole(int processId);
-
-    // lgtm[cs/unmanaged-code] The bootstrapper uses kernel32 console APIs only for Windows command-line log visibility.
-    // Used only when no parent console exists and the installer needs a visible console for command-line output.
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AllocConsole();
 }
 
 internal sealed record PreparedArtifactConfigurationFiles(
