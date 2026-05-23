@@ -943,4 +943,6 @@ public sealed class HostArtifactStateRow
     public DateTime? LastProvisionedUtc { get; set; }
 
     public string? LastError { get; set; }
+
+    public bool IsCurrentlyDesired { get; set; }
 }

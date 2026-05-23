@@ -2368,7 +2368,7 @@ button {
 
 .table-tools {
     display: grid;
-    grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto auto;
+    grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(140px, 1fr)) auto;
     gap: 10px;
     align-items: end;
     margin: 14px 0;
