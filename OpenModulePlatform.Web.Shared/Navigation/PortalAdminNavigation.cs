@@ -19,7 +19,7 @@ public static class PortalAdminNavigation
             new(
                 "Administration",
                 [
-                    new PortalAdminMenuItem("Portal entries", hrefFactory("/admin/portalentries")),
+                    new PortalAdminMenuItem("Navigation", hrefFactory("/admin/portalentries")),
                     new PortalAdminMenuItem("Dashboard widgets", hrefFactory("/admin/dashboardwidgets")),
                     new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings")),
                     new PortalAdminMenuItem("Security", hrefFactory("/admin/security")),

@@ -13,7 +13,7 @@ using System.Text.RegularExpressions;
 namespace OpenModulePlatform.Portal.Services;
 
 /// <summary>
-/// Builds and persists the personalized Portal Entries list.
+/// Builds and persists the personalized portal navigation entries list.
 /// </summary>
 public sealed class PortalEntryService
 {
@@ -764,7 +764,7 @@ END";
 
             if (update.ParentEntryId == update.PortalEntryId)
             {
-                throw new InvalidOperationException("A Portal Entry cannot be its own parent.");
+                throw new InvalidOperationException("A navigation entry cannot be its own parent.");
             }
 
             var visited = new HashSet<int> { update.PortalEntryId };
@@ -773,7 +773,7 @@ END";
             {
                 if (!visited.Add(parentId.Value))
                 {
-                    throw new InvalidOperationException("The layout update would create a Portal Entry cycle.");
+                    throw new InvalidOperationException("The layout update would create a navigation cycle.");
                 }
 
                 parentId = parentsById.TryGetValue(parentId.Value, out var nextParentId)

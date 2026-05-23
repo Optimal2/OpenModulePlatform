@@ -2047,4 +2047,35 @@
   <data name="Back to packages" xml:space="preserve"><value>Tillbaka till paket</value></data>
   <data name="Back to operations" xml:space="preserve"><value>Tillbaka till drift</value></data>
   <data name="Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisionering, runtime-identitetskontroller och explicita materialiseringsbegäranden för installationen.</value></data>
+  <data name="Navigation" xml:space="preserve"><value>Navigering</value></data>
+  <data name="Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts." xml:space="preserve"><value>Hantera den gemensamma menyn Alla moduler. Användare väljer Favoriter från samma poster och dashboard-widgets återanvänder båda begreppen.</value></data>
+  <data name="Enabled entries" xml:space="preserve"><value>Aktiverade poster</value></data>
+  <data name="Top-level entries" xml:space="preserve"><value>Poster på toppnivå</value></data>
+  <data name="App entries" xml:space="preserve"><value>Appposter</value></data>
+  <data name="Custom links" xml:space="preserve"><value>Egna länkar</value></data>
+  <data name="Choose which entries are visible in All modules and adjust the parent-child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Välj vilka poster som visas i Alla moduler och justera förälder-barn-strukturen. Släpp en länkpost på en toppnivåpost för att göra den till en underpost.</value></data>
+  <data name="App entry" xml:space="preserve"><value>Apppost</value></data>
+  <data name="Custom link" xml:space="preserve"><value>Egen länk</value></data>
+  <data name="Remove this navigation entry?" xml:space="preserve"><value>Ta bort den här navigeringsposten?</value></data>
+  <data name="Save All modules" xml:space="preserve"><value>Spara Alla moduler</value></data>
+  <data name="All modules saved." xml:space="preserve"><value>Alla moduler har sparats.</value></data>
+  <data name="Add custom link" xml:space="preserve"><value>Lägg till egen länk</value></data>
+  <data name="Use custom links for destinations that are not created automatically from installed apps." xml:space="preserve"><value>Använd egna länkar för mål som inte skapas automatiskt från installerade appar.</value></data>
+  <data name="Leave empty for a top-level entry. Choose a parent to show the link under that group." xml:space="preserve"><value>Lämna tomt för en post på toppnivå. Välj en förälder för att visa länken under den gruppen.</value></data>
+  <data name="Custom link created." xml:space="preserve"><value>Den egna länken har skapats.</value></data>
+  <data name="Navigation entry removed." xml:space="preserve"><value>Navigeringsposten har tagits bort.</value></data>
+  <data name="Navigation entry was not found." xml:space="preserve"><value>Navigeringsposten hittades inte.</value></data>
+  <data name="Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections." xml:space="preserve"><value>Favoriter är personliga genvägar som varje användare väljer från Alla moduler. Favoritmenyn i toppbaren och favorit-widgets använder samma sparade val.</value></data>
+  <data name="Open dashboard widget settings" xml:space="preserve"><value>Öppna inställningar för dashboard-widgets</value></data>
+  <data name="Admins control which entries can be selected as favorites by enabling or disabling them in All modules." xml:space="preserve"><value>Administratörer styr vilka poster som kan väljas som favoriter genom att aktivera eller inaktivera dem i Alla moduler.</value></data>
+  <data name="Available favorite entries" xml:space="preserve"><value>Tillgängliga favoritposter</value></data>
+  <data name="Edit navigation entry" xml:space="preserve"><value>Redigera navigeringspost</value></data>
+  <data name="Update an entry shown in All modules and available as a favorite." xml:space="preserve"><value>Uppdatera en post som visas i Alla moduler och kan användas som favorit.</value></data>
+  <data name="Save navigation entry" xml:space="preserve"><value>Spara navigeringspost</value></data>
+  <data name="Back to navigation" xml:space="preserve"><value>Tillbaka till navigering</value></data>
+  <data name="Navigation entry updated." xml:space="preserve"><value>Navigeringsposten har uppdaterats.</value></data>
+  <data name="No navigation entries were submitted." xml:space="preserve"><value>Inga navigeringsposter skickades.</value></data>
+  <data name="The selected parent would create a navigation cycle." xml:space="preserve"><value>Vald förälder skulle skapa en cirkel i navigeringen.</value></data>
+  <data name="A navigation entry cannot be its own parent." xml:space="preserve"><value>En navigeringspost kan inte vara sin egen förälder.</value></data>
+  <data name="The layout update would create a navigation cycle." xml:space="preserve"><value>Layoutändringen skulle skapa en cirkel i navigeringen.</value></data>
 </root>

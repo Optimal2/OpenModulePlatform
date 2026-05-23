@@ -12,9 +12,8 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 
 public sealed class PortalEntriesModel : OmpPortalPageModel
 {
-    private const string CreateTab = "create";
-    private const string LayoutTab = "layout";
-    private const string EntriesTab = "entries";
+    private const string AllModulesTab = "all";
+    private const string FavoritesTab = "favorites";
 
     private readonly PortalEntryService _portalEntries;
 
@@ -39,13 +38,19 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> ParentOptions { get; private set; } = [];
 
-    public string ActiveTab { get; private set; } = CreateTab;
+    public string ActiveTab { get; private set; } = AllModulesTab;
 
-    public bool IsCreateTab => string.Equals(ActiveTab, CreateTab, StringComparison.Ordinal);
+    public bool IsAllModulesTab => string.Equals(ActiveTab, AllModulesTab, StringComparison.Ordinal);
 
-    public bool IsLayoutTab => string.Equals(ActiveTab, LayoutTab, StringComparison.Ordinal);
+    public bool IsFavoritesTab => string.Equals(ActiveTab, FavoritesTab, StringComparison.Ordinal);
 
-    public bool IsEntriesTab => string.Equals(ActiveTab, EntriesTab, StringComparison.Ordinal);
+    public int EnabledEntryCount => Rows.Count(row => row.IsEnabled);
+
+    public int TopLevelEntryCount => Rows.Count(row => row.ParentEntryId is null);
+
+    public int AppEntryCount => Rows.Count(row => row.SourceAppInstanceId.HasValue);
+
+    public int CustomEntryCount => Rows.Count(row => !row.SourceAppInstanceId.HasValue);
 
     public async Task<IActionResult> OnGet(string? tab, CancellationToken ct)
     {
@@ -57,7 +62,7 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
         SetActiveTab(tab);
         await LoadAsync(ct);
-        SetTitles("Portal entries");
+        SetTitles("Navigation");
         Input.IsEnabled = true;
         return Page();
     }
@@ -70,10 +75,10 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             return guard;
         }
 
-        ActiveTab = CreateTab;
+        ActiveTab = AllModulesTab;
         Input = input;
         await LoadAsync(ct);
-        SetTitles("Portal entries");
+        SetTitles("Navigation");
         ValidateInput();
 
         if (!ModelState.IsValid)
@@ -96,8 +101,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             },
             ct);
 
-        StatusMessage = T("Portal entry created.");
-        return RedirectToPage("/Admin/PortalEntries", new { tab = EntriesTab });
+        StatusMessage = T("Custom link created.");
+        return RedirectToPage("/Admin/PortalEntries");
     }
 
     public async Task<IActionResult> OnPostLayout(CancellationToken ct)
@@ -108,18 +113,18 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             return guard;
         }
 
-        ActiveTab = LayoutTab;
+        ActiveTab = AllModulesTab;
         RemoveModelStatePrefix(nameof(Input));
 
         if (LayoutEntries.Count == 0)
         {
-            ModelState.AddModelError(string.Empty, T("No portal entries were submitted."));
+            ModelState.AddModelError(string.Empty, T("No navigation entries were submitted."));
         }
 
         if (!ModelState.IsValid)
         {
             await LoadAsync(ct);
-            SetTitles("Portal entries");
+            SetTitles("Navigation");
             return Page();
         }
 
@@ -139,12 +144,12 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
         {
             ModelState.AddModelError(string.Empty, T(ex.Message));
             await LoadAsync(ct);
-            SetTitles("Portal entries");
+            SetTitles("Navigation");
             return Page();
         }
 
-        StatusMessage = T("Topbar layout saved.");
-        return RedirectToPage("/Admin/PortalEntries", new { tab = LayoutTab });
+        StatusMessage = T("All modules saved.");
+        return RedirectToPage("/Admin/PortalEntries");
     }
 
     public async Task<IActionResult> OnPostDelete(int portalEntryId, CancellationToken ct)
@@ -157,9 +162,9 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
         var deleted = await _portalEntries.DeleteAsync(portalEntryId, ct);
         StatusMessage = deleted
-            ? T("Portal entry removed.")
-            : T("Portal entry was not found.");
-        return RedirectToPage("/Admin/PortalEntries", new { tab = LayoutTab });
+            ? T("Navigation entry removed.")
+            : T("Navigation entry was not found.");
+        return RedirectToPage("/Admin/PortalEntries");
     }
 
     public int GetDepth(PortalEntryAdminRow row)
@@ -188,9 +193,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
 
         ActiveTab = candidate?.ToLowerInvariant() switch
         {
-            LayoutTab => LayoutTab,
-            EntriesTab => EntriesTab,
-            _ => CreateTab
+            FavoritesTab => FavoritesTab,
+            _ => AllModulesTab
         };
     }
 

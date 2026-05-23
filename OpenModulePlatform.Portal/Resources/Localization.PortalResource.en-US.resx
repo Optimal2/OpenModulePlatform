@@ -394,4 +394,36 @@
   <data name="Back to packages" xml:space="preserve"><value>Back to packages</value></data>
   <data name="Back to operations" xml:space="preserve"><value>Back to operations</value></data>
   <data name="Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests." xml:space="preserve"><value>Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests.</value></data>
+  <data name="Navigation" xml:space="preserve"><value>Navigation</value></data>
+  <data name="Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts." xml:space="preserve"><value>Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts.</value></data>
+  <data name="Enabled entries" xml:space="preserve"><value>Enabled entries</value></data>
+  <data name="Top-level entries" xml:space="preserve"><value>Top-level entries</value></data>
+  <data name="App entries" xml:space="preserve"><value>App entries</value></data>
+  <data name="Custom links" xml:space="preserve"><value>Custom links</value></data>
+  <data name="Choose which entries are visible in All modules and adjust the parent-child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Choose which entries are visible in All modules and adjust the parent-child layout. Drop a leaf entry on a top-level entry to make it a child.</value></data>
+  <data name="App entry" xml:space="preserve"><value>App entry</value></data>
+  <data name="Custom link" xml:space="preserve"><value>Custom link</value></data>
+  <data name="Remove this navigation entry?" xml:space="preserve"><value>Remove this navigation entry?</value></data>
+  <data name="Save All modules" xml:space="preserve"><value>Save All modules</value></data>
+  <data name="All modules saved." xml:space="preserve"><value>All modules saved.</value></data>
+  <data name="Add custom link" xml:space="preserve"><value>Add custom link</value></data>
+  <data name="Use custom links for destinations that are not created automatically from installed apps." xml:space="preserve"><value>Use custom links for destinations that are not created automatically from installed apps.</value></data>
+  <data name="Leave empty for a top-level entry. Choose a parent to show the link under that group." xml:space="preserve"><value>Leave empty for a top-level entry. Choose a parent to show the link under that group.</value></data>
+  <data name="Custom link created." xml:space="preserve"><value>Custom link created.</value></data>
+  <data name="Navigation entry removed." xml:space="preserve"><value>Navigation entry removed.</value></data>
+  <data name="Navigation entry was not found." xml:space="preserve"><value>Navigation entry was not found.</value></data>
+  <data name="Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections." xml:space="preserve"><value>Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections.</value></data>
+  <data name="Open dashboard widget settings" xml:space="preserve"><value>Open dashboard widget settings</value></data>
+  <data name="Admins control which entries can be selected as favorites by enabling or disabling them in All modules." xml:space="preserve"><value>Admins control which entries can be selected as favorites by enabling or disabling them in All modules.</value></data>
+  <data name="Available favorite entries" xml:space="preserve"><value>Available favorite entries</value></data>
+  <data name="Edit navigation entry" xml:space="preserve"><value>Edit navigation entry</value></data>
+  <data name="Update an entry shown in All modules and available as a favorite." xml:space="preserve"><value>Update an entry shown in All modules and available as a favorite.</value></data>
+  <data name="Save navigation entry" xml:space="preserve"><value>Save navigation entry</value></data>
+  <data name="Back to navigation" xml:space="preserve"><value>Back to navigation</value></data>
+  <data name="Navigation entry updated." xml:space="preserve"><value>Navigation entry updated.</value></data>
+  <data name="Group" xml:space="preserve"><value>Group</value></data>
+  <data name="No navigation entries were submitted." xml:space="preserve"><value>No navigation entries were submitted.</value></data>
+  <data name="The selected parent would create a navigation cycle." xml:space="preserve"><value>The selected parent would create a navigation cycle.</value></data>
+  <data name="A navigation entry cannot be its own parent." xml:space="preserve"><value>A navigation entry cannot be its own parent.</value></data>
+  <data name="The layout update would create a navigation cycle." xml:space="preserve"><value>The layout update would create a navigation cycle.</value></data>
 </root>

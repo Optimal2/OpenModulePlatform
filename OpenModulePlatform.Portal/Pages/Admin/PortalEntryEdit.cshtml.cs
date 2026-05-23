@@ -39,7 +39,7 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Edit portal entry");
+        SetTitles("Edit navigation entry");
         await LoadAsync(portalEntryId, ct);
         var row = await _portalEntries.GetAdminRowAsync(portalEntryId, ct);
         if (row is null)
@@ -59,7 +59,7 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Edit portal entry");
+        SetTitles("Edit navigation entry");
         var entryId = Input.PortalEntryId > 0 ? Input.PortalEntryId : portalEntryId;
         await LoadAsync(entryId, ct);
         var existing = await _portalEntries.GetAdminRowAsync(entryId, ct);
@@ -74,7 +74,7 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
         ValidateInput(existing);
         if (await _portalEntries.WouldCreateCycleAsync(Input.PortalEntryId, Input.ParentEntryId, ct))
         {
-            ModelState.AddModelError(nameof(Input.ParentEntryId), T("The selected parent would create a Portal Entry cycle."));
+            ModelState.AddModelError(nameof(Input.ParentEntryId), T("The selected parent would create a navigation cycle."));
         }
 
         if (!ModelState.IsValid)
@@ -103,7 +103,7 @@ public sealed class PortalEntryEditModel : OmpPortalPageModel
             return NotFound();
         }
 
-        StatusMessage = T("Portal entry updated.");
+        StatusMessage = T("Navigation entry updated.");
         return RedirectToPage("/Admin/PortalEntryEdit", new { portalEntryId = Input.PortalEntryId });
     }
 
