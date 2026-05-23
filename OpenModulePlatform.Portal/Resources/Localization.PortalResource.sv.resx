@@ -2126,4 +2126,16 @@
   <data name="Export all widgets or choose one of the widgets available in this OMP installation." xml:space="preserve"><value>Exportera alla widgets eller välj en av de widgets som finns i den här OMP-installationen.</value></data>
   <data name="Widget" xml:space="preserve"><value>Widget</value></data>
   <data name="All widgets" xml:space="preserve"><value>Alla widgets</value></data>
+  <data name="Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisioneringshistorik och runtime-identitetskontroller.</value></data>
+  <data name="Filter" xml:space="preserve"><value>Filter</value></data>
+  <data name="Search rows" xml:space="preserve"><value>Sök rader</value></data>
+  <data name="All statuses" xml:space="preserve"><value>Alla statusar</value></data>
+  <data name="Only rows that need attention" xml:space="preserve"><value>Bara rader som behöver uppmärksamhet</value></data>
+  <data name="Artifact provisioning history" xml:space="preserve"><value>Artefaktprovisioneringshistorik</value></data>
+  <data name="These rows show the latest HostAgent artifact download and verification result per host. The default view shows rows from the last 24 hours that may need attention." xml:space="preserve"><value>Raderna visar senaste HostAgent-resultatet för nedladdning och verifiering av artefakter per värd. Standardvyn visar rader från de senaste 24 timmarna som kan behöva uppmärksamhet.</value></data>
+  <data name="Time span" xml:space="preserve"><value>Tidsintervall</value></data>
+  <data name="All time" xml:space="preserve"><value>All tid</value></data>
+  <data name="Last 24 hours" xml:space="preserve"><value>Senaste 24 timmarna</value></data>
+  <data name="Last 7 days" xml:space="preserve"><value>Senaste 7 dagarna</value></data>
+  <data name="Last 30 days" xml:space="preserve"><value>Senaste 30 dagarna</value></data>
 </root>

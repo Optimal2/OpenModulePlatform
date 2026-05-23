@@ -869,6 +869,27 @@ code {
     background: var(--surface-muted);
 }
 
+.option-cluster {
+    display: grid;
+    gap: 4px 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted);
+}
+
+.option-cluster--2 {
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.option-cluster .checkbox-row--boxed {
+    min-height: 28px;
+    padding: 2px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
 .validation-summary-errors,
 .field-validation-error {
     color: #a61b1b;
@@ -2345,6 +2366,63 @@ button {
     color: var(--text-muted);
 }
 
+.table-tools {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto auto;
+    gap: 10px;
+    align-items: end;
+    margin: 14px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted);
+}
+
+.table-tools .form-field {
+    gap: 3px;
+}
+
+.table-tools input,
+.table-tools select {
+    padding: 7px 9px;
+    border-radius: 8px;
+}
+
+.table-tools__check {
+    min-height: 34px;
+    align-self: end;
+    white-space: nowrap;
+}
+
+.table-tools__count {
+    align-self: center;
+    justify-self: end;
+    min-width: 5.5rem;
+    text-align: right;
+}
+
+.ops-history-table th button[data-sort] {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    padding: 0;
+    text-align: left;
+}
+
+.ops-history-table th button[data-sort]::after {
+    content: "\2195";
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
 @media (max-width: 720px) {
     .workflow-step {
         grid-template-columns: 1fr;
@@ -2355,6 +2433,15 @@ button {
     .workflow-choice-grid {
         grid-column: 1;
         grid-row: auto;
+    }
+
+    .table-tools {
+        grid-template-columns: 1fr;
+    }
+
+    .table-tools__count {
+        justify-self: start;
+        text-align: left;
     }
 
     .workers-grid th:last-child,

@@ -5,7 +5,7 @@
     <div>
         <div class="eyebrow">@L["System"]</div>
         <h2>@L["Operations"]</h2>
-        <p class="lede">@L["Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests."]</p>
+        <p class="lede">@L["Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks."]</p>
     </div>
 </section>
 
@@ -26,27 +26,51 @@
     }
     else
     {
+        <div class="table-tools" data-ops-table-controls="app-deployments">
+            <div class="form-field">
+                <label for="appDeploymentSearch">@L["Filter"]</label>
+                <input id="appDeploymentSearch" type="search" data-ops-search placeholder="@L["Search rows"]" />
+            </div>
+            <div class="form-field">
+                <label for="appDeploymentStatus">@L["Status"]</label>
+                <select id="appDeploymentStatus" data-ops-status>
+                    <option value="">@L["All statuses"]</option>
+                    <option value="0">@L["Pending"]</option>
+                    <option value="1">@L["Running"]</option>
+                    <option value="2">@L["Succeeded"]</option>
+                    <option value="3">@L["Failed"]</option>
+                    <option value="4">@L["Warning"]</option>
+                </select>
+            </div>
+            <label class="checkbox-row table-tools__check">
+                <input type="checkbox" data-ops-interesting />
+                <span>@L["Only rows that need attention"]</span>
+            </label>
+            <span class="muted table-tools__count" data-ops-count></span>
+        </div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid">
+            <table class="grid app-instances-grid ops-history-table" data-ops-table="app-deployments">
                 <thead>
                     <tr>
-                        <th>@L["Host key"]</th>
-                        <th>@L["App instance"]</th>
-                        <th>@L["Artifact"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Last checked UTC"]</th>
-                        <th>@L["Last applied UTC"]</th>
-                        <th>@L["Target path"]</th>
-                        <th>@L["Runtime"]</th>
-                        <th>@L["Identity"]</th>
-                        <th>@L["Error"]</th>
+                        <th><button type="button" data-sort="text">@L["Host key"]</button></th>
+                        <th><button type="button" data-sort="text">@L["App instance"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Artifact"]</button></th>
+                        <th><button type="button" data-sort="number">@L["Status"]</button></th>
+                        <th><button type="button" data-sort="date">@L["Last checked UTC"]</button></th>
+                        <th><button type="button" data-sort="date">@L["Last applied UTC"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Target path"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Runtime"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Identity"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Error"]</button></th>
                         <th>@L["Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach (var row in Model.AppDeploymentStates)
                 {
-                    <tr>
+                    <tr data-state="@row.DeploymentState"
+                        data-interesting="@HostDeploymentsModel.IsInterestingAppDeployment(row).ToString().ToLowerInvariant()"
+                        data-search="@($"{row.HostKey} {row.AppInstanceKey} {row.DisplayName} {row.ArtifactVersion} {row.PackageType} {row.TargetPath} {row.RuntimeName} {row.IdentityCheckStatus} {row.DesiredRuntimeIdentity} {row.ActualRuntimeIdentity} {row.LastError}")">
                         <td><code>@row.HostKey</code></td>
                         <td>
                             <div><code>@row.AppInstanceKey</code></div>
@@ -111,8 +135,8 @@
 </section>
 
 <section class="card section-card section-card--wide">
-    <h3>@L["Artifact provisioning state"]</h3>
-    <p class="muted">@L["These rows show whether HostAgent has downloaded and verified artifact packages on each host."]</p>
+    <h3>@L["Artifact provisioning history"]</h3>
+    <p class="muted">@L["These rows show the latest HostAgent artifact download and verification result per host. The default view shows rows from the last 24 hours that may need attention."]</p>
 
     @if (Model.ArtifactStates.Count == 0)
     {
@@ -120,24 +144,58 @@
     }
     else
     {
+        <div class="table-tools" data-ops-table-controls="artifact-history">
+            <div class="form-field">
+                <label for="artifactStateSearch">@L["Filter"]</label>
+                <input id="artifactStateSearch" type="search" data-ops-search placeholder="@L["Search rows"]" />
+            </div>
+            <div class="form-field">
+                <label for="artifactStateStatus">@L["Status"]</label>
+                <select id="artifactStateStatus" data-ops-status>
+                    <option value="">@L["All statuses"]</option>
+                    <option value="0">@L["Unknown"]</option>
+                    <option value="1">@L["Pending"]</option>
+                    <option value="2">@L["Succeeded"]</option>
+                    <option value="3">@L["Failed"]</option>
+                    <option value="4">@L["Hash mismatch"]</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label for="artifactStateSince">@L["Time span"]</label>
+                <select id="artifactStateSince" data-ops-since>
+                    <option value="">@L["All time"]</option>
+                    <option value="24" selected>@L["Last 24 hours"]</option>
+                    <option value="168">@L["Last 7 days"]</option>
+                    <option value="720">@L["Last 30 days"]</option>
+                </select>
+            </div>
+            <label class="checkbox-row table-tools__check">
+                <input type="checkbox" data-ops-interesting checked />
+                <span>@L["Only rows that need attention"]</span>
+            </label>
+            <span class="muted table-tools__count" data-ops-count></span>
+        </div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid">
+            <table class="grid app-instances-grid ops-history-table" data-ops-table="artifact-history">
                 <thead>
                     <tr>
-                        <th>@L["Host key"]</th>
-                        <th>@L["App"]</th>
-                        <th>@L["Artifact"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Last checked UTC"]</th>
-                        <th>@L["Last provisioned UTC"]</th>
-                        <th>@L["Local path"]</th>
-                        <th>@L["Error"]</th>
+                        <th><button type="button" data-sort="text">@L["Host key"]</button></th>
+                        <th><button type="button" data-sort="text">@L["App"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Artifact"]</button></th>
+                        <th><button type="button" data-sort="number">@L["Status"]</button></th>
+                        <th><button type="button" data-sort="date">@L["Last checked UTC"]</button></th>
+                        <th><button type="button" data-sort="date">@L["Last provisioned UTC"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Local path"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Error"]</button></th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach (var row in Model.ArtifactStates)
                 {
-                    <tr>
+                    <tr data-state="@row.ProvisioningState"
+                        data-row-time="@HostDeploymentsModel.ToUnixTimeMilliseconds(row.LastCheckedUtc)"
+                        data-interesting="@HostDeploymentsModel.IsInterestingArtifactState(row).ToString().ToLowerInvariant()"
+                        data-search="@($"{row.HostKey} {row.AppKey} {row.ArtifactVersion} {row.PackageType} {row.TargetName} {row.LocalPath} {row.LastError}")">
                         <td><code>@row.HostKey</code></td>
                         <td><code>@row.AppKey</code></td>
                         <td>
@@ -158,46 +216,99 @@
     }
 </section>
 
-<section class="card section-card section-card--wide">
-    <h3>@L["Installation materialization requests"]</h3>
-    <p class="muted">@L["These rows are explicit installation-topology materialization requests. Normal HostAgent app upgrades are shown above even when this list is empty."]</p>
+<script>
+(() => {
+    const now = Date.now();
 
-    @if (Model.Rows.Count == 0)
-    {
-        <div class="empty-state">@L["No host deployments found."]</div>
-    }
-    else
-    {
-        <div class="table-scroll">
-            <table class="grid">
-                <thead>
-                    <tr>
-                        <th>@L["Host key"]</th>
-                        <th>@L["Host role"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Requested by"]</th>
-                        <th>@L["Requested UTC"]</th>
-                        <th>@L["Started UTC"]</th>
-                        <th>@L["Completed UTC"]</th>
-                        <th>@L["Message"]</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach (var row in Model.Rows)
-                {
-                    <tr>
-                        <td><code>@row.HostKey</code></td>
-                        <td><code>@(row.HostTemplateKey ?? L["None"].Value)</code></td>
-                        <td><span class="pill">@L[HostDeploymentsModel.FormatHostDeploymentStatus(row.Status)]</span></td>
-                        <td>@row.RequestedBy</td>
-                        <td>@row.RequestedUtc.ToString("u")</td>
-                        <td>@row.StartedUtc?.ToString("u")</td>
-                        <td>@row.CompletedUtc?.ToString("u")</td>
-                        <td>@row.OutcomeMessage</td>
-                    </tr>
+    const normalize = value => (value || '').toString().trim().toLocaleLowerCase();
+
+    const updateTable = tableName => {
+        const controls = document.querySelector(`[data-ops-table-controls="${tableName}"]`);
+        const table = document.querySelector(`[data-ops-table="${tableName}"]`);
+        if (!controls || !table) {
+            return;
+        }
+
+        const search = normalize(controls.querySelector('[data-ops-search]')?.value);
+        const status = controls.querySelector('[data-ops-status]')?.value ?? '';
+        const sinceHours = Number(controls.querySelector('[data-ops-since]')?.value || 0);
+        const onlyInteresting = controls.querySelector('[data-ops-interesting]')?.checked ?? false;
+        const threshold = sinceHours > 0 ? now - (sinceHours * 60 * 60 * 1000) : 0;
+        let visible = 0;
+        let total = 0;
+
+        table.querySelectorAll('tbody tr').forEach(row => {
+            total++;
+            const rowTime = Number(row.dataset.rowTime || 0);
+            const matchesSearch = !search || normalize(row.dataset.search).includes(search);
+            const matchesStatus = !status || row.dataset.state === status;
+            const matchesInteresting = !onlyInteresting || row.dataset.interesting === 'true';
+            const matchesTime = !sinceHours || (rowTime > 0 && rowTime >= threshold);
+            const show = matchesSearch && matchesStatus && matchesInteresting && matchesTime;
+            row.hidden = !show;
+            if (show) {
+                visible++;
+            }
+        });
+
+        const count = controls.querySelector('[data-ops-count]');
+        if (count) {
+            count.textContent = `${visible} / ${total}`;
+        }
+    };
+
+    const getCellValue = (row, index, type) => {
+        const text = row.cells[index]?.innerText.trim() ?? '';
+        if (type === 'number') {
+            return Number(row.dataset.state || 0);
+        }
+
+        if (type === 'date') {
+            const parsed = Date.parse(text);
+            return Number.isNaN(parsed) ? 0 : parsed;
+        }
+
+        return normalize(text);
+    };
+
+    document.querySelectorAll('[data-ops-table-controls]').forEach(controls => {
+        const tableName = controls.dataset.opsTableControls;
+        controls.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', () => updateTable(tableName));
+            input.addEventListener('change', () => updateTable(tableName));
+        });
+        updateTable(tableName);
+    });
+
+    document.querySelectorAll('[data-ops-table] th button[data-sort]').forEach(button => {
+        button.addEventListener('click', () => {
+            const table = button.closest('table');
+            const tbody = table?.querySelector('tbody');
+            if (!table || !tbody) {
+                return;
+            }
+
+            const header = button.closest('th');
+            const index = Array.from(header.parentElement.children).indexOf(header);
+            const type = button.dataset.sort;
+            const ascending = button.dataset.direction !== 'asc';
+            button.dataset.direction = ascending ? 'asc' : 'desc';
+
+            const rows = Array.from(tbody.rows);
+            rows.sort((left, right) => {
+                const leftValue = getCellValue(left, index, type);
+                const rightValue = getCellValue(right, index, type);
+                if (leftValue < rightValue) {
+                    return ascending ? -1 : 1;
                 }
-                </tbody>
-            </table>
-        </div>
-    }
-</section>
+                if (leftValue > rightValue) {
+                    return ascending ? 1 : -1;
+                }
+                return 0;
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+        });
+    });
+})();
+</script>

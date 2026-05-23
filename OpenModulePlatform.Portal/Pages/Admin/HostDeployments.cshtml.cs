@@ -18,8 +18,6 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         _repo = repo;
     }
 
-    public IReadOnlyList<HostDeploymentRow> Rows { get; private set; } = [];
-
     public IReadOnlyList<HostAppDeploymentStateRow> AppDeploymentStates { get; private set; } = [];
 
     public IReadOnlyList<HostArtifactStateRow> ArtifactStates { get; private set; } = [];
@@ -49,7 +47,6 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     private async Task LoadAsync(CancellationToken ct)
     {
         SetTitles("Operations");
-        Rows = await _repo.GetHostDeploymentsAsync(ct);
         AppDeploymentStates = await _repo.GetHostAppDeploymentStatesAsync(ct);
         ArtifactStates = await _repo.GetHostArtifactStatesAsync(ct);
     }
@@ -75,4 +72,19 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             4 => "Hash mismatch",
             _ => "Unknown"
         };
+
+    public static bool IsInterestingAppDeployment(HostAppDeploymentStateRow row)
+        => row.DeploymentState != 2
+           || !string.IsNullOrWhiteSpace(row.LastError)
+           || string.Equals(row.IdentityCheckStatus, "ManualActionRequired", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(row.IdentityCheckStatus, "WaitingForPortalAdminApproval", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsInterestingArtifactState(HostArtifactStateRow row)
+        => row.ProvisioningState != 2
+           || !string.IsNullOrWhiteSpace(row.LastError);
+
+    public static long ToUnixTimeMilliseconds(DateTime? value)
+        => value.HasValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+            : 0;
 }
