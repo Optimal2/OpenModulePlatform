@@ -250,6 +250,11 @@
         StartServices = $false
         # Production/customer databases should normally be created and secured by a DBA.
         CreateDatabase = $false
+        # When enabled, the generated bootstrap profile grants db_datareader and
+        # db_datawriter to the configured HostAgent, IIS app-pool and service-app
+        # accounts. Use this for customer packages where those runtime accounts
+        # use integrated security and the installer account is allowed to manage
+        # database role membership.
         GrantRunAsDatabaseAccess = $false
         RemoveIis = $true
         RemoveServices = $true
