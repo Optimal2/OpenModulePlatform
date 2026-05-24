@@ -108,7 +108,10 @@ directory prefixes.
 
 For a legacy zip, Portal and HostAgent folder import extract the whole zip as
 the immutable artifact content and continue to block runtime configuration files
-such as `appsettings*.json` and `odv.site.config.js`.
+such as `appsettings*.json` and `odv.site.config.js`. This matters for apps
+such as Vajskrivare and OpenDocViewer: their runtime configuration must be
+stored as artifact configuration-file rows or config overlays, never inside the
+hashed payload.
 
 For a manifest envelope:
 
@@ -118,6 +121,9 @@ For a manifest envelope:
 - `relativePath` becomes the deployed file path relative to the artifact root
 - the imported files replace the artifact's current
   `omp.ArtifactConfigurationFiles` rows
+- importing the same artifact identity with the same payload hash is still
+  allowed to update configuration-file rows from the package; the immutable
+  artifact payload is left unchanged
 - if no configuration files are declared, the existing "copy from previous
   version" behavior can still apply
 - matching config overlays can override these artifact-owned files for one host

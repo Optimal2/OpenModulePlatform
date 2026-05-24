@@ -40,3 +40,19 @@ coverage/
 
 # Machine- and environment-specific deployment settings
 /scripts/deployment/*.local.psd1
+
+# Public sample installer runner. The source-controlled files are the neutral
+# host profile and documentation; generated runner/data is rebuilt locally.
+/installer/OpenModulePlatform.Bootstrapper.exe
+/installer/data/
+/installer/payload/
+/installer/sql/
+/installer/tools/
+/installer/configs/
+/installer/*.json
+/installer/*.cmd
+/installer/*.ps1
+/installer/*.log
+!/installer/README.md
+!/installer/hosts/
+!/installer/hosts/**

@@ -1,0 +1,145 @@
+{
+  "schema": "OpenModulePlatform.HostAgentFirstBootstrap.v1",
+  "profile": {
+    "displayName": "Sample local OMP",
+    "machineNames": [
+      "CHANGE-ME"
+    ]
+  },
+  "security": {
+    "portableEncryptionKey": "",
+    "portableEncryptionKeyEnvironmentVariable": ""
+  },
+  "developerSource": {
+    "sourceRoot": "",
+    "packageConfigPath": "",
+    "packageOutputRoot": ""
+  },
+  "sql": {
+    "enabled": true,
+    "server": "localhost",
+    "database": "OpenModulePlatform",
+    "integratedSecurity": true,
+    "userId": "",
+    "password": "",
+    "trustServerCertificate": true,
+    "createDatabase": false,
+    "commandTimeoutSeconds": 3600,
+    "bootstrapPortalAdminPrincipal": "DOMAIN\\UserOrGroup",
+    "bootstrapPortalAdminPrincipalType": "ADUser",
+    "scripts": [
+      {
+        "path": "sql/bootstrap-local.sql"
+      }
+    ],
+    "artifactVersionOverrides": {},
+    "artifactVersionVariableOverrides": {}
+  },
+  "artifactStoreRoot": "C:\\OMP\\ArtifactStore",
+  "includeExampleApps": true,
+  "artifacts": [],
+  "hostAgent": {
+    "enabled": true,
+    "serviceName": "OMP.HostAgent",
+    "additionalServiceNamesToRemove": [
+      "OpenModulePlatform.HostAgent",
+      "OpenModulePlatform.WorkerManager",
+      "OpenModulePlatform.Service.ExampleServiceAppModule"
+    ],
+    "displayName": "OMP HostAgent",
+    "description": "OpenModulePlatform artifact provisioning agent.",
+    "serviceAccountName": "",
+    "serviceAccountPassword": "",
+    "serviceAccountCredentialKey": "",
+    "installPath": "C:\\OMP\\Services\\HostAgent",
+    "packagePath": "payload/OpenModulePlatform.HostAgent.WindowsService.zip",
+    "backupExistingInstall": true,
+    "startService": true,
+    "settingsFileName": "appsettings.Production.json",
+    "localArtifactCacheRoot": "C:\\OMP\\ArtifactCache",
+    "hostKey": "sample-host",
+    "hostName": "sample-host",
+    "refreshSeconds": 30,
+    "deployWebApps": true,
+    "iisSiteName": "OpenModulePlatform",
+    "ensureIisSite": true,
+    "iisBindingProtocol": "http",
+    "iisBindingPort": 8088,
+    "iisBindingHostHeader": "",
+    "webAppsRoot": "C:\\OMP\\WebApps",
+    "portalPhysicalPath": "C:\\OMP\\Sites\\Portal",
+    "iisAppPoolNamePrefix": "OMP_",
+    "iisAppPoolUserName": "",
+    "iisAppPoolPassword": "",
+    "iisAppPoolOverrides": {},
+    "deployServiceApps": true,
+    "servicesRoot": "C:\\OMP\\Services",
+    "credentialStore": {
+      "automationMode": "",
+      "filePath": "",
+      "protectionScope": "LocalMachine",
+      "entropyPurpose": "OpenModulePlatform.HostAgent.CredentialStore.v1"
+    },
+    "appSettings": {
+      "ConnectionStrings": {
+        "OmpDb": "{SqlConnectionString}"
+      },
+      "HostAgent": {
+        "ServiceName": "OMP.HostAgent",
+        "Version": "",
+        "HostKey": "{HostAgent.HostKey}",
+        "HostName": "{HostAgent.HostName}",
+        "RefreshSeconds": 30,
+        "CentralArtifactRoot": "{ArtifactStoreRoot}",
+        "LocalArtifactCacheRoot": "{HostAgent.LocalArtifactCacheRoot}",
+        "MaterializeTemplates": true,
+        "ProcessHostDeployments": true,
+        "ProvisionAppInstanceArtifacts": true,
+        "ProvisionExplicitRequirements": true,
+        "ArtifactZipImport": {
+          "IsEnabled": false,
+          "ImportPath": "C:\\OMP\\ArtifactImports",
+          "ProcessedPath": "",
+          "FailedPath": "",
+          "MaxFilesPerCycle": 10,
+          "CopyConfigurationFilesFromPreviousVersion": true
+        },
+        "DeployWebApps": true,
+        "IisSiteName": "OpenModulePlatform",
+        "EnsureIisSite": true,
+        "IisBindingProtocol": "http",
+        "IisBindingPort": 8088,
+        "IisBindingHostHeader": "",
+        "WebAppsRoot": "C:\\OMP\\WebApps",
+        "PortalPhysicalPath": "C:\\OMP\\Sites\\Portal",
+        "IisAppPoolNamePrefix": "OMP_",
+        "IisAppPoolUserName": "",
+        "IisAppPoolPasswordCredentialKey": "",
+        "IisAppPoolOverrides": {},
+        "WebAppDataProtectionKeyPath": "C:\\OMP\\DataProtectionKeys",
+        "DeployServiceApps": true,
+        "ServicesRoot": "C:\\OMP\\Services",
+        "FileMirrors": [],
+        "SelfUpgrade": {
+          "IsEnabled": true,
+          "InstallRoot": "C:\\OMP\\Services",
+          "ServiceNamePrefix": "OMP.HostAgent",
+          "ServiceAccountName": "",
+          "ServiceAccountPasswordCredentialKey": "",
+          "TakeoverStopTimeoutSeconds": 45,
+          "DeletePreviousServiceAfterTakeover": true,
+          "StartPreparedService": true
+        },
+        "CredentialStore": {
+          "AutomationMode": "",
+          "FilePath": "",
+          "ProtectionScope": "LocalMachine",
+          "EntropyPurpose": "OpenModulePlatform.HostAgent.CredentialStore.v1"
+        },
+        "EnableRpc": true,
+        "RpcPipeName": "",
+        "RpcRequestTimeoutSeconds": 60
+      }
+    }
+  }
+}

@@ -342,6 +342,8 @@ internal static partial class Program
         var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         var directoryName = Path.GetFileName(fullPath);
         return directoryName.StartsWith("OpenModulePlatformHostAgentFirst-", StringComparison.OrdinalIgnoreCase)
+            || (directoryName.Equals("installer", StringComparison.OrdinalIgnoreCase)
+                && File.Exists(Path.Join(fullPath, "OpenModulePlatform.Bootstrapper.exe")))
             || File.Exists(Path.Join(fullPath, "hostagent-first-package.json"))
             || Directory.Exists(Path.Join(fullPath, "data", "global"));
     }
@@ -361,6 +363,12 @@ internal static partial class Program
         if (LooksLikeInstallerPackageRoot(packageLocalCandidate))
         {
             return packageLocalCandidate;
+        }
+
+        var siblingInstallerRoot = Path.Join(hostsDirectory.Parent.FullName, "installer");
+        if (Directory.Exists(siblingInstallerRoot) && LooksLikeInstallerPackageRoot(siblingInstallerRoot))
+        {
+            return siblingInstallerRoot;
         }
 
         var siblingPackagesRoot = Path.Join(hostsDirectory.Parent.FullName, "package");

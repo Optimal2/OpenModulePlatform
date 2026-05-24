@@ -29,11 +29,6 @@ public sealed class PortableModulePackageService
         "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
         RegexOptions.Compiled);
 
-    private static readonly string[] RuntimeConfigurationFileNames =
-    [
-        "odv.site.config.js"
-    ];
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = true,
@@ -544,6 +539,24 @@ public sealed class PortableModulePackageService
                 && string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
             {
                 var existingWarning = string.Empty;
+                var configurationFileCount = 0;
+                if (package.ConfigurationFiles.Count > 0)
+                {
+                    try
+                    {
+                        configurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
+                            existingIdentity.ArtifactId,
+                            package.ConfigurationFiles,
+                            ct);
+                    }
+                    catch (SqlException ex)
+                    {
+                        existingWarning = AppendWarning(
+                            existingWarning,
+                            $"The existing artifact content matched, but configuration files from the package could not be saved: {ex.Message}");
+                    }
+                }
+
                 if (options.UseArtifactsImmediately)
                 {
                     try
@@ -560,8 +573,12 @@ public sealed class PortableModulePackageService
 
                 return new PortableModulePackageArtifactImportResult(
                     identity.FileName,
-                    "Skipped",
-                    AppendWarning("The same artifact identity and content already exists.", existingWarning),
+                    configurationFileCount > 0 ? "Updated" : "Skipped",
+                    AppendWarning(
+                        configurationFileCount > 0
+                            ? $"The same artifact identity and content already exists. Updated {configurationFileCount} configuration file row(s)."
+                            : "The same artifact identity and content already exists.",
+                        existingWarning),
                     existingIdentity.ArtifactId);
             }
 
@@ -987,10 +1004,7 @@ public sealed class PortableModulePackageService
     private static void ValidateArtifactEntryIsNotRuntimeConfiguration(string normalizedEntryName)
     {
         var fileName = normalizedEntryName.Split('/').LastOrDefault() ?? string.Empty;
-        if (string.Equals(fileName, "appsettings.json", StringComparison.OrdinalIgnoreCase)
-            || fileName.StartsWith("appsettings.", StringComparison.OrdinalIgnoreCase)
-               && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            || RuntimeConfigurationFileNames.Any(name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase)))
+        if (RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(fileName))
         {
             throw new InvalidOperationException(
                 $"The artifact zip contains runtime configuration file '{normalizedEntryName}'. Put runtime configuration in the artifact package configuration-files section instead.");
@@ -1453,7 +1467,7 @@ public sealed record PortableModulePackageImportResult(
     int SqlRepairCount,
     IReadOnlyList<PortableModulePackageArtifactImportResult> Artifacts)
 {
-    public int ImportedArtifactCount => Artifacts.Count(item => item.Status is "Imported" or "Replaced");
+    public int ImportedArtifactCount => Artifacts.Count(item => item.Status is "Imported" or "Replaced" or "Updated");
 
     public int FailedArtifactCount => Artifacts.Count(item => item.Status == "Failed");
 }
