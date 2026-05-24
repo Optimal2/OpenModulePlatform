@@ -109,6 +109,10 @@ app instance key. When app pools must run as a specific Windows identity, set
 HostAgent credential store. The legacy `HostAgent:IisAppPoolPassword` setting is
 accepted only for old appsettings files and should not be written by new
 installations.
+HostAgent also clears the IIS Anonymous Authentication username and password for
+managed sites and applications. That makes anonymous requests execute as the app
+pool identity instead of the machine-level IUSR account, which keeps static
+apps and ASP.NET apps on the same filesystem permission model.
 
 An app instance with `HostId = NULL` is treated as host-neutral. HostAgent
 deploys that same logical app instance on every enabled host that runs the
