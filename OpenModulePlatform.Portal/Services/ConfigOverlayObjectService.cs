@@ -32,7 +32,7 @@ public sealed class ConfigOverlayObjectService
         }
 
         var rows = new List<AvailableHostConfigurationObject>();
-        foreach (var path in EnumerateObjectFiles(root))
+        foreach (var path in EnumerateObjectFilesOrEmpty(root))
         {
             ct.ThrowIfCancellationRequested();
             try
@@ -70,7 +70,7 @@ public sealed class ConfigOverlayObjectService
         }
 
         var rows = new List<AvailableConfigOverlayObject>();
-        foreach (var path in EnumerateObjectFiles(root))
+        foreach (var path in EnumerateObjectFilesOrEmpty(root))
         {
             ct.ThrowIfCancellationRequested();
             try
@@ -238,6 +238,20 @@ public sealed class ConfigOverlayObjectService
             .Where(static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
                 || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<string> EnumerateObjectFilesOrEmpty(string root)
+    {
+        try
+        {
+            return EnumerateObjectFiles(root).ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // Library scans are optional for the import/export page. Explicit
+            // imports still validate paths and report detailed errors.
+            return [];
+        }
+    }
 
     private static string ResolveOptionalRoot(string? value)
         => string.IsNullOrWhiteSpace(value) ? string.Empty : Path.GetFullPath(value.Trim());
