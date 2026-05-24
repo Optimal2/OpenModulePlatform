@@ -137,9 +137,27 @@ data/global/host-configs
 data/global/config-overlays
 ```
 
-The selected host config file under `configs` contains all host-specific
-installer settings. If a package must carry host-only helper files for the
-bootstrapper itself, place them below:
+The selected host profile contains all host-specific installer settings. Private
+universal installer packages should keep profiles outside generated package
+content:
+
+```text
+hosts/<profile>/bootstrap.json
+hosts/<profile>/package.psd1
+hosts/<profile>/sql
+hosts/<profile>/host-configs
+hosts/<profile>/config-overlays
+```
+
+`bootstrap.json` is the profile selected by the GUI. `package.psd1` and the
+optional `sql`, `host-configs`, and `config-overlays` folders are source inputs
+used by developer refresh tooling. Generated package folders such as `sql` and
+`data` are build output and should not be treated as the source of truth.
+
+Older packages may still place bootstrap JSON files directly below `configs`;
+the bootstrapper continues to support that layout for compatibility. If a
+package must carry host-only helper files for the bootstrapper itself, place
+them below:
 
 ```text
 data/hosts/<config-file-name-without-extension>

@@ -5,10 +5,11 @@ Updates only the runnable installer executable in an existing HostAgent-first pa
 
 .DESCRIPTION
 Developer/private installer packages can be kept intentionally minimal in Git:
-the root OpenModulePlatform.Bootstrapper.exe plus machine-specific configs. This
-helper refreshes only that executable from source. It does not rebuild module
-definitions, artifact packages, SQL payloads, package manifests, tools, or any
-other generated package content.
+the root OpenModulePlatform.Bootstrapper.exe plus the machine-specific host
+profiles that live next to the package. This helper refreshes only that
+executable from source. It does not rebuild module definitions, artifact
+packages, SQL payloads, package manifests, tools, or any other generated package
+content.
 
 Use the installer GUI package sync action afterwards when a developer machine
 needs to populate the ignored package object library before an install.
@@ -76,9 +77,31 @@ if (-not (Test-Path -LiteralPath $packageRootPath -PathType Container)) {
     throw "PackageRoot does not exist: $packageRootPath"
 }
 
-$configsRoot = Join-Path $packageRootPath 'configs'
-if (-not (Test-Path -LiteralPath $configsRoot -PathType Container)) {
-    throw "Minimal installer packages must keep machine configs in '$configsRoot'."
+function Test-HasBootstrapProfiles {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        return $false
+    }
+
+    if ((Get-ChildItem -LiteralPath $Root -Filter '*.json' -File -ErrorAction SilentlyContinue | Select-Object -First 1) -ne $null) {
+        return $true
+    }
+
+    return (Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'bootstrap.json') -PathType Leaf } |
+        Select-Object -First 1) -ne $null
+}
+
+$profileRoots = @(
+    (Join-Path $packageRootPath 'configs'),
+    (Join-Path $packageRootPath 'hosts'),
+    (Join-Path (Split-Path -Parent $packageRootPath) 'hosts'),
+    (Join-Path (Split-Path -Parent (Split-Path -Parent $packageRootPath)) 'hosts')
+)
+
+if (-not ($profileRoots | Where-Object { Test-HasBootstrapProfiles -Root $_ } | Select-Object -First 1)) {
+    throw "Minimal installer packages must be accompanied by bootstrap profiles in a package 'configs' folder or a sibling 'hosts\<profile>\bootstrap.json' tree."
 }
 
 $repositoryRootPath = Resolve-RepositoryRoot -ConfiguredRoot $RepositoryRoot

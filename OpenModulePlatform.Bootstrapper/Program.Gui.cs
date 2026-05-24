@@ -101,6 +101,28 @@ internal static partial class Program
             }
         }
 
+        void AddHostProfileRoot(string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            if (!Directory.Exists(fullPath))
+            {
+                return;
+            }
+
+            foreach (var profileDirectory in Directory.EnumerateDirectories(fullPath, "*", SearchOption.TopDirectoryOnly)
+                         .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase))
+            {
+                var bootstrapPath = Path.Join(profileDirectory, "bootstrap.json");
+                if (File.Exists(bootstrapPath))
+                {
+                    AddConfigFile(bootstrapPath);
+                    continue;
+                }
+
+                AddConfigDirectory(profileDirectory);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(cli.ConfigPath))
         {
             AddConfigFile(cli.ConfigPath);
@@ -109,6 +131,11 @@ internal static partial class Program
         foreach (var directory in EnumerateGuiConfigDirectories(cli))
         {
             AddConfigDirectory(directory);
+        }
+
+        foreach (var directory in EnumerateGuiHostProfileRoots(cli))
+        {
+            AddHostProfileRoot(directory);
         }
 
         if (profiles.Count == 0)
@@ -132,7 +159,7 @@ internal static partial class Program
         if (profiles.Count == 0)
         {
             throw new FileNotFoundException(
-                "No bootstrap configuration file was found. Create a machine-specific config in the package 'configs' folder before starting the installer. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
+                "No bootstrap configuration file was found. Create a machine-specific profile in 'hosts\\<profile>\\bootstrap.json' or in the package 'configs' folder before starting the installer. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
         }
 
         var localMachineNames = GetLocalMachineNames();
@@ -147,7 +174,7 @@ internal static partial class Program
         if (machineMatches.Length > 1)
         {
             throw new InvalidOperationException(
-                "More than one bootstrap configuration matches this computer. Keep exactly one matching config file in the package 'configs' folder, then start the installer again." + Environment.NewLine + Environment.NewLine
+                "More than one bootstrap configuration matches this computer. Keep exactly one matching host profile, then start the installer again." + Environment.NewLine + Environment.NewLine
                 + "Local computer names: " + string.Join(", ", localMachineNames.OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)) + Environment.NewLine
                 + "Matching configs: " + string.Join(", ", machineMatches.Select(static profile => profile.ConfigPath)));
         }
@@ -155,8 +182,8 @@ internal static partial class Program
         throw new InvalidOperationException(
             "No bootstrap configuration matches this computer. The installer is locked to the config whose profile.machineNames, hostAgent.hostName, or hostAgent.hostKey matches the local computer name." + Environment.NewLine + Environment.NewLine
             + "Local computer names: " + string.Join(", ", localMachineNames.OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)) + Environment.NewLine
-            + "Config folder: " + string.Join(Environment.NewLine + "  ", profiles.Select(static profile => Path.GetDirectoryName(profile.ConfigPath)).Distinct(StringComparer.OrdinalIgnoreCase)) + Environment.NewLine + Environment.NewLine
-            + "Create or update a config file in the package 'configs' folder, then start the installer again. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
+            + "Profile folders: " + string.Join(Environment.NewLine + "  ", profiles.Select(static profile => Path.GetDirectoryName(profile.ConfigPath)).Distinct(StringComparer.OrdinalIgnoreCase)) + Environment.NewLine + Environment.NewLine
+            + "Create or update a matching host profile, then start the installer again. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
     }
 
     private static IReadOnlyList<string> ResolveProfileMachineNames(BootstrapConfig config)
@@ -254,6 +281,28 @@ internal static partial class Program
         yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "configs"));
         yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "configs"));
         yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", "configs"));
+    }
+
+    private static IEnumerable<string> EnumerateGuiHostProfileRoots(CliOptions cli)
+    {
+        if (!string.IsNullOrWhiteSpace(cli.ConfigDirectory))
+        {
+            yield return Path.Join(cli.ConfigDirectory, "hosts");
+        }
+
+        if (!string.IsNullOrWhiteSpace(cli.ConfigPath)
+            && Path.GetDirectoryName(cli.ConfigPath) is { } explicitConfigDirectory)
+        {
+            yield return Path.Join(explicitConfigDirectory, "hosts");
+            yield return Path.GetFullPath(Path.Join(explicitConfigDirectory, ".."));
+            yield return Path.GetFullPath(Path.Join(explicitConfigDirectory, "..", "..", "hosts"));
+        }
+
+        yield return Path.Join(Environment.CurrentDirectory, "hosts");
+        yield return Path.Join(AppContext.BaseDirectory, "hosts");
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "hosts"));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "hosts"));
+        yield return Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", "hosts"));
     }
 
     private static IEnumerable<string> EnumerateLegacyGuiConfigFiles()
