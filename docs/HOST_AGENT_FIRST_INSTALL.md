@@ -148,7 +148,7 @@ Local development example:
 
 ```powershell
 .\scripts\deployment\package-hostagent-first.ps1 `
-  -ConfigPath .\scripts\deployment\omp-suite.local.psd1 `
+  -ConfigPath .\scripts\deployment\hostagent-first.local.psd1 `
   -OutputRoot .\artifacts\hostagent-first
 ```
 
@@ -156,7 +156,7 @@ Folder-only local/private package example:
 
 ```powershell
 .\scripts\deployment\package-hostagent-first.ps1 `
-  -ConfigPath .\scripts\deployment\omp-suite.local.psd1 `
+  -ConfigPath .\scripts\deployment\hostagent-first.local.psd1 `
   -OutputRoot .\artifacts\hostagent-first `
   -SkipZip
 ```
@@ -167,7 +167,7 @@ Neutral public package example:
 scripts\deployment\package-hostagent-first-public.cmd
 ```
 
-This uses `scripts\deployment\omp-suite.config.sample.psd1` and writes a
+This uses `scripts\deployment\hostagent-first.config.sample.psd1` and writes a
 non-customer-specific package to `artifacts\hostagent-first-public`. Protected
 customer packages should use `.local.psd1` files outside source control.
 
@@ -470,21 +470,14 @@ same operator-confirmed uninstall.
 
 ## SQL Files
 
-The public local SQL entry point is:
-
-```text
-sql/bootstrap-hostagent-first-local.sql
-```
-
 Package builds also generate a package-local SQL entry point:
 
 ```text
 sql/bootstrap-local.sql
 ```
 
-Both files use SQLCMD-style `:r` includes. The bootstrapper expands those
-includes and applies the same environment patches that the older suite installer
-applied:
+That file uses SQLCMD-style `:r` includes. The bootstrapper expands those
+includes and applies environment patches:
 
 - replace `USE [OpenModulePlatform]` with the configured database name
 - inject the bootstrap portal admin principal

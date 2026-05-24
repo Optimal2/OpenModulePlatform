@@ -109,7 +109,7 @@ OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql
 OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
 ```
 
-Set the same `@BootstrapPortalAdminPrincipal` value in `2-initialize-omp-portal.sql`, or use `scripts/manage-local-install.ps1` so the local installer handles it.
+Set the same `@BootstrapPortalAdminPrincipal` value in `2-initialize-omp-portal.sql`, or use the HostAgent-first installer profile in `installer/hosts/sample` so the bootstrapper handles it.
 
 ### 4. Install first-party OMP modules and optional examples
 
@@ -123,12 +123,12 @@ OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql
 OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql
 ```
 
-The local installer `scripts/manage-local-install.ps1` installs the Portal plus
-the first-party Content and iFrame modules, including their template metadata
-and web artifacts. Content starts without sample pages; run
-`scripts/dev/seed-content-webapp-test-pages.ps1` only when you want explicit
-local Content smoke-test pages. Use `scripts/install-local-examples.ps1` only
-when you also want the optional example modules.
+The current local installation path is the HostAgent-first installer. Start
+from `installer/hosts/sample/bootstrap.json`, set the machine name and bootstrap
+administrator principal for the local computer, then create the installer
+runner as described in `installer/README.md`. Content starts without sample
+pages; run `scripts/dev/seed-content-webapp-test-pages.ps1` only when you want
+explicit local Content smoke-test pages.
 
 Each example module owns its own SQL folder and follows the same two-file pattern:
 

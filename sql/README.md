@@ -17,20 +17,15 @@ Use these scripts for the neutral OMP core installation flow:
    - Registers OpenDocViewer as a host-neutral OMP web app artifact target so
      HostAgent can deploy it like other web apps.
 
-`bootstrap-hostagent-first-local.sql` is a SQLCMD-style include file for local
-HostAgent-first bootstrap packages. It is intended for the bootstrapper or SQLCMD
-mode; normal SQL editors that do not expand `:r` includes cannot run it as-is.
-
-`2-initialize-openmoduleplatform.sql` requires a bootstrap administrator principal. Prefer the local installer because it writes a temporary SQL file with the principal escaped safely:
+`2-initialize-openmoduleplatform.sql` requires a bootstrap administrator principal. Prefer the HostAgent-first installer because it writes a temporary SQL file with the principal escaped safely:
 
 ```powershell
-.\scripts\manage-local-install.ps1 `
-  -Action Install `
-  -BootstrapPortalAdminPrincipal "DOMAIN\User" `
-  -Yes
+.\scripts\deployment\update-installer-runner-only.ps1 -PackageRoot .\installer
+.\installer\OpenModulePlatform.Bootstrapper.exe
 ```
 
-The `-BootstrapPortalAdminPrincipal` parameter accepts an array, so pass more than one value when a development machine can authenticate the same operator under multiple Windows principal strings.
+The bootstrap JSON supports the bootstrap administrator principal and related
+principal type. Use one clear principal per profile.
 
 For direct SQL execution, manually replace `__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__` inside the initialization script with a single-quote-escaped Windows user or group. Do not pass the principal through `sqlcmd -v`; SQLCMD variables are textual substitution before T-SQL parsing and cannot be safely validated by the script after substitution.
 
