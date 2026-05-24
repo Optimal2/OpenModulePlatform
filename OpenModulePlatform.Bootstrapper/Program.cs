@@ -41,6 +41,12 @@ internal static partial class Program
                 return await RunInstallerPackageRefreshAsync(cli);
             }
 
+            if (cli.SyncPackageObjects)
+            {
+                EnsureConsole();
+                return await RunSyncPackageObjectsAsync(cli);
+            }
+
             var useGui = cli.Gui || (args.Length == 0 && OperatingSystem.IsWindows() && Environment.UserInteractive);
             if (!useGui)
             {
@@ -360,6 +366,7 @@ internal static partial class Program
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --uninstall [--remove-runtime-files] [--remove-database-objects] [--yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui [--config <bootstrap.json> | --config-dir <configs>] [--payload-root <path>] [--payload-zip <zip>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> --payload-root <path> [--parent-process-id <pid>] [--restart-gui]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --sync-package-objects --config <bootstrap.json> [--payload-root <path>]");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
@@ -4372,6 +4379,8 @@ internal sealed class CliOptions
 
     public bool RefreshInstallerPackage { get; private init; }
 
+    public bool SyncPackageObjects { get; private init; }
+
     public bool UpgradeOrComplete { get; private init; }
 
     public bool Uninstall { get; private init; }
@@ -4418,6 +4427,9 @@ internal sealed class CliOptions
                     break;
                 case "--refresh-installer-package":
                     options.RefreshInstallerPackage = true;
+                    break;
+                case "--sync-package-objects":
+                    options.SyncPackageObjects = true;
                     break;
                 case "--upgrade-or-complete":
                     options.UpgradeOrComplete = true;
@@ -4474,6 +4486,8 @@ internal sealed class CliOptions
 
         public bool RefreshInstallerPackage { get; set; }
 
+        public bool SyncPackageObjects { get; set; }
+
         public bool UpgradeOrComplete { get; set; }
 
         public bool Uninstall { get; set; }
@@ -4488,11 +4502,11 @@ internal sealed class CliOptions
 
         public CliOptions ToOptions()
         {
-            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage }
+            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects }
                 .Count(static item => item);
             if (selectedModes > 1)
             {
-                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, or refresh-installer-package.");
+                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, refresh-installer-package, or sync-package-objects.");
             }
 
             if ((RemoveRuntimeFiles || RemoveDatabaseObjects) && !Uninstall)
@@ -4510,6 +4524,7 @@ internal sealed class CliOptions
                 Gui = Gui,
                 ShowHelp = ShowHelp,
                 RefreshInstallerPackage = RefreshInstallerPackage,
+                SyncPackageObjects = SyncPackageObjects,
                 UpgradeOrComplete = UpgradeOrComplete,
                 Uninstall = Uninstall,
                 RemoveRuntimeFiles = RemoveRuntimeFiles,
