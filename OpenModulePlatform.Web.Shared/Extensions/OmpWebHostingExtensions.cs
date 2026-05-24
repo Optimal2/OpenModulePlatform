@@ -160,6 +160,8 @@ public static class OmpWebHostingExtensions
             app.UseForwardedHeaders();
         }
 
+        app.UseOmpSecurityHeaders();
+
         if (app.Environment.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();
@@ -321,6 +323,40 @@ public static class OmpWebHostingExtensions
         }
 
         return app;
+    }
+
+    public static IApplicationBuilder UseOmpSecurityHeaders(this IApplicationBuilder app)
+    {
+        return app.Use(async (context, next) =>
+        {
+            context.Response.OnStarting(static state =>
+            {
+                var httpContext = (HttpContext)state;
+                var headers = httpContext.Response.Headers;
+
+                SetHeaderIfMissing(headers, "X-Content-Type-Options", "nosniff");
+                SetHeaderIfMissing(headers, "Referrer-Policy", "same-origin");
+                SetHeaderIfMissing(headers, "X-Frame-Options", "SAMEORIGIN");
+                SetHeaderIfMissing(headers, "Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+                // OMP still has trusted inline scripts and styles in legacy module pages.
+                // Add CSP only after those pages have been migrated to nonce/hash based assets.
+                return Task.CompletedTask;
+            }, context);
+
+            await next();
+        });
+    }
+
+    private static void SetHeaderIfMissing(
+        IHeaderDictionary headers,
+        string headerName,
+        string headerValue)
+    {
+        if (!headers.ContainsKey(headerName))
+        {
+            headers[headerName] = headerValue;
+        }
     }
 
     private static async Task<IResult> HandleSetActiveRoleAsync(
