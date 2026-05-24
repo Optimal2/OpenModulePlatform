@@ -49,11 +49,13 @@ public sealed class HostAgentEngine
 
         var hostKey = settings.ResolveHostKey();
         var runtimeMode = _process.RuntimeMode;
+        var forceLeaseTakeover = runtimeMode == HostAgentRuntimeMode.Takeover
+            || await _selfUpgradeService.ShouldForceLeaseTakeoverAsync(hostKey, cancellationToken);
         var lease = await _repository.TryAcquireHostAgentLeaseAsync(
             hostKey,
             _process.ServiceName,
             runtimeMode,
-            forceTakeover: runtimeMode == HostAgentRuntimeMode.Takeover,
+            forceTakeover: forceLeaseTakeover,
             leaseSeconds: Math.Max(30, settings.RefreshSeconds * 3),
             cancellationToken);
 
@@ -89,6 +91,10 @@ public sealed class HostAgentEngine
         if (runtimeMode == HostAgentRuntimeMode.Takeover)
         {
             await _selfUpgradeService.CompleteTakeoverAsync(hostKey, lease.HostId.Value, cancellationToken);
+        }
+        else
+        {
+            await _selfUpgradeService.CleanupSupersededHostAgentServicesAsync(hostKey, lease.HostId.Value, cancellationToken);
         }
 
         if (_process.IsQuiesceRequested)

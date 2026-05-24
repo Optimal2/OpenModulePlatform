@@ -110,6 +110,24 @@ SELECT CAST(0 AS bit) AS Acquired, @hostId AS HostId, CAST(NULL AS uniqueidentif
             rdr.IsDBNull(3) ? null : rdr.GetString(3));
     }
 
+    public async Task ReleaseHostAgentLeaseAsync(
+        Guid hostId,
+        string serviceName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DELETE FROM omp.HostAgentLeases
+WHERE HostId = @hostId
+  AND ServiceName = @serviceName;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task PublishHostAgentRuntimeStateAsync(
         Guid hostId,
         HostAgentProcessContext process,
@@ -194,8 +212,36 @@ WHEN NOT MATCHED THEN
         cmd.Parameters.AddWithValue("@processId", process.ProcessId);
         cmd.Parameters.AddWithValue("@runtimeMode", runtimeMode);
         cmd.Parameters.AddWithValue("@isActive", isActive);
-        cmd.Parameters.AddWithValue("@takeoverFromServiceName", string.IsNullOrWhiteSpace(process.TakeoverFromServiceName) ? DBNull.Value : process.TakeoverFromServiceName);
+        var takeoverFromServiceName = string.Equals(runtimeMode, HostAgentRuntimeMode.Normal, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : process.TakeoverFromServiceName;
+        cmd.Parameters.AddWithValue("@takeoverFromServiceName", string.IsNullOrWhiteSpace(takeoverFromServiceName) ? DBNull.Value : takeoverFromServiceName);
         cmd.Parameters.AddWithValue("@statusMessage", string.IsNullOrWhiteSpace(statusMessage) ? DBNull.Value : Truncate(statusMessage, 1000));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task MarkHostAgentRetiredAsync(
+        Guid hostId,
+        string serviceName,
+        string retiredByServiceName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.HostAgentRuntimeStates
+SET RuntimeMode = N'Quiesced',
+    IsActive = 0,
+    QuiescedUtc = COALESCE(QuiescedUtc, SYSUTCDATETIME()),
+    StatusMessage = @statusMessage,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostId = @hostId
+  AND ServiceName = @serviceName;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        cmd.Parameters.AddWithValue("@statusMessage", Truncate($"Retired by {retiredByServiceName}.", 1000));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

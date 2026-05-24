@@ -47,7 +47,7 @@ DECLARE @ServiceHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.37';
+DECLARE @ArtifactVersion nvarchar(50) = N'0.3.45';
 DECLARE @WorkerManagerArtifactVersion nvarchar(50) = N'0.3.7';
 DECLARE @WorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
 DECLARE @DefaultHostKey nvarchar(128) = N'sample-host';
