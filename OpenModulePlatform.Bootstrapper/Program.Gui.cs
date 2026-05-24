@@ -1807,8 +1807,18 @@ internal static partial class Program
                     {
                         // Existing same-target packages are treated as immutable. Refresh should add missing or newer
                         // versions, not rewrite bytes for an already versioned artifact and create noisy binary diffs.
-                        lines.Add($"  OK      {component.ComponentKey}: artifact package is present.");
-                        unchanged++;
+                        if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase))
+                        {
+                            current.Source = expectedSource;
+                            configUpdated = true;
+                            lines.Add($"  UPDATED {component.ComponentKey}: using package library artifact {expectedSource} for this run.");
+                            updated++;
+                        }
+                        else
+                        {
+                            lines.Add($"  OK      {component.ComponentKey}: artifact package is present.");
+                            unchanged++;
+                        }
 
                         var mirroredLibraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
                         if (!File.Exists(mirroredLibraryPath))
@@ -1822,8 +1832,21 @@ internal static partial class Program
                     var currentSourcePath = ResolvePackagePath(current.Source);
                     if (File.Exists(currentSourcePath))
                     {
-                        lines.Add($"  OK      {component.ComponentKey}: configured artifact source is present ({current.Source}).");
-                        unchanged++;
+                        CopyFileIfDifferent(currentSourcePath, payloadPath);
+                        CopyFileIfDifferent(currentSourcePath, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
+                        if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase))
+                        {
+                            current.Source = expectedSource;
+                            configUpdated = true;
+                            lines.Add($"  UPDATED {component.ComponentKey}: moved configured artifact source to package library path {expectedSource} for this run.");
+                            updated++;
+                        }
+                        else
+                        {
+                            lines.Add($"  OK      {component.ComponentKey}: configured artifact source is present ({current.Source}).");
+                            unchanged++;
+                        }
+
                         continue;
                     }
 
