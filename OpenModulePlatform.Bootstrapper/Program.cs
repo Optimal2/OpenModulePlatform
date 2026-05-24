@@ -2108,6 +2108,19 @@ END;
                     $"> Artifact desired state {artifact.Target}: updated {updates.TemplateAppRowsUpdated} template row(s), {updates.AppInstanceRowsUpdated} app instance row(s), {updates.WorkerInstanceRowsUpdated} worker row(s).");
             }
 
+            if (identity.PackageType.Equals("host-agent", StringComparison.OrdinalIgnoreCase))
+            {
+                var hostAgentDesiredRows = await ApplyConfiguredHostAgentArtifactToCurrentHostAsync(
+                    connection,
+                    artifactId,
+                    config.HostAgent);
+                if (hostAgentDesiredRows > 0)
+                {
+                    Console.WriteLine(
+                        $"> HostAgent desired state {artifact.Target}: updated {hostAgentDesiredRows} host row(s).");
+                }
+            }
+
             registered++;
         }
 
@@ -2308,6 +2321,82 @@ SELECT @templateAppRowsUpdated,
         }
 
         return (reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
+    }
+
+    private static async Task<int> ApplyConfiguredHostAgentArtifactToCurrentHostAsync(
+        SqlConnection connection,
+        int artifactId,
+        HostAgentInstallOptions hostAgent)
+    {
+        const string sql = """
+DECLARE @hostId uniqueidentifier;
+DECLARE @changes table(ActionName nvarchar(10) NOT NULL);
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT 0;
+    RETURN;
+END;
+
+MERGE omp.HostAgentDesiredStates AS target
+USING
+(
+    SELECT
+        @hostId AS HostId,
+        @artifactId AS ArtifactId,
+        NULLIF(@serviceNamePrefix, N'') AS ServiceNamePrefix,
+        NULLIF(@installRoot, N'') AS InstallRoot
+) AS source
+ON target.HostId = source.HostId
+WHEN MATCHED AND
+(
+       target.ArtifactId <> source.ArtifactId
+    OR (source.ServiceNamePrefix IS NOT NULL AND ISNULL(target.ServiceNamePrefix, N'') <> source.ServiceNamePrefix)
+    OR (source.InstallRoot IS NOT NULL AND ISNULL(target.InstallRoot, N'') <> source.InstallRoot)
+    OR target.IsEnabled = 0
+)
+    THEN UPDATE SET
+        ArtifactId = source.ArtifactId,
+        ServiceNamePrefix = COALESCE(source.ServiceNamePrefix, target.ServiceNamePrefix),
+        InstallRoot = COALESCE(source.InstallRoot, target.InstallRoot),
+        IsEnabled = 1,
+        UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(HostId, ArtifactId, ServiceNamePrefix, InstallRoot, IsEnabled)
+    VALUES(source.HostId, source.ArtifactId, source.ServiceNamePrefix, source.InstallRoot, 1)
+OUTPUT $action INTO @changes;
+
+SELECT COUNT(1) FROM @changes;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@artifactId", artifactId);
+        command.Parameters.AddWithValue("@hostKey", ResolveHostAgentHostKey(hostAgent));
+        command.Parameters.AddWithValue("@serviceNamePrefix", string.IsNullOrWhiteSpace(hostAgent.ServiceName) ? string.Empty : hostAgent.ServiceName.Trim());
+        command.Parameters.AddWithValue("@installRoot", string.IsNullOrWhiteSpace(hostAgent.ServicesRoot) ? string.Empty : hostAgent.ServicesRoot.Trim());
+
+        var value = await command.ExecuteScalarAsync();
+        return value is int count ? count : 0;
+    }
+
+    private static string ResolveHostAgentHostKey(HostAgentInstallOptions hostAgent)
+    {
+        if (!string.IsNullOrWhiteSpace(hostAgent.HostKey))
+        {
+            return hostAgent.HostKey.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(hostAgent.HostName))
+        {
+            return hostAgent.HostName.Trim();
+        }
+
+        return Environment.MachineName;
     }
 
     private static string ComputeDirectorySha256(string path)
