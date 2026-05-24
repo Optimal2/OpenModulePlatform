@@ -383,6 +383,8 @@ must still exist in the package, `ArtifactStoreRoot\_available`,
 `RuntimeRoot\ArtifactArchive`, or a source repository `artifacts` folder.
 The sync action writes a timestamped diagnostic log to the user's temp folder
 (`omp-installer-sync-*.log`) and keeps tracked host config files unchanged.
+The command-line installer can use the same behavior before a bootstrap or
+upgrade with `--sync-package-objects-before-action`.
 
 For non-interactive console installation, run:
 

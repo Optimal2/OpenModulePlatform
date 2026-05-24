@@ -83,6 +83,15 @@ internal static partial class Program
                     cli.Yes);
             }
 
+            if (cli.SyncPackageObjectsBeforeAction)
+            {
+                var syncExitCode = await RunPackageObjectSyncForActionAsync(cli, config, configPath, payloadRoot);
+                if (syncExitCode != 0)
+                {
+                    return syncExitCode;
+                }
+            }
+
             if (cli.UpgradeOrComplete)
             {
                 return await RunUpgradeOrCompleteAsync(config, configPath, payloadRoot, cli.PayloadZipPath);
@@ -361,8 +370,8 @@ internal static partial class Program
         Console.WriteLine("OpenModulePlatform.Bootstrapper");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--yes]");
-        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --upgrade-or-complete [--payload-root <path>] [--payload-zip <zip>]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action] [--yes]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --upgrade-or-complete [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --uninstall [--remove-runtime-files] [--remove-database-objects] [--yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui [--config <bootstrap.json> | --config-dir <configs>] [--payload-root <path>] [--payload-zip <zip>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> --payload-root <path> [--parent-process-id <pid>] [--restart-gui]");
@@ -4381,6 +4390,8 @@ internal sealed class CliOptions
 
     public bool SyncPackageObjects { get; private init; }
 
+    public bool SyncPackageObjectsBeforeAction { get; private init; }
+
     public bool UpgradeOrComplete { get; private init; }
 
     public bool Uninstall { get; private init; }
@@ -4430,6 +4441,9 @@ internal sealed class CliOptions
                     break;
                 case "--sync-package-objects":
                     options.SyncPackageObjects = true;
+                    break;
+                case "--sync-package-objects-before-action":
+                    options.SyncPackageObjectsBeforeAction = true;
                     break;
                 case "--upgrade-or-complete":
                     options.UpgradeOrComplete = true;
@@ -4488,6 +4502,8 @@ internal sealed class CliOptions
 
         public bool SyncPackageObjects { get; set; }
 
+        public bool SyncPackageObjectsBeforeAction { get; set; }
+
         public bool UpgradeOrComplete { get; set; }
 
         public bool Uninstall { get; set; }
@@ -4514,6 +4530,11 @@ internal sealed class CliOptions
                 throw new InvalidOperationException("--remove-runtime-files and --remove-database-objects can only be used with --uninstall.");
             }
 
+            if (SyncPackageObjectsBeforeAction && (SyncPackageObjects || RefreshInstallerPackage || Uninstall))
+            {
+                throw new InvalidOperationException("--sync-package-objects-before-action can only be used with bootstrap or --upgrade-or-complete.");
+            }
+
             return new()
             {
                 ConfigPath = ConfigPath,
@@ -4525,6 +4546,7 @@ internal sealed class CliOptions
                 ShowHelp = ShowHelp,
                 RefreshInstallerPackage = RefreshInstallerPackage,
                 SyncPackageObjects = SyncPackageObjects,
+                SyncPackageObjectsBeforeAction = SyncPackageObjectsBeforeAction,
                 UpgradeOrComplete = UpgradeOrComplete,
                 Uninstall = Uninstall,
                 RemoveRuntimeFiles = RemoveRuntimeFiles,

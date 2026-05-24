@@ -287,6 +287,33 @@ internal static partial class Program
         var configPath = Path.GetFullPath(cli.ConfigPath);
         var config = await ReadJsonAsync<BootstrapConfig>(configPath);
         var payloadRoot = ResolvePayloadRoot(cli, configPath);
+        var result = await SyncPackageObjectsIntoConfigAsync(cli, config, configPath, payloadRoot);
+        return result.HasWarnings ? 1 : 0;
+    }
+
+    private static async Task<int> RunPackageObjectSyncForActionAsync(
+        CliOptions cli,
+        BootstrapConfig config,
+        string configPath,
+        string payloadRoot)
+    {
+        var result = await SyncPackageObjectsIntoConfigAsync(cli, config, configPath, payloadRoot);
+        if (result.HasWarnings)
+        {
+            Console.WriteLine("> Package object sync had warnings. The main installation action was not started.");
+            return 1;
+        }
+
+        Console.WriteLine("> Package object sync completed.");
+        return 0;
+    }
+
+    private static async Task<DeveloperPackageObjectSyncResult> SyncPackageObjectsIntoConfigAsync(
+        CliOptions cli,
+        BootstrapConfig config,
+        string configPath,
+        string payloadRoot)
+    {
         var logPath = Path.Join(
             Path.GetTempPath(),
             $"omp-installer-sync-{DateTime.UtcNow:yyyyMMddHHmmss}.log");
@@ -334,7 +361,7 @@ internal static partial class Program
                 WriteProgress("Configuration targets were updated in memory for this sync run. Tracked host config files are not rewritten by package-object sync.");
             }
 
-            return result.HasWarnings ? 1 : 0;
+            return result;
         }
         finally
         {
