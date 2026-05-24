@@ -21,11 +21,6 @@ public sealed class ArtifactZipImportService
         "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
         RegexOptions.Compiled);
 
-    private static readonly string[] RuntimeConfigurationFileNames =
-    [
-        "odv.site.config.js"
-    ];
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = true,
@@ -526,9 +521,22 @@ public sealed class ArtifactZipImportService
                 cancellationToken);
             if (existingIdentity is not null)
             {
-                if (allowExistingIdentical
-                    && string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+                var existingContentMatches = string.Equals(
+                    existingIdentity.Sha256,
+                    contentHash,
+                    StringComparison.OrdinalIgnoreCase);
+                if ((allowExistingIdentical || package.ConfigurationFiles.Count > 0)
+                    && existingContentMatches)
                 {
+                    var updatedConfigurationFiles = 0;
+                    if (package.ConfigurationFiles.Count > 0)
+                    {
+                        updatedConfigurationFiles = await _repository.ReplaceArtifactConfigurationFilesAsync(
+                            existingIdentity.ArtifactId,
+                            package.ConfigurationFiles,
+                            cancellationToken);
+                    }
+
                     var existingApplication = applyToMatchingApplications
                         ? await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(
                             existingIdentity.ArtifactId,
@@ -550,14 +558,16 @@ public sealed class ArtifactZipImportService
                         existingIdentity.ArtifactId,
                         existingIdentity.Version,
                         existingIdentity.RelativePath ?? relativePath,
-                        0,
+                        updatedConfigurationFiles,
                         existingApplication.TemplateAppRowsUpdated,
                         existingApplication.AppInstanceRowsUpdated,
                         existingApplication.WorkerInstanceRowsUpdated,
                         existingHostAgentDesiredRows,
                         AdoptedExistingContent: true,
-                        Status: "Skipped",
-                        Message: "The same artifact identity and content already exists.");
+                        Status: updatedConfigurationFiles > 0 ? "Updated" : "Skipped",
+                        Message: updatedConfigurationFiles > 0
+                            ? $"The same artifact identity and content already exists. Updated {updatedConfigurationFiles} configuration file row(s)."
+                            : "The same artifact identity and content already exists.");
                 }
 
                 throw new InvalidOperationException(
@@ -668,28 +678,11 @@ public sealed class ArtifactZipImportService
     private static void ValidateArtifactEntryIsNotRuntimeConfiguration(string normalizedEntryName)
     {
         var fileName = normalizedEntryName.Split('/').LastOrDefault() ?? string.Empty;
-        if (IsRuntimeConfigurationFileName(fileName))
+        if (RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(fileName))
         {
             throw new InvalidOperationException(
                 $"The artifact zip contains runtime configuration file '{normalizedEntryName}'. Store runtime configuration in artifact configuration file rows instead.");
         }
-    }
-
-    private static bool IsRuntimeConfigurationFileName(string fileName)
-    {
-        if (string.Equals(fileName, "appsettings.json", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (fileName.StartsWith("appsettings.", StringComparison.OrdinalIgnoreCase)
-            && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return RuntimeConfigurationFileNames.Any(
-            name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task<string> ComputeDirectorySha256Async(string path, CancellationToken cancellationToken)
