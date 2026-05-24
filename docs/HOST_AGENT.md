@@ -354,9 +354,13 @@ creates or updates a versioned Windows service, and starts it with:
 --service-name=<new service> --runtime-mode=Takeover --takeover-from=<old service>
 ```
 
-The takeover service then records the old service as quiescing, stops it,
-optionally deletes it, reconfigures its own Windows service command line back to
-normal mode, and continues as the active HostAgent.
+The takeover service first validates that its own executable and required
+credential-store entries are readable. Only after that readiness check succeeds
+does it record the old service as quiescing, stop it, optionally delete it,
+reconfigure its own Windows service command line back to normal mode, and
+continue as the active HostAgent. If the readiness check fails, the new service
+marks its runtime state as failed, releases the host lease, and stops its own
+loop so the old service can resume the upgrade work on a later cycle.
 
 Minimal configuration:
 
@@ -392,6 +396,18 @@ the bootstrapper writes the password to the local HostAgent credential store and
 puts only the credential key in appsettings. The credential store uses Windows
 DPAPI; with `ProtectionScope = "LocalMachine"` the encrypted password can only
 be decrypted on the same Windows machine.
+
+During self-upgrade the old HostAgent copies the credential store into the new
+versioned install folder and rewrites the new appsettings to point at that local
+copy. Cleanup of superseded HostAgent folders will not remove a folder that is
+still referenced by the active credential-store path; this keeps interrupted or
+legacy upgrades resumable until the next successful version has its own local
+credential-store file.
+
+The desired version also performs cleanup during normal cycles. This makes the
+upgrade idempotent if the process is interrupted after the new service starts:
+the desired service can force the host lease, finish takeover bookkeeping, and
+remove superseded HostAgent services and orphaned versioned folders later.
 
 For a desired upgrade, insert or update one row in
 `omp.HostAgentDesiredStates` for the concrete host and point it at the desired

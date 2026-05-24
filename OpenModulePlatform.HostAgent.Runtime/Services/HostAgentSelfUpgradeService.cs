@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -12,8 +13,10 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class HostAgentSelfUpgradeService
 {
     private const int ScServiceNotFoundExitCode = 1060;
+    private const int DirectoryDeleteMaxAttempts = 20;
     private const string DefaultNLogAppName = "OpenModulePlatform.HostAgent.WindowsService";
     private const string DefaultNLogDirectory = "${basedir}/logs";
+    private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
@@ -111,6 +114,22 @@ public sealed class HostAgentSelfUpgradeService
             installPath);
     }
 
+    public async Task<bool> ShouldForceLeaseTakeoverAsync(
+        string hostKey,
+        CancellationToken cancellationToken)
+    {
+        var settings = _settings.CurrentValue;
+        if (!settings.SelfUpgrade.IsEnabled)
+        {
+            return false;
+        }
+
+        var desired = await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
+        return desired is not null
+            && IsCurrentVersion(desired)
+            && string.Equals(ResolveServiceName(settings, desired), _process.ServiceName, StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task CompleteTakeoverAsync(
         string hostKey,
         Guid hostId,
@@ -125,6 +144,21 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
+        try
+        {
+            await ValidateTakeoverReadinessAsync(settings, cancellationToken);
+        }
+        catch (Exception ex) when (IsExpectedTakeoverReadinessFailure(ex))
+        {
+            await FailTakeoverAsync(
+                hostId,
+                $"HostAgent takeover failed before retiring '{previousServiceName}': {ex.Message}",
+                cancellationToken);
+            throw;
+        }
+
+        var previousExecutablePath = TryGetServiceExecutablePath(previousServiceName);
+
         await _repository.RequestHostAgentQuiesceAsync(
             hostId,
             previousServiceName,
@@ -138,6 +172,8 @@ public sealed class HostAgentSelfUpgradeService
         {
             DeleteServiceIfExists(previousServiceName);
         }
+
+        TryDeletePreviousInstallDirectory(previousServiceName, previousExecutablePath, settings, cancellationToken);
 
         var executablePath = FindHostAgentExecutable(AppContext.BaseDirectory);
         ConfigureService(_process.ServiceName, executablePath, CreateNormalArguments(_process.ServiceName), version: _process.Version);
@@ -158,10 +194,193 @@ public sealed class HostAgentSelfUpgradeService
             $"HostAgent takeover completed for host '{hostKey}'.",
             cancellationToken);
 
+        await CleanupSupersededHostAgentServicesAsync(hostKey, hostId, cancellationToken);
+
         _logger.LogInformation(
             "Completed HostAgent takeover. CurrentService={CurrentService}, PreviousService={PreviousService}",
             _process.ServiceName,
             previousServiceName);
+    }
+
+    private async Task ValidateTakeoverReadinessAsync(
+        HostAgentSettings settings,
+        CancellationToken cancellationToken)
+    {
+        _ = FindHostAgentExecutable(AppContext.BaseDirectory);
+
+        var credentialKeys = GetRequiredCredentialKeys(settings)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (credentialKeys.Length == 0)
+        {
+            return;
+        }
+
+        if (!settings.CredentialStore.IsEnabled())
+        {
+            throw new InvalidOperationException(
+                "HostAgent takeover requires stored credentials, but HostAgent:CredentialStore:AutomationMode is Disabled.");
+        }
+
+        foreach (var credentialKey in credentialKeys)
+        {
+            var credential = await _credentialStore.TryReadCredentialAsync(credentialKey, cancellationToken);
+            if (credential is null)
+            {
+                throw new InvalidOperationException(
+                    $"HostAgent takeover credential '{credentialKey}' could not be resolved from the credential store.");
+            }
+        }
+    }
+
+    private async Task FailTakeoverAsync(
+        Guid hostId,
+        string statusMessage,
+        CancellationToken cancellationToken)
+    {
+        _process.MarkQuiesced();
+        await _repository.PublishHostAgentRuntimeStateAsync(
+            hostId,
+            _process,
+            HostAgentRuntimeMode.Failed,
+            artifactId: null,
+            AppContext.BaseDirectory,
+            isActive: false,
+            statusMessage,
+            cancellationToken);
+        await _repository.ReleaseHostAgentLeaseAsync(hostId, _process.ServiceName, cancellationToken);
+
+        _logger.LogError(
+            "HostAgent takeover failed before the previous service was retired. CurrentService={CurrentService}, StatusMessage={StatusMessage}",
+            _process.ServiceName,
+            statusMessage);
+    }
+
+    private static IEnumerable<string> GetRequiredCredentialKeys(HostAgentSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.SelfUpgrade.ServiceAccountPasswordCredentialKey))
+        {
+            yield return settings.SelfUpgrade.ServiceAccountPasswordCredentialKey.Trim();
+        }
+
+        if (settings.DeployWebApps)
+        {
+            if (!string.IsNullOrWhiteSpace(settings.IisAppPoolPasswordCredentialKey))
+            {
+                yield return settings.IisAppPoolPasswordCredentialKey.Trim();
+            }
+
+            foreach (var key in settings.IisAppPoolOverrides.Values
+                .Select(static identity => identity.PasswordCredentialKey)
+                .Where(static key => !string.IsNullOrWhiteSpace(key)))
+            {
+                yield return key.Trim();
+            }
+        }
+
+        if (!settings.DeployServiceApps)
+        {
+            yield break;
+        }
+
+        var serviceAppCredentialKey = string.IsNullOrWhiteSpace(settings.ServiceAppPasswordCredentialKey)
+            ? settings.SelfUpgrade.ServiceAccountPasswordCredentialKey
+            : settings.ServiceAppPasswordCredentialKey;
+        if (!string.IsNullOrWhiteSpace(serviceAppCredentialKey))
+        {
+            yield return serviceAppCredentialKey.Trim();
+        }
+
+        foreach (var key in settings.ServiceAppIdentityOverrides.Values
+            .Select(static identity => identity.PasswordCredentialKey)
+            .Where(static key => !string.IsNullOrWhiteSpace(key)))
+        {
+            yield return key.Trim();
+        }
+    }
+
+    private static bool IsExpectedTakeoverReadinessFailure(Exception ex)
+        => ex is InvalidOperationException
+            or IOException
+            or UnauthorizedAccessException
+            or CryptographicException
+            or FormatException;
+
+    public async Task CleanupSupersededHostAgentServicesAsync(
+        string hostKey,
+        Guid hostId,
+        CancellationToken cancellationToken)
+    {
+        var settings = _settings.CurrentValue;
+        if (!settings.SelfUpgrade.IsEnabled)
+        {
+            return;
+        }
+
+        var desired = await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
+        if (desired is null || !IsCurrentVersion(desired))
+        {
+            return;
+        }
+
+        var expectedCurrentServiceName = ResolveServiceName(settings, desired);
+        if (!string.Equals(expectedCurrentServiceName, _process.ServiceName, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Skipping HostAgent cleanup because the current service name does not match the desired versioned service name. CurrentService={CurrentService}, ExpectedService={ExpectedService}",
+                _process.ServiceName,
+                expectedCurrentServiceName);
+            return;
+        }
+
+        var serviceNamePrefix = ResolveServiceNamePrefix(settings, desired);
+        foreach (var service in EnumerateSupersededHostAgentServices(serviceNamePrefix))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(service.Name, _process.ServiceName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            try
+            {
+                StopServiceIfRunning(service.Name, settings.SelfUpgrade.TakeoverStopTimeoutSeconds);
+                DeleteServiceIfExists(service.Name);
+                TryDeleteSupersededInstallDirectory(service.ExecutablePath, settings, cancellationToken);
+                await _repository.MarkHostAgentRetiredAsync(hostId, service.Name, _process.ServiceName, cancellationToken);
+
+                _logger.LogInformation(
+                    "Removed superseded HostAgent service. CurrentService={CurrentService}, RemovedService={RemovedService}",
+                    _process.ServiceName,
+                    service.Name);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not remove superseded HostAgent service. CurrentService={CurrentService}, SupersededService={SupersededService}",
+                    _process.ServiceName,
+                    service.Name);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not remove superseded HostAgent service files. CurrentService={CurrentService}, SupersededService={SupersededService}",
+                    _process.ServiceName,
+                    service.Name);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not remove superseded HostAgent service files because access was denied. CurrentService={CurrentService}, SupersededService={SupersededService}",
+                    _process.ServiceName,
+                    service.Name);
+            }
+        }
+
+        CleanupOrphanedInstallDirectories(settings, serviceNamePrefix, cancellationToken);
     }
 
     private bool IsCurrentVersion(HostAgentUpgradeDescriptor desired)
@@ -176,13 +395,19 @@ public sealed class HostAgentSelfUpgradeService
 
     private string ResolveServiceName(HostAgentSettings settings, HostAgentUpgradeDescriptor desired)
     {
+        var prefix = ResolveServiceNamePrefix(settings, desired);
+        return $"{prefix.Trim().TrimEnd('.')}.{SanitizeForServiceName(desired.Version)}";
+    }
+
+    private string ResolveServiceNamePrefix(HostAgentSettings settings, HostAgentUpgradeDescriptor desired)
+    {
         var prefix = FirstNonEmpty(desired.ServiceNamePrefix, settings.SelfUpgrade.ServiceNamePrefix);
         if (string.IsNullOrWhiteSpace(prefix))
         {
             prefix = TrimTrailingVersion(_process.ServiceName);
         }
 
-        return $"{prefix.Trim().TrimEnd('.')}.{SanitizeForServiceName(desired.Version)}";
+        return prefix.Trim().TrimEnd('.');
     }
 
     private static string TrimTrailingVersion(string serviceName)
@@ -257,8 +482,10 @@ public sealed class HostAgentSelfUpgradeService
         selfUpgrade.Remove("ServiceAccountPassword");
 
         var credentialStore = GetOrCreateObject(hostAgent, "CredentialStore");
+        var targetCredentialStorePath = Path.Join(installPath, "hostagent.credentials.json");
+        TryCopyCredentialStoreFile(settings.CredentialStore, targetCredentialStorePath);
         credentialStore["AutomationMode"] = settings.CredentialStore.AutomationMode;
-        credentialStore["FilePath"] = ResolveCredentialStoreFilePath(settings.CredentialStore);
+        credentialStore["FilePath"] = targetCredentialStorePath;
         credentialStore["ProtectionScope"] = settings.CredentialStore.ProtectionScope;
         credentialStore["EntropyPurpose"] = settings.CredentialStore.EntropyPurpose;
 
@@ -331,6 +558,27 @@ public sealed class HostAgentSelfUpgradeService
         => string.IsNullOrWhiteSpace(settings.FilePath)
             ? Path.Join(AppContext.BaseDirectory, "hostagent.credentials.json")
             : settings.FilePath.Trim();
+
+    private static void TryCopyCredentialStoreFile(
+        HostAgentCredentialStoreSettings settings,
+        string targetCredentialStorePath)
+    {
+        var sourceCredentialStorePath = ResolveCredentialStoreFilePath(settings);
+        if (!File.Exists(sourceCredentialStorePath))
+        {
+            return;
+        }
+
+        var fullSourcePath = Path.GetFullPath(sourceCredentialStorePath);
+        var fullTargetPath = Path.GetFullPath(targetCredentialStorePath);
+        if (string.Equals(fullSourcePath, fullTargetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(fullTargetPath)!);
+        File.Copy(fullSourcePath, fullTargetPath, overwrite: true);
+    }
 
     private static void WriteNormalSettings(string installPath, string serviceName)
     {
@@ -639,6 +887,279 @@ public sealed class HostAgentSelfUpgradeService
         RunScChecked("delete", serviceName);
     }
 
+    private static IReadOnlyList<HostAgentServiceCandidate> EnumerateSupersededHostAgentServices(string serviceNamePrefix)
+    {
+        var prefix = serviceNamePrefix.Trim().TrimEnd('.');
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            return [];
+        }
+
+        return EnumerateHostAgentServices(prefix)
+            .Where(service => IsSupersededHostAgentServiceName(service.Name, prefix))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<HostAgentServiceCandidate> EnumerateHostAgentServices(string serviceNamePrefix)
+    {
+        var prefix = serviceNamePrefix.Trim().TrimEnd('.');
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            return [];
+        }
+
+        var result = RunSc("queryex", "type=", "service", "state=", "all");
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
+        }
+
+        var serviceNames = result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
+            .Select(line => line["SERVICE_NAME:".Length..].Trim())
+            .Where(name => IsHostAgentServiceName(name, prefix))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return serviceNames
+            .Select(name => new HostAgentServiceCandidate(name, TryGetServiceExecutablePath(name)))
+            .ToArray();
+    }
+
+    private static bool IsSupersededHostAgentServiceName(string serviceName, string serviceNamePrefix)
+        => IsHostAgentServiceName(serviceName, serviceNamePrefix);
+
+    private static bool IsHostAgentServiceName(string serviceName, string serviceNamePrefix)
+        => string.Equals(serviceName, serviceNamePrefix, StringComparison.OrdinalIgnoreCase)
+            || serviceName.StartsWith(serviceNamePrefix + ".", StringComparison.OrdinalIgnoreCase);
+
+    private static string? TryGetServiceExecutablePath(string serviceName)
+    {
+        var result = RunSc("qc", serviceName);
+        if (result.ExitCode != 0)
+        {
+            return null;
+        }
+
+        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var binaryPathIndex = line.IndexOf("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase);
+            if (binaryPathIndex < 0)
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf(':', binaryPathIndex);
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            return TryExtractExecutablePath(line[(separatorIndex + 1)..].Trim());
+        }
+
+        return null;
+    }
+
+    private static string? TryExtractExecutablePath(string binaryPath)
+    {
+        if (string.IsNullOrWhiteSpace(binaryPath))
+        {
+            return null;
+        }
+
+        var trimmed = binaryPath.Trim();
+        if (trimmed.StartsWith('"'))
+        {
+            var closingQuote = trimmed.IndexOf('"', 1);
+            return closingQuote > 1 ? trimmed[1..closingQuote] : null;
+        }
+
+        var executableEnd = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        return executableEnd < 0 ? null : trimmed[..(executableEnd + ".exe".Length)].Trim();
+    }
+
+    private void TryDeletePreviousInstallDirectory(
+        string previousServiceName,
+        string? previousExecutablePath,
+        HostAgentSettings settings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            TryDeleteSupersededInstallDirectory(previousExecutablePath, settings, cancellationToken);
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not remove previous HostAgent install directory after takeover. CurrentService={CurrentService}, PreviousService={PreviousService}",
+                _process.ServiceName,
+                previousServiceName);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not remove previous HostAgent install directory after takeover because access was denied. CurrentService={CurrentService}, PreviousService={PreviousService}",
+                _process.ServiceName,
+                previousServiceName);
+        }
+    }
+
+    private static void TryDeleteSupersededInstallDirectory(
+        string? executablePath,
+        HostAgentSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return;
+        }
+
+        var installDirectory = Path.GetDirectoryName(executablePath);
+        if (string.IsNullOrWhiteSpace(installDirectory) || !Directory.Exists(installDirectory))
+        {
+            return;
+        }
+
+        var allowedRoot = FirstNonEmpty(settings.SelfUpgrade.InstallRoot, settings.ServicesRoot, AppContext.BaseDirectory);
+        var fullAllowedRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(allowedRoot));
+        var fullInstallDirectory = Path.GetFullPath(installDirectory);
+        if (!fullInstallDirectory.StartsWith(fullAllowedRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var folderName = Path.GetFileName(fullInstallDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (!folderName.StartsWith("HostAgent-", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (IsDirectoryProtectedByCredentialStore(fullInstallDirectory, settings))
+        {
+            return;
+        }
+
+        DeleteDirectoryWithRetry(fullInstallDirectory, cancellationToken);
+    }
+
+    private void CleanupOrphanedInstallDirectories(
+        HostAgentSettings settings,
+        string serviceNamePrefix,
+        CancellationToken cancellationToken)
+    {
+        var allowedRoot = FirstNonEmpty(settings.SelfUpgrade.InstallRoot, settings.ServicesRoot, AppContext.BaseDirectory);
+        if (!Directory.Exists(allowedRoot))
+        {
+            return;
+        }
+
+        var protectedDirectories = EnumerateHostAgentServices(serviceNamePrefix)
+            .Select(service => service.ExecutablePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetDirectoryName(path!))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path!))
+            .Append(Path.GetFullPath(AppContext.BaseDirectory))
+            .Concat(GetCredentialStoreProtectedDirectories(settings))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var directory in Directory.EnumerateDirectories(allowedRoot, "HostAgent-*", SearchOption.TopDirectoryOnly))
+        {
+            var fullDirectory = Path.GetFullPath(directory);
+            if (protectedDirectories.Contains(fullDirectory))
+            {
+                continue;
+            }
+
+            try
+            {
+                DeleteDirectoryWithRetry(fullDirectory, cancellationToken);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogDebug(ex, "Could not remove orphaned HostAgent install directory. Directory={Directory}", fullDirectory);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogDebug(ex, "Could not remove orphaned HostAgent install directory because access was denied. Directory={Directory}", fullDirectory);
+            }
+        }
+    }
+
+    private static void DeleteDirectoryWithRetry(string path, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                }
+
+                return;
+            }
+            catch (IOException) when (attempt < DirectoryDeleteMaxAttempts)
+            {
+                WaitBeforeDirectoryDeleteRetry(cancellationToken);
+            }
+            catch (UnauthorizedAccessException) when (attempt < DirectoryDeleteMaxAttempts)
+            {
+                WaitBeforeDirectoryDeleteRetry(cancellationToken);
+            }
+        }
+    }
+
+    private static void WaitBeforeDirectoryDeleteRetry(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.WaitHandle.WaitOne(DirectoryDeleteRetryDelay))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
+
+    private static string EnsureTrailingDirectorySeparator(string path)
+        => path.EndsWith(Path.DirectorySeparatorChar)
+            ? path
+            : path + Path.DirectorySeparatorChar;
+
+    private static IEnumerable<string> GetCredentialStoreProtectedDirectories(HostAgentSettings settings)
+    {
+        var credentialStorePath = ResolveCredentialStoreFilePath(settings.CredentialStore);
+        if (string.IsNullOrWhiteSpace(credentialStorePath))
+        {
+            yield break;
+        }
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(credentialStorePath));
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            yield return directory;
+        }
+    }
+
+    private static bool IsDirectoryProtectedByCredentialStore(
+        string installDirectory,
+        HostAgentSettings settings)
+    {
+        var credentialStorePath = ResolveCredentialStoreFilePath(settings.CredentialStore);
+        if (string.IsNullOrWhiteSpace(credentialStorePath))
+        {
+            return false;
+        }
+
+        var fullInstallDirectory = EnsureTrailingDirectorySeparator(Path.GetFullPath(installDirectory));
+        var fullCredentialStorePath = Path.GetFullPath(credentialStorePath);
+        return fullCredentialStorePath.StartsWith(fullInstallDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void WaitForServiceState(string serviceName, string desiredState, int timeoutSeconds)
     {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
@@ -777,4 +1298,6 @@ public sealed class HostAgentSelfUpgradeService
     {
         public string CombinedOutput => string.Concat(Output, "\n", Error);
     }
+
+    private sealed record HostAgentServiceCandidate(string Name, string? ExecutablePath);
 }
