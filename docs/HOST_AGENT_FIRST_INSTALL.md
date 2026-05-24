@@ -381,6 +381,11 @@ for reuse. This avoids a full package rebuild when one or two compiled
 artifacts are missing. Non-.NET artifacts, such as externally built web bundles,
 must still exist in the package, `ArtifactStoreRoot\_available`,
 `RuntimeRoot\ArtifactArchive`, or a source repository `artifacts` folder.
+For minimal developer packages it also restores the configured bootstrap SQL
+files, including the package-local include tree, from the configured source
+repositories and private package config folder. If the configured HostAgent
+package is absent, the current run can use the synced standard HostAgent
+artifact package directly.
 The sync action writes a timestamped diagnostic log to the user's temp folder
 (`omp-installer-sync-*.log`) and keeps tracked host config files unchanged.
 The command-line installer can use the same behavior before a bootstrap or

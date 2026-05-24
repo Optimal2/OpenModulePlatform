@@ -2816,8 +2816,8 @@ VALUES
             if (File.Exists(packagePath) && packagePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 Directory.CreateDirectory(stagingRoot);
-                ZipFile.ExtractToDirectory(packagePath, stagingRoot, overwriteFiles: true);
-                sourceDirectory = stagingRoot;
+                var extraction = new ArtifactPackageExtractor().Extract(packagePath, stagingRoot);
+                sourceDirectory = extraction.ArtifactContentPath;
             }
 
             if (!Directory.Exists(sourceDirectory))
