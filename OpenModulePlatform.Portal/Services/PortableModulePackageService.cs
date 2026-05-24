@@ -51,22 +51,22 @@ public sealed class PortableModulePackageService
     {
         var definitionsRoot = ResolveOptionalRoot(_options.AvailableModuleDefinitionsRoot);
         var artifactsRoot = ResolveOptionalRoot(_options.AvailableArtifactsRoot);
-        var artifactFiles = Directory.Exists(artifactsRoot)
-            ? Directory.EnumerateFiles(artifactsRoot, "*.zip", SearchOption.TopDirectoryOnly)
+        var artifactFiles = EnumerateLibraryFiles(artifactsRoot, "*.zip")
                 .Select(TryReadArtifactPackageFile)
                 .Where(static item => item is not null)
                 .Select(static item => item!)
-                .ToList()
-            : [];
+                .ToList();
 
-        if (!Directory.Exists(definitionsRoot))
+        var definitionPaths = EnumerateLibraryFiles(definitionsRoot, "*.json")
+            .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (definitionPaths.Count == 0)
         {
             return [];
         }
 
         var packages = new List<AvailablePortableModulePackage>();
-        foreach (var path in Directory.EnumerateFiles(definitionsRoot, "*.json", SearchOption.TopDirectoryOnly)
-                     .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase))
+        foreach (var path in definitionPaths)
         {
             var definition = TryReadDefinitionSummary(path);
             if (definition is null)
@@ -91,6 +91,26 @@ public sealed class PortableModulePackageService
         }
 
         return packages;
+    }
+
+    private static IReadOnlyList<string> EnumerateLibraryFiles(string root, string searchPattern)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        {
+            return [];
+        }
+
+        try
+        {
+            return Directory.EnumerateFiles(root, searchPattern, SearchOption.TopDirectoryOnly).ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // The package library is optional on this page. Operators should be
+            // able to import uploaded files even when the shared library is
+            // temporarily unavailable or the IIS runtime account lacks access.
+            return [];
+        }
     }
 
     public async Task<PortableModulePackageImportResult> ImportFromLibraryAsync(

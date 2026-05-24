@@ -1844,6 +1844,365 @@ BEGIN
         VALUES(@ModuleId, source.AppKey, source.DisplayName, source.AppType, source.AllowMultipleActiveInstances, source.Description, source.SortOrder, source.IsEnabled);
 END;
 
+IF @ModuleId IS NOT NULL
+BEGIN
+    ;WITH RequiredModuleInstances AS
+    (
+        SELECT COALESCE(NULLIF(InstanceKey, N''), N'default') AS InstanceKey,
+               COALESCE(NULLIF(ModuleInstanceKey, N''), @ModuleKey) AS ModuleInstanceKey,
+               COALESCE(NULLIF(DisplayName, N''), @ModuleDisplayName, @ModuleKey) AS DisplayName,
+               NULLIF(Description, N'') AS Description,
+               COALESCE(SortOrder, @SortOrder, 0) AS SortOrder,
+               COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+        FROM OPENJSON(@DefinitionJson, N'$.integrity.requiredOmpRows.moduleInstances')
+        WITH
+        (
+            InstanceKey nvarchar(100) N'$.instanceKey',
+            ModuleInstanceKey nvarchar(100) N'$.moduleInstanceKey',
+            DisplayName nvarchar(200) N'$.displayName',
+            Description nvarchar(500) N'$.description',
+            SortOrder int N'$.sortOrder',
+            IsEnabled bit N'$.isEnabled'
+        )
+        WHERE ModuleInstanceKey IS NOT NULL
+    ),
+    ResolvedModuleInstances AS
+    (
+        SELECT instance.InstanceId,
+               @ModuleId AS ModuleId,
+               source.ModuleInstanceKey,
+               source.DisplayName,
+               source.Description,
+               source.SortOrder,
+               source.IsEnabled
+        FROM RequiredModuleInstances source
+        INNER JOIN omp.Instances instance ON instance.InstanceKey = source.InstanceKey
+    )
+    MERGE omp.ModuleInstances AS target
+    USING ResolvedModuleInstances AS source
+    ON target.InstanceId = source.InstanceId
+    AND target.ModuleInstanceKey = source.ModuleInstanceKey
+    WHEN MATCHED THEN
+        UPDATE SET ModuleId = source.ModuleId,
+                   DisplayName = source.DisplayName,
+                   Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName, Description, IsEnabled, SortOrder)
+        VALUES(NEWID(), source.InstanceId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, source.IsEnabled, source.SortOrder);
+
+    ;WITH RequiredTemplateModuleInstances AS
+    (
+        SELECT COALESCE(NULLIF(InstanceTemplateKey, N''), N'default') AS InstanceTemplateKey,
+               COALESCE(NULLIF(ModuleInstanceKey, N''), @ModuleKey) AS ModuleInstanceKey,
+               COALESCE(NULLIF(DisplayName, N''), @ModuleDisplayName, @ModuleKey) AS DisplayName,
+               NULLIF(Description, N'') AS Description,
+               COALESCE(SortOrder, @SortOrder, 0) AS SortOrder,
+               COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled
+        FROM OPENJSON(@DefinitionJson, N'$.integrity.requiredOmpRows.instanceTemplateModuleInstances')
+        WITH
+        (
+            InstanceTemplateKey nvarchar(100) N'$.instanceTemplateKey',
+            ModuleInstanceKey nvarchar(100) N'$.moduleInstanceKey',
+            DisplayName nvarchar(200) N'$.displayName',
+            Description nvarchar(500) N'$.description',
+            SortOrder int N'$.sortOrder',
+            IsEnabled bit N'$.isEnabled'
+        )
+        WHERE ModuleInstanceKey IS NOT NULL
+    ),
+    ResolvedTemplateModuleInstances AS
+    (
+        SELECT template.InstanceTemplateId,
+               @ModuleId AS ModuleId,
+               source.ModuleInstanceKey,
+               source.DisplayName,
+               source.Description,
+               source.SortOrder,
+               source.IsEnabled
+        FROM RequiredTemplateModuleInstances source
+        INNER JOIN omp.InstanceTemplates template ON template.TemplateKey = source.InstanceTemplateKey
+    )
+    MERGE omp.InstanceTemplateModuleInstances AS target
+    USING ResolvedTemplateModuleInstances AS source
+    ON target.InstanceTemplateId = source.InstanceTemplateId
+    AND target.ModuleInstanceKey = source.ModuleInstanceKey
+    WHEN MATCHED THEN
+        UPDATE SET ModuleId = source.ModuleId,
+                   DisplayName = source.DisplayName,
+                   Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder, IsEnabled)
+        VALUES(source.InstanceTemplateId, source.ModuleId, source.ModuleInstanceKey, source.DisplayName, source.Description, source.SortOrder, source.IsEnabled);
+
+    ;WITH RequiredAppInstances AS
+    (
+        SELECT COALESCE(NULLIF(InstanceKey, N''), N'default') AS InstanceKey,
+               COALESCE(NULLIF(ModuleInstanceKey, N''), @ModuleKey) AS ModuleInstanceKey,
+               AppInstanceKey,
+               COALESCE(NULLIF(AppKey, N''), AppInstanceKey) AS AppKey,
+               COALESCE(NULLIF(DisplayName, N''), AppInstanceKey) AS DisplayName,
+               NULLIF(Description, N'') AS Description,
+               NULLIF(RoutePath, N'') AS RoutePath,
+               NULLIF(PublicUrl, N'') AS PublicUrl,
+               NULLIF(InstallPath, N'') AS InstallPath,
+               NULLIF(InstallationName, N'') AS InstallationName,
+               NULLIF(HostBinding, N'') AS HostBinding,
+               NULLIF(HostKey, N'') AS HostKey,
+               NULLIF(COALESCE(TargetHostTemplateKey, HostTemplateKey), N'') AS TargetHostTemplateKey,
+               NULLIF(PackageType, N'') AS PackageType,
+               NULLIF(TargetName, N'') AS TargetName,
+               COALESCE(DesiredState, CONVERT(tinyint, 1)) AS DesiredState,
+               COALESCE(SortOrder, 0) AS SortOrder,
+               COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled,
+               COALESCE(IsAllowed, CONVERT(bit, 1)) AS IsAllowed
+        FROM OPENJSON(@DefinitionJson, N'$.integrity.requiredOmpRows.appInstances')
+        WITH
+        (
+            InstanceKey nvarchar(100) N'$.instanceKey',
+            ModuleInstanceKey nvarchar(100) N'$.moduleInstanceKey',
+            AppInstanceKey nvarchar(100) N'$.appInstanceKey',
+            AppKey nvarchar(100) N'$.appKey',
+            DisplayName nvarchar(200) N'$.displayName',
+            Description nvarchar(500) N'$.description',
+            RoutePath nvarchar(256) N'$.routePath',
+            PublicUrl nvarchar(500) N'$.publicUrl',
+            InstallPath nvarchar(500) N'$.installPath',
+            InstallationName nvarchar(150) N'$.installationName',
+            HostBinding nvarchar(100) N'$.hostBinding',
+            HostKey nvarchar(128) N'$.hostKey',
+            TargetHostTemplateKey nvarchar(100) N'$.targetHostTemplateKey',
+            HostTemplateKey nvarchar(100) N'$.hostTemplateKey',
+            PackageType nvarchar(50) N'$.packageType',
+            TargetName nvarchar(100) N'$.targetName',
+            DesiredState tinyint N'$.desiredState',
+            SortOrder int N'$.sortOrder',
+            IsEnabled bit N'$.isEnabled',
+            IsAllowed bit N'$.isAllowed'
+        )
+        WHERE AppInstanceKey IS NOT NULL
+    ),
+    ResolvedAppInstances AS
+    (
+        SELECT moduleInstance.ModuleInstanceId,
+               host.HostId,
+               targetTemplate.HostTemplateId AS TargetHostTemplateId,
+               app.AppId,
+               source.AppInstanceKey,
+               COALESCE(NULLIF(source.DisplayName, source.AppInstanceKey), app.DisplayName) AS DisplayName,
+               source.Description,
+               source.RoutePath,
+               source.PublicUrl,
+               source.InstallPath,
+               source.InstallationName,
+               source.PackageType,
+               source.TargetName,
+               source.DesiredState,
+               source.SortOrder,
+               source.IsEnabled,
+               source.IsAllowed,
+               CASE
+                   WHEN app.AppType IN (N'Portal', N'WebApp') THEN N'web-app'
+                   WHEN app.AppType = N'ServiceApp' THEN N'service-app'
+                   WHEN app.AppType = N'Worker' THEN N'worker'
+                   WHEN app.AppType = N'HostAgent' THEN N'host-agent'
+                   WHEN app.AppType = N'WorkerHost' THEN N'worker-host'
+                   ELSE NULL
+               END AS DefaultPackageType
+        FROM RequiredAppInstances source
+        INNER JOIN omp.Instances instance ON instance.InstanceKey = source.InstanceKey
+        INNER JOIN omp.ModuleInstances moduleInstance
+            ON moduleInstance.InstanceId = instance.InstanceId
+           AND moduleInstance.ModuleInstanceKey = source.ModuleInstanceKey
+        INNER JOIN omp.Apps app ON app.ModuleId = @ModuleId AND app.AppKey = source.AppKey
+        LEFT JOIN omp.Hosts host
+            ON host.InstanceId = instance.InstanceId
+           AND host.HostKey = source.HostKey
+        LEFT JOIN omp.HostTemplates targetTemplate ON targetTemplate.TemplateKey = source.TargetHostTemplateKey
+        WHERE (source.HostKey IS NULL OR host.HostId IS NOT NULL)
+          AND (source.TargetHostTemplateKey IS NULL OR targetTemplate.HostTemplateId IS NOT NULL)
+          AND (source.HostBinding IS NULL
+               OR source.HostBinding = N'host-neutral'
+               OR source.HostKey IS NOT NULL
+               OR source.TargetHostTemplateKey IS NOT NULL)
+    ),
+    AppInstancesWithArtifact AS
+    (
+        SELECT source.*,
+               artifact.ArtifactId
+        FROM ResolvedAppInstances source
+        OUTER APPLY
+        (
+            SELECT TOP (1) item.ArtifactId
+            FROM omp.Artifacts item
+            WHERE item.AppId = source.AppId
+              AND item.IsEnabled = 1
+              AND item.PackageType = COALESCE(source.PackageType, source.DefaultPackageType)
+              AND (source.TargetName IS NULL OR item.TargetName = source.TargetName)
+            ORDER BY item.UpdatedUtc DESC, item.ArtifactId DESC
+        ) artifact
+    )
+    MERGE omp.AppInstances AS target
+    USING AppInstancesWithArtifact AS source
+    ON target.ModuleInstanceId = source.ModuleInstanceId
+    AND target.AppInstanceKey = source.AppInstanceKey
+    WHEN MATCHED THEN
+        UPDATE SET HostId = source.HostId,
+                   TargetHostTemplateId = source.TargetHostTemplateId,
+                   AppId = source.AppId,
+                   DisplayName = source.DisplayName,
+                   Description = source.Description,
+                   RoutePath = source.RoutePath,
+                   PublicUrl = source.PublicUrl,
+                   InstallPath = source.InstallPath,
+                   InstallationName = source.InstallationName,
+                   ArtifactId = COALESCE(source.ArtifactId, target.ArtifactId),
+                   DesiredState = source.DesiredState,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   IsAllowed = source.IsAllowed,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(AppInstanceId, ModuleInstanceId, HostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)
+        VALUES(NEWID(), source.ModuleInstanceId, source.HostId, source.TargetHostTemplateId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.ArtifactId, source.IsEnabled, source.IsAllowed, source.DesiredState, source.SortOrder);
+
+    ;WITH RequiredTemplateAppInstances AS
+    (
+        SELECT COALESCE(NULLIF(InstanceTemplateKey, N''), N'default') AS InstanceTemplateKey,
+               COALESCE(NULLIF(ModuleInstanceKey, N''), @ModuleKey) AS ModuleInstanceKey,
+               AppInstanceKey,
+               COALESCE(NULLIF(AppKey, N''), AppInstanceKey) AS AppKey,
+               COALESCE(NULLIF(DisplayName, N''), AppInstanceKey) AS DisplayName,
+               NULLIF(Description, N'') AS Description,
+               NULLIF(RoutePath, N'') AS RoutePath,
+               NULLIF(PublicUrl, N'') AS PublicUrl,
+               NULLIF(InstallPath, N'') AS InstallPath,
+               NULLIF(InstallationName, N'') AS InstallationName,
+               NULLIF(HostBinding, N'') AS HostBinding,
+               NULLIF(HostKey, N'') AS HostKey,
+               NULLIF(COALESCE(TargetHostTemplateKey, HostTemplateKey), N'') AS TargetHostTemplateKey,
+               NULLIF(PackageType, N'') AS PackageType,
+               NULLIF(TargetName, N'') AS TargetName,
+               COALESCE(DesiredState, CONVERT(tinyint, 1)) AS DesiredState,
+               COALESCE(SortOrder, 0) AS SortOrder,
+               COALESCE(IsEnabled, CONVERT(bit, 1)) AS IsEnabled,
+               COALESCE(IsAllowed, CONVERT(bit, 1)) AS IsAllowed
+        FROM OPENJSON(@DefinitionJson, N'$.integrity.requiredOmpRows.instanceTemplateAppInstances')
+        WITH
+        (
+            InstanceTemplateKey nvarchar(100) N'$.instanceTemplateKey',
+            ModuleInstanceKey nvarchar(100) N'$.moduleInstanceKey',
+            AppInstanceKey nvarchar(100) N'$.appInstanceKey',
+            AppKey nvarchar(100) N'$.appKey',
+            DisplayName nvarchar(200) N'$.displayName',
+            Description nvarchar(500) N'$.description',
+            RoutePath nvarchar(256) N'$.routePath',
+            PublicUrl nvarchar(500) N'$.publicUrl',
+            InstallPath nvarchar(500) N'$.installPath',
+            InstallationName nvarchar(150) N'$.installationName',
+            HostBinding nvarchar(100) N'$.hostBinding',
+            HostKey nvarchar(128) N'$.hostKey',
+            TargetHostTemplateKey nvarchar(100) N'$.targetHostTemplateKey',
+            HostTemplateKey nvarchar(100) N'$.hostTemplateKey',
+            PackageType nvarchar(50) N'$.packageType',
+            TargetName nvarchar(100) N'$.targetName',
+            DesiredState tinyint N'$.desiredState',
+            SortOrder int N'$.sortOrder',
+            IsEnabled bit N'$.isEnabled',
+            IsAllowed bit N'$.isAllowed'
+        )
+        WHERE AppInstanceKey IS NOT NULL
+    ),
+    ResolvedTemplateAppInstances AS
+    (
+        SELECT templateModule.InstanceTemplateModuleInstanceId,
+               templateHost.InstanceTemplateHostId,
+               targetTemplate.HostTemplateId AS TargetHostTemplateId,
+               app.AppId,
+               source.AppInstanceKey,
+               COALESCE(NULLIF(source.DisplayName, source.AppInstanceKey), app.DisplayName) AS DisplayName,
+               source.Description,
+               source.RoutePath,
+               source.PublicUrl,
+               source.InstallPath,
+               source.InstallationName,
+               source.PackageType,
+               source.TargetName,
+               source.DesiredState,
+               source.SortOrder,
+               source.IsEnabled,
+               source.IsAllowed,
+               CASE
+                   WHEN app.AppType IN (N'Portal', N'WebApp') THEN N'web-app'
+                   WHEN app.AppType = N'ServiceApp' THEN N'service-app'
+                   WHEN app.AppType = N'Worker' THEN N'worker'
+                   WHEN app.AppType = N'HostAgent' THEN N'host-agent'
+                   WHEN app.AppType = N'WorkerHost' THEN N'worker-host'
+                   ELSE NULL
+               END AS DefaultPackageType
+        FROM RequiredTemplateAppInstances source
+        INNER JOIN omp.InstanceTemplates template ON template.TemplateKey = source.InstanceTemplateKey
+        INNER JOIN omp.InstanceTemplateModuleInstances templateModule
+            ON templateModule.InstanceTemplateId = template.InstanceTemplateId
+           AND templateModule.ModuleInstanceKey = source.ModuleInstanceKey
+        INNER JOIN omp.Apps app ON app.ModuleId = @ModuleId AND app.AppKey = source.AppKey
+        LEFT JOIN omp.InstanceTemplateHosts templateHost
+            ON templateHost.InstanceTemplateId = template.InstanceTemplateId
+           AND templateHost.HostKey = source.HostKey
+        LEFT JOIN omp.HostTemplates targetTemplate ON targetTemplate.TemplateKey = source.TargetHostTemplateKey
+        WHERE (source.HostKey IS NULL OR templateHost.InstanceTemplateHostId IS NOT NULL)
+          AND (source.TargetHostTemplateKey IS NULL OR targetTemplate.HostTemplateId IS NOT NULL)
+          AND (source.HostBinding IS NULL
+               OR source.HostBinding = N'host-neutral'
+               OR source.HostKey IS NOT NULL
+               OR source.TargetHostTemplateKey IS NOT NULL)
+    ),
+    TemplateAppInstancesWithArtifact AS
+    (
+        SELECT source.*,
+               artifact.ArtifactId
+        FROM ResolvedTemplateAppInstances source
+        OUTER APPLY
+        (
+            SELECT TOP (1) item.ArtifactId
+            FROM omp.Artifacts item
+            WHERE item.AppId = source.AppId
+              AND item.IsEnabled = 1
+              AND item.PackageType = COALESCE(source.PackageType, source.DefaultPackageType)
+              AND (source.TargetName IS NULL OR item.TargetName = source.TargetName)
+            ORDER BY item.UpdatedUtc DESC, item.ArtifactId DESC
+        ) artifact
+    )
+    MERGE omp.InstanceTemplateAppInstances AS target
+    USING TemplateAppInstancesWithArtifact AS source
+    ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
+    AND target.AppInstanceKey = source.AppInstanceKey
+    WHEN MATCHED THEN
+        UPDATE SET InstanceTemplateHostId = source.InstanceTemplateHostId,
+                   TargetHostTemplateId = source.TargetHostTemplateId,
+                   AppId = source.AppId,
+                   DisplayName = source.DisplayName,
+                   Description = source.Description,
+                   RoutePath = source.RoutePath,
+                   PublicUrl = source.PublicUrl,
+                   InstallPath = source.InstallPath,
+                   InstallationName = source.InstallationName,
+                   DesiredArtifactId = COALESCE(source.ArtifactId, target.DesiredArtifactId),
+                   DesiredState = source.DesiredState,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   IsAllowed = source.IsAllowed,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
+        VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.TargetHostTemplateId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.ArtifactId, source.DesiredState, source.SortOrder, source.IsEnabled, source.IsAllowed);
+END;
+
 UPDATE omp.ModuleDefinitionDocuments
 SET IsApplied = CASE WHEN ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId THEN 1 ELSE 0 END,
     AppliedUtc = CASE WHEN ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId THEN SYSUTCDATETIME() ELSE AppliedUtc END,
