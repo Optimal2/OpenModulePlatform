@@ -9,6 +9,9 @@ public sealed class ArtifactPackageExtractor
 {
     public const string ManifestEntryName = "omp-artifact-package.json";
 
+    private const long MaxManifestBytes = 1024 * 1024;
+    private const long MaxConfigurationFileBytes = 1024 * 1024 * 5;
+
     private readonly Action<string>? _validatePayloadEntry;
 
     public ArtifactPackageExtractor(Action<string>? validatePayloadEntry = null)
@@ -193,6 +196,12 @@ public sealed class ArtifactPackageExtractor
 
     private static JsonObject ReadJsonObject(ZipArchiveEntry entry)
     {
+        if (entry.Length > MaxManifestBytes)
+        {
+            throw new InvalidOperationException(
+                $"Artifact package manifest exceeds the limit of {MaxManifestBytes} bytes.");
+        }
+
         using var stream = entry.Open();
         using var reader = new StreamReader(
             stream,
@@ -217,6 +226,12 @@ public sealed class ArtifactPackageExtractor
 
     private static string ReadUtf8Text(ZipArchiveEntry entry)
     {
+        if (entry.Length > MaxConfigurationFileBytes)
+        {
+            throw new InvalidOperationException(
+                $"Artifact package configuration file '{entry.FullName}' exceeds the limit of {MaxConfigurationFileBytes} bytes.");
+        }
+
         using var stream = entry.Open();
         using var reader = new StreamReader(
             stream,

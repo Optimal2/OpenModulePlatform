@@ -70,6 +70,12 @@ public sealed class ConfigOverlayPackageReader
         var extension = Path.GetExtension(path);
         if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
         {
+            var fileInfo = new FileInfo(path);
+            if (fileInfo.Length > MaxJsonBytes)
+            {
+                return PortableConfigObjectKind.Unknown;
+            }
+
             return DetectJsonKind(File.ReadAllText(path, Encoding.UTF8));
         }
 
@@ -94,7 +100,16 @@ public sealed class ConfigOverlayPackageReader
 
     public static PortableConfigObjectKind DetectJsonKind(string jsonText)
     {
-        var root = JsonNode.Parse(jsonText) as JsonObject;
+        JsonObject? root;
+        try
+        {
+            root = JsonNode.Parse(jsonText) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            return PortableConfigObjectKind.Unknown;
+        }
+
         if (root is null)
         {
             return PortableConfigObjectKind.Unknown;
@@ -384,6 +399,12 @@ public sealed class ConfigOverlayPackageReader
 
     private static string ReadUtf8Text(ZipArchiveEntry entry)
     {
+        if (entry.Length > MaxExternalFileBytes)
+        {
+            throw new InvalidOperationException(
+                $"Config overlay package entry '{entry.FullName}' exceeds the limit of {MaxExternalFileBytes} bytes.");
+        }
+
         using var stream = entry.Open();
         using var reader = new StreamReader(
             stream,
