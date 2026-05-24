@@ -104,6 +104,19 @@ function Copy-Runner {
     throw "Package does not contain a bootstrapper runner under tools or package root: $Root"
 }
 
+function ConvertTo-ProcessArgumentString {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+
+    return ($Arguments | ForEach-Object {
+        if ($_ -match '[\s"]') {
+            '"' + ($_.Replace('"', '\"')) + '"'
+        }
+        else {
+            $_
+        }
+    }) -join ' '
+}
+
 $packageRootPath = Resolve-FullPath -Path $PackageRoot
 if (-not (Test-Path -LiteralPath $packageRootPath -PathType Container)) {
     throw "PackageRoot does not exist: $packageRootPath"
@@ -160,9 +173,10 @@ try {
         }
     }
     else {
+        $argumentString = ConvertTo-ProcessArgumentString -Arguments $arguments
         $process = Start-Process `
             -FilePath $fileName `
-            -ArgumentList $arguments `
+            -ArgumentList $argumentString `
             -WorkingDirectory $runnerRoot `
             -WindowStyle Hidden `
             -Wait `
