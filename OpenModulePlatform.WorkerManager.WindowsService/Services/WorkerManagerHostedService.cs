@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/WorkerManagerHostedService.cs
 using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,7 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 public sealed class WorkerManagerHostedService : BackgroundService
 {
     private readonly ILogger<WorkerManagerHostedService> _logger;
+    private readonly IConfiguration _configuration;
     private readonly IOptionsMonitor<WorkerManagerSettings> _settings;
     private readonly IWorkerInstanceCatalog _catalog;
     private readonly OmpWorkerRuntimeRepository _runtimeRepository;
@@ -21,12 +23,14 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     public WorkerManagerHostedService(
         ILogger<WorkerManagerHostedService> logger,
+        IConfiguration configuration,
         IOptionsMonitor<WorkerManagerSettings> settings,
         IWorkerInstanceCatalog catalog,
         OmpWorkerRuntimeRepository runtimeRepository,
         HostAgentRpcClient hostAgentRpcClient)
     {
         _logger = logger;
+        _configuration = configuration;
         _settings = settings;
         _catalog = catalog;
         _runtimeRepository = runtimeRepository;
@@ -232,7 +236,10 @@ public sealed class WorkerManagerHostedService : BackgroundService
             mode: EventResetMode.ManualReset,
             name: managed.Definition.ShutdownEventName);
 
-        var process = CreateWorkerProcess(workerProcessPath, managed.Definition);
+        var process = CreateWorkerProcess(
+            workerProcessPath,
+            managed.Definition,
+            _configuration.GetConnectionString("OmpDb"));
         managed.RecordStartAttempt(nowUtc, restartWindow);
 
         try
@@ -547,7 +554,10 @@ public sealed class WorkerManagerHostedService : BackgroundService
         return workerProcessPath;
     }
 
-    private static Process CreateWorkerProcess(string workerProcessPath, DesiredWorkerInstance desired)
+    private static Process CreateWorkerProcess(
+        string workerProcessPath,
+        DesiredWorkerInstance desired,
+        string? ompConnectionString)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -569,6 +579,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerTypeKey={desired.WorkerTypeKey}");
         startInfo.ArgumentList.Add($"--WorkerProcess:PluginAssemblyPath={desired.PluginAssemblyPath}");
         startInfo.ArgumentList.Add($"--WorkerProcess:ShutdownEventName={desired.ShutdownEventName}");
+        if (!string.IsNullOrWhiteSpace(ompConnectionString))
+        {
+            // Worker modules run in a separate process; pass the OMP database connection through
+            // process-local configuration without exposing it as a command-line argument.
+            startInfo.Environment["ConnectionStrings__OmpDb"] = ompConnectionString.Trim();
+        }
 
         return new Process
         {

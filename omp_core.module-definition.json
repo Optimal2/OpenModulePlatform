@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "definitionType": "platform-core",
   "moduleKey": "omp_core",
-  "definitionVersion": "0.3.54",
+  "definitionVersion": "0.3.55",
   "module": {
     "displayName": "OpenModulePlatform Core",
     "moduleType": "PlatformCore",
@@ -52,7 +52,7 @@
       "targetName": "omp-workermanager",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.7"
+      "maxVersion": "0.3.8"
     },
     {
       "appKey": "omp_workerprocesshost",
