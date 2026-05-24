@@ -159,11 +159,14 @@ During bootstrap the installer also records the current `host-agent` artifact in
 `omp.HostAgentDesiredStates` for the configured host. The configured
 `HostAgent:ServiceName` is treated as the stable service-name prefix, so the
 initial Windows service is created with the current artifact version appended
-for example `OMP.HostAgent.0.3.35`. Future HostAgent artifact imports can then
+for example `OMP.HostAgent.0.3.35`. The initial runtime folder follows the same
+versioned convention as later self-upgrades:
+`HostAgent:ServicesRoot\HostAgent-<version>`, for example
+`E:\OMP\Services\HostAgent-0.3.35`. Future HostAgent artifact imports can then
 update the desired row. The running HostAgent provisions the new artifact,
-creates the next side-by-side versioned service, starts it in takeover mode, and
-the new service removes the previous Windows service after it has acquired the
-host lease.
+creates the next side-by-side versioned service and folder, starts it in
+takeover mode, and the new service removes the previous Windows service after it
+has acquired the host lease.
 
 OpenDocViewer is also packaged as a manifest-based OMP artifact package. The
 deployable `dist` output is stored as the package payload, while
@@ -277,6 +280,24 @@ the package and installed database with the source repository manifest:
   from source, replaces the current package folder after the installer exits,
   and starts the updated installer. This keeps the running EXE from locking the
   package files that need to be replaced.
+
+Do not run `scripts/deployment/package-hostagent-first.ps1` directly with the
+existing universal installer package as its output target. That script creates a
+fresh package from one package config and can legitimately omit package-local
+host configs that belong to a universal/private package. To refresh an existing
+package from the command line, use the package-preserving wrapper instead:
+
+```powershell
+.\scripts\deployment\refresh-existing-hostagent-first-package.ps1 `
+  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\package\OpenModulePlatformHostAgentFirst-0.3.3" `
+  -ConfigName linus
+```
+
+The wrapper copies the package-local bootstrapper runner to a temporary folder
+and lets the bootstrapper perform its normal refresh from outside the package
+directory. This preserves `configs\*.json`, host-specific data, and private
+package contents while still updating generated payloads and metadata. The GUI
+button `Create updated installer package` uses the same detached-runner idea.
 
 If the package has been copied outside the source tree, use the `Developer` tab
 to point the installer at the source repository roots and, when needed, a

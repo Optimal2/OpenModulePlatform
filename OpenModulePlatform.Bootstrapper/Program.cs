@@ -319,7 +319,8 @@ internal static partial class Program
         Console.WriteLine($"Payload root:   {payloadRoot}");
         Console.WriteLine($"SQL target:     {config.Sql.Server}/{config.Sql.Database}");
         Console.WriteLine($"Artifact store: {config.ArtifactStoreRoot}");
-        Console.WriteLine($"HostAgent:      {config.HostAgent.ServiceName} -> {config.HostAgent.InstallPath}");
+        var hostAgentIdentity = ResolveBootstrapHostAgentServiceIdentity(config);
+        Console.WriteLine($"HostAgent:      {hostAgentIdentity.ServiceName} -> {hostAgentIdentity.InstallPath}");
         Console.WriteLine();
     }
 
@@ -2408,6 +2409,7 @@ SELECT COUNT(1) FROM @changes;
         var serviceName = string.IsNullOrWhiteSpace(version)
             ? prefix
             : $"{prefix}.{SanitizeWindowsServiceNamePart(version)}";
+        var installPath = ResolveBootstrapHostAgentInstallPath(hostAgent, version);
         var displayName = ResolveSystemServiceDisplayName(
             hostAgent.DisplayName,
             prefix,
@@ -2416,8 +2418,34 @@ SELECT COUNT(1) FROM @changes;
         return new HostAgentBootstrapServiceIdentity(
             prefix,
             serviceName,
+            installPath,
             displayName,
             version);
+    }
+
+    private static string ResolveBootstrapHostAgentInstallPath(
+        HostAgentInstallOptions hostAgent,
+        string? version)
+    {
+        var configuredInstallPath = string.IsNullOrWhiteSpace(hostAgent.InstallPath)
+            ? string.Empty
+            : Path.GetFullPath(hostAgent.InstallPath.Trim());
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return configuredInstallPath;
+        }
+
+        var folderName = "HostAgent-" + SanitizeWindowsPathPart(version);
+        if (!string.IsNullOrWhiteSpace(configuredInstallPath)
+            && Path.GetFileName(configuredInstallPath).Equals(folderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return configuredInstallPath;
+        }
+
+        var root = !string.IsNullOrWhiteSpace(hostAgent.ServicesRoot)
+            ? Path.GetFullPath(hostAgent.ServicesRoot.Trim())
+            : Path.GetDirectoryName(configuredInstallPath) ?? configuredInstallPath;
+        return Path.Join(root, folderName);
     }
 
     private static string ResolveHostAgentServiceNamePrefix(string serviceName)
@@ -2495,6 +2523,16 @@ SELECT COUNT(1) FROM @changes;
                 : '_')
             .ToArray();
         var sanitized = new string(chars).Trim('.');
+        return string.IsNullOrWhiteSpace(sanitized) ? "unknown" : sanitized;
+    }
+
+    private static string SanitizeWindowsPathPart(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars().ToHashSet();
+        var chars = value.Trim()
+            .Select(ch => invalid.Contains(ch) ? '_' : ch)
+            .ToArray();
+        var sanitized = new string(chars).Trim('.', ' ');
         return string.IsNullOrWhiteSpace(sanitized) ? "unknown" : sanitized;
     }
 
@@ -2753,7 +2791,7 @@ VALUES
         }
 
         var packagePath = ResolvePackageDataPath(payloadRoot, hostAgent.PackagePath);
-        var installPath = Path.GetFullPath(hostAgent.InstallPath.Trim());
+        var installPath = serviceIdentity.InstallPath;
         var stagingRoot = Path.Join(Path.GetTempPath(), "OMP.HostAgent", Guid.NewGuid().ToString("N"));
         var sourceDirectory = packagePath;
 
@@ -2836,14 +2874,14 @@ VALUES
     {
         var hostAgent = config.HostAgent;
         var settings = hostAgent.AppSettings?.DeepClone()
-            ?? CreateDefaultHostAgentSettings(config);
+            ?? CreateDefaultHostAgentSettings(config, serviceIdentity);
         var credentialPlan = CreateHostAgentCredentialPlan(config, installPath);
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["SqlConnectionString"] = BuildConnectionString(config.Sql, config.Sql.Database),
             ["ArtifactStoreRoot"] = Path.GetFullPath(config.ArtifactStoreRoot.Trim()),
-            ["HostAgent.InstallPath"] = Path.GetFullPath(hostAgent.InstallPath.Trim()),
+            ["HostAgent.InstallPath"] = serviceIdentity.InstallPath,
             ["HostAgent.LocalArtifactCacheRoot"] = hostAgent.LocalArtifactCacheRoot,
             ["HostAgent.HostKey"] = hostAgent.HostKey,
             ["HostAgent.HostName"] = hostAgent.HostName,
@@ -3330,11 +3368,13 @@ VALUES
         return created;
     }
 
-    private static JsonNode CreateDefaultHostAgentSettings(BootstrapConfig config)
+    private static JsonNode CreateDefaultHostAgentSettings(
+        BootstrapConfig config,
+        HostAgentBootstrapServiceIdentity serviceIdentity)
     {
         var hostAgent = config.HostAgent;
         var localArtifactCacheRoot = string.IsNullOrWhiteSpace(hostAgent.LocalArtifactCacheRoot)
-            ? Path.Join(Path.GetFullPath(hostAgent.InstallPath.Trim()), "ArtifactCache")
+            ? Path.Join(serviceIdentity.InstallPath, "ArtifactCache")
             : hostAgent.LocalArtifactCacheRoot.Trim();
 
         return JsonNode.Parse(
@@ -4700,6 +4740,7 @@ internal sealed class HostAgentInstallOptions
 internal sealed record HostAgentBootstrapServiceIdentity(
     string ServiceNamePrefix,
     string ServiceName,
+    string InstallPath,
     string DisplayName,
     string? Version);
 
