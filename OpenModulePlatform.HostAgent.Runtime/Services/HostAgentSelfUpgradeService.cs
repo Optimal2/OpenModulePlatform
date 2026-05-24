@@ -12,6 +12,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class HostAgentSelfUpgradeService
 {
     private const int ScServiceNotFoundExitCode = 1060;
+    private const string DefaultNLogAppName = "OpenModulePlatform.HostAgent.WindowsService";
+    private const string DefaultNLogDirectory = "${basedir}/logs";
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
@@ -93,7 +95,8 @@ public sealed class HostAgentSelfUpgradeService
             serviceName,
             executablePath,
             CreateTakeoverArguments(serviceName, _process.ServiceName),
-            resolvedSelfUpgradeSettings);
+            resolvedSelfUpgradeSettings,
+            desired.Version);
 
         if (settings.SelfUpgrade.StartPreparedService)
         {
@@ -137,7 +140,7 @@ public sealed class HostAgentSelfUpgradeService
         }
 
         var executablePath = FindHostAgentExecutable(AppContext.BaseDirectory);
-        ConfigureService(_process.ServiceName, executablePath, CreateNormalArguments(_process.ServiceName));
+        ConfigureService(_process.ServiceName, executablePath, CreateNormalArguments(_process.ServiceName), version: _process.Version);
         WriteNormalSettings(AppContext.BaseDirectory, _process.ServiceName);
         _process.MarkNormal();
         var currentDesired = await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
@@ -261,6 +264,7 @@ public sealed class HostAgentSelfUpgradeService
 
         var connectionStrings = GetOrCreateObject(json, "ConnectionStrings");
         connectionStrings["OmpDb"] = _repository.GetConfiguredConnectionString();
+        EnsureDefaultLoggingSettings(json);
 
         Directory.CreateDirectory(Path.GetDirectoryName(targetSettingsPath)!);
         File.WriteAllText(
@@ -355,13 +359,101 @@ public sealed class HostAgentSelfUpgradeService
 
     private static JsonObject? LoadCurrentSettingsJson()
     {
-        return new[] { "appsettings.Production.json", "appsettings.json" }
-            .Select(fileName => Path.Join(AppContext.BaseDirectory, fileName))
-            .Where(File.Exists)
-            .Select(path => JsonNode.Parse(File.ReadAllText(path)))
-            .OfType<JsonObject>()
-            .Select(obj => obj.DeepClone().AsObject())
-            .FirstOrDefault();
+        JsonObject? merged = null;
+        foreach (var fileName in new[] { "appsettings.json", "appsettings.Production.json" })
+        {
+            var path = Path.Join(AppContext.BaseDirectory, fileName);
+            if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path)) is not JsonObject json)
+            {
+                continue;
+            }
+
+            merged ??= [];
+            MergeJsonObject(merged, json);
+        }
+
+        return merged;
+    }
+
+    private static void MergeJsonObject(JsonObject target, JsonObject source)
+    {
+        foreach (var (key, value) in source)
+        {
+            if (value is JsonObject sourceObject && target[key] is JsonObject targetObject)
+            {
+                MergeJsonObject(targetObject, sourceObject);
+                continue;
+            }
+
+            target[key] = value?.DeepClone();
+        }
+    }
+
+    private static void EnsureDefaultLoggingSettings(JsonObject json)
+    {
+        if (json["Logging"] is null)
+        {
+            json["Logging"] = new JsonObject
+            {
+                ["LogLevel"] = new JsonObject
+                {
+                    ["Default"] = "Information",
+                    ["Microsoft.Hosting.Lifetime"] = "Information"
+                }
+            };
+        }
+
+        if (json["NLog"] is not null)
+        {
+            return;
+        }
+
+        json["NLog"] = new JsonObject
+        {
+            ["autoReload"] = true,
+            ["throwConfigExceptions"] = true,
+            ["variables"] = new JsonObject
+            {
+                ["appName"] = DefaultNLogAppName,
+                ["logDirectory"] = DefaultNLogDirectory
+            },
+            ["targets"] = new JsonObject
+            {
+                ["logfile"] = new JsonObject
+                {
+                    ["type"] = "File",
+                    ["fileName"] = "${var:logDirectory}/${var:appName}-${shortdate}.log",
+                    ["layout"] = "${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}"
+                },
+                ["console"] = new JsonObject
+                {
+                    ["type"] = "Console",
+                    ["layout"] = "${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}"
+                }
+            },
+            ["rules"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["logger"] = "Microsoft.Hosting.Lifetime",
+                    ["minLevel"] = "Info",
+                    ["writeTo"] = "console,logfile",
+                    ["final"] = true
+                },
+                new JsonObject
+                {
+                    ["logger"] = "Microsoft.*",
+                    ["maxLevel"] = "Info",
+                    ["final"] = true
+                },
+                new JsonObject
+                {
+                    ["logger"] = "*",
+                    ["minLevel"] = "Info",
+                    ["writeTo"] = "console,logfile"
+                }
+            }
+        };
     }
 
     private static JsonObject GetOrCreateObject(JsonObject parent, string propertyName)
@@ -413,7 +505,8 @@ public sealed class HostAgentSelfUpgradeService
         string serviceName,
         string executablePath,
         IReadOnlyList<string> arguments,
-        HostAgentUpgradeSettings upgradeSettings)
+        HostAgentUpgradeSettings upgradeSettings,
+        string version)
     {
         if (GetServiceState(serviceName) is null)
         {
@@ -426,14 +519,14 @@ public sealed class HostAgentSelfUpgradeService
                 "start=",
                 "auto",
                 "DisplayName=",
-                ResolveServiceDisplayName(serviceName)
+                ResolveServiceDisplayName(serviceName, version)
             };
             AddServiceAccountArguments(createArguments, upgradeSettings);
             RunScChecked(createArguments.ToArray());
         }
         else
         {
-            ConfigureService(serviceName, executablePath, arguments, upgradeSettings);
+            ConfigureService(serviceName, executablePath, arguments, upgradeSettings, version);
         }
 
         RunScChecked("description", serviceName, "OpenModulePlatform HostAgent runtime service.");
@@ -443,7 +536,8 @@ public sealed class HostAgentSelfUpgradeService
         string serviceName,
         string executablePath,
         IReadOnlyList<string> arguments,
-        HostAgentUpgradeSettings? upgradeSettings = null)
+        HostAgentUpgradeSettings? upgradeSettings = null,
+        string? version = null)
     {
         var configArguments = new List<string>
         {
@@ -454,7 +548,7 @@ public sealed class HostAgentSelfUpgradeService
             "start=",
             "auto",
             "DisplayName=",
-            ResolveServiceDisplayName(serviceName)
+            ResolveServiceDisplayName(serviceName, version)
         };
         if (upgradeSettings is not null)
         {
@@ -464,10 +558,26 @@ public sealed class HostAgentSelfUpgradeService
         RunScChecked(configArguments.ToArray());
     }
 
-    private static string ResolveServiceDisplayName(string serviceName)
-        => serviceName.StartsWith("OMP", StringComparison.OrdinalIgnoreCase)
-            ? serviceName
-            : $"OMP {serviceName}";
+    private static string ResolveServiceDisplayName(string serviceName, string? version)
+    {
+        var trimmed = serviceName.Trim();
+        if (!string.IsNullOrWhiteSpace(version)
+            && trimmed.EndsWith("." + version.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            var prefix = trimmed[..^(version.Trim().Length + 1)];
+            var baseDisplayName = prefix.Replace('.', ' ');
+            if (!baseDisplayName.StartsWith("OMP", StringComparison.OrdinalIgnoreCase))
+            {
+                baseDisplayName = "OMP " + baseDisplayName;
+            }
+
+            return $"{baseDisplayName} {version.Trim()}";
+        }
+
+        return trimmed.StartsWith("OMP", StringComparison.OrdinalIgnoreCase)
+            ? trimmed.Replace('.', ' ')
+            : $"OMP {trimmed}";
+    }
 
     private static void AddServiceAccountArguments(List<string> arguments, HostAgentUpgradeSettings upgradeSettings)
     {
