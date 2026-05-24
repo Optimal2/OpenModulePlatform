@@ -277,25 +277,26 @@ Supported query fields:
 
 If neither report-level nor query-level `database` is set, the module uses the default `ConnectionStrings:OmpDb` database.
 This connection string is configured in the app's `appsettings*.json` files at
-runtime. For suite installs, it is written from
-`scripts/deployment/omp-suite.local.psd1` into the deployed
-`appsettings.Production.json`; verify the deployed file or the generated IIS
-runtime folder when troubleshooting environment-specific database access.
+runtime. For HostAgent-managed installs, HostAgent writes the deployed
+`appsettings.Production.json` from artifact configuration file metadata; verify
+the deployed file or the generated IIS runtime folder when troubleshooting
+environment-specific database access.
 
 ## Allowed Databases
 
 Server reports may only select databases that are explicitly allowlisted.
 
-Local install config:
+HostAgent-first sample package config:
 
 ```text
-scripts/deployment/omp-suite.local.psd1
+scripts/deployment/hostagent-first.config.sample.psd1
 ```
 
-Sample config:
+Host-specific runtime overlays are kept with the installer package host data,
+for example:
 
 ```text
-scripts/deployment/omp-suite.config.sample.psd1
+installer/hosts/sample/config-overlays
 ```
 
 Relevant config section:
@@ -327,7 +328,10 @@ Runtime config example:
 }
 ```
 
-Prefer changing `omp-suite.local.psd1` and then publishing/installing again. Editing `appsettings.Production.json` directly is useful for quick local tests, but that change can be overwritten by the next publish/install.
+Prefer changing the host-specific artifact configuration metadata and then
+letting HostAgent materialize it again. Editing `appsettings.Production.json`
+directly is useful for quick local tests, but that change can be overwritten by
+the next HostAgent deployment.
 
 After changing runtime config directly, recycle the Content app pool so the app reloads options:
 
@@ -479,9 +483,9 @@ The current module status:
 When adding a new report that must survive future publishes:
 
 1. Add the JSON file under `OpenModulePlatform.Web.ContentWebAppModule/App_Data/ContentReports`.
-2. Add any extra database names to `scripts/deployment/omp-suite.local.psd1`.
-3. Add the same config shape to `scripts/deployment/omp-suite.config.sample.psd1` when the new option should be documented for future environments.
-4. Run the local publish/install script.
+2. Add any extra database names to the host-specific artifact configuration overlay.
+3. Add the same config shape to `scripts/deployment/hostagent-first.config.sample.psd1` when the new option should be documented for future environments.
+4. Run the HostAgent-first installer or let HostAgent rematerialize the app.
 5. Verify the file exists under `C:\OMP\WebApps\content\App_Data\ContentReports`.
 6. Verify the runtime allowlist in `C:\OMP\WebApps\content\appsettings.Production.json`.
 7. Open the content page or embedded shortcode page in the browser.

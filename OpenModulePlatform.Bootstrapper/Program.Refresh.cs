@@ -540,13 +540,13 @@ internal static partial class Program
             return configured;
         }
 
-        var local = Path.Join(sourceRoot, "scripts", "deployment", "omp-suite.local.psd1");
+        var local = Path.Join(sourceRoot, "scripts", "deployment", "hostagent-first.local.psd1");
         if (File.Exists(local))
         {
             return local;
         }
 
-        var sample = Path.Join(sourceRoot, "scripts", "deployment", "omp-suite.config.sample.psd1");
+        var sample = Path.Join(sourceRoot, "scripts", "deployment", "hostagent-first.config.sample.psd1");
         if (File.Exists(sample))
         {
             return sample;
