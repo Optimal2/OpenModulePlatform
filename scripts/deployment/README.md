@@ -58,7 +58,10 @@ minimal in Git: the package root `OpenModulePlatform.Bootstrapper.exe` and
 `tools`) can be ignored and regenerated from developer source roots by the
 installer's package sync action before install/upgrade. For that model, commit
 runner-only updates with `update-installer-runner-only.ps1`, then let each
-developer machine regenerate the ignored package contents locally.
+developer machine regenerate the ignored package contents locally. The sync
+action updates the running installer's in-memory artifact targets for the
+current install/upgrade action, but it does not rewrite tracked host config
+files.
 
 See `docs/HOST_AGENT_FIRST_INSTALL.md` and
 `docs/PORTABLE_DEPLOYMENT_OBJECTS.md` for the full model.
