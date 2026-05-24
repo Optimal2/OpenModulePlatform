@@ -3032,6 +3032,59 @@ SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
         };
     }
 
+    public async Task<int> RequestHostAgentUpgradeAsync(
+        Guid hostId,
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @Changes table(ActionName nvarchar(10) NOT NULL);
+
+MERGE omp.HostAgentDesiredStates AS target
+USING
+(
+    SELECT h.HostId,
+           ar.ArtifactId
+    FROM omp.Hosts h
+    CROSS JOIN omp.Artifacts ar
+    INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+    INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+    WHERE h.HostId = @HostId
+      AND h.IsEnabled = 1
+      AND ar.ArtifactId = @ArtifactId
+      AND ar.IsEnabled = 1
+      AND m.ModuleKey = N'omp_core'
+      AND a.AppKey = N'omp_hostagent'
+      AND ar.PackageType = N'host-agent'
+      AND ar.TargetName = N'omp-hostagent'
+) AS source
+ON target.HostId = source.HostId
+WHEN MATCHED AND
+(
+       target.ArtifactId <> source.ArtifactId
+    OR target.IsEnabled = 0
+)
+    THEN UPDATE SET
+        ArtifactId = source.ArtifactId,
+        IsEnabled = 1,
+        UpdatedUtc = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(HostId, ArtifactId, ServiceNamePrefix, InstallRoot, IsEnabled)
+    VALUES(source.HostId, source.ArtifactId, NULL, NULL, 1)
+OUTPUT $action INTO @Changes;
+
+SELECT COUNT(1)
+FROM @Changes;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@HostId", hostId);
+        Add(cmd, "@ArtifactId", artifactId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 0);
+    }
+
     // -------------------------------------------------------------------------
     // App-instance editing
     // -------------------------------------------------------------------------

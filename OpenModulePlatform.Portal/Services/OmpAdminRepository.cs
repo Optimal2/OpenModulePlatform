@@ -1392,6 +1392,107 @@ ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey,
         return rows;
     }
 
+    public async Task<IReadOnlyList<HostAgentUpgradeRow>> GetHostAgentUpgradeRowsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT h.HostId,
+       h.HostKey,
+       h.DisplayName,
+       desired.ArtifactId AS DesiredArtifactId,
+       desiredArtifact.Version AS DesiredVersion,
+       desiredArtifact.RelativePath AS DesiredRelativePath,
+       desired.ServiceNamePrefix,
+       desired.InstallRoot,
+       CAST(ISNULL(desired.IsEnabled, 0) AS bit) AS DesiredIsEnabled,
+       desired.UpdatedUtc AS DesiredUpdatedUtc,
+       runtimeState.ServiceName AS CurrentServiceName,
+       runtimeState.Version AS CurrentVersion,
+       runtimeState.InstallPath AS CurrentInstallPath,
+       runtimeState.RuntimeMode,
+       CAST(ISNULL(runtimeState.IsActive, 0) AS bit) AS CurrentIsActive,
+       runtimeState.TakeoverFromServiceName,
+       runtimeState.LastSeenUtc,
+       runtimeState.StatusMessage
+FROM omp.Hosts h
+LEFT JOIN omp.HostAgentDesiredStates desired ON desired.HostId = h.HostId
+LEFT JOIN omp.Artifacts desiredArtifact ON desiredArtifact.ArtifactId = desired.ArtifactId
+OUTER APPLY
+(
+    SELECT TOP (1) r.*
+    FROM omp.HostAgentRuntimeStates r
+    WHERE r.HostId = h.HostId
+    ORDER BY r.IsActive DESC, COALESCE(r.LastSeenUtc, r.UpdatedUtc, r.CreatedUtc) DESC, r.ServiceName
+) runtimeState
+WHERE h.IsEnabled = 1
+ORDER BY h.HostKey;";
+
+        var rows = new List<HostAgentUpgradeRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new HostAgentUpgradeRow
+            {
+                HostId = rdr.GetGuid(0),
+                HostKey = rdr.GetString(1),
+                DisplayName = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                DesiredArtifactId = rdr.IsDBNull(3) ? null : rdr.GetInt32(3),
+                DesiredVersion = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                DesiredRelativePath = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                ServiceNamePrefix = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                InstallRoot = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                DesiredIsEnabled = rdr.GetBoolean(8),
+                DesiredUpdatedUtc = rdr.IsDBNull(9) ? null : rdr.GetDateTime(9),
+                CurrentServiceName = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                CurrentVersion = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+                CurrentInstallPath = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                RuntimeMode = rdr.IsDBNull(13) ? null : rdr.GetString(13),
+                CurrentIsActive = rdr.GetBoolean(14),
+                TakeoverFromServiceName = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+                RuntimeLastSeenUtc = rdr.IsDBNull(16) ? null : rdr.GetDateTime(16),
+                RuntimeStatusMessage = rdr.IsDBNull(17) ? null : rdr.GetString(17)
+            });
+        }
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<HostAgentArtifactOption>> GetHostAgentArtifactOptionsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ar.ArtifactId,
+       ar.Version,
+       ar.RelativePath,
+       ar.CreatedUtc
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = N'omp_core'
+  AND a.AppKey = N'omp_hostagent'
+  AND ar.PackageType = N'host-agent'
+  AND ar.TargetName = N'omp-hostagent'
+  AND ar.IsEnabled = 1
+ORDER BY ar.CreatedUtc DESC, ar.ArtifactId DESC;";
+
+        var rows = new List<HostAgentArtifactOption>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new HostAgentArtifactOption
+            {
+                ArtifactId = rdr.GetInt32(0),
+                Version = rdr.GetString(1),
+                RelativePath = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                CreatedUtc = rdr.GetDateTime(3)
+            });
+        }
+        return rows;
+    }
+
     private static async Task<int> ScalarIntAsync(SqlConnection conn, string sql, CancellationToken ct)
     {
         await using var cmd = new SqlCommand(sql, conn);

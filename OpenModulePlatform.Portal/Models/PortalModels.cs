@@ -946,3 +946,59 @@ public sealed class HostArtifactStateRow
 
     public bool IsCurrentlyDesired { get; set; }
 }
+
+/// <summary>
+/// HostAgent self-upgrade state for one host.
+/// </summary>
+public sealed class HostAgentUpgradeRow
+{
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string? DisplayName { get; set; }
+
+    public int? DesiredArtifactId { get; set; }
+
+    public string? DesiredVersion { get; set; }
+
+    public string? DesiredRelativePath { get; set; }
+
+    public string? ServiceNamePrefix { get; set; }
+
+    public string? InstallRoot { get; set; }
+
+    public bool DesiredIsEnabled { get; set; }
+
+    public DateTime? DesiredUpdatedUtc { get; set; }
+
+    public string? CurrentServiceName { get; set; }
+
+    public string? CurrentVersion { get; set; }
+
+    public string? CurrentInstallPath { get; set; }
+
+    public string? RuntimeMode { get; set; }
+
+    public bool CurrentIsActive { get; set; }
+
+    public string? TakeoverFromServiceName { get; set; }
+
+    public DateTime? RuntimeLastSeenUtc { get; set; }
+
+    public string? RuntimeStatusMessage { get; set; }
+}
+
+/// <summary>
+/// HostAgent artifact option that can be selected as desired runtime version.
+/// </summary>
+public sealed class HostAgentArtifactOption
+{
+    public int ArtifactId { get; set; }
+
+    public string Version { get; set; } = string.Empty;
+
+    public string? RelativePath { get; set; }
+
+    public DateTime CreatedUtc { get; set; }
+}
