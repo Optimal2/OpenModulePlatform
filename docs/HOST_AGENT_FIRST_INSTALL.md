@@ -16,8 +16,32 @@ of in one-off PowerShell installation logic.
 
 ## Package Layout
 
+Developer checkouts can use the shorter runner layout below. This is the layout
+used by the public sample installer and by private installation repositories:
+
+```text
+installer/
+  OpenModulePlatform.Bootstrapper.exe
+  data/                         # generated and ignored
+  payload/                      # generated and ignored
+  sql/                          # generated and ignored
+  tools/                        # generated and ignored
+hosts/
+  <profile>/
+    bootstrap.json
+    package.psd1
+    sql/
+    host-configs/
+    config-overlays/
+```
+
+`installer` is the runnable package root. `hosts/<profile>` is the source of
+truth for machine-specific bootstrap settings and optional host-specific inputs.
+Generated data is repopulated by the installer sync action on developer
+machines and should not be committed.
+
 The bootstrapper supports this package shape, and new package builds should
-produce it:
+produce it for copied/zipped release packages:
 
 ```text
 OpenModulePlatformHostAgentFirst-<version>/
@@ -305,7 +329,7 @@ When only installer code changed, update just the committed executable:
 
 ```powershell
 .\scripts\deployment\update-installer-runner-only.ps1 `
-  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\package\OpenModulePlatformHostAgentFirst-0.3.3"
+  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\installer"
 ```
 
 This runner-only update does not rebuild or commit module definitions, artifact
@@ -321,7 +345,7 @@ package from the command line, use the package-preserving wrapper instead:
 
 ```powershell
 .\scripts\deployment\refresh-existing-hostagent-first-package.ps1 `
-  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\package\OpenModulePlatformHostAgentFirst-0.3.3" `
+  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\installer" `
   -ConfigName linus
 ```
 

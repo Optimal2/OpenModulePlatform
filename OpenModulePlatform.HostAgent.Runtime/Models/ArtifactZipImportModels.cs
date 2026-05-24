@@ -75,7 +75,7 @@ public sealed record ModulePackageImportResult(
     int SqlRepairCount,
     IReadOnlyList<ModulePackageArtifactImportResult> Artifacts)
 {
-    public int ImportedArtifactCount => Artifacts.Count(static item => item.Status is "Imported" or "Replaced");
+    public int ImportedArtifactCount => Artifacts.Count(static item => item.Status is "Imported" or "Replaced" or "Updated");
 
     public int FailedArtifactCount => Artifacts.Count(static item => item.Status == "Failed");
 

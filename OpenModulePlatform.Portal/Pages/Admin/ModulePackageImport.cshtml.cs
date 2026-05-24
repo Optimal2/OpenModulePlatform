@@ -574,7 +574,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     {
         var importedCount = result.Count(static item =>
             string.Equals(item.Status, "Imported", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(item.Status, "Replaced", StringComparison.OrdinalIgnoreCase));
+            || string.Equals(item.Status, "Replaced", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(item.Status, "Updated", StringComparison.OrdinalIgnoreCase));
         var failedCount = result.Count(static item =>
             string.Equals(item.Status, "Failed", StringComparison.OrdinalIgnoreCase));
 
