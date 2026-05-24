@@ -757,7 +757,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         {
             var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
             message += " " + string.Format(
-                T("Selected this artifact as desired version for {0} matching app row(s)."),
+                T("Selected this artifact as desired version for {0} matching deployment row(s)."),
                 updatedRows);
         }
 
@@ -778,7 +778,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         {
             var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
             message += " " + string.Format(
-                T("Selected this artifact as desired version for {0} matching app row(s)."),
+                T("Selected this artifact as desired version for {0} matching deployment row(s)."),
                 updatedRows);
         }
 

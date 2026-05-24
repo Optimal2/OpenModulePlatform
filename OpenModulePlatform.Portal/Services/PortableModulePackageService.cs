@@ -57,36 +57,37 @@ public sealed class PortableModulePackageService
                 .Select(static item => item!)
                 .ToList();
 
-        var definitionPaths = EnumerateLibraryFiles(definitionsRoot, "*.json")
-            .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)
+        var definitions = EnumerateLibraryFiles(definitionsRoot, "*.json")
+            .Select(static path => new AvailableModuleDefinitionFile(path, TryReadDefinitionSummary(path)))
+            .Where(static file => file.Summary is not null)
+            .GroupBy(static file => file.Summary!.ModuleKey, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderByDescending(static file => file.Summary!.DefinitionVersion, ArtifactVersionComparer.Instance)
+                .ThenBy(static file => file.Path, StringComparer.OrdinalIgnoreCase)
+                .First())
+            .OrderBy(static file => file.Summary!.ModuleKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        if (definitionPaths.Count == 0)
+        if (definitions.Count == 0)
         {
             return [];
         }
 
         var packages = new List<AvailablePortableModulePackage>();
-        foreach (var path in definitionPaths)
+        foreach (var definitionFile in definitions)
         {
-            var definition = TryReadDefinitionSummary(path);
-            if (definition is null)
-            {
-                continue;
-            }
+            var definition = definitionFile.Summary!;
 
-            var artifacts = artifactFiles
+            // The shared available library may intentionally contain historical
+            // artifact files. The operator-facing package row should represent
+            // the latest installable package for each artifact slot.
+            var artifacts = SelectLatestArtifactFilesBySlot(artifactFiles
                 .Where(file => file.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
-                .Where(file => IsCompatibleWithDefinition(file, definition.CompatibleArtifacts))
-                .OrderBy(static file => file.AppKey, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static file => file.PackageType, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static file => file.TargetName, StringComparer.OrdinalIgnoreCase)
-                .ThenByDescending(static file => file.Version, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                .Where(file => IsCompatibleWithDefinition(file, definition.CompatibleArtifacts)));
 
             packages.Add(new AvailablePortableModulePackage(
                 definition.ModuleKey,
                 definition.DefinitionVersion,
-                Path.GetFileName(path),
+                Path.GetFileName(definitionFile.Path),
                 artifacts));
         }
 
@@ -128,11 +129,12 @@ public sealed class PortableModulePackageService
             definitionsRoot);
 
         var artifactPaths = Directory.Exists(artifactsRoot)
-            ? Directory.EnumerateFiles(artifactsRoot, $"{definition.ModuleKey}__*.zip", SearchOption.TopDirectoryOnly)
-                .Where(path => TryReadArtifactPackageFile(path) is { } artifact
-                    && IsCompatibleWithDefinition(artifact, definition.CompatibleArtifacts))
-                .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)
-                .ToList()
+            ? SelectLatestArtifactPathsBySlot(Directory
+                .EnumerateFiles(artifactsRoot, $"{definition.ModuleKey}__*.zip", SearchOption.TopDirectoryOnly)
+                .Select(static path => (Path: path, Artifact: TryReadArtifactPackageFile(path)))
+                .Where(item => item.Artifact is not null
+                    && IsCompatibleWithDefinition(item.Artifact, definition.CompatibleArtifacts))
+                .Select(static item => (item.Path, Artifact: item.Artifact!)))
             : [];
 
         return await ImportAsync(definition, artifactPaths, options, ct);
@@ -911,6 +913,36 @@ public sealed class PortableModulePackageService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
+    private static IReadOnlyList<ArtifactPackageFile> SelectLatestArtifactFilesBySlot(IEnumerable<ArtifactPackageFile> artifacts)
+    {
+        return artifacts
+            .GroupBy(static artifact => BuildArtifactSlotKey(artifact), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderByDescending(static artifact => artifact.Version, ArtifactVersionComparer.Instance)
+                .ThenBy(static artifact => artifact.FileName, StringComparer.OrdinalIgnoreCase)
+                .First())
+            .OrderBy(static artifact => artifact.AppKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static artifact => artifact.PackageType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static artifact => artifact.TargetName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> SelectLatestArtifactPathsBySlot(
+        IEnumerable<(string Path, ArtifactPackageFile Artifact)> artifacts)
+    {
+        return artifacts
+            .GroupBy(static artifact => BuildArtifactSlotKey(artifact.Artifact), StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group
+                .OrderByDescending(static artifact => artifact.Artifact.Version, ArtifactVersionComparer.Instance)
+                .ThenBy(static artifact => artifact.Path, StringComparer.OrdinalIgnoreCase)
+                .First())
+            .OrderBy(static artifact => artifact.Artifact.AppKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static artifact => artifact.Artifact.PackageType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static artifact => artifact.Artifact.TargetName, StringComparer.OrdinalIgnoreCase)
+            .Select(static artifact => artifact.Path)
+            .ToList();
+    }
+
     private static string FindSingleModuleDefinitionFile(string root)
     {
         var candidates = Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
@@ -1436,6 +1468,10 @@ public sealed class PortableModulePackageService
 
     private static string AppendWarning(string current, string next)
         => string.IsNullOrWhiteSpace(current) ? next : current + " " + next;
+
+    private sealed record AvailableModuleDefinitionFile(
+        string Path,
+        ModuleDefinitionSummary? Summary);
 
     private sealed record ModuleDefinitionSummary(
         string ModuleKey,
