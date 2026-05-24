@@ -168,7 +168,15 @@ function Publish-DotNetComponent {
         $projectRoot
     }
     else {
-        @(Get-ChildItem -LiteralPath $projectRoot -Filter '*.csproj' -File | Sort-Object Name | Select-Object -First 1).FullName
+        $projectFileItem = Get-ChildItem -LiteralPath $projectRoot -Filter '*.csproj' -File |
+            Sort-Object Name |
+            Select-Object -First 1
+        if ($null -eq $projectFileItem) {
+            ''
+        }
+        else {
+            $projectFileItem.FullName
+        }
     }
 
     if ([string]::IsNullOrWhiteSpace($projectFile)) {
@@ -179,6 +187,77 @@ function Publish-DotNetComponent {
     & dotnet publish $projectFile -c $Configuration -o $outputPath | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet publish failed for component '$($Component.componentKey)'."
+    }
+
+    return $outputPath
+}
+
+function Invoke-NativeChecked {
+    param(
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
+
+    Push-Location $WorkingDirectory
+    try {
+        & $FileName @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) {
+            throw "$FileName failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Publish-NodeWebComponent {
+    param(
+        [Parameter(Mandatory = $true)][object]$Component,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$BuildRoot
+    )
+
+    if (-not [string]::Equals([string]$Component.packageType, 'web-app', [StringComparison]::OrdinalIgnoreCase)) {
+        return ''
+    }
+
+    $projectPath = [string](Get-JsonPropertyValue -Object $Component -Name 'projectPath')
+    if ([string]::IsNullOrWhiteSpace($projectPath)) {
+        return ''
+    }
+
+    $projectRoot = Resolve-PathFromBase -Path $projectPath -BasePath $RepositoryRoot
+    $projectDirectory = if (Test-Path -LiteralPath $projectRoot -PathType Leaf) {
+        Split-Path -Parent $projectRoot
+    }
+    else {
+        $projectRoot
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $projectDirectory 'package.json') -PathType Leaf)) {
+        return ''
+    }
+
+    if (Test-Path -LiteralPath (Join-Path $projectDirectory 'package-lock.json') -PathType Leaf) {
+        Invoke-NativeChecked -FileName 'npm' -Arguments @('ci') -WorkingDirectory $projectDirectory
+    }
+
+    Invoke-NativeChecked -FileName 'npm' -Arguments @('run', 'build') -WorkingDirectory $projectDirectory
+
+    $distPath = Join-Path $projectDirectory 'dist'
+    if (-not (Test-Path -LiteralPath $distPath -PathType Container)) {
+        throw "Node web component '$($Component.componentKey)' did not produce a dist folder: $distPath"
+    }
+
+    $outputPath = Join-Path $BuildRoot ([string]$Component.componentKey)
+    if (Test-Path -LiteralPath $outputPath) {
+        Remove-Item -LiteralPath $outputPath -Recurse -Force
+    }
+
+    New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
+    Get-ChildItem -LiteralPath $distPath -Force | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $outputPath -Recurse -Force
     }
 
     return $outputPath
@@ -304,12 +383,19 @@ try {
             -Configuration $Configuration
 
         if ([string]::IsNullOrWhiteSpace($payloadPath)) {
+            $payloadPath = Publish-NodeWebComponent `
+                -Component $component `
+                -RepositoryRoot $repositoryRoot `
+                -BuildRoot $buildRoot
+        }
+
+        if ([string]::IsNullOrWhiteSpace($payloadPath)) {
             if (-not [string]::IsNullOrWhiteSpace($existingPackage)) {
                 Copy-Item -LiteralPath $existingPackage -Destination (Join-Path $artifactsRoot $packageName) -Force
                 continue
             }
 
-            Write-Warning "Skipping component '$($component.componentKey)' because no existing package was found and no publishable .NET projectPath is configured."
+            Write-Warning "Skipping component '$($component.componentKey)' because no existing package was found and no publishable .NET or Node web projectPath is configured."
             continue
         }
 

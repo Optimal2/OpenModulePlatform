@@ -1691,23 +1691,6 @@ internal static partial class Program
                 return null;
             }
 
-            string? projectFile;
-            try
-            {
-                projectFile = ResolveComponentProjectFile(component);
-            }
-            catch (InvalidOperationException ex)
-            {
-                lines.Add($"  BUILD   {component.ComponentKey}: skipped selective build because {ex.Message}");
-                return null;
-            }
-
-            if (projectFile is null)
-            {
-                lines.Add($"  BUILD   {component.ComponentKey}: skipped selective build because projectPath '{component.ProjectPath}' does not resolve to one .NET project file.");
-                return null;
-            }
-
             var outputRoot = ResolveSelectiveArtifactOutputRoot(component);
             var destination = Path.Join(outputRoot, packageName);
             var tempRoot = Path.Join(
@@ -1718,21 +1701,36 @@ internal static partial class Program
             try
             {
                 Directory.CreateDirectory(publishRoot);
-                lines.Add($"  BUILD   {component.ComponentKey}: publishing {GetDisplayPath(component.SourceRoot, projectFile)}.");
-                RunProcess(
-                    "dotnet",
-                    [
-                        "publish",
-                        projectFile,
-                        "-c",
-                        "Release",
-                        "-o",
-                        publishRoot,
-                        "--nologo",
-                        "--verbosity",
-                        "minimal"
-                    ],
-                    workingDirectory: component.SourceRoot);
+                var projectFile = ResolveComponentProjectFile(component);
+                if (projectFile is not null)
+                {
+                    lines.Add($"  BUILD   {component.ComponentKey}: publishing {GetDisplayPath(component.SourceRoot, projectFile)}.");
+                    RunProcess(
+                        "dotnet",
+                        [
+                            "publish",
+                            projectFile,
+                            "-c",
+                            "Release",
+                            "-o",
+                            publishRoot,
+                            "--nologo",
+                            "--verbosity",
+                            "minimal"
+                        ],
+                        workingDirectory: component.SourceRoot);
+                }
+                else
+                {
+                    var nodeProjectDirectory = ResolveComponentNodeProjectDirectory(component);
+                    if (nodeProjectDirectory is null)
+                    {
+                        lines.Add($"  BUILD   {component.ComponentKey}: skipped selective build because projectPath '{component.ProjectPath}' does not resolve to one .NET project file or Node web project.");
+                        return null;
+                    }
+
+                    BuildNodeWebArtifactPayload(component, nodeProjectDirectory, publishRoot, lines);
+                }
 
                 RemoveRuntimeConfigurationFiles(publishRoot);
                 new ArtifactPackageWriter().CreateFromPayloadDirectory(
@@ -1743,7 +1741,7 @@ internal static partial class Program
                 lines.Add($"  BUILD   {component.ComponentKey}: created {destination}.");
                 return destination;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 lines.Add($"  BUILD   {component.ComponentKey}: selective build failed: {ex.Message}");
                 return null;
@@ -1771,14 +1769,7 @@ internal static partial class Program
 
         private static string? ResolveComponentProjectFile(ManifestComponent component)
         {
-            var projectPath = Path.GetFullPath(Path.Join(
-                component.SourceRoot,
-                component.ProjectPath.Replace('/', Path.DirectorySeparatorChar)));
-            if (!IsSameOrChildPath(component.SourceRoot, projectPath))
-            {
-                throw new InvalidOperationException(
-                    $"Component projectPath '{component.ProjectPath}' escapes source root '{component.SourceRoot}'.");
-            }
+            var projectPath = ResolveComponentProjectPath(component);
 
             if (File.Exists(projectPath)
                 && projectPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
@@ -1806,6 +1797,67 @@ internal static partial class Program
                 .Take(2)
                 .ToArray();
             return projects.Length == 1 ? projects[0] : null;
+        }
+
+        private static string? ResolveComponentNodeProjectDirectory(ManifestComponent component)
+        {
+            if (!component.PackageType.Equals("web-app", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var projectPath = ResolveComponentProjectPath(component);
+            var projectDirectory = File.Exists(projectPath)
+                ? Path.GetDirectoryName(projectPath)
+                : projectPath;
+            if (string.IsNullOrWhiteSpace(projectDirectory)
+                || !Directory.Exists(projectDirectory)
+                || !File.Exists(Path.Join(projectDirectory, "package.json")))
+            {
+                return null;
+            }
+
+            return projectDirectory;
+        }
+
+        private static string ResolveComponentProjectPath(ManifestComponent component)
+        {
+            var projectPath = Path.GetFullPath(Path.Join(
+                component.SourceRoot,
+                component.ProjectPath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!IsSameOrChildPath(component.SourceRoot, projectPath))
+            {
+                throw new InvalidOperationException(
+                    $"Component projectPath '{component.ProjectPath}' escapes source root '{component.SourceRoot}'.");
+            }
+
+            return projectPath;
+        }
+
+        private static void BuildNodeWebArtifactPayload(
+            ManifestComponent component,
+            string projectDirectory,
+            string publishRoot,
+            List<string> lines)
+        {
+            var npm = OperatingSystem.IsWindows() ? "npm.cmd" : "npm";
+            var packageLockPath = Path.Join(projectDirectory, "package-lock.json");
+            if (File.Exists(packageLockPath))
+            {
+                lines.Add($"  BUILD   {component.ComponentKey}: restoring npm packages in {GetDisplayPath(component.SourceRoot, projectDirectory)}.");
+                RunProcess(npm, ["ci"], workingDirectory: projectDirectory);
+            }
+
+            lines.Add($"  BUILD   {component.ComponentKey}: running npm build in {GetDisplayPath(component.SourceRoot, projectDirectory)}.");
+            RunProcess(npm, ["run", "build"], workingDirectory: projectDirectory);
+
+            var distPath = Path.Join(projectDirectory, "dist");
+            if (!Directory.Exists(distPath))
+            {
+                throw new InvalidOperationException($"Node web project did not produce a dist folder: {distPath}");
+            }
+
+            CopyDirectory(distPath, publishRoot);
         }
 
         private static string GetDisplayPath(string root, string path)
