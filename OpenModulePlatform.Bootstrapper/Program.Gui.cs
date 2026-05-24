@@ -1040,7 +1040,10 @@ internal static partial class Program
                 ? "upgrade the existing OpenModulePlatform installation"
                 : "install OpenModulePlatform";
             var refreshPackage = _hasDeveloperSource && _refreshPackageBeforePrimaryAction.Checked;
-            if (!ConfirmPrimaryAction(actionName, refreshPackage))
+            var packageWarnings = refreshPackage
+                ? []
+                : GetPackageReadinessWarnings();
+            if (!ConfirmPrimaryAction(actionName, refreshPackage, packageWarnings))
             {
                 return;
             }
@@ -1104,7 +1107,10 @@ internal static partial class Program
             return 0;
         }
 
-        private bool ConfirmPrimaryAction(string actionName, bool refreshPackage)
+        private bool ConfirmPrimaryAction(
+            string actionName,
+            bool refreshPackage,
+            IReadOnlyList<string> packageWarnings)
         {
             var builder = new StringBuilder();
             builder.AppendLine($"This will {actionName} using the matched profile.");
@@ -1122,6 +1128,23 @@ internal static partial class Program
             builder.AppendLine(refreshPackage
                 ? "Before the main action, the installer package will be refreshed from the configured source repositories. Warnings stop the main action so package problems can be reviewed first."
                 : "The installer package will be used as-is.");
+            if (packageWarnings.Count > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("Package readiness warning:");
+                foreach (var warning in packageWarnings.Take(12))
+                {
+                    builder.AppendLine("  - " + warning);
+                }
+
+                if (packageWarnings.Count > 12)
+                {
+                    builder.AppendLine($"  - ...and {packageWarnings.Count - 12} more missing package file(s).");
+                }
+
+                builder.AppendLine();
+                builder.AppendLine("Enable package refresh from source on developer machines, or use a full package that already contains the generated files.");
+            }
             builder.AppendLine();
             builder.Append("Continue?");
 
@@ -1131,6 +1154,51 @@ internal static partial class Program
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+        }
+
+        private IReadOnlyList<string> GetPackageReadinessWarnings()
+        {
+            var warnings = new List<string>();
+            void AddMissingPackageFile(string label, string relativePath)
+            {
+                if (string.IsNullOrWhiteSpace(relativePath))
+                {
+                    return;
+                }
+
+                try
+                {
+                    var path = ResolvePackagePath(relativePath);
+                    if (!File.Exists(path))
+                    {
+                        warnings.Add($"{label} is missing: {relativePath}");
+                    }
+                }
+                catch (InvalidOperationException ex)
+                {
+                    warnings.Add($"{label} cannot be resolved: {ex.Message}");
+                }
+            }
+
+            if (_config.Sql.Enabled)
+            {
+                foreach (var script in _config.Sql.Scripts.Where(static script => script.Enabled))
+                {
+                    AddMissingPackageFile("SQL script", script.Path);
+                }
+            }
+
+            foreach (var artifact in _config.Artifacts)
+            {
+                AddMissingPackageFile("Artifact package", artifact.Source);
+            }
+
+            if (_config.HostAgent.Enabled)
+            {
+                AddMissingPackageFile("HostAgent package", _config.HostAgent.PackagePath);
+            }
+
+            return warnings;
         }
 
         private async Task InstallAsync()
