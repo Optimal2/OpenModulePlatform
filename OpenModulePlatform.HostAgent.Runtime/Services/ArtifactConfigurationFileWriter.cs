@@ -150,23 +150,27 @@ internal static class ArtifactConfigurationFileWriter
     {
         var databaseName = ResolveDatabaseName(ompConnectionString);
         var dataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
+        var webAppOptions = new
+        {
+            Title = deployment.DisplayName,
+            DefaultCulture = "sv-SE",
+            SupportedCultures = new[] { "sv-SE", "en-US" },
+            PortalTopBar = new
+            {
+                Enabled = true,
+                PortalBaseUrl = "/"
+            },
+            AllowAnonymous = false,
+            UseForwardedHeaders = false,
+            PermissionMode = "Any"
+        };
         var content = JsonSerializer.Serialize(
             new
             {
-                Portal = new
-                {
-                    Title = deployment.DisplayName,
-                    DefaultCulture = "sv-SE",
-                    SupportedCultures = new[] { "sv-SE", "en-US" },
-                    PortalTopBar = new
-                    {
-                        Enabled = true,
-                        PortalBaseUrl = "/"
-                    },
-                    AllowAnonymous = false,
-                    UseForwardedHeaders = false,
-                    PermissionMode = "Any"
-                },
+                // OMP-hosted web apps historically used Portal, while shared web defaults use WebApp.
+                // Keep both sections aligned so external modules can use either convention.
+                Portal = webAppOptions,
+                WebApp = webAppOptions,
                 ConnectionStrings = new
                 {
                     OmpDb = ompConnectionString
