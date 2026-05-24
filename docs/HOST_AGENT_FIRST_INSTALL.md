@@ -283,7 +283,11 @@ the package and installed database with the source repository manifest:
 - `Sync package objects` is the normal lightweight developer action. It fills
   the package object library from source manifests and selectively builds only
   missing .NET artifact packages. Use this before install/upgrade when a private
-  developer package is intentionally minimal.
+  developer package is intentionally minimal. It may update artifact targets in
+  the running installer configuration so the current install/upgrade action uses
+  the freshly synced versions, but it does not rewrite the tracked
+  `configs/*.json` files. Persisting host config changes is an explicit package
+  refresh or manual config-editing step.
 
 Private developer installer repositories can keep the committed package small:
 the root `OpenModulePlatform.Bootstrapper.exe` plus `configs/*.json`. Generated
@@ -377,6 +381,8 @@ for reuse. This avoids a full package rebuild when one or two compiled
 artifacts are missing. Non-.NET artifacts, such as externally built web bundles,
 must still exist in the package, `ArtifactStoreRoot\_available`,
 `RuntimeRoot\ArtifactArchive`, or a source repository `artifacts` folder.
+The sync action writes a timestamped diagnostic log to the user's temp folder
+(`omp-installer-sync-*.log`) and keeps tracked host config files unchanged.
 
 For non-interactive console installation, run:
 

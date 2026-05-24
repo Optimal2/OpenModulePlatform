@@ -287,6 +287,19 @@ internal static partial class Program
         var configPath = Path.GetFullPath(cli.ConfigPath);
         var config = await ReadJsonAsync<BootstrapConfig>(configPath);
         var payloadRoot = ResolvePayloadRoot(cli, configPath);
+        var logPath = Path.Join(
+            Path.GetTempPath(),
+            $"omp-installer-sync-{DateTime.UtcNow:yyyyMMddHHmmss}.log");
+
+        void WriteProgress(string message)
+        {
+            var line = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} {message}";
+            File.AppendAllText(logPath, line + Environment.NewLine, Encoding.UTF8);
+            Console.WriteLine(message);
+        }
+
+        WriteProgress($"Sync log: {logPath}");
+        var previousSynchronizationContext = SynchronizationContext.Current;
         using var form = new InstallerForm(
             [
                 new BootstrapConfigProfile(
@@ -299,21 +312,34 @@ internal static partial class Program
             config,
             configPath,
             payloadRoot,
-            cli);
+            cli,
+            initializeUi: false);
 
-        Console.WriteLine("> Sync installer package objects from source");
-        var result = await form.SyncDeveloperPackageObjectsCoreAsync();
-        foreach (var line in result.Lines)
+        try
         {
-            Console.WriteLine(line);
-        }
+            // Creating WinForms controls installs a WindowsFormsSynchronizationContext.
+            // The headless sync path has no message loop, so async continuations must
+            // run on the thread pool instead of being posted back to WinForms.
+            SynchronizationContext.SetSynchronizationContext(null);
 
-        if (result.ConfigUpdated)
+            WriteProgress("> Sync installer package objects from source");
+            var result = await form.SyncDeveloperPackageObjectsCoreAsync(WriteProgress);
+            foreach (var line in result.Lines)
+            {
+                WriteProgress(line);
+            }
+
+            if (result.ConfigUpdated)
+            {
+                WriteProgress("Configuration targets were updated in memory for this sync run. Tracked host config files are not rewritten by package-object sync.");
+            }
+
+            return result.HasWarnings ? 1 : 0;
+        }
+        finally
         {
-            await form.SaveCurrentConfigAsync();
+            SynchronizationContext.SetSynchronizationContext(previousSynchronizationContext);
         }
-
-        return result.HasWarnings ? 1 : 0;
     }
 
     private sealed class InstallerForm : Form
@@ -423,7 +449,8 @@ internal static partial class Program
             BootstrapConfig config,
             string configPath,
             string payloadRoot,
-            CliOptions cli)
+            CliOptions cli,
+            bool initializeUi = true)
         {
             _configProfiles = configProfiles;
             _config = config;
@@ -432,6 +459,11 @@ internal static partial class Program
             _cli = cli;
             _payloadZipPath = cli.PayloadZipPath;
             ExitCode = 2;
+
+            if (!initializeUi)
+            {
+                return;
+            }
 
             Text = "OpenModulePlatform Installer";
             StartPosition = FormStartPosition.CenterScreen;
@@ -1140,7 +1172,7 @@ internal static partial class Program
 
             if (result.ConfigUpdated)
             {
-                await SaveCurrentConfigAsync();
+                Console.WriteLine("> Configuration targets were updated in memory for this run. Package-object sync does not rewrite tracked host config files.");
             }
 
             if (result.HasWarnings)
@@ -1338,7 +1370,7 @@ internal static partial class Program
 
                     if (result.ConfigUpdated)
                     {
-                        await SaveCurrentConfigAsync();
+                        Console.WriteLine("> Configuration targets were updated in memory for this run. Package-object sync does not rewrite tracked host config files.");
                     }
 
                     return result.HasWarnings ? 1 : 0;
@@ -1544,17 +1576,24 @@ internal static partial class Program
             return new DeveloperSourceCheckResult(hasPackageUpdates || hasInstalledUpdates, lines);
         }
 
-        internal async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync()
+        internal async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync(Action<string>? progress = null)
         {
+            void Report(string message) => progress?.Invoke(message);
+
             var lines = new List<string>();
+            Report("Resolving developer source repositories...");
             var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
+            Report($"Resolved {sourceRoots.Count} developer source root(s).");
+            Report("Reading developer component manifests...");
             var manifests = await ReadDeveloperManifestsAsync(sourceRoots);
+            Report($"Read {manifests.Count} developer component manifest(s).");
             var sourceDefinitions = manifests
                 .SelectMany(manifest => ReadManifestModuleDefinitions(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
                 .ToArray();
             var sourceComponents = manifests
                 .SelectMany(manifest => ReadManifestComponents(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
                 .ToArray();
+            Report($"Found {sourceDefinitions.Length} module definition(s) and {sourceComponents.Length} artifact component(s).");
             var artifactSearchRoots = EnumerateArtifactPackageSearchRoots(sourceRoots).ToArray();
             var updated = 0;
             var unchanged = 0;
@@ -1573,6 +1612,7 @@ internal static partial class Program
             lines.Add("Module definitions:");
             foreach (var definition in sourceDefinitions)
             {
+                Report($"Syncing module definition {definition.ModuleKey} {definition.DefinitionVersion}...");
                 var sourcePath = Path.Join(definition.SourceRoot, definition.Path);
                 if (!File.Exists(sourcePath))
                 {
@@ -1598,6 +1638,7 @@ internal static partial class Program
             lines.Add("Artifact packages:");
             foreach (var component in sourceComponents)
             {
+                Report($"Syncing artifact package {component.ComponentKey} {component.Version}...");
                 var packageName = GetArtifactPackageFileName(component);
                 var expectedTarget = component.RelativePathTemplate.Replace("{version}", component.Version, StringComparison.OrdinalIgnoreCase);
                 var sourcePackage = FindSourceArtifactPackage(packageName, artifactSearchRoots);
