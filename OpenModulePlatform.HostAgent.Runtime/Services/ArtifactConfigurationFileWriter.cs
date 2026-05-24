@@ -33,7 +33,8 @@ internal static class ArtifactConfigurationFileWriter
     public static IReadOnlyList<ArtifactConfigurationFileDescriptor> WithBuiltInServiceAppConfiguration(
         IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
         ServiceAppDeploymentDescriptor deployment,
-        string ompConnectionString)
+        string ompConnectionString,
+        HostAgentSettings settings)
     {
         if (HasAppSettingsJson(files))
         {
@@ -42,7 +43,9 @@ internal static class ArtifactConfigurationFileWriter
 
         return
         [
-            CreateBuiltInServiceAppConfigurationFile(deployment, ompConnectionString),
+            IsWorkerManagerDeployment(deployment)
+                ? CreateBuiltInWorkerManagerConfigurationFile(deployment, ompConnectionString, settings)
+                : CreateBuiltInServiceAppConfigurationFile(deployment, ompConnectionString),
             .. files
         ];
     }
@@ -253,6 +256,109 @@ internal static class ArtifactConfigurationFileWriter
         };
     }
 
+    private static ArtifactConfigurationFileDescriptor CreateBuiltInWorkerManagerConfigurationFile(
+        ServiceAppDeploymentDescriptor deployment,
+        string ompConnectionString,
+        HostAgentSettings settings)
+    {
+        var content = JsonSerializer.Serialize(
+            new
+            {
+                ConnectionStrings = new
+                {
+                    OmpDb = ompConnectionString
+                },
+                WorkerManager = new
+                {
+                    CatalogMode = "OmpDatabase",
+                    HostKey = deployment.HostKey,
+                    HostName = Environment.MachineName,
+                    RefreshSeconds = 15,
+                    WorkerProcessPath = string.Empty,
+                    StopTimeoutSeconds = 15,
+                    RestartDelaySeconds = 5,
+                    RestartWindowSeconds = 300,
+                    MaxRestartsPerWindow = 5,
+                    OmpDatabase = new
+                    {
+                        RuntimeKind = "windows-worker-plugin",
+                        RunningDesiredState = 1,
+                        UseHostArtifactCache = true
+                    },
+                    HostAgentRpc = new
+                    {
+                        Enabled = settings.EnableRpc,
+                        PipeName = settings.ResolveRpcPipeName(),
+                        TimeoutSeconds = settings.RpcRequestTimeoutSeconds
+                    },
+                    Workers = Array.Empty<object>()
+                },
+                Logging = new
+                {
+                    LogLevel = new Dictionary<string, string>
+                    {
+                        ["Default"] = "Information",
+                        ["Microsoft.Hosting.Lifetime"] = "Information"
+                    }
+                },
+                NLog = new
+                {
+                    autoReload = true,
+                    throwConfigExceptions = true,
+                    variables = new
+                    {
+                        appName = "OpenModulePlatform.WorkerManager.WindowsService",
+                        logDirectory = "${basedir}/logs"
+                    },
+                    targets = new Dictionary<string, object>
+                    {
+                        ["logfile"] = new
+                        {
+                            type = "File",
+                            fileName = "${var:logDirectory}/${var:appName}-${shortdate}.log",
+                            layout = "${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}"
+                        },
+                        ["console"] = new
+                        {
+                            type = "Console",
+                            layout = "${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}"
+                        }
+                    },
+                    rules = new object[]
+                    {
+                        new
+                        {
+                            logger = "Microsoft.Hosting.Lifetime",
+                            minLevel = "Info",
+                            writeTo = "console,logfile",
+                            final = true
+                        },
+                        new
+                        {
+                            logger = "Microsoft.*",
+                            maxLevel = "Info",
+                            final = true
+                        },
+                        new
+                        {
+                            logger = "*",
+                            minLevel = "Info",
+                            writeTo = "console,logfile"
+                        }
+                    }
+                }
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+
+        return new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 0,
+            ArtifactId = deployment.ArtifactId,
+            RelativePath = AppSettingsRelativePath,
+            FileContent = content
+        };
+    }
+
     private static IReadOnlyDictionary<string, string> CreateVariables(
         Guid hostId,
         string hostKey,
@@ -327,6 +433,10 @@ internal static class ArtifactConfigurationFileWriter
             file.RelativePath.Trim().Replace('\\', '/'),
             AppSettingsRelativePath,
             StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsWorkerManagerDeployment(ServiceAppDeploymentDescriptor deployment)
+        => string.Equals(deployment.AppInstanceKey, "omp_workermanager", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(deployment.TargetName, "omp-workermanager", StringComparison.OrdinalIgnoreCase);
 
     private static string ResolveDatabaseName(string connectionString)
     {
