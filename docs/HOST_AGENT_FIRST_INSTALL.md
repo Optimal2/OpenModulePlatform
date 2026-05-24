@@ -22,11 +22,6 @@ produce it:
 ```text
 OpenModulePlatformHostAgentFirst-<version>/
   OpenModulePlatform.Bootstrapper.exe
-  configs/
-    linus.json
-    alfons.json
-    vgr-production-1825.json
-    vgr-production-1826.json
   data/
     global/
       artifacts/
@@ -40,16 +35,8 @@ OpenModulePlatformHostAgentFirst-<version>/
         <other module definitions available for install/import>
       sql/
         bootstrap-local.sql
-    profiles/
-      linus/
-        sql/
-        artifacts/
-        files/
-      alfons/
-        sql/
-        artifacts/
-        files/
-      vgr-production-1825/
+    hosts/
+      <profile>/
         sql/
         artifacts/
         files/
@@ -69,12 +56,25 @@ OpenModulePlatformHostAgentFirst-<version>/
 ```
 
 The package has two data levels: `data/global` contains portable objects shared
-by every host in the package, while `data/hosts/<config-file-name-without-extension>`
-contains only bootstrap helper files that are unique to that host. The selected
-file in `configs` is the host profile; there is no separate
+by every host in the package, while `data/hosts/<profile>` contains only
+bootstrap helper files that are unique to that host. Private universal
+installer repositories should keep the canonical host profile outside generated
+package content:
+
+```text
+hosts/<profile>/bootstrap.json
+hosts/<profile>/package.psd1
+hosts/<profile>/sql/
+hosts/<profile>/host-configs/
+hosts/<profile>/config-overlays/
+```
+
+The selected `bootstrap.json` file is the host profile; there is no separate
 installation-instance layer in the package layout. Runtime differences that
 belong to modules or artifacts are represented as host configuration and config
 overlay objects rather than by duplicating global module or artifact packages.
+Generated package folders such as `data` and `sql` are output caches and should
+not be treated as the source of truth.
 
 The package library has no separate `initial` and `available` folders. All
 portable module definitions and artifact package objects live in
@@ -92,9 +92,11 @@ The package can be zipped and copied as a single file, or generated as an
 expanded folder by setting `Package.SkipZip = $true` or passing `-SkipZip`.
 The expanded package is self-contained except for environment-specific values in
 the bootstrap configuration files. The graphical installer reads
-`configs\*.json` and automatically selects the one profile that matches the
-local computer name. The root-level `bootstrap.local.sample.json` is kept only
-for command-line and older automation compatibility.
+`hosts\<profile>\bootstrap.json` beside the package, and still supports
+package-local `configs\*.json` for older layouts. It automatically selects the
+one profile that matches the local computer name. The root-level
+`bootstrap.local.sample.json` is kept only for command-line and older automation
+compatibility.
 
 ## Environment Configuration Model
 
@@ -169,20 +171,21 @@ takeover mode, and the new service removes the previous Windows service after it
 has acquired the host lease.
 
 OpenDocViewer is also packaged as a manifest-based OMP artifact package. The
-deployable `dist` output is stored as the package payload, while
-`odv.site.config.js` is registered as an artifact configuration file. Set
-`OpenDocViewer.SiteConfigPath` in the package config to include a site-specific
-file; when it is left empty the package includes a neutral config file that can
-be edited later through Portal.
+deployable `dist` output is stored as the package payload. Site-specific
+`odv.site.config.js` belongs in a host config overlay, not in the global
+artifact package. Put protected overlay packages below
+`hosts/<profile>/config-overlays` in a private installer repository or import
+them later through Portal.
 
 ## Installing
 
 1. Expand the package on the target server.
-2. Put one or more environment-specific bootstrap JSON files in `configs`.
-   Keeping names such as `linus.json`, `alfons.json`, `vgr-production.json`,
-   and `vgr-test.json` lets one package carry multiple installation profiles.
-   For a disposable local environment, editing `configs\bootstrap.local.sample.json`
-   in place is also acceptable.
+2. Put one or more environment-specific bootstrap JSON files in
+   `hosts/<profile>/bootstrap.json` beside the package. Keeping profile names
+   such as `linus`, `alfons`, `vgr-production-1825`, and `vgr-test` lets one
+   package carry multiple installation profiles. For older disposable local
+   environments, editing `configs\bootstrap.local.sample.json` in place is also
+   acceptable.
    Profiles can include a `profile` section:
 
    ```json
@@ -225,7 +228,8 @@ install-hostagent-first.cmd
 ```
 
 Both entry points open the graphical installer. The EXE requests administrator
-rights, loads `configs\*.json`, locks onto the profile matching the local
+rights, loads `hosts\<profile>\bootstrap.json` beside the package (or legacy
+`configs\*.json` files when present), locks onto the profile matching the local
 computer, and shows common SQL, path, HostAgent, and IIS settings as read-only
 values. Operational changes are made in the JSON file and then loaded with
 `Reload config`.
@@ -285,16 +289,17 @@ the package and installed database with the source repository manifest:
   missing .NET artifact packages. Use this before install/upgrade when a private
   developer package is intentionally minimal. It may update artifact targets in
   the running installer configuration so the current install/upgrade action uses
-  the freshly synced versions, but it does not rewrite the tracked
-  `configs/*.json` files. Persisting host config changes is an explicit package
-  refresh or manual config-editing step.
+  the freshly synced versions, but it does not rewrite the tracked host profile
+  files. Persisting host config changes is an explicit package refresh or manual
+  config-editing step.
 
 Private developer installer repositories can keep the committed package small:
-the root `OpenModulePlatform.Bootstrapper.exe` plus `configs/*.json`. Generated
-package folders such as `data`, `payload`, `sql`, and `tools` can be ignored in
-Git and repopulated locally by `Sync package objects` before the main install or
-upgrade action. If that refresh option is disabled or developer source roots are
-unavailable, the package must already contain the required generated files.
+the root `OpenModulePlatform.Bootstrapper.exe` plus host profiles below
+`hosts/<profile>`. Generated package folders such as `data`, `payload`, `sql`,
+and `tools` can be ignored in Git and repopulated locally by `Sync package
+objects` before the main install or upgrade action. If that refresh option is
+disabled or developer source roots are unavailable, the package must already
+contain the required generated files.
 
 When only installer code changed, update just the committed executable:
 
@@ -322,8 +327,8 @@ package from the command line, use the package-preserving wrapper instead:
 
 The wrapper copies the package-local bootstrapper runner to a temporary folder
 and lets the bootstrapper perform its normal refresh from outside the package
-directory. This preserves `configs\*.json`, host-specific data, and private
-package contents while still updating generated payloads and metadata. The GUI
+directory. This preserves host profiles, host-specific data, and private package
+contents while still updating generated payloads and metadata. The GUI
 button `Create updated installer package` uses the same detached-runner idea.
 
 If the package has been copied outside the source tree, use the `Developer` tab
@@ -364,10 +369,11 @@ The same shape is used by repository-level object generation. Run
 `scripts/omp/build-repository-objects.ps1` from the OpenModulePlatform
 repository with `-RepositoryRoot`, and use the package's `data/global` folder as
 `-OutputRoot` when the generated objects should be added to an installer
-package. Host-specific values live in the selected `configs\<host>.json` file
-and in generated host config/config overlay objects, not in the global module
-definition or artifact package. If the bootstrapper itself needs host-local
-helper files, place them below `data/hosts/<config-file-name-without-extension>`.
+package. Host-specific values live in the selected
+`hosts\<profile>\bootstrap.json` file and in generated host config/config
+overlay objects, not in the global module definition or artifact package. If
+the bootstrapper itself needs host-local helper files, place them below
+`data/hosts/<profile>`.
 
 The GUI action `Sync package objects` is the lightweight alternative to
 `Create updated installer package`. It uses the same source manifest comparison
@@ -397,11 +403,11 @@ For non-interactive console installation, run:
 tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --config bootstrap.local.sample.json
 ```
 
-When using a profile below `configs`, the package root is resolved to the parent
-folder automatically:
+When using a profile below `hosts`, pass the profile JSON and the package root
+explicitly for console automation:
 
 ```cmd
-tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --config configs\linus.json
+OpenModulePlatform.Bootstrapper.exe --config ..\..\hosts\linus\bootstrap.json --payload-root .
 ```
 
 Use `--yes` only for controlled automated runs:

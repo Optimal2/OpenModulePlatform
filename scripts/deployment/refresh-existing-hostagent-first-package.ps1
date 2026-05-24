@@ -8,7 +8,8 @@ The bootstrapper can rebuild and replace an installer package, but the process
 that performs the replacement must not run from the package being replaced.
 This helper copies the package-local bootstrapper runner to a temporary folder
 and starts the refresh from there. That keeps the package directory unlocked and
-lets the bootstrapper preserve package-local configs and host data correctly.
+lets the bootstrapper preserve package-local legacy configs, sibling host
+profiles, and host data correctly.
 #>
 [CmdletBinding()]
 param(
@@ -46,28 +47,17 @@ function Resolve-ConfigPath {
         return $resolved
     }
 
-    $configsRoot = Join-Path $Root 'configs'
-    if (-not (Test-Path -LiteralPath $configsRoot -PathType Container)) {
-        $sample = Join-Path $Root 'bootstrap.local.sample.json'
-        if (Test-Path -LiteralPath $sample -PathType Leaf) {
-            return $sample
-        }
-
-        throw "Package does not contain a configs folder or bootstrap.local.sample.json: $Root"
-    }
-
     if (-not [string]::IsNullOrWhiteSpace($Name)) {
-        $fileName = if ($Name.EndsWith('.json', [System.StringComparison]::OrdinalIgnoreCase)) { $Name } else { "$Name.json" }
-        $named = Join-Path $configsRoot $fileName
-        if (-not (Test-Path -LiteralPath $named -PathType Leaf)) {
-            throw "ConfigName does not resolve to an existing config: $named"
+        $named = Resolve-NamedConfigPath -Root $Root -Name $Name
+        if (-not [string]::IsNullOrWhiteSpace($named)) {
+            return $named
         }
 
-        return $named
+        throw "ConfigName does not resolve to an existing config: $Name"
     }
 
     $machineName = $env:COMPUTERNAME
-    foreach ($candidate in Get-ChildItem -LiteralPath $configsRoot -Filter '*.json' -File) {
+    foreach ($candidate in Get-CandidateConfigFiles -Root $Root) {
         try {
             $json = Get-Content -LiteralPath $candidate.FullName -Raw | ConvertFrom-Json
             $machineNames = @($json.profile.machineNames)
@@ -81,6 +71,64 @@ function Resolve-ConfigPath {
     }
 
     throw "No config matched computer name '$machineName'. Pass -ConfigName or -ConfigPath."
+}
+
+function Get-CandidateConfigFiles {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $candidateRoots = @(
+        (Join-Path $Root 'configs'),
+        (Join-Path $Root 'hosts'),
+        (Join-Path (Split-Path -Parent $Root) 'hosts'),
+        (Join-Path (Split-Path -Parent (Split-Path -Parent $Root)) 'hosts')
+    )
+
+    foreach ($candidateRoot in $candidateRoots) {
+        if (-not (Test-Path -LiteralPath $candidateRoot -PathType Container)) {
+            continue
+        }
+
+        foreach ($file in Get-ChildItem -LiteralPath $candidateRoot -Filter '*.json' -File -ErrorAction SilentlyContinue) {
+            $file
+        }
+
+        foreach ($directory in Get-ChildItem -LiteralPath $candidateRoot -Directory -ErrorAction SilentlyContinue) {
+            $bootstrap = Join-Path $directory.FullName 'bootstrap.json'
+            if (Test-Path -LiteralPath $bootstrap -PathType Leaf) {
+                Get-Item -LiteralPath $bootstrap
+            }
+        }
+    }
+
+    $sample = Join-Path $Root 'bootstrap.local.sample.json'
+    if (Test-Path -LiteralPath $sample -PathType Leaf) {
+        Get-Item -LiteralPath $sample
+    }
+}
+
+function Resolve-NamedConfigPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $normalizedName = if ($Name.EndsWith('.json', [System.StringComparison]::OrdinalIgnoreCase)) {
+        [System.IO.Path]::GetFileNameWithoutExtension($Name)
+    }
+    else {
+        $Name
+    }
+
+    foreach ($candidate in Get-CandidateConfigFiles -Root $Root) {
+        $fileName = [System.IO.Path]::GetFileNameWithoutExtension($candidate.Name)
+        $profileName = Split-Path -Leaf (Split-Path -Parent $candidate.FullName)
+        if ($normalizedName.Equals($fileName, [System.StringComparison]::OrdinalIgnoreCase) `
+            -or $normalizedName.Equals($profileName, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $candidate.FullName
+        }
+    }
+
+    return ''
 }
 
 function Copy-Runner {

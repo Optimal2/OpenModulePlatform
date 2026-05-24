@@ -320,11 +320,59 @@ internal static partial class Program
             return Path.GetFullPath(cli.PayloadRoot);
         }
 
+        var appBaseDirectory = Path.GetFullPath(AppContext.BaseDirectory);
+        if (LooksLikeInstallerPackageRoot(appBaseDirectory))
+        {
+            return appBaseDirectory;
+        }
+
         var configDirectory = Path.GetDirectoryName(configPath) ?? Environment.CurrentDirectory;
-        return Path.GetFileName(Path.TrimEndingDirectorySeparator(configDirectory))
-            .Equals("configs", StringComparison.OrdinalIgnoreCase)
-            ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(configDirectory)) ?? configDirectory
-            : configDirectory;
+        var trimmedConfigDirectory = Path.TrimEndingDirectorySeparator(configDirectory);
+        if (Path.GetFileName(trimmedConfigDirectory).Equals("configs", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.GetDirectoryName(trimmedConfigDirectory) ?? configDirectory;
+        }
+
+        return TryResolvePackageRootFromHostProfileDirectory(configDirectory)
+            ?? configDirectory;
+    }
+
+    private static bool LooksLikeInstallerPackageRoot(string path)
+    {
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var directoryName = Path.GetFileName(fullPath);
+        return directoryName.StartsWith("OpenModulePlatformHostAgentFirst-", StringComparison.OrdinalIgnoreCase)
+            || File.Exists(Path.Join(fullPath, "hostagent-first-package.json"))
+            || Directory.Exists(Path.Join(fullPath, "data", "global"));
+    }
+
+    private static string? TryResolvePackageRootFromHostProfileDirectory(string configDirectory)
+    {
+        var hostDirectory = new DirectoryInfo(Path.GetFullPath(configDirectory));
+        var hostsDirectory = hostDirectory.Parent;
+        if (hostsDirectory is null
+            || !hostsDirectory.Name.Equals("hosts", StringComparison.OrdinalIgnoreCase)
+            || hostsDirectory.Parent is null)
+        {
+            return null;
+        }
+
+        var packageLocalCandidate = hostsDirectory.Parent.FullName;
+        if (LooksLikeInstallerPackageRoot(packageLocalCandidate))
+        {
+            return packageLocalCandidate;
+        }
+
+        var siblingPackagesRoot = Path.Join(hostsDirectory.Parent.FullName, "package");
+        if (!Directory.Exists(siblingPackagesRoot))
+        {
+            return null;
+        }
+
+        return Directory
+            .EnumerateDirectories(siblingPackagesRoot, "OpenModulePlatformHostAgentFirst-*", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(static path => path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(LooksLikeInstallerPackageRoot);
     }
 
     private static void WritePlan(BootstrapConfig config, string configPath, string payloadRoot)
