@@ -362,6 +362,7 @@ public sealed class WebAppDeploymentService
         }
 
         RunAppCmd("set", "app", $"/app.name:{siteName}/", $"/applicationPool:{appPoolName}");
+        EnsureIisBindingCertificate(settings);
         EnsureIisAuthentication(siteName, anonymousEnabled: true, windowsEnabled: false);
     }
 
@@ -611,9 +612,46 @@ public sealed class WebAppDeploymentService
     private static string CreateIisBinding(HostAgentSettings settings)
     {
         var protocol = settings.IisBindingProtocol.Trim();
-        var hostHeader = settings.IisBindingHostHeader?.Trim() ?? string.Empty;
-        return $"{protocol}/*:{settings.IisBindingPort}:{hostHeader}";
+        return $"{protocol}/{CreateIisBindingInformation(settings)}";
     }
+
+    private static string CreateIisBindingInformation(HostAgentSettings settings)
+    {
+        var hostHeader = settings.IisBindingHostHeader?.Trim() ?? string.Empty;
+        return $"*:{settings.IisBindingPort}:{hostHeader}";
+    }
+
+    private static void EnsureIisBindingCertificate(HostAgentSettings settings)
+    {
+        if (!string.Equals(settings.IisBindingProtocol.Trim(), "https", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(settings.IisBindingCertificateThumbprint))
+        {
+            return;
+        }
+
+        var siteName = settings.IisSiteName.Trim();
+        var bindingInformation = CreateIisBindingInformation(settings);
+        var bindingSelector = $"/bindings.[protocol='https',bindingInformation='{bindingInformation}']";
+        var thumbprint = NormalizeCertificateThumbprint(settings.IisBindingCertificateThumbprint);
+        var storeName = string.IsNullOrWhiteSpace(settings.IisBindingCertificateStoreName)
+            ? "My"
+            : settings.IisBindingCertificateStoreName.Trim();
+        var sslFlags = string.IsNullOrWhiteSpace(settings.IisBindingHostHeader) ? "0" : "1";
+
+        RunAppCmd(
+            "set",
+            "site",
+            $"/site.name:{siteName}",
+            $"{bindingSelector}.certificateHash:{thumbprint}",
+            $"{bindingSelector}.certificateStoreName:{storeName}",
+            $"{bindingSelector}.sslFlags:{sslFlags}");
+    }
+
+    private static string NormalizeCertificateThumbprint(string value)
+        => new(value
+            .Where(static ch => !char.IsWhiteSpace(ch))
+            .Select(static ch => char.ToUpperInvariant(ch))
+            .ToArray());
 
     private static string CreateAppOfflineFile(
         string targetPath,

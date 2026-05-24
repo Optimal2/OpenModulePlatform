@@ -40,6 +40,12 @@ public sealed class HostAgentSettings
 
     public string IisBindingHostHeader { get; set; } = string.Empty;
 
+    public string IisBindingCertificateThumbprint { get; set; } = string.Empty;
+
+    public string IisBindingCertificateSerialNumber { get; set; } = string.Empty;
+
+    public string IisBindingCertificateStoreName { get; set; } = "My";
+
     public string WebAppsRoot { get; set; } = string.Empty;
 
     public string PortalPhysicalPath { get; set; } = string.Empty;
