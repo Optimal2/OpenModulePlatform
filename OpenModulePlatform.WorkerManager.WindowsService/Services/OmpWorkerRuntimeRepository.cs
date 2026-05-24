@@ -9,6 +9,8 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 /// </summary>
 public sealed class OmpWorkerRuntimeRepository
 {
+    private const string WorkerProcessHostExecutableName = "OpenModulePlatform.WorkerProcessHost.exe";
+
     private readonly SqlConnectionFactory _db;
 
     public OmpWorkerRuntimeRepository(SqlConnectionFactory db)
@@ -30,6 +32,82 @@ WHERE HostKey = @hostKey;";
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@hostKey", hostKey);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<string?> ResolveWorkerProcessHostPathAsync(string hostKey, CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0) CAST(NULL AS nvarchar(500)) AS LocalPath;
+    RETURN;
+END;
+
+WITH HostRoles AS
+(
+    SELECT HostTemplateId
+    FROM omp.HostDeploymentAssignments
+    WHERE HostId = @hostId
+      AND IsActive = 1
+)
+SELECT TOP (1)
+    has.LocalPath
+FROM omp.AppInstances ai
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+INNER JOIN omp.HostArtifactStates has
+    ON has.HostId = @hostId
+   AND has.ArtifactId = ar.ArtifactId
+   AND has.ProvisioningState = 2
+WHERE
+  (
+      ai.HostId = @hostId
+      OR (ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL)
+      OR
+      (
+          ai.HostId IS NULL
+          AND ai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS (SELECT 1 FROM HostRoles hr WHERE hr.HostTemplateId = ai.TargetHostTemplateId)
+      )
+  )
+  AND a.AppKey = N'omp_workerprocesshost'
+  AND a.IsEnabled = 1
+  AND ai.IsEnabled = 1
+  AND ai.IsAllowed = 1
+  AND ai.DesiredState = 1
+  AND ar.IsEnabled = 1
+  AND ar.PackageType = N'worker-host'
+  AND has.LocalPath IS NOT NULL
+  AND LTRIM(RTRIM(has.LocalPath)) <> N''
+ORDER BY
+    CASE
+        WHEN ai.HostId = @hostId THEN 0
+        WHEN ai.TargetHostTemplateId IS NOT NULL THEN 1
+        ELSE 2
+    END,
+    ai.SortOrder,
+    ai.AppInstanceKey;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+
+        var localPath = await cmd.ExecuteScalarAsync(ct) as string;
+        if (string.IsNullOrWhiteSpace(localPath))
+        {
+            return null;
+        }
+
+        return Path.Combine(localPath.Trim(), WorkerProcessHostExecutableName);
     }
 
     public async Task PublishObservationAsync(
