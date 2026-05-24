@@ -359,6 +359,18 @@ internal static partial class Program
         string generatedPackageRoot,
         string currentConfigPath)
     {
+        PreserveCurrentPackageDirectory(
+            currentPackageRoot,
+            generatedPackageRoot,
+            "payload");
+        PreserveCurrentPackageDirectory(
+            currentPackageRoot,
+            generatedPackageRoot,
+            "sql");
+        PreserveCurrentPackageDirectory(
+            currentPackageRoot,
+            generatedPackageRoot,
+            Path.Join("data", "global", "artifacts"));
         MergeCurrentGlobalConfigObjectLibrary(
             currentPackageRoot,
             generatedPackageRoot,
@@ -382,6 +394,23 @@ internal static partial class Program
                 generatedSampleHostRoot,
                 Path.Join(generatedHostsRoot, activeConfigKey));
         }
+    }
+
+    private static void PreserveCurrentPackageDirectory(
+        string currentPackageRoot,
+        string generatedPackageRoot,
+        string relativeDirectory)
+    {
+        var currentRoot = Path.Join(currentPackageRoot, relativeDirectory);
+        if (!Directory.Exists(currentRoot))
+        {
+            return;
+        }
+
+        CopyDirectoryRecursive(
+            currentRoot,
+            Path.Join(generatedPackageRoot, relativeDirectory),
+            overwriteExistingFiles: false);
     }
 
     private static void MergeCurrentGlobalConfigObjectLibrary(
@@ -632,7 +661,10 @@ internal static partial class Program
         }
     }
 
-    private static void CopyDirectoryRecursive(string source, string destination)
+    private static void CopyDirectoryRecursive(
+        string source,
+        string destination,
+        bool overwriteExistingFiles = true)
     {
         Directory.CreateDirectory(destination);
         foreach (var relativeDirectory in Directory
@@ -648,7 +680,12 @@ internal static partial class Program
         {
             var target = Path.Join(destination, relativeFile);
             Directory.CreateDirectory(Path.GetDirectoryName(target) ?? destination);
-            File.Copy(Path.Join(source, relativeFile), target, overwrite: true);
+            if (!overwriteExistingFiles && File.Exists(target))
+            {
+                continue;
+            }
+
+            File.Copy(Path.Join(source, relativeFile), target, overwrite: overwriteExistingFiles);
         }
     }
 

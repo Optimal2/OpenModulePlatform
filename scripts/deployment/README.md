@@ -3,6 +3,9 @@
 The supported deployment flow is the HostAgent-first installer:
 
 - `package-hostagent-first.ps1` builds the installer package.
+- `refresh-existing-hostagent-first-package.ps1` refreshes an existing package
+  through a temporary runner so package-local `configs` and host data are not
+  deleted by a fresh one-profile package build.
 - `package-hostagent-first-public.cmd` builds a neutral public sample package.
 - `new-omp-artifact-package.ps1` wraps a deployable payload and optional
   runtime configuration files as a standard OMP artifact package object.
@@ -39,6 +42,11 @@ configuration belongs in config overlays.
 Older `*-omp-suite*` scripts are retained only as migration references for
 pre-HostAgent-first packages. Do not use them for new local, test, production,
 or customer installs.
+
+Do not point `package-hostagent-first.ps1 -OutputRoot` at an existing universal
+package that contains multiple host configs. Build into a separate output folder
+for a new package, or use `refresh-existing-hostagent-first-package.ps1` when
+the intention is to update a package in place.
 
 See `docs/HOST_AGENT_FIRST_INSTALL.md` and
 `docs/PORTABLE_DEPLOYMENT_OBJECTS.md` for the full model.
