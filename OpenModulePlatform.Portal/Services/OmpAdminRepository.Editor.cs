@@ -2909,11 +2909,14 @@ ORDER BY ar.ArtifactId;";
     {
         const string sql = @"
 DECLARE @AppId int;
+DECLARE @PackageType nvarchar(50);
 DECLARE @TemplateAppRowsUpdated int = 0;
 DECLARE @AppInstanceRowsUpdated int = 0;
 DECLARE @WorkerInstanceRowsUpdated int = 0;
+DECLARE @HostAgentDesiredRowsUpdated int = 0;
 
-SELECT @AppId = AppId
+SELECT @AppId = AppId,
+       @PackageType = PackageType
 FROM omp.Artifacts
 WHERE ArtifactId = @ArtifactId
   AND IsEnabled = 1;
@@ -2922,7 +2925,8 @@ IF @AppId IS NULL
 BEGIN
     SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
            @AppInstanceRowsUpdated AS AppInstanceRowsUpdated,
-           @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated;
+           @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated,
+           @HostAgentDesiredRowsUpdated AS HostAgentDesiredRowsUpdated;
     RETURN;
 END;
 
@@ -2956,9 +2960,57 @@ WHERE ai.AppId = @AppId
 
 SET @WorkerInstanceRowsUpdated = @@ROWCOUNT;
 
+IF @PackageType = N'host-agent'
+BEGIN
+    DECLARE @HostAgentChanges table(ActionName nvarchar(10) NOT NULL);
+
+    MERGE omp.HostAgentDesiredStates AS target
+    USING
+    (
+        SELECT h.HostId,
+               @ArtifactId AS ArtifactId
+        FROM omp.Hosts h
+        WHERE h.IsEnabled = 1
+          AND
+          (
+              EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostAgentDesiredStates existing
+                  WHERE existing.HostId = h.HostId
+              )
+              OR EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostAgentRuntimeStates runtimeState
+                  WHERE runtimeState.HostId = h.HostId
+                    AND runtimeState.IsActive = 1
+              )
+          )
+    ) AS source
+    ON target.HostId = source.HostId
+    WHEN MATCHED AND
+    (
+           target.ArtifactId <> source.ArtifactId
+        OR target.IsEnabled = 0
+    )
+        THEN UPDATE SET
+            ArtifactId = source.ArtifactId,
+            IsEnabled = 1,
+            UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(HostId, ArtifactId, ServiceNamePrefix, InstallRoot, IsEnabled)
+        VALUES(source.HostId, source.ArtifactId, NULL, NULL, 1)
+    OUTPUT $action INTO @HostAgentChanges;
+
+    SELECT @HostAgentDesiredRowsUpdated = COUNT(1)
+    FROM @HostAgentChanges;
+END;
+
 SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
        @AppInstanceRowsUpdated AS AppInstanceRowsUpdated,
-       @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated;";
+       @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated,
+       @HostAgentDesiredRowsUpdated AS HostAgentDesiredRowsUpdated;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -2975,7 +3027,8 @@ SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
         {
             TemplateAppRowsUpdated = rdr.GetInt32(0),
             AppInstanceRowsUpdated = rdr.GetInt32(1),
-            WorkerInstanceRowsUpdated = rdr.GetInt32(2)
+            WorkerInstanceRowsUpdated = rdr.GetInt32(2),
+            HostAgentDesiredRowsUpdated = rdr.GetInt32(3)
         };
     }
 
