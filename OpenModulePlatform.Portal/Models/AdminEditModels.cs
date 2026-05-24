@@ -446,7 +446,13 @@ public sealed class ArtifactApplicationResult
 
     public int WorkerInstanceRowsUpdated { get; set; }
 
-    public int TotalRowsUpdated => TemplateAppRowsUpdated + AppInstanceRowsUpdated + WorkerInstanceRowsUpdated;
+    public int HostAgentDesiredRowsUpdated { get; set; }
+
+    public int TotalRowsUpdated =>
+        TemplateAppRowsUpdated
+        + AppInstanceRowsUpdated
+        + WorkerInstanceRowsUpdated
+        + HostAgentDesiredRowsUpdated;
 }
 
 /// <summary>
