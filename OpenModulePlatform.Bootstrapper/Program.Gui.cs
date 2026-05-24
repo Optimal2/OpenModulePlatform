@@ -1662,6 +1662,52 @@ internal static partial class Program
             }
 
             lines.Add(string.Empty);
+            lines.Add("SQL scripts:");
+            foreach (var script in _config.Sql.Scripts.Where(static script => script.Enabled))
+            {
+                if (string.IsNullOrWhiteSpace(script.Path))
+                {
+                    lines.Add("  WARN    SQL script entry has no path.");
+                    warnings++;
+                    continue;
+                }
+
+                Report($"Syncing SQL script {script.Path}...");
+                var scriptFileName = Path.GetFileName(script.Path);
+                var targetPath = ResolvePackagePath(script.Path);
+                if (File.Exists(targetPath))
+                {
+                    lines.Add($"  OK      {script.Path}: package file is present.");
+                    unchanged++;
+                    continue;
+                }
+
+                var sourcePath = FindSourceSqlScript(script, sourceRoots);
+                if (sourcePath is null)
+                {
+                    lines.Add($"  WARN    {script.Path}: package file is missing and no source SQL file was found.");
+                    warnings++;
+                    continue;
+                }
+
+                if (scriptFileName.Equals("bootstrap-local.sql", StringComparison.OrdinalIgnoreCase)
+                    && Path.GetDirectoryName(sourcePath) is { } sourceSqlRoot
+                    && Path.GetDirectoryName(targetPath) is { } targetSqlRoot)
+                {
+                    CopyDirectory(sourceSqlRoot, targetSqlRoot);
+                    CopyCurrentOpenModulePlatformSqlTree(sourceRoots, targetSqlRoot);
+                    lines.Add($"  UPDATED {script.Path}: restored missing SQL bootstrap tree.");
+                }
+                else
+                {
+                    CopyFileIfDifferent(sourcePath, targetPath);
+                    lines.Add($"  UPDATED {script.Path}: restored missing SQL script.");
+                }
+
+                updated++;
+            }
+
+            lines.Add(string.Empty);
             lines.Add("Artifact packages:");
             foreach (var component in sourceComponents)
             {
@@ -1794,9 +1840,138 @@ internal static partial class Program
                 updated++;
             }
 
+            if (TryUpdateHostAgentPackagePathFromSyncedArtifacts(sourceComponents, lines))
+            {
+                updated++;
+                configUpdated = true;
+            }
+
             lines.Add(string.Empty);
             lines.Add($"Summary: {updated} updated, {unchanged} already current, {warnings} warning(s).");
             return new DeveloperPackageObjectSyncResult(warnings > 0, configUpdated, lines);
+        }
+
+        private bool TryUpdateHostAgentPackagePathFromSyncedArtifacts(
+            IReadOnlyList<ManifestComponent> sourceComponents,
+            List<string> lines)
+        {
+            var component = sourceComponents.FirstOrDefault(static component =>
+                component.PackageType.Equals("host-agent", StringComparison.OrdinalIgnoreCase));
+            if (component is null)
+            {
+                return false;
+            }
+
+            var expectedSource = $"data/global/artifacts/{GetArtifactPackageFileName(component)}";
+            var expectedPath = ResolvePackagePath(expectedSource);
+            if (!File.Exists(expectedPath))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_config.HostAgent.PackagePath)
+                && File.Exists(ResolvePackagePath(_config.HostAgent.PackagePath)))
+            {
+                return false;
+            }
+
+            _config.HostAgent.PackagePath = expectedSource;
+            lines.Add($"  UPDATED HostAgent package path: using synced package {expectedSource} for this run.");
+            return true;
+        }
+
+        private string? FindSourceSqlScript(SqlScriptOptions script, IReadOnlyList<string> sourceRoots)
+        {
+            var relativePath = script.Path.Replace('/', Path.DirectorySeparatorChar);
+            var fileName = Path.GetFileName(relativePath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return null;
+            }
+
+            var candidates = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_config.DeveloperSource.PackageConfigPath))
+            {
+                var packageConfigDirectory = Path.GetDirectoryName(Path.GetFullPath(_config.DeveloperSource.PackageConfigPath));
+                if (!string.IsNullOrWhiteSpace(packageConfigDirectory))
+                {
+                    candidates.Add(Path.Join(packageConfigDirectory, relativePath));
+                    candidates.Add(Path.Join(packageConfigDirectory, "sql", fileName));
+                    if (Directory.Exists(packageConfigDirectory))
+                    {
+                        candidates.AddRange(Directory
+                            .EnumerateFiles(packageConfigDirectory, fileName, SearchOption.AllDirectories)
+                            .Order(StringComparer.OrdinalIgnoreCase));
+                    }
+                }
+            }
+
+            foreach (var sourceRoot in sourceRoots)
+            {
+                candidates.Add(Path.Join(sourceRoot, relativePath));
+                var artifactsRoot = Path.Join(sourceRoot, "artifacts");
+                if (Directory.Exists(artifactsRoot))
+                {
+                    candidates.AddRange(Directory
+                        .EnumerateFiles(artifactsRoot, fileName, SearchOption.AllDirectories)
+                        .OrderByDescending(static path => path.Contains("hostagent-first-public", StringComparison.OrdinalIgnoreCase))
+                        .ThenByDescending(static path => path.Contains("hostagent-first-generic", StringComparison.OrdinalIgnoreCase))
+                        .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase));
+                }
+            }
+
+            return candidates
+                .Select(Path.GetFullPath)
+                .FirstOrDefault(File.Exists);
+        }
+
+        private static void CopyCurrentOpenModulePlatformSqlTree(
+            IReadOnlyList<string> sourceRoots,
+            string targetSqlRoot)
+        {
+            var openModulePlatformRoot = sourceRoots.FirstOrDefault(IsDeveloperSourceRoot);
+            if (string.IsNullOrWhiteSpace(openModulePlatformRoot))
+            {
+                return;
+            }
+
+            CopySqlFiles(Path.Join(openModulePlatformRoot, "sql"), Path.Join(targetSqlRoot, "OpenModulePlatform"));
+            CopySqlDirectory(openModulePlatformRoot, "OpenModulePlatform.Auth", Path.Join(targetSqlRoot, "OpenModulePlatform.Auth"));
+            CopySqlDirectory(openModulePlatformRoot, "OpenModulePlatform.Portal", Path.Join(targetSqlRoot, "OpenModulePlatform.Portal"));
+            CopySqlDirectory(openModulePlatformRoot, "OpenModulePlatform.Web.ContentWebAppModule", Path.Join(targetSqlRoot, "OpenModulePlatform.Web.ContentWebAppModule"));
+            CopySqlDirectory(openModulePlatformRoot, "OpenModulePlatform.Web.iFrameWebAppModule", Path.Join(targetSqlRoot, "OpenModulePlatform.Web.iFrameWebAppModule"));
+            CopySqlDirectory(openModulePlatformRoot, Path.Join("examples", "WebAppModule"), Path.Join(targetSqlRoot, "examples", "WebAppModule"));
+            CopySqlDirectory(openModulePlatformRoot, Path.Join("examples", "WebAppBlazorModule"), Path.Join(targetSqlRoot, "examples", "WebAppBlazorModule"));
+            CopySqlDirectory(openModulePlatformRoot, Path.Join("examples", "ServiceAppModule"), Path.Join(targetSqlRoot, "examples", "ServiceAppModule"));
+            CopySqlDirectory(openModulePlatformRoot, Path.Join("examples", "WorkerAppModule"), Path.Join(targetSqlRoot, "examples", "WorkerAppModule"));
+        }
+
+        private static void CopySqlDirectory(string sourceRoot, string projectRelativePath, string targetDirectory)
+        {
+            var sourceDirectory = Path.Join(sourceRoot, projectRelativePath, "sql");
+            if (!Directory.Exists(sourceDirectory))
+            {
+                sourceDirectory = Path.Join(sourceRoot, projectRelativePath, "Sql");
+            }
+
+            CopySqlFiles(sourceDirectory, targetDirectory);
+        }
+
+        private static void CopySqlFiles(string sourceDirectory, string targetDirectory)
+        {
+            if (!Directory.Exists(sourceDirectory))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(targetDirectory);
+            foreach (var sourceFile in Directory.EnumerateFiles(sourceDirectory, "*.sql", SearchOption.TopDirectoryOnly))
+            {
+                File.Copy(
+                    sourceFile,
+                    Path.Join(targetDirectory, Path.GetFileName(sourceFile)),
+                    overwrite: true);
+            }
         }
 
         private IEnumerable<string> EnumerateArtifactPackageSearchRoots(IReadOnlyList<string> sourceRoots)
