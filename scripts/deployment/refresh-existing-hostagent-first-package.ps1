@@ -149,13 +149,25 @@ try {
     Write-Host "Config:       $configPathValue"
     Write-Host "Runner root:  $runnerRoot"
 
-    Push-Location -LiteralPath $runnerRoot
-    try {
-        & $fileName @arguments
-        $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+    if ($fileName.Equals('dotnet', [System.StringComparison]::OrdinalIgnoreCase)) {
+        Push-Location -LiteralPath $runnerRoot
+        try {
+            & $fileName @arguments
+            $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+        }
+        finally {
+            Pop-Location
+        }
     }
-    finally {
-        Pop-Location
+    else {
+        $process = Start-Process `
+            -FilePath $fileName `
+            -ArgumentList $arguments `
+            -WorkingDirectory $runnerRoot `
+            -WindowStyle Hidden `
+            -Wait `
+            -PassThru
+        $exitCode = $process.ExitCode
     }
 
     if ($exitCode -ne 0) {
