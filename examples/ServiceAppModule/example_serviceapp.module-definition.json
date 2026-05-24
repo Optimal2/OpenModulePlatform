@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_serviceapp",
-  "definitionVersion": "0.3.7",
+  "definitionVersion": "0.3.8",
   "module": {
     "displayName": "Example ServiceApp",
     "moduleType": "HostAppModule",
@@ -35,7 +35,7 @@
       "targetName": "example-serviceapp-web",
       "relativePathTemplate": "example-serviceapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.4"
+      "maxVersion": "0.3.5"
     },
     {
       "appKey": "example_serviceapp_service",

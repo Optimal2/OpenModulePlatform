@@ -58,6 +58,7 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
 var app = builder.Build();
 
 app.UseRequestLocalization(app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>().Value);
+app.UseOmpSecurityHeaders();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
