@@ -409,6 +409,8 @@ public sealed class WebAppDeploymentService
             location,
             "/section:system.webServer/security/authentication/anonymousAuthentication",
             $"/enabled:{FormatIisBoolean(anonymousEnabled)}",
+            "/userName:",
+            "/password:",
             "/commit:apphost");
 
         RunAppCmd(
