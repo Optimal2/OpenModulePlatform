@@ -19,7 +19,7 @@ Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-    $ConfigPath = Join-Path $PSScriptRoot 'omp-suite.local.psd1'
+    $ConfigPath = Join-Path $PSScriptRoot 'hostagent-first.local.psd1'
 }
 
 function Write-Step {
@@ -808,7 +808,7 @@ function Add-VersionVariableOverride {
 }
 
 $config = Import-DeploymentConfig -Path $ConfigPath
-$configPathForResolution = if (Test-Path -LiteralPath $ConfigPath -PathType Leaf) { [System.IO.Path]::GetFullPath($ConfigPath) } else { Join-Path $PSScriptRoot 'omp-suite.local.psd1' }
+$configPathForResolution = if (Test-Path -LiteralPath $ConfigPath -PathType Leaf) { [System.IO.Path]::GetFullPath($ConfigPath) } else { Join-Path $PSScriptRoot 'hostagent-first.local.psd1' }
 $configDirectory = Split-Path -Parent $configPathForResolution
 $scriptRootParent = Split-Path -Parent $PSScriptRoot
 $defaultRepositoryRoot = Split-Path -Parent $scriptRootParent

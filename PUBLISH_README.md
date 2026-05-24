@@ -138,18 +138,9 @@ Published service folders need runtime `appsettings.json` files with real local
 paths and a real OMP database connection string. Repository defaults intentionally
 keep those values empty.
 
-For a local development machine you can generate standard runtime configuration:
-
-```powershell
-.\scripts\write-local-runtime-config.ps1 `
-  -RuntimeRoot "E:\OMP" `
-  -SqlServer "localhost" `
-  -Database "OpenModulePlatform" `
-  -HostKey "sample-host"
-```
-
-The script preserves existing config files by default. Pass `-Overwrite` only when
-you intentionally want to replace the runtime files.
+For a local development machine, prefer the HostAgent-first installer in
+`installer/`. HostAgent writes built-in runtime configuration files and applies
+artifact configuration-file rows or config overlays during deployment.
 
 The standard service names are:
 

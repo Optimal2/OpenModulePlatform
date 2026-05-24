@@ -1,8 +1,7 @@
 -- File: sql/2-initialize-openmoduleplatform.sql
--- IMPORTANT: run scripts/manage-local-install.ps1 with
--- -BootstrapPortalAdminPrincipal for automated local installs, or replace the
--- bootstrap literals below manually with a single-quote-escaped Windows principal
--- and the matching principal type.
+-- IMPORTANT: use the HostAgent-first installer for automated local installs, or
+-- replace the bootstrap literals below manually with a single-quote-escaped
+-- Windows principal and the matching principal type.
 /*
 OpenModulePlatform core initialization script.
 
@@ -16,8 +15,8 @@ Prerequisites:
 - Set @BootstrapPortalAdminPrincipalType to N'ADUser' for a Windows user or
   N'ADGroup' for a Windows group. Legacy N'User' values are normalized to
   N'ADUser'. The source default is N'ADUser' because local bootstrap installs
-  normally grant the current Windows user. Prefer scripts/manage-local-install.ps1
-  for local user installs because it escapes the value before running sqlcmd.
+  normally grant the current Windows user. Prefer the HostAgent-first installer
+  for local user installs because it escapes the value before running SQL.
 
 Portal, content, iframe, and example modules are initialized separately from
 their own module sql folders.
@@ -68,8 +67,8 @@ DECLARE @InsertedHostTemplateIds TABLE (HostTemplateId int NOT NULL);
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
 BEGIN
-    -- Set @BootstrapPortalAdminPrincipal manually or use
-    -- scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User".
+    -- Set @BootstrapPortalAdminPrincipal manually or use the HostAgent-first
+    -- installer profile bootstrapPortalAdminPrincipal setting.
     -- This script inserts one bootstrap principal per execution.
     THROW 51000, 'Bootstrap portal admin principal was not replaced.', 1;
 END

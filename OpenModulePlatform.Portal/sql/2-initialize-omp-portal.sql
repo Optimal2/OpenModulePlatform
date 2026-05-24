@@ -1,7 +1,7 @@
 -- File: OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
--- IMPORTANT: run scripts/manage-local-install.ps1 with
--- -BootstrapPortalAdminPrincipal for automated local installs, or replace the
--- bootstrap literal below manually with a single-quote-escaped Windows principal.
+-- IMPORTANT: use the HostAgent-first installer for automated local installs, or
+-- replace the bootstrap literal below manually with a single-quote-escaped
+-- Windows principal.
 /*
 Seeds default values and OMP registration rows for the OMP Portal.
 
@@ -9,9 +9,8 @@ Prerequisites:
 - Run ../../sql/1-setup-openmoduleplatform.sql
 - Run ../../sql/2-initialize-openmoduleplatform.sql
 - Run 1-setup-omp-portal.sql
-- Set @BootstrapPortalAdminPrincipal to the Windows user or group that should
-  receive the initial PortalAdmins role. Prefer scripts/manage-local-install.ps1
-  for local installs because it escapes the value before running sqlcmd.
+  receive the initial PortalAdmins role. Prefer the HostAgent-first installer
+  for local installs because it escapes the value before running SQL.
 */
 USE [OpenModulePlatform];
 GO
@@ -40,7 +39,7 @@ DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMI
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
 BEGIN
-    THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal "DOMAIN\User" to let the local installer safely patch it. The parameter accepts multiple principals as an array.', 1;
+    THROW 51000, 'Set @BootstrapPortalAdminPrincipal before running this script, or use the HostAgent-first installer profile bootstrapPortalAdminPrincipal setting to let the bootstrapper safely patch it.', 1;
 END
 
 SELECT @DefaultInstanceId = InstanceId,

@@ -13,6 +13,9 @@ The supported deployment flow is the HostAgent-first installer:
 - `package-hostagent-first-public.cmd` builds a neutral public sample package.
 - `new-omp-artifact-package.ps1` wraps a deployable payload and optional
   runtime configuration files as a standard OMP artifact package object.
+- `hostagent-first.config.sample.psd1` is the neutral package-build config.
+  Copy it to `hostagent-first.local.psd1` for local source-package experiments
+  that should not be committed.
 
 The current package layout keeps shared portable objects in:
 
@@ -50,9 +53,10 @@ checks the selected host folder first and then falls back to `data/global`. Use
 host-local artifacts only for bootstrap repair scenarios; normal runtime
 configuration belongs in config overlays.
 
-Older `*-omp-suite*` scripts are retained only as migration references for
-pre-HostAgent-first packages. Do not use them for new local, test, production,
-or customer installs.
+Older `*-omp-suite*` scripts have been moved out of this public repository to
+the private DEV archive under
+`OpenModulePlatform/OLD/2026-05-24-public-repo-cleanup/tracked-legacy`. Do not
+use them for new local, test, production, or customer installs.
 
 Do not point `package-hostagent-first.ps1 -OutputRoot` at an existing universal
 package that contains multiple host configs. Build into a separate output folder

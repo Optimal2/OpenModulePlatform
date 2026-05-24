@@ -25,6 +25,8 @@ Use these files as the main map:
 - `docs/OMP_COMPONENT_MANIFEST.md` - repository component manifest and version-bump helper usage.
 - `docs/HOST_AGENT_FIRST_INSTALL.md` - HostAgent-first package and bootstrapper flow.
 - `PUBLISH_README.md` - publish helper behavior and local runtime layout.
+- `installer/README.md` - public sample HostAgent-first installer layout.
+- `scripts/README.md` - current script inventory.
 - `sql/README.md` - SQL setup and initialization conventions.
 
 ## Language and Documentation Policy
@@ -73,10 +75,12 @@ reusable scripts unless the task explicitly asks for a local-only script.
 
 ## Local Publish Commands
 
-For a full local OpenModulePlatform update:
+For a full local OpenModulePlatform install or upgrade, use the HostAgent-first
+sample installer:
 
 ```powershell
-.\scripts\manage-local-install.ps1 -Action Install -RuntimeRoot "E:\OMP" -SqlServer "localhost" -Database "OpenModulePlatform" -Yes
+.\scripts\deployment\update-installer-runner-only.ps1 -PackageRoot .\installer
+.\installer\OpenModulePlatform.Bootstrapper.exe
 ```
 
 For a publish-only pass:
@@ -90,9 +94,9 @@ Use destructive options such as `-DropDatabase`, `-ClearDatabaseObjects`, or
 
 ## SQL Bootstrap Notes
 
-The bootstrap principal is environment-specific. Prefer
-`scripts/manage-local-install.ps1 -BootstrapPortalAdminPrincipal` because the
-script escapes principal values before invoking `sqlcmd`.
+The bootstrap principal is environment-specific. Prefer the HostAgent-first
+installer because it patches principal values into a temporary SQL file before
+invoking SQL bootstrap logic.
 
 Do not pass principal values through `sqlcmd -v`. SQLCMD variables are textual
 substitution before T-SQL parsing, so values containing SQL metacharacters cannot

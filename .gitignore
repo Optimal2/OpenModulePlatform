@@ -8,7 +8,9 @@
 *.nupkg
 *.snupkg
 TestResults/
-artifacts/
+/artifacts/*
+!/artifacts/
+!/artifacts/README.md
 **/logs/
 **/.DS_Store
 **/.idea/

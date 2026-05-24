@@ -231,9 +231,9 @@
         OpenDocViewerPackageZip = ''
         # Set this to true only for protected/customer-specific packages where
         # the package should include the active install config next to the
-        # installer as omp-suite.local.psd1.
+        # installer as hostagent-first.local.psd1.
         IncludeInstallConfig = $false
-        InstallConfigFileName = 'omp-suite.local.psd1'
+        InstallConfigFileName = 'hostagent-first.local.psd1'
     }
 
     Options = @{
