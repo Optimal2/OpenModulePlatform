@@ -108,9 +108,10 @@
         # manifest.json during package installation. Set explicitly only when a
         # prebuilt ODV payload should be registered with a known external version.
         Version = ''
-        # Optional deployment-owned odv.site.config.js source file. When empty,
-        # the HostAgent-first package includes a neutral site config file that
-        # can later be edited through OMP artifact configuration files.
+        # Legacy optional deployment-owned odv.site.config.js source file for
+        # artifact packages that still carry configuration files. New universal
+        # packages should prefer HostAgentFirst.AdditionalConfigOverlayFiles so
+        # host-specific ODV site config lives outside the global artifact.
         SiteConfigPath = ''
     }
 
@@ -225,8 +226,8 @@
         SkipOpenDocViewerNpmInstall = $false
         # Optional path to a prebuilt OpenDocViewer zip. If it is a legacy dist
         # zip, the package script wraps it in the standard OMP artifact package
-        # envelope together with OpenDocViewer.SiteConfigPath. If it is already
-        # an OMP artifact package, it is copied as-is.
+        # envelope. Prefer config overlay packages for host-specific ODV site
+        # config instead of putting that file in the artifact package.
         OpenDocViewerPackageZip = ''
         # Set this to true only for protected/customer-specific packages where
         # the package should include the active install config next to the
