@@ -270,6 +270,52 @@ internal static partial class Program
         string ConfigPath,
         IReadOnlyList<string> MachineNames);
 
+    private static async Task<int> RunSyncPackageObjectsAsync(CliOptions cli)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Console.Error.WriteLine("Package-object sync currently uses the Windows installer profile loader.");
+            return 1;
+        }
+
+        if (string.IsNullOrWhiteSpace(cli.ConfigPath))
+        {
+            WriteUsage();
+            return 1;
+        }
+
+        var configPath = Path.GetFullPath(cli.ConfigPath);
+        var config = await ReadJsonAsync<BootstrapConfig>(configPath);
+        var payloadRoot = ResolvePayloadRoot(cli, configPath);
+        using var form = new InstallerForm(
+            [
+                new BootstrapConfigProfile(
+                    string.IsNullOrWhiteSpace(config.Profile.DisplayName)
+                        ? Path.GetFileNameWithoutExtension(configPath)
+                        : config.Profile.DisplayName,
+                    configPath,
+                    ResolveProfileMachineNames(config))
+            ],
+            config,
+            configPath,
+            payloadRoot,
+            cli);
+
+        Console.WriteLine("> Sync installer package objects from source");
+        var result = await form.SyncDeveloperPackageObjectsCoreAsync();
+        foreach (var line in result.Lines)
+        {
+            Console.WriteLine(line);
+        }
+
+        if (result.ConfigUpdated)
+        {
+            await form.SaveCurrentConfigAsync();
+        }
+
+        return result.HasWarnings ? 1 : 0;
+    }
+
     private sealed class InstallerForm : Form
     {
         private readonly IReadOnlyList<BootstrapConfigProfile> _configProfiles;
@@ -1498,7 +1544,7 @@ internal static partial class Program
             return new DeveloperSourceCheckResult(hasPackageUpdates || hasInstalledUpdates, lines);
         }
 
-        private async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync()
+        internal async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync()
         {
             var lines = new List<string>();
             var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
@@ -1636,11 +1682,16 @@ internal static partial class Program
 
                     CopyFileIfDifferent(sourcePackage, payloadPath);
                     CopyFileIfDifferent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
-                    current.Source = expectedSource;
-                    current.Target = expectedTarget;
+                    if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(current.Target, expectedTarget, StringComparison.OrdinalIgnoreCase))
+                    {
+                        current.Source = expectedSource;
+                        current.Target = expectedTarget;
+                        configUpdated = true;
+                    }
+
                     lines.Add($"  UPDATED {component.ComponentKey}: restored missing artifact package {packageName}.");
                     updated++;
-                    configUpdated = true;
                     continue;
                 }
 
@@ -2342,7 +2393,7 @@ ORDER BY ar.ArtifactId DESC;
                 && File.Exists(Path.Join(path, "OpenModulePlatform.slnx"))
                 && File.Exists(Path.Join(path, "scripts", "deployment", "package-hostagent-first.ps1"));
 
-        private async Task SaveCurrentConfigAsync()
+        internal async Task SaveCurrentConfigAsync()
         {
             var json = JsonSerializer.Serialize(_config, JsonOptions);
             await File.WriteAllTextAsync(_configPath, json + Environment.NewLine, Encoding.UTF8);
