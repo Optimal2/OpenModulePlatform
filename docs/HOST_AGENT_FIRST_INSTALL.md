@@ -280,6 +280,29 @@ the package and installed database with the source repository manifest:
   from source, replaces the current package folder after the installer exits,
   and starts the updated installer. This keeps the running EXE from locking the
   package files that need to be replaced.
+- `Sync package objects` is the normal lightweight developer action. It fills
+  the package object library from source manifests and selectively builds only
+  missing .NET artifact packages. Use this before install/upgrade when a private
+  developer package is intentionally minimal.
+
+Private developer installer repositories can keep the committed package small:
+the root `OpenModulePlatform.Bootstrapper.exe` plus `configs/*.json`. Generated
+package folders such as `data`, `payload`, `sql`, and `tools` can be ignored in
+Git and repopulated locally by `Sync package objects` before the main install or
+upgrade action. If that refresh option is disabled or developer source roots are
+unavailable, the package must already contain the required generated files.
+
+When only installer code changed, update just the committed executable:
+
+```powershell
+.\scripts\deployment\update-installer-runner-only.ps1 `
+  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\package\OpenModulePlatformHostAgentFirst-0.3.3"
+```
+
+This runner-only update does not rebuild or commit module definitions, artifact
+zips, SQL payloads, manifests, helper tools, or package libraries. It is the
+preferred DEV-repository path when the installer binary changed but the package
+contents should remain generated on each developer machine.
 
 Do not run `scripts/deployment/package-hostagent-first.ps1` directly with the
 existing universal installer package as its output target. That script creates a

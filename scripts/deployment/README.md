@@ -3,6 +3,10 @@
 The supported deployment flow is the HostAgent-first installer:
 
 - `package-hostagent-first.ps1` builds the installer package.
+- `update-installer-runner-only.ps1` updates only the root
+  `OpenModulePlatform.Bootstrapper.exe` in an existing package. Use this for
+  private developer installer packages when installer code changed but the
+  package object library should stay generated/ignored.
 - `refresh-existing-hostagent-first-package.ps1` refreshes an existing package
   through a temporary runner so package-local `configs` and host data are not
   deleted by a fresh one-profile package build.
@@ -47,6 +51,14 @@ Do not point `package-hostagent-first.ps1 -OutputRoot` at an existing universal
 package that contains multiple host configs. Build into a separate output folder
 for a new package, or use `refresh-existing-hostagent-first-package.ps1` when
 the intention is to update a package in place.
+
+Private developer installer repositories can keep the package intentionally
+minimal in Git: the package root `OpenModulePlatform.Bootstrapper.exe` and
+`configs/*.json`. The package object library folders (`data`, `payload`, `sql`,
+`tools`) can be ignored and regenerated from developer source roots by the
+installer's package sync action before install/upgrade. For that model, commit
+runner-only updates with `update-installer-runner-only.ps1`, then let each
+developer machine regenerate the ignored package contents locally.
 
 See `docs/HOST_AGENT_FIRST_INSTALL.md` and
 `docs/PORTABLE_DEPLOYMENT_OBJECTS.md` for the full model.
