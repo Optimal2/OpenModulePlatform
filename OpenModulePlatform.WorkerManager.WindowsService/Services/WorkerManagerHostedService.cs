@@ -214,11 +214,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
         }
 
-        var workerProcessPath = ResolvePath(settings.WorkerProcessPath);
+        var workerProcessPath = await ResolveWorkerProcessPathAsync(settings, cancellationToken);
         if (!File.Exists(workerProcessPath))
         {
             throw new InvalidOperationException(
-                $"Configured WorkerManager:WorkerProcessPath '{workerProcessPath}' does not exist.");
+                $"Resolved WorkerProcessHost executable path '{workerProcessPath}' does not exist.");
         }
 
         if (!File.Exists(managed.Definition.PluginAssemblyPath))
@@ -519,6 +519,32 @@ public sealed class WorkerManagerHostedService : BackgroundService
     private static string ResolvePath(string path)
     {
         return PathResolutionUtility.ResolvePath(path);
+    }
+
+    private async Task<string> ResolveWorkerProcessPathAsync(
+        WorkerManagerSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.WorkerProcessPath))
+        {
+            return ResolvePath(settings.WorkerProcessPath);
+        }
+
+        if (!string.Equals(settings.GetCatalogMode(), WorkerCatalogModes.OmpDatabase, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "WorkerManager:WorkerProcessPath must be configured unless WorkerManager:CatalogMode is 'OmpDatabase'.");
+        }
+
+        var hostKey = settings.ResolveHostKey();
+        var workerProcessPath = await _runtimeRepository.ResolveWorkerProcessHostPathAsync(hostKey, cancellationToken);
+        if (string.IsNullOrWhiteSpace(workerProcessPath))
+        {
+            throw new InvalidOperationException(
+                $"Could not resolve a provisioned OMP Worker Process Host artifact for HostKey '{hostKey}'.");
+        }
+
+        return workerProcessPath;
     }
 
     private static Process CreateWorkerProcess(string workerProcessPath, DesiredWorkerInstance desired)

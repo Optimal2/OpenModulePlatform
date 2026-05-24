@@ -93,7 +93,8 @@ public sealed class ServiceAppDeploymentService
             configurationFiles = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
                 configurationFiles,
                 deployment,
-                configuredConnectionString);
+                configuredConnectionString,
+                settings);
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,
                 configuredConnectionString,

@@ -84,9 +84,11 @@ public sealed class WorkerManagerSettings
             throw new InvalidOperationException("WorkerManager:MaxRestartsPerWindow must be at least 1.");
         }
 
-        if (string.IsNullOrWhiteSpace(WorkerProcessPath))
+        if (string.Equals(catalogMode, WorkerCatalogModes.Configuration, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(WorkerProcessPath))
         {
-            throw new InvalidOperationException("WorkerManager:WorkerProcessPath must be configured.");
+            throw new InvalidOperationException(
+                "WorkerManager:WorkerProcessPath must be configured when WorkerManager:CatalogMode is 'Configuration'.");
         }
 
         HostAgentRpc.Validate();
