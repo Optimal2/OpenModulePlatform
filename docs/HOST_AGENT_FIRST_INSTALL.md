@@ -155,6 +155,13 @@ artifact package that later HostAgent self-upgrade can consume. Other compiled
 runtime components, including WorkerManager and WorkerProcessHost, are packaged
 only as OMP artifact packages with module/app metadata.
 
+During bootstrap the installer also records the current `host-agent` artifact in
+`omp.HostAgentDesiredStates` for the configured host. Future HostAgent artifact
+imports can then update that desired row. The running HostAgent provisions the
+new artifact, creates a side-by-side versioned service such as
+`OMP.HostAgent.0.3.35`, starts it in takeover mode, and the new service removes
+the previous Windows service after it has acquired the host lease.
+
 OpenDocViewer is also packaged as a manifest-based OMP artifact package. The
 deployable `dist` output is stored as the package payload, while
 `odv.site.config.js` is registered as an artifact configuration file. Set
