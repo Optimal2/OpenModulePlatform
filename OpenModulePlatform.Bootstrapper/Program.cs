@@ -156,6 +156,7 @@ internal static partial class Program
             {
                 await RunSqlAsync(config, configPath, payloadRoot);
                 await ImportModuleDefinitionsAsync(config, payloadRoot);
+                await EnsureRuntimeDatabaseAccessAsync(config);
             }
 
             var preparedArtifactConfigurationFiles = PrepareArtifacts(
@@ -169,6 +170,7 @@ internal static partial class Program
 
             if (config.HostAgent.Enabled)
             {
+                EnsureRuntimeFilesystemAccess(config);
                 await InstallHostAgentAsync(config, payloadRoot);
             }
 
@@ -211,6 +213,7 @@ internal static partial class Program
             if (config.Sql.Enabled)
             {
                 await ImportModuleDefinitionsAsync(config, payloadRoot, onlyNewerOrChanged: true);
+                await EnsureRuntimeDatabaseAccessAsync(config);
             }
 
             var preparedArtifactConfigurationFiles = PrepareArtifacts(
@@ -238,10 +241,12 @@ internal static partial class Program
             {
                 var identity = ResolveBootstrapHostAgentServiceIdentity(config);
                 Console.WriteLine($"> HostAgent service '{identity.ServiceName}' is missing; installing it.");
+                EnsureRuntimeFilesystemAccess(config);
                 await InstallHostAgentAsync(config, payloadRoot);
             }
             else
             {
+                EnsureRuntimeFilesystemAccess(config);
                 Console.WriteLine("> HostAgent service already exists; leaving runtime installation unchanged.");
             }
 
@@ -460,6 +465,276 @@ internal static partial class Program
             Console.WriteLine($"> SQL {scriptPath}");
             var sqlText = ReadSqlFile(scriptPath, sql, payloadRoot, config.IncludeExampleApps, []);
             await ExecuteSqlBatchesAsync(sql, sql.Database, sqlText, scriptPath);
+        }
+    }
+
+    private static async Task EnsureRuntimeDatabaseAccessAsync(BootstrapConfig config)
+    {
+        if (!config.Sql.GrantRuntimeDatabaseAccess)
+        {
+            return;
+        }
+
+        var accountNames = ResolveRuntimeAccountNames(config)
+            .SelectMany(ResolveWindowsAccountNameCandidates)
+            .Where(static accountName => !IsBuiltInServiceIdentity(accountName))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static accountName => accountName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (accountNames.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine("> Runtime database access");
+        await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
+        await connection.OpenAsync();
+
+        foreach (var accountName in accountNames)
+        {
+            var granted = await EnsureDatabaseReaderWriterAsync(
+                connection,
+                accountName,
+                config.Sql.CommandTimeoutSeconds);
+            Console.WriteLine(granted
+                ? $"  {accountName}: db_datareader/db_datawriter."
+                : $"  {accountName}: skipped; no matching SQL login exists.");
+        }
+    }
+
+    private static async Task<bool> EnsureDatabaseReaderWriterAsync(
+        SqlConnection connection,
+        string accountName,
+        int commandTimeoutSeconds)
+    {
+        const string sql = @"
+DECLARE @UserName sysname = @runtime_user_name;
+DECLARE @Sql nvarchar(max);
+
+IF DATABASE_PRINCIPAL_ID(@UserName) IS NULL
+   AND SUSER_ID(@UserName) IS NOT NULL
+BEGIN
+    SET @Sql = N'CREATE USER ' + QUOTENAME(@UserName) +
+        N' FOR LOGIN ' + QUOTENAME(@UserName) + N';';
+    EXEC sys.sp_executesql @Sql;
+END;
+
+IF DATABASE_PRINCIPAL_ID(@UserName) IS NOT NULL
+BEGIN
+    IF ISNULL(IS_ROLEMEMBER(N'db_datareader', @UserName), 0) <> 1
+    BEGIN
+        SET @Sql = N'ALTER ROLE db_datareader ADD MEMBER ' + QUOTENAME(@UserName) + N';';
+        EXEC sys.sp_executesql @Sql;
+    END;
+
+    IF ISNULL(IS_ROLEMEMBER(N'db_datawriter', @UserName), 0) <> 1
+    BEGIN
+        SET @Sql = N'ALTER ROLE db_datawriter ADD MEMBER ' + QUOTENAME(@UserName) + N';';
+        EXEC sys.sp_executesql @Sql;
+    END;
+END;
+
+SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
+
+        await using var command = new SqlCommand(sql, connection)
+        {
+            CommandTimeout = commandTimeoutSeconds
+        };
+        command.Parameters.AddWithValue("@runtime_user_name", accountName);
+
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture) == 1;
+    }
+
+    private static void EnsureRuntimeFilesystemAccess(BootstrapConfig config)
+    {
+        if (!OperatingSystem.IsWindows() || !config.HostAgent.Enabled)
+        {
+            return;
+        }
+
+        var hostAgent = config.HostAgent;
+        var webAccounts = ResolveWebRuntimeAccountNames(hostAgent)
+            .SelectMany(ResolveWindowsAccountNameCandidates)
+            .Where(static accountName => !IsBuiltInServiceIdentity(accountName))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (webAccounts.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine("> Runtime filesystem access");
+        var webReadPaths = new[]
+            {
+                hostAgent.PortalPhysicalPath,
+                hostAgent.WebAppsRoot
+            }
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .SelectMany(EnumerateDirectoryAndLocalParents)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in webReadPaths)
+        {
+            EnsureDirectoryAccess(path, webAccounts, "RX", required: false);
+        }
+
+        var hostAgentSettings = GetJsonObjectProperty(hostAgent.AppSettings, "HostAgent");
+        var dataProtectionPath = GetJsonStringProperty(hostAgentSettings, "WebAppDataProtectionKeyPath");
+        if (!string.IsNullOrWhiteSpace(dataProtectionPath))
+        {
+            EnsureDirectoryAccess(dataProtectionPath, webAccounts, "M", required: true);
+        }
+    }
+
+    private static IEnumerable<string> ResolveRuntimeAccountNames(BootstrapConfig config)
+    {
+        var hostAgent = config.HostAgent;
+        foreach (var accountName in ResolveWebRuntimeAccountNames(hostAgent))
+        {
+            yield return accountName;
+        }
+
+        yield return hostAgent.ServiceAccountName;
+        yield return hostAgent.ServiceAppUserName;
+
+        foreach (var identity in hostAgent.ServiceAppIdentityOverrides.Values)
+        {
+            yield return identity.UserName;
+        }
+    }
+
+    private static IEnumerable<string> ResolveWebRuntimeAccountNames(HostAgentInstallOptions hostAgent)
+    {
+        yield return hostAgent.IisAppPoolUserName;
+        foreach (var identity in hostAgent.IisAppPoolOverrides.Values)
+        {
+            yield return identity.UserName;
+        }
+    }
+
+    private static IEnumerable<string> ResolveWindowsAccountNameCandidates(string? configuredAccountName)
+    {
+        if (string.IsNullOrWhiteSpace(configuredAccountName))
+        {
+            yield break;
+        }
+
+        var trimmed = configuredAccountName.Trim();
+        var normalized = TryNormalizeDomainAccountName(trimmed);
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            yield return normalized;
+        }
+
+        yield return trimmed;
+    }
+
+    private static string TryNormalizeDomainAccountName(string accountName)
+    {
+        var atIndex = accountName.IndexOf('@', StringComparison.Ordinal);
+        if (atIndex > 0 && atIndex < accountName.Length - 1)
+        {
+            var userName = accountName[..atIndex];
+            var domain = NormalizeNetBiosDomainName(accountName[(atIndex + 1)..]);
+            return string.IsNullOrWhiteSpace(domain) ? string.Empty : domain + "\\" + userName;
+        }
+
+        var slashIndex = accountName.IndexOf('\\', StringComparison.Ordinal);
+        if (slashIndex > 0 && slashIndex < accountName.Length - 1)
+        {
+            var domain = NormalizeNetBiosDomainName(accountName[..slashIndex]);
+            return string.IsNullOrWhiteSpace(domain)
+                ? string.Empty
+                : domain + "\\" + accountName[(slashIndex + 1)..];
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizeNetBiosDomainName(string domainName)
+    {
+        var trimmed = domainName.Trim();
+        if (trimmed.Equals(".", StringComparison.Ordinal))
+        {
+            return ".";
+        }
+
+        var dotIndex = trimmed.IndexOf('.', StringComparison.Ordinal);
+        var netBios = dotIndex > 0 ? trimmed[..dotIndex] : trimmed;
+        return netBios.ToUpperInvariant();
+    }
+
+    private static bool IsBuiltInServiceIdentity(string accountName)
+    {
+        var normalized = accountName.Trim();
+        return normalized.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("LocalService", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NetworkService", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("ApplicationPoolIdentity", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\SYSTEM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\LOCAL SERVICE", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\NETWORK SERVICE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> EnumerateDirectoryAndLocalParents(string path)
+    {
+        var fullPath = Path.GetFullPath(path.Trim());
+        if (fullPath.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            yield return fullPath;
+            yield break;
+        }
+
+        var directory = new DirectoryInfo(fullPath);
+        var root = directory.Root.FullName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var stack = new Stack<string>();
+        for (var current = directory; current is not null; current = current.Parent)
+        {
+            var currentPath = current.FullName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (string.Equals(currentPath, root, StringComparison.OrdinalIgnoreCase))
+            {
+                break;
+            }
+
+            stack.Push(current.FullName);
+        }
+
+        while (stack.Count > 0)
+        {
+            yield return stack.Pop();
+        }
+    }
+
+    private static void EnsureDirectoryAccess(
+        string path,
+        IReadOnlyCollection<string> accountNames,
+        string permission,
+        bool required)
+    {
+        Directory.CreateDirectory(path);
+
+        var granted = false;
+        foreach (var accountName in accountNames)
+        {
+            var result = RunProcess(
+                "icacls.exe",
+                [path, "/grant", $"{accountName}:(OI)(CI)({permission})"],
+                throwOnFailure: false);
+            if (result.ExitCode == 0)
+            {
+                granted = true;
+                Console.WriteLine($"  {path}: granted {permission} to {accountName}.");
+                break;
+            }
+        }
+
+        if (!granted && required)
+        {
+            throw new InvalidOperationException(
+                $"Could not grant {permission} access to '{path}' for any configured web runtime account.");
         }
     }
 
@@ -4723,6 +4998,8 @@ internal sealed class SqlBootstrapOptions
     public bool CreateDatabase { get; set; }
 
     public int CommandTimeoutSeconds { get; set; } = 3600;
+
+    public bool GrantRuntimeDatabaseAccess { get; set; }
 
     public string BootstrapPortalAdminPrincipal { get; set; } = string.Empty;
 

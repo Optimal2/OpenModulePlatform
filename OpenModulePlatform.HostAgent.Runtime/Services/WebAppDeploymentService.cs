@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -7,6 +8,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class WebAppDeploymentService
 {
+    private const string IisSslBindingAppId = "{6E9C7F30-6D4E-4D8A-9D1E-9F086C35B508}";
+
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly HostAgentCredentialStoreService _credentialStore;
@@ -623,35 +626,102 @@ public sealed class WebAppDeploymentService
 
     private static void EnsureIisBindingCertificate(HostAgentSettings settings)
     {
-        if (!string.Equals(settings.IisBindingProtocol.Trim(), "https", StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(settings.IisBindingCertificateThumbprint))
+        if (!string.Equals(settings.IisBindingProtocol.Trim(), "https", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        var siteName = settings.IisSiteName.Trim();
-        var bindingInformation = CreateIisBindingInformation(settings);
-        var bindingSelector = $"/bindings.[protocol='https',bindingInformation='{bindingInformation}']";
-        var thumbprint = NormalizeCertificateThumbprint(settings.IisBindingCertificateThumbprint);
+        var thumbprint = ResolveCertificateThumbprint(settings);
+        if (string.IsNullOrWhiteSpace(thumbprint))
+        {
+            return;
+        }
+
         var storeName = string.IsNullOrWhiteSpace(settings.IisBindingCertificateStoreName)
             ? "My"
             : settings.IisBindingCertificateStoreName.Trim();
-        var sslFlags = string.IsNullOrWhiteSpace(settings.IisBindingHostHeader) ? "0" : "1";
+        var bindingTarget = CreateNetshSslBindingTarget(settings);
 
-        RunAppCmd(
-            "set",
-            "site",
-            $"/site.name:{siteName}",
-            $"{bindingSelector}.certificateHash:{thumbprint}",
-            $"{bindingSelector}.certificateStoreName:{storeName}",
-            $"{bindingSelector}.sslFlags:{sslFlags}");
+        // IIS appcmd can create the HTTPS site binding, but on some Windows/IIS
+        // versions it cannot set certificateHash on the binding collection. The
+        // HTTP.sys SSL binding is the authoritative backend binding and works
+        // for VGR-style TLS termination where the public certificate lives on a
+        // load balancer and IIS uses a node/server certificate.
+        RunNetsh("http", "delete", "sslcert", bindingTarget);
+        RunNetsh(
+            "http",
+            "add",
+            "sslcert",
+            bindingTarget,
+            $"certhash={thumbprint}",
+            $"appid={IisSslBindingAppId}",
+            $"certstorename={storeName}");
     }
 
-    private static string NormalizeCertificateThumbprint(string value)
+    private static string ResolveCertificateThumbprint(HostAgentSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.IisBindingCertificateThumbprint))
+        {
+            return NormalizeCertificateHex(settings.IisBindingCertificateThumbprint);
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.IisBindingCertificateSerialNumber))
+        {
+            return string.Empty;
+        }
+
+        var storeName = string.IsNullOrWhiteSpace(settings.IisBindingCertificateStoreName)
+            ? "My"
+            : settings.IisBindingCertificateStoreName.Trim();
+        var serialNumber = NormalizeCertificateHex(settings.IisBindingCertificateSerialNumber);
+
+        using var store = new X509Store(storeName, StoreLocation.LocalMachine);
+        store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
+        foreach (var certificate in store.Certificates)
+        {
+            if (string.Equals(
+                    NormalizeCertificateHex(certificate.SerialNumber),
+                    serialNumber,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return NormalizeCertificateHex(certificate.Thumbprint);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"IIS binding certificate with serial number '{settings.IisBindingCertificateSerialNumber}' was not found in LocalMachine/{storeName}.");
+    }
+
+    private static string CreateNetshSslBindingTarget(HostAgentSettings settings)
+    {
+        var hostHeader = settings.IisBindingHostHeader?.Trim() ?? string.Empty;
+        return string.IsNullOrWhiteSpace(hostHeader)
+            ? $"ipport=0.0.0.0:{settings.IisBindingPort}"
+            : $"hostnameport={hostHeader}:{settings.IisBindingPort}";
+    }
+
+    private static string NormalizeCertificateHex(string value)
         => new(value
-            .Where(static ch => !char.IsWhiteSpace(ch))
+            .Where(Uri.IsHexDigit)
             .Select(static ch => char.ToUpperInvariant(ch))
             .ToArray());
+
+    private static void RunNetsh(params string[] arguments)
+    {
+        var result = RunProcess("netsh.exe", arguments);
+        if (result.ExitCode != 0 && !IsExpectedNetshSslDeleteFailure(arguments))
+        {
+            var message = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+            throw new InvalidOperationException(
+                $"netsh.exe failed with exit code {result.ExitCode}: {message.Trim()}");
+        }
+    }
+
+    private static bool IsExpectedNetshSslDeleteFailure(IReadOnlyList<string> arguments)
+        => arguments.Count >= 3
+            && string.Equals(arguments[0], "http", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(arguments[1], "delete", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(arguments[2], "sslcert", StringComparison.OrdinalIgnoreCase);
 
     private static string CreateAppOfflineFile(
         string targetPath,
@@ -801,9 +871,21 @@ public sealed class WebAppDeploymentService
 
     private static AppCmdResult RunAppCmdRaw(IReadOnlyList<string> arguments, bool throwOnFailure)
     {
+        var result = RunProcess(GetAppCmdPath(), arguments);
+        if (throwOnFailure && result.ExitCode != 0)
+        {
+            var message = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+            throw new InvalidOperationException(CreateAppCmdFailureMessage(result.ExitCode, message));
+        }
+
+        return new AppCmdResult(result.ExitCode, result.StdOut, result.StdErr);
+    }
+
+    private static ProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
+    {
         var startInfo = new ProcessStartInfo
         {
-            FileName = GetAppCmdPath(),
+            FileName = fileName,
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
@@ -816,18 +898,12 @@ public sealed class WebAppDeploymentService
         }
 
         using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start IIS appcmd.exe.");
+            ?? throw new InvalidOperationException($"Failed to start '{fileName}'.");
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        if (throwOnFailure && process.ExitCode != 0)
-        {
-            var message = string.IsNullOrWhiteSpace(error) ? output : error;
-            throw new InvalidOperationException(CreateAppCmdFailureMessage(process.ExitCode, message));
-        }
-
-        return new AppCmdResult(process.ExitCode, output, error);
+        return new ProcessResult(process.ExitCode, output, error);
     }
 
     private static string CreateAppCmdFailureMessage(int exitCode, string message)
@@ -857,4 +933,6 @@ public sealed class WebAppDeploymentService
             or System.ComponentModel.Win32Exception;
 
     private sealed record AppCmdResult(int ExitCode, string StdOut, string StdErr);
+
+    private sealed record ProcessResult(int ExitCode, string StdOut, string StdErr);
 }
