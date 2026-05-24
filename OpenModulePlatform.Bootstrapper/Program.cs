@@ -3016,6 +3016,9 @@ VALUES
         hostAgentSettings["IisBindingProtocol"] = hostAgent.IisBindingProtocol;
         hostAgentSettings["IisBindingPort"] = hostAgent.IisBindingPort;
         hostAgentSettings["IisBindingHostHeader"] = hostAgent.IisBindingHostHeader;
+        hostAgentSettings["IisBindingCertificateThumbprint"] = hostAgent.IisBindingCertificateThumbprint;
+        hostAgentSettings["IisBindingCertificateSerialNumber"] = hostAgent.IisBindingCertificateSerialNumber;
+        hostAgentSettings["IisBindingCertificateStoreName"] = hostAgent.IisBindingCertificateStoreName;
         hostAgentSettings["WebAppsRoot"] = hostAgent.WebAppsRoot;
         hostAgentSettings["PortalPhysicalPath"] = hostAgent.PortalPhysicalPath;
         hostAgentSettings["IisAppPoolNamePrefix"] = hostAgent.IisAppPoolNamePrefix;
@@ -3484,6 +3487,9 @@ VALUES
                         IisBindingProtocol = hostAgent.IisBindingProtocol,
                         IisBindingPort = hostAgent.IisBindingPort,
                         IisBindingHostHeader = hostAgent.IisBindingHostHeader,
+                        IisBindingCertificateThumbprint = hostAgent.IisBindingCertificateThumbprint,
+                        IisBindingCertificateSerialNumber = hostAgent.IisBindingCertificateSerialNumber,
+                        IisBindingCertificateStoreName = hostAgent.IisBindingCertificateStoreName,
                         WebAppsRoot = hostAgent.WebAppsRoot,
                         PortalPhysicalPath = hostAgent.PortalPhysicalPath,
                         IisAppPoolNamePrefix = hostAgent.IisAppPoolNamePrefix,
@@ -4798,6 +4804,12 @@ internal sealed class HostAgentInstallOptions
     public int IisBindingPort { get; set; } = 80;
 
     public string IisBindingHostHeader { get; set; } = string.Empty;
+
+    public string IisBindingCertificateThumbprint { get; set; } = string.Empty;
+
+    public string IisBindingCertificateSerialNumber { get; set; } = string.Empty;
+
+    public string IisBindingCertificateStoreName { get; set; } = "My";
 
     public string WebAppsRoot { get; set; } = string.Empty;
 
