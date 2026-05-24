@@ -17,6 +17,124 @@
 }
 
 <section class="card section-card section-card--wide">
+    <h3>@L["HostAgent self-upgrade"]</h3>
+    <p class="muted">@L["Select the desired HostAgent artifact per host. The active HostAgent installs the selected version and hands over to it during its next cycle."]</p>
+
+    @if (Model.HostAgentRows.Count == 0)
+    {
+        <div class="empty-state">@L["No enabled hosts were found."]</div>
+    }
+    else if (Model.HostAgentArtifactOptions.Count == 0)
+    {
+        <div class="empty-state">@L["No HostAgent artifacts are available. Import a host-agent artifact before requesting a self-upgrade."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid app-instances-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Host"]</th>
+                        <th>@L["Running"]</th>
+                        <th>@L["Desired"]</th>
+                        <th>@L["Upgrade target"]</th>
+                        <th>@L["Status"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.HostAgentRows)
+                {
+                    var selectedArtifactId = Model.GetSelectedHostAgentArtifactId(row);
+                    <tr>
+                        <td>
+                            <div><code>@row.HostKey</code></div>
+                            @if (!string.IsNullOrWhiteSpace(row.DisplayName))
+                            {
+                                <div class="muted">@row.DisplayName</div>
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.CurrentVersion))
+                            {
+                                <span class="muted">@L["No runtime state"]</span>
+                            }
+                            else
+                            {
+                                <div>@row.CurrentVersion</div>
+                                <div class="muted"><code>@row.CurrentServiceName</code></div>
+                                @if (!string.IsNullOrWhiteSpace(row.RuntimeMode))
+                                {
+                                    <div class="muted">@L["Mode"]: @row.RuntimeMode</div>
+                                }
+                                @if (row.RuntimeLastSeenUtc.HasValue)
+                                {
+                                    <div class="muted">@L["Last seen"]: @row.RuntimeLastSeenUtc.Value.ToString("u")</div>
+                                }
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.DesiredVersion))
+                            {
+                                <span class="muted">@L["Not set"]</span>
+                            }
+                            else
+                            {
+                                <div>
+                                    @row.DesiredVersion
+                                    @if (HostDeploymentsModel.IsHostAgentUpgradePending(row))
+                                    {
+                                        <span class="pill">@L["Pending"]</span>
+                                    }
+                                </div>
+                                <div class="muted"><code>@row.DesiredRelativePath</code></div>
+                                @if (!string.IsNullOrWhiteSpace(row.ServiceNamePrefix))
+                                {
+                                    <div class="muted">@L["Service prefix"]: <code>@row.ServiceNamePrefix</code></div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(row.InstallRoot))
+                                {
+                                    <div class="muted">@L["Install root"]: <code>@row.InstallRoot</code></div>
+                                }
+                            }
+                        </td>
+                        <td>
+                            <form method="post" asp-page-handler="RequestHostAgentUpgrade" class="inline-form">
+                                <input type="hidden" name="hostId" value="@row.HostId" />
+                                <select name="artifactId" aria-label="@L["HostAgent artifact"]">
+                                    @foreach (var option in Model.HostAgentArtifactOptions)
+                                    {
+                                        if (option.ArtifactId == selectedArtifactId)
+                                        {
+                                            <option value="@option.ArtifactId" selected>@option.Version - @option.RelativePath</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@option.ArtifactId">@option.Version - @option.RelativePath</option>
+                                        }
+                                    }
+                                </select>
+                                <button type="submit" class="btn btn-secondary">@L["Request upgrade"]</button>
+                            </form>
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.RuntimeStatusMessage))
+                            {
+                                <div>@row.RuntimeStatusMessage</div>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="card section-card section-card--wide">
     <h3>@L["App deployment state"]</h3>
     <p class="muted">@L["These rows show the latest HostAgent result for each host and app instance. This is usually the most useful view after a desired version has been selected."]</p>
 
