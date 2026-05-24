@@ -914,10 +914,10 @@ public sealed class ServiceAppDeploymentService
             || value.Equals("serviceapp", StringComparison.OrdinalIgnoreCase);
 
     private static bool AccountsEqual(string actual, string desired)
-        => string.Equals(
-            NormalizeAccountForComparison(actual),
-            NormalizeAccountForComparison(desired),
-            StringComparison.OrdinalIgnoreCase);
+    {
+        var desiredCandidates = NormalizeAccountCandidates(desired);
+        return NormalizeAccountCandidates(actual).Any(desiredCandidates.Contains);
+    }
 
     private static string NormalizeAccountForComparison(string value)
     {
@@ -953,6 +953,82 @@ public sealed class ServiceAppDeploymentService
         }
 
         return normalized;
+    }
+
+    private static HashSet<string> NormalizeAccountCandidates(string value)
+    {
+        var normalized = NormalizeAccountForComparison(value);
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            normalized
+        };
+
+        if (TrySplitDomainAccount(normalized, out var domain, out var accountName))
+        {
+            AddDomainAccountCandidates(candidates, domain, accountName);
+        }
+        else if (TrySplitUserPrincipalName(normalized, out accountName, out domain))
+        {
+            AddDomainAccountCandidates(candidates, domain, accountName);
+        }
+
+        return candidates;
+    }
+
+    private static void AddDomainAccountCandidates(HashSet<string> candidates, string domain, string accountName)
+    {
+        if (string.IsNullOrWhiteSpace(domain) || string.IsNullOrWhiteSpace(accountName))
+        {
+            return;
+        }
+
+        var trimmedDomain = domain.Trim();
+        var trimmedAccount = accountName.Trim();
+        candidates.Add(trimmedDomain + "\\" + trimmedAccount);
+        candidates.Add(trimmedAccount + "@" + trimmedDomain);
+
+        var shortDomain = GetShortDomainName(trimmedDomain);
+        if (!shortDomain.Equals(trimmedDomain, StringComparison.OrdinalIgnoreCase))
+        {
+            candidates.Add(shortDomain + "\\" + trimmedAccount);
+            candidates.Add(trimmedAccount + "@" + shortDomain);
+        }
+    }
+
+    private static bool TrySplitDomainAccount(string value, out string domain, out string accountName)
+    {
+        var separatorIndex = value.IndexOf('\\', StringComparison.Ordinal);
+        if (separatorIndex <= 0 || separatorIndex >= value.Length - 1)
+        {
+            domain = string.Empty;
+            accountName = string.Empty;
+            return false;
+        }
+
+        domain = value[..separatorIndex];
+        accountName = value[(separatorIndex + 1)..];
+        return true;
+    }
+
+    private static bool TrySplitUserPrincipalName(string value, out string accountName, out string domain)
+    {
+        var separatorIndex = value.IndexOf('@', StringComparison.Ordinal);
+        if (separatorIndex <= 0 || separatorIndex >= value.Length - 1)
+        {
+            accountName = string.Empty;
+            domain = string.Empty;
+            return false;
+        }
+
+        accountName = value[..separatorIndex];
+        domain = value[(separatorIndex + 1)..];
+        return true;
+    }
+
+    private static string GetShortDomainName(string domain)
+    {
+        var dotIndex = domain.IndexOf('.', StringComparison.Ordinal);
+        return dotIndex > 0 ? domain[..dotIndex] : domain;
     }
 
     private static string NormalizeAccountForSc(string value)
