@@ -219,9 +219,10 @@ internal static partial class Program
             {
                 Console.WriteLine("> HostAgent service name is not configured; skipping HostAgent installation.");
             }
-            else if (!ServiceExists(config.HostAgent.ServiceName))
+            else if (!ServiceExists(ResolveBootstrapHostAgentServiceIdentity(config).ServiceName))
             {
-                Console.WriteLine($"> HostAgent service '{config.HostAgent.ServiceName}' is missing; installing it.");
+                var identity = ResolveBootstrapHostAgentServiceIdentity(config);
+                Console.WriteLine($"> HostAgent service '{identity.ServiceName}' is missing; installing it.");
                 await InstallHostAgentAsync(config, payloadRoot);
             }
             else
@@ -2377,7 +2378,7 @@ SELECT COUNT(1) FROM @changes;
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@artifactId", artifactId);
         command.Parameters.AddWithValue("@hostKey", ResolveHostAgentHostKey(hostAgent));
-        command.Parameters.AddWithValue("@serviceNamePrefix", string.IsNullOrWhiteSpace(hostAgent.ServiceName) ? string.Empty : hostAgent.ServiceName.Trim());
+        command.Parameters.AddWithValue("@serviceNamePrefix", ResolveHostAgentServiceNamePrefix(hostAgent.ServiceName));
         command.Parameters.AddWithValue("@installRoot", string.IsNullOrWhiteSpace(hostAgent.ServicesRoot) ? string.Empty : hostAgent.ServicesRoot.Trim());
 
         var value = await command.ExecuteScalarAsync();
@@ -2397,6 +2398,104 @@ SELECT COUNT(1) FROM @changes;
         }
 
         return Environment.MachineName;
+    }
+
+    private static HostAgentBootstrapServiceIdentity ResolveBootstrapHostAgentServiceIdentity(BootstrapConfig config)
+    {
+        var hostAgent = config.HostAgent;
+        var prefix = ResolveHostAgentServiceNamePrefix(hostAgent.ServiceName);
+        var version = ResolveConfiguredHostAgentArtifactVersion(config);
+        var serviceName = string.IsNullOrWhiteSpace(version)
+            ? prefix
+            : $"{prefix}.{SanitizeWindowsServiceNamePart(version)}";
+        var displayName = ResolveSystemServiceDisplayName(
+            hostAgent.DisplayName,
+            prefix,
+            version);
+
+        return new HostAgentBootstrapServiceIdentity(
+            prefix,
+            serviceName,
+            displayName,
+            version);
+    }
+
+    private static string ResolveHostAgentServiceNamePrefix(string serviceName)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(serviceName)
+            ? "OMP.HostAgent"
+            : serviceName.Trim().TrimEnd('.');
+
+        var parts = trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var index = 1; index < parts.Length; index++)
+        {
+            var suffix = string.Join('.', parts.Skip(index));
+            if (Version.TryParse(suffix, out _))
+            {
+                return string.Join('.', parts.Take(index));
+            }
+        }
+
+        return trimmed;
+    }
+
+    private static string? ResolveConfiguredHostAgentArtifactVersion(BootstrapConfig config)
+    {
+        foreach (var artifact in config.Artifacts.Where(static artifact => artifact.Enabled))
+        {
+            var version = TryResolveHostAgentVersionFromTarget(artifact.Target)
+                ?? TryResolveHostAgentVersionFromPackageName(artifact.Source);
+            if (!string.IsNullOrWhiteSpace(version))
+            {
+                return version;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? TryResolveHostAgentVersionFromTarget(string target)
+    {
+        var normalized = NormalizePathFragment(target);
+        const string hostAgentTargetPrefix = "omp-hostagent/hostagent/";
+        if (!normalized.StartsWith(hostAgentTargetPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var version = normalized[hostAgentTargetPrefix.Length..].Trim('/');
+        return string.IsNullOrWhiteSpace(version) ? null : version;
+    }
+
+    private static string? TryResolveHostAgentVersionFromPackageName(string source)
+    {
+        var fileName = Path.GetFileName(source);
+        if (string.IsNullOrWhiteSpace(fileName)
+            || !fileName.Contains("__host-agent__", StringComparison.OrdinalIgnoreCase)
+            || !fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var withoutExtension = Path.GetFileNameWithoutExtension(fileName);
+        var parts = withoutExtension.Split("__", StringSplitOptions.None);
+        return parts.Length >= 5 && !string.IsNullOrWhiteSpace(parts[^1])
+            ? parts[^1]
+            : null;
+    }
+
+    private static string NormalizePathFragment(string value)
+        => value.Trim().Replace('\\', '/').TrimStart('/');
+
+    private static string SanitizeWindowsServiceNamePart(string value)
+    {
+        var chars = value.Trim()
+            .Select(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-'
+                ? ch
+                : '_')
+            .ToArray();
+        var sanitized = new string(chars).Trim('.');
+        return string.IsNullOrWhiteSpace(sanitized) ? "unknown" : sanitized;
     }
 
     private static string ComputeDirectorySha256(string path)
@@ -2637,6 +2736,7 @@ VALUES
 
         var hostAgent = config.HostAgent;
         ValidateHostAgentServiceAccount(hostAgent);
+        var serviceIdentity = ResolveBootstrapHostAgentServiceIdentity(config);
         if (string.IsNullOrWhiteSpace(hostAgent.ServiceName))
         {
             throw new InvalidOperationException("HostAgent:ServiceName must be configured.");
@@ -2671,10 +2771,18 @@ VALUES
                 throw new DirectoryNotFoundException($"HostAgent package folder was not found: {sourceDirectory}");
             }
 
-            var serviceExists = ServiceExists(hostAgent.ServiceName);
-            if (serviceExists)
+            var serviceExists = ServiceExists(serviceIdentity.ServiceName);
+            var prefixServiceExists = !serviceIdentity.ServiceName.Equals(hostAgent.ServiceName, StringComparison.OrdinalIgnoreCase)
+                && ServiceExists(hostAgent.ServiceName);
+            if (prefixServiceExists)
             {
                 StopService(hostAgent.ServiceName);
+                DeleteWindowsService(hostAgent.ServiceName);
+            }
+
+            if (serviceExists)
+            {
+                StopService(serviceIdentity.ServiceName);
             }
 
             if (Directory.Exists(installPath) && hostAgent.BackupExistingInstall)
@@ -2687,7 +2795,7 @@ VALUES
 
             Console.WriteLine($"> Install HostAgent {installPath}");
             CopyDirectory(sourceDirectory, installPath);
-            await WriteHostAgentSettingsAsync(config, installPath);
+            await WriteHostAgentSettingsAsync(config, installPath, serviceIdentity);
 
             var executablePath = Path.Join(installPath, "OpenModulePlatform.HostAgent.WindowsService.exe");
             if (!File.Exists(executablePath))
@@ -2695,7 +2803,7 @@ VALUES
                 throw new FileNotFoundException("HostAgent executable was not found after installation.", executablePath);
             }
 
-            RunHostAgentOnce(executablePath, installPath);
+            RunHostAgentOnce(executablePath, installPath, serviceIdentity.ServiceName);
             var serviceAccountPassword = ResolveInstallerSecret(
                 hostAgent.ServiceAccountPassword,
                 config,
@@ -2703,16 +2811,16 @@ VALUES
 
             if (serviceExists)
             {
-                ConfigureService(hostAgent, executablePath, serviceAccountPassword);
+                ConfigureService(hostAgent, serviceIdentity, executablePath, serviceAccountPassword);
             }
             else
             {
-                CreateService(hostAgent, executablePath, serviceAccountPassword);
+                CreateService(hostAgent, serviceIdentity, executablePath, serviceAccountPassword);
             }
 
             if (hostAgent.StartService)
             {
-                StartService(hostAgent.ServiceName);
+                StartService(serviceIdentity.ServiceName);
             }
         }
         finally
@@ -2721,7 +2829,10 @@ VALUES
         }
     }
 
-    private static async Task WriteHostAgentSettingsAsync(BootstrapConfig config, string installPath)
+    private static async Task WriteHostAgentSettingsAsync(
+        BootstrapConfig config,
+        string installPath,
+        HostAgentBootstrapServiceIdentity serviceIdentity)
     {
         var hostAgent = config.HostAgent;
         var settings = hostAgent.AppSettings?.DeepClone()
@@ -2736,11 +2847,11 @@ VALUES
             ["HostAgent.LocalArtifactCacheRoot"] = hostAgent.LocalArtifactCacheRoot,
             ["HostAgent.HostKey"] = hostAgent.HostKey,
             ["HostAgent.HostName"] = hostAgent.HostName,
-            ["HostAgent.ServiceName"] = hostAgent.ServiceName
+            ["HostAgent.ServiceName"] = serviceIdentity.ServiceName
         };
 
         ReplaceTokens(settings, tokens);
-        SynchronizeHostAgentSettings(settings, config, credentialPlan);
+        SynchronizeHostAgentSettings(settings, config, credentialPlan, serviceIdentity);
 
         var fileName = string.IsNullOrWhiteSpace(hostAgent.SettingsFileName)
             ? "appsettings.Production.json"
@@ -2756,16 +2867,17 @@ VALUES
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
-    private static void RunHostAgentOnce(string executablePath, string installPath)
+    private static void RunHostAgentOnce(string executablePath, string installPath, string serviceName)
     {
         Console.WriteLine("> Run HostAgent once");
-        RunProcess(executablePath, ["--run-once"], workingDirectory: installPath);
+        RunProcess(executablePath, ["--run-once", $"--service-name={serviceName}"], workingDirectory: installPath);
     }
 
     private static void SynchronizeHostAgentSettings(
         JsonNode settings,
         BootstrapConfig config,
-        HostAgentCredentialBootstrapPlan credentialPlan)
+        HostAgentCredentialBootstrapPlan credentialPlan,
+        HostAgentBootstrapServiceIdentity serviceIdentity)
     {
         if (settings is not JsonObject root)
         {
@@ -2777,7 +2889,12 @@ VALUES
         connectionStrings["OmpDb"] = BuildConnectionString(config.Sql, config.Sql.Database);
 
         var hostAgentSettings = GetOrCreateJsonObject(root, "HostAgent");
-        hostAgentSettings["ServiceName"] = hostAgent.ServiceName;
+        hostAgentSettings["ServiceName"] = serviceIdentity.ServiceName;
+        if (!string.IsNullOrWhiteSpace(serviceIdentity.Version))
+        {
+            hostAgentSettings["Version"] = serviceIdentity.Version;
+        }
+
         hostAgentSettings["HostKey"] = hostAgent.HostKey;
         hostAgentSettings["HostName"] = hostAgent.HostName;
         hostAgentSettings["RefreshSeconds"] = hostAgent.RefreshSeconds;
@@ -2826,7 +2943,7 @@ VALUES
 
         var selfUpgrade = GetOrCreateJsonObject(hostAgentSettings, "SelfUpgrade");
         selfUpgrade["InstallRoot"] = hostAgent.ServicesRoot;
-        selfUpgrade["ServiceNamePrefix"] = hostAgent.ServiceName;
+        selfUpgrade["ServiceNamePrefix"] = serviceIdentity.ServiceNamePrefix;
         selfUpgrade["ServiceAccountName"] = hostAgent.ServiceAccountName;
         selfUpgrade["ServiceAccountPasswordCredentialKey"] = credentialPlan.ServiceAccountCredentialKey;
         selfUpgrade.Remove("ServiceAccountPassword");
@@ -3840,42 +3957,45 @@ VALUES
 
     private static void CreateService(
         HostAgentInstallOptions hostAgent,
+        HostAgentBootstrapServiceIdentity serviceIdentity,
         string executablePath,
         string serviceAccountPassword)
     {
-        Console.WriteLine($"> Create service {hostAgent.ServiceName}");
-        var arguments = CreateServiceArguments("create", hostAgent, executablePath, serviceAccountPassword);
+        Console.WriteLine($"> Create service {serviceIdentity.ServiceName}");
+        var arguments = CreateServiceArguments("create", hostAgent, serviceIdentity, executablePath, serviceAccountPassword);
         RunProcess(GetScPath(), arguments);
-        SetServiceDescription(hostAgent);
+        SetServiceDescription(hostAgent, serviceIdentity.ServiceName);
     }
 
     private static void ConfigureService(
         HostAgentInstallOptions hostAgent,
+        HostAgentBootstrapServiceIdentity serviceIdentity,
         string executablePath,
         string serviceAccountPassword)
     {
-        Console.WriteLine($"> Configure service {hostAgent.ServiceName}");
-        var arguments = CreateServiceArguments("config", hostAgent, executablePath, serviceAccountPassword);
+        Console.WriteLine($"> Configure service {serviceIdentity.ServiceName}");
+        var arguments = CreateServiceArguments("config", hostAgent, serviceIdentity, executablePath, serviceAccountPassword);
         RunProcess(GetScPath(), arguments);
-        SetServiceDescription(hostAgent);
+        SetServiceDescription(hostAgent, serviceIdentity.ServiceName);
     }
 
     private static string[] CreateServiceArguments(
         string verb,
         HostAgentInstallOptions hostAgent,
+        HostAgentBootstrapServiceIdentity serviceIdentity,
         string executablePath,
         string serviceAccountPassword)
     {
         var arguments = new List<string>
         {
             verb,
-            hostAgent.ServiceName,
+            serviceIdentity.ServiceName,
             "binPath=",
-            CreateHostAgentServiceBinaryPath(executablePath, hostAgent.ServiceName),
+            CreateHostAgentServiceBinaryPath(executablePath, serviceIdentity.ServiceName),
             "start=",
             "auto",
             "DisplayName=",
-            ResolveSystemServiceDisplayName(hostAgent.DisplayName, hostAgent.ServiceName)
+            serviceIdentity.DisplayName
         };
 
         if (!string.IsNullOrWhiteSpace(hostAgent.ServiceAccountName))
@@ -3901,15 +4021,18 @@ VALUES
             : $"{quotedExecutablePath} --service-name={serviceName.Trim()}";
     }
 
-    private static void SetServiceDescription(HostAgentInstallOptions hostAgent)
+    private static void SetServiceDescription(HostAgentInstallOptions hostAgent, string serviceName)
     {
         if (!string.IsNullOrWhiteSpace(hostAgent.Description))
         {
-            RunProcess(GetScPath(), ["description", hostAgent.ServiceName, hostAgent.Description]);
+            RunProcess(GetScPath(), ["description", serviceName, hostAgent.Description]);
         }
     }
 
-    private static string ResolveSystemServiceDisplayName(string configuredDisplayName, string serviceName)
+    private static string ResolveSystemServiceDisplayName(
+        string configuredDisplayName,
+        string serviceName,
+        string? version = null)
     {
         var displayName = string.IsNullOrWhiteSpace(configuredDisplayName)
             ? serviceName.Trim()
@@ -3917,15 +4040,26 @@ VALUES
 
         if (displayName.StartsWith("OMP", StringComparison.OrdinalIgnoreCase))
         {
-            return displayName;
+            return AppendDisplayVersion(displayName, version);
         }
 
         if (displayName.StartsWith("OpenModulePlatform ", StringComparison.OrdinalIgnoreCase))
         {
-            return "OMP " + displayName["OpenModulePlatform ".Length..];
+            return AppendDisplayVersion("OMP " + displayName["OpenModulePlatform ".Length..], version);
         }
 
-        return "OMP " + displayName;
+        return AppendDisplayVersion("OMP " + displayName, version);
+    }
+
+    private static string AppendDisplayVersion(string displayName, string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version)
+            || displayName.EndsWith(" " + version.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return displayName;
+        }
+
+        return $"{displayName} {version.Trim()}";
     }
 
     private static void WaitForServiceState(string serviceName, string expectedState, TimeSpan timeout)
@@ -4562,6 +4696,12 @@ internal sealed class HostAgentInstallOptions
 
     public JsonNode? AppSettings { get; set; }
 }
+
+internal sealed record HostAgentBootstrapServiceIdentity(
+    string ServiceNamePrefix,
+    string ServiceName,
+    string DisplayName,
+    string? Version);
 
 internal sealed class IisAppPoolIdentityOptions
 {
