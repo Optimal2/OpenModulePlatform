@@ -48,8 +48,10 @@
             addedWidgetIds: new Set(),
             pendingRemovedWidgetIds: new Set(),
             nextTemporaryWidgetId: -1,
-            savedSnapshot: null
+            savedSnapshot: null,
+            savedSignature: ''
         };
+        const updateDirtyState = () => updateDashboardDirtyState(root, canvas, state, saveButton);
 
         updateAlignToGridState(root, alignToggle, state.alignToGrid);
         updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
@@ -58,8 +60,23 @@
 
         editToggle.addEventListener('click', async () => {
             if (isEditing) {
-                await saveDashboardChanges(root, canvas, token, state);
-                setEditing(false);
+                if (!updateDirtyState()) {
+                    setEditing(false);
+                    return;
+                }
+
+                const choice = await requestDashboardDoneChoice(root);
+                if (choice === 'save') {
+                    await saveDashboardChanges(root, canvas, token, state);
+                    maxOrder = getMaxOrder(canvas);
+                    setEditing(false);
+                } else if (choice === 'discard') {
+                    const snapshot = state.savedSnapshot || captureDashboardSnapshot(canvas, state);
+                    await resetDashboardChanges(root, canvas, token, state, snapshot, () => ++maxOrder, updateDirtyState);
+                    maxOrder = snapshot.maxOrder;
+                    setEditing(false);
+                }
+
                 return;
             }
 
@@ -67,6 +84,10 @@
         });
 
         saveButton?.addEventListener('click', async () => {
+            if (!updateDirtyState()) {
+                return;
+            }
+
             await saveDashboardChanges(root, canvas, token, state);
             maxOrder = getMaxOrder(canvas);
         });
@@ -85,8 +106,9 @@
 
         resetChangesButton?.addEventListener('click', async () => {
             const snapshot = state.savedSnapshot || captureDashboardSnapshot(canvas, state);
-            await resetDashboardChanges(root, canvas, token, state, snapshot, () => ++maxOrder);
+            await resetDashboardChanges(root, canvas, token, state, snapshot, () => ++maxOrder, updateDirtyState);
             maxOrder = snapshot.maxOrder;
+            updateDirtyState();
         });
 
         resetButton?.addEventListener('click', async () => {
@@ -103,6 +125,8 @@
             state.addedWidgetIds.clear();
             state.pendingRemovedWidgetIds.clear();
             state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+            state.savedSignature = getDashboardSignature(canvas, state);
+            updateDirtyState();
         });
 
         alignToggle?.addEventListener('change', async () => {
@@ -114,12 +138,14 @@
                 snapAllWidgetsToGrid(canvas, state);
                 updateCanvasHeight(root, canvas, state);
             }
+            updateDirtyState();
 
             try {
                 await saveDashboardPreferences(root, token, state);
             } catch (error) {
                 state.alignToGrid = previous;
                 updateAlignToGridState(root, alignToggle, state.alignToGrid);
+                updateDirtyState();
                 throw error;
             }
         });
@@ -130,6 +156,7 @@
             state.expandedCanvas = next;
             updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
             updateCanvasHeight(root, canvas, state);
+            updateDirtyState();
 
             try {
                 await saveDashboardPreferences(root, token, state);
@@ -137,6 +164,7 @@
                 state.expandedCanvas = previous;
                 updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
                 updateCanvasHeight(root, canvas, state);
+                updateDirtyState();
                 throw error;
             }
         });
@@ -174,11 +202,12 @@
                 canvas.appendChild(element);
                 snapWidgetToGrid(element, state);
                 state.addedWidgetIds.add(temporaryWidgetId);
-                bindWidget(root, canvas, element, token, () => ++maxOrder, state);
+                bindWidget(root, canvas, element, token, () => ++maxOrder, state, updateDirtyState);
                 bindEntryFavoriteToggles(root, element, token);
                 bindEntryListFilters(element);
                 updateEmptyState(canvas);
                 updateCanvasHeight(root, canvas, state);
+                updateDirtyState();
                 closePicker(picker);
                 if (!isEditing) {
                     setEditing(true);
@@ -187,15 +216,18 @@
         });
 
         canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => {
-            bindWidget(root, canvas, widget, token, () => ++maxOrder, state);
+            bindWidget(root, canvas, widget, token, () => ++maxOrder, state, updateDirtyState);
         });
         bindEntryFavoriteToggles(root, root, token);
         bindEntryListFilters(root);
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+        state.savedSignature = getDashboardSignature(canvas, state);
+        updateDirtyState();
 
         function setEditing(next) {
             if (isEditing === next) {
                 updateCanvasHeight(root, canvas, state);
+                updateDirtyState();
                 return;
             }
 
@@ -204,6 +236,7 @@
                 state.addedWidgetIds.clear();
                 state.pendingRemovedWidgetIds.clear();
                 state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+                state.savedSignature = getDashboardSignature(canvas, state);
                 maxOrder = state.savedSnapshot.maxOrder;
             }
 
@@ -215,6 +248,7 @@
                     : root.dataset.editLabel || 'Edit dashboard';
             }
             updateCanvasHeight(root, canvas, state);
+            updateDirtyState();
         }
     }
 
@@ -237,7 +271,7 @@
         });
     }
 
-    function bindWidget(root, canvas, widget, token, nextOrder, state) {
+    function bindWidget(root, canvas, widget, token, nextOrder, state, onChange = () => {}) {
         const removeButton = widget.querySelector('[data-widget-remove]');
         const resizeHandle = widget.querySelector('[data-widget-resize]');
 
@@ -252,7 +286,7 @@
 
             event.preventDefault();
             bringToFront(widget, nextOrder());
-            startDrag(root, canvas, widget, event, state);
+            startDrag(root, canvas, widget, event, state, onChange);
         });
 
         resizeHandle?.addEventListener('pointerdown', (event) => {
@@ -263,7 +297,7 @@
             event.preventDefault();
             event.stopPropagation();
             bringToFront(widget, nextOrder());
-            startResize(root, canvas, widget, event, state);
+            startResize(root, canvas, widget, event, state, onChange);
         });
 
         removeButton?.addEventListener('click', async (event) => {
@@ -281,6 +315,7 @@
             widget.remove();
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
+            onChange();
         });
     }
 
@@ -651,7 +686,7 @@
         return String(value || '').trim().toLocaleLowerCase();
     }
 
-    function startDrag(root, canvas, widget, event, state) {
+    function startDrag(root, canvas, widget, event, state, onChange = () => {}) {
         const canvasRect = canvas.getBoundingClientRect();
         const widgetRect = widget.getBoundingClientRect();
         const startX = event.clientX;
@@ -676,6 +711,7 @@
             widget.removeEventListener('pointerup', end);
             widget.removeEventListener('pointercancel', end);
             updateCanvasHeight(root, canvas, state);
+            onChange();
         };
 
         widget.addEventListener('pointermove', move);
@@ -683,7 +719,7 @@
         widget.addEventListener('pointercancel', end);
     }
 
-    function startResize(root, canvas, widget, event, state) {
+    function startResize(root, canvas, widget, event, state, onChange = () => {}) {
         const startX = event.clientX;
         const startY = event.clientY;
         const startWidth = widget.offsetWidth;
@@ -706,6 +742,7 @@
             widget.removeEventListener('pointerup', end);
             widget.removeEventListener('pointercancel', end);
             updateCanvasHeight(root, canvas, state);
+            onChange();
         };
 
         widget.addEventListener('pointermove', move);
@@ -795,6 +832,80 @@
         state.pendingRemovedWidgetIds.clear();
         state.addedWidgetIds.clear();
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+        state.savedSignature = getDashboardSignature(canvas, state);
+        updateDashboardDirtyState(root, canvas, state);
+    }
+
+    function updateDashboardDirtyState(root, canvas, state, saveButton = root.querySelector('[data-dashboard-save]')) {
+        const isDirty = getDashboardSignature(canvas, state) !== (state?.savedSignature || '');
+        root.classList.toggle('has-dashboard-changes', isDirty);
+        if (saveButton) {
+            saveButton.disabled = !isDirty;
+            saveButton.setAttribute('aria-disabled', String(!isDirty));
+        }
+
+        return isDirty;
+    }
+
+    function getDashboardSignature(canvas, state) {
+        const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
+            .map((widget) => ({
+                userActiveWidgetId: parseInt(widget.dataset.userActiveWidgetId || '0', 10),
+                widgetId: parseInt(widget.dataset.widgetId || '0', 10),
+                offsetTop: parsePixel(widget.style.top),
+                offsetLeft: parsePixel(widget.style.left),
+                width: Math.round(widget.offsetWidth),
+                height: Math.round(widget.offsetHeight),
+                orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
+                title: widget.querySelector('[data-widget-titlebar]')?.textContent?.trim() || ''
+            }))
+            .sort((left, right) => {
+                const idCompare = left.userActiveWidgetId - right.userActiveWidgetId;
+                return idCompare !== 0 ? idCompare : left.widgetId - right.widgetId;
+            });
+
+        return JSON.stringify({
+            alignToGrid: !!state?.alignToGrid,
+            expandedCanvas: !!state?.expandedCanvas,
+            widgets
+        });
+    }
+
+    function requestDashboardDoneChoice(root) {
+        const dialog = root.querySelector('[data-dashboard-unsaved-dialog]');
+        if (!dialog || typeof dialog.showModal !== 'function') {
+            return Promise.resolve(window.confirm(root.dataset.doneFallbackConfirm || 'Save changes?') ? 'save' : 'cancel');
+        }
+
+        const saveButton = dialog.querySelector('[data-dashboard-unsaved-save]');
+        const discardButton = dialog.querySelector('[data-dashboard-unsaved-discard]');
+        const cancelButton = dialog.querySelector('[data-dashboard-unsaved-cancel]');
+
+        return new Promise((resolve) => {
+            const finish = (choice) => {
+                saveButton?.removeEventListener('click', save);
+                discardButton?.removeEventListener('click', discard);
+                cancelButton?.removeEventListener('click', cancel);
+                dialog.removeEventListener('cancel', cancel);
+                if (dialog.open) {
+                    dialog.close();
+                }
+
+                resolve(choice);
+            };
+            const save = () => finish('save');
+            const discard = () => finish('discard');
+            const cancel = (event) => {
+                event?.preventDefault();
+                finish('cancel');
+            };
+
+            saveButton?.addEventListener('click', save);
+            discardButton?.addEventListener('click', discard);
+            cancelButton?.addEventListener('click', cancel);
+            dialog.addEventListener('cancel', cancel);
+            dialog.showModal();
+        });
     }
 
     async function saveLayout(root, canvas, token, state) {
@@ -833,7 +944,7 @@
         }
     }
 
-    async function resetDashboardChanges(root, canvas, token, state, snapshot, nextOrder) {
+    async function resetDashboardChanges(root, canvas, token, state, snapshot, nextOrder, onChange = () => {}) {
         const addedIds = Array.from(state.addedWidgetIds);
         for (const userActiveWidgetId of addedIds) {
             if (userActiveWidgetId <= 0) {
@@ -851,10 +962,11 @@
             await saveDashboardPreferences(root, token, state);
         }
 
-        restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder);
+        restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder, onChange);
         state.pendingRemovedWidgetIds.clear();
         state.addedWidgetIds.clear();
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
+        state.savedSignature = getDashboardSignature(canvas, state);
         updateEmptyState(canvas);
         updateCanvasHeight(root, canvas, state);
     }
@@ -892,14 +1004,14 @@
         };
     }
 
-    function restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder) {
+    function restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder, onChange = () => {}) {
         canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => widget.remove());
 
         snapshot.widgets.forEach((savedWidget) => {
             const widget = savedWidget.cloneNode(true);
             clearDashboardBindingMarkers(widget);
             canvas.appendChild(widget);
-            bindWidget(root, canvas, widget, token, nextOrder, state);
+            bindWidget(root, canvas, widget, token, nextOrder, state, onChange);
             bindEntryFavoriteToggles(root, widget, token);
             bindEntryListFilters(widget);
         });
