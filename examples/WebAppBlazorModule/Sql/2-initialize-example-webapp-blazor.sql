@@ -35,7 +35,7 @@ DECLARE @WebBlazorAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-1111
 DECLARE @WebBlazorArtifactId int;
 DECLARE @WebBlazorViewPermissionId int;
 DECLARE @WebBlazorAdminPermissionId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'1.0.0';
+DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.5';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -136,10 +136,10 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @WebBlazorAppId AS AppId,
-           @ArtifactVersion AS Version,
+           @BaselineArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'example-webapp-blazor' AS TargetName,
-           N'example-webapp-blazor/web/' + @ArtifactVersion AS RelativePath,
+           N'example-webapp-blazor/web/' + @BaselineArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -154,12 +154,30 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+-- Repair runs seed the packaged baseline artifact row but should never
+-- downgrade desired state after a newer compatible example artifact has been
+-- imported. Use the latest registered artifact for app/template state.
+SELECT TOP (1) @WebBlazorArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @WebBlazorAppId
+  AND PackageType = N'web-app'
+  AND TargetName = N'example-webapp-blazor'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 SELECT @WebBlazorArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WebBlazorAppId
-  AND Version = @ArtifactVersion
+  AND Version = @BaselineArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'example-webapp-blazor';
+  AND TargetName = N'example-webapp-blazor'
+  AND @WebBlazorArtifactId IS NULL;
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @WebBlazorAppId AND PermissionId = @WebBlazorViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@WebBlazorAppId, @WebBlazorViewPermissionId, 0);

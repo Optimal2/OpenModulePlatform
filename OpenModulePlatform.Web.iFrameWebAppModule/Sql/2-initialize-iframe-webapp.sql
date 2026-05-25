@@ -155,7 +155,7 @@ DECLARE @IFrameAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-1111111
 DECLARE @IFrameArtifactId int;
 DECLARE @IFrameViewPermissionId int;
 DECLARE @IFrameAdminPermissionId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.5';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -251,10 +251,10 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @IFrameAppId AS AppId,
-           @ArtifactVersion AS Version,
+           @BaselineArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'iframe-webapp' AS TargetName,
-           N'iframe-webapp/web/' + @ArtifactVersion AS RelativePath,
+           N'iframe-webapp/web/' + @BaselineArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -269,12 +269,30 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+-- Repair runs seed the packaged baseline artifact row but should never
+-- downgrade desired state after a newer compatible iFrame artifact has been
+-- imported. Use the latest registered iFrame artifact for app/template state.
+SELECT TOP (1) @IFrameArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @IFrameAppId
+  AND PackageType = N'web-app'
+  AND TargetName = N'iframe-webapp'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 SELECT @IFrameArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @IFrameAppId
-  AND Version = @ArtifactVersion
+  AND Version = @BaselineArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'iframe-webapp';
+  AND TargetName = N'iframe-webapp'
+  AND @IFrameArtifactId IS NULL;
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @IFrameAppId AND PermissionId = @IFrameViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@IFrameAppId, @IFrameViewPermissionId, 0);

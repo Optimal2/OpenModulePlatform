@@ -47,9 +47,9 @@ DECLARE @ServiceHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.45';
-DECLARE @WorkerManagerArtifactVersion nvarchar(50) = N'0.3.7';
-DECLARE @WorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineHostAgentArtifactVersion nvarchar(50) = N'0.3.54';
+DECLARE @BaselineWorkerManagerArtifactVersion nvarchar(50) = N'0.3.8';
+DECLARE @BaselineWorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
 DECLARE @DefaultHostKey nvarchar(128) = N'sample-host';
 DECLARE @DefaultHostDisplayName nvarchar(200) = N'Sample Host';
 DECLARE @DefaultHostEnvironment nvarchar(50) = N'Development';
@@ -421,24 +421,24 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @HostAgentAppId AS AppId,
-           @ArtifactVersion AS Version,
+           @BaselineHostAgentArtifactVersion AS Version,
            N'host-agent' AS PackageType,
            N'omp-hostagent' AS TargetName,
-           N'omp-hostagent/hostagent/' + @ArtifactVersion AS RelativePath,
+           N'omp-hostagent/hostagent/' + @BaselineHostAgentArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
     UNION ALL
     SELECT @WorkerManagerAppId AS AppId,
-           @WorkerManagerArtifactVersion AS Version,
+           @BaselineWorkerManagerArtifactVersion AS Version,
            N'service-app' AS PackageType,
            N'omp-workermanager' AS TargetName,
-           N'omp-workermanager/service/' + @WorkerManagerArtifactVersion AS RelativePath,
+           N'omp-workermanager/service/' + @BaselineWorkerManagerArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
     UNION ALL
     SELECT @WorkerProcessHostAppId AS AppId,
-           @WorkerProcessHostArtifactVersion AS Version,
+           @BaselineWorkerProcessHostArtifactVersion AS Version,
            N'worker-host' AS PackageType,
            N'omp-workerprocesshost' AS TargetName,
-           N'omp-workerprocesshost/host/' + @WorkerProcessHostArtifactVersion AS RelativePath,
+           N'omp-workerprocesshost/host/' + @BaselineWorkerProcessHostArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -453,29 +453,50 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+-- Repair runs seed the packaged baseline artifact rows but should never
+-- downgrade desired state after newer compatible core artifacts have been
+-- imported. Use the latest registered artifacts for template state.
 SELECT TOP (1) @HostAgentArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @HostAgentAppId
-  AND Version = @ArtifactVersion
   AND PackageType = N'host-agent'
   AND TargetName = N'omp-hostagent'
-ORDER BY ArtifactId;
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
 
 SELECT TOP (1) @WorkerManagerArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WorkerManagerAppId
-  AND Version = @WorkerManagerArtifactVersion
   AND PackageType = N'service-app'
   AND TargetName = N'omp-workermanager'
-ORDER BY ArtifactId;
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
 
 SELECT TOP (1) @WorkerProcessHostArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WorkerProcessHostAppId
-  AND Version = @WorkerProcessHostArtifactVersion
   AND PackageType = N'worker-host'
   AND TargetName = N'omp-workerprocesshost'
-ORDER BY ArtifactId;
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
 
 MERGE omp.InstanceTemplateModuleInstances AS target
 USING

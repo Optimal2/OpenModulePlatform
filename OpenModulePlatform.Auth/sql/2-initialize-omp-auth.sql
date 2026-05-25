@@ -29,7 +29,7 @@ DECLARE @AuthTemplateModuleInstanceId int;
 DECLARE @AuthAppId int;
 DECLARE @AuthAppInstanceId uniqueidentifier;
 DECLARE @AuthArtifactId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.4';
 
 SELECT TOP (1)
        @InstanceId = InstanceId,
@@ -87,10 +87,10 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @AuthAppId AS AppId,
-           @ArtifactVersion AS Version,
+           @BaselineArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'omp-auth' AS TargetName,
-           N'omp-auth/web/' + @ArtifactVersion AS RelativePath,
+           N'omp-auth/web/' + @BaselineArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -105,12 +105,30 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+-- Repair runs seed the packaged baseline artifact row but should never
+-- downgrade desired state after a newer compatible Auth artifact has been
+-- imported. Use the latest registered Auth artifact for app/template state.
+SELECT TOP (1) @AuthArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @AuthAppId
+  AND PackageType = N'web-app'
+  AND TargetName = N'omp-auth'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 SELECT @AuthArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @AuthAppId
-  AND Version = @ArtifactVersion
+  AND Version = @BaselineArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'omp-auth';
+  AND TargetName = N'omp-auth'
+  AND @AuthArtifactId IS NULL;
 
 MERGE omp.ArtifactConfigurationFiles AS target
 USING

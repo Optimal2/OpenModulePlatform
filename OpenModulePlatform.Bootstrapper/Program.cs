@@ -1476,7 +1476,13 @@ BEGIN
               AND item.IsEnabled = 1
               AND item.PackageType = COALESCE(source.PackageType, source.DefaultPackageType)
               AND (source.TargetName IS NULL OR item.TargetName = source.TargetName)
-            ORDER BY item.UpdatedUtc DESC, item.ArtifactId DESC
+            ORDER BY
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 4)), 0) DESC,
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 3)), 0) DESC,
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 2)), 0) DESC,
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 1)), 0) DESC,
+                item.Version DESC,
+                item.ArtifactId DESC
         ) artifact
     )
     MERGE omp.AppInstances AS target
@@ -1607,7 +1613,13 @@ BEGIN
               AND item.IsEnabled = 1
               AND item.PackageType = COALESCE(source.PackageType, source.DefaultPackageType)
               AND (source.TargetName IS NULL OR item.TargetName = source.TargetName)
-            ORDER BY item.UpdatedUtc DESC, item.ArtifactId DESC
+            ORDER BY
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 4)), 0) DESC,
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 3)), 0) DESC,
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 2)), 0) DESC,
+                COALESCE(TRY_CONVERT(int, PARSENAME(item.Version, 1)), 0) DESC,
+                item.Version DESC,
+                item.ArtifactId DESC
         ) artifact
     )
     MERGE omp.InstanceTemplateAppInstances AS target
