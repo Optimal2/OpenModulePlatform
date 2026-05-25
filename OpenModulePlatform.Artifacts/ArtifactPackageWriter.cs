@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace OpenModulePlatform.Artifacts;
 
@@ -14,13 +15,15 @@ public sealed class ArtifactPackageWriter
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true
     };
 
     public void CreateFromPayloadDirectory(
         string payloadDirectoryPath,
         string destinationZipPath,
-        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles)
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        string? minModuleDefinitionVersion = null)
     {
         if (!Directory.Exists(payloadDirectoryPath))
         {
@@ -37,7 +40,7 @@ public sealed class ArtifactPackageWriter
         {
             Directory.CreateDirectory(Path.GetDirectoryName(tempPayloadZipPath)!);
             CreatePayloadZip(payloadDirectoryPath, tempPayloadZipPath);
-            CreateFromPayloadZip(tempPayloadZipPath, destinationZipPath, configurationFiles);
+            CreateFromPayloadZip(tempPayloadZipPath, destinationZipPath, configurationFiles, minModuleDefinitionVersion);
         }
         finally
         {
@@ -48,7 +51,8 @@ public sealed class ArtifactPackageWriter
     public void CreateFromPayloadZip(
         string payloadZipPath,
         string destinationZipPath,
-        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles)
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        string? minModuleDefinitionVersion = null)
     {
         if (!File.Exists(payloadZipPath))
         {
@@ -70,6 +74,9 @@ public sealed class ArtifactPackageWriter
                 type = "zip",
                 path = PayloadEntryName
             },
+            moduleDefinition = string.IsNullOrWhiteSpace(minModuleDefinitionVersion)
+                ? null
+                : new { minVersion = minModuleDefinitionVersion.Trim() },
             configurationFiles = normalizedConfigurationFiles.Select(file => new
             {
                 file.RelativePath,

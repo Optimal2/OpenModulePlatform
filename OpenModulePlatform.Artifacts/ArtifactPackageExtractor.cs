@@ -51,6 +51,7 @@ public sealed class ArtifactPackageExtractor
         return new ArtifactPackageExtractionResult(
             stagingPath,
             [],
+            MinModuleDefinitionVersion: null,
             UsesManifestEnvelope: false);
     }
 
@@ -86,7 +87,17 @@ public sealed class ArtifactPackageExtractor
         return new ArtifactPackageExtractionResult(
             artifactContentPath,
             ReadConfigurationFiles(archive, manifest),
+            ReadMinModuleDefinitionVersion(manifest),
             UsesManifestEnvelope: true);
+    }
+
+    private static string? ReadMinModuleDefinitionVersion(JsonObject manifest)
+    {
+        var moduleDefinition = manifest["moduleDefinition"] as JsonObject;
+        var value = moduleDefinition?["minVersion"]?.GetValue<string>()
+            ?? manifest["minModuleDefinitionVersion"]?.GetValue<string>()
+            ?? manifest["requiredModuleDefinitionVersion"]?.GetValue<string>();
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private int ExtractNestedPayloadZip(

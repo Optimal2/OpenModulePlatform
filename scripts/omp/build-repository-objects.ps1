@@ -449,15 +449,22 @@ try {
             $configurationFileArgs = @($configurationMappings[[string]$component.componentKey])
         }
 
-        & $newArtifactPackageScript `
-            -ModuleKey ([string]$component.moduleKey) `
-            -AppKey ([string]$component.appKey) `
-            -PackageType ([string]$component.packageType) `
-            -TargetName ([string]$component.targetName) `
-            -Version ([string]$component.version) `
-            -PayloadPath $payloadPath `
-            -OutputPath $artifactsRoot `
-            -ConfigurationFile $configurationFileArgs
+        $artifactPackageArgs = @{
+            ModuleKey = [string]$component.moduleKey
+            AppKey = [string]$component.appKey
+            PackageType = [string]$component.packageType
+            TargetName = [string]$component.targetName
+            Version = [string]$component.version
+            PayloadPath = $payloadPath
+            OutputPath = $artifactsRoot
+            ConfigurationFile = $configurationFileArgs
+        }
+        $minModuleDefinitionVersion = [string](Get-JsonPropertyValue -Object $component -Name 'minModuleDefinitionVersion')
+        if (-not [string]::IsNullOrWhiteSpace($minModuleDefinitionVersion)) {
+            $artifactPackageArgs.MinModuleDefinitionVersion = $minModuleDefinitionVersion.Trim()
+        }
+
+        & $newArtifactPackageScript @artifactPackageArgs
         if ($LASTEXITCODE -ne 0) {
             throw "Artifact package creation failed for component '$($component.componentKey)'."
         }
