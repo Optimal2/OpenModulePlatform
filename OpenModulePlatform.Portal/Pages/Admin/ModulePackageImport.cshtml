@@ -117,6 +117,13 @@
         </div>
 
         <div class="workflow-choice-grid workflow-choice-grid--dense" data-workflow-options="export" hidden>
+            <button type="button" class="workflow-choice" data-workflow-action="export-universal" aria-pressed="false">
+                <span class="workflow-choice__icon" aria-hidden="true">◎</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Universal zip"]</span>
+                    <span class="workflow-choice__text">@L["Create one zip containing the selected OMP objects."]</span>
+                </span>
+            </button>
             <button type="button" class="workflow-choice" data-workflow-action="export-module" aria-pressed="false">
                 <span class="workflow-choice__icon" aria-hidden="true">▣</span>
                 <span class="workflow-choice__content">
@@ -163,10 +170,11 @@
         <h3>@L["Import universal module package"]</h3>
         <p class="muted">@L["Use this for the new universal package format with omp-universal-package.json and standard object folders. Each object is imported independently so one failed item does not stop the rest."]</p>
 
-        <form method="post" asp-page-handler="ImportUniversal" enctype="multipart/form-data" class="form-grid top-gap">
+        <form method="post" enctype="multipart/form-data" class="form-grid top-gap">
             <div class="form-field">
                 <label asp-for="UniversalUploadInput.PackageFile">@L["Universal module package zip"]</label>
                 <input asp-for="UniversalUploadInput.PackageFile" type="file" accept=".zip,application/zip" />
+                <div class="field-help">@L["Preview lets you choose individual items. Import all applies every supported item immediately."]</div>
             </div>
 
             <div class="option-cluster option-cluster--2">
@@ -212,9 +220,66 @@
             </div>
 
             <div class="toolbar">
-                <button type="submit">@L["Import universal zip"]</button>
+                <button type="submit" asp-page-handler="PreviewUniversal">@L["Preview and choose"]</button>
+                <button type="submit" asp-page-handler="ImportUniversal">@L["Import all"]</button>
             </div>
         </form>
+
+        @if (Model.UniversalPreview is not null)
+        {
+            <form method="post" asp-page-handler="ImportStagedUniversal" class="form-grid top-gap">
+                <input type="hidden" asp-for="UniversalStagedInput.Token" />
+                <input type="hidden" asp-for="UniversalStagedInput.ApplyModuleDefinitions" />
+                <input type="hidden" asp-for="UniversalStagedInput.ExecuteSqlRepairs" />
+                <input type="hidden" asp-for="UniversalStagedInput.UseArtifactsImmediately" />
+                <input type="hidden" asp-for="UniversalStagedInput.CopyConfigurationFilesFromPreviousVersion" />
+                <input type="hidden" asp-for="UniversalStagedInput.AllowTemporaryIncompatibleArtifacts" />
+                <input type="hidden" asp-for="UniversalStagedInput.ReplaceExistingModuleDefinitions" />
+                <input type="hidden" asp-for="UniversalStagedInput.ReplaceExistingArtifacts" />
+                <input type="hidden" asp-for="UniversalStagedInput.ReplaceExistingConfigObjects" />
+
+                <div class="section-heading-row">
+                    <div>
+                        <h4>@L["Package contents"]</h4>
+                        <p class="muted">
+                            @Model.UniversalPreview.DisplayName
+                            @if (!string.IsNullOrWhiteSpace(Model.UniversalPreview.TargetHostProfile))
+                            {
+                                <span>@string.Format(L["Target host: {0}"].Value, Model.UniversalPreview.TargetHostProfile)</span>
+                            }
+                        </p>
+                    </div>
+                </div>
+
+                <div class="table-scroll">
+                    <table class="grid">
+                        <thead>
+                            <tr>
+                                <th>@L["Import"]</th>
+                                <th>@L["Kind"]</th>
+                                <th>@L["Path"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var item in Model.UniversalPreview.Items)
+                        {
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="UniversalStagedInput.SelectedItemPaths" value="@item.Path" checked />
+                                </td>
+                                <td>@item.Kind</td>
+                                <td><code>@item.Path</code></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Import selected items"]</button>
+                </div>
+            </form>
+        }
     </section>
 
     <section class="card workflow-panel" data-workflow-panel="import-bundle" hidden>
@@ -605,6 +670,120 @@
                 </table>
             </div>
         }
+    </section>
+
+    <section class="card workflow-panel" data-workflow-panel="export-universal" hidden>
+        <h3>@L["Export universal module package"]</h3>
+        <p class="muted">@L["Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, and widgets."]</p>
+
+        <form method="get" asp-page-handler="ExportUniversal" class="form-grid top-gap">
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="UniversalExportInput.PackageKey">@L["Package key"]</label>
+                    <input asp-for="UniversalExportInput.PackageKey" />
+                </div>
+                <div class="form-field">
+                    <label asp-for="UniversalExportInput.PackageVersion">@L["Package version"]</label>
+                    <input asp-for="UniversalExportInput.PackageVersion" />
+                </div>
+                <div class="form-field">
+                    <label asp-for="UniversalExportInput.DisplayName">@L["Display name"]</label>
+                    <input asp-for="UniversalExportInput.DisplayName" />
+                </div>
+                <div class="form-field">
+                    <label asp-for="UniversalExportInput.TargetHostProfile">@L["Target host profile"]</label>
+                    <input asp-for="UniversalExportInput.TargetHostProfile" placeholder="@L["Optional"]" />
+                    <div class="field-help">@L["Leave empty for a global/generic package."]</div>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="UniversalExportInput.Description">@L["Description"]</label>
+                <input asp-for="UniversalExportInput.Description" />
+            </div>
+
+            <div class="option-cluster option-cluster--2">
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalExportInput.IncludeArtifactsForSelectedModules" type="checkbox" />
+                    <span>@L["Include compatible artifacts for selected modules"]</span>
+                </label>
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalExportInput.IncludeAllArtifactVersions" type="checkbox" />
+                    <span>@L["Include historical artifact versions for selected modules"]</span>
+                </label>
+            </div>
+
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <h4>@L["Module definitions"]</h4>
+                    <div class="selection-list">
+                        @foreach (var definition in Model.AppliedDefinitions)
+                        {
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="UniversalExportInput.ModuleKeys" value="@definition.ModuleKey" />
+                                <span><code>@definition.ModuleKey</code> @definition.DefinitionVersion</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <h4>@L["Artifacts"]</h4>
+                    <div class="selection-list">
+                        @foreach (var artifact in Model.ArtifactRows)
+                        {
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="UniversalExportInput.ArtifactIds" value="@artifact.ArtifactId" />
+                                <span><code>@artifact.ModuleKey/@artifact.AppKey</code> @artifact.PackageType @artifact.Version</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <h4>@L["Host configs"]</h4>
+                    <div class="selection-list">
+                        @foreach (var item in Model.HostConfigurationRows)
+                        {
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="UniversalExportInput.HostConfigurationDocumentIds" value="@item.HostConfigurationDocumentId" />
+                                <span><code>@item.HostKey</code> @item.ConfigurationVersion</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <h4>@L["Config overlays"]</h4>
+                    <div class="selection-list">
+                        @foreach (var item in Model.ConfigOverlayRows)
+                        {
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="UniversalExportInput.ConfigOverlayDocumentIds" value="@item.ConfigOverlayDocumentId" />
+                                <span><code>@item.HostKey/@item.OverlayKey</code> @item.OverlayVersion</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <h4>@L["Widgets"]</h4>
+                    <div class="selection-list">
+                        @foreach (var widget in Model.WidgetRows)
+                        {
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="UniversalExportInput.WidgetIds" value="@widget.WidgetId" />
+                                <span>@widget.Title <code>@widget.WidgetKey</code></span>
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Export universal zip"]</button>
+            </div>
+        </form>
     </section>
 
     <section class="card workflow-panel" data-workflow-panel="export-module" hidden>

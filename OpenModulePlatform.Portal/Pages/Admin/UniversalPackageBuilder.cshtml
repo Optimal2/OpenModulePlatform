@@ -1,0 +1,19 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.UniversalPackageBuilderModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Object tools"]</div>
+        <h2>@L["Universal package builder"]</h2>
+        <p class="lede">@L["Use this standalone-compatible tool to create a universal OMP package zip from any mix of portable objects."]</p>
+    </div>
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/modulepackageimport">@L["Back to import/export"]</a>
+</div>
+
+<iframe
+    class="module-definition-editor-frame top-gap"
+    title="@L["Universal package builder"]"
+    src="~/tools/universal-package-builder/index.html"></iframe>
