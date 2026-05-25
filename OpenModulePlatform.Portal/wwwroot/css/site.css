@@ -11,6 +11,7 @@
     --link-hover: #0842a1;
     --accent: #e8f0fe;
     --shadow: 0 8px 24px rgba(17, 24, 39, 0.05);
+    --portal-page-chrome-width: 100%;
 }
 
 * {
@@ -19,6 +20,7 @@
 
 html {
     background: var(--bg);
+    min-width: 100%;
 }
 
 body {
@@ -26,6 +28,7 @@ body {
     margin: 0;
     color: var(--text);
     background: var(--bg);
+    min-width: 100%;
 }
 
 a {
@@ -39,10 +42,20 @@ a:hover {
 .app-header {
     position: sticky;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 10;
+    width: max(100%, var(--portal-page-chrome-width, 100%));
+    min-width: 100%;
     border-bottom: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.94);
     backdrop-filter: blur(8px);
+}
+
+.app-header > .portal-topbar,
+.app-header > .topbar {
+    width: 100%;
+    min-width: 100%;
 }
 
 .topbar {
@@ -289,6 +302,7 @@ a:hover {
 .content-shell--expanded-dashboard,
 .content-shell:has(.portal-dashboard.is-expanded-canvas) {
     max-width: none;
+    overflow-x: auto;
 }
 
 .content {
@@ -1616,6 +1630,27 @@ a.dashboard-role-list__item:focus-visible {
     text-align: center;
 }
 
+.dashboard-date-widget {
+    display: grid;
+    align-content: center;
+    height: 100%;
+    min-height: 0;
+    padding: 8px;
+}
+
+.dashboard-date-widget__weekday {
+    color: var(--text);
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.dashboard-date-widget__date {
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 0.98rem;
+}
+
 .dashboard-widget__remove {
     position: absolute;
     top: 6px;
@@ -1741,8 +1776,8 @@ a.dashboard-role-list__item:focus-visible {
 
 .dashboard-reset-button {
     position: fixed;
-    left: 22px;
-    bottom: 218px;
+    left: 150px;
+    bottom: 22px;
     z-index: 20000;
     display: none;
     align-items: center;
