@@ -1,0 +1,13 @@
+@using System.Globalization
+
+@{
+    var now = DateTime.Now;
+    var culture = CultureInfo.CurrentUICulture;
+    var weekday = culture.TextInfo.ToTitleCase(now.ToString("dddd", culture));
+    var date = now.ToString("d MMMM yyyy", culture);
+}
+
+<div class="dashboard-date-widget">
+    <div class="dashboard-date-widget__weekday">@weekday</div>
+    <div class="dashboard-date-widget__date">@date</div>
+</div>

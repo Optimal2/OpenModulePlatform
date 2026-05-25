@@ -70,8 +70,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         }
 
         var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
-        var widget = await _dashboard.AddWidgetAsync(
-            userId,
+        var widget = await _dashboard.CreateWidgetDraftAsync(
             widgetId,
             roleContext.EffectiveRoleIds.ToHashSet(),
             roleContext.EffectivePermissions,
@@ -96,8 +95,15 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             : JsonSerializer.Deserialize<List<DashboardWidgetLayoutUpdate>>(
                 widgetsJson,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-        await _dashboard.UpdateLayoutAsync(userId, updates, ct);
-        return new JsonResult(new { ok = true });
+
+        var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
+        var result = await _dashboard.SaveLayoutAsync(
+            userId,
+            updates,
+            roleContext.EffectiveRoleIds.ToHashSet(),
+            roleContext.EffectivePermissions,
+            ct);
+        return new JsonResult(new { ok = true, addedWidgets = result.CreatedWidgets });
     }
 
     public async Task<IActionResult> OnPostSaveDashboardPreference(bool alignToGrid, bool expandedCanvas, CancellationToken ct)

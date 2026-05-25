@@ -349,6 +349,13 @@ USING
            N'user-roles' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'weekday-date' AS widget_key,
+           N'Weekday and date' AS title,
+           N'portal' AS widget_type,
+           N'weekday-date' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
 ) AS source
 ON target.widget_key = source.widget_key
 WHEN MATCHED THEN
