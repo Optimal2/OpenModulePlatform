@@ -149,6 +149,40 @@ The standalone tool at `tools/universal-package-builder/index.html` creates the
 same zip format entirely in the browser. It is available in Portal through the
 Universal package builder admin page and can also be opened directly from disk.
 
+## Repository Export Standard
+
+Each OMP-compatible module repository should have the same exporter path:
+
+```text
+scripts/omp/export-universal-package.ps1
+```
+
+The exporter is the command-line equivalent of the Portal and standalone
+builders for repository-owned objects. It reads `omp-components.json`, builds the
+current module definitions and artifact packages, optionally applies host
+profile inputs, and writes a universal package zip.
+
+Use a global package when the repository only contributes generic module
+definitions and binary artifact packages:
+
+```powershell
+.\scripts\omp\export-universal-package.ps1 -AllComponents -BuildArtifacts
+```
+
+Use a host profile when repository objects need host-specific configuration
+files or overlays:
+
+```powershell
+.\scripts\omp\export-universal-package.ps1 `
+  -AllComponents `
+  -BuildArtifacts `
+  -HostProfilePath E:\Private\profiles\vgr-test.package-profile.json
+```
+
+Public repositories should not store customer-specific profile files. The
+private installer repository can keep those profiles and pass them to the same
+exporter so every repository follows the same packaging model.
+
 ## Import Behavior
 
 Importers process universal packages item by item.

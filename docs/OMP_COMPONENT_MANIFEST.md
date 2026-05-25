@@ -84,18 +84,78 @@ Repositories can also build their own portable objects without a full installer
 refresh:
 
 ```powershell
-.\build-omp-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -AllComponents
-.\build-omp-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -ComponentKey content-webapp -BuildArtifacts
-.\build-omp-objects.ps1 `
+.\scripts\omp\build-repository-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -AllComponents
+.\scripts\omp\build-repository-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -ComponentKey content-webapp -BuildArtifacts
+.\scripts\omp\build-repository-objects.ps1 `
   -OutputRoot E:\OMP\ObjectBuild `
   -ComponentKey opendocviewer-web `
   -BuildArtifacts `
   -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'
 ```
 
-The output shape is always `module-definitions` and `artifacts`. Point
-`OutputRoot` at an installer package's `data/global` folder to refresh the
+The output shape is always:
+
+```text
+module-definitions/
+artifacts/
+host-configs/
+config-overlays/
+widgets/
+```
+
+Point `OutputRoot` at an installer package's `data/global` folder to refresh the
 shared package library directly. Customer or host-specific configuration is
 passed as arguments and must not be committed to source repositories; the DEV
 repository is the appropriate place to keep private profile files and the
 commands that pass those files into object generation.
+
+## Repository Universal Package Export
+
+Every OMP-compatible module repository should expose this command path:
+
+```text
+scripts/omp/export-universal-package.ps1
+```
+
+The command reads `omp-components.json`, builds the repository's current
+portable objects, and emits one universal package zip with
+`omp-universal-package.json` plus the standard object folders.
+
+Global package:
+
+```powershell
+.\scripts\omp\export-universal-package.ps1 -AllComponents -BuildArtifacts
+```
+
+Host-specific package:
+
+```powershell
+.\scripts\omp\export-universal-package.ps1 `
+  -AllComponents `
+  -BuildArtifacts `
+  -HostProfilePath E:\Private\profiles\vgr-test.package-profile.json `
+  -OutputPath E:\Packages\openmoduleplatform__vgr-test__20260525.zip
+```
+
+The optional host profile is JSON. It may contain:
+
+```json
+{
+  "targetHostProfile": "vgr-test",
+  "artifactConfigurationFiles": [
+    {
+      "componentKey": "opendocviewer-web",
+      "relativePath": "odv.site.config.js",
+      "sourcePath": "overlays/vgr-test/odv.site.config.js"
+    }
+  ],
+  "hostConfigurationFiles": [],
+  "configOverlayFiles": [],
+  "widgetFiles": []
+}
+```
+
+Paths inside the profile are resolved relative to the profile file unless they
+are absolute. This lets the private DEV repository keep sensitive or
+customer-specific inputs while public module repositories keep only generic code,
+module definitions, and component metadata.

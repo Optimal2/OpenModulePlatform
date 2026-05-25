@@ -18,3 +18,31 @@ mappings, not committed to the public repository.
 
 Use `-WidgetFile` for dashboard widget JSON objects that should be copied into
 the same output shape as the other portable OMP objects.
+
+`export-universal-package.ps1` is the standard command that every
+OMP-compatible module repository should expose at the same path. It uses the
+object builder and then creates one universal zip with
+`omp-universal-package.json` at the root.
+
+Examples:
+
+```powershell
+.\scripts\omp\export-universal-package.ps1 -AllComponents -BuildArtifacts
+
+.\scripts\omp\export-universal-package.ps1 `
+  -AllComponents `
+  -BuildArtifacts `
+  -TargetHostProfile vgr-test `
+  -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'
+
+.\scripts\omp\export-universal-package.ps1 `
+  -AllComponents `
+  -BuildArtifacts `
+  -HostProfilePath E:\Private\profiles\vgr-test.package-profile.json `
+  -OutputPath E:\Packages\opendocviewer__vgr-test__20260525.zip
+```
+
+The optional host profile is JSON and can provide `targetHostProfile`,
+`artifactConfigurationFiles`, `hostConfigurationFiles`, `configOverlayFiles`,
+and `widgetFiles`. Keep private host profiles in the private installer or DEV
+repository, not in public module repositories.
