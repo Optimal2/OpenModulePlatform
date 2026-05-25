@@ -12,6 +12,11 @@ The outer filename is:
 Configuration files are supplied as relative-path/source-path pairs using:
 
   -ConfigurationFile 'odv.site.config.js=C:\config\odv.site.config.js'
+
+Runtime configuration files such as appsettings.json and
+appsettings.Development.json are removed from payload directories before the
+immutable artifact payload is zipped. Put those files in -ConfigurationFile,
+artifact configuration rows, or config overlays instead.
 #>
 [CmdletBinding()]
 param(
@@ -113,16 +118,55 @@ function Resolve-ConfigurationMapping {
     }
 }
 
+function Test-RuntimeConfigurationFileName {
+    param([string]$FileName)
+
+    if ([string]::IsNullOrWhiteSpace($FileName)) {
+        return $false
+    }
+
+    if ([string]::Equals($FileName, 'appsettings.json', [StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    if ($FileName.StartsWith('appsettings.', [StringComparison]::OrdinalIgnoreCase) `
+            -and $FileName.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    return [string]::Equals($FileName, 'odv.site.config.js', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Remove-RuntimeConfigurationFilesFromFolder {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    Get-ChildItem -LiteralPath $Path -File -Recurse |
+        Where-Object { Test-RuntimeConfigurationFileName -FileName $_.Name } |
+        Remove-Item -Force
+}
+
+function Assert-ZipPayloadDoesNotContainRuntimeConfiguration {
+    param([Parameter(Mandatory = $true)][string]$ZipPath)
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        foreach ($entry in $archive.Entries) {
+            if (-not [string]::IsNullOrWhiteSpace($entry.Name) `
+                    -and (Test-RuntimeConfigurationFileName -FileName $entry.Name)) {
+                throw "Payload zip contains runtime configuration file '$($entry.FullName)'. Put runtime configuration in -ConfigurationFile instead."
+            }
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
 function Compress-PayloadDirectory {
     param(
         [string]$SourceDirectory,
         [string]$DestinationZip
     )
-
-    $items = @(Get-ChildItem -LiteralPath $SourceDirectory -Force)
-    if ($items.Count -eq 0) {
-        throw "Payload directory is empty: $SourceDirectory"
-    }
 
     $parent = Split-Path -Parent $DestinationZip
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
@@ -130,7 +174,22 @@ function Compress-PayloadDirectory {
         Remove-Item -LiteralPath $DestinationZip -Force
     }
 
-    Compress-Archive -Path @($items | ForEach-Object { $_.FullName }) -DestinationPath $DestinationZip -Force
+    $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-artifact-payload-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
+        Get-ChildItem -LiteralPath $SourceDirectory -Force | Copy-Item -Destination $stagingRoot -Recurse -Force
+        Remove-RuntimeConfigurationFilesFromFolder -Path $stagingRoot
+
+        $items = @(Get-ChildItem -LiteralPath $stagingRoot -Force)
+        if ($items.Count -eq 0) {
+            throw "Payload directory is empty after runtime configuration files were removed: $SourceDirectory"
+        }
+
+        Compress-Archive -Path @($items | ForEach-Object { $_.FullName }) -DestinationPath $DestinationZip -Force
+    }
+    finally {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 foreach ($token in @($ModuleKey, $AppKey, $PackageType, $TargetName, $Version)) {
@@ -163,6 +222,7 @@ try {
         Compress-PayloadDirectory -SourceDirectory $payloadFullPath -DestinationZip $payloadZip
     }
     elseif ($payloadFullPath.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {
+        Assert-ZipPayloadDoesNotContainRuntimeConfiguration -ZipPath $payloadFullPath
         Copy-Item -LiteralPath $payloadFullPath -Destination $payloadZip -Force
     }
     else {
