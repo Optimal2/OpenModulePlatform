@@ -183,6 +183,26 @@ Public repositories should not store customer-specific profile files. The
 private installer repository can keep those profiles and pass them to the same
 exporter so every repository follows the same packaging model.
 
+## Plugins
+
+Plugins are not a separate universal-package object folder. OMP transports
+plugin code as artifact packages, using the package type that matches the
+runtime contract:
+
+- `worker` for WorkerManager-loaded worker plugins.
+- `worker-host` for the generic WorkerProcessHost runtime.
+- `channel-type` for module-private plugin models such as IbsPackager channel
+  types.
+- `service-app` or `web-app` when a module implements extension behavior as a
+  normal hosted app.
+
+Plugin metadata belongs to the owning module definition or module-specific
+database/configuration. For example, WorkerManager plugin metadata is expressed
+through app worker definitions in the module definition, while IbsPackager
+channel-type metadata belongs to the IbsPackager module. Host-specific plugin
+configuration should be emitted as config overlays or artifact configuration
+files, not embedded into the binary artifact hash.
+
 ## Import Behavior
 
 Importers process universal packages item by item.
