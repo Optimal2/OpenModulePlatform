@@ -2144,4 +2144,5 @@
   <data name="Switch active role to {0}?" xml:space="preserve"><value>Byt aktiv roll till {0}?</value></data>
   <data name="You have unsaved dashboard changes. Save them before leaving edit mode?" xml:space="preserve"><value>Du har osparade dashboardändringar. Vill du spara dem innan du lämnar redigeringsläget?</value></data>
   <data name="Keep editing" xml:space="preserve"><value>Fortsätt redigera</value></data>
+  <data name="Week {0}" xml:space="preserve"><value>Vecka {0}</value></data>
 </root>

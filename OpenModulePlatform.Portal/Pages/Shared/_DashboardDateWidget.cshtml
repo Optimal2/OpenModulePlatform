@@ -1,13 +1,17 @@
 @using System.Globalization
+@using OpenModulePlatform.Portal.Localization
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
 
 @{
     var now = DateTime.Now;
-    var culture = CultureInfo.CurrentUICulture;
+    var culture = CultureInfo.GetCultureInfo("sv-SE");
+    var weekNumber = ISOWeek.GetWeekOfYear(now);
     var weekday = culture.TextInfo.ToTitleCase(now.ToString("dddd", culture));
     var date = now.ToString("d MMMM yyyy", culture);
 }
 
 <div class="dashboard-date-widget">
+    <div class="dashboard-date-widget__week">@L["Week {0}", weekNumber]</div>
     <div class="dashboard-date-widget__weekday">@weekday</div>
     <div class="dashboard-date-widget__date">@date</div>
 </div>

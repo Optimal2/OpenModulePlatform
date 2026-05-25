@@ -1654,7 +1654,15 @@ a.dashboard-role-list__item:focus-visible {
     padding: 8px;
 }
 
+.dashboard-date-widget__week {
+    color: var(--accent);
+    font-size: 0.92rem;
+    font-weight: 750;
+    line-height: 1.2;
+}
+
 .dashboard-date-widget__weekday {
+    margin-top: 4px;
     color: var(--text);
     font-size: 1.45rem;
     font-weight: 800;
