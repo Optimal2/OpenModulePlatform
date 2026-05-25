@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OMP Universal Package Builder</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f6f8fb;
+            --panel: #ffffff;
+            --text: #132033;
+            --muted: #60708a;
+            --border: #d5deea;
+            --accent: #1b6ec2;
+            --accent-strong: #14579a;
+            --danger: #a61b1b;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 18px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 14px;
+        }
+
+        h1, h2 {
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+        }
+
+        h2 {
+            font-size: 1rem;
+        }
+
+        p {
+            margin: 6px 0 0;
+            color: var(--muted);
+        }
+
+        button, input, select, textarea {
+            font: inherit;
+        }
+
+        button {
+            min-height: 34px;
+            padding: 6px 12px;
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            background: var(--accent);
+            color: #ffffff;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            border-color: var(--border);
+            background: #ffffff;
+            color: var(--text);
+        }
+
+        button.danger {
+            border-color: #d9a4a4;
+            background: #fff5f5;
+            color: var(--danger);
+        }
+
+        button:hover {
+            border-color: var(--accent-strong);
+        }
+
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            margin-top: 12px;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel);
+        }
+
+        .field-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .field {
+            display: grid;
+            gap: 4px;
+        }
+
+        label {
+            font-weight: 600;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            min-height: 34px;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #ffffff;
+            color: var(--text);
+        }
+
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-top: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            table-layout: fixed;
+        }
+
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+
+        th {
+            background: #f1f5fa;
+            font-size: 0.82rem;
+        }
+
+        code {
+            font-family: Consolas, "Liberation Mono", monospace;
+            font-size: 0.86rem;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .status {
+            min-height: 22px;
+            color: var(--muted);
+        }
+
+        .status.error {
+            color: var(--danger);
+        }
+
+        @media (max-width: 760px) {
+            .grid,
+            .field-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<main class="page">
+    <header>
+        <h1>OMP Universal Package Builder</h1>
+        <p>Create a universal package zip with module definitions, artifact packages, host configs, config overlays, and widgets.</p>
+    </header>
+
+    <section class="card">
+        <h2>Package metadata</h2>
+        <div class="field-grid">
+            <div class="field">
+                <label for="packageKey">Package key</label>
+                <input id="packageKey" value="omp-universal" />
+            </div>
+            <div class="field">
+                <label for="packageVersion">Package version</label>
+                <input id="packageVersion" />
+            </div>
+            <div class="field">
+                <label for="displayName">Display name</label>
+                <input id="displayName" value="OpenModulePlatform universal package" />
+            </div>
+            <div class="field">
+                <label for="targetHostProfile">Target host profile</label>
+                <input id="targetHostProfile" placeholder="Optional host key/profile" />
+            </div>
+        </div>
+        <div class="field" style="margin-top: 10px;">
+            <label for="description">Description</label>
+            <textarea id="description"></textarea>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Add objects</h2>
+        <div class="grid">
+            <div class="field">
+                <label for="objectKind">Object type</label>
+                <select id="objectKind">
+                    <option value="module-definition">Module definition JSON</option>
+                    <option value="artifact-package">Artifact package zip</option>
+                    <option value="host-config">Host configuration JSON/zip</option>
+                    <option value="config-overlay">Config overlay JSON/zip</option>
+                    <option value="dashboard-widget">Dashboard widget JSON</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="hostFolder">Host-specific folder</label>
+                <input id="hostFolder" placeholder="Optional host subfolder for host-specific objects" />
+            </div>
+        </div>
+        <div class="field" style="margin-top: 10px;">
+            <label for="objectFiles">Files</label>
+            <input id="objectFiles" type="file" multiple />
+        </div>
+        <div class="toolbar">
+            <button type="button" id="addFiles">Add files</button>
+            <button type="button" class="secondary" id="clearFiles">Clear list</button>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Package items</h2>
+        <div class="status" id="status">No items added.</div>
+        <table>
+            <thead>
+            <tr>
+                <th style="width: 18%;">Kind</th>
+                <th>Package path</th>
+                <th style="width: 22%;">Source file</th>
+                <th style="width: 92px;">Actions</th>
+            </tr>
+            </thead>
+            <tbody id="itemsBody"></tbody>
+        </table>
+        <div class="toolbar">
+            <button type="button" id="createPackage">Create package</button>
+        </div>
+    </section>
+</main>
+
+<script>
+(() => {
+    const folderByKind = {
+        "module-definition": "module-definitions",
+        "artifact-package": "artifacts",
+        "host-config": "host-configs",
+        "config-overlay": "config-overlays",
+        "dashboard-widget": "widgets"
+    };
+
+    const items = [];
+    const packageVersion = document.getElementById("packageVersion");
+    const objectKind = document.getElementById("objectKind");
+    const hostFolder = document.getElementById("hostFolder");
+    const objectFiles = document.getElementById("objectFiles");
+    const itemsBody = document.getElementById("itemsBody");
+    const status = document.getElementById("status");
+
+    packageVersion.value = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "Z");
+
+    const encoder = new TextEncoder();
+
+    const sanitizeSegment = value => {
+        const text = String(value || "").trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/^\.+|\.+$/g, "");
+        return text || "item";
+    };
+
+    const normalizePath = value => String(value || "")
+        .replace(/\\/g, "/")
+        .split("/")
+        .filter(segment => segment && segment !== "." && segment !== "..")
+        .map(sanitizeSegment)
+        .join("/");
+
+    const updateStatus = (message, isError = false) => {
+        status.textContent = message;
+        status.classList.toggle("error", isError);
+    };
+
+    const renderItems = () => {
+        itemsBody.innerHTML = "";
+        items.forEach((item, index) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td><code></code></td>
+                <td><code></code></td>
+                <td></td>
+                <td><button type="button" class="danger">Remove</button></td>`;
+            row.children[0].querySelector("code").textContent = item.kind;
+            row.children[1].querySelector("code").textContent = item.path;
+            row.children[2].textContent = item.file.name;
+            row.querySelector("button").addEventListener("click", () => {
+                items.splice(index, 1);
+                renderItems();
+            });
+            itemsBody.appendChild(row);
+        });
+
+        updateStatus(items.length === 0 ? "No items added." : `${items.length} item(s) ready.`);
+    };
+
+    const addFiles = () => {
+        const kind = objectKind.value;
+        const folder = folderByKind[kind];
+        const host = sanitizeSegment(hostFolder.value);
+        const useHostFolder = hostFolder.value.trim().length > 0
+            && (kind === "host-config" || kind === "config-overlay" || kind === "dashboard-widget");
+        const selectedFiles = Array.from(objectFiles.files || []);
+        for (const file of selectedFiles) {
+            const path = normalizePath(`${folder}/${useHostFolder ? `${host}/` : ""}${file.name}`);
+            if (items.some(item => item.path.toLowerCase() === path.toLowerCase())) {
+                updateStatus(`Skipped duplicate package path: ${path}`, true);
+                continue;
+            }
+
+            items.push({ kind, path, file });
+        }
+
+        objectFiles.value = "";
+        renderItems();
+    };
+
+    const makeCrcTable = () => {
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let k = 0; k < 8; k++) {
+                c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+            }
+            table[i] = c >>> 0;
+        }
+        return table;
+    };
+
+    const crcTable = makeCrcTable();
+    const crc32 = bytes => {
+        let crc = 0xffffffff;
+        for (const byte of bytes) {
+            crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xffffffff) >>> 0;
+    };
+
+    const dosDateTime = date => {
+        const year = Math.max(1980, date.getFullYear());
+        const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+        const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+        return { dosTime, dosDate };
+    };
+
+    const uint16 = value => {
+        const bytes = new Uint8Array(2);
+        new DataView(bytes.buffer).setUint16(0, value, true);
+        return bytes;
+    };
+
+    const uint32 = value => {
+        const bytes = new Uint8Array(4);
+        new DataView(bytes.buffer).setUint32(0, value >>> 0, true);
+        return bytes;
+    };
+
+    const concatBytes = parts => {
+        const size = parts.reduce((sum, part) => sum + part.length, 0);
+        const result = new Uint8Array(size);
+        let offset = 0;
+        for (const part of parts) {
+            result.set(part, offset);
+            offset += part.length;
+        }
+
+        return result;
+    };
+
+    const createZip = async entries => {
+        const localParts = [];
+        const centralParts = [];
+        let offset = 0;
+        const now = dosDateTime(new Date());
+
+        for (const entry of entries) {
+            const nameBytes = encoder.encode(entry.name);
+            const data = entry.bytes;
+            const crc = crc32(data);
+            const localHeader = concatBytes([
+                uint32(0x04034b50), uint16(20), uint16(0x0800), uint16(0),
+                uint16(now.dosTime), uint16(now.dosDate), uint32(crc),
+                uint32(data.length), uint32(data.length), uint16(nameBytes.length),
+                uint16(0), nameBytes
+            ]);
+            localParts.push(localHeader, data);
+
+            const centralHeader = concatBytes([
+                uint32(0x02014b50), uint16(20), uint16(20), uint16(0x0800),
+                uint16(0), uint16(now.dosTime), uint16(now.dosDate), uint32(crc),
+                uint32(data.length), uint32(data.length), uint16(nameBytes.length),
+                uint16(0), uint16(0), uint16(0), uint16(0), uint32(0),
+                uint32(offset), nameBytes
+            ]);
+            centralParts.push(centralHeader);
+            offset += localHeader.length + data.length;
+        }
+
+        const centralOffset = offset;
+        const central = concatBytes(centralParts);
+        const end = concatBytes([
+            uint32(0x06054b50), uint16(0), uint16(0), uint16(entries.length),
+            uint16(entries.length), uint32(central.length), uint32(centralOffset), uint16(0)
+        ]);
+
+        return new Blob([concatBytes([...localParts, central, end])], { type: "application/zip" });
+    };
+
+    const createPackage = async () => {
+        try {
+            const packageItems = [...items].sort((a, b) => a.path.localeCompare(b.path));
+            const manifest = {
+                formatVersion: 1,
+                objectType: "universal-module-package",
+                packageKey: document.getElementById("packageKey").value.trim(),
+                packageVersion: document.getElementById("packageVersion").value.trim(),
+                displayName: document.getElementById("displayName").value.trim(),
+                description: document.getElementById("description").value.trim() || null,
+                targetHostProfile: document.getElementById("targetHostProfile").value.trim() || null,
+                createdUtc: new Date().toISOString(),
+                items: packageItems.map(item => ({ kind: item.kind, path: item.path }))
+            };
+
+            if (!manifest.packageKey || !manifest.packageVersion) {
+                updateStatus("Package key and package version are required.", true);
+                return;
+            }
+
+            const entries = [];
+            for (const item of packageItems) {
+                entries.push({
+                    name: item.path,
+                    bytes: new Uint8Array(await item.file.arrayBuffer())
+                });
+            }
+
+            entries.push({
+                name: "omp-universal-package.json",
+                bytes: encoder.encode(JSON.stringify(manifest, null, 2))
+            });
+
+            const zip = await createZip(entries);
+            const fileName = `${sanitizeSegment(manifest.packageKey)}__${sanitizeSegment(manifest.targetHostProfile || "global")}__${sanitizeSegment(manifest.packageVersion)}.zip`;
+            const url = URL.createObjectURL(zip);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            updateStatus(`Created ${fileName}.`);
+        } catch (error) {
+            updateStatus(error instanceof Error ? error.message : String(error), true);
+        }
+    };
+
+    document.getElementById("addFiles").addEventListener("click", addFiles);
+    document.getElementById("clearFiles").addEventListener("click", () => {
+        items.length = 0;
+        renderItems();
+    });
+    document.getElementById("createPackage").addEventListener("click", createPackage);
+    renderItems();
+})();
+</script>
+</body>
+</html>

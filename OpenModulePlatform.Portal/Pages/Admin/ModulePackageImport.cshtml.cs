@@ -45,6 +45,12 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     public UniversalUploadInputModel UniversalUploadInput { get; set; } = new();
 
     [BindProperty]
+    public UniversalStagedImportInputModel UniversalStagedInput { get; set; } = new();
+
+    [BindProperty(SupportsGet = true)]
+    public UniversalExportInputModel UniversalExportInput { get; set; } = new();
+
+    [BindProperty]
     public ArtifactUploadInputModel ArtifactUploadInput { get; set; } = new();
 
     [BindProperty]
@@ -80,6 +86,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     public IReadOnlyList<HostConfigurationDocumentRow> HostConfigurationRows { get; private set; } = [];
 
     public IReadOnlyList<ConfigOverlayDocumentRow> ConfigOverlayRows { get; private set; } = [];
+
+    public UniversalPackagePreviewResult? UniversalPreview { get; private set; }
 
     public string ActivePanel { get; private set; } = string.Empty;
 
@@ -149,6 +157,64 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 UniversalUploadInput.PackageFile,
                 CreateOptions(UniversalUploadInput),
                 UniversalUploadInput.ReplaceExistingConfigObjects,
+                ct);
+
+            StatusMessage = BuildUniversalImportStatus(result);
+            return RedirectToPage("/Admin/ModulePackageImport");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
+        {
+            ActivePanel = "import-universal";
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostPreviewUniversal(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        try
+        {
+            UniversalPreview = await _packages.StageUniversalPackageUploadForPreviewAsync(
+                UniversalUploadInput.PackageFile,
+                ct);
+            UniversalStagedInput = UniversalStagedImportInputModel.From(UniversalUploadInput, UniversalPreview.Token);
+            ActivePanel = "import-universal";
+            await LoadAsync(ct);
+            return Page();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
+        {
+            ActivePanel = "import-universal";
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostImportStagedUniversal(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        try
+        {
+            var result = await _packages.ImportStagedUniversalPackageAsync(
+                UniversalStagedInput.Token,
+                UniversalStagedInput.SelectedItemPaths,
+                CreateOptions(UniversalStagedInput),
+                UniversalStagedInput.ReplaceExistingConfigObjects,
                 ct);
 
             StatusMessage = BuildUniversalImportStatus(result);
@@ -456,6 +522,33 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnGetExportUniversal(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        try
+        {
+            var result = await _packages.ExportUniversalPackageAsync(
+                UniversalExportInput.ToRequest(),
+                ct);
+            Response.OnCompleted(static state =>
+            {
+                TryDeleteTemporaryFile((string)state);
+                return Task.CompletedTask;
+            }, result.PackagePath);
+
+            return PhysicalFile(result.PackagePath, "application/zip", result.FileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(T(ex.Message));
+        }
+    }
+
     public async Task<IActionResult> OnGetExportHostConfiguration(int documentId, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -643,6 +736,12 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             result.ImportedCount,
             result.SkippedCount,
             result.FailedCount);
+        if (!string.IsNullOrWhiteSpace(result.TargetHostProfile))
+        {
+            message += " " + string.Format(
+                T("Target host profile: {0}."),
+                result.TargetHostProfile);
+        }
 
         var detailRows = result.Items
             .Where(static item =>
@@ -721,6 +820,16 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             input.UseArtifactsImmediately);
 
     private static PortableModulePackageImportOptions CreateOptions(UniversalUploadInputModel input)
+        => new(
+            input.ApplyModuleDefinitions,
+            input.ExecuteSqlRepairs,
+            input.AllowTemporaryIncompatibleArtifacts,
+            input.ReplaceExistingModuleDefinitions,
+            input.ReplaceExistingArtifacts,
+            input.CopyConfigurationFilesFromPreviousVersion,
+            input.UseArtifactsImmediately);
+
+    private static PortableModulePackageImportOptions CreateOptions(UniversalStagedImportInputModel input)
         => new(
             input.ApplyModuleDefinitions,
             input.ExecuteSqlRepairs,
@@ -813,6 +922,87 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
 
         public bool UseArtifactsImmediately { get; set; } = true;
+    }
+
+    public sealed class UniversalStagedImportInputModel
+    {
+        public string Token { get; set; } = string.Empty;
+
+        public List<string> SelectedItemPaths { get; set; } = [];
+
+        public bool ApplyModuleDefinitions { get; set; } = true;
+
+        public bool ExecuteSqlRepairs { get; set; } = true;
+
+        public bool AllowTemporaryIncompatibleArtifacts { get; set; } = true;
+
+        public bool ReplaceExistingModuleDefinitions { get; set; }
+
+        public bool ReplaceExistingArtifacts { get; set; }
+
+        public bool ReplaceExistingConfigObjects { get; set; }
+
+        public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
+
+        public bool UseArtifactsImmediately { get; set; } = true;
+
+        public static UniversalStagedImportInputModel From(
+            UniversalUploadInputModel input,
+            string token)
+            => new()
+            {
+                Token = token,
+                ApplyModuleDefinitions = input.ApplyModuleDefinitions,
+                ExecuteSqlRepairs = input.ExecuteSqlRepairs,
+                AllowTemporaryIncompatibleArtifacts = input.AllowTemporaryIncompatibleArtifacts,
+                ReplaceExistingModuleDefinitions = input.ReplaceExistingModuleDefinitions,
+                ReplaceExistingArtifacts = input.ReplaceExistingArtifacts,
+                ReplaceExistingConfigObjects = input.ReplaceExistingConfigObjects,
+                CopyConfigurationFilesFromPreviousVersion = input.CopyConfigurationFilesFromPreviousVersion,
+                UseArtifactsImmediately = input.UseArtifactsImmediately
+            };
+    }
+
+    public sealed class UniversalExportInputModel
+    {
+        public string PackageKey { get; set; } = "omp-universal";
+
+        public string PackageVersion { get; set; } = DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+
+        public string DisplayName { get; set; } = "OpenModulePlatform universal package";
+
+        public string? Description { get; set; }
+
+        public string? TargetHostProfile { get; set; }
+
+        public List<string> ModuleKeys { get; set; } = [];
+
+        public bool IncludeArtifactsForSelectedModules { get; set; } = true;
+
+        public bool IncludeAllArtifactVersions { get; set; }
+
+        public List<int> ArtifactIds { get; set; } = [];
+
+        public List<int> HostConfigurationDocumentIds { get; set; } = [];
+
+        public List<int> ConfigOverlayDocumentIds { get; set; } = [];
+
+        public List<int> WidgetIds { get; set; } = [];
+
+        public UniversalPackageExportRequest ToRequest()
+            => new(
+                PackageKey,
+                PackageVersion,
+                DisplayName,
+                Description,
+                TargetHostProfile,
+                ModuleKeys,
+                IncludeArtifactsForSelectedModules,
+                IncludeAllArtifactVersions,
+                ArtifactIds,
+                HostConfigurationDocumentIds,
+                ConfigOverlayDocumentIds,
+                WidgetIds);
     }
 
     public sealed class ArtifactUploadInputModel

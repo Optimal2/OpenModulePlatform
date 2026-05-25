@@ -27,6 +27,7 @@ Example:
   "packageVersion": "2026.05.25",
   "displayName": "OMP core runtime",
   "description": "Module definitions, artifact packages, and optional overlays.",
+  "targetHostProfile": "vgr-test",
   "items": [
     {
       "kind": "module-definition",
@@ -48,6 +49,12 @@ Example:
 types from the standard folders. Empty packages are valid as long as the manifest
 exists and has `formatVersion` set to `1`.
 
+`targetHostProfile` is optional. Leave it absent or `null` for a global package.
+When the package was created for one host profile, set it to that host key or
+profile key. Importers treat it as operator-facing metadata; the portable
+objects themselves still carry their own identities. Host-specific objects should
+also include their host key inside the object document.
+
 ## Standard Folders
 
 Use these root folders inside the zip:
@@ -59,6 +66,19 @@ host-configs/
 config-overlays/
 widgets/
 ```
+
+Host-specific objects use the same root folders. Put them in a host subfolder
+when it makes the package easier to inspect, for example:
+
+```text
+host-configs/vgr-test/vgr-test__host-config__2026.05.25.json
+config-overlays/vgr-test/vgr-test__opendocviewer__2.0.4.json
+widgets/vgr-test/omp-dashboard-widgets-vgr-test.json
+```
+
+No extra container folders are needed. The folder tells an operator what the
+package was built for; the object JSON is still the source of truth for host key,
+overlay key, version, and selectors.
 
 Supported item kinds:
 
@@ -117,6 +137,17 @@ The generated zip contains `omp-universal-package.json` and only the selected
 objects. This is the recommended way to create a customer or host-specific
 transport package from a developer machine and then import it through Portal, the
 HostAgent import folder, or another installer instance.
+
+Portal also supports universal package import and export. Universal imports can
+be run in two modes: import all supported items immediately, or preview the zip
+and select individual manifest paths before importing. Universal export lets an
+administrator choose module definitions, artifacts, host configurations, config
+overlays, and widgets from the current OMP installation and emits the same folder
+layout and manifest format.
+
+The standalone tool at `tools/universal-package-builder/index.html` creates the
+same zip format entirely in the browser. It is available in Portal through the
+Universal package builder admin page and can also be opened directly from disk.
 
 ## Import Behavior
 

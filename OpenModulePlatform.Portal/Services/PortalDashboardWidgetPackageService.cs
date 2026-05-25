@@ -128,6 +128,27 @@ ORDER BY w.module_key,
         return ExportRows([row], null, row.WidgetKey);
     }
 
+    public async Task<(byte[] Content, string FileName)> ExportWidgetsAsync(
+        IReadOnlyList<int> widgetIds,
+        CancellationToken ct)
+    {
+        if (widgetIds.Count == 0)
+        {
+            return await ExportAsync(null, ct);
+        }
+
+        var selectedIds = widgetIds.ToHashSet();
+        var rows = (await GetWidgetsAsync(null, ct))
+            .Where(row => selectedIds.Contains(row.WidgetId))
+            .ToArray();
+        if (rows.Length == 0)
+        {
+            throw new InvalidOperationException("No selected dashboard widgets were found.");
+        }
+
+        return ExportRows(rows, null, rows.Length == 1 ? rows[0].WidgetKey : "selected");
+    }
+
     private static (byte[] Content, string FileName) ExportRows(
         IReadOnlyList<DashboardWidgetAdminRow> rows,
         string? documentModuleKey,

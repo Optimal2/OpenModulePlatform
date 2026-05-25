@@ -904,6 +904,22 @@ code {
     background: transparent;
 }
 
+.selection-list {
+    display: grid;
+    gap: 4px;
+    max-height: 260px;
+    overflow: auto;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted);
+}
+
+.selection-list .checkbox-row {
+    align-items: flex-start;
+    min-height: 28px;
+}
+
 .validation-summary-errors,
 .field-validation-error {
     color: #a61b1b;
