@@ -12,8 +12,8 @@ still part of the current OMP object/installer model.
 - `dev/` contains developer-only helpers for module-definition SQL embedding
   and local Content smoke-test data.
 - `omp/` contains repository-object builders that turn `omp-components.json`
-  entries into portable module, artifact, host config, and config overlay
-  objects.
+  entries into portable module, artifact, host config, config overlay, widget,
+  and universal-package objects.
 
 ## Removed Legacy Scripts
 
