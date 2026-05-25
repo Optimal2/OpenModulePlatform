@@ -2036,4 +2036,7 @@
   <data name="Last 7 days" xml:space="preserve"><value>Last 7 days</value></data>
   <data name="Last 30 days" xml:space="preserve"><value>Last 30 days</value></data>
   <data name="Only currently desired artifacts" xml:space="preserve"><value>Only currently desired artifacts</value></data>
+  <data name="Active role" xml:space="preserve"><value>Active role</value></data>
+  <data name="No roles assigned." xml:space="preserve"><value>No roles assigned.</value></data>
+  <data name="Switch active role to {0}?" xml:space="preserve"><value>Switch active role to {0}?</value></data>
 </root>
