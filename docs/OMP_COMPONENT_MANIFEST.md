@@ -142,13 +142,17 @@ The optional host profile is JSON. It may contain:
 ```json
 {
   "targetHostProfile": "vgr-test",
-  "artifactConfigurationFiles": [
-    {
-      "componentKey": "opendocviewer-web",
-      "relativePath": "odv.site.config.js",
-      "sourcePath": "overlays/vgr-test/odv.site.config.js"
+  "modules": {
+    "opendocviewer": {
+      "artifactConfigurationFiles": [
+        {
+          "componentKey": "opendocviewer-web",
+          "relativePath": "odv.site.config.js",
+          "sourcePath": "overlays/vgr-test/odv.site.config.js"
+        }
+      ]
     }
-  ],
+  },
   "hostConfigurationFiles": [],
   "configOverlayFiles": [],
   "widgetFiles": []
@@ -159,3 +163,23 @@ Paths inside the profile are resolved relative to the profile file unless they
 are absolute. This lets the private DEV repository keep sensitive or
 customer-specific inputs while public module repositories keep only generic code,
 module definitions, and component metadata.
+
+Top-level file lists apply to the current repository export. Values under
+`modules.<moduleKey>` apply only when the repository owns that module key in
+`omp-components.json`. This lets one shared host profile contain data for
+OpenDocViewer, VajSkrivare, IbsPackager, and other modules while each repository
+consumes only its own segment.
+
+If a repository needs to generate portable host-specific objects from arbitrary
+module-private settings, it can add this optional hook:
+
+```text
+scripts/omp/build-host-profile-objects.ps1
+```
+
+The exporter calls the hook after the generic object build and before the
+universal zip is created. The hook receives `-RepositoryRoot`, `-OutputRoot`,
+`-HostProfilePath`, `-TargetHostProfile`, `-ModuleKey`, and `-Configuration`.
+It should write generated `host-configs`, `config-overlays`, or `widgets` under
+`OutputRoot`. The hook is owned by the module repository, so the module decides
+how to interpret its `modules.<moduleKey>` settings.

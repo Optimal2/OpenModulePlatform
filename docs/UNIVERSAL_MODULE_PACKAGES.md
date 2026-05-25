@@ -183,6 +183,44 @@ Public repositories should not store customer-specific profile files. The
 private installer repository can keep those profiles and pass them to the same
 exporter so every repository follows the same packaging model.
 
+The host profile can carry module-specific segments. Top-level file lists apply
+to the current repository export; `modules.<moduleKey>` applies only when the
+repository owns that module key:
+
+```json
+{
+  "targetHostProfile": "vgr-test",
+  "modules": {
+    "vajskrivare": {
+      "settings": {
+        "printerListPath": "\\\\vgregion.se\\app\\Vaj.SkaS\\Printer_List\\Printer_List_test.json"
+      },
+      "configOverlayFiles": [
+        {
+          "destinationName": "vgr-test-vajskrivare-appsettings.json",
+          "sourcePath": "generated/vgr-test/vajskrivare-appsettings.json"
+        }
+      ]
+    },
+    "opendocviewer": {
+      "artifactConfigurationFiles": [
+        {
+          "componentKey": "opendocviewer-web",
+          "relativePath": "odv.site.config.js",
+          "sourcePath": "generated/vgr-test/odv.site.config.js"
+        }
+      ]
+    }
+  }
+}
+```
+
+The generic exporter understands the common file-list fields in each module
+segment. If a module needs to transform arbitrary settings into generated
+overlays, it can add `scripts/omp/build-host-profile-objects.ps1` in its own
+repository. That hook receives the full host profile path and writes generated
+portable objects under the exporter output root.
+
 ## Plugins
 
 Plugins are not a separate universal-package object folder. OMP transports

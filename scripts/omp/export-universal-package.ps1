@@ -26,11 +26,15 @@ The optional host profile is JSON. Its supported fields are:
   hostConfigurationFiles
   configOverlayFiles
   widgetFiles
+  modules
 
 Each file list may contain either strings in the same syntax as the matching
 command-line parameter, or objects with sourcePath/path and optional
 destinationName. artifactConfigurationFiles objects use componentKey,
-relativePath, and sourcePath/path.
+relativePath, and sourcePath/path. The modules object may contain one property
+per module key with the same file-list fields, plus any additional
+module-private values consumed by the repository's optional
+scripts/omp/build-host-profile-objects.ps1 hook.
 #>
 [CmdletBinding()]
 param(
@@ -75,12 +79,43 @@ function Get-JsonPropertyValue {
         [Parameter(Mandatory = $true)][string]$Name
     )
 
-    $property = $Object.PSObject.Properties[$Name]
+    $property = $Object.PSObject.Properties |
+        Where-Object { $_.Name.Equals($Name, [StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1
     if ($null -eq $property) {
         return $null
     }
 
     return $property.Value
+}
+
+function Get-RepositoryModuleKeys {
+    param([Parameter(Mandatory = $true)][object]$Manifest)
+
+    $keys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($definition in @((Get-JsonPropertyValue -Object $Manifest -Name 'moduleDefinitions'))) {
+        if ($null -eq $definition) {
+            continue
+        }
+
+        $moduleKey = [string](Get-JsonPropertyValue -Object $definition -Name 'moduleKey')
+        if (-not [string]::IsNullOrWhiteSpace($moduleKey)) {
+            [void]$keys.Add($moduleKey.Trim())
+        }
+    }
+
+    foreach ($component in @((Get-JsonPropertyValue -Object $Manifest -Name 'components'))) {
+        if ($null -eq $component) {
+            continue
+        }
+
+        $moduleKey = [string](Get-JsonPropertyValue -Object $component -Name 'moduleKey')
+        if (-not [string]::IsNullOrWhiteSpace($moduleKey)) {
+            [void]$keys.Add($moduleKey.Trim())
+        }
+    }
+
+    return @($keys | Sort-Object)
 }
 
 function Convert-ProfileMappingSource {
@@ -159,9 +194,49 @@ function Convert-ProfilePortableFile {
     return ('{0}={1}' -f $destinationName.Trim(), $resolvedSource)
 }
 
+function Add-ProfileObjectArguments {
+    param(
+        [Parameter(Mandatory = $true)][object]$Profile,
+        [Parameter(Mandatory = $true)][string]$BasePath
+    )
+
+    foreach ($entry in @((Get-JsonPropertyValue -Object $Profile -Name 'artifactConfigurationFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $script:ArtifactConfigurationFile += (Convert-ProfileArtifactConfiguration -Entry $entry -BasePath $basePath)
+    }
+
+    foreach ($entry in @((Get-JsonPropertyValue -Object $Profile -Name 'hostConfigurationFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $script:HostConfigurationFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'hostConfigurationFiles')
+    }
+
+    foreach ($entry in @((Get-JsonPropertyValue -Object $Profile -Name 'configOverlayFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $script:ConfigOverlayFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'configOverlayFiles')
+    }
+
+    foreach ($entry in @((Get-JsonPropertyValue -Object $Profile -Name 'widgetFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $script:WidgetFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'widgetFiles')
+    }
+}
+
 function Add-HostProfileArguments {
     param(
-        [Parameter(Mandatory = $true)][string]$Path
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string[]]$ModuleKeys
     )
 
     $resolvedPath = [System.IO.Path]::GetFullPath($Path)
@@ -178,37 +253,51 @@ function Add-HostProfileArguments {
         $script:TargetHostProfile = $profileTarget.Trim()
     }
 
-    foreach ($entry in @((Get-JsonPropertyValue -Object $profile -Name 'artifactConfigurationFiles'))) {
-        if ($null -eq $entry) {
+    Add-ProfileObjectArguments -Profile $profile -BasePath $basePath
+
+    $modules = Get-JsonPropertyValue -Object $profile -Name 'modules'
+    if ($null -eq $modules) {
+        return
+    }
+
+    foreach ($moduleKey in $ModuleKeys) {
+        $moduleProfile = Get-JsonPropertyValue -Object $modules -Name $moduleKey
+        if ($null -eq $moduleProfile) {
             continue
         }
 
-        $script:ArtifactConfigurationFile += (Convert-ProfileArtifactConfiguration -Entry $entry -BasePath $basePath)
+        Add-ProfileObjectArguments -Profile $moduleProfile -BasePath $basePath
+    }
+}
+
+function Invoke-HostProfileObjectHook {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$OutputRoot,
+        [Parameter(Mandatory = $true)][string]$HostProfilePath,
+        [Parameter(Mandatory = $true)][string[]]$ModuleKeys,
+        [string]$TargetHostProfile,
+        [string]$Configuration
+    )
+
+    $hookPath = Join-Path $RepositoryRoot 'scripts\omp\build-host-profile-objects.ps1'
+    if (-not (Test-Path -LiteralPath $hookPath -PathType Leaf)) {
+        return
     }
 
-    foreach ($entry in @((Get-JsonPropertyValue -Object $profile -Name 'hostConfigurationFiles'))) {
-        if ($null -eq $entry) {
-            continue
-        }
-
-        $script:HostConfigurationFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'hostConfigurationFiles')
+    $hookArgs = @{
+        RepositoryRoot = $RepositoryRoot
+        OutputRoot = $OutputRoot
+        HostProfilePath = $HostProfilePath
+        ModuleKey = $ModuleKeys
+        Configuration = $Configuration
     }
 
-    foreach ($entry in @((Get-JsonPropertyValue -Object $profile -Name 'configOverlayFiles'))) {
-        if ($null -eq $entry) {
-            continue
-        }
-
-        $script:ConfigOverlayFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'configOverlayFiles')
+    if (-not [string]::IsNullOrWhiteSpace($TargetHostProfile)) {
+        $hookArgs.TargetHostProfile = $TargetHostProfile
     }
 
-    foreach ($entry in @((Get-JsonPropertyValue -Object $profile -Name 'widgetFiles'))) {
-        if ($null -eq $entry) {
-            continue
-        }
-
-        $script:WidgetFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'widgetFiles')
-    }
+    & $hookPath @hookArgs
 }
 
 function Get-SafeName {
@@ -302,11 +391,14 @@ if (-not (Test-Path -LiteralPath $componentManifestPath -PathType Leaf)) {
     throw "Component manifest was not found: $componentManifestPath"
 }
 
-if (-not [string]::IsNullOrWhiteSpace($HostProfilePath)) {
-    Add-HostProfileArguments -Path $HostProfilePath
-}
-
 $componentManifest = Get-Content -LiteralPath $componentManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$repositoryModuleKeys = Get-RepositoryModuleKeys -Manifest $componentManifest
+$resolvedHostProfilePath = ''
+
+if (-not [string]::IsNullOrWhiteSpace($HostProfilePath)) {
+    $resolvedHostProfilePath = Resolve-PathFromBase -Path $HostProfilePath -BasePath $repositoryRoot
+    Add-HostProfileArguments -Path $resolvedHostProfilePath -ModuleKeys $repositoryModuleKeys
+}
 
 if ([string]::IsNullOrWhiteSpace($PackageKey)) {
     $PackageKey = [string](Get-JsonPropertyValue -Object $componentManifest -Name 'repositoryKey')
@@ -388,6 +480,16 @@ try {
     }
 
     & $buildRepositoryObjectsScript @builderArgs
+
+    if (-not [string]::IsNullOrWhiteSpace($resolvedHostProfilePath)) {
+        Invoke-HostProfileObjectHook `
+            -RepositoryRoot $repositoryRoot `
+            -OutputRoot $objectRoot `
+            -HostProfilePath $resolvedHostProfilePath `
+            -ModuleKeys $repositoryModuleKeys `
+            -TargetHostProfile $TargetHostProfile `
+            -Configuration $Configuration
+    }
 
     $files = Get-UniversalPackageFiles -ObjectRoot $objectRoot
     $manifestItems = @(
