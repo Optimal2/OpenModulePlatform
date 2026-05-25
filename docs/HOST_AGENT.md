@@ -412,6 +412,11 @@ The desired version also performs cleanup during normal cycles. This makes the
 upgrade idempotent if the process is interrupted after the new service starts:
 the desired service can force the host lease, finish takeover bookkeeping, and
 remove superseded HostAgent services and orphaned versioned folders later.
+If Windows Service Control Manager refuses a stop command for a superseded
+HostAgent with `1061` ("cannot accept control messages"), the desired HostAgent
+waits briefly and then terminates the old HostAgent process before deleting the
+old service. This recovery is intentionally limited to versioned HostAgent
+services managed by the self-upgrade flow.
 
 For a desired upgrade, insert or update one row in
 `omp.HostAgentDesiredStates` for the concrete host and point it at the desired
