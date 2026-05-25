@@ -272,6 +272,8 @@ public sealed class DashboardWidgetLayoutUpdate
 {
     public long UserActiveWidgetId { get; set; }
 
+    public int WidgetId { get; set; }
+
     public int OffsetTop { get; set; }
 
     public int OffsetLeft { get; set; }
@@ -288,6 +290,16 @@ public sealed class DashboardWidgetLayoutUpdate
 
     public string? StringData { get; set; }
 }
+
+/// <summary>
+/// Result returned after saving a dashboard layout with new draft widgets.
+/// </summary>
+public sealed record DashboardWidgetSaveResult(IReadOnlyList<DashboardWidgetSaveCreatedItem> CreatedWidgets);
+
+/// <summary>
+/// Server-assigned id for a dashboard widget that was created as a client draft.
+/// </summary>
+public sealed record DashboardWidgetSaveCreatedItem(long TemporaryUserActiveWidgetId, long UserActiveWidgetId);
 
 /// <summary>
 /// Admin-facing widget definition row including portable import/export metadata.

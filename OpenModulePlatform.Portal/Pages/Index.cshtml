@@ -81,6 +81,10 @@
                     {
                         <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
                     }
+                    else if (widget.Payload == "weekday-date")
+                    {
+                        <partial name="_DashboardDateWidget" />
+                    }
                     else
                     {
                         <div class="dashboard-widget__blank"></div>
@@ -161,6 +165,10 @@
 
         <template data-dashboard-widget-template="user-roles">
             <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
+        </template>
+
+        <template data-dashboard-widget-template="weekday-date">
+            <partial name="_DashboardDateWidget" />
         </template>
 
         <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">

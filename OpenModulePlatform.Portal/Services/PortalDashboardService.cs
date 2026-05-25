@@ -152,8 +152,7 @@ ORDER BY uaw.order_priority,
             .ToArray();
     }
 
-    public async Task<DashboardActiveWidget?> AddWidgetAsync(
-        int userId,
+    public async Task<DashboardActiveWidget?> CreateWidgetDraftAsync(
         int widgetId,
         IReadOnlySet<int> roleIds,
         IReadOnlySet<string> permissions,
@@ -164,31 +163,77 @@ ORDER BY uaw.order_priority,
         {
             return null;
         }
+        var defaultWidth = GetDefaultWidgetWidth(definition);
+        var defaultHeight = GetDefaultWidgetHeight(definition);
+
+        return new DashboardActiveWidget
+        {
+            UserActiveWidgetId = 0,
+            WidgetId = widgetId,
+            WidgetTitle = definition.Title,
+            WidgetType = definition.WidgetType,
+            Payload = definition.Payload,
+            OffsetTop = 32,
+            OffsetLeft = 32,
+            Width = defaultWidth,
+            Height = defaultHeight,
+            OrderPriority = 10
+        };
+    }
+
+    public async Task<DashboardWidgetSaveResult> SaveLayoutAsync(
+        int userId,
+        IReadOnlyList<DashboardWidgetLayoutUpdate> updates,
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        if (updates.Count == 0)
+        {
+            return new DashboardWidgetSaveResult([]);
+        }
+
+        var hasDraftWidgets = updates.Any(update => update.UserActiveWidgetId <= 0);
+        var accessibleDefinitions = hasDraftWidgets
+            ? await GetAccessibleDefinitionMapAsync(roleIds, permissions, ct)
+            : new Dictionary<int, DashboardWidgetDefinition>();
+        var createdWidgets = new List<DashboardWidgetSaveCreatedItem>();
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
-        const string placementSql = @"
-SELECT COUNT(1),
-       COALESCE(MAX(order_priority), 0) + 10
-FROM omp_portal.user_active_widgets
-WHERE user_id = @user_id;";
-
-        var existingCount = 0;
-        var orderPriority = 10;
-        await using (var placementCmd = new SqlCommand(placementSql, conn))
+        try
         {
-            placementCmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-            await using var rdr = await placementCmd.ExecuteReaderAsync(ct);
-            if (await rdr.ReadAsync(ct))
-            {
-                existingCount = rdr.GetInt32(0);
-                orderPriority = rdr.GetInt32(1);
-            }
-        }
+            const string sql = @"
+UPDATE omp_portal.user_active_widgets
+SET offset_top = @offset_top,
+    offset_left = @offset_left,
+    width = @width,
+    height = @height,
+    order_priority = @order_priority,
+    title = @title,
+    int_data = @int_data,
+    string_data = @string_data
+WHERE user_active_widget_id = @user_active_widget_id
+  AND user_id = @user_id;";
 
-        var offset = Math.Min(32 + (existingCount % 8) * 32, 256);
-        const string insertSql = @"
+            foreach (var update in updates.GroupBy(item => item.UserActiveWidgetId).Select(group => group.Last()))
+            {
+                if (update.UserActiveWidgetId > 0)
+                {
+                    await using var cmd = new SqlCommand(sql, conn, tx);
+                    BindLayoutParameters(cmd, userId, update);
+                    await cmd.ExecuteNonQueryAsync(ct);
+                    continue;
+                }
+
+                if (update.WidgetId <= 0 || !accessibleDefinitions.ContainsKey(update.WidgetId))
+                {
+                    continue;
+                }
+
+                const string insertSql = @"
 INSERT INTO omp_portal.user_active_widgets
 (
     widget_id,
@@ -212,84 +257,20 @@ VALUES
     @width,
     @height,
     @order_priority,
-    NULL,
-    NULL,
-    NULL
+    @title,
+    @int_data,
+    @string_data
 );";
 
-        await using var insertCmd = new SqlCommand(insertSql, conn);
-        insertCmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
-        insertCmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-        insertCmd.Parameters.Add("@offset_top", SqlDbType.Int).Value = offset;
-        insertCmd.Parameters.Add("@offset_left", SqlDbType.Int).Value = offset;
-        var defaultWidth = GetDefaultWidgetWidth(definition);
-        var defaultHeight = GetDefaultWidgetHeight(definition);
-        insertCmd.Parameters.Add("@width", SqlDbType.Int).Value = defaultWidth;
-        insertCmd.Parameters.Add("@height", SqlDbType.Int).Value = defaultHeight;
-        insertCmd.Parameters.Add("@order_priority", SqlDbType.Int).Value = orderPriority;
-        var userActiveWidgetId = Convert.ToInt64(await insertCmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
-
-        return new DashboardActiveWidget
-        {
-            UserActiveWidgetId = userActiveWidgetId,
-            WidgetId = widgetId,
-            WidgetTitle = definition.Title,
-            WidgetType = definition.WidgetType,
-            Payload = definition.Payload,
-            OffsetTop = offset,
-            OffsetLeft = offset,
-            Width = defaultWidth,
-            Height = defaultHeight,
-            OrderPriority = orderPriority
-        };
-    }
-
-    public async Task UpdateLayoutAsync(
-        int userId,
-        IReadOnlyList<DashboardWidgetLayoutUpdate> updates,
-        CancellationToken ct)
-    {
-        if (updates.Count == 0)
-        {
-            return;
-        }
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
-
-        try
-        {
-            const string sql = @"
-UPDATE omp_portal.user_active_widgets
-SET offset_top = @offset_top,
-    offset_left = @offset_left,
-    width = @width,
-    height = @height,
-    order_priority = @order_priority,
-    title = @title,
-    int_data = @int_data,
-    string_data = @string_data
-WHERE user_active_widget_id = @user_active_widget_id
-  AND user_id = @user_id;";
-
-            foreach (var update in updates.GroupBy(item => item.UserActiveWidgetId).Select(group => group.Last()))
-            {
-                await using var cmd = new SqlCommand(sql, conn, tx);
-                cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = update.UserActiveWidgetId;
-                cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-                cmd.Parameters.Add("@offset_top", SqlDbType.Int).Value = Clamp(update.OffsetTop, 0, MaxWidgetOffset);
-                cmd.Parameters.Add("@offset_left", SqlDbType.Int).Value = Clamp(update.OffsetLeft, 0, MaxWidgetOffset);
-                cmd.Parameters.Add("@width", SqlDbType.Int).Value = Clamp(update.Width, MinWidgetWidth, MaxWidgetWidth);
-                cmd.Parameters.Add("@height", SqlDbType.Int).Value = Clamp(update.Height, MinWidgetHeight, MaxWidgetHeight);
-                cmd.Parameters.Add("@order_priority", SqlDbType.Int).Value = Clamp(update.OrderPriority, 0, MaxWidgetOrder);
-                cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = CleanTitle(update.Title) ?? (object)DBNull.Value;
-                cmd.Parameters.Add("@int_data", SqlDbType.Int).Value = update.IntData.HasValue ? update.IntData.Value : DBNull.Value;
-                cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(update.StringData) ?? (object)DBNull.Value;
-                await cmd.ExecuteNonQueryAsync(ct);
+                await using var insertCmd = new SqlCommand(insertSql, conn, tx);
+                insertCmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = update.WidgetId;
+                BindLayoutParameters(insertCmd, userId, update);
+                var userActiveWidgetId = Convert.ToInt64(await insertCmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+                createdWidgets.Add(new DashboardWidgetSaveCreatedItem(update.UserActiveWidgetId, userActiveWidgetId));
             }
 
             await tx.CommitAsync(ct);
+            return new DashboardWidgetSaveResult(createdWidgets);
         }
         catch
         {
@@ -454,12 +435,27 @@ ORDER BY w.title,
     private static int Clamp(int value, int min, int max)
         => Math.Min(Math.Max(value, min), max);
 
+    private static void BindLayoutParameters(SqlCommand cmd, int userId, DashboardWidgetLayoutUpdate update)
+    {
+        cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = update.UserActiveWidgetId;
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@offset_top", SqlDbType.Int).Value = Clamp(update.OffsetTop, 0, MaxWidgetOffset);
+        cmd.Parameters.Add("@offset_left", SqlDbType.Int).Value = Clamp(update.OffsetLeft, 0, MaxWidgetOffset);
+        cmd.Parameters.Add("@width", SqlDbType.Int).Value = Clamp(update.Width, MinWidgetWidth, MaxWidgetWidth);
+        cmd.Parameters.Add("@height", SqlDbType.Int).Value = Clamp(update.Height, MinWidgetHeight, MaxWidgetHeight);
+        cmd.Parameters.Add("@order_priority", SqlDbType.Int).Value = Clamp(update.OrderPriority, 0, MaxWidgetOrder);
+        cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = CleanTitle(update.Title) ?? (object)DBNull.Value;
+        cmd.Parameters.Add("@int_data", SqlDbType.Int).Value = update.IntData.HasValue ? update.IntData.Value : DBNull.Value;
+        cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(update.StringData) ?? (object)DBNull.Value;
+    }
+
     private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)
         => definition.Payload switch
         {
             "admin-overview" => 768,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 416,
             "user-roles" => 384,
+            "weekday-date" => 288,
             _ => DefaultWidgetWidth
         };
 
@@ -469,6 +465,7 @@ ORDER BY w.title,
             "admin-overview" => 384,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 384,
             "user-roles" => 320,
+            "weekday-date" => 160,
             _ => DefaultWidgetHeight
         };
 

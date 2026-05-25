@@ -47,6 +47,7 @@
             emptyCanvasHeight: parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight),
             addedWidgetIds: new Set(),
             pendingRemovedWidgetIds: new Set(),
+            nextTemporaryWidgetId: -1,
             savedSnapshot: null
         };
 
@@ -162,20 +163,26 @@
                     return;
                 }
 
+                const temporaryWidgetId = state.nextTemporaryWidgetId--;
+                widget.userActiveWidgetId = temporaryWidgetId;
+                widget.orderPriority = ++maxOrder;
+                const offset = getNextWidgetOffset(canvas, state);
+                widget.offsetTop = offset;
+                widget.offsetLeft = offset;
+
                 const element = createWidgetElement(root, widget);
                 canvas.appendChild(element);
                 snapWidgetToGrid(element, state);
-                const userActiveWidgetId = parseInt(element.dataset.userActiveWidgetId || '0', 10);
-                if (userActiveWidgetId > 0) {
-                    state.addedWidgetIds.add(userActiveWidgetId);
-                }
+                state.addedWidgetIds.add(temporaryWidgetId);
                 bindWidget(root, canvas, element, token, () => ++maxOrder, state);
                 bindEntryFavoriteToggles(root, element, token);
                 bindEntryListFilters(element);
                 updateEmptyState(canvas);
                 updateCanvasHeight(root, canvas, state);
                 closePicker(picker);
-                setEditing(true);
+                if (!isEditing) {
+                    setEditing(true);
+                }
             });
         });
 
@@ -187,6 +194,11 @@
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
 
         function setEditing(next) {
+            if (isEditing === next) {
+                updateCanvasHeight(root, canvas, state);
+                return;
+            }
+
             isEditing = next;
             if (isEditing) {
                 state.addedWidgetIds.clear();
@@ -263,7 +275,9 @@
                 return;
             }
 
-            state.pendingRemovedWidgetIds.add(userActiveWidgetId);
+            if (userActiveWidgetId > 0) {
+                state.pendingRemovedWidgetIds.add(userActiveWidgetId);
+            }
             widget.remove();
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
@@ -752,6 +766,17 @@
                 ? lowestWidgetBottom + (state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding))
                 : (state?.emptyCanvasHeight ?? parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight));
         canvas.style.setProperty('--dashboard-canvas-height', `${Math.ceil(nextHeight)}px`);
+        updatePageChromeWidth(canvas);
+    }
+
+    function updatePageChromeWidth(canvas) {
+        const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'));
+        const lowestWidgetRight = widgets
+            .reduce((max, widget) => Math.max(max, parsePixel(widget.style.left) + widget.offsetWidth), 0);
+        const canvasLeft = Math.max(0, canvas.getBoundingClientRect().left);
+        const pageWidth = Math.max(window.innerWidth, Math.ceil(canvasLeft + lowestWidgetRight + 32));
+
+        document.documentElement.style.setProperty('--portal-page-chrome-width', `${pageWidth}px`);
     }
 
     function getMinCanvasHeight(root, canvas, state) {
@@ -781,6 +806,7 @@
         const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
             .map((widget) => ({
                 userActiveWidgetId: parseInt(widget.dataset.userActiveWidgetId || '0', 10),
+                widgetId: parseInt(widget.dataset.widgetId || '0', 10),
                 offsetTop: parsePixel(widget.style.top),
                 offsetLeft: parsePixel(widget.style.left),
                 width: Math.round(widget.offsetWidth),
@@ -790,14 +816,19 @@
                 intData: null,
                 stringData: null
             }))
-            .filter((widget) => widget.userActiveWidgetId > 0);
+            .filter((widget) => widget.widgetId > 0);
 
-        await postForm(root.dataset.saveUrl, token, {
+        const result = await postForm(root.dataset.saveUrl, token, {
             widgetsJson: JSON.stringify(widgets)
         });
+        applySavedWidgetIds(canvas, result);
 
         const removedIds = Array.from(state?.pendingRemovedWidgetIds || []);
         for (const userActiveWidgetId of removedIds) {
+            if (userActiveWidgetId <= 0) {
+                continue;
+            }
+
             await postForm(root.dataset.removeUrl, token, { userActiveWidgetId });
         }
     }
@@ -805,6 +836,10 @@
     async function resetDashboardChanges(root, canvas, token, state, snapshot, nextOrder) {
         const addedIds = Array.from(state.addedWidgetIds);
         for (const userActiveWidgetId of addedIds) {
+            if (userActiveWidgetId <= 0) {
+                continue;
+            }
+
             await postForm(root.dataset.removeUrl, token, { userActiveWidgetId });
         }
 
@@ -822,6 +857,25 @@
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
         updateEmptyState(canvas);
         updateCanvasHeight(root, canvas, state);
+    }
+
+    function applySavedWidgetIds(canvas, result) {
+        const addedWidgets = Array.isArray(result?.addedWidgets)
+            ? result.addedWidgets
+            : [];
+
+        addedWidgets.forEach((item) => {
+            const temporaryId = String(item.temporaryUserActiveWidgetId || '');
+            const userActiveWidgetId = String(item.userActiveWidgetId || '');
+            if (!temporaryId || !userActiveWidgetId) {
+                return;
+            }
+
+            const widget = canvas.querySelector(`[data-dashboard-widget][data-user-active-widget-id="${cssEscape(temporaryId)}"]`);
+            if (widget) {
+                widget.dataset.userActiveWidgetId = userActiveWidgetId;
+            }
+        });
     }
 
     function captureDashboardSnapshot(canvas, state) {
@@ -973,6 +1027,12 @@
     function getMaxOrder(canvas) {
         return Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
             .reduce((max, widget) => Math.max(max, parseInt(widget.style.zIndex || '0', 10) || 0), 0);
+    }
+
+    function getNextWidgetOffset(canvas, state) {
+        const widgetCount = canvas.querySelectorAll('[data-dashboard-widget]').length;
+        const offset = Math.min(32 + (widgetCount % 8) * 32, 256);
+        return snapIfNeeded(offset, state);
     }
 
     function parsePixel(value) {
