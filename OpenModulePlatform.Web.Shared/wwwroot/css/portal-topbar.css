@@ -201,6 +201,41 @@
     stroke-linejoin: round;
 }
 
+.portal-topbar__icon--admin-gears,
+.portal-topbar__icon--language,
+.portal-topbar__icon--user,
+.portal-topbar__icon--copy,
+.portal-topbar__icon--logout,
+.portal-topbar__icon--switch {
+    background: currentColor;
+    -webkit-mask: var(--portal-topbar-icon) center / contain no-repeat;
+    mask: var(--portal-topbar-icon) center / contain no-repeat;
+}
+
+.portal-topbar__icon--admin-gears {
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/person-gears.svg");
+}
+
+.portal-topbar__icon--language {
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/language.svg");
+}
+
+.portal-topbar__icon--user {
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/person.svg");
+}
+
+.portal-topbar__icon--copy {
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg");
+}
+
+.portal-topbar__icon--logout {
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/logout.svg");
+}
+
+.portal-topbar__icon--switch {
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/change.svg");
+}
+
 .portal-topbar__admin-menu,
 .portal-topbar__nav-menu,
 .portal-topbar__favorites-menu,
@@ -707,6 +742,12 @@ span.portal-topbar__nav-group-link {
     opacity: 0;
     transform: translateX(-2px);
     transition: opacity 120ms ease, transform 120ms ease, color 120ms ease;
+}
+
+.portal-topbar__profile-copy-inline-icon.portal-topbar__icon--copy {
+    background: currentColor;
+    -webkit-mask: var(--portal-topbar-icon) center / contain no-repeat;
+    mask: var(--portal-topbar-icon) center / contain no-repeat;
 }
 
 .portal-topbar__profile-copy-inline-icon svg {

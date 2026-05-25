@@ -1687,17 +1687,22 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-floating-button__icon {
+    --dashboard-floating-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/wrench.svg");
     width: 18px;
     height: 18px;
     background: currentColor;
-    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/wrench.svg") center / contain no-repeat;
-    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/wrench.svg") center / contain no-repeat;
+    -webkit-mask: var(--dashboard-floating-icon) center / contain no-repeat;
+    mask: var(--dashboard-floating-icon) center / contain no-repeat;
 }
 
 .portal-dashboard.is-editing .dashboard-floating-button {
     border-color: var(--link);
     background: var(--link);
     color: #ffffff;
+}
+
+.portal-dashboard.is-editing .dashboard-floating-button__icon {
+    --dashboard-floating-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
 }
 
 .dashboard-save-button,
@@ -1707,7 +1712,10 @@ a.dashboard-role-list__item:focus-visible {
     left: 22px;
     z-index: 20000;
     display: none;
+    align-items: center;
+    gap: 8px;
     min-height: 38px;
+    padding: 8px 12px;
     border-radius: 999px;
     background: var(--surface-muted);
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
@@ -1737,7 +1745,10 @@ a.dashboard-role-list__item:focus-visible {
     bottom: 218px;
     z-index: 20000;
     display: none;
+    align-items: center;
+    gap: 8px;
     min-height: 38px;
+    padding: 8px 12px;
     border-color: #b42318;
     border-radius: 999px;
     background: #b42318;
@@ -1755,6 +1766,32 @@ a.dashboard-role-list__item:focus-visible {
 
 .portal-dashboard.is-editing .dashboard-reset-button {
     display: inline-flex;
+}
+
+.dashboard-action-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: var(--dashboard-action-icon) center / contain no-repeat;
+    mask: var(--dashboard-action-icon) center / contain no-repeat;
+}
+
+.dashboard-action-icon--save {
+    --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/save.svg");
+}
+
+.dashboard-action-icon--add {
+    --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/add.svg");
+}
+
+.dashboard-action-icon--reset-history {
+    --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset-history.svg");
+}
+
+.dashboard-action-icon--reset {
+    --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
 }
 
 .dashboard-grid-toggle,
