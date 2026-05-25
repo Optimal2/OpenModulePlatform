@@ -40,8 +40,8 @@ DECLARE @WorkerViewPermissionId int;
 DECLARE @WorkerAdminPermissionId int;
 DECLARE @InitialWorkerConfigId int;
 DECLARE @WorkerArtifactId int;
-DECLARE @WebArtifactVersion nvarchar(50) = N'0.3.4';
-DECLARE @WorkerArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineWebArtifactVersion nvarchar(50) = N'0.3.5';
+DECLARE @BaselineWorkerArtifactVersion nvarchar(50) = N'0.3.3';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -188,14 +188,14 @@ IF @PortalAdminsRoleId IS NOT NULL
 SELECT TOP (1) @WorkerArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WorkerAppId
-  AND Version = @WorkerArtifactVersion
+  AND Version = @BaselineWorkerArtifactVersion
 ORDER BY CASE WHEN PackageType = N'worker' AND TargetName = N'example-workerapp' THEN 0 ELSE 1 END,
          ArtifactId;
 
 IF @WorkerArtifactId IS NULL
 BEGIN
     INSERT INTO omp.Artifacts(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(@WorkerAppId, @WorkerArtifactVersion, N'worker', N'example-workerapp', N'example-workerapp/worker/' + @WorkerArtifactVersion, 1);
+    VALUES(@WorkerAppId, @BaselineWorkerArtifactVersion, N'worker', N'example-workerapp', N'example-workerapp/worker/' + @BaselineWorkerArtifactVersion, 1);
 
     SELECT @WorkerArtifactId = CONVERT(int, SCOPE_IDENTITY());
 END
@@ -204,20 +204,37 @@ BEGIN
     UPDATE omp.Artifacts
     SET PackageType = N'worker',
         TargetName = N'example-workerapp',
-        RelativePath = N'example-workerapp/worker/' + @WorkerArtifactVersion,
+        RelativePath = N'example-workerapp/worker/' + @BaselineWorkerArtifactVersion,
         IsEnabled = 1,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE ArtifactId = @WorkerArtifactId;
 END
 
+-- Repair runs seed the packaged baseline artifact rows but should never
+-- downgrade desired state after newer compatible example artifacts have been
+-- imported. Use the latest registered artifacts for app/template state.
+SELECT TOP (1) @WorkerArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @WorkerAppId
+  AND PackageType = N'worker'
+  AND TargetName = N'example-workerapp'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 MERGE omp.Artifacts AS target
 USING
 (
     SELECT @WorkerWebAppId AS AppId,
-           @WebArtifactVersion AS Version,
+           @BaselineWebArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'example-workerapp-web' AS TargetName,
-           N'example-workerapp/web/' + @WebArtifactVersion AS RelativePath,
+           N'example-workerapp/web/' + @BaselineWebArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -232,12 +249,27 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+SELECT TOP (1) @WorkerWebArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @WorkerWebAppId
+  AND PackageType = N'web-app'
+  AND TargetName = N'example-workerapp-web'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 SELECT @WorkerWebArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WorkerWebAppId
-  AND Version = @WebArtifactVersion
+  AND Version = @BaselineWebArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'example-workerapp-web';
+  AND TargetName = N'example-workerapp-web'
+  AND @WorkerWebArtifactId IS NULL;
 
 IF EXISTS (SELECT 1 FROM omp.AppWorkerDefinitions WHERE AppId = @WorkerAppId)
 BEGIN

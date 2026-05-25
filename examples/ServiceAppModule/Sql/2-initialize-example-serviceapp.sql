@@ -45,8 +45,8 @@ DECLARE @ServiceViewPermissionId int;
 DECLARE @ServiceAdminPermissionId int;
 DECLARE @InitialServiceConfigId int;
 DECLARE @ServiceArtifactId int;
-DECLARE @WebArtifactVersion nvarchar(50) = N'0.3.4';
-DECLARE @ServiceArtifactVersion nvarchar(50) = N'0.3.4';
+DECLARE @BaselineWebArtifactVersion nvarchar(50) = N'0.3.5';
+DECLARE @BaselineServiceArtifactVersion nvarchar(50) = N'0.3.4';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -194,17 +194,17 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @ServiceWebAppId AS AppId,
-           @WebArtifactVersion AS Version,
+           @BaselineWebArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'example-serviceapp-web' AS TargetName,
-           N'example-serviceapp/web/' + @WebArtifactVersion AS RelativePath,
+           N'example-serviceapp/web/' + @BaselineWebArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
     UNION ALL
     SELECT @ServiceAppId,
-           @ServiceArtifactVersion,
+           @BaselineServiceArtifactVersion,
            N'service-app',
            N'example-serviceapp-service',
-           N'example-serviceapp/service/' + @ServiceArtifactVersion,
+           N'example-serviceapp/service/' + @BaselineServiceArtifactVersion,
            CAST(1 AS bit)
 ) AS source
 ON target.AppId = source.AppId
@@ -219,19 +219,52 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+-- Repair runs seed the packaged baseline artifact rows but should never
+-- downgrade desired state after newer compatible example artifacts have been
+-- imported. Use the latest registered artifacts for app/template state.
+SELECT TOP (1) @ServiceWebArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @ServiceWebAppId
+  AND PackageType = N'web-app'
+  AND TargetName = N'example-serviceapp-web'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
+SELECT TOP (1) @ServiceArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @ServiceAppId
+  AND PackageType = N'service-app'
+  AND TargetName = N'example-serviceapp-service'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 SELECT @ServiceWebArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @ServiceWebAppId
-  AND Version = @WebArtifactVersion
+  AND Version = @BaselineWebArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'example-serviceapp-web';
+  AND TargetName = N'example-serviceapp-web'
+  AND @ServiceWebArtifactId IS NULL;
 
 SELECT @ServiceArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @ServiceAppId
-  AND Version = @ServiceArtifactVersion
+  AND Version = @BaselineServiceArtifactVersion
   AND PackageType = N'service-app'
-  AND TargetName = N'example-serviceapp-service';
+  AND TargetName = N'example-serviceapp-service'
+  AND @ServiceArtifactId IS NULL;
 
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @ServiceModuleInstanceId)
 BEGIN

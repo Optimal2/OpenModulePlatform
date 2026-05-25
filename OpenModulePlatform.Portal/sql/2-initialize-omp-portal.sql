@@ -34,7 +34,7 @@ DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.75';
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
@@ -143,10 +143,10 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @PortalAppId AS AppId,
-           @ArtifactVersion AS Version,
+           @BaselineArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'omp-portal' AS TargetName,
-           N'omp-portal/web/' + @ArtifactVersion AS RelativePath,
+           N'omp-portal/web/' + @BaselineArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -161,12 +161,30 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+-- Repair runs seed the packaged baseline artifact row but should never
+-- downgrade desired state after a newer compatible Portal artifact has been
+-- imported. Use the latest registered Portal artifact for app/template state.
+SELECT TOP (1) @PortalArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @PortalAppId
+  AND PackageType = N'web-app'
+  AND TargetName = N'omp-portal'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 SELECT @PortalArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @PortalAppId
-  AND Version = @ArtifactVersion
+  AND Version = @BaselineArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'omp-portal';
+  AND TargetName = N'omp-portal'
+  AND @PortalArtifactId IS NULL;
 
 MERGE omp.ArtifactConfigurationFiles AS target
 USING

@@ -29,7 +29,7 @@ DECLARE @ContentAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111
 DECLARE @ContentArtifactId int;
 DECLARE @ContentViewPermissionId int;
 DECLARE @ContentManagePermissionId int;
-DECLARE @ArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.15';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -128,10 +128,10 @@ MERGE omp.Artifacts AS target
 USING
 (
     SELECT @ContentAppId AS AppId,
-           @ArtifactVersion AS Version,
+           @BaselineArtifactVersion AS Version,
            N'web-app' AS PackageType,
            N'content-webapp' AS TargetName,
-           N'content-webapp/web/' + @ArtifactVersion AS RelativePath,
+           N'content-webapp/web/' + @BaselineArtifactVersion AS RelativePath,
            CAST(1 AS bit) AS IsEnabled
 ) AS source
 ON target.AppId = source.AppId
@@ -146,12 +146,30 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
+-- Repair runs seed the packaged baseline artifact row but should never
+-- downgrade desired state after a newer compatible Content artifact has been
+-- imported. Use the latest registered Content artifact for app/template state.
+SELECT TOP (1) @ContentArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @ContentAppId
+  AND PackageType = N'web-app'
+  AND TargetName = N'content-webapp'
+  AND IsEnabled = 1
+ORDER BY
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+    Version DESC,
+    ArtifactId DESC;
+
 SELECT @ContentArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @ContentAppId
-  AND Version = @ArtifactVersion
+  AND Version = @BaselineArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'content-webapp';
+  AND TargetName = N'content-webapp'
+  AND @ContentArtifactId IS NULL;
 
 DELETE ap
 FROM omp.AppPermissions ap

@@ -56,6 +56,13 @@ desired installation app row, worker instance, or host artifact requirement. Hos
 deploys that selected artifact. It does not choose the highest version on its
 own.
 
+Idempotent module repair SQL may seed a packaged baseline artifact row so a
+clean installation has something to reference, but it must not downgrade an
+existing desired row when newer compatible artifacts are already registered. If
+repair SQL has to repair app or template desired state, it should resolve the
+latest enabled artifact for the same app/package type/target slot and only fall
+back to the packaged baseline when no newer row exists.
+
 `Stable key` is a text key such as `ModuleKey`, `AppKey`, `InstanceKey`,
 `ModuleInstanceKey`, `AppInstanceKey`, `HostKey`, or `WorkerInstanceKey`.
 Installers, installation topology, and administrators should use these keys to match
