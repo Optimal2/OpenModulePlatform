@@ -42,6 +42,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     public UploadInputModel UploadInput { get; set; } = new();
 
     [BindProperty]
+    public UniversalUploadInputModel UniversalUploadInput { get; set; } = new();
+
+    [BindProperty]
     public ArtifactUploadInputModel ArtifactUploadInput { get; set; } = new();
 
     [BindProperty]
@@ -125,6 +128,35 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 "files" => "import-files",
                 _ => "import-bundle"
             };
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostImportUniversal(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        try
+        {
+            var result = await _packages.ImportUniversalPackageUploadAsync(
+                UniversalUploadInput.PackageFile,
+                CreateOptions(UniversalUploadInput),
+                UniversalUploadInput.ReplaceExistingConfigObjects,
+                ct);
+
+            StatusMessage = BuildUniversalImportStatus(result);
+            return RedirectToPage("/Admin/ModulePackageImport");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
+        {
+            ActivePanel = "import-universal";
             ModelState.AddModelError(string.Empty, T(ex.Message));
             await LoadAsync(ct);
             return Page();
@@ -600,6 +632,35 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         return message;
     }
 
+    private string BuildUniversalImportStatus(UniversalPackageImportResult result)
+    {
+        var packageName = string.IsNullOrWhiteSpace(result.PackageKey)
+            ? result.SourceName
+            : $"{result.PackageKey} {result.PackageVersion}".Trim();
+        var message = string.Format(
+            T("Imported universal module package {0}. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
+            packageName,
+            result.ImportedCount,
+            result.SkippedCount,
+            result.FailedCount);
+
+        var detailRows = result.Items
+            .Where(static item =>
+                string.Equals(item.Status, "Failed", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.Status, "Skipped", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrWhiteSpace(item.Message))
+            .Select(static item => string.IsNullOrWhiteSpace(item.Message)
+                ? $"{item.Kind} {item.Path}: {item.Status}"
+                : $"{item.Kind} {item.Path}: {item.Status} - {item.Message}")
+            .ToArray();
+        if (detailRows.Length > 0)
+        {
+            message += " " + T("Import details:") + " " + string.Join(" | ", detailRows);
+        }
+
+        return message;
+    }
+
     private string BuildConfigObjectStatus(ConfigObjectImportResult result)
     {
         var action = result.WasIdentical
@@ -655,6 +716,16 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             input.ExecuteSqlRepairs,
             input.AllowTemporaryIncompatibleArtifacts,
             input.ReplaceExistingModuleDefinition,
+            input.ReplaceExistingArtifacts,
+            input.CopyConfigurationFilesFromPreviousVersion,
+            input.UseArtifactsImmediately);
+
+    private static PortableModulePackageImportOptions CreateOptions(UniversalUploadInputModel input)
+        => new(
+            input.ApplyModuleDefinitions,
+            input.ExecuteSqlRepairs,
+            input.AllowTemporaryIncompatibleArtifacts,
+            input.ReplaceExistingModuleDefinitions,
             input.ReplaceExistingArtifacts,
             input.CopyConfigurationFilesFromPreviousVersion,
             input.UseArtifactsImmediately);
@@ -717,6 +788,27 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         public bool ReplaceExistingModuleDefinition { get; set; }
 
         public bool ReplaceExistingArtifacts { get; set; }
+
+        public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
+
+        public bool UseArtifactsImmediately { get; set; } = true;
+    }
+
+    public sealed class UniversalUploadInputModel
+    {
+        public IFormFile? PackageFile { get; set; }
+
+        public bool ApplyModuleDefinitions { get; set; } = true;
+
+        public bool ExecuteSqlRepairs { get; set; } = true;
+
+        public bool AllowTemporaryIncompatibleArtifacts { get; set; } = true;
+
+        public bool ReplaceExistingModuleDefinitions { get; set; }
+
+        public bool ReplaceExistingArtifacts { get; set; }
+
+        public bool ReplaceExistingConfigObjects { get; set; }
 
         public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
 

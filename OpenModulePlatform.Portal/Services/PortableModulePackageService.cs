@@ -15,8 +15,8 @@ using OpenModulePlatform.Portal.Options;
 namespace OpenModulePlatform.Portal.Services;
 
 /// <summary>
-/// Imports and exports portable module packages: one module definition JSON plus
-/// one or more standard artifact package zips.
+/// Imports and exports portable deployment packages, including universal module
+/// packages and legacy module-definition-plus-artifact package bundles.
 /// </summary>
 public sealed class PortableModulePackageService
 {
@@ -38,13 +38,16 @@ public sealed class PortableModulePackageService
 
     private readonly OmpAdminRepository _repo;
     private readonly ArtifactUploadOptions _options;
+    private readonly PortalDashboardWidgetPackageService _widgets;
 
     public PortableModulePackageService(
         OmpAdminRepository repo,
-        IOptions<ArtifactUploadOptions> options)
+        IOptions<ArtifactUploadOptions> options,
+        PortalDashboardWidgetPackageService widgets)
     {
         _repo = repo;
         _options = options.Value;
+        _widgets = widgets;
     }
 
     public IReadOnlyList<AvailablePortableModulePackage> GetAvailablePackages()
@@ -277,6 +280,251 @@ public sealed class PortableModulePackageService
         }
     }
 
+    public async Task<UniversalPackageImportResult> ImportUniversalPackageUploadAsync(
+        IFormFile? packageFile,
+        PortableModulePackageImportOptions options,
+        bool replaceExistingConfigObjects,
+        CancellationToken ct)
+    {
+        if (packageFile is null || packageFile.Length == 0)
+        {
+            throw new InvalidOperationException("Select one universal module package zip.");
+        }
+
+        if (!packageFile.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Universal module package uploads must be .zip files.");
+        }
+
+        var tempRoot = CreateTempRoot("portal-universal-module-package-upload");
+        try
+        {
+            var packagePath = Path.Join(tempRoot, Path.GetFileName(packageFile.FileName));
+            await CopyUploadToFileAsync(packageFile, packagePath, _options.MaxUploadBytes, ct);
+            return await ImportUniversalPackageFileAsync(
+                packagePath,
+                options,
+                replaceExistingConfigObjects,
+                ct);
+        }
+        finally
+        {
+            TryDelete(tempRoot);
+        }
+    }
+
+    private async Task<UniversalPackageImportResult> ImportUniversalPackageFileAsync(
+        string packagePath,
+        PortableModulePackageImportOptions options,
+        bool replaceExistingConfigObjects,
+        CancellationToken ct)
+    {
+        var extractionRoot = CreateTempRoot("portal-universal-module-package-extract");
+        try
+        {
+            var package = new UniversalModulePackageReader().ExtractToDirectory(packagePath, extractionRoot);
+            var results = new List<UniversalPackageImportItemResult>();
+            var processedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var artifactItems = package.Items
+                .Where(static item => item.Kind == UniversalModulePackageItemKind.ArtifactPackage)
+                .ToArray();
+
+            foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.ModuleDefinition))
+            {
+                try
+                {
+                    var definition = await ReadDefinitionAsync(
+                        item.ExtractedPath,
+                        item.SourceName,
+                        ct,
+                        package.ExtractionRoot);
+                    var matchingArtifactItems = artifactItems
+                        .Where(artifactItem => TryReadArtifactPackageFile(artifactItem.ExtractedPath) is { } artifact
+                            && artifact.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    var importResult = await ImportAsync(
+                        definition,
+                        matchingArtifactItems.Select(static artifactItem => artifactItem.ExtractedPath).ToArray(),
+                        options,
+                        ct);
+
+                    foreach (var artifactItem in matchingArtifactItems)
+                    {
+                        processedArtifactPaths.Add(artifactItem.ExtractedPath);
+                    }
+
+                    results.Add(new UniversalPackageImportItemResult(
+                        "module-definition",
+                        item.Path,
+                        importResult.Applied ? "Applied" : "Stored",
+                        $"Module {importResult.ModuleKey} {importResult.DefinitionVersion}; artifacts imported or replaced: {importResult.ImportedArtifactCount}; failed artifacts: {importResult.FailedArtifactCount}."));
+
+                    foreach (var artifactResult in importResult.Artifacts)
+                    {
+                        results.Add(new UniversalPackageImportItemResult(
+                            "artifact-package",
+                            artifactResult.FileName,
+                            artifactResult.Status,
+                            artifactResult.Message));
+                    }
+                }
+                catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+                {
+                    results.Add(new UniversalPackageImportItemResult(
+                        "module-definition",
+                        item.Path,
+                        "Failed",
+                        ex.Message));
+                }
+            }
+
+            foreach (var item in artifactItems.Where(item => !processedArtifactPaths.Contains(item.ExtractedPath)))
+            {
+                results.Add(await ImportUniversalArtifactItemAsync(item, options, ct));
+            }
+
+            foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.HostConfiguration))
+            {
+                results.Add(await ImportUniversalHostConfigurationItemAsync(item, replaceExistingConfigObjects, ct));
+            }
+
+            foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.ConfigOverlay))
+            {
+                results.Add(await ImportUniversalConfigOverlayItemAsync(item, replaceExistingConfigObjects, ct));
+            }
+
+            foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.DashboardWidget))
+            {
+                results.Add(await ImportUniversalWidgetItemAsync(item, ct));
+            }
+
+            foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.Unknown))
+            {
+                results.Add(new UniversalPackageImportItemResult(
+                    "unknown",
+                    item.Path,
+                    "Skipped",
+                    "The item kind is not supported."));
+            }
+
+            return new UniversalPackageImportResult(
+                package.SourceName,
+                package.PackageKey,
+                package.PackageVersion,
+                results);
+        }
+        finally
+        {
+            TryDelete(extractionRoot);
+        }
+    }
+
+    private async Task<UniversalPackageImportItemResult> ImportUniversalArtifactItemAsync(
+        PortableUniversalModulePackageItem item,
+        PortableModulePackageImportOptions options,
+        CancellationToken ct)
+    {
+        try
+        {
+            var artifact = TryReadArtifactPackageFile(item.ExtractedPath);
+            if (artifact is null)
+            {
+                return new UniversalPackageImportItemResult(
+                    "artifact-package",
+                    item.Path,
+                    "Failed",
+                    "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.");
+            }
+
+            var result = await ImportArtifactPackageAsync(artifact, item.ExtractedPath, options, ct);
+            return new UniversalPackageImportItemResult(
+                "artifact-package",
+                item.Path,
+                result.Status,
+                result.Message);
+        }
+        catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+        {
+            return new UniversalPackageImportItemResult("artifact-package", item.Path, "Failed", ex.Message);
+        }
+    }
+
+    private async Task<UniversalPackageImportItemResult> ImportUniversalHostConfigurationItemAsync(
+        PortableUniversalModulePackageItem item,
+        bool replaceExisting,
+        CancellationToken ct)
+    {
+        try
+        {
+            var reader = new ConfigOverlayPackageReader();
+            var hostConfiguration = await reader.ReadHostConfigurationAsync(
+                item.ExtractedPath,
+                item.SourceName,
+                ct);
+            var result = await _repo.SaveImportedHostConfigurationAsync(
+                hostConfiguration,
+                replaceExisting,
+                ct);
+            return new UniversalPackageImportItemResult(
+                "host-configuration",
+                item.Path,
+                result.WasIdentical ? "Skipped" : result.Replaced ? "Replaced" : result.Created ? "Imported" : "Updated",
+                $"Host {hostConfiguration.HostKey} {hostConfiguration.ConfigurationVersion}.");
+        }
+        catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+        {
+            return new UniversalPackageImportItemResult("host-configuration", item.Path, "Failed", ex.Message);
+        }
+    }
+
+    private async Task<UniversalPackageImportItemResult> ImportUniversalConfigOverlayItemAsync(
+        PortableUniversalModulePackageItem item,
+        bool replaceExisting,
+        CancellationToken ct)
+    {
+        try
+        {
+            var reader = new ConfigOverlayPackageReader();
+            var overlay = await reader.ReadConfigOverlayAsync(
+                item.ExtractedPath,
+                item.SourceName,
+                ct);
+            var result = await _repo.SaveImportedConfigOverlayAsync(
+                overlay,
+                replaceExisting,
+                ct);
+            return new UniversalPackageImportItemResult(
+                "config-overlay",
+                item.Path,
+                result.WasIdentical ? "Skipped" : result.Replaced ? "Replaced" : result.Created ? "Imported" : "Updated",
+                $"Overlay {overlay.HostKey}/{overlay.OverlayKey} {overlay.OverlayVersion}; configuration files: {overlay.ConfigurationFiles.Count}.");
+        }
+        catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+        {
+            return new UniversalPackageImportItemResult("config-overlay", item.Path, "Failed", ex.Message);
+        }
+    }
+
+    private async Task<UniversalPackageImportItemResult> ImportUniversalWidgetItemAsync(
+        PortableUniversalModulePackageItem item,
+        CancellationToken ct)
+    {
+        try
+        {
+            await using var stream = File.OpenRead(item.ExtractedPath);
+            var result = await _widgets.ImportAsync(stream, item.SourceName, ct);
+            return new UniversalPackageImportItemResult(
+                "dashboard-widget",
+                item.Path,
+                "Imported",
+                $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; permission rows: {result.PermissionRowCount}.");
+        }
+        catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+        {
+            return new UniversalPackageImportItemResult("dashboard-widget", item.Path, "Failed", ex.Message);
+        }
+    }
+
     public async Task<PortableModulePackageExportResult> ExportModulePackageAsync(
         string moduleKey,
         bool includeAllArtifactVersions,
@@ -301,14 +549,18 @@ public sealed class PortableModulePackageService
         {
             using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
             {
+                var universalItems = new JsonArray();
+                var definitionEntryName = $"{ModuleDefinitionFolder}/{SanitizePathSegment(moduleKey)}.module-definition.json";
                 var definitionEntry = archive.CreateEntry(
-                    $"{ModuleDefinitionFolder}/{SanitizePathSegment(moduleKey)}.module-definition.json",
+                    definitionEntryName,
                     CompressionLevel.Optimal);
                 await using (var entryStream = definitionEntry.Open())
                 await using (var writer = new StreamWriter(entryStream, new UTF8Encoding(false)))
                 {
                     await writer.WriteAsync(definition.DefinitionJson.AsMemory(), ct);
                 }
+
+                universalItems.Add(CreateUniversalPackageItem("module-definition", definitionEntryName));
 
                 foreach (var artifact in artifactRows)
                 {
@@ -348,12 +600,22 @@ public sealed class PortableModulePackageService
                         artifact.PackageType,
                         artifact.TargetName,
                         artifact.Version);
+                    var artifactEntryName = $"{ArtifactsFolder}/{artifactFileName}";
                     archive.CreateEntryFromFile(
                         artifactPackagePath,
-                        $"{ArtifactsFolder}/{artifactFileName}",
+                        artifactEntryName,
                         CompressionLevel.Optimal);
+                    universalItems.Add(CreateUniversalPackageItem("artifact-package", artifactEntryName));
                     File.Delete(artifactPackagePath);
                 }
+
+                await WriteUniversalPackageManifestAsync(
+                    archive,
+                    moduleKey,
+                    definition.DefinitionVersion,
+                    $"Module package for {moduleKey}",
+                    universalItems,
+                    ct);
             }
 
             TryDelete(tempRoot);
@@ -1125,6 +1387,39 @@ public sealed class PortableModulePackageService
         string version)
         => $"{moduleKey}__{appKey}__{packageType}__{targetName}__{version}.zip";
 
+    private static JsonObject CreateUniversalPackageItem(string kind, string path)
+        => new()
+        {
+            ["kind"] = kind,
+            ["path"] = path
+        };
+
+    private static async Task WriteUniversalPackageManifestAsync(
+        ZipArchive archive,
+        string packageKey,
+        string packageVersion,
+        string displayName,
+        JsonArray items,
+        CancellationToken ct)
+    {
+        var manifest = new JsonObject
+        {
+            ["formatVersion"] = 1,
+            ["objectType"] = "universal-module-package",
+            ["packageKey"] = packageKey,
+            ["packageVersion"] = packageVersion,
+            ["displayName"] = displayName,
+            ["items"] = items
+        };
+
+        var entry = archive.CreateEntry(
+            UniversalModulePackageReader.ManifestEntryName,
+            CompressionLevel.Optimal);
+        await using var stream = entry.Open();
+        await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+        await writer.WriteAsync(manifest.ToJsonString(JsonOptions).AsMemory(), ct);
+    }
+
     private static string? NormalizeRelativePath(string? relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
@@ -1414,6 +1709,15 @@ public sealed class PortableModulePackageService
             && string.Equals(slot.TargetName ?? string.Empty, artifact.TargetName, StringComparison.OrdinalIgnoreCase)
             && IsVersionInRange(artifact.Version, slot.MinArtifactVersion, slot.MaxArtifactVersion));
 
+    private static bool IsExpectedUniversalImportFailure(Exception exception)
+        => exception is InvalidOperationException
+            or InvalidDataException
+            or JsonException
+            or IOException
+            or SqlException
+            or UnauthorizedAccessException
+            or System.Security.SecurityException;
+
     private static string BuildArtifactSlotKey(ArtifactPackageFile artifact)
         => string.Join('\u001f', artifact.ModuleKey, artifact.AppKey, artifact.PackageType, artifact.TargetName);
 
@@ -1537,3 +1841,23 @@ public sealed record PortableModulePackageArtifactImportResult(
 public sealed record PortableModulePackageExportResult(
     string PackagePath,
     string FileName);
+
+public sealed record UniversalPackageImportResult(
+    string SourceName,
+    string? PackageKey,
+    string? PackageVersion,
+    IReadOnlyList<UniversalPackageImportItemResult> Items)
+{
+    public int ImportedCount => Items.Count(static item =>
+        item.Status is "Applied" or "Stored" or "Imported" or "Replaced" or "Updated");
+
+    public int FailedCount => Items.Count(static item => item.Status == "Failed");
+
+    public int SkippedCount => Items.Count(static item => item.Status == "Skipped");
+}
+
+public sealed record UniversalPackageImportItemResult(
+    string Kind,
+    string Path,
+    string Status,
+    string? Message);

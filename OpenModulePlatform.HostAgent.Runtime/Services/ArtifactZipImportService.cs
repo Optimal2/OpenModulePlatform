@@ -99,6 +99,24 @@ public sealed class ArtifactZipImportService
                 await ImportJsonObjectAsync(tempImportPath, Path.GetFileName(importPath), importPath, cancellationToken);
             }
             else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
+                     && UniversalModulePackageReader.IsUniversalPackage(tempImportPath))
+            {
+                var result = await ImportUniversalModulePackageZipAsync(
+                    settings,
+                    importSettings,
+                    tempImportPath,
+                    Path.Join(stagingPath, "universal-module-package"),
+                    cancellationToken);
+                _logger.LogInformation(
+                    "Imported universal module package from HostAgent import folder. File={ImportPath}, Package={PackageKey}, Version={PackageVersion}, Imported={Imported}, Skipped={Skipped}, Failed={Failed}",
+                    importPath,
+                    result.PackageKey ?? Path.GetFileName(importPath),
+                    result.PackageVersion,
+                    result.ImportedCount,
+                    result.SkippedCount,
+                    result.FailedCount);
+            }
+            else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
                      && TryParseFilenameMetadata(Path.GetFileName(importPath)) is { } metadata)
             {
                 var result = await ImportArtifactPackageAsync(
@@ -170,23 +188,23 @@ public sealed class ArtifactZipImportService
                 }
                 else
                 {
-                var result = await ImportModulePackageZipAsync(
-                    settings,
-                    importSettings,
-                    tempImportPath,
-                    Path.Join(stagingPath, "module-package"),
-                    cancellationToken);
-                _logger.LogInformation(
-                    "Imported module package from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}, ImportedArtifacts={ImportedArtifacts}, SkippedArtifacts={SkippedArtifacts}, FailedArtifacts={FailedArtifacts}",
-                    importPath,
-                    result.ModuleKey,
-                    result.DefinitionVersion,
-                    result.ModuleDefinitionDocumentId,
-                    result.Applied,
-                    result.SqlRepairCount,
-                    result.ImportedArtifactCount,
-                    result.SkippedArtifactCount,
-                    result.FailedArtifactCount);
+                    var result = await ImportModulePackageZipAsync(
+                        settings,
+                        importSettings,
+                        tempImportPath,
+                        Path.Join(stagingPath, "module-package"),
+                        cancellationToken);
+                    _logger.LogInformation(
+                        "Imported module package from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}, ImportedArtifacts={ImportedArtifacts}, SkippedArtifacts={SkippedArtifacts}, FailedArtifacts={FailedArtifacts}",
+                        importPath,
+                        result.ModuleKey,
+                        result.DefinitionVersion,
+                        result.ModuleDefinitionDocumentId,
+                        result.Applied,
+                        result.SqlRepairCount,
+                        result.ImportedArtifactCount,
+                        result.SkippedArtifactCount,
+                        result.FailedArtifactCount);
                 }
             }
             else
@@ -429,6 +447,290 @@ public sealed class ArtifactZipImportService
             definitionResult.Applied,
             definitionResult.SqlRepairCount,
             artifactResults);
+    }
+
+    private async Task<UniversalHostAgentImportResult> ImportUniversalModulePackageZipAsync(
+        HostAgentSettings settings,
+        HostAgentArtifactZipImportSettings importSettings,
+        string packageZipPath,
+        string extractionRoot,
+        CancellationToken cancellationToken)
+    {
+        var package = new UniversalModulePackageReader().ExtractToDirectory(packageZipPath, extractionRoot);
+        var itemResults = new List<UniversalHostAgentImportItemResult>();
+        var processedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var artifactItems = package.Items
+            .Where(static item => item.Kind == UniversalModulePackageItemKind.ArtifactPackage)
+            .ToArray();
+
+        foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.ModuleDefinition))
+        {
+            try
+            {
+                var definition = await ReadModuleDefinitionAsync(
+                    item.ExtractedPath,
+                    item.SourceName,
+                    cancellationToken,
+                    package.ExtractionRoot);
+                var definitionResult = await ImportModuleDefinitionAsync(definition, cancellationToken);
+                var matchingArtifactItems = artifactItems
+                    .Where(artifactItem => TryParseFilenameMetadata(Path.GetFileName(artifactItem.ExtractedPath)) is { } metadata
+                        && metadata.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var artifactResults = await ImportUniversalModuleArtifactsAsync(
+                    settings,
+                    importSettings,
+                    definition,
+                    matchingArtifactItems,
+                    extractionRoot,
+                    cancellationToken);
+
+                foreach (var artifactItem in matchingArtifactItems)
+                {
+                    processedArtifactPaths.Add(artifactItem.ExtractedPath);
+                }
+
+                itemResults.Add(new UniversalHostAgentImportItemResult(
+                    "module-definition",
+                    item.Path,
+                    definitionResult.Applied ? "Applied" : "Stored",
+                    $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}."));
+                itemResults.AddRange(artifactResults);
+            }
+            catch (Exception ex) when (IsExpectedImportFailure(ex))
+            {
+                itemResults.Add(new UniversalHostAgentImportItemResult(
+                    "module-definition",
+                    item.Path,
+                    "Failed",
+                    ex.Message));
+            }
+        }
+
+        foreach (var item in artifactItems.Where(item => !processedArtifactPaths.Contains(item.ExtractedPath)))
+        {
+            itemResults.Add(await ImportUniversalArtifactItemAsync(
+                settings,
+                importSettings,
+                item,
+                extractionRoot,
+                cancellationToken));
+        }
+
+        foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.HostConfiguration))
+        {
+            itemResults.Add(await ImportUniversalHostConfigurationItemAsync(item, cancellationToken));
+        }
+
+        foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.ConfigOverlay))
+        {
+            itemResults.Add(await ImportUniversalConfigOverlayItemAsync(item, cancellationToken));
+        }
+
+        foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.DashboardWidget))
+        {
+            itemResults.Add(new UniversalHostAgentImportItemResult(
+                "dashboard-widget",
+                item.Path,
+                "Skipped",
+                "Dashboard widget imports are handled by Portal because HostAgent does not own Portal UI metadata imports."));
+        }
+
+        foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.Unknown))
+        {
+            itemResults.Add(new UniversalHostAgentImportItemResult(
+                "unknown",
+                item.Path,
+                "Skipped",
+                "The item kind is not supported."));
+        }
+
+        foreach (var failed in itemResults.Where(static item => item.Status == "Failed"))
+        {
+            _logger.LogWarning(
+                "Universal module package item import failed. Kind={Kind}, Path={Path}, Message={Message}",
+                failed.Kind,
+                failed.Path,
+                failed.Message);
+        }
+
+        return new UniversalHostAgentImportResult(
+            package.PackageKey,
+            package.PackageVersion,
+            itemResults);
+    }
+
+    private async Task<IReadOnlyList<UniversalHostAgentImportItemResult>> ImportUniversalModuleArtifactsAsync(
+        HostAgentSettings settings,
+        HostAgentArtifactZipImportSettings importSettings,
+        ModuleDefinitionImportDocument definition,
+        IReadOnlyList<PortableUniversalModulePackageItem> artifactItems,
+        string extractionRoot,
+        CancellationToken cancellationToken)
+    {
+        var plans = CreateModulePackageArtifactPlans(
+            definition,
+            artifactItems.Select(static item => item.ExtractedPath).ToArray());
+        var activationKeys = SelectLatestActivationKeys(plans);
+        var results = new List<UniversalHostAgentImportItemResult>();
+
+        foreach (var plan in plans)
+        {
+            if (!string.IsNullOrWhiteSpace(plan.FailureMessage))
+            {
+                results.Add(new UniversalHostAgentImportItemResult(
+                    "artifact-package",
+                    Path.GetFileName(plan.Path),
+                    IsArtifactCompatibilityMessage(plan.FailureMessage) ? "Skipped" : "Failed",
+                    plan.FailureMessage));
+                continue;
+            }
+
+            if (plan.Metadata is null || !string.IsNullOrWhiteSpace(plan.SkipMessage))
+            {
+                results.Add(new UniversalHostAgentImportItemResult(
+                    "artifact-package",
+                    Path.GetFileName(plan.Path),
+                    "Skipped",
+                    plan.SkipMessage ?? "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format."));
+                continue;
+            }
+
+            var activateArtifact = activationKeys.Contains(BuildArtifactActivationKey(plan.Metadata));
+            try
+            {
+                var artifact = await ImportArtifactPackageAsync(
+                    settings,
+                    importSettings,
+                    plan.Metadata,
+                    plan.Path,
+                    Path.Join(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
+                    cancellationToken,
+                    allowExistingIdentical: true,
+                    applyToMatchingApplications: activateArtifact);
+                var message = artifact.Message;
+                if (!activateArtifact && artifact.Status is "Imported" or "Replaced" or "Skipped")
+                {
+                    message = AppendWarning(
+                        message ?? string.Empty,
+                        "The artifact was kept as a historical package and was not selected because a newer compatible artifact for the same app slot exists in this universal package.");
+                }
+
+                results.Add(new UniversalHostAgentImportItemResult(
+                    "artifact-package",
+                    Path.GetFileName(plan.Path),
+                    artifact.Status,
+                    message));
+            }
+            catch (Exception ex) when (IsExpectedImportFailure(ex))
+            {
+                results.Add(new UniversalHostAgentImportItemResult(
+                    "artifact-package",
+                    Path.GetFileName(plan.Path),
+                    IsArtifactCompatibilityFailure(ex) ? "Skipped" : "Failed",
+                    ex.Message));
+            }
+        }
+
+        return results;
+    }
+
+    private async Task<UniversalHostAgentImportItemResult> ImportUniversalArtifactItemAsync(
+        HostAgentSettings settings,
+        HostAgentArtifactZipImportSettings importSettings,
+        PortableUniversalModulePackageItem item,
+        string extractionRoot,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var metadata = TryParseFilenameMetadata(Path.GetFileName(item.ExtractedPath));
+            if (metadata is null)
+            {
+                return new UniversalHostAgentImportItemResult(
+                    "artifact-package",
+                    item.Path,
+                    "Failed",
+                    "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.");
+            }
+
+            var result = await ImportArtifactPackageAsync(
+                settings,
+                importSettings,
+                metadata,
+                item.ExtractedPath,
+                Path.Join(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
+                cancellationToken,
+                allowExistingIdentical: true,
+                applyToMatchingApplications: true);
+            return new UniversalHostAgentImportItemResult(
+                "artifact-package",
+                item.Path,
+                result.Status,
+                result.Message);
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            return new UniversalHostAgentImportItemResult(
+                "artifact-package",
+                item.Path,
+                IsArtifactCompatibilityFailure(ex) ? "Skipped" : "Failed",
+                ex.Message);
+        }
+    }
+
+    private async Task<UniversalHostAgentImportItemResult> ImportUniversalHostConfigurationItemAsync(
+        PortableUniversalModulePackageItem item,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var reader = new ConfigOverlayPackageReader();
+            var hostConfiguration = await reader.ReadHostConfigurationAsync(
+                item.ExtractedPath,
+                item.SourceName,
+                cancellationToken);
+            var result = await _repository.SaveImportedHostConfigurationAsync(
+                hostConfiguration,
+                replaceExisting: false,
+                cancellationToken);
+            return new UniversalHostAgentImportItemResult(
+                "host-configuration",
+                item.Path,
+                result.WasIdentical ? "Skipped" : result.Replaced ? "Replaced" : result.Created ? "Imported" : "Updated",
+                $"Host {hostConfiguration.HostKey} {hostConfiguration.ConfigurationVersion}.");
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            return new UniversalHostAgentImportItemResult("host-configuration", item.Path, "Failed", ex.Message);
+        }
+    }
+
+    private async Task<UniversalHostAgentImportItemResult> ImportUniversalConfigOverlayItemAsync(
+        PortableUniversalModulePackageItem item,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var reader = new ConfigOverlayPackageReader();
+            var overlay = await reader.ReadConfigOverlayAsync(
+                item.ExtractedPath,
+                item.SourceName,
+                cancellationToken);
+            var result = await _repository.SaveImportedConfigOverlayAsync(
+                overlay,
+                replaceExisting: false,
+                cancellationToken);
+            return new UniversalHostAgentImportItemResult(
+                "config-overlay",
+                item.Path,
+                result.WasIdentical ? "Skipped" : result.Replaced ? "Replaced" : result.Created ? "Imported" : "Updated",
+                $"Overlay {overlay.HostKey}/{overlay.OverlayKey} {overlay.OverlayVersion}; configuration files: {overlay.ConfigurationFiles.Count}.");
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            return new UniversalHostAgentImportItemResult("config-overlay", item.Path, "Failed", ex.Message);
+        }
     }
 
     private async Task<ModuleDefinitionImportResult> ImportModuleDefinitionAsync(
@@ -1090,8 +1392,12 @@ public sealed class ArtifactZipImportService
 
     private static bool IsArtifactCompatibilityFailure(Exception exception)
         => exception is InvalidOperationException
-            && (exception.Message.Contains("not compatible with module definition", StringComparison.OrdinalIgnoreCase)
-                || exception.Message.Contains("does not allow artifacts", StringComparison.OrdinalIgnoreCase));
+            && IsArtifactCompatibilityMessage(exception.Message);
+
+    private static bool IsArtifactCompatibilityMessage(string? message)
+        => !string.IsNullOrWhiteSpace(message)
+            && (message.Contains("not compatible with module definition", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("does not allow artifacts", StringComparison.OrdinalIgnoreCase));
 
     private static void ExtractZipToDirectory(string zipPath, string destinationRoot)
     {
@@ -1273,6 +1579,25 @@ public sealed class ArtifactZipImportService
 
     private static string AppendWarning(string current, string next)
         => string.IsNullOrWhiteSpace(current) ? next : current + " " + next;
+
+    private sealed record UniversalHostAgentImportResult(
+        string? PackageKey,
+        string? PackageVersion,
+        IReadOnlyList<UniversalHostAgentImportItemResult> Items)
+    {
+        public int ImportedCount => Items.Count(static item =>
+            item.Status is "Applied" or "Stored" or "Imported" or "Replaced" or "Updated");
+
+        public int SkippedCount => Items.Count(static item => item.Status == "Skipped");
+
+        public int FailedCount => Items.Count(static item => item.Status == "Failed");
+    }
+
+    private sealed record UniversalHostAgentImportItemResult(
+        string Kind,
+        string Path,
+        string Status,
+        string? Message);
 
     private sealed record ModulePackageArtifactPlan(
         string Path,
