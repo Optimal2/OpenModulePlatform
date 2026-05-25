@@ -214,6 +214,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         }
 
         SetTitles("Edit artifact configuration file");
+        var postedFileContent = Input.FileContent ?? string.Empty;
         var row = await LoadExistingRowForContentUpdateAsync(ct);
         if (row is null)
         {
@@ -222,7 +223,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
 
         try
         {
-            row.FileContent = Input.FileContent ?? string.Empty;
+            row.FileContent = postedFileContent;
             await _repo.SaveArtifactConfigurationFileAsync(row, ct);
             StatusMessage = T("Artifact configuration file content updated.");
             return RedirectToPage("/Admin/ArtifactConfigFileEdit", new { id = row.ArtifactConfigurationFileId });
