@@ -44,5 +44,18 @@ Examples:
 
 The optional host profile is JSON and can provide `targetHostProfile`,
 `artifactConfigurationFiles`, `hostConfigurationFiles`, `configOverlayFiles`,
-and `widgetFiles`. Keep private host profiles in the private installer or DEV
-repository, not in public module repositories.
+`widgetFiles`, and `modules`.
+
+Use `modules.<moduleKey>` when one shared host profile contains values for many
+modules. The exporter applies only the segments that match module keys owned by
+the current repository.
+
+Repositories that need to turn module-private settings into generated portable
+objects can add an optional hook at
+`scripts/omp/build-host-profile-objects.ps1`. The hook receives
+`-RepositoryRoot`, `-OutputRoot`, `-HostProfilePath`, `-TargetHostProfile`,
+`-ModuleKey`, and `-Configuration`, and should write generated host configs,
+config overlays, or widgets below `OutputRoot`.
+
+Keep private host profiles in the private installer or DEV repository, not in
+public module repositories.
