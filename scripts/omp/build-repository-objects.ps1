@@ -10,6 +10,7 @@ files plus selected artifact package zips to a common output shape:
   artifacts/
   host-configs/
   config-overlays/
+  widgets/
 
 Runtime/customer configuration is supplied as command-line mappings instead of
 being stored in the source repository:
@@ -17,6 +18,7 @@ being stored in the source repository:
   -ArtifactConfigurationFile 'component-key:relative/path.ext=C:\secure\file.ext'
   -HostConfigurationFile 'C:\secure\host.json'
   -ConfigOverlayFile 'C:\secure\overlay.zip'
+  -WidgetFile 'C:\secure\widgets\my-widget.json'
 
 Point OutputRoot at an installer package's data/global folder to refresh that
 package library directly.
@@ -32,7 +34,8 @@ param(
     [string]$Configuration = 'Release',
     [string[]]$ArtifactConfigurationFile = @(),
     [string[]]$HostConfigurationFile = @(),
-    [string[]]$ConfigOverlayFile = @()
+    [string[]]$ConfigOverlayFile = @(),
+    [string[]]$WidgetFile = @()
 )
 
 Set-StrictMode -Version Latest
@@ -310,6 +313,44 @@ function Copy-PortableObjectFiles {
     }
 }
 
+function Copy-WidgetFiles {
+    param(
+        [string[]]$Files,
+        [string]$DestinationRoot
+    )
+
+    foreach ($entry in @($Files)) {
+        if ([string]::IsNullOrWhiteSpace($entry)) {
+            continue
+        }
+
+        $separatorIndex = $entry.IndexOf('=')
+        if ($separatorIndex -ge 0) {
+            $destinationName = $entry.Substring(0, $separatorIndex).Trim()
+            $sourcePath = $entry.Substring($separatorIndex + 1).Trim()
+        }
+        else {
+            $sourcePath = $entry.Trim()
+            $destinationName = [System.IO.Path]::GetFileName($sourcePath)
+        }
+
+        if ([string]::IsNullOrWhiteSpace($destinationName)) {
+            throw "Widget file destination name is empty: $entry"
+        }
+
+        if (-not [System.IO.Path]::GetExtension($destinationName).Equals('.json', [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Widget files must be JSON files: $destinationName"
+        }
+
+        $resolvedSource = Resolve-PathFromBase -Path $sourcePath -BasePath $repositoryRoot
+        if (-not (Test-Path -LiteralPath $resolvedSource -PathType Leaf)) {
+            throw "Widget file was not found: $resolvedSource"
+        }
+
+        Copy-Item -LiteralPath $resolvedSource -Destination (Join-Path $DestinationRoot $destinationName) -Force
+    }
+}
+
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
 $manifestPath = Join-Path $repositoryRoot 'omp-components.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
@@ -324,10 +365,12 @@ $definitionsRoot = Join-Path $outputRoot 'module-definitions'
 $artifactsRoot = Join-Path $outputRoot 'artifacts'
 $hostConfigsRoot = Join-Path $outputRoot 'host-configs'
 $configOverlaysRoot = Join-Path $outputRoot 'config-overlays'
+$widgetsRoot = Join-Path $outputRoot 'widgets'
 New-Item -ItemType Directory -Path $definitionsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $artifactsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $hostConfigsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $configOverlaysRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $widgetsRoot -Force | Out-Null
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
@@ -426,8 +469,10 @@ finally {
 
 Copy-PortableObjectFiles -Files $HostConfigurationFile -DestinationRoot $hostConfigsRoot -ObjectName 'Host configuration'
 Copy-PortableObjectFiles -Files $ConfigOverlayFile -DestinationRoot $configOverlaysRoot -ObjectName 'Config overlay'
+Copy-WidgetFiles -Files $WidgetFile -DestinationRoot $widgetsRoot
 
 Write-Host "OMP module definitions: $definitionsRoot"
 Write-Host "OMP artifact packages:   $artifactsRoot"
 Write-Host "OMP host configs:        $hostConfigsRoot"
 Write-Host "OMP config overlays:     $configOverlaysRoot"
+Write-Host "OMP widgets:             $widgetsRoot"
