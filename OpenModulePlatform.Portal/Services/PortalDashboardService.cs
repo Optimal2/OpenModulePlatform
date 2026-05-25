@@ -459,6 +459,7 @@ ORDER BY w.title,
         {
             "admin-overview" => 768,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 416,
+            "user-roles" => 384,
             _ => DefaultWidgetWidth
         };
 
@@ -467,6 +468,7 @@ ORDER BY w.title,
         {
             "admin-overview" => 384,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 384,
+            "user-roles" => 320,
             _ => DefaultWidgetHeight
         };
 

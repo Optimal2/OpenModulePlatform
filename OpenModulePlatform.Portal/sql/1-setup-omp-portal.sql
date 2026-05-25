@@ -712,6 +712,13 @@ USING
            N'portal-entry-combolist' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'user-roles' AS widget_key,
+           N'User roles' AS title,
+           N'portal' AS widget_type,
+           N'user-roles' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
 ) AS source
 ON target.widget_key = source.widget_key
 WHEN MATCHED THEN

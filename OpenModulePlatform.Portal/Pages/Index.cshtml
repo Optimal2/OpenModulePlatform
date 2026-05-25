@@ -1,20 +1,7 @@
 @page
-@using OpenModulePlatform.Portal.Services
 @model OpenModulePlatform.Portal.Pages.IndexModel
-@{
-    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
-}
 
-<h2>@ompBranding.PortalDisplayName</h2>
-
-<p class="muted">@ompBranding.ApplyPlatformName(L["This portal is the shared entry point for an OMP instance."].Value)</p>
-
-<div class="card">
-    <div><b>@L["Current user"]</b>: @User?.Identity?.Name</div>
-    <div><b>@ompBranding.ApplyTerms(L["Portal admin"].Value)</b>: @(Model.IsPortalAdmin ? L["Yes"] : L["No"])</div>
-</div>
-
-<section class="portal-dashboard top-gap@(Model.DashboardExpandedCanvas ? " is-expanded-canvas" : string.Empty)"
+<section class="portal-dashboard@(Model.DashboardExpandedCanvas ? " is-expanded-canvas" : string.Empty)"
          data-dashboard-root
          data-can-edit="@Model.CanEditDashboard.ToString().ToLowerInvariant()"
          data-add-url="@Url.Page("/Index", "AddWidget")"
@@ -39,13 +26,6 @@
     <form class="visually-hidden" method="post" data-dashboard-token-form>
         @Html.AntiForgeryToken()
     </form>
-
-    <div class="portal-dashboard__header">
-        <div>
-            <h3>@L["Dashboard"]</h3>
-            <p class="muted">@L["Arrange widgets freely on your personal canvas."]</p>
-        </div>
-    </div>
 
     <div class="portal-dashboard__canvas" data-dashboard-canvas aria-label="@L["Dashboard canvas"]">
         @if (Model.ActiveWidgets.Count == 0)
@@ -96,6 +76,10 @@
                     else if (widget.Payload == "portal-entry-combolist")
                     {
                         <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
+                    }
+                    else if (widget.Payload == "user-roles")
+                    {
+                        <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
                     }
                     else
                     {
@@ -169,6 +153,10 @@
 
         <template data-dashboard-widget-template="portal-entry-combolist">
             <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
+        </template>
+
+        <template data-dashboard-widget-template="user-roles">
+            <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
         </template>
 
         <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">

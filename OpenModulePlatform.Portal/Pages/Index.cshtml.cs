@@ -55,6 +55,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public IReadOnlyList<PortalEntry> AllPortalEntries { get; private set; } = [];
 
+    public IReadOnlyList<DashboardRoleOption> DashboardRoles { get; private set; } = [];
+
     public async Task OnGet(bool manage = false, bool fullList = false, CancellationToken ct = default)
     {
         await LoadAsync(ct);
@@ -140,6 +142,15 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         var roleIds = roleContext.EffectiveRoleIds.ToHashSet();
         IsPortalAdmin = permissions.Contains(OmpPortalPermissions.Admin);
         ViewData["IsPortalAdmin"] = IsPortalAdmin;
+        DashboardRoles = roleContext.AvailableRoles
+            .Select(role => new DashboardRoleOption(
+                role.RoleId,
+                role.Name,
+                role.Description,
+                role.RoleId == roleContext.ActiveRoleId))
+            .OrderByDescending(role => role.IsActive)
+            .ThenBy(role => role.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var userId = TryGetCurrentUserId(out var resolvedUserId)
             ? resolvedUserId

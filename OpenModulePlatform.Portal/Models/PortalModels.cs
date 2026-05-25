@@ -99,6 +99,16 @@ public sealed record DashboardPortalEntryComboWidgetList(
     IReadOnlyList<PortalEntry> AllEntries);
 
 /// <summary>
+/// Role list rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardRoleWidgetList(IReadOnlyList<DashboardRoleOption> Roles);
+
+/// <summary>
+/// One selectable user role rendered inside the dashboard role widget.
+/// </summary>
+public sealed record DashboardRoleOption(int RoleId, string Name, string? Description, bool IsActive);
+
+/// <summary>
 /// Per-user dashboard behavior preferences.
 /// </summary>
 public sealed record DashboardPreferences(bool AlignToGrid, bool ExpandedCanvas);

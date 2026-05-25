@@ -24,6 +24,8 @@
         const picker = root.querySelector('[data-widget-picker]');
         const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
 
+        bindRoleSwitchConfirmations(root);
+
         if (!canvas || !editToggle || root.dataset.canEdit !== 'true') {
             if (canvas) {
                 updateCanvasHeight(root, canvas);
@@ -202,6 +204,25 @@
             }
             updateCanvasHeight(root, canvas, state);
         }
+    }
+
+    function bindRoleSwitchConfirmations(root) {
+        if (root.dataset.dashboardRoleSwitchBound === 'true') {
+            return;
+        }
+
+        root.dataset.dashboardRoleSwitchBound = 'true';
+        root.addEventListener('click', (event) => {
+            const link = event.target.closest('[data-dashboard-role-switch]');
+            if (!link || !root.contains(link)) {
+                return;
+            }
+
+            const message = link.dataset.confirmMessage || '';
+            if (message && !window.confirm(message)) {
+                event.preventDefault();
+            }
+        });
     }
 
     function bindWidget(root, canvas, widget, token, nextOrder, state) {
