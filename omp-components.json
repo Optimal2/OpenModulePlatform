@@ -5,47 +5,47 @@
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.59",
+      "definitionVersion": "0.3.60",
       "path": "omp_core.module-definition.json"
     },
     {
       "moduleKey": "omp_auth",
-      "definitionVersion": "0.3.5",
+      "definitionVersion": "0.3.6",
       "path": "OpenModulePlatform.Auth/omp_auth.module-definition.json"
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.75",
+      "definitionVersion": "0.3.76",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
       "moduleKey": "iframe_webapp",
-      "definitionVersion": "0.3.7",
+      "definitionVersion": "0.3.8",
       "path": "OpenModulePlatform.Web.iFrameWebAppModule/iframe_webapp.module-definition.json"
     },
     {
       "moduleKey": "content_webapp",
-      "definitionVersion": "0.3.17",
+      "definitionVersion": "0.3.18",
       "path": "OpenModulePlatform.Web.ContentWebAppModule/content_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.7",
+      "definitionVersion": "0.3.8",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp_blazor",
-      "definitionVersion": "0.3.7",
+      "definitionVersion": "0.3.8",
       "path": "examples/WebAppBlazorModule/example_webapp_blazor.module-definition.json"
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.8",
+      "definitionVersion": "0.3.9",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.7",
+      "definitionVersion": "0.3.8",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
@@ -57,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.74",
+      "version": "0.3.75",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip"
