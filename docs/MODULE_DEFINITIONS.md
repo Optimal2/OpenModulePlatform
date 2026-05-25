@@ -315,9 +315,21 @@ database connection, so module definition SQL must not switch databases.
 
 The `compatibleArtifacts` array defines artifact slots, not already-installed
 artifact rows. An artifact zip import uses these rows to validate
-`appKey`/`packageType`/`targetName`/version and to resolve
-`relativePathTemplate`. Applying only the module definition should not require
-the zip payload or create a fake artifact version.
+`appKey`/`packageType`/`targetName` and the optional minimum artifact version,
+and to resolve `relativePathTemplate`. Do not set `maxVersion` to the latest
+known build number as a release marker. Normal code-only artifact releases must
+be importable and selectable without publishing a new module definition.
+Use `maxVersion` only as a deliberate hard compatibility ceiling for a known
+artifact line that must not move forward under the current module contract.
+Applying only the module definition should not require the zip payload or create
+a fake artifact version.
+
+When a particular artifact build really requires a newer module definition
+because SQL, OMP metadata, or another module contract changed, put that
+requirement in the artifact package manifest as
+`moduleDefinition.minVersion`. Portal and HostAgent then reject that artifact
+until the required module definition has been applied, while ordinary artifact
+releases remain independent.
 
 `artifactConfigurationFiles` describes runtime files that belong to an artifact
 slot but should not live inside the immutable zip. These descriptors are also

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_serviceapp",
-  "definitionVersion": "0.3.9",
+  "definitionVersion": "0.3.10",
   "module": {
     "displayName": "Example ServiceApp",
     "moduleType": "HostAppModule",
@@ -35,7 +35,7 @@
       "targetName": "example-serviceapp-web",
       "relativePathTemplate": "example-serviceapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.5"
+      "maxVersion": null
     },
     {
       "appKey": "example_serviceapp_service",
@@ -43,7 +43,7 @@
       "targetName": "example-serviceapp-service",
       "relativePathTemplate": "example-serviceapp/service/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.4"
+      "maxVersion": null
     }
   ],
   "sqlScripts": [

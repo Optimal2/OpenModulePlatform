@@ -17,6 +17,10 @@ Runtime configuration files such as appsettings.json and
 appsettings.Development.json are removed from payload directories before the
 immutable artifact payload is zipped. Put those files in -ConfigurationFile,
 artifact configuration rows, or config overlays instead.
+
+Use -MinModuleDefinitionVersion only when this artifact requires SQL, OMP
+metadata, or another module contract from a newer module definition. Leave it
+empty for ordinary code-only artifact releases.
 #>
 [CmdletBinding()]
 param(
@@ -27,7 +31,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$PayloadPath,
     [Parameter(Mandatory = $true)][string]$OutputPath,
-    [string[]]$ConfigurationFile = @()
+    [string[]]$ConfigurationFile = @(),
+    [string]$MinModuleDefinitionVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -258,6 +263,11 @@ try {
             path = 'payload/artifact.zip'
         }
         configurationFiles = @($manifestConfigurationFiles)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($MinModuleDefinitionVersion)) {
+        $manifest.moduleDefinition = [ordered]@{
+            minVersion = $MinModuleDefinitionVersion.Trim()
+        }
     }
 
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'omp-artifact-package.json') -Encoding UTF8

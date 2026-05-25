@@ -137,6 +137,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             await CopyUploadToTempZipAsync(Input.ZipFile!, tempZipPath, ct);
             var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
                 .Extract(tempZipPath, stagingPath);
+            ValidateModuleDefinitionRequirement(package, compatibility);
 
             var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, ct);
             var existingIdentity = await _repo.FindArtifactByIdentityAsync(
@@ -835,6 +836,34 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         => _uploadOptions.MaxUploadBytes > 0
             ? _uploadOptions.MaxUploadBytes
             : ArtifactUploadOptions.DefaultMaxUploadBytes;
+
+    private static void ValidateModuleDefinitionRequirement(
+        ArtifactPackageExtractionResult package,
+        ArtifactCompatibilitySlot compatibility)
+    {
+        if (string.IsNullOrWhiteSpace(package.MinModuleDefinitionVersion))
+        {
+            return;
+        }
+
+        if (CompareArtifactVersions(compatibility.DefinitionVersion, package.MinModuleDefinitionVersion) < 0)
+        {
+            throw new InvalidOperationException(
+                $"Artifact package requires module definition '{compatibility.ModuleKey}' version {package.MinModuleDefinitionVersion} or later. " +
+                $"The currently applied definition is {compatibility.DefinitionVersion}.");
+        }
+    }
+
+    private static int CompareArtifactVersions(string left, string right)
+    {
+        if (Version.TryParse(left, out var leftVersion)
+            && Version.TryParse(right, out var rightVersion))
+        {
+            return leftVersion.CompareTo(rightVersion);
+        }
+
+        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static void MoveFileOrDirectory(string source, string destination)
     {
