@@ -34,7 +34,7 @@ DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
-DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.75';
+DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.76';
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'

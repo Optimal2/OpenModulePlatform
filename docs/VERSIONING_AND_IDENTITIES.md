@@ -120,7 +120,7 @@ upgrades. Other compiled runtime components, including WorkerManager and
 WorkerProcessHost, must be represented as ordinary OMP apps with compatible
 artifacts.
 
-When a new version is produced:
+When a new code-only artifact version is produced:
 
 1. Publish or copy the package contents into the central artifact store.
 2. Register a new `omp.Artifacts` row with the app, version, package type,
@@ -129,6 +129,13 @@ When a new version is produced:
    `ArtifactId`.
 4. Let HostAgent provision and deploy the selected artifact on each matching
    host.
+
+This path must not require a new module definition when the module's SQL and OMP
+metadata contract did not change. Module definitions define artifact slots and
+minimum compatible versions; they should not be bumped merely to move a
+`maxVersion` ceiling forward. If an artifact really does need a newer module
+definition, the artifact package should declare `moduleDefinition.minVersion`
+and the package import will wait until that definition has been applied.
 
 Changing `omp.AppInstances.ArtifactId` or
 `omp.InstanceTemplateAppInstances.DesiredArtifactId` is the version switch.

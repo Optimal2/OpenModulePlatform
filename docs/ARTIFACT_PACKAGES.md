@@ -87,6 +87,9 @@ Manifest example:
     "type": "directory",
     "path": "payload/"
   },
+  "moduleDefinition": {
+    "minVersion": "1.2.3"
+  },
   "configurationFiles": [
     {
       "relativePath": "odv.site.config.js",
@@ -103,6 +106,12 @@ Manifest example:
 `payload.type` can be `directory` or `zip`. If `type` is omitted, paths ending
 in `.zip` are treated as nested zip payloads and other paths are treated as
 directory prefixes.
+
+`moduleDefinition.minVersion` is optional. Leave it out for normal code-only
+artifact releases that are compatible with the currently applied module
+definition. Set it only when this artifact requires SQL, OMP metadata, or
+another module contract from a newer module definition. Portal and HostAgent
+validate the requirement before registering the artifact.
 
 ## Runtime Behavior
 

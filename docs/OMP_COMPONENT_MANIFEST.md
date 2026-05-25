@@ -35,6 +35,12 @@ own `version`, and that value is the version that belongs in
   component can be published directly with `dotnet publish`. The graphical
   bootstrapper uses this to build only missing .NET artifact packages during
   `Sync package objects`.
+- `minModuleDefinitionVersion` is optional and is written into generated
+  artifact package manifests as `moduleDefinition.minVersion`. Use it only when
+  that component build requires SQL, OMP metadata, or another module contract
+  from a newer module definition. Leave it empty for normal code-only artifact
+  releases so the artifact can be imported and selected without bumping the
+  module definition.
 
 ## Bumping Versions
 

@@ -47,7 +47,7 @@ DECLARE @ServiceHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
-DECLARE @BaselineHostAgentArtifactVersion nvarchar(50) = N'0.3.54';
+DECLARE @BaselineHostAgentArtifactVersion nvarchar(50) = N'0.3.55';
 DECLARE @BaselineWorkerManagerArtifactVersion nvarchar(50) = N'0.3.8';
 DECLARE @BaselineWorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
 DECLARE @DefaultHostKey nvarchar(128) = N'sample-host';

@@ -1079,6 +1079,7 @@ public sealed class PortableModulePackageService
         {
             var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
                 .Extract(packagePath, stagingPath);
+            ValidateModuleDefinitionRequirement(package, compatibility);
             var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, ct);
 
             var existingIdentity = await _repo.FindArtifactByIdentityAsync(
@@ -2178,6 +2179,23 @@ public sealed class PortableModulePackageService
             && slot.PackageType.Equals(artifact.PackageType, StringComparison.OrdinalIgnoreCase)
             && string.Equals(slot.TargetName ?? string.Empty, artifact.TargetName, StringComparison.OrdinalIgnoreCase)
             && IsVersionInRange(artifact.Version, slot.MinArtifactVersion, slot.MaxArtifactVersion));
+
+    private static void ValidateModuleDefinitionRequirement(
+        ArtifactPackageExtractionResult package,
+        ArtifactCompatibilitySlot compatibility)
+    {
+        if (string.IsNullOrWhiteSpace(package.MinModuleDefinitionVersion))
+        {
+            return;
+        }
+
+        if (CompareArtifactVersions(compatibility.DefinitionVersion, package.MinModuleDefinitionVersion) < 0)
+        {
+            throw new InvalidOperationException(
+                $"Artifact package requires module definition '{compatibility.ModuleKey}' version {package.MinModuleDefinitionVersion} or later. " +
+                $"The currently applied definition is {compatibility.DefinitionVersion}.");
+        }
+    }
 
     private static bool IsExpectedUniversalImportFailure(Exception exception)
         => exception is InvalidOperationException
