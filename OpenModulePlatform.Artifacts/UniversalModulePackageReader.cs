@@ -21,6 +21,7 @@ public sealed record PortableUniversalModulePackage(
     string? PackageVersion,
     string? DisplayName,
     string? Description,
+    string? TargetHostProfile,
     string SourceName,
     string ExtractionRoot,
     IReadOnlyList<PortableUniversalModulePackageItem> Items);
@@ -90,6 +91,7 @@ public sealed class UniversalModulePackageReader
             NullIfWhiteSpace(GetString(manifest, "packageVersion")),
             NullIfWhiteSpace(GetString(manifest, "displayName")),
             NullIfWhiteSpace(GetString(manifest, "description")),
+            NullIfWhiteSpace(GetString(manifest, "targetHostProfile")),
             Path.GetFileName(zipPath),
             extractionRoot,
             items);
