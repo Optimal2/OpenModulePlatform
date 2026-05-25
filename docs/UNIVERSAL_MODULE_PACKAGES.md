@@ -73,23 +73,75 @@ Supported item kinds:
 Paths in the manifest must be relative package paths. Absolute paths, drive
 letters, `..` segments, and invalid file-name characters are rejected.
 
+## Installer Object Archive
+
+The HostAgent-first installer uses the same folder names for its local object
+archive. This makes the installer folder a staging area for universal packages,
+not a separate format:
+
+```text
+installer/
+  data/
+    global/
+      module-definitions/
+      artifacts/
+      host-configs/
+      config-overlays/
+      widgets/
+    hosts/
+      <host-key>/
+        host-configs/
+        config-overlays/
+        widgets/
+```
+
+The private deployment repository can also keep host profiles beside the
+installer, for example `hosts/<host-key>/bootstrap.json` with sibling
+`config-overlays/`, `host-configs/`, and `widgets/` folders. The installer GUI
+can read those host-specific folders when creating a package for a selected
+target host. The bootstrap profile itself is not included automatically, because
+it may contain installation paths, environment information, and encrypted
+credentials that belong to the installer profile rather than to the portable OMP
+object library.
+
+Use the installer action `Refresh object archive` to populate or update
+`data/global` from configured source repositories without starting an
+installation. Then use `Create universal package` to choose:
+
+- the target host profile, or a global-only package
+- global module definitions, artifacts, host configs, overlays, and widgets
+- host-specific host configs, overlays, and widgets for the selected profile
+- the output zip path
+
+The generated zip contains `omp-universal-package.json` and only the selected
+objects. This is the recommended way to create a customer or host-specific
+transport package from a developer machine and then import it through Portal, the
+HostAgent import folder, or another installer instance.
+
 ## Import Behavior
 
 Importers process universal packages item by item.
 
 - One corrupt object should not stop the rest of the package.
+- Objects that are already present with identical identity and content should be
+  skipped or reported as already current.
 - Module definitions are processed before artifact packages.
 - Artifact packages that match a module definition in the same package are
   evaluated against that module definition's compatibility rules.
 - For each app slot, the latest compatible artifact in the package is selected
   for immediate desired-state updates. Older compatible artifacts are retained as
   historical packages.
+- Desired-state updates should move forward automatically to newer compatible
+  versions. Older versions can be imported as library/history objects, but a
+  deliberate downgrade should be made explicitly from the Portal installation
+  administration pages.
 - Standalone artifacts are imported independently and may update matching app or
   HostAgent desired state when compatibility allows it.
 - Host configuration and config overlay objects are stored in the available
   object library.
-- Dashboard widgets are imported by Portal. HostAgent skips widget items because
-  Portal owns UI metadata imports.
+- Dashboard widgets are imported by both Portal and HostAgent. HostAgent writes
+  the same portable widget format into the Portal widget tables so import-folder
+  packages can carry complete common OMP objects.
 
 The result should report imported, skipped, and failed item counts. Failed items
 belong to the package item, not to the whole package, unless the zip or manifest

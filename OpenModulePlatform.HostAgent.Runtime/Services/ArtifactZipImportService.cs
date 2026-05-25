@@ -529,11 +529,7 @@ public sealed class ArtifactZipImportService
 
         foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.DashboardWidget))
         {
-            itemResults.Add(new UniversalHostAgentImportItemResult(
-                "dashboard-widget",
-                item.Path,
-                "Skipped",
-                "Dashboard widget imports are handled by Portal because HostAgent does not own Portal UI metadata imports."));
+            itemResults.Add(await ImportUniversalDashboardWidgetItemAsync(item, cancellationToken));
         }
 
         foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.Unknown))
@@ -730,6 +726,28 @@ public sealed class ArtifactZipImportService
         catch (Exception ex) when (IsExpectedImportFailure(ex))
         {
             return new UniversalHostAgentImportItemResult("config-overlay", item.Path, "Failed", ex.Message);
+        }
+    }
+
+    private async Task<UniversalHostAgentImportItemResult> ImportUniversalDashboardWidgetItemAsync(
+        PortableUniversalModulePackageItem item,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var stream = File.OpenRead(item.ExtractedPath);
+            var reader = new DashboardWidgetPackageReader();
+            var widgets = await reader.ReadAsync(stream, item.SourceName, cancellationToken);
+            var result = await _repository.SaveImportedDashboardWidgetsAsync(widgets, cancellationToken);
+            return new UniversalHostAgentImportItemResult(
+                "dashboard-widget",
+                item.Path,
+                "Imported",
+                $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; permission rows: {result.PermissionRowCount}.");
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            return new UniversalHostAgentImportItemResult("dashboard-widget", item.Path, "Failed", ex.Message);
         }
     }
 

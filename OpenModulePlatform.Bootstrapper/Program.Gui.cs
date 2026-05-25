@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -464,7 +465,9 @@ internal static partial class Program
         private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
         private readonly Button _upgradeCompleteButton = new() { Text = "Upgrade / complete", AutoSize = true };
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
-        private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
+        private readonly Button _syncPackageObjectsButton = new() { Text = "Refresh object archive", AutoSize = true };
+        private readonly Button _refreshObjectArchiveButton = new() { Text = "Refresh object archive", AutoSize = true };
+        private readonly Button _createUniversalPackageButton = new() { Text = "Create universal package", AutoSize = true };
         private readonly Button _createUpdatedInstallerPackageButton = new() { Text = "Create updated installer package", AutoSize = true };
         private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
         private readonly Button _cleanUninstallButton = new() { Text = "Clean uninstall", AutoSize = true };
@@ -597,6 +600,8 @@ internal static partial class Program
             _upgradeCompleteButton.Click += async (_, _) => await UpgradeOrCompleteAsync();
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
             _syncPackageObjectsButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
+            _refreshObjectArchiveButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
+            _createUniversalPackageButton.Click += async (_, _) => await CreateUniversalPackageAsync();
             _createUpdatedInstallerPackageButton.Click += async (_, _) => await CreateUpdatedInstallerPackageAsync();
             _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
             _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
@@ -759,6 +764,18 @@ internal static partial class Program
             panel.Controls.Add(_refreshPackageBeforePrimaryAction, 0, 1);
             panel.Controls.Add(_developerSourceStatusLabel, 1, 1);
 
+            _refreshObjectArchiveButton.Width = 260;
+            _refreshObjectArchiveButton.Margin = new Padding(0, 4, 12, 4);
+            panel.Controls.Add(_refreshObjectArchiveButton, 0, 2);
+            panel.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(850, 0),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 7, 0, 4),
+                Text = "Updates the local installer object archive from configured source repositories without starting an install."
+            }, 1, 2);
+
             group.Controls.Add(panel);
             return group;
         }
@@ -782,10 +799,11 @@ internal static partial class Program
 
             _packageToolsTab = CreateActionTab(
                 "Package tools",
-                "Developer-only helpers for checking and refreshing package objects from source repositories.",
+                "Package helpers for refreshing the installer object archive and creating universal package zips.",
                 [
                     (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
                     (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
+                    (_createUniversalPackageButton, "Creates a universal module package zip from this installer's object archive. You can choose global objects and host-specific overlays for any available host profile."),
                     (_createUpdatedInstallerPackageButton, "Starts a separate refresh process that creates a fresh installer package from source and restarts the updated installer.")
                 ]);
             tabs.TabPages.Add(_packageToolsTab);
@@ -1099,6 +1117,8 @@ internal static partial class Program
             _refreshPackageBeforePrimaryAction.Visible = _hasDeveloperSource;
             _refreshPackageBeforePrimaryAction.Enabled = _hasDeveloperSource;
             _refreshPackageBeforePrimaryAction.Checked = _hasDeveloperSource;
+            _refreshObjectArchiveButton.Visible = _hasDeveloperSource;
+            _refreshObjectArchiveButton.Enabled = _hasDeveloperSource;
             _developerSourceStatusLabel.ForeColor = _hasDeveloperSource ? Color.DarkGreen : SystemColors.GrayText;
             _developerSourceStatusLabel.Text += string.IsNullOrWhiteSpace(developerSourceDetails)
                 ? string.Empty
@@ -1115,15 +1135,16 @@ internal static partial class Program
             }
 
             var containsPackageTools = _advancedActionTabs.TabPages.Contains(_packageToolsTab);
-            if (_hasDeveloperSource && !containsPackageTools)
+            if (!containsPackageTools)
             {
                 var insertIndex = Math.Min(1, _advancedActionTabs.TabPages.Count);
                 _advancedActionTabs.TabPages.Insert(insertIndex, _packageToolsTab);
             }
-            else if (!_hasDeveloperSource && containsPackageTools)
-            {
-                _advancedActionTabs.TabPages.Remove(_packageToolsTab);
-            }
+
+            _checkSourceButton.Enabled = _hasDeveloperSource;
+            _syncPackageObjectsButton.Enabled = _hasDeveloperSource;
+            _createUpdatedInstallerPackageButton.Enabled = _hasDeveloperSource;
+            _createUniversalPackageButton.Enabled = HasUniversalPackageCandidates();
         }
 
         private bool DetectExistingInstallation(out string details)
@@ -1481,8 +1502,40 @@ internal static partial class Program
                     ex.Message,
                     "OpenModulePlatform installer",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                MessageBoxIcon.Error);
             }
+        }
+
+        private async Task CreateUniversalPackageAsync()
+        {
+            ApplyValues();
+            using var form = new UniversalPackageBuilderForm(_payloadRoot, _configProfiles, _configPath);
+            if (form.ShowDialog(this) != DialogResult.OK || form.Request is null)
+            {
+                return;
+            }
+
+            var request = form.Request;
+            await RunGuiOperationAsync(
+                "Creating universal module package...",
+                "Universal module package created.",
+                "Universal module package was created with warnings. Review the log for details.",
+                "Universal module package creation failed.",
+                () =>
+                {
+                    var result = CreateUniversalPackageZip(request);
+                    Console.WriteLine($"> Universal module package: {result.PackagePath}");
+                    Console.WriteLine($"> Package key: {request.PackageKey}");
+                    Console.WriteLine($"> Package version: {request.PackageVersion}");
+                    Console.WriteLine($"> Host profile: {request.HostDisplayName}");
+                    Console.WriteLine($"> Items: {result.ItemCount}");
+                    foreach (var item in request.Items)
+                    {
+                        Console.WriteLine($"  {item.Kind,-18} {item.PackagePath}");
+                    }
+
+                    return Task.FromResult(0);
+                });
         }
 
         private void StartDetachedInstallerPackageRefresh()
@@ -1519,6 +1572,77 @@ internal static partial class Program
             {
                 throw new InvalidOperationException("Could not start the installer package refresh process.");
             }
+        }
+
+        private bool HasUniversalPackageCandidates()
+            => CollectUniversalPackageCandidates(
+                _payloadRoot,
+                hostChoice: null,
+                includeGlobal: true,
+                includeHostSpecific: false).Count > 0
+                || _configProfiles
+                    .Select(CreateUniversalPackageHostChoice)
+                    .Any(hostChoice => CollectUniversalPackageCandidates(
+                        _payloadRoot,
+                        hostChoice,
+                        includeGlobal: false,
+                        includeHostSpecific: true).Count > 0);
+
+        private static UniversalPackageBuildResult CreateUniversalPackageZip(UniversalPackageBuildRequest request)
+        {
+            var outputPath = Path.GetFullPath(request.OutputPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+
+            using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
+            var items = new JsonArray();
+            var usedPackagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in request.Items.OrderBy(static item => item.PackagePath, StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(item.SourcePath))
+                {
+                    throw new FileNotFoundException("A selected universal package item no longer exists.", item.SourcePath);
+                }
+
+                if (!usedPackagePaths.Add(item.PackagePath))
+                {
+                    throw new InvalidOperationException($"Duplicate universal package item path '{item.PackagePath}'.");
+                }
+
+                archive.CreateEntryFromFile(
+                    item.SourcePath,
+                    item.PackagePath,
+                    CompressionLevel.Optimal);
+                items.Add(new JsonObject
+                {
+                    ["kind"] = item.Kind,
+                    ["path"] = item.PackagePath
+                });
+            }
+
+            var manifest = new JsonObject
+            {
+                ["formatVersion"] = 1,
+                ["objectType"] = "universal-module-package",
+                ["packageKey"] = request.PackageKey,
+                ["packageVersion"] = request.PackageVersion,
+                ["displayName"] = request.DisplayName,
+                ["description"] = request.Description,
+                ["targetHostProfile"] = request.HostKey,
+                ["createdUtc"] = DateTimeOffset.UtcNow.ToString("O"),
+                ["items"] = items
+            };
+
+            var manifestEntry = archive.CreateEntry(
+                UniversalModulePackageReader.ManifestEntryName,
+                CompressionLevel.Optimal);
+            using var manifestStream = manifestEntry.Open();
+            using var manifestWriter = new StreamWriter(manifestStream, new UTF8Encoding(false));
+            manifestWriter.Write(manifest.ToJsonString(JsonOptions));
+            return new UniversalPackageBuildResult(outputPath, request.Items.Count);
         }
 
         private static void CopyInstallerRunnerFiles(string currentExecutable, string runnerRoot)
@@ -2927,11 +3051,13 @@ ORDER BY ar.ArtifactId DESC;
         {
             _primaryActionButton.Enabled = enabled;
             _refreshPackageBeforePrimaryAction.Enabled = enabled && _hasDeveloperSource;
+            _refreshObjectArchiveButton.Enabled = enabled && _hasDeveloperSource;
             _showAdvancedActions.Enabled = enabled;
             _installButton.Enabled = enabled;
             _upgradeCompleteButton.Enabled = enabled;
             _checkSourceButton.Enabled = enabled && _hasDeveloperSource;
             _syncPackageObjectsButton.Enabled = enabled && _hasDeveloperSource;
+            _createUniversalPackageButton.Enabled = enabled && HasUniversalPackageCandidates();
             _createUpdatedInstallerPackageButton.Enabled = enabled && _hasDeveloperSource;
             _uninstallRuntimeButton.Enabled = enabled;
             _cleanUninstallButton.Enabled = enabled;
@@ -3001,6 +3127,727 @@ ORDER BY ar.ArtifactId DESC;
 
             _target.AppendText(text);
         }
+    }
+
+    private sealed record UniversalPackageBuildRequest(
+        string PackageKey,
+        string PackageVersion,
+        string DisplayName,
+        string Description,
+        string? HostKey,
+        string HostDisplayName,
+        string OutputPath,
+        IReadOnlyList<UniversalPackageCandidate> Items);
+
+    private sealed record UniversalPackageBuildResult(
+        string PackagePath,
+        int ItemCount);
+
+    private sealed record UniversalPackageCandidate(
+        string Kind,
+        string SourcePath,
+        string PackagePath)
+    {
+        public string DisplayName => $"{Kind}: {PackagePath}";
+    }
+
+    private sealed record UniversalPackageHostChoice(
+        string DisplayName,
+        string? HostKey,
+        string? ConfigPath,
+        string? ExternalDataRoot)
+    {
+        public override string ToString() => DisplayName;
+    }
+
+    private sealed class UniversalPackageCandidateListItem
+    {
+        public UniversalPackageCandidateListItem(UniversalPackageCandidate candidate)
+        {
+            Candidate = candidate;
+        }
+
+        public UniversalPackageCandidate Candidate { get; }
+
+        public override string ToString() => Candidate.DisplayName;
+    }
+
+    private sealed class UniversalPackageBuilderForm : Form
+    {
+        private readonly string _payloadRoot;
+        private readonly IReadOnlyList<UniversalPackageHostChoice> _hostChoices;
+        private readonly ComboBox _hostBox = new()
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 360
+        };
+        private readonly CheckBox _includeGlobalObjects = new()
+        {
+            AutoSize = true,
+            Checked = true,
+            Text = "Include global package objects"
+        };
+        private readonly CheckBox _includeHostObjects = new()
+        {
+            AutoSize = true,
+            Checked = true,
+            Text = "Include host-specific package objects"
+        };
+        private readonly TextBox _packageKeyBox = new() { Width = 220 };
+        private readonly TextBox _packageVersionBox = new() { Width = 160 };
+        private readonly TextBox _displayNameBox = new() { Width = 420 };
+        private readonly TextBox _descriptionBox = new() { Width = 580 };
+        private readonly TextBox _outputPathBox = new()
+        {
+            Anchor = AnchorStyles.Left | AnchorStyles.Right
+        };
+        private readonly CheckedListBox _itemList = new()
+        {
+            CheckOnClick = true,
+            Dock = DockStyle.Fill
+        };
+        private readonly Label _itemSummaryLabel = new()
+        {
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText
+        };
+        private readonly Button _selectAllButton = new()
+        {
+            AutoSize = true,
+            Text = "Select all"
+        };
+        private readonly Button _selectNoneButton = new()
+        {
+            AutoSize = true,
+            Text = "Select none"
+        };
+        private readonly Button _browseButton = new()
+        {
+            AutoSize = true,
+            Text = "Browse..."
+        };
+        private readonly Button _createButton = new()
+        {
+            AutoSize = true,
+            Text = "Create"
+        };
+
+        private bool _outputPathIsAutomatic = true;
+        private bool _updatingOutputPath;
+
+        public UniversalPackageBuilderForm(
+            string payloadRoot,
+            IReadOnlyList<BootstrapConfigProfile> configProfiles,
+            string currentConfigPath)
+        {
+            _payloadRoot = payloadRoot;
+            _hostChoices = BuildHostChoices(configProfiles);
+
+            Text = "Create universal module package";
+            StartPosition = FormStartPosition.CenterParent;
+            MinimumSize = new Size(900, 620);
+            Size = new Size(980, 700);
+
+            _packageKeyBox.Text = "omp-universal";
+            _packageVersionBox.Text = DateTime.Now.ToString("yyyyMMdd-HHmm");
+            _displayNameBox.Text = "OpenModulePlatform universal package";
+
+            BuildLayout();
+            PopulateHostChoices(currentConfigPath);
+            RefreshCandidateList();
+            UpdateDefaultOutputPath(force: true);
+            UpdateHostObjectState();
+
+            _hostBox.SelectedIndexChanged += (_, _) =>
+            {
+                UpdateHostObjectState();
+                RefreshCandidateList();
+                UpdateDefaultOutputPath(force: false);
+            };
+            _includeGlobalObjects.CheckedChanged += (_, _) => RefreshCandidateList();
+            _includeHostObjects.CheckedChanged += (_, _) => RefreshCandidateList();
+            _packageKeyBox.TextChanged += (_, _) => UpdateDefaultOutputPath(force: false);
+            _packageVersionBox.TextChanged += (_, _) => UpdateDefaultOutputPath(force: false);
+            _displayNameBox.TextChanged += (_, _) => UpdateCreateButtonState();
+            _descriptionBox.TextChanged += (_, _) => UpdateCreateButtonState();
+            _outputPathBox.TextChanged += (_, _) =>
+            {
+                if (!_updatingOutputPath)
+                {
+                    _outputPathIsAutomatic = false;
+                }
+
+                UpdateCreateButtonState();
+            };
+            _itemList.ItemCheck += (_, _) => BeginInvoke(UpdateCreateButtonState);
+            _selectAllButton.Click += (_, _) => SetAllItemsChecked(checkedState: true);
+            _selectNoneButton.Click += (_, _) => SetAllItemsChecked(checkedState: false);
+            _browseButton.Click += (_, _) => BrowseOutputPath();
+            _createButton.Click += (_, _) => TryCreateRequest();
+        }
+
+        public UniversalPackageBuildRequest? Request { get; private set; }
+
+        private void BuildLayout()
+        {
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                Padding = new Padding(12),
+                RowCount = 7
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            root.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(880, 0),
+                Text = "Create a universal package zip from the installer's object archive. The zip uses the same folders as the local archive: module-definitions, artifacts, host-configs, config-overlays, and widgets."
+            }, 0, 0);
+
+            var identityGrid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 4,
+                Margin = new Padding(0, 12, 0, 0)
+            };
+            identityGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+            identityGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
+            identityGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+            identityGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            identityGrid.Controls.Add(CreateFieldLabel("Package key"), 0, 0);
+            identityGrid.Controls.Add(_packageKeyBox, 1, 0);
+            identityGrid.Controls.Add(CreateFieldLabel("Version"), 2, 0);
+            identityGrid.Controls.Add(_packageVersionBox, 3, 0);
+            identityGrid.Controls.Add(CreateFieldLabel("Display name"), 0, 1);
+            identityGrid.SetColumnSpan(_displayNameBox, 3);
+            identityGrid.Controls.Add(_displayNameBox, 1, 1);
+            identityGrid.Controls.Add(CreateFieldLabel("Description"), 0, 2);
+            identityGrid.SetColumnSpan(_descriptionBox, 3);
+            identityGrid.Controls.Add(_descriptionBox, 1, 2);
+            root.Controls.Add(identityGrid, 0, 1);
+
+            var hostGrid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2,
+                Margin = new Padding(0, 10, 0, 0)
+            };
+            hostGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+            hostGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            hostGrid.Controls.Add(CreateFieldLabel("Target host"), 0, 0);
+            hostGrid.Controls.Add(_hostBox, 1, 0);
+
+            var includePanel = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(110, 4, 0, 0)
+            };
+            includePanel.Controls.Add(_includeGlobalObjects);
+            includePanel.Controls.Add(_includeHostObjects);
+            hostGrid.SetColumnSpan(includePanel, 2);
+            hostGrid.Controls.Add(includePanel, 0, 1);
+            root.Controls.Add(hostGrid, 0, 2);
+
+            var outputGrid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 3,
+                Margin = new Padding(0, 10, 0, 0)
+            };
+            outputGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+            outputGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            outputGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            outputGrid.Controls.Add(CreateFieldLabel("Output zip"), 0, 0);
+            outputGrid.Controls.Add(_outputPathBox, 1, 0);
+            outputGrid.Controls.Add(_browseButton, 2, 0);
+            root.Controls.Add(outputGrid, 0, 3);
+
+            var itemToolbar = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                Dock = DockStyle.Top,
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(0, 12, 0, 4)
+            };
+            itemToolbar.Controls.Add(_itemSummaryLabel);
+            itemToolbar.Controls.Add(_selectAllButton);
+            itemToolbar.Controls.Add(_selectNoneButton);
+            root.Controls.Add(itemToolbar, 0, 4);
+            root.Controls.Add(_itemList, 0, 5);
+
+            var buttons = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                Dock = DockStyle.Bottom,
+                FlowDirection = FlowDirection.RightToLeft,
+                Margin = new Padding(0, 10, 0, 0)
+            };
+            var cancelButton = new Button
+            {
+                AutoSize = true,
+                DialogResult = DialogResult.Cancel,
+                Text = "Cancel"
+            };
+            buttons.Controls.Add(cancelButton);
+            buttons.Controls.Add(_createButton);
+            root.Controls.Add(buttons, 0, 6);
+
+            AcceptButton = _createButton;
+            CancelButton = cancelButton;
+            Controls.Add(root);
+        }
+
+        private static Label CreateFieldLabel(string text)
+            => new()
+            {
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 5, 8, 5),
+                Text = text
+            };
+
+        private void PopulateHostChoices(string currentConfigPath)
+        {
+            _hostBox.Items.Add(new UniversalPackageHostChoice(
+                "No target host (global package)",
+                null,
+                null,
+                null));
+
+            foreach (var choice in _hostChoices)
+            {
+                _hostBox.Items.Add(choice);
+            }
+
+            var selected = _hostChoices.FirstOrDefault(choice =>
+                !string.IsNullOrWhiteSpace(choice.ConfigPath)
+                && choice.ConfigPath.Equals(currentConfigPath, StringComparison.OrdinalIgnoreCase));
+            _hostBox.SelectedItem = selected ?? _hostBox.Items[0];
+        }
+
+        private void UpdateHostObjectState()
+        {
+            var hostChoice = SelectedHostChoice;
+            var hasHost = !string.IsNullOrWhiteSpace(hostChoice?.HostKey);
+            _includeHostObjects.Enabled = hasHost;
+            if (!hasHost)
+            {
+                _includeHostObjects.Checked = false;
+            }
+        }
+
+        private void RefreshCandidateList()
+        {
+            var previouslyChecked = _itemList.CheckedItems
+                .OfType<UniversalPackageCandidateListItem>()
+                .Select(item => item.Candidate.PackagePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var hadSelection = _itemList.Items.Count > 0;
+
+            _itemList.BeginUpdate();
+            _itemList.Items.Clear();
+            var candidates = CollectUniversalPackageCandidates(
+                _payloadRoot,
+                SelectedHostChoice,
+                _includeGlobalObjects.Checked,
+                _includeHostObjects.Checked);
+            foreach (var candidate in candidates)
+            {
+                var item = new UniversalPackageCandidateListItem(candidate);
+                var isChecked = hadSelection
+                    ? previouslyChecked.Contains(candidate.PackagePath)
+                    : true;
+                _itemList.Items.Add(item, isChecked);
+            }
+
+            _itemList.EndUpdate();
+            _itemSummaryLabel.Text = $"{candidates.Count} package object(s)";
+            UpdateCreateButtonState();
+        }
+
+        private void SetAllItemsChecked(bool checkedState)
+        {
+            for (var index = 0; index < _itemList.Items.Count; index++)
+            {
+                _itemList.SetItemChecked(index, checkedState);
+            }
+
+            UpdateCreateButtonState();
+        }
+
+        private void BrowseOutputPath()
+        {
+            using var dialog = new SaveFileDialog
+            {
+                AddExtension = true,
+                DefaultExt = "zip",
+                Filter = "Universal package (*.zip)|*.zip|All files (*.*)|*.*",
+                FileName = Path.GetFileName(_outputPathBox.Text),
+                InitialDirectory = ResolveInitialOutputDirectory()
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            _outputPathIsAutomatic = false;
+            SetOutputPath(dialog.FileName);
+        }
+
+        private string ResolveInitialOutputDirectory()
+        {
+            if (!string.IsNullOrWhiteSpace(_outputPathBox.Text)
+                && Path.GetDirectoryName(_outputPathBox.Text) is { } currentDirectory
+                && Directory.Exists(currentDirectory))
+            {
+                return currentDirectory;
+            }
+
+            var exportsRoot = Path.Join(_payloadRoot, "exports");
+            Directory.CreateDirectory(exportsRoot);
+            return exportsRoot;
+        }
+
+        private void UpdateDefaultOutputPath(bool force)
+        {
+            if (!force && !_outputPathIsAutomatic)
+            {
+                return;
+            }
+
+            var packageKey = SanitizeUniversalPackageFilePart(_packageKeyBox.Text);
+            var packageVersion = SanitizeUniversalPackageFilePart(_packageVersionBox.Text);
+            var hostChoice = SelectedHostChoice;
+            var hostPart = string.IsNullOrWhiteSpace(hostChoice?.HostKey)
+                ? "global"
+                : SanitizeUniversalPackageFilePart(hostChoice.HostKey);
+            var fileName = $"{packageKey}__{hostPart}__{packageVersion}.zip";
+            SetOutputPath(Path.Join(_payloadRoot, "exports", fileName));
+            _outputPathIsAutomatic = true;
+        }
+
+        private void SetOutputPath(string path)
+        {
+            _updatingOutputPath = true;
+            _outputPathBox.Text = path;
+            _updatingOutputPath = false;
+        }
+
+        private void UpdateCreateButtonState()
+        {
+            _createButton.Enabled =
+                !string.IsNullOrWhiteSpace(_packageKeyBox.Text)
+                && !string.IsNullOrWhiteSpace(_packageVersionBox.Text)
+                && !string.IsNullOrWhiteSpace(_outputPathBox.Text);
+        }
+
+        private void TryCreateRequest()
+        {
+            var selectedItems = _itemList.CheckedItems
+                .OfType<UniversalPackageCandidateListItem>()
+                .Select(item => item.Candidate)
+                .ToArray();
+            if (selectedItems.Length == 0)
+            {
+                var createEmpty = MessageBox.Show(
+                    this,
+                    "No package objects are selected. Create a manifest-only universal package?",
+                    "Create universal module package",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button2);
+                if (createEmpty != DialogResult.Yes)
+                {
+                    return;
+                }
+            }
+
+            var outputPath = _outputPathBox.Text.Trim();
+            if (File.Exists(outputPath))
+            {
+                var overwrite = MessageBox.Show(
+                    this,
+                    $"The output file already exists:{Environment.NewLine}{outputPath}{Environment.NewLine}{Environment.NewLine}Replace it?",
+                    "Create universal module package",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button2);
+                if (overwrite != DialogResult.Yes)
+                {
+                    return;
+                }
+            }
+
+            var hostChoice = SelectedHostChoice;
+            Request = new UniversalPackageBuildRequest(
+                _packageKeyBox.Text.Trim(),
+                _packageVersionBox.Text.Trim(),
+                string.IsNullOrWhiteSpace(_displayNameBox.Text)
+                    ? _packageKeyBox.Text.Trim()
+                    : _displayNameBox.Text.Trim(),
+                _descriptionBox.Text.Trim(),
+                hostChoice?.HostKey,
+                hostChoice?.DisplayName ?? "No target host",
+                outputPath,
+                selectedItems);
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        private UniversalPackageHostChoice? SelectedHostChoice
+            => _hostBox.SelectedItem as UniversalPackageHostChoice;
+    }
+
+    private static UniversalPackageHostChoice CreateUniversalPackageHostChoice(BootstrapConfigProfile profile)
+    {
+        var hostKey = ResolveUniversalPackageHostKey(profile.ConfigPath);
+        var externalDataRoot = Path.GetFileName(profile.ConfigPath).Equals("bootstrap.json", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetDirectoryName(profile.ConfigPath)
+            : null;
+        var displayName = string.Equals(profile.DisplayName, hostKey, StringComparison.OrdinalIgnoreCase)
+            ? profile.DisplayName
+            : $"{profile.DisplayName} ({hostKey})";
+        return new UniversalPackageHostChoice(
+            displayName,
+            hostKey,
+            profile.ConfigPath,
+            externalDataRoot);
+    }
+
+    private static IReadOnlyList<UniversalPackageHostChoice> BuildHostChoices(
+        IReadOnlyList<BootstrapConfigProfile> configProfiles)
+    {
+        var choices = new Dictionary<string, UniversalPackageHostChoice>(StringComparer.OrdinalIgnoreCase);
+        foreach (var profile in configProfiles)
+        {
+            var choice = CreateUniversalPackageHostChoice(profile);
+            if (!string.IsNullOrWhiteSpace(choice.HostKey))
+            {
+                choices.TryAdd(choice.HostKey, choice);
+            }
+        }
+
+        return choices.Values
+            .OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<UniversalPackageCandidate> CollectUniversalPackageCandidates(
+        string payloadRoot,
+        UniversalPackageHostChoice? hostChoice,
+        bool includeGlobal,
+        bool includeHostSpecific)
+    {
+        var candidates = new Dictionary<string, UniversalPackageCandidate>(StringComparer.OrdinalIgnoreCase);
+
+        if (includeGlobal)
+        {
+            AddUniversalPackageCandidates(
+                candidates,
+                ResolvePackageModuleDefinitionsRoot(payloadRoot),
+                "module-definitions",
+                "module-definition",
+                "*.json");
+            AddUniversalPackageCandidates(
+                candidates,
+                ResolvePackageArtifactsRoot(payloadRoot),
+                "artifacts",
+                "artifact",
+                "*.zip");
+            AddUniversalPackageCandidates(
+                candidates,
+                ResolvePackageHostConfigurationsRoot(payloadRoot),
+                "host-configs",
+                "host-config",
+                "*.*",
+                IsJsonOrZipFile);
+            AddUniversalPackageCandidates(
+                candidates,
+                ResolvePackageConfigOverlaysRoot(payloadRoot),
+                "config-overlays",
+                "config-overlay",
+                "*.*",
+                IsJsonOrZipFile);
+            AddUniversalPackageCandidates(
+                candidates,
+                ResolvePackageWidgetsRoot(payloadRoot),
+                "widgets",
+                "widget",
+                "*.json");
+        }
+
+        if (includeHostSpecific && !string.IsNullOrWhiteSpace(hostChoice?.HostKey))
+        {
+            var hostSegment = SanitizeUniversalPackagePathSegment(hostChoice.HostKey);
+            foreach (var root in EnumerateUniversalPackageHostDataRoots(payloadRoot, hostChoice))
+            {
+                AddUniversalPackageCandidates(
+                    candidates,
+                    Path.Join(root, "host-configs"),
+                    $"host-configs/{hostSegment}",
+                    "host-config",
+                    "*.*",
+                    IsJsonOrZipFile);
+                AddUniversalPackageCandidates(
+                    candidates,
+                    Path.Join(root, "config-overlays"),
+                    $"config-overlays/{hostSegment}",
+                    "config-overlay",
+                    "*.*",
+                    IsJsonOrZipFile);
+                AddUniversalPackageCandidates(
+                    candidates,
+                    Path.Join(root, "widgets"),
+                    $"widgets/{hostSegment}",
+                    "widget",
+                    "*.json");
+            }
+        }
+
+        return candidates.Values
+            .OrderBy(static item => item.Kind, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static item => item.PackagePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void AddUniversalPackageCandidates(
+        Dictionary<string, UniversalPackageCandidate> candidates,
+        string sourceRoot,
+        string packageFolder,
+        string kind,
+        string searchPattern,
+        Func<string, bool>? filter = null)
+    {
+        if (!Directory.Exists(sourceRoot))
+        {
+            return;
+        }
+
+        foreach (var sourcePath in Directory.EnumerateFiles(sourceRoot, searchPattern, SearchOption.AllDirectories)
+                     .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase))
+        {
+            if (filter is not null && !filter(sourcePath))
+            {
+                continue;
+            }
+
+            var relativePath = Path.GetRelativePath(sourceRoot, sourcePath);
+            var packagePath = NormalizeUniversalPackagePath(Path.Join(packageFolder, relativePath));
+            if (packagePath.Equals(UniversalModulePackageReader.ManifestEntryName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            candidates.TryAdd(packagePath, new UniversalPackageCandidate(
+                kind,
+                sourcePath,
+                packagePath));
+        }
+    }
+
+    private static IEnumerable<string> EnumerateUniversalPackageHostDataRoots(
+        string payloadRoot,
+        UniversalPackageHostChoice hostChoice)
+    {
+        var yielded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void YieldIfUnique(string? path, List<string> result)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            var fullPath = Path.GetFullPath(path);
+            if (yielded.Add(fullPath))
+            {
+                result.Add(fullPath);
+            }
+        }
+
+        var roots = new List<string>();
+        YieldIfUnique(hostChoice.ExternalDataRoot, roots);
+        if (!string.IsNullOrWhiteSpace(hostChoice.HostKey))
+        {
+            YieldIfUnique(Path.Join(payloadRoot, "data", "hosts", hostChoice.HostKey), roots);
+            YieldIfUnique(Path.Join(payloadRoot, "data", "profiles", hostChoice.HostKey), roots);
+        }
+
+        return roots;
+    }
+
+    private static bool IsJsonOrZipFile(string path)
+        => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveUniversalPackageHostKey(string configPath)
+    {
+        if (Path.GetFileName(configPath).Equals("bootstrap.json", StringComparison.OrdinalIgnoreCase)
+            && Path.GetDirectoryName(configPath) is { } parent
+            && !string.IsNullOrWhiteSpace(Path.GetFileName(parent)))
+        {
+            return SanitizeUniversalPackagePathSegment(Path.GetFileName(parent));
+        }
+
+        return SanitizeUniversalPackagePathSegment(Path.GetFileNameWithoutExtension(configPath));
+    }
+
+    private static string NormalizeUniversalPackagePath(string value)
+    {
+        var normalized = value.Trim().Replace('\\', '/').Trim('/');
+        if (normalized.Length == 0
+            || normalized.Contains(':', StringComparison.Ordinal)
+            || normalized.IndexOf('\0') >= 0)
+        {
+            throw new InvalidOperationException("Universal package object paths must be relative paths.");
+        }
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0
+            || segments.Any(static segment => segment is "." or "..")
+            || segments.Any(segment => segment.IndexOfAny(invalid) >= 0))
+        {
+            throw new InvalidOperationException("Universal package object paths contain an invalid path segment.");
+        }
+
+        return string.Join('/', segments);
+    }
+
+    private static string SanitizeUniversalPackagePathSegment(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars()
+            .Concat(['/', '\\', ':'])
+            .ToHashSet();
+        var chars = value.Trim()
+            .Select(ch => invalid.Contains(ch) ? '_' : ch)
+            .ToArray();
+        var sanitized = new string(chars).Trim('.', ' ');
+        return string.IsNullOrWhiteSpace(sanitized) ? "host" : sanitized;
+    }
+
+    private static string SanitizeUniversalPackageFilePart(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars()
+            .Concat(['/', '\\', ':'])
+            .ToHashSet();
+        var chars = value.Trim()
+            .Select(ch => invalid.Contains(ch) || char.IsWhiteSpace(ch) ? '_' : ch)
+            .ToArray();
+        var sanitized = new string(chars).Trim('.', ' ', '_');
+        return string.IsNullOrWhiteSpace(sanitized) ? "package" : sanitized;
     }
 
     private sealed record DeveloperSourceCheckResult(
