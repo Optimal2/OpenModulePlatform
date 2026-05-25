@@ -13,6 +13,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class HostAgentSelfUpgradeService
 {
     private const int ScServiceNotFoundExitCode = 1060;
+    private const int ScServiceCannotAcceptControlExitCode = 1061;
     private const int DirectoryDeleteMaxAttempts = 20;
     private const string DefaultNLogAppName = "OpenModulePlatform.HostAgent.WindowsService";
     private const string DefaultNLogDirectory = "${basedir}/logs";
@@ -858,8 +859,35 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
-        RunScChecked("stop", serviceName);
-        WaitForServiceState(serviceName, "STOPPED", timeoutSeconds);
+        var result = RunSc("stop", serviceName);
+        if (result.ExitCode == 0)
+        {
+            WaitForServiceStoppedOrTerminate(serviceName, timeoutSeconds, timeoutSeconds);
+            return;
+        }
+
+        if (IsServiceNotFound(result))
+        {
+            return;
+        }
+
+        if (IsServiceControlTemporarilyUnavailable(result))
+        {
+            WaitForServiceStoppedOrTerminate(serviceName, Math.Min(timeoutSeconds, 5), timeoutSeconds);
+            return;
+        }
+
+        throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
+    }
+
+    private static void WaitForServiceStoppedOrTerminate(string serviceName, int gracefulStopSeconds, int terminateTimeoutSeconds)
+    {
+        if (TryWaitForServiceState(serviceName, "STOPPED", Math.Max(gracefulStopSeconds, 1)))
+        {
+            return;
+        }
+
+        TerminateServiceProcess(serviceName, terminateTimeoutSeconds);
     }
 
     private static void StartServiceIfStopped(string serviceName, int timeoutSeconds)
@@ -1162,24 +1190,34 @@ public sealed class HostAgentSelfUpgradeService
 
     private static void WaitForServiceState(string serviceName, string desiredState, int timeoutSeconds)
     {
+        if (TryWaitForServiceState(serviceName, desiredState, timeoutSeconds))
+        {
+            return;
+        }
+
+        throw new TimeoutException($"Windows service '{serviceName}' did not reach state '{desiredState}' within {timeoutSeconds} seconds.");
+    }
+
+    private static bool TryWaitForServiceState(string serviceName, string desiredState, int timeoutSeconds)
+    {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
         while (DateTimeOffset.UtcNow < deadline)
         {
             var state = GetServiceState(serviceName);
             if (state is null && desiredState.Equals("DELETED", StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return true;
             }
 
             if (state is not null && state.Equals(desiredState, StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return true;
             }
 
             Thread.Sleep(250);
         }
 
-        throw new TimeoutException($"Windows service '{serviceName}' did not reach state '{desiredState}' within {timeoutSeconds} seconds.");
+        return false;
     }
 
     private static string? GetServiceState(string serviceName)
@@ -1213,6 +1251,66 @@ public sealed class HostAgentSelfUpgradeService
         }
 
         return null;
+    }
+
+    private static int? GetServiceProcessId(string serviceName)
+    {
+        var result = RunSc("queryex", serviceName);
+        if (result.ExitCode != 0)
+        {
+            return IsServiceNotFound(result)
+                ? null
+                : throw new InvalidOperationException(result.CombinedOutput.Trim());
+        }
+
+        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pidIndex = line.IndexOf("PID", StringComparison.OrdinalIgnoreCase);
+            if (pidIndex < 0)
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf(':', pidIndex);
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            var value = line[(separatorIndex + 1)..].Trim();
+            if (int.TryParse(value, out var processId) && processId > 0)
+            {
+                return processId;
+            }
+        }
+
+        return null;
+    }
+
+    private static void TerminateServiceProcess(string serviceName, int timeoutSeconds)
+    {
+        var processId = GetServiceProcessId(serviceName);
+        if (processId is null)
+        {
+            WaitForServiceState(serviceName, "STOPPED", timeoutSeconds);
+            return;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(processId.Value);
+            process.Kill(entireProcessTree: true);
+            if (!process.WaitForExit(Math.Max(timeoutSeconds, 1) * 1000))
+            {
+                throw new TimeoutException($"Windows service process '{serviceName}' with PID {processId.Value} did not exit within {timeoutSeconds} seconds.");
+            }
+        }
+        catch (ArgumentException)
+        {
+            // The service process exited between queryex and Kill. The SCM state check below confirms completion.
+        }
+
+        WaitForServiceState(serviceName, "STOPPED", Math.Max(timeoutSeconds, 5));
     }
 
     private static ScResult RunSc(params string[] arguments)
@@ -1252,6 +1350,11 @@ public sealed class HostAgentSelfUpgradeService
         => result.ExitCode == ScServiceNotFoundExitCode
             || result.CombinedOutput.Contains("FAILED 1060", StringComparison.OrdinalIgnoreCase)
             || result.CombinedOutput.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsServiceControlTemporarilyUnavailable(ScResult result)
+        => result.ExitCode == ScServiceCannotAcceptControlExitCode
+            || result.CombinedOutput.Contains("FAILED 1061", StringComparison.OrdinalIgnoreCase)
+            || result.CombinedOutput.Contains("cannot accept control messages", StringComparison.OrdinalIgnoreCase);
 
     private static string FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
