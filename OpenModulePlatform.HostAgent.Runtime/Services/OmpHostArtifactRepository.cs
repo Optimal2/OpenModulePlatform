@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Data;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -654,6 +655,51 @@ WHERE OverlayKey = @overlayKey
         }
     }
 
+    public async Task<(int CreatedCount, int UpdatedCount, int PermissionRowCount)> SaveImportedDashboardWidgetsAsync(
+        PortableDashboardWidgetPackage input,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            await EnsureDashboardWidgetTablesAsync(conn, tx, ct);
+            var created = 0;
+            var updated = 0;
+            var permissionRows = 0;
+
+            foreach (var widget in input.Widgets)
+            {
+                var permissionIds = await ResolveDashboardWidgetPermissionIdsAsync(conn, tx, widget.PermissionNames, ct);
+                var roleIds = await ResolveDashboardWidgetRoleIdsAsync(conn, tx, widget.RoleNames, ct);
+                var widgetId = await FindDashboardWidgetIdAsync(conn, tx, widget, ct);
+                if (widgetId.HasValue)
+                {
+                    await UpdateDashboardWidgetAsync(conn, tx, widgetId.Value, widget, ct);
+                    updated++;
+                }
+                else
+                {
+                    widgetId = await InsertDashboardWidgetAsync(conn, tx, widget, ct);
+                    created++;
+                }
+
+                await ReplaceDashboardWidgetPermissionRowsAsync(conn, tx, widgetId.Value, permissionIds, roleIds, ct);
+                permissionRows += permissionIds.Count + roleIds.Count;
+            }
+
+            await tx.CommitAsync(ct);
+            return (created, updated, permissionRows);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<string?> GetAppliedModuleDefinitionVersionAsync(
         string moduleKey,
         CancellationToken ct)
@@ -1208,80 +1254,82 @@ VALUES
         int artifactId,
         CancellationToken ct)
     {
-        const string sql = @"
-DECLARE @AppId int;
-DECLARE @AppType nvarchar(50);
-DECLARE @PackageType nvarchar(50);
-DECLARE @TemplateAppRowsUpdated int = 0;
-DECLARE @AppInstanceRowsUpdated int = 0;
-DECLARE @WorkerInstanceRowsUpdated int = 0;
-
-SELECT @AppId = app.AppId,
-       @AppType = app.AppType,
-       @PackageType = artifact.PackageType
-FROM omp.Artifacts artifact
-INNER JOIN omp.Apps app ON app.AppId = artifact.AppId
-WHERE artifact.ArtifactId = @artifactId
-  AND artifact.IsEnabled = 1
-  AND app.IsEnabled = 1;
-
-IF @AppId IS NOT NULL
-   AND
-   (
-       (@PackageType = N'web-app' AND @AppType IN (N'Portal', N'WebApp'))
-       OR (@PackageType = N'service-app' AND @AppType = N'ServiceApp')
-       OR (@PackageType = N'worker' AND @AppType = N'Worker')
-       OR (@PackageType = N'host-agent' AND @AppType = N'HostAgent')
-       OR (@PackageType = N'worker-host' AND @AppType = N'WorkerHost')
-   )
-BEGIN
-    UPDATE omp.InstanceTemplateAppInstances
-    SET DesiredArtifactId = @artifactId,
-        UpdatedUtc = SYSUTCDATETIME()
-    WHERE AppId = @AppId
-      AND IsEnabled = 1
-      AND ISNULL(DesiredArtifactId, -1) <> @artifactId;
-
-    SET @TemplateAppRowsUpdated = @@ROWCOUNT;
-
-    UPDATE omp.AppInstances
-    SET ArtifactId = @artifactId,
-        UpdatedUtc = SYSUTCDATETIME()
-    WHERE AppId = @AppId
-      AND IsEnabled = 1
-      AND ISNULL(ArtifactId, -1) <> @artifactId;
-
-    SET @AppInstanceRowsUpdated = @@ROWCOUNT;
-
-    UPDATE wi
-    SET ArtifactId = @artifactId,
-        UpdatedUtc = SYSUTCDATETIME()
-    FROM omp.WorkerInstances wi
-    INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
-    WHERE ai.AppId = @AppId
-      AND wi.IsEnabled = 1
-      AND wi.ArtifactId IS NOT NULL
-      AND wi.ArtifactId <> @artifactId;
-
-    SET @WorkerInstanceRowsUpdated = @@ROWCOUNT;
-END;
-
-SELECT @TemplateAppRowsUpdated,
-       @AppInstanceRowsUpdated,
-       @WorkerInstanceRowsUpdated;";
-
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@artifactId", artifactId);
 
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        if (!await rdr.ReadAsync(ct))
+        var target = await ReadArtifactAutoApplyTargetAsync(conn, artifactId, ct);
+        if (target is null || !IsArtifactPackageCompatibleWithAppType(target.PackageType, target.AppType))
         {
             return (0, 0, 0);
         }
 
-        return (rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetInt32(2));
+        var templateRowsUpdated = await ApplyArtifactToIntRowsAsync(
+            conn,
+            artifactId,
+            target.Version,
+            @"
+SELECT tai.InstanceTemplateAppInstanceId,
+       currentArtifact.Version
+FROM omp.InstanceTemplateAppInstances tai
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = tai.DesiredArtifactId
+WHERE tai.AppId = @appId
+  AND tai.IsEnabled = 1
+  AND ISNULL(tai.DesiredArtifactId, -1) <> @artifactId;",
+            @"
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @artifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE InstanceTemplateAppInstanceId = @rowId;",
+            target.AppId,
+            ct);
+
+        var appRowsUpdated = await ApplyArtifactToGuidRowsAsync(
+            conn,
+            artifactId,
+            target.Version,
+            @"
+SELECT ai.AppInstanceId,
+       currentArtifact.Version
+FROM omp.AppInstances ai
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = ai.ArtifactId
+WHERE ai.AppId = @appId
+  AND ai.IsEnabled = 1
+  AND ISNULL(ai.ArtifactId, -1) <> @artifactId;",
+            @"
+UPDATE omp.AppInstances
+SET ArtifactId = @artifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppInstanceId = @rowId;",
+            target.AppId,
+            ct);
+
+        var workerRowsUpdated = await ApplyArtifactToGuidRowsAsync(
+            conn,
+            artifactId,
+            target.Version,
+            @"
+SELECT wi.WorkerInstanceId,
+       currentArtifact.Version
+FROM omp.WorkerInstances wi
+INNER JOIN omp.AppInstances ai
+    ON ai.AppInstanceId = wi.AppInstanceId
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = wi.ArtifactId
+WHERE ai.AppId = @appId
+  AND wi.IsEnabled = 1
+  AND wi.ArtifactId IS NOT NULL
+  AND wi.ArtifactId <> @artifactId;",
+            @"
+UPDATE omp.WorkerInstances
+SET ArtifactId = @artifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE WorkerInstanceId = @rowId;",
+            target.AppId,
+            ct);
+
+        return (templateRowsUpdated, appRowsUpdated, workerRowsUpdated);
     }
 
     public async Task<int> ApplyImportedHostAgentArtifactToCurrentHostAsync(
@@ -1291,6 +1339,23 @@ SELECT @TemplateAppRowsUpdated,
         string? installRoot,
         CancellationToken ct)
     {
+        const string contextSql = @"
+SELECT h.HostId,
+       targetArtifact.Version,
+       desired.ArtifactId,
+       currentArtifact.Version
+FROM omp.Hosts h
+CROSS JOIN omp.Artifacts targetArtifact
+LEFT JOIN omp.HostAgentDesiredStates desired
+    ON desired.HostId = h.HostId
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = desired.ArtifactId
+WHERE h.HostKey = @hostKey
+  AND h.IsEnabled = 1
+  AND targetArtifact.ArtifactId = @artifactId
+  AND targetArtifact.PackageType = N'host-agent'
+  AND targetArtifact.IsEnabled = 1;";
+
         const string sql = @"
 DECLARE @hostId uniqueidentifier;
 DECLARE @changes table(ActionName nvarchar(10) NOT NULL);
@@ -1351,6 +1416,32 @@ SELECT COUNT(1) FROM @changes;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
+        string targetVersion;
+        int? currentArtifactId;
+        string? currentVersion;
+        await using (var context = new SqlCommand(contextSql, conn))
+        {
+            context.Parameters.AddWithValue("@artifactId", artifactId);
+            context.Parameters.AddWithValue("@hostKey", hostKey);
+            await using var rdr = await context.ExecuteReaderAsync(ct);
+            if (!await rdr.ReadAsync(ct))
+            {
+                return 0;
+            }
+
+            targetVersion = rdr.GetString(1);
+            currentArtifactId = rdr.IsDBNull(2) ? null : rdr.GetInt32(2);
+            currentVersion = rdr.IsDBNull(3) ? null : rdr.GetString(3);
+        }
+
+        if (currentArtifactId.HasValue
+            && currentArtifactId.Value != artifactId
+            && !ShouldAutoApplyImportedArtifact(targetVersion, currentVersion))
+        {
+            return 0;
+        }
+
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@artifactId", artifactId);
         cmd.Parameters.AddWithValue("@hostKey", hostKey);
@@ -3124,6 +3215,347 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
     private static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private async Task<ArtifactAutoApplyTarget?> ReadArtifactAutoApplyTargetAsync(
+        SqlConnection conn,
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT artifact.ArtifactId,
+       app.AppId,
+       artifact.Version,
+       artifact.PackageType,
+       app.AppType
+FROM omp.Artifacts artifact
+INNER JOIN omp.Apps app
+    ON app.AppId = artifact.AppId
+WHERE artifact.ArtifactId = @artifactId
+  AND artifact.IsEnabled = 1
+  AND app.IsEnabled = 1;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactAutoApplyTarget(
+            rdr.GetInt32(0),
+            rdr.GetInt32(1),
+            rdr.GetString(2),
+            rdr.GetString(3),
+            rdr.GetString(4));
+    }
+
+    private static async Task<int> ApplyArtifactToIntRowsAsync(
+        SqlConnection conn,
+        int artifactId,
+        string targetVersion,
+        string selectSql,
+        string updateSql,
+        int appId,
+        CancellationToken ct)
+    {
+        var rowIds = new List<int>();
+        await using (var select = new SqlCommand(selectSql, conn))
+        {
+            select.Parameters.AddWithValue("@artifactId", artifactId);
+            select.Parameters.AddWithValue("@appId", appId);
+            await using var rdr = await select.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                var currentVersion = rdr.IsDBNull(1) ? null : rdr.GetString(1);
+                if (ShouldAutoApplyImportedArtifact(targetVersion, currentVersion))
+                {
+                    rowIds.Add(rdr.GetInt32(0));
+                }
+            }
+        }
+
+        var updated = 0;
+        foreach (var rowId in rowIds)
+        {
+            await using var update = new SqlCommand(updateSql, conn);
+            update.Parameters.AddWithValue("@artifactId", artifactId);
+            update.Parameters.AddWithValue("@rowId", rowId);
+            updated += await update.ExecuteNonQueryAsync(ct);
+        }
+
+        return updated;
+    }
+
+    private static async Task<int> ApplyArtifactToGuidRowsAsync(
+        SqlConnection conn,
+        int artifactId,
+        string targetVersion,
+        string selectSql,
+        string updateSql,
+        int appId,
+        CancellationToken ct)
+    {
+        var rowIds = new List<Guid>();
+        await using (var select = new SqlCommand(selectSql, conn))
+        {
+            select.Parameters.AddWithValue("@artifactId", artifactId);
+            select.Parameters.AddWithValue("@appId", appId);
+            await using var rdr = await select.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                var currentVersion = rdr.IsDBNull(1) ? null : rdr.GetString(1);
+                if (ShouldAutoApplyImportedArtifact(targetVersion, currentVersion))
+                {
+                    rowIds.Add(rdr.GetGuid(0));
+                }
+            }
+        }
+
+        var updated = 0;
+        foreach (var rowId in rowIds)
+        {
+            await using var update = new SqlCommand(updateSql, conn);
+            update.Parameters.AddWithValue("@artifactId", artifactId);
+            update.Parameters.AddWithValue("@rowId", rowId);
+            updated += await update.ExecuteNonQueryAsync(ct);
+        }
+
+        return updated;
+    }
+
+    private static bool IsArtifactPackageCompatibleWithAppType(string packageType, string appType)
+        => (packageType.Equals("web-app", StringComparison.OrdinalIgnoreCase)
+                && (appType.Equals("Portal", StringComparison.OrdinalIgnoreCase)
+                    || appType.Equals("WebApp", StringComparison.OrdinalIgnoreCase)))
+            || (packageType.Equals("service-app", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("ServiceApp", StringComparison.OrdinalIgnoreCase))
+            || (packageType.Equals("worker", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("Worker", StringComparison.OrdinalIgnoreCase))
+            || (packageType.Equals("host-agent", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("HostAgent", StringComparison.OrdinalIgnoreCase))
+            || (packageType.Equals("worker-host", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("WorkerHost", StringComparison.OrdinalIgnoreCase));
+
+    private static bool ShouldAutoApplyImportedArtifact(string targetVersion, string? currentVersion)
+        => string.IsNullOrWhiteSpace(currentVersion)
+            || CompareArtifactVersions(targetVersion, currentVersion) > 0;
+
+    private static async Task EnsureDashboardWidgetTablesAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CASE
+    WHEN OBJECT_ID(N'omp_portal.widgets', N'U') IS NOT NULL
+     AND OBJECT_ID(N'omp_portal.widget_permissions', N'U') IS NOT NULL
+     AND OBJECT_ID(N'omp.Permissions', N'U') IS NOT NULL
+     AND OBJECT_ID(N'omp.Roles', N'U') IS NOT NULL
+    THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        var value = await cmd.ExecuteScalarAsync(ct);
+        if (value is not bool isAvailable || !isAvailable)
+        {
+            throw new InvalidOperationException(
+                "Portal dashboard widget tables are not available. Apply the Portal module definition before importing dashboard widgets through HostAgent.");
+        }
+    }
+
+    private static async Task<int?> FindDashboardWidgetIdAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableDashboardWidgetDefinition widget,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1) widget_id
+FROM
+(
+    SELECT widget_id,
+           0 AS match_priority
+    FROM omp_portal.widgets
+    WHERE widget_key = @widget_key
+    UNION ALL
+    SELECT widget_id,
+           1 AS match_priority
+    FROM omp_portal.widgets
+    WHERE ((@module_key IS NULL AND module_key IS NULL) OR module_key = @module_key)
+      AND widget_key IS NULL
+      AND title = @title
+      AND widget_type = @widget_type
+) AS matches
+ORDER BY match_priority,
+         widget_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        AddDashboardWidgetIdentityParameters(cmd, widget);
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is null || value == DBNull.Value
+            ? null
+            : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<int> InsertDashboardWidgetAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableDashboardWidgetDefinition widget,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp_portal.widgets(widget_key, title, widget_type, payload, module_key, author, modified_at)
+OUTPUT INSERTED.widget_id
+VALUES(@widget_key, @title, @widget_type, @payload, @module_key, @author, SYSUTCDATETIME());";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        AddDashboardWidgetParameters(cmd, widget);
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task UpdateDashboardWidgetAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int widgetId,
+        PortableDashboardWidgetDefinition widget,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp_portal.widgets
+SET widget_key = @widget_key,
+    title = @title,
+    widget_type = @widget_type,
+    payload = @payload,
+    module_key = @module_key,
+    author = @author,
+    modified_at = SYSUTCDATETIME()
+WHERE widget_id = @widget_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+        AddDashboardWidgetParameters(cmd, widget);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ReplaceDashboardWidgetPermissionRowsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int widgetId,
+        IReadOnlyList<int> permissionIds,
+        IReadOnlyList<int> roleIds,
+        CancellationToken ct)
+    {
+        await using (var deleteCmd = new SqlCommand(
+            "DELETE FROM omp_portal.widget_permissions WHERE widget_id = @widget_id;",
+            conn,
+            tx))
+        {
+            deleteCmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+            await deleteCmd.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSql = @"
+INSERT INTO omp_portal.widget_permissions(widget_id, permission_id, role_id)
+VALUES(@widget_id, @permission_id, @role_id);";
+
+        foreach (var permissionId in permissionIds)
+        {
+            await using var cmd = new SqlCommand(insertSql, conn, tx);
+            cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+            cmd.Parameters.Add("@permission_id", SqlDbType.Int).Value = permissionId;
+            cmd.Parameters.Add("@role_id", SqlDbType.Int).Value = DBNull.Value;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        foreach (var roleId in roleIds)
+        {
+            await using var cmd = new SqlCommand(insertSql, conn, tx);
+            cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+            cmd.Parameters.Add("@permission_id", SqlDbType.Int).Value = DBNull.Value;
+            cmd.Parameters.Add("@role_id", SqlDbType.Int).Value = roleId;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static async Task<IReadOnlyList<int>> ResolveDashboardWidgetPermissionIdsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        IReadOnlyList<string> names,
+        CancellationToken ct)
+        => await ResolveDashboardWidgetIdsAsync(
+            conn,
+            tx,
+            "omp.Permissions",
+            "PermissionId",
+            names,
+            "permission",
+            ct);
+
+    private static async Task<IReadOnlyList<int>> ResolveDashboardWidgetRoleIdsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        IReadOnlyList<string> names,
+        CancellationToken ct)
+        => await ResolveDashboardWidgetIdsAsync(
+            conn,
+            tx,
+            "omp.Roles",
+            "RoleId",
+            names,
+            "role",
+            ct);
+
+    private static async Task<IReadOnlyList<int>> ResolveDashboardWidgetIdsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string tableName,
+        string idColumn,
+        IReadOnlyList<string> names,
+        string label,
+        CancellationToken ct)
+    {
+        var ids = new List<int>(names.Count);
+        foreach (var name in names)
+        {
+            var sql = $"SELECT {idColumn} FROM {tableName} WHERE Name = @name;";
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            cmd.Parameters.Add("@name", SqlDbType.NVarChar, 200).Value = name;
+            var value = await cmd.ExecuteScalarAsync(ct);
+            if (value is null || value == DBNull.Value)
+            {
+                throw new InvalidOperationException($"The dashboard widget {label} '{name}' does not exist.");
+            }
+
+            ids.Add(Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return ids;
+    }
+
+    private static void AddDashboardWidgetIdentityParameters(
+        SqlCommand cmd,
+        PortableDashboardWidgetDefinition widget)
+    {
+        cmd.Parameters.Add("@module_key", SqlDbType.NVarChar, 100).Value =
+            widget.ModuleKey is null ? DBNull.Value : widget.ModuleKey;
+        cmd.Parameters.Add("@widget_key", SqlDbType.NVarChar, 200).Value = widget.WidgetKey;
+        cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = widget.Title;
+        cmd.Parameters.Add("@widget_type", SqlDbType.NVarChar, 50).Value = widget.WidgetType;
+    }
+
+    private static void AddDashboardWidgetParameters(
+        SqlCommand cmd,
+        PortableDashboardWidgetDefinition widget)
+    {
+        AddDashboardWidgetIdentityParameters(cmd, widget);
+        cmd.Parameters.Add("@payload", SqlDbType.NVarChar, -1).Value =
+            widget.Payload is null ? DBNull.Value : widget.Payload;
+        cmd.Parameters.Add("@author", SqlDbType.NVarChar, 200).Value =
+            widget.Author is null ? DBNull.Value : widget.Author;
+    }
+
     private static void Add(SqlCommand cmd, string name, object? value)
         => cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
 
@@ -3206,4 +3638,11 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
     private sealed record BootstrapPortalAdminPrincipal(
         string PrincipalType,
         string Principal);
+
+    private sealed record ArtifactAutoApplyTarget(
+        int ArtifactId,
+        int AppId,
+        string Version,
+        string PackageType,
+        string AppType);
 }

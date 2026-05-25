@@ -2907,130 +2907,288 @@ ORDER BY ar.ArtifactId;";
         int artifactId,
         CancellationToken ct)
     {
-        const string sql = @"
-DECLARE @AppId int;
-DECLARE @PackageType nvarchar(50);
-DECLARE @TemplateAppRowsUpdated int = 0;
-DECLARE @AppInstanceRowsUpdated int = 0;
-DECLARE @WorkerInstanceRowsUpdated int = 0;
-DECLARE @HostAgentDesiredRowsUpdated int = 0;
-
-SELECT @AppId = AppId,
-       @PackageType = PackageType
-FROM omp.Artifacts
-WHERE ArtifactId = @ArtifactId
-  AND IsEnabled = 1;
-
-IF @AppId IS NULL
-BEGIN
-    SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
-           @AppInstanceRowsUpdated AS AppInstanceRowsUpdated,
-           @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated,
-           @HostAgentDesiredRowsUpdated AS HostAgentDesiredRowsUpdated;
-    RETURN;
-END;
-
-UPDATE omp.InstanceTemplateAppInstances
-SET DesiredArtifactId = @ArtifactId,
-    UpdatedUtc = SYSUTCDATETIME()
-WHERE AppId = @AppId
-  AND IsEnabled = 1
-  AND ISNULL(DesiredArtifactId, -1) <> @ArtifactId;
-
-SET @TemplateAppRowsUpdated = @@ROWCOUNT;
-
-UPDATE omp.AppInstances
-SET ArtifactId = @ArtifactId,
-    UpdatedUtc = SYSUTCDATETIME()
-WHERE AppId = @AppId
-  AND IsEnabled = 1
-  AND ISNULL(ArtifactId, -1) <> @ArtifactId;
-
-SET @AppInstanceRowsUpdated = @@ROWCOUNT;
-
-UPDATE wi
-SET ArtifactId = @ArtifactId,
-    UpdatedUtc = SYSUTCDATETIME()
-FROM omp.WorkerInstances wi
-INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
-WHERE ai.AppId = @AppId
-  AND wi.IsEnabled = 1
-  AND wi.ArtifactId IS NOT NULL
-  AND wi.ArtifactId <> @ArtifactId;
-
-SET @WorkerInstanceRowsUpdated = @@ROWCOUNT;
-
-IF @PackageType = N'host-agent'
-BEGIN
-    DECLARE @HostAgentChanges table(ActionName nvarchar(10) NOT NULL);
-
-    MERGE omp.HostAgentDesiredStates AS target
-    USING
-    (
-        SELECT h.HostId,
-               @ArtifactId AS ArtifactId
-        FROM omp.Hosts h
-        WHERE h.IsEnabled = 1
-          AND
-          (
-              EXISTS
-              (
-                  SELECT 1
-                  FROM omp.HostAgentDesiredStates existing
-                  WHERE existing.HostId = h.HostId
-              )
-              OR EXISTS
-              (
-                  SELECT 1
-                  FROM omp.HostAgentRuntimeStates runtimeState
-                  WHERE runtimeState.HostId = h.HostId
-                    AND runtimeState.IsActive = 1
-              )
-          )
-    ) AS source
-    ON target.HostId = source.HostId
-    WHEN MATCHED AND
-    (
-           target.ArtifactId <> source.ArtifactId
-        OR target.IsEnabled = 0
-    )
-        THEN UPDATE SET
-            ArtifactId = source.ArtifactId,
-            IsEnabled = 1,
-            UpdatedUtc = SYSUTCDATETIME()
-    WHEN NOT MATCHED THEN
-        INSERT(HostId, ArtifactId, ServiceNamePrefix, InstallRoot, IsEnabled)
-        VALUES(source.HostId, source.ArtifactId, NULL, NULL, 1)
-    OUTPUT $action INTO @HostAgentChanges;
-
-    SELECT @HostAgentDesiredRowsUpdated = COUNT(1)
-    FROM @HostAgentChanges;
-END;
-
-SELECT @TemplateAppRowsUpdated AS TemplateAppRowsUpdated,
-       @AppInstanceRowsUpdated AS AppInstanceRowsUpdated,
-       @WorkerInstanceRowsUpdated AS WorkerInstanceRowsUpdated,
-       @HostAgentDesiredRowsUpdated AS HostAgentDesiredRowsUpdated;";
-
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@ArtifactId", artifactId);
 
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        if (!await rdr.ReadAsync(ct))
+        var target = await ReadArtifactAutoApplyTargetAsync(conn, artifactId, ct);
+        if (target is null)
         {
             return new ArtifactApplicationResult();
         }
 
+        var templateAppRowsUpdated = await ApplyArtifactToIntRowsAsync(
+            conn,
+            artifactId,
+            target.Version,
+            @"
+SELECT tai.InstanceTemplateAppInstanceId,
+       currentArtifact.Version
+FROM omp.InstanceTemplateAppInstances tai
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = tai.DesiredArtifactId
+WHERE tai.AppId = @AppId
+  AND tai.IsEnabled = 1
+  AND ISNULL(tai.DesiredArtifactId, -1) <> @ArtifactId;",
+            @"
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @ArtifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE InstanceTemplateAppInstanceId = @RowId;",
+            target.AppId,
+            ct);
+
+        var appInstanceRowsUpdated = await ApplyArtifactToGuidRowsAsync(
+            conn,
+            artifactId,
+            target.Version,
+            @"
+SELECT ai.AppInstanceId,
+       currentArtifact.Version
+FROM omp.AppInstances ai
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = ai.ArtifactId
+WHERE ai.AppId = @AppId
+  AND ai.IsEnabled = 1
+  AND ISNULL(ai.ArtifactId, -1) <> @ArtifactId;",
+            @"
+UPDATE omp.AppInstances
+SET ArtifactId = @ArtifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE AppInstanceId = @RowId;",
+            target.AppId,
+            ct);
+
+        var workerInstanceRowsUpdated = await ApplyArtifactToGuidRowsAsync(
+            conn,
+            artifactId,
+            target.Version,
+            @"
+SELECT wi.WorkerInstanceId,
+       currentArtifact.Version
+FROM omp.WorkerInstances wi
+INNER JOIN omp.AppInstances ai
+    ON ai.AppInstanceId = wi.AppInstanceId
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = wi.ArtifactId
+WHERE ai.AppId = @AppId
+  AND wi.IsEnabled = 1
+  AND wi.ArtifactId IS NOT NULL
+  AND wi.ArtifactId <> @ArtifactId;",
+            @"
+UPDATE omp.WorkerInstances
+SET ArtifactId = @ArtifactId,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE WorkerInstanceId = @RowId;",
+            target.AppId,
+            ct);
+
+        var hostAgentDesiredRowsUpdated = target.PackageType.Equals("host-agent", StringComparison.OrdinalIgnoreCase)
+            ? await ApplyHostAgentArtifactToForwardRowsAsync(conn, artifactId, target.Version, ct)
+            : 0;
+
         return new ArtifactApplicationResult
         {
-            TemplateAppRowsUpdated = rdr.GetInt32(0),
-            AppInstanceRowsUpdated = rdr.GetInt32(1),
-            WorkerInstanceRowsUpdated = rdr.GetInt32(2),
-            HostAgentDesiredRowsUpdated = rdr.GetInt32(3)
+            TemplateAppRowsUpdated = templateAppRowsUpdated,
+            AppInstanceRowsUpdated = appInstanceRowsUpdated,
+            WorkerInstanceRowsUpdated = workerInstanceRowsUpdated,
+            HostAgentDesiredRowsUpdated = hostAgentDesiredRowsUpdated
         };
     }
+
+    private async Task<ArtifactAutoApplyTarget?> ReadArtifactAutoApplyTargetAsync(
+        SqlConnection conn,
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ArtifactId,
+       AppId,
+       Version,
+       PackageType
+FROM omp.Artifacts
+WHERE ArtifactId = @ArtifactId
+  AND IsEnabled = 1;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new ArtifactAutoApplyTarget(
+            rdr.GetInt32(0),
+            rdr.GetInt32(1),
+            rdr.GetString(2),
+            rdr.GetString(3));
+    }
+
+    private static async Task<int> ApplyArtifactToIntRowsAsync(
+        SqlConnection conn,
+        int artifactId,
+        string targetVersion,
+        string selectSql,
+        string updateSql,
+        int appId,
+        CancellationToken ct)
+    {
+        var rowIds = new List<int>();
+        await using (var select = new SqlCommand(selectSql, conn))
+        {
+            select.Parameters.AddWithValue("@ArtifactId", artifactId);
+            select.Parameters.AddWithValue("@AppId", appId);
+            await using var rdr = await select.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                var currentVersion = rdr.IsDBNull(1) ? null : rdr.GetString(1);
+                if (ShouldApplyImportedArtifact(targetVersion, currentVersion))
+                {
+                    rowIds.Add(rdr.GetInt32(0));
+                }
+            }
+        }
+
+        var updated = 0;
+        foreach (var rowId in rowIds)
+        {
+            await using var update = new SqlCommand(updateSql, conn);
+            update.Parameters.AddWithValue("@ArtifactId", artifactId);
+            update.Parameters.AddWithValue("@RowId", rowId);
+            updated += await update.ExecuteNonQueryAsync(ct);
+        }
+
+        return updated;
+    }
+
+    private static async Task<int> ApplyArtifactToGuidRowsAsync(
+        SqlConnection conn,
+        int artifactId,
+        string targetVersion,
+        string selectSql,
+        string updateSql,
+        int appId,
+        CancellationToken ct)
+    {
+        var rowIds = new List<Guid>();
+        await using (var select = new SqlCommand(selectSql, conn))
+        {
+            select.Parameters.AddWithValue("@ArtifactId", artifactId);
+            select.Parameters.AddWithValue("@AppId", appId);
+            await using var rdr = await select.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                var currentVersion = rdr.IsDBNull(1) ? null : rdr.GetString(1);
+                if (ShouldApplyImportedArtifact(targetVersion, currentVersion))
+                {
+                    rowIds.Add(rdr.GetGuid(0));
+                }
+            }
+        }
+
+        var updated = 0;
+        foreach (var rowId in rowIds)
+        {
+            await using var update = new SqlCommand(updateSql, conn);
+            update.Parameters.AddWithValue("@ArtifactId", artifactId);
+            update.Parameters.AddWithValue("@RowId", rowId);
+            updated += await update.ExecuteNonQueryAsync(ct);
+        }
+
+        return updated;
+    }
+
+    private static async Task<int> ApplyHostAgentArtifactToForwardRowsAsync(
+        SqlConnection conn,
+        int artifactId,
+        string targetVersion,
+        CancellationToken ct)
+    {
+        const string selectSql = @"
+SELECT h.HostId,
+       desired.ArtifactId,
+       desired.IsEnabled,
+       currentArtifact.Version
+FROM omp.Hosts h
+LEFT JOIN omp.HostAgentDesiredStates desired
+    ON desired.HostId = h.HostId
+LEFT JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = desired.ArtifactId
+WHERE h.IsEnabled = 1
+  AND
+  (
+      desired.HostId IS NOT NULL
+      OR EXISTS
+      (
+          SELECT 1
+          FROM omp.HostAgentRuntimeStates runtimeState
+          WHERE runtimeState.HostId = h.HostId
+            AND runtimeState.IsActive = 1
+      )
+  );";
+
+        var rows = new List<(Guid HostId, int? CurrentArtifactId, bool IsEnabled, string? CurrentVersion)>();
+        await using (var select = new SqlCommand(selectSql, conn))
+        {
+            await using var rdr = await select.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                rows.Add((
+                    rdr.GetGuid(0),
+                    rdr.IsDBNull(1) ? null : rdr.GetInt32(1),
+                    !rdr.IsDBNull(2) && rdr.GetBoolean(2),
+                    rdr.IsDBNull(3) ? null : rdr.GetString(3)));
+            }
+        }
+
+        const string updateSql = @"
+UPDATE omp.HostAgentDesiredStates
+SET ArtifactId = @ArtifactId,
+    IsEnabled = 1,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostId = @HostId;";
+
+        const string insertSql = @"
+INSERT omp.HostAgentDesiredStates(HostId, ArtifactId, ServiceNamePrefix, InstallRoot, IsEnabled)
+VALUES(@HostId, @ArtifactId, NULL, NULL, 1);";
+
+        var updated = 0;
+        foreach (var row in rows)
+        {
+            if (row.CurrentArtifactId.HasValue
+                && row.CurrentArtifactId.Value != artifactId
+                && !ShouldApplyImportedArtifact(targetVersion, row.CurrentVersion))
+            {
+                continue;
+            }
+
+            if (row.CurrentArtifactId.HasValue)
+            {
+                if (row.CurrentArtifactId.Value == artifactId && row.IsEnabled)
+                {
+                    continue;
+                }
+
+                await using var update = new SqlCommand(updateSql, conn);
+                update.Parameters.AddWithValue("@ArtifactId", artifactId);
+                update.Parameters.AddWithValue("@HostId", row.HostId);
+                updated += await update.ExecuteNonQueryAsync(ct);
+            }
+            else
+            {
+                await using var insert = new SqlCommand(insertSql, conn);
+                insert.Parameters.AddWithValue("@ArtifactId", artifactId);
+                insert.Parameters.AddWithValue("@HostId", row.HostId);
+                updated += await insert.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        return updated;
+    }
+
+    private static bool ShouldApplyImportedArtifact(string targetVersion, string? currentVersion)
+        => string.IsNullOrWhiteSpace(currentVersion)
+            || CompareArtifactVersions(targetVersion, currentVersion) > 0;
 
     public async Task<int> RequestHostAgentUpgradeAsync(
         Guid hostId,
@@ -5208,6 +5366,12 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
     private sealed record BootstrapPortalAdminPrincipal(
         string PrincipalType,
         string Principal);
+
+    private sealed record ArtifactAutoApplyTarget(
+        int ArtifactId,
+        int AppId,
+        string Version,
+        string PackageType);
 
     private static void Add(SqlCommand cmd, string name, object? value)
     {

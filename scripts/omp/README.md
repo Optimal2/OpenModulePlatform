@@ -8,9 +8,13 @@ module-definitions/
 artifacts/
 host-configs/
 config-overlays/
+widgets/
 ```
 
 Use this script when a module repository needs to publish objects for Portal,
 HostAgent import folders, or installer package libraries. Runtime or
 customer-specific configuration should be supplied through command-line
 mappings, not committed to the public repository.
+
+Use `-WidgetFile` for dashboard widget JSON objects that should be copied into
+the same output shape as the other portable OMP objects.

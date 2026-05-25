@@ -379,6 +379,10 @@ internal static partial class Program
             currentPackageRoot,
             generatedPackageRoot,
             "config-overlays");
+        MergeCurrentGlobalConfigObjectLibrary(
+            currentPackageRoot,
+            generatedPackageRoot,
+            "widgets");
 
         var generatedHostsRoot = Path.Join(generatedPackageRoot, "data", "hosts");
         var generatedSampleHostRoot = Path.Join(generatedHostsRoot, "bootstrap.local.sample");
