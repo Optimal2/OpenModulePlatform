@@ -1394,9 +1394,6 @@ button {
 }
 
 .dashboard-entry-list__search {
-    position: sticky;
-    top: 0;
-    z-index: 1;
     padding-bottom: 4px;
     background: var(--surface);
 }
@@ -1835,6 +1832,7 @@ a.dashboard-role-list__item:focus-visible {
     justify-items: start;
     gap: 3px;
     width: 100%;
+    min-height: 68px;
     padding: 12px;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -1852,11 +1850,13 @@ a.dashboard-role-list__item:focus-visible {
 
 .dashboard-widget-option__title {
     font-weight: 700;
+    line-height: 1.25;
 }
 
 .dashboard-widget-option__meta {
     color: var(--text-muted);
     font-size: 0.82rem;
+    line-height: 1.25;
 }
 
 @media (hover: none), (max-width: 760px) {
