@@ -285,10 +285,12 @@ them out of the normal operator path.
 The `Upgrade / complete` action is a package catch-up action for an existing
 installation. It imports missing, newer, or changed module definition documents,
 copies missing artifact folders, publishes missing package-library files, and
-installs HostAgent only if the configured service is absent. Existing
-artifact folders and an existing HostAgent service are deliberately left
-unchanged; use `Install or update` when a full bootstrap/reconfiguration pass is
-intended.
+installs HostAgent only if no HostAgent service with the configured service-name
+prefix exists. If an older versioned HostAgent service is already present, the
+bootstrapper leaves the runtime service alone and lets HostAgent self-upgrade
+complete the version switch. Existing artifact folders and an existing HostAgent
+service are deliberately left unchanged; use `Install or update` when a full
+bootstrap/reconfiguration pass is intended.
 
 When imported module definitions include validation SQL, the bootstrapper runs
 the read-only validation script first. Idempotent repair SQL runs only when the
