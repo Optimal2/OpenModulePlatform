@@ -237,17 +237,26 @@ internal static partial class Program
             {
                 Console.WriteLine("> HostAgent service name is not configured; skipping HostAgent installation.");
             }
-            else if (!ServiceExists(ResolveBootstrapHostAgentServiceIdentity(config).ServiceName))
-            {
-                var identity = ResolveBootstrapHostAgentServiceIdentity(config);
-                Console.WriteLine($"> HostAgent service '{identity.ServiceName}' is missing; installing it.");
-                EnsureRuntimeFilesystemAccess(config);
-                await InstallHostAgentAsync(config, payloadRoot);
-            }
             else
             {
-                EnsureRuntimeFilesystemAccess(config);
-                Console.WriteLine("> HostAgent service already exists; leaving runtime installation unchanged.");
+                var identity = ResolveBootstrapHostAgentServiceIdentity(config);
+                if (ServiceExists(identity.ServiceName))
+                {
+                    EnsureRuntimeFilesystemAccess(config);
+                    Console.WriteLine("> HostAgent service already exists; leaving runtime installation unchanged.");
+                }
+                else if (HostAgentServiceWithPrefixExists(identity.ServiceNamePrefix))
+                {
+                    EnsureRuntimeFilesystemAccess(config);
+                    Console.WriteLine(
+                        $"> HostAgent service '{identity.ServiceName}' is missing, but an existing HostAgent service with prefix '{identity.ServiceNamePrefix}' is present; leaving runtime installation unchanged so self-upgrade can complete.");
+                }
+                else
+                {
+                    Console.WriteLine($"> HostAgent service '{identity.ServiceName}' is missing; installing it.");
+                    EnsureRuntimeFilesystemAccess(config);
+                    await InstallHostAgentAsync(config, payloadRoot);
+                }
             }
 
             Console.WriteLine();
@@ -4699,6 +4708,20 @@ VALUES
     {
         var result = RunProcess(GetScPath(), ["query", serviceName], throwOnFailure: false);
         return result.ExitCode == 0;
+    }
+
+    private static bool HostAgentServiceWithPrefixExists(string serviceNamePrefix)
+    {
+        var prefix = ResolveHostAgentServiceNamePrefix(serviceNamePrefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            return false;
+        }
+
+        var versionedPrefix = prefix + ".";
+        return EnumerateWindowsServiceNames().Any(serviceName =>
+            serviceName.Equals(prefix, StringComparison.OrdinalIgnoreCase)
+            || serviceName.StartsWith(versionedPrefix, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void StopService(string serviceName)
