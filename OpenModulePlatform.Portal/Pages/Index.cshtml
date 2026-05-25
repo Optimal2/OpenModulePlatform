@@ -21,6 +21,7 @@
          data-edit-label="@L["Edit dashboard"]"
          data-remove-label="@L["Remove widget"]"
          data-reset-confirm="@L["This clears your current dashboard widgets. Continue?"]"
+         data-done-fallback-confirm="@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]"
          data-add-favorite-label="@L["Add favorite"]"
          data-remove-favorite-label="@L["Remove favorite"]">
     <form class="visually-hidden" method="post" data-dashboard-token-form>
@@ -112,7 +113,7 @@
             <span data-dashboard-edit-label>@L["Edit dashboard"]</span>
         </button>
 
-        <button type="button" class="dashboard-save-button" data-dashboard-save>
+        <button type="button" class="dashboard-save-button" data-dashboard-save disabled aria-disabled="true">
             <span class="dashboard-action-icon dashboard-action-icon--save" aria-hidden="true"></span>
             @L["Save"]
         </button>
@@ -198,6 +199,18 @@
                     }
                 </div>
             }
+        </dialog>
+
+        <dialog class="dashboard-unsaved-dialog unsaved-dialog" data-dashboard-unsaved-dialog aria-labelledby="dashboard-unsaved-title">
+            <form method="dialog" class="unsaved-dialog__body">
+                <h3 id="dashboard-unsaved-title">@L["Unsaved changes"]</h3>
+                <p class="muted">@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]</p>
+                <div class="toolbar">
+                    <button type="button" class="btn btn-primary" data-dashboard-unsaved-save>@L["Save changes"]</button>
+                    <button type="button" class="btn" data-dashboard-unsaved-discard>@L["Discard changes"]</button>
+                    <button type="button" class="btn" data-dashboard-unsaved-cancel>@L["Keep editing"]</button>
+                </div>
+            </form>
         </dialog>
     }
 </section>

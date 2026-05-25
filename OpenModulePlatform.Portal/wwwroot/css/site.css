@@ -1751,21 +1751,36 @@ a.dashboard-role-list__item:focus-visible {
     gap: 8px;
     min-height: 38px;
     padding: 8px 12px;
+    border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface-muted);
+    color: var(--text);
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
 }
 
 .dashboard-save-button {
-    bottom: 74px;
+    bottom: 66px;
 }
 
 .dashboard-add-button {
-    bottom: 122px;
+    bottom: 110px;
 }
 
 .dashboard-reset-changes-button {
-    bottom: 170px;
+    bottom: 154px;
+}
+
+.dashboard-save-button:disabled {
+    cursor: not-allowed;
+    color: var(--text-muted);
+    opacity: 0.72;
+}
+
+.portal-dashboard.is-editing.has-dashboard-changes .dashboard-save-button:not(:disabled) {
+    border-color: #198754;
+    background: #198754;
+    color: #ffffff;
+    opacity: 1;
 }
 
 .portal-dashboard.is-editing .dashboard-save-button,
@@ -1848,11 +1863,11 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-grid-toggle {
-    bottom: 266px;
+    bottom: 198px;
 }
 
 .dashboard-expanded-toggle {
-    bottom: 314px;
+    bottom: 242px;
 }
 
 .portal-dashboard.is-editing .dashboard-grid-toggle,
