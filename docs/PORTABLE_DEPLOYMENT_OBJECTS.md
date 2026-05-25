@@ -13,10 +13,12 @@ everything that should move between installations:
 Together they replace module-specific installation scripts for normal
 application deployment. A new environment should first import module
 definitions, then import artifact packages that are compatible with those
-definitions, then let HostAgent materialize the desired runtime state. When a
-module should move as one unit, use a complete module package: one zip that
-contains the module definition plus the outer artifact package zips for that
-module. Host-specific files are added separately through config overlays.
+definitions, then let HostAgent materialize the desired runtime state. When
+objects should move together, prefer a universal module package. It can contain
+module definitions, artifact packages, host configurations, config overlays, and
+dashboard widgets in one manifest-based zip while still keeping host-specific
+files separate from global binary artifacts. See
+`docs/UNIVERSAL_MODULE_PACKAGES.md`.
 
 ## Module Definition Object
 

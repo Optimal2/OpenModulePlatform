@@ -58,6 +58,13 @@
         </div>
 
         <div class="workflow-choice-grid workflow-choice-grid--dense" data-workflow-options="import" hidden>
+            <button type="button" class="workflow-choice" data-workflow-action="import-universal" aria-pressed="false">
+                <span class="workflow-choice__icon" aria-hidden="true">◎</span>
+                <span class="workflow-choice__content">
+                    <span class="workflow-choice__title">@L["Universal zip"]</span>
+                    <span class="workflow-choice__text">@L["Import one zip containing any mix of OMP module definitions, artifact packages, host configs, overlays, and widgets."]</span>
+                </span>
+            </button>
             <button type="button" class="workflow-choice" data-workflow-action="import-bundle" aria-pressed="false">
                 <span class="workflow-choice__icon" aria-hidden="true">▣</span>
                 <span class="workflow-choice__content">
@@ -151,6 +158,64 @@
     <div class="workflow-empty-state" data-workflow-empty>
         @L["Choose import or export to continue."]
     </div>
+
+    <section class="card workflow-panel" data-workflow-panel="import-universal" hidden>
+        <h3>@L["Import universal module package"]</h3>
+        <p class="muted">@L["Use this for the new universal package format with omp-universal-package.json and standard object folders. Each object is imported independently so one failed item does not stop the rest."]</p>
+
+        <form method="post" asp-page-handler="ImportUniversal" enctype="multipart/form-data" class="form-grid top-gap">
+            <div class="form-field">
+                <label asp-for="UniversalUploadInput.PackageFile">@L["Universal module package zip"]</label>
+                <input asp-for="UniversalUploadInput.PackageFile" type="file" accept=".zip,application/zip" />
+            </div>
+
+            <div class="option-cluster option-cluster--2">
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.ApplyModuleDefinitions" type="checkbox" />
+                    <span>@L["Apply module definitions"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.ExecuteSqlRepairs" type="checkbox" />
+                    <span>@L["Execute detected SQL repairs"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.UseArtifactsImmediately" type="checkbox" />
+                    <span>@L["Use imported artifacts immediately"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.CopyConfigurationFilesFromPreviousVersion" type="checkbox" />
+                    <span>@L["Copy configuration files from previous version"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.AllowTemporaryIncompatibleArtifacts" type="checkbox" />
+                    <span>@L["Allow temporary incompatible artifact selections"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.ReplaceExistingModuleDefinitions" type="checkbox" />
+                    <span>@L["Replace existing module definitions with same key and version"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.ReplaceExistingArtifacts" type="checkbox" />
+                    <span>@L["Replace existing artifacts with same identity"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.ReplaceExistingConfigObjects" type="checkbox" />
+                    <span>@L["Replace existing host configs and overlays with same key and version"]</span>
+                </label>
+            </div>
+
+            <div class="toolbar">
+                <button type="submit">@L["Import universal zip"]</button>
+            </div>
+        </form>
+    </section>
 
     <section class="card workflow-panel" data-workflow-panel="import-bundle" hidden>
         <h3>@L["Import package zip"]</h3>
