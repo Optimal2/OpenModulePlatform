@@ -1300,6 +1300,15 @@ button {
     touch-action: none;
 }
 
+.dashboard-selection-box {
+    position: absolute;
+    z-index: 30000;
+    border: 1px solid var(--link);
+    border-radius: 4px;
+    background: rgba(11, 87, 208, 0.14);
+    pointer-events: none;
+}
+
 .portal-dashboard.is-editing.is-expanded-canvas .portal-dashboard__canvas {
     overflow: auto;
 }
@@ -1344,6 +1353,12 @@ button {
     cursor: move;
     outline: 1px dashed rgba(11, 87, 208, 0.28);
     outline-offset: -4px;
+}
+
+.portal-dashboard.is-editing .dashboard-widget.is-selected {
+    outline: 2px solid var(--link);
+    outline-offset: -3px;
+    box-shadow: 0 0 0 4px rgba(11, 87, 208, 0.12), 0 12px 28px rgba(17, 24, 39, 0.1);
 }
 
 .dashboard-widget.is-moving,
@@ -1847,6 +1862,10 @@ a.dashboard-role-list__item:focus-visible {
     justify-content: center;
 }
 
+.portal-dashboard.has-multi-selected-widgets .dashboard-widget.is-selected .dashboard-widget__remove {
+    display: none;
+}
+
 .dashboard-widget__remove:hover,
 .dashboard-widget__remove:focus-visible {
     border-color: #d36f6f;
@@ -1873,6 +1892,10 @@ a.dashboard-role-list__item:focus-visible {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+.portal-dashboard.has-multi-selected-widgets .dashboard-widget.is-selected .dashboard-widget__settings-toggle {
+    display: none;
 }
 
 .dashboard-widget__settings-toggle:hover,
@@ -1950,6 +1973,10 @@ a.dashboard-role-list__item:focus-visible {
 
 .portal-dashboard.is-editing .dashboard-widget__resize {
     display: block;
+}
+
+.portal-dashboard.has-multi-selected-widgets .dashboard-widget.is-selected .dashboard-widget__resize {
+    display: none;
 }
 
 .dashboard-floating-button {
