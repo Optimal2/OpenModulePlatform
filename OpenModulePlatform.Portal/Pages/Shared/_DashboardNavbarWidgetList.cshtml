@@ -10,17 +10,26 @@
     }
     else
     {
-        @foreach (var section in Model.Sections)
-        {
-            <section class="dashboard-navbar-list__section">
-                <h4>@L[section.TextKey]</h4>
-                <div class="dashboard-navbar-list__links">
-                    @foreach (var link in section.Links)
-                    {
-                        <a class="dashboard-navbar-list__link" href="@link.Href">@L[link.TextKey]</a>
-                    }
-                </div>
-            </section>
-        }
+        <nav class="dashboard-navbar-menu" aria-label="@L["Portal navigation"]">
+            @foreach (var section in Model.Sections)
+            {
+                if (section.Links.Count == 1 && string.Equals(section.TextKey, "Portal", StringComparison.OrdinalIgnoreCase))
+                {
+                    var link = section.Links[0];
+                    <a class="dashboard-navbar-menu__link" href="@link.Href">@L[link.TextKey]</a>
+                    continue;
+                }
+
+                <details class="dashboard-navbar-dropdown" data-dashboard-navbar-dropdown>
+                    <summary>@L[section.TextKey]</summary>
+                    <div class="dashboard-navbar-dropdown__menu">
+                        @foreach (var link in section.Links)
+                        {
+                            <a href="@link.Href">@L[link.TextKey]</a>
+                        }
+                    </div>
+                </details>
+            }
+        </nav>
     }
 </div>

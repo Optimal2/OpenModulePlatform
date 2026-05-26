@@ -269,7 +269,7 @@
                 return;
             }
 
-            if (event.target.closest('button, a, input, textarea, select, [data-widget-resize], [data-widget-settings-panel]')) {
+            if (event.target.closest('button, a, input, textarea, select, summary, [data-dashboard-navbar-dropdown], [data-widget-resize], [data-widget-settings-panel]')) {
                 return;
             }
 
