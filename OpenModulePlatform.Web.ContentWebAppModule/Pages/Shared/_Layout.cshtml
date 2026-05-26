@@ -23,7 +23,12 @@
                 <div class="brand-subtitle">@L["Content"]</div>
             </a>
             <nav class="topbar-nav" aria-label="@L["Content navigation"]">
-                @if (ViewData["CanManageContent"] is true)
+                @if (ViewData["ContentManageHref"] is string contentManageHref && !string.IsNullOrWhiteSpace(contentManageHref))
+                {
+                    var contentManageLabel = ViewData["ContentManageLabel"]?.ToString() ?? "Manage pages";
+                    <a href="@contentManageHref">@L[contentManageLabel]</a>
+                }
+                else if (ViewData["CanManageContent"] is true)
                 {
                     <a href="~/admin">@L["Manage pages"]</a>
                 }
