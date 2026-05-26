@@ -8,6 +8,7 @@
   <data name="Content home" xml:space="preserve"><value>Innehåll startsida</value></data>
   <data name="Content navigation" xml:space="preserve"><value>Innehållsnavigering</value></data>
   <data name="Manage pages" xml:space="preserve"><value>Hantera sidor</value></data>
+  <data name="Manage page" xml:space="preserve"><value>Hantera sida</value></data>
   <data name="Create, edit, publish and unpublish simple content pages for this app instance." xml:space="preserve"><value>Skapa, redigera, publicera och avpublicera enkla informationssidor för den här appinstansen.</value></data>
   <data name="Create and edit content pages for this app instance." xml:space="preserve"><value>Skapa och redigera innehållssidor för den här appinstansen.</value></data>
   <data name="New page" xml:space="preserve"><value>Ny sida</value></data>

@@ -58,6 +58,18 @@ public sealed class PageModel : ContentWebAppModulePageModel
             return NotFound();
         }
 
+        var editablePage = await _repo.GetPageForEditAsync(
+            AppInstanceId,
+            PageContent.ContentId,
+            accessContext.RoleIds,
+            accessContext.CanManageAll,
+            ct);
+        if (editablePage is not null)
+        {
+            ViewData["ContentManageHref"] = Url.Content($"~/admin/edit/{PageContent.ContentId}");
+            ViewData["ContentManageLabel"] = "Manage page";
+        }
+
         await SetContentTitlesAsync(PageContent.Title, ct);
         RenderedHtml = await _renderer.RenderToHtmlAsync(
             PageContent.Body,

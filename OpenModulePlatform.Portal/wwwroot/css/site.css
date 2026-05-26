@@ -1732,55 +1732,94 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-navbar-list {
-    display: grid;
-    gap: 12px;
-    align-content: start;
     height: 100%;
     min-height: 0;
     overflow: auto;
     padding: 4px;
 }
 
-.dashboard-navbar-list__section {
-    display: grid;
-    gap: 6px;
+.dashboard-navbar-menu {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
 }
 
-.dashboard-navbar-list__section h4 {
-    margin: 0;
+.dashboard-navbar-menu__link,
+.dashboard-navbar-dropdown summary {
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: var(--text);
+    font-weight: 650;
+    text-decoration: none;
+}
+
+.dashboard-navbar-menu__link {
+    display: inline-flex;
+    align-items: center;
+}
+
+.dashboard-navbar-dropdown {
+    min-width: min(100%, 180px);
+}
+
+.dashboard-navbar-dropdown summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    background: var(--surface);
+    cursor: pointer;
+}
+
+.dashboard-navbar-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.dashboard-navbar-dropdown summary::after {
+    content: "▾";
     color: var(--text-muted);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 0.8rem;
 }
 
-.dashboard-navbar-list__links {
+.dashboard-navbar-menu__link:hover,
+.dashboard-navbar-menu__link:focus-visible,
+.dashboard-navbar-dropdown summary:hover,
+.dashboard-navbar-dropdown[open] summary {
+    border-color: var(--border);
+    background: var(--surface-muted);
+    color: var(--text);
+    outline: none;
+}
+
+.dashboard-navbar-dropdown__menu {
     display: grid;
     gap: 6px;
+    padding: 8px 0 0;
 }
 
-.dashboard-navbar-list__link {
+.dashboard-navbar-dropdown__menu a {
     display: block;
-    min-height: 40px;
-    padding: 10px 12px;
+    min-height: 34px;
+    padding: 8px 10px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
     color: var(--text);
-    font-weight: 650;
     overflow: hidden;
     text-decoration: none;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.dashboard-navbar-list__link:hover,
-.dashboard-navbar-list__link:focus-visible {
+.dashboard-navbar-dropdown__menu a:hover,
+.dashboard-navbar-dropdown__menu a:focus-visible {
     border-color: var(--border-strong);
     background: var(--surface-muted);
-    color: var(--text);
-    outline: none;
 }
 
 .dashboard-navbar-list__empty {
