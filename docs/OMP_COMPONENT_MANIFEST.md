@@ -109,6 +109,14 @@ config-overlays/
 widgets/
 ```
 
+When `-ComponentKey` is used, the generated object set is scoped to the selected
+components. Artifact packages are emitted only for those components, and module
+definition files are emitted only for the matching component module keys. This
+keeps a HostAgent-only or single web-app package from importing unrelated module
+definitions and accidentally repairing or changing desired state for unrelated
+apps. Use `-AllComponents` when the package is meant to refresh the full
+repository.
+
 Point `OutputRoot` at an installer package's `data/global` folder to refresh the
 shared package library directly. Customer or host-specific configuration is
 passed as arguments and must not be committed to source repositories; the DEV

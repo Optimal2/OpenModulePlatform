@@ -19,6 +19,10 @@ mappings, not committed to the public repository.
 Use `-WidgetFile` for dashboard widget JSON objects that should be copied into
 the same output shape as the other portable OMP objects.
 
+When `-ComponentKey` is used, the builder exports only those component artifact
+packages and the module definition files whose `moduleKey` belongs to the
+selected components. Use `-AllComponents` for a full repository package.
+
 `export-universal-package.ps1` is the standard command that every
 OMP-compatible module repository should expose at the same path. It uses the
 object builder and then creates one universal zip with

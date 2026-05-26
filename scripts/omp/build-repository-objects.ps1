@@ -374,8 +374,34 @@ New-Item -ItemType Directory -Path $widgetsRoot -Force | Out-Null
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
+$selectedComponents = @($manifest.components | Where-Object { Test-ArtifactComponent -Component $_ })
+$selectedModuleKeys = $null
+if ($ComponentKey.Count -gt 0) {
+    $keySet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($key in $ComponentKey) {
+        [void]$keySet.Add($key)
+    }
+
+    $selectedComponents = @($selectedComponents | Where-Object { $keySet.Contains([string]$_.componentKey) })
+    $selectedModuleKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($component in $selectedComponents) {
+        $moduleKey = [string](Get-JsonPropertyValue -Object $component -Name 'moduleKey')
+        if (-not [string]::IsNullOrWhiteSpace($moduleKey)) {
+            [void]$selectedModuleKeys.Add($moduleKey.Trim())
+        }
+    }
+}
+elseif (-not $AllComponents) {
+    $selectedComponents = @()
+}
+
 foreach ($definition in @($manifest.moduleDefinitions)) {
     if ($null -eq $definition) {
+        continue
+    }
+
+    $definitionModuleKey = [string](Get-JsonPropertyValue -Object $definition -Name 'moduleKey')
+    if ($null -ne $selectedModuleKeys -and -not $selectedModuleKeys.Contains($definitionModuleKey)) {
         continue
     }
 
@@ -385,19 +411,6 @@ foreach ($definition in @($manifest.moduleDefinitions)) {
     }
 
     Copy-Item -LiteralPath $definitionPath -Destination (Join-Path $definitionsRoot ([System.IO.Path]::GetFileName($definitionPath))) -Force
-}
-
-$selectedComponents = @($manifest.components | Where-Object { Test-ArtifactComponent -Component $_ })
-if ($ComponentKey.Count -gt 0) {
-    $keySet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($key in $ComponentKey) {
-        [void]$keySet.Add($key)
-    }
-
-    $selectedComponents = @($selectedComponents | Where-Object { $keySet.Contains([string]$_.componentKey) })
-}
-elseif (-not $AllComponents) {
-    $selectedComponents = @()
 }
 
 $configurationMappings = Read-ConfigurationMappings -Mappings $ArtifactConfigurationFile
