@@ -20,7 +20,6 @@
         const resetChangesButton = root.querySelector('[data-dashboard-reset-changes]');
         const resetButton = root.querySelector('[data-dashboard-reset]');
         const alignToggle = root.querySelector('[data-dashboard-align-toggle]');
-        const expandedToggle = root.querySelector('[data-dashboard-expanded-toggle]');
         const picker = root.querySelector('[data-widget-picker]');
         const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
 
@@ -54,7 +53,7 @@
         const updateDirtyState = () => updateDashboardDirtyState(root, canvas, state, saveButton);
 
         updateAlignToGridState(root, alignToggle, state.alignToGrid);
-        updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
+        updateExpandedCanvasState(root, null, state.expandedCanvas);
         updateCanvasHeight(root, canvas, state);
         window.addEventListener('resize', () => updateCanvasHeight(root, canvas, state));
 
@@ -150,25 +149,6 @@
             }
         });
 
-        expandedToggle?.addEventListener('change', async () => {
-            const next = expandedToggle.checked;
-            const previous = state.expandedCanvas;
-            state.expandedCanvas = next;
-            updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
-            updateCanvasHeight(root, canvas, state);
-            updateDirtyState();
-
-            try {
-                await saveDashboardPreferences(root, token, state);
-            } catch (error) {
-                state.expandedCanvas = previous;
-                updateExpandedCanvasState(root, expandedToggle, state.expandedCanvas);
-                updateCanvasHeight(root, canvas, state);
-                updateDirtyState();
-                throw error;
-            }
-        });
-
         picker?.querySelector('[data-widget-picker-close]')?.addEventListener('click', () => {
             closePicker(picker);
         });
@@ -245,8 +225,13 @@
             if (editLabel) {
                 editLabel.textContent = isEditing
                     ? root.dataset.doneLabel || 'Done'
-                    : root.dataset.editLabel || 'Edit dashboard';
+                    : '';
             }
+            const buttonLabel = isEditing
+                ? root.dataset.doneLabel || 'Done'
+                : root.dataset.editLabel || 'Edit dashboard';
+            editToggle.setAttribute('aria-label', buttonLabel);
+            editToggle.title = buttonLabel;
             updateCanvasHeight(root, canvas, state);
             updateDirtyState();
         }
@@ -678,7 +663,8 @@
             row.dataset.entryContext,
             row.dataset.entryDescription,
             row.dataset.entryHref,
-            row.dataset.entryKey
+            row.dataset.entryKey,
+            row.textContent
         ].join(' '));
     }
 
@@ -810,8 +796,14 @@
         const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'));
         const lowestWidgetRight = widgets
             .reduce((max, widget) => Math.max(max, parsePixel(widget.style.left) + widget.offsetWidth), 0);
+        if (lowestWidgetRight <= 0) {
+            document.documentElement.style.setProperty('--portal-page-chrome-width', '100%');
+            return;
+        }
+
         const canvasLeft = Math.max(0, canvas.getBoundingClientRect().left);
-        const pageWidth = Math.max(window.innerWidth, Math.ceil(canvasLeft + lowestWidgetRight + 32));
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        const pageWidth = Math.max(viewportWidth, Math.ceil(canvasLeft + lowestWidgetRight + 32));
 
         document.documentElement.style.setProperty('--portal-page-chrome-width', `${pageWidth}px`);
     }
@@ -958,7 +950,7 @@
             state.alignToGrid = snapshot.alignToGrid;
             state.expandedCanvas = snapshot.expandedCanvas;
             updateAlignToGridState(root, root.querySelector('[data-dashboard-align-toggle]'), state.alignToGrid);
-            updateExpandedCanvasState(root, root.querySelector('[data-dashboard-expanded-toggle]'), state.expandedCanvas);
+            updateExpandedCanvasState(root, null, state.expandedCanvas);
             await saveDashboardPreferences(root, token, state);
         }
 

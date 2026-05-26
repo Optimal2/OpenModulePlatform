@@ -298,7 +298,10 @@
                                     </button>
                                 </form>
                             </div>
-                            <a class="portal-topbar__profile-settings-link" href="@Model.SettingsUrl" data-enhance-nav="false">@L["Settings"]</a>
+                            <a class="portal-topbar__profile-settings-link" href="@Model.SettingsUrl" data-enhance-nav="false">
+                                <span>@L["Settings"]</span>
+                                <span class="portal-topbar__icon portal-topbar__icon--settings" aria-hidden="true"></span>
+                            </a>
                         </div>
                         <div class="portal-topbar__profile-section">
                             <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>

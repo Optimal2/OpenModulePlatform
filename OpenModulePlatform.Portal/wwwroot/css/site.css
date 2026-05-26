@@ -1754,6 +1754,10 @@ a.dashboard-role-list__item:focus-visible {
     mask: var(--dashboard-floating-icon) center / contain no-repeat;
 }
 
+.dashboard-floating-button [data-dashboard-edit-label]:empty {
+    display: none;
+}
+
 .portal-dashboard.is-editing .dashboard-floating-button {
     border-color: var(--link);
     background: var(--link);
@@ -1868,8 +1872,7 @@ a.dashboard-role-list__item:focus-visible {
     --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
 }
 
-.dashboard-grid-toggle,
-.dashboard-expanded-toggle {
+.dashboard-grid-toggle {
     position: fixed;
     left: 22px;
     z-index: 20000;
@@ -1890,17 +1893,11 @@ a.dashboard-role-list__item:focus-visible {
     bottom: 198px;
 }
 
-.dashboard-expanded-toggle {
-    bottom: 242px;
-}
-
-.portal-dashboard.is-editing .dashboard-grid-toggle,
-.portal-dashboard.is-editing .dashboard-expanded-toggle {
+.portal-dashboard.is-editing .dashboard-grid-toggle {
     display: inline-flex;
 }
 
-.dashboard-grid-toggle input,
-.dashboard-expanded-toggle input {
+.dashboard-grid-toggle input {
     margin: 0;
 }
 
