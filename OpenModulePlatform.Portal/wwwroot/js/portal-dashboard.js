@@ -171,6 +171,7 @@
                     return;
                 }
 
+                widget.title = option.dataset.widgetTitle || widget.title || '';
                 const temporaryWidgetId = state.nextTemporaryWidgetId--;
                 widget.userActiveWidgetId = temporaryWidgetId;
                 widget.orderPriority = ++maxOrder;
@@ -260,12 +261,15 @@
         const removeButton = widget.querySelector('[data-widget-remove]');
         const resizeHandle = widget.querySelector('[data-widget-resize]');
 
+        bindWidgetSettings(root, widget, onChange);
+        applyWidgetSettings(widget);
+
         widget.addEventListener('pointerdown', (event) => {
             if (!root.classList.contains('is-editing') || event.button !== 0) {
                 return;
             }
 
-            if (event.target.closest('button, a, input, textarea, select, [data-widget-resize]')) {
+            if (event.target.closest('button, a, input, textarea, select, [data-widget-resize], [data-widget-settings-panel]')) {
                 return;
             }
 
@@ -301,6 +305,48 @@
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
             onChange();
+        });
+    }
+
+    function bindWidgetSettings(root, widget, onChange = () => {}) {
+        const toggle = widget.querySelector('[data-widget-settings-toggle]');
+        const panel = widget.querySelector('[data-widget-settings-panel]');
+        if (toggle && panel && toggle.dataset.dashboardWidgetSettingsBound !== 'true') {
+            toggle.dataset.dashboardWidgetSettingsBound = 'true';
+            toggle.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const isOpen = panel.hidden;
+                panel.hidden = !isOpen;
+                toggle.setAttribute('aria-expanded', String(isOpen));
+            });
+        }
+
+        widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
+            if (control.dataset.dashboardWidgetSettingsBound === 'true') {
+                return;
+            }
+
+            control.dataset.dashboardWidgetSettingsBound = 'true';
+            control.addEventListener('change', () => {
+                widget.dataset.widgetIntData = normalizeWidgetDataValue(control.value);
+                applyWidgetSettings(widget);
+                onChange();
+            });
+        });
+    }
+
+    function applyWidgetSettings(widget) {
+        if (widget.dataset.widgetPayload !== 'weekday-date') {
+            return;
+        }
+
+        const hideWeekNumber = parseNullableInteger(widget.dataset.widgetIntData) === 1;
+        widget.querySelectorAll('.dashboard-date-widget__week').forEach((week) => {
+            week.hidden = hideWeekNumber;
+        });
+        widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
+            control.value = hideWeekNumber ? '1' : '0';
         });
     }
 
@@ -825,6 +871,23 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
     }
 
+    function parseNullableInteger(value) {
+        if (value === null || value === undefined || String(value).trim() === '') {
+            return null;
+        }
+
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function normalizeWidgetDataValue(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        return String(value).trim();
+    }
+
     async function saveDashboardChanges(root, canvas, token, state) {
         await saveLayout(root, canvas, token, state);
         state.pendingRemovedWidgetIds.clear();
@@ -855,7 +918,9 @@
                 width: Math.round(widget.offsetWidth),
                 height: Math.round(widget.offsetHeight),
                 orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
-                title: widget.querySelector('[data-widget-titlebar]')?.textContent?.trim() || ''
+                title: '',
+                intData: parseNullableInteger(widget.dataset.widgetIntData),
+                stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData)
             }))
             .sort((left, right) => {
                 const idCompare = left.userActiveWidgetId - right.userActiveWidgetId;
@@ -922,8 +987,8 @@
                 height: Math.round(widget.offsetHeight),
                 orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
                 title: null,
-                intData: null,
-                stringData: null
+                intData: parseNullableInteger(widget.dataset.widgetIntData),
+                stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData) || null
             }))
             .filter((widget) => widget.widgetId > 0);
 
@@ -1019,6 +1084,9 @@
         element.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
             delete button.dataset.dashboardFavoriteBound;
         });
+        element.querySelectorAll('[data-widget-settings-toggle]').forEach((button) => {
+            delete button.dataset.dashboardWidgetSettingsBound;
+        });
     }
 
     async function saveDashboardPreferences(root, token, state) {
@@ -1076,6 +1144,9 @@
         element.dataset.userActiveWidgetId = String(widget.userActiveWidgetId);
         element.dataset.widgetId = String(widget.widgetId);
         element.dataset.widgetType = widget.widgetType || '';
+        element.dataset.widgetPayload = widget.payload || '';
+        element.dataset.widgetIntData = normalizeWidgetDataValue(widget.intData);
+        element.dataset.widgetStringData = normalizeWidgetDataValue(widget.stringData);
         element.style.top = `${widget.offsetTop || 0}px`;
         element.style.left = `${widget.offsetLeft || 0}px`;
         element.style.width = `${widget.width || 320}px`;
@@ -1104,13 +1175,69 @@
         remove.textContent = '×';
         element.appendChild(remove);
 
+        const settings = createWidgetSettingsControls(root, widget);
+        if (settings) {
+            element.appendChild(settings.toggle);
+            element.appendChild(settings.panel);
+        }
+
         const resize = document.createElement('span');
         resize.className = 'dashboard-widget__resize';
         resize.dataset.widgetResize = '';
         resize.setAttribute('aria-hidden', 'true');
         element.appendChild(resize);
 
+        applyWidgetSettings(element);
         return element;
+    }
+
+    function createWidgetSettingsControls(root, widget) {
+        if (widget.payload !== 'weekday-date') {
+            return null;
+        }
+
+        const label = root.dataset.widgetSettingsLabel || 'Widget settings';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'dashboard-widget__settings-toggle';
+        toggle.dataset.widgetSettingsToggle = '';
+        toggle.title = label;
+        toggle.setAttribute('aria-label', label);
+        toggle.setAttribute('aria-expanded', 'false');
+
+        const icon = document.createElement('span');
+        icon.className = 'dashboard-widget__settings-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        toggle.appendChild(icon);
+
+        const panel = document.createElement('div');
+        panel.className = 'dashboard-widget__settings-panel';
+        panel.dataset.widgetSettingsPanel = '';
+        panel.hidden = true;
+
+        const fieldLabel = document.createElement('label');
+        const text = document.createElement('span');
+        text.textContent = root.dataset.weekNumberLabel || 'Week number';
+        const select = document.createElement('select');
+        select.dataset.widgetIntDataControl = '';
+
+        const showOption = document.createElement('option');
+        showOption.value = '0';
+        showOption.textContent = root.dataset.showWeekNumberLabel || 'Show week number';
+
+        const hideOption = document.createElement('option');
+        hideOption.value = '1';
+        hideOption.textContent = root.dataset.hideWeekNumberLabel || 'Hide week number';
+
+        select.appendChild(showOption);
+        select.appendChild(hideOption);
+        select.value = parseNullableInteger(widget.intData) === 1 ? '1' : '0';
+
+        fieldLabel.appendChild(text);
+        fieldLabel.appendChild(select);
+        panel.appendChild(fieldLabel);
+
+        return { toggle, panel };
     }
 
     function createWidgetBodyContent(root, payload) {

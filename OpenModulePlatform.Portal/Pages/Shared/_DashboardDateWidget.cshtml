@@ -1,5 +1,6 @@
 @using System.Globalization
 @using OpenModulePlatform.Portal.Localization
+@model bool
 @inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
 
 @{
@@ -8,10 +9,11 @@
     var weekNumber = ISOWeek.GetWeekOfYear(now);
     var weekday = culture.TextInfo.ToTitleCase(now.ToString("dddd", culture));
     var date = now.ToString("d MMMM yyyy", culture);
+    var hideWeekNumber = Model;
 }
 
 <div class="dashboard-date-widget">
-    <div class="dashboard-date-widget__week">@L["Week {0}", weekNumber]</div>
+    <div class="dashboard-date-widget__week" hidden="@hideWeekNumber">@L["Week {0}", weekNumber]</div>
     <div class="dashboard-date-widget__weekday">@weekday</div>
     <div class="dashboard-date-widget__date">@date</div>
 </div>

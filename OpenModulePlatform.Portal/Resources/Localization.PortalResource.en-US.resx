@@ -493,4 +493,17 @@
   <data name="You have unsaved dashboard changes. Save them before leaving edit mode?" xml:space="preserve"><value>You have unsaved dashboard changes. Save them before leaving edit mode?</value></data>
   <data name="Keep editing" xml:space="preserve"><value>Keep editing</value></data>
   <data name="Week {0}" xml:space="preserve"><value>Week {0}</value></data>
+  <data name="Widget settings" xml:space="preserve"><value>Widget settings</value></data>
+  <data name="Week number" xml:space="preserve"><value>Week number</value></data>
+  <data name="Show week number" xml:space="preserve"><value>Show week number</value></data>
+  <data name="Hide week number" xml:space="preserve"><value>Hide week number</value></data>
+  <data name="No content pages to show." xml:space="preserve"><value>No content pages to show.</value></data>
+  <data name="Blank widget" xml:space="preserve"><value>Blank widget</value></data>
+  <data name="Admin overview" xml:space="preserve"><value>Admin overview</value></data>
+  <data name="Favorite portal entries" xml:space="preserve"><value>Favorite portal entries</value></data>
+  <data name="All portal entries" xml:space="preserve"><value>All portal entries</value></data>
+  <data name="Combolist" xml:space="preserve"><value>Combolist</value></data>
+  <data name="User roles" xml:space="preserve"><value>User roles</value></data>
+  <data name="Weekday and date" xml:space="preserve"><value>Weekday and date</value></data>
+  <data name="Content pages" xml:space="preserve"><value>Content pages</value></data>
 </root>

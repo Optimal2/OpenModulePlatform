@@ -1648,6 +1648,68 @@ a.dashboard-role-list__item:focus-visible {
     text-align: center;
 }
 
+.dashboard-content-list {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    padding: 4px;
+}
+
+.dashboard-content-list__item {
+    display: grid;
+    min-height: 62px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.dashboard-content-list__item:hover,
+.dashboard-content-list__item:focus-visible {
+    border-color: var(--border-strong);
+    background: var(--surface-muted);
+    color: var(--text);
+    outline: none;
+}
+
+.dashboard-content-list__text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dashboard-content-list__title,
+.dashboard-content-list__context,
+.dashboard-content-list__slug {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-content-list__title {
+    font-weight: 700;
+}
+
+.dashboard-content-list__context,
+.dashboard-content-list__slug {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.dashboard-content-list__empty {
+    display: grid;
+    min-height: 80px;
+    place-items: center;
+    padding: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
 .dashboard-date-widget {
     display: grid;
     align-content: center;
@@ -1703,6 +1765,79 @@ a.dashboard-role-list__item:focus-visible {
     border-color: #d36f6f;
     color: #8a1f1f;
     outline: none;
+}
+
+.dashboard-widget__settings-toggle {
+    position: absolute;
+    top: 6px;
+    right: 40px;
+    display: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.portal-dashboard.is-editing .dashboard-widget__settings-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dashboard-widget__settings-toggle:hover,
+.dashboard-widget__settings-toggle:focus-visible {
+    border-color: var(--link);
+    color: var(--link);
+    outline: none;
+}
+
+.dashboard-widget__settings-icon {
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg") center / contain no-repeat;
+}
+
+.dashboard-widget__settings-panel {
+    position: absolute;
+    top: 40px;
+    right: 6px;
+    z-index: 2;
+    min-width: 190px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.16);
+}
+
+.dashboard-widget__settings-panel[hidden] {
+    display: none;
+}
+
+.portal-dashboard:not(.is-editing) .dashboard-widget__settings-panel {
+    display: none;
+}
+
+.dashboard-widget__settings-panel label {
+    display: grid;
+    gap: 6px;
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.dashboard-widget__settings-panel select {
+    min-height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
 }
 
 .dashboard-widget__resize {

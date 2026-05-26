@@ -1,0 +1,26 @@
+@using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Models
+@model DashboardContentPageWidgetList
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+<div class="dashboard-content-list">
+    @if (Model.Pages.Count == 0)
+    {
+        <div class="dashboard-content-list__empty">
+            @L["No content pages to show."]
+        </div>
+    }
+    @foreach (var contentPage in Model.Pages)
+    {
+        <a class="dashboard-content-list__item" href="@contentPage.Href">
+            <span class="dashboard-content-list__text">
+                <span class="dashboard-content-list__title">@contentPage.Title</span>
+                @if (!string.IsNullOrWhiteSpace(contentPage.AppDisplayName))
+                {
+                    <span class="dashboard-content-list__context">@contentPage.AppDisplayName</span>
+                }
+                <span class="dashboard-content-list__slug">@contentPage.Slug</span>
+            </span>
+        </a>
+    }
+</div>

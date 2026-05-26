@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Services/PortalDashboardService.cs
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
@@ -12,6 +13,8 @@ namespace OpenModulePlatform.Portal.Services;
 /// </summary>
 public sealed class PortalDashboardService
 {
+    private const string ContentManagePermission = "ContentWebAppModule.Manage";
+    private const string ContentAppKey = "content_webapp_webapp";
     private const bool DefaultAlignToGrid = true;
     private const bool DefaultExpandedCanvas = true;
     private const int DefaultWidgetWidth = 320;
@@ -24,10 +27,12 @@ public sealed class PortalDashboardService
     private const int MaxWidgetOrder = 10000;
 
     private readonly SqlConnectionFactory _db;
+    private readonly AppCatalogService _catalog;
 
-    public PortalDashboardService(SqlConnectionFactory db)
+    public PortalDashboardService(SqlConnectionFactory db, AppCatalogService catalog)
     {
         _db = db;
+        _catalog = catalog;
     }
 
     public async Task<DashboardPreferences> GetPreferencesAsync(int userId, CancellationToken ct)
@@ -150,6 +155,108 @@ ORDER BY uaw.order_priority,
         return definitions.Values
             .OrderBy(widget => widget.Title, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    public async Task<IReadOnlyList<DashboardContentPageLink>> GetReadableContentPagesAsync(
+        HttpRequest request,
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var allApps = await _catalog.GetEnabledWebAppsAsync(ct);
+        var contentApps = _catalog.FilterByPermissions(allApps, permissions)
+            .Where(app => string.Equals(app.AppKey, ContentAppKey, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (contentApps.Length == 0)
+        {
+            return [];
+        }
+
+        var canManageAll = permissions.Contains(ContentManagePermission);
+        if (!canManageAll && roleIds.Count == 0)
+        {
+            return [];
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await TableExistsAsync(conn, "omp_content.contents", ct)
+            || !await TableExistsAsync(conn, "omp_content.content_role_access", ct))
+        {
+            return [];
+        }
+
+        var appParameters = contentApps
+            .Select((app, index) => new { App = app, Name = $"@app{index}" })
+            .ToArray();
+        var roleParameters = roleIds
+            .Select((roleId, index) => new { RoleId = roleId, Name = $"@role{index}" })
+            .ToArray();
+        var accessFilter = canManageAll
+            ? string.Empty
+            : $@"
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp_content.content_role_access a
+      WHERE a.content_id = c.content_id
+        AND a.role_id IN ({string.Join(", ", roleParameters.Select(item => item.Name))})
+        AND a.can_read = 1
+  )";
+
+        var sql = $@"
+SELECT c.content_id,
+       c.app_instance_id,
+       c.slug,
+       c.title,
+       c.content_type
+FROM omp_content.contents c
+WHERE c.app_instance_id IN ({string.Join(", ", appParameters.Select(item => item.Name))})
+  AND c.is_enabled = 1
+{accessFilter}
+ORDER BY COALESCE(c.sort_order, 2147483647),
+         c.title,
+         c.slug;";
+
+        var appsById = contentApps.ToDictionary(app => app.AppInstanceId);
+        var pages = new List<DashboardContentPageLink>();
+        await using var cmd = new SqlCommand(sql, conn);
+        foreach (var item in appParameters)
+        {
+            cmd.Parameters.Add(item.Name, SqlDbType.UniqueIdentifier).Value = item.App.AppInstanceId;
+        }
+
+        foreach (var item in roleParameters)
+        {
+            cmd.Parameters.Add(item.Name, SqlDbType.Int).Value = item.RoleId;
+        }
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var appInstanceId = rdr.GetGuid(1);
+            if (!appsById.TryGetValue(appInstanceId, out var app))
+            {
+                continue;
+            }
+
+            var slug = rdr.GetString(2);
+            var href = BuildContentPageHref(request, app, slug);
+            if (string.IsNullOrWhiteSpace(href))
+            {
+                continue;
+            }
+
+            pages.Add(new DashboardContentPageLink(
+                rdr.GetGuid(0),
+                rdr.GetString(3),
+                slug,
+                href,
+                contentApps.Length > 1 ? app.DisplayName : null,
+                rdr.GetString(4)));
+        }
+
+        return pages;
     }
 
     public async Task<DashboardActiveWidget?> CreateWidgetDraftAsync(
@@ -435,6 +542,35 @@ ORDER BY w.title,
     private static int Clamp(int value, int min, int max)
         => Math.Min(Math.Max(value, min), max);
 
+    private static async Task<bool> TableExistsAsync(SqlConnection conn, string objectName, CancellationToken ct)
+    {
+        const string sql = "SELECT CAST(CASE WHEN OBJECT_ID(@object_name, N'U') IS NULL THEN 0 ELSE 1 END AS bit);";
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@object_name", SqlDbType.NVarChar, 256).Value = objectName;
+        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    private static string? BuildContentPageHref(HttpRequest request, PortalAppEntry app, string slug)
+    {
+        var appHref = AppLinkBuilder.ResolveHref(request, app);
+        if (string.IsNullOrWhiteSpace(appHref))
+        {
+            return null;
+        }
+
+        var normalizedSlug = slug.Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(normalizedSlug))
+        {
+            return appHref;
+        }
+
+        var escapedSlug = string.Join(
+            "/",
+            normalizedSlug.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(Uri.EscapeDataString));
+        return $"{appHref.TrimEnd('/')}/{escapedSlug}";
+    }
+
     private static void BindLayoutParameters(SqlCommand cmd, int userId, DashboardWidgetLayoutUpdate update)
     {
         cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = update.UserActiveWidgetId;
@@ -454,6 +590,7 @@ ORDER BY w.title,
         {
             "admin-overview" => 768,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 416,
+            "content-pages" => 416,
             "user-roles" => 384,
             "weekday-date" => 288,
             _ => DefaultWidgetWidth
@@ -464,6 +601,7 @@ ORDER BY w.title,
         {
             "admin-overview" => 384,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 384,
+            "content-pages" => 384,
             "user-roles" => 320,
             "weekday-date" => 160,
             _ => DefaultWidgetHeight

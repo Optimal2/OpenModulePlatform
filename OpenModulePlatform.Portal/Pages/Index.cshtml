@@ -1,5 +1,6 @@
 @page
 @model OpenModulePlatform.Portal.Pages.IndexModel
+@using System.Globalization
 
 <section class="portal-dashboard is-expanded-canvas"
          data-dashboard-root
@@ -23,7 +24,11 @@
          data-reset-confirm="@L["This clears your current dashboard widgets. Continue?"]"
          data-done-fallback-confirm="@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]"
          data-add-favorite-label="@L["Add favorite"]"
-         data-remove-favorite-label="@L["Remove favorite"]">
+         data-remove-favorite-label="@L["Remove favorite"]"
+         data-widget-settings-label="@L["Widget settings"]"
+         data-week-number-label="@L["Week number"]"
+         data-show-week-number-label="@L["Show week number"]"
+         data-hide-week-number-label="@L["Hide week number"]">
     <form class="visually-hidden" method="post" data-dashboard-token-form>
         @Html.AntiForgeryToken()
     </form>
@@ -54,10 +59,13 @@
                      data-user-active-widget-id="@widget.UserActiveWidgetId"
                      data-widget-id="@widget.WidgetId"
                      data-widget-type="@widget.WidgetType"
+                     data-widget-payload="@widget.Payload"
+                     data-widget-int-data="@(widget.IntData?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)"
+                     data-widget-string-data="@widget.StringData"
                      style="top: @(widget.OffsetTop)px; left: @(widget.OffsetLeft)px; width: @(widget.Width)px; height: @(widget.Height)px; z-index: @(widget.OrderPriority);">
                 @if (!string.IsNullOrWhiteSpace(widget.EffectiveTitle))
                 {
-                    <div class="dashboard-widget__titlebar" data-widget-titlebar>@widget.EffectiveTitle</div>
+                    <div class="dashboard-widget__titlebar" data-widget-titlebar>@L[widget.EffectiveTitle]</div>
                 }
                 <div class="dashboard-widget__body">
                     @if (widget.Payload == "admin-overview")
@@ -82,9 +90,13 @@
                     {
                         <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
                     }
+                    else if (widget.Payload == "content-pages")
+                    {
+                        <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
+                    }
                     else if (widget.Payload == "weekday-date")
                     {
-                        <partial name="_DashboardDateWidget" />
+                        <partial name="_DashboardDateWidget" model="widget.IntData == 1" />
                     }
                     else
                     {
@@ -100,6 +112,26 @@
                             aria-label="@L["Remove widget"]">
                         ×
                     </button>
+                    @if (widget.Payload == "weekday-date")
+                    {
+                        <button type="button"
+                                class="dashboard-widget__settings-toggle"
+                                data-widget-settings-toggle
+                                title="@L["Widget settings"]"
+                                aria-label="@L["Widget settings"]"
+                                aria-expanded="false">
+                            <span class="dashboard-widget__settings-icon" aria-hidden="true"></span>
+                        </button>
+                        <div class="dashboard-widget__settings-panel" data-widget-settings-panel hidden>
+                            <label>
+                                <span>@L["Week number"]</span>
+                                <select data-widget-int-data-control>
+                                    <option value="0" selected="@(widget.IntData != 1)">@L["Show week number"]</option>
+                                    <option value="1" selected="@(widget.IntData == 1)">@L["Hide week number"]</option>
+                                </select>
+                            </label>
+                        </div>
+                    }
                     <span class="dashboard-widget__resize" data-widget-resize aria-hidden="true"></span>
                 }
             </article>
@@ -168,8 +200,12 @@
             <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
         </template>
 
+        <template data-dashboard-widget-template="content-pages">
+            <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
+        </template>
+
         <template data-dashboard-widget-template="weekday-date">
-            <partial name="_DashboardDateWidget" />
+            <partial name="_DashboardDateWidget" model="false" />
         </template>
 
         <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">
@@ -190,10 +226,10 @@
                                 class="dashboard-widget-option"
                                 data-widget-option
                                 data-widget-id="@widget.WidgetId"
-                                data-widget-title="@widget.Title"
+                                data-widget-title="@L[widget.Title]"
                                 data-widget-type="@widget.WidgetType"
                                 data-widget-payload="@widget.Payload">
-                            <span class="dashboard-widget-option__title">@widget.Title</span>
+                            <span class="dashboard-widget-option__title">@L[widget.Title]</span>
                             <span class="dashboard-widget-option__meta">@L["Portal widget"]</span>
                         </button>
                     }

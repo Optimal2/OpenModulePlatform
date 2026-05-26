@@ -47,7 +47,8 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'user_active_widgets', N'width'),
         (N'omp_portal', N'user_active_widgets', N'height'),
         (N'omp_portal', N'user_dashboard_preferences', N'user_id'),
-        (N'omp_portal', N'user_dashboard_preferences', N'layout_mode')
+        (N'omp_portal', N'user_dashboard_preferences', N'align_to_grid'),
+        (N'omp_portal', N'user_dashboard_preferences', N'expanded_canvas')
     ) AS v(SchemaName, TableName, ColumnName)
 )
 SELECT @Missing = @Missing + COUNT(1)
@@ -100,8 +101,14 @@ END;
 IF OBJECT_ID(N'omp_portal.widgets', N'U') IS NOT NULL
 BEGIN
     SELECT @Missing = @Missing + CASE
-        WHEN EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'portal-clock')
-         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'portal-links')
+        WHEN EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'blank-rectangle')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'admin-overview')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'portal-entry-favorites')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'portal-entry-list')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'portal-entry-combolist')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'user-roles')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'content-pages')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'weekday-date')
         THEN 0 ELSE 1 END;
 END;
 
