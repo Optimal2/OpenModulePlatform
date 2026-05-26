@@ -1,0 +1,14 @@
+{
+  "tracks": [
+    {
+      "title": "Track 001",
+      "artist": "OpenModulePlatform",
+      "src": "001.mp3"
+    },
+    {
+      "title": "Track 002",
+      "artist": "OpenModulePlatform",
+      "src": "002.mp3"
+    }
+  ]
+}

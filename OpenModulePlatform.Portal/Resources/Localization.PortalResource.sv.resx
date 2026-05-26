@@ -2167,4 +2167,18 @@
   <data name="1 column" xml:space="preserve"><value>1 kolumn</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 kolumner</value></data>
   <data name="3 columns" xml:space="preserve"><value>3 kolumner</value></data>
+  <data name="Music player" xml:space="preserve"><value>Musikspelare</value></data>
+  <data name="Loading playlist" xml:space="preserve"><value>Laddar spellista</value></data>
+  <data name="No tracks available" xml:space="preserve"><value>Inga låtar tillgängliga</value></data>
+  <data name="Could not play track" xml:space="preserve"><value>Kunde inte spela låten</value></data>
+  <data name="Local file" xml:space="preserve"><value>Lokal fil</value></data>
+  <data name="No track selected" xml:space="preserve"><value>Ingen låt vald</value></data>
+  <data name="Seek" xml:space="preserve"><value>Sök</value></data>
+  <data name="Previous track" xml:space="preserve"><value>Föregående låt</value></data>
+  <data name="Play" xml:space="preserve"><value>Spela</value></data>
+  <data name="Pause" xml:space="preserve"><value>Pausa</value></data>
+  <data name="Next track" xml:space="preserve"><value>Nästa låt</value></data>
+  <data name="Shuffle" xml:space="preserve"><value>Blanda</value></data>
+  <data name="Loop" xml:space="preserve"><value>Loopa</value></data>
+  <data name="Add local MP3 files" xml:space="preserve"><value>Lägg till lokala MP3-filer</value></data>
 </root>
