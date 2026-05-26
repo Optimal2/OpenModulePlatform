@@ -1,0 +1,45 @@
+@using OpenModulePlatform.Portal.Localization
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+<div class="dashboard-music-player"
+     data-dashboard-music-player
+     data-playlist-url="@Url.Content("~/media/music-player/playlist.json")"
+     data-loading-label="@L["Loading playlist"]"
+     data-no-tracks-label="@L["No tracks available"]"
+     data-error-label="@L["Could not play track"]"
+     data-local-artist-label="@L["Local file"]">
+    <audio preload="metadata" data-music-audio></audio>
+    <div class="dashboard-music-player__track">
+        <div class="dashboard-music-player__cover" aria-hidden="true">
+            <span></span>
+        </div>
+        <div class="dashboard-music-player__metadata">
+            <div class="dashboard-music-player__title" data-music-title>@L["No track selected"]</div>
+            <div class="dashboard-music-player__artist" data-music-artist>@L["Music player"]</div>
+        </div>
+    </div>
+    <div class="dashboard-music-player__progress">
+        <span data-music-current>0:00</span>
+        <input type="range" min="0" max="100" step="0.1" value="0" data-music-seek aria-label="@L["Seek"]" />
+        <span data-music-duration>0:00</span>
+    </div>
+    <div class="dashboard-music-player__controls">
+        <button type="button" class="dashboard-music-player__button" data-music-previous aria-label="@L["Previous track"]" title="@L["Previous track"]">
+            <span class="dashboard-music-player__icon dashboard-music-player__icon--previous" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="dashboard-music-player__button dashboard-music-player__button--primary" data-music-play aria-label="@L["Play"]" title="@L["Play"]" data-play-label="@L["Play"]" data-pause-label="@L["Pause"]">
+            <span class="dashboard-music-player__icon dashboard-music-player__icon--play" aria-hidden="true"></span>
+            <span class="dashboard-music-player__icon dashboard-music-player__icon--pause" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="dashboard-music-player__button" data-music-next aria-label="@L["Next track"]" title="@L["Next track"]">
+            <span class="dashboard-music-player__icon dashboard-music-player__icon--next" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="dashboard-music-player__button" data-music-shuffle aria-label="@L["Shuffle"]" title="@L["Shuffle"]" aria-pressed="false">S</button>
+        <button type="button" class="dashboard-music-player__button" data-music-loop aria-label="@L["Loop"]" title="@L["Loop"]" aria-pressed="false">L</button>
+        <label class="dashboard-music-player__button dashboard-music-player__file" title="@L["Add local MP3 files"]" aria-label="@L["Add local MP3 files"]">
+            <input type="file" accept="audio/mpeg,.mp3" multiple data-music-files />
+            <span class="dashboard-music-player__icon dashboard-music-player__icon--add" aria-hidden="true"></span>
+        </label>
+    </div>
+    <div class="dashboard-music-player__status" data-music-status>@L["Loading playlist"]</div>
+</div>

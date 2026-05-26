@@ -592,6 +592,7 @@ ORDER BY w.title,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" => 416,
             "content-pages" => 416,
             "user-roles" => 384,
+            "music-player" => 384,
             "weekday-date" => 288,
             _ => DefaultWidgetWidth
         };
@@ -603,6 +604,7 @@ ORDER BY w.title,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" => 384,
             "content-pages" => 384,
             "user-roles" => 320,
+            "music-player" => 256,
             "weekday-date" => 160,
             _ => DefaultWidgetHeight
         };

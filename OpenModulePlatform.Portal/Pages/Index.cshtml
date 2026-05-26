@@ -107,6 +107,10 @@
                     {
                         <partial name="_DashboardDateWidget" model="widget.IntData == 1" />
                     }
+                    else if (widget.Payload == "music-player")
+                    {
+                        <partial name="_DashboardMusicPlayerWidget" />
+                    }
                     else
                     {
                         <div class="dashboard-widget__blank"></div>
@@ -235,6 +239,10 @@
 
         <template data-dashboard-widget-template="weekday-date">
             <partial name="_DashboardDateWidget" model="false" />
+        </template>
+
+        <template data-dashboard-widget-template="music-player">
+            <partial name="_DashboardMusicPlayerWidget" />
         </template>
 
         <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">

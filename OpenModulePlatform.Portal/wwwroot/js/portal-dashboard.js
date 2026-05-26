@@ -10,6 +10,7 @@
     const defaultViewBottomPadding = 32;
     const defaultEmptyCanvasHeight = 220;
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
+    const musicObjectUrls = new Set();
 
     function initDashboard(root) {
         const canvas = root.querySelector('[data-dashboard-canvas]');
@@ -30,6 +31,7 @@
                 updateCanvasHeight(root, canvas);
                 window.addEventListener('resize', () => updateCanvasHeight(root, canvas));
             }
+            bindDashboardMusicPlayers(root);
             bindEntryListFilters(root);
             return;
         }
@@ -188,6 +190,7 @@
                 bindWidget(root, canvas, element, token, () => ++maxOrder, state, updateDirtyState);
                 bindEntryFavoriteToggles(root, element, token);
                 bindEntryListFilters(element);
+                bindDashboardMusicPlayers(element);
                 updateEmptyState(canvas);
                 updateCanvasHeight(root, canvas, state);
                 updateDirtyState();
@@ -203,6 +206,7 @@
         });
         bindEntryFavoriteToggles(root, root, token);
         bindEntryListFilters(root);
+        bindDashboardMusicPlayers(root);
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
         state.savedSignature = getDashboardSignature(canvas, state);
         updateDirtyState();
@@ -274,7 +278,7 @@
                 return;
             }
 
-            if (event.target.closest('button, a, input, textarea, select, summary, [data-widget-resize], [data-widget-settings-panel]')) {
+            if (event.target.closest('button, a, input, textarea, select, label, summary, [data-widget-resize], [data-widget-settings-panel]')) {
                 return;
             }
 
@@ -874,6 +878,321 @@
             row.dataset.entryKey,
             row.textContent
         ].join(' '));
+    }
+
+    function bindDashboardMusicPlayers(scope) {
+        scope.querySelectorAll('[data-dashboard-music-player]').forEach((player) => {
+            if (player.dataset.dashboardMusicBound === 'true') {
+                return;
+            }
+
+            player.dataset.dashboardMusicBound = 'true';
+            initDashboardMusicPlayer(player);
+        });
+    }
+
+    async function initDashboardMusicPlayer(player) {
+        const audio = player.querySelector('[data-music-audio]');
+        const title = player.querySelector('[data-music-title]');
+        const artist = player.querySelector('[data-music-artist]');
+        const status = player.querySelector('[data-music-status]');
+        const seek = player.querySelector('[data-music-seek]');
+        const current = player.querySelector('[data-music-current]');
+        const duration = player.querySelector('[data-music-duration]');
+        const play = player.querySelector('[data-music-play]');
+        const previous = player.querySelector('[data-music-previous]');
+        const next = player.querySelector('[data-music-next]');
+        const shuffle = player.querySelector('[data-music-shuffle]');
+        const loop = player.querySelector('[data-music-loop]');
+        const files = player.querySelector('[data-music-files]');
+        if (!audio || !play) {
+            return;
+        }
+
+        const state = {
+            tracks: [],
+            index: 0,
+            shuffle: false,
+            loop: false,
+            seeking: false
+        };
+
+        const setStatus = (message) => {
+            if (status) {
+                status.textContent = message || '';
+            }
+        };
+
+        const setTrackText = (track) => {
+            if (title) {
+                title.textContent = track?.title || player.dataset.noTracksLabel || 'No tracks available';
+            }
+            if (artist) {
+                artist.textContent = track?.artist || player.dataset.localArtistLabel || '';
+            }
+        };
+
+        const updatePlayState = () => {
+            const isPlaying = !audio.paused && !audio.ended;
+            player.classList.toggle('is-playing', isPlaying);
+            const label = isPlaying
+                ? play.dataset.pauseLabel || 'Pause'
+                : play.dataset.playLabel || 'Play';
+            play.setAttribute('aria-label', label);
+            play.title = label;
+        };
+
+        const updateProgress = () => {
+            const total = Number.isFinite(audio.duration) ? audio.duration : 0;
+            const position = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+            if (current) {
+                current.textContent = formatMusicTime(position);
+            }
+            if (duration) {
+                duration.textContent = formatMusicTime(total);
+            }
+            if (seek && !state.seeking) {
+                seek.value = total > 0 ? String((position / total) * 100) : '0';
+            }
+        };
+
+        const setTrack = (index, autoplay = false) => {
+            if (state.tracks.length === 0) {
+                audio.removeAttribute('src');
+                setTrackText(null);
+                setStatus(player.dataset.noTracksLabel || 'No tracks available');
+                updateProgress();
+                updatePlayState();
+                return;
+            }
+
+            state.index = normalizeTrackIndex(index, state.tracks.length);
+            const track = state.tracks[state.index];
+            audio.src = track.src;
+            setTrackText(track);
+            setStatus(`${state.index + 1} / ${state.tracks.length}`);
+            updateProgress();
+
+            if (autoplay) {
+                playAudio(audio, player);
+            }
+        };
+
+        const move = (direction, autoplay = true) => {
+            if (state.tracks.length === 0) {
+                return;
+            }
+
+            if (state.shuffle && state.tracks.length > 1) {
+                let nextIndex = state.index;
+                while (nextIndex === state.index) {
+                    nextIndex = Math.floor(Math.random() * state.tracks.length);
+                }
+                setTrack(nextIndex, autoplay);
+                return;
+            }
+
+            const nextIndex = state.index + direction;
+            if (nextIndex >= state.tracks.length && !state.loop) {
+                setTrack(state.tracks.length - 1, false);
+                return;
+            }
+            if (nextIndex < 0 && !state.loop) {
+                setTrack(0, false);
+                return;
+            }
+
+            setTrack(nextIndex, autoplay);
+        };
+
+        play.addEventListener('click', () => {
+            if (!audio.src && state.tracks.length > 0) {
+                setTrack(state.index, false);
+            }
+
+            if (audio.paused || audio.ended) {
+                playAudio(audio, player);
+            } else {
+                audio.pause();
+            }
+        });
+
+        previous?.addEventListener('click', () => move(-1));
+        next?.addEventListener('click', () => move(1));
+        shuffle?.addEventListener('click', () => {
+            state.shuffle = !state.shuffle;
+            shuffle.setAttribute('aria-pressed', String(state.shuffle));
+        });
+        loop?.addEventListener('click', () => {
+            state.loop = !state.loop;
+            loop.setAttribute('aria-pressed', String(state.loop));
+        });
+
+        seek?.addEventListener('input', () => {
+            state.seeking = true;
+        });
+        seek?.addEventListener('change', () => {
+            const total = Number.isFinite(audio.duration) ? audio.duration : 0;
+            if (total > 0) {
+                audio.currentTime = total * ((parseFloat(seek.value || '0') || 0) / 100);
+            }
+            state.seeking = false;
+            updateProgress();
+        });
+
+        audio.addEventListener('play', updatePlayState);
+        audio.addEventListener('pause', updatePlayState);
+        audio.addEventListener('ended', () => {
+            updatePlayState();
+            move(1, true);
+        });
+        audio.addEventListener('loadedmetadata', updateProgress);
+        audio.addEventListener('timeupdate', updateProgress);
+        audio.addEventListener('error', () => {
+            setStatus(player.dataset.errorLabel || 'Could not play track');
+            updatePlayState();
+        });
+
+        files?.addEventListener('change', () => {
+            const previousCount = state.tracks.length;
+            addLocalMusicFiles(state, files.files, player);
+            if (state.tracks.length > previousCount) {
+                setTrack(previousCount, true);
+            }
+            files.value = '';
+        });
+
+        player.addEventListener('dragover', (event) => {
+            if (!hasMusicTransfer(event.dataTransfer)) {
+                return;
+            }
+            event.preventDefault();
+            player.classList.add('is-dragover');
+        });
+        player.addEventListener('dragleave', () => {
+            player.classList.remove('is-dragover');
+        });
+        player.addEventListener('drop', (event) => {
+            if (!hasMusicTransfer(event.dataTransfer)) {
+                return;
+            }
+            event.preventDefault();
+            player.classList.remove('is-dragover');
+            const previousCount = state.tracks.length;
+            addLocalMusicFiles(state, event.dataTransfer?.files, player);
+            if (state.tracks.length > previousCount) {
+                setTrack(previousCount, true);
+            }
+        });
+
+        setStatus(player.dataset.loadingLabel || 'Loading playlist');
+        state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl || '');
+        setTrack(0, false);
+    }
+
+    async function playAudio(audio, player) {
+        try {
+            await audio.play();
+        } catch {
+            const status = player.querySelector('[data-music-status]');
+            if (status) {
+                status.textContent = player.dataset.errorLabel || 'Could not play track';
+            }
+        }
+    }
+
+    async function loadMusicPlaylist(playlistUrl) {
+        if (!playlistUrl) {
+            return [];
+        }
+
+        try {
+            const response = await fetch(playlistUrl, { credentials: 'same-origin' });
+            if (!response.ok) {
+                return [];
+            }
+
+            const json = await response.json();
+            const baseUrl = new URL(response.url || playlistUrl, document.baseURI);
+            return Array.isArray(json.tracks)
+                ? json.tracks.map((track) => normalizePlaylistTrack(track, baseUrl)).filter(Boolean)
+                : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function normalizePlaylistTrack(track, baseUrl) {
+        if (!track || typeof track !== 'object') {
+            return null;
+        }
+
+        const rawSource = String(track.src || track.url || '').trim();
+        if (!rawSource) {
+            return null;
+        }
+
+        let source;
+        try {
+            source = new URL(rawSource, baseUrl).toString();
+        } catch {
+            return null;
+        }
+
+        return {
+            src: source,
+            title: String(track.title || getFileStem(rawSource) || 'Track').trim(),
+            artist: String(track.artist || '').trim()
+        };
+    }
+
+    function addLocalMusicFiles(state, fileList, player) {
+        const files = Array.from(fileList || [])
+            .filter(isMusicFile);
+        files.forEach((file) => {
+            const source = URL.createObjectURL(file);
+            musicObjectUrls.add(source);
+            state.tracks.push({
+                src: source,
+                title: getFileStem(file.name) || file.name,
+                artist: player.dataset.localArtistLabel || 'Local file'
+            });
+        });
+    }
+
+    function hasMusicTransfer(dataTransfer) {
+        return Array.from(dataTransfer?.items || []).some((item) => {
+            const file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
+            return item.type === 'audio/mpeg' || isMusicFile(file);
+        }) || Array.from(dataTransfer?.files || []).some(isMusicFile);
+    }
+
+    function isMusicFile(file) {
+        return !!file && (file.type === 'audio/mpeg' || file.name.toLowerCase().endsWith('.mp3'));
+    }
+
+    function normalizeTrackIndex(index, count) {
+        if (count <= 0) {
+            return 0;
+        }
+
+        return ((index % count) + count) % count;
+    }
+
+    function formatMusicTime(seconds) {
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+            return '0:00';
+        }
+
+        const rounded = Math.floor(seconds);
+        const minutes = Math.floor(rounded / 60);
+        const remainingSeconds = rounded % 60;
+        return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+    }
+
+    function getFileStem(path) {
+        const name = String(path || '').split(/[\\/]/).pop() || '';
+        return name.replace(/\.[^.]+$/, '');
     }
 
     function normalizeSearchText(value) {
@@ -1540,4 +1859,8 @@
     }
 
     window.addEventListener(favoriteChangedEvent, handleExternalFavoriteChanged);
+    window.addEventListener('beforeunload', () => {
+        musicObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+        musicObjectUrls.clear();
+    });
 })();

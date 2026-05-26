@@ -370,6 +370,13 @@ USING
            N'weekday-date' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'music-player' AS widget_key,
+           N'Music player' AS title,
+           N'portal' AS widget_type,
+           N'music-player' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
 ) AS source
 ON target.widget_key = source.widget_key
 WHEN MATCHED THEN
