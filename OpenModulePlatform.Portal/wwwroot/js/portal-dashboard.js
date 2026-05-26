@@ -56,6 +56,7 @@
         updateExpandedCanvasState(root, null, state.expandedCanvas);
         updateCanvasHeight(root, canvas, state);
         window.addEventListener('resize', () => updateCanvasHeight(root, canvas, state));
+        bindDashboardBoxSelection(root, canvas);
 
         editToggle.addEventListener('click', async () => {
             if (isEditing) {
@@ -119,6 +120,7 @@
             await postForm(root.dataset.resetUrl, token, {});
             canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => widget.remove());
             maxOrder = 0;
+            updateWidgetSelectionState(root, canvas);
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
             state.addedWidgetIds.clear();
@@ -222,6 +224,9 @@
             }
 
             root.classList.toggle('is-editing', isEditing);
+            if (!isEditing) {
+                clearWidgetSelection(root, canvas);
+            }
             editToggle.setAttribute('aria-pressed', isEditing ? 'true' : 'false');
             if (editLabel) {
                 editLabel.textContent = isEditing
@@ -274,12 +279,26 @@
             }
 
             event.preventDefault();
-            bringToFront(widget, nextOrder());
+            const selectedWidgets = getSelectedWidgets(canvas);
+            const movesSelection = selectedWidgets.length > 1 && widget.classList.contains('is-selected');
+            if (movesSelection) {
+                selectedWidgets.forEach((selectedWidget) => bringToFront(selectedWidget, nextOrder()));
+            } else {
+                if (!(selectedWidgets.length === 1 && widget.classList.contains('is-selected'))) {
+                    clearWidgetSelection(root, canvas);
+                }
+                bringToFront(widget, nextOrder());
+            }
+
             startDrag(root, canvas, widget, event, state, onChange);
         });
 
         resizeHandle?.addEventListener('pointerdown', (event) => {
             if (!root.classList.contains('is-editing') || event.button !== 0) {
+                return;
+            }
+
+            if (getSelectedWidgets(canvas).length > 1 && widget.classList.contains('is-selected')) {
                 return;
             }
 
@@ -302,10 +321,146 @@
                 state.pendingRemovedWidgetIds.add(userActiveWidgetId);
             }
             widget.remove();
+            updateWidgetSelectionState(root, canvas);
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
             onChange();
         });
+    }
+
+    function bindDashboardBoxSelection(root, canvas) {
+        if (canvas.dataset.dashboardBoxSelectionBound === 'true') {
+            return;
+        }
+
+        canvas.dataset.dashboardBoxSelectionBound = 'true';
+        canvas.addEventListener('pointerdown', (event) => {
+            if (!root.classList.contains('is-editing') || event.button !== 0) {
+                return;
+            }
+
+            if (event.target.closest('[data-dashboard-widget], button, a, input, textarea, select, summary')) {
+                return;
+            }
+
+            event.preventDefault();
+
+            const start = getCanvasPointerPosition(canvas, event);
+            const selectionBox = document.createElement('div');
+            selectionBox.className = 'dashboard-selection-box';
+            selectionBox.setAttribute('aria-hidden', 'true');
+            canvas.appendChild(selectionBox);
+            canvas.setPointerCapture(event.pointerId);
+
+            let moved = false;
+            const move = (moveEvent) => {
+                const current = getCanvasPointerPosition(canvas, moveEvent);
+                moved = moved
+                    || Math.abs(current.x - start.x) > 3
+                    || Math.abs(current.y - start.y) > 3;
+                const rect = normalizeSelectionRect(start, current);
+                positionSelectionBox(selectionBox, rect);
+                selectWidgetsInRect(root, canvas, rect);
+            };
+
+            const end = () => {
+                selectionBox.remove();
+                canvas.removeEventListener('pointermove', move);
+                canvas.removeEventListener('pointerup', end);
+                canvas.removeEventListener('pointercancel', end);
+
+                if (!moved) {
+                    clearWidgetSelection(root, canvas);
+                } else {
+                    updateWidgetSelectionState(root, canvas);
+                }
+            };
+
+            canvas.addEventListener('pointermove', move);
+            canvas.addEventListener('pointerup', end);
+            canvas.addEventListener('pointercancel', end);
+        });
+    }
+
+    function getCanvasPointerPosition(canvas, event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: event.clientX - rect.left + canvas.scrollLeft,
+            y: event.clientY - rect.top + canvas.scrollTop
+        };
+    }
+
+    function normalizeSelectionRect(start, current) {
+        const left = Math.min(start.x, current.x);
+        const top = Math.min(start.y, current.y);
+        const right = Math.max(start.x, current.x);
+        const bottom = Math.max(start.y, current.y);
+        return {
+            left,
+            top,
+            right,
+            bottom,
+            width: right - left,
+            height: bottom - top
+        };
+    }
+
+    function positionSelectionBox(selectionBox, rect) {
+        selectionBox.style.left = `${rect.left}px`;
+        selectionBox.style.top = `${rect.top}px`;
+        selectionBox.style.width = `${rect.width}px`;
+        selectionBox.style.height = `${rect.height}px`;
+    }
+
+    function selectWidgetsInRect(root, canvas, selectionRect) {
+        canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => {
+            const rect = getWidgetCanvasRect(widget);
+            setWidgetSelected(widget, rectsIntersect(selectionRect, rect));
+        });
+        updateWidgetSelectionState(root, canvas);
+    }
+
+    function getWidgetCanvasRect(widget) {
+        const left = parsePixel(widget.style.left);
+        const top = parsePixel(widget.style.top);
+        return {
+            left,
+            top,
+            right: left + widget.offsetWidth,
+            bottom: top + widget.offsetHeight
+        };
+    }
+
+    function rectsIntersect(left, right) {
+        return left.left < right.right
+            && left.right > right.left
+            && left.top < right.bottom
+            && left.bottom > right.top;
+    }
+
+    function getSelectedWidgets(canvas) {
+        return Array.from(canvas.querySelectorAll('[data-dashboard-widget].is-selected'));
+    }
+
+    function setWidgetSelected(widget, selected) {
+        widget.classList.toggle('is-selected', selected);
+        if (selected) {
+            widget.setAttribute('aria-selected', 'true');
+        } else {
+            widget.removeAttribute('aria-selected');
+        }
+    }
+
+    function clearWidgetSelection(root, canvas) {
+        getSelectedWidgets(canvas).forEach((widget) => setWidgetSelected(widget, false));
+        updateWidgetSelectionState(root, canvas);
+    }
+
+    function updateWidgetSelectionState(root, canvas) {
+        const selectedCount = getSelectedWidgets(canvas).length;
+        root.classList.toggle('has-selected-widgets', selectedCount > 0);
+        root.classList.toggle('has-multi-selected-widgets', selectedCount > 1);
+        canvas.dataset.selectedWidgetCount = String(selectedCount);
     }
 
     function bindWidgetSettings(root, widget, onChange = () => {}) {
@@ -733,22 +888,39 @@
         const startScrollY = window.scrollY || window.pageYOffset || 0;
         const startLeft = widgetRect.left - canvasRect.left + canvas.scrollLeft;
         const startTop = widgetRect.top - canvasRect.top + canvas.scrollTop;
+        const selectedWidgets = getSelectedWidgets(canvas);
+        const dragWidgets = selectedWidgets.length > 1 && widget.classList.contains('is-selected')
+            ? selectedWidgets
+            : [widget];
+        const widgetPositions = dragWidgets.map((dragWidget) => ({
+            widget: dragWidget,
+            left: parsePixel(dragWidget.style.left),
+            top: parsePixel(dragWidget.style.top)
+        }));
+        const activeStart = widgetPositions.find((item) => item.widget === widget) || { left: startLeft, top: startTop };
+        const minStartLeft = widgetPositions.reduce((min, item) => Math.min(min, item.left), Number.POSITIVE_INFINITY);
+        const minStartTop = widgetPositions.reduce((min, item) => Math.min(min, item.top), Number.POSITIVE_INFINITY);
 
         widget.setPointerCapture(event.pointerId);
-        widget.classList.add('is-moving');
+        dragWidgets.forEach((dragWidget) => dragWidget.classList.add('is-moving'));
 
         const move = (moveEvent) => {
             autoScrollPageVertically(moveEvent);
             const nextLeft = Math.max(0, startLeft + moveEvent.clientX - startX);
             const scrollDeltaY = (window.scrollY || window.pageYOffset || 0) - startScrollY;
             const nextTop = Math.max(0, startTop + moveEvent.clientY - startY + scrollDeltaY);
-            widget.style.left = `${snapIfNeeded(nextLeft, state)}px`;
-            widget.style.top = `${snapIfNeeded(nextTop, state)}px`;
+            const deltaLeft = Math.max(snapIfNeeded(nextLeft, state) - activeStart.left, -minStartLeft);
+            const deltaTop = Math.max(snapIfNeeded(nextTop, state) - activeStart.top, -minStartTop);
+
+            widgetPositions.forEach((item) => {
+                item.widget.style.left = `${item.left + deltaLeft}px`;
+                item.widget.style.top = `${item.top + deltaTop}px`;
+            });
             updateCanvasHeight(root, canvas, state);
         };
 
         const end = () => {
-            widget.classList.remove('is-moving');
+            dragWidgets.forEach((dragWidget) => dragWidget.classList.remove('is-moving'));
             widget.removeEventListener('pointermove', move);
             widget.removeEventListener('pointerup', end);
             widget.removeEventListener('pointercancel', end);
@@ -1061,6 +1233,7 @@
         state.addedWidgetIds.clear();
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
         state.savedSignature = getDashboardSignature(canvas, state);
+        updateWidgetSelectionState(root, canvas);
         updateEmptyState(canvas);
         updateCanvasHeight(root, canvas, state);
     }
