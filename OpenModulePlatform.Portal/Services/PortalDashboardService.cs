@@ -589,7 +589,7 @@ ORDER BY w.title,
         => definition.Payload switch
         {
             "admin-overview" => 768,
-            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 416,
+            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" => 416,
             "content-pages" => 416,
             "user-roles" => 384,
             "weekday-date" => 288,
@@ -600,7 +600,7 @@ ORDER BY w.title,
         => definition.Payload switch
         {
             "admin-overview" => 384,
-            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" => 384,
+            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" => 384,
             "content-pages" => 384,
             "user-roles" => 320,
             "weekday-date" => 160,

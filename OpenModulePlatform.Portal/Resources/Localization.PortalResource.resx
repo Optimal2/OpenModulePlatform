@@ -2055,4 +2055,13 @@
   <data name="User roles" xml:space="preserve"><value>User roles</value></data>
   <data name="Weekday and date" xml:space="preserve"><value>Weekday and date</value></data>
   <data name="Content pages" xml:space="preserve"><value>Content pages</value></data>
+  <data name="Show portal navbar" xml:space="preserve"><value>Show portal navbar</value></data>
+  <data name="When this is turned off, the Portal navbar below the topbar is hidden." xml:space="preserve"><value>When this is turned off, the Portal navbar below the topbar is hidden.</value></data>
+  <data name="Portal navigation" xml:space="preserve"><value>Portal navigation</value></data>
+  <data name="No navigation links to show." xml:space="preserve"><value>No navigation links to show.</value></data>
+  <data name="Column count" xml:space="preserve"><value>Column count</value></data>
+  <data name="Default" xml:space="preserve"><value>Default</value></data>
+  <data name="1 column" xml:space="preserve"><value>1 column</value></data>
+  <data name="2 columns" xml:space="preserve"><value>2 columns</value></data>
+  <data name="3 columns" xml:space="preserve"><value>3 columns</value></data>
 </root>

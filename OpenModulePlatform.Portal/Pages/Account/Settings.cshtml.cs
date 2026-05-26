@@ -188,6 +188,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         }
 
         await _settings.UpsertTopbarDropdownsOpenOnHoverAsync(userId, PortalInput.TopbarDropdownsOpenOnHover, ct);
+        await _settings.UpsertShowPortalNavbarAsync(userId, PortalInput.ShowPortalNavbar, ct);
 
         StatusMessage = T("Settings saved.");
         return RedirectToSettings(PortalTab);
@@ -222,6 +223,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         if (loadPortalInput)
         {
             PortalInput.TopbarDropdownsOpenOnHover = settings.TopbarDropdownsOpenOnHover;
+            PortalInput.ShowPortalNavbar = settings.ShowPortalNavbar;
         }
 
         var permissions = await GetUserPermissionsAsync(ct);
@@ -426,5 +428,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     public sealed class PortalInputModel
     {
         public bool TopbarDropdownsOpenOnHover { get; set; } = true;
+
+        public bool ShowPortalNavbar { get; set; } = true;
     }
 }
