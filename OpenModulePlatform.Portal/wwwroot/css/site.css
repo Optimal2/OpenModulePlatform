@@ -1425,7 +1425,26 @@ button {
     padding: 0;
 }
 
+.dashboard-widget[data-widget-payload="portal-entry-list"][data-widget-columns="1"] .dashboard-entry-list,
+.dashboard-widget[data-widget-payload="portal-entry-list"][data-widget-columns="2"] .dashboard-entry-list,
+.dashboard-widget[data-widget-payload="portal-entry-list"][data-widget-columns="3"] .dashboard-entry-list {
+    grid-template-columns: repeat(var(--dashboard-entry-list-columns, 1), minmax(0, 1fr));
+}
+
+.dashboard-widget[data-widget-payload="portal-entry-list"][data-widget-columns="1"] {
+    --dashboard-entry-list-columns: 1;
+}
+
+.dashboard-widget[data-widget-payload="portal-entry-list"][data-widget-columns="2"] {
+    --dashboard-entry-list-columns: 2;
+}
+
+.dashboard-widget[data-widget-payload="portal-entry-list"][data-widget-columns="3"] {
+    --dashboard-entry-list-columns: 3;
+}
+
 .dashboard-entry-list__search {
+    grid-column: 1 / -1;
     padding-bottom: 4px;
     background: var(--surface);
 }
@@ -1447,6 +1466,7 @@ button {
 }
 
 .dashboard-entry-list__section {
+    grid-column: 1 / -1;
     padding: 2px 2px 0;
     color: var(--text-muted);
     font-size: 0.78rem;
@@ -1456,6 +1476,7 @@ button {
 }
 
 .dashboard-entry-list__empty {
+    grid-column: 1 / -1;
     display: grid;
     min-height: 80px;
     place-items: center;
@@ -1702,6 +1723,67 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-content-list__empty {
+    display: grid;
+    min-height: 80px;
+    place-items: center;
+    padding: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.dashboard-navbar-list {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    padding: 4px;
+}
+
+.dashboard-navbar-list__section {
+    display: grid;
+    gap: 6px;
+}
+
+.dashboard-navbar-list__section h4 {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.dashboard-navbar-list__links {
+    display: grid;
+    gap: 6px;
+}
+
+.dashboard-navbar-list__link {
+    display: block;
+    min-height: 40px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 650;
+    overflow: hidden;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-navbar-list__link:hover,
+.dashboard-navbar-list__link:focus-visible {
+    border-color: var(--border-strong);
+    background: var(--surface-muted);
+    color: var(--text);
+    outline: none;
+}
+
+.dashboard-navbar-list__empty {
     display: grid;
     min-height: 80px;
     place-items: center;
