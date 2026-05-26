@@ -64,7 +64,7 @@ public sealed class PortalTopBarService
 
         var branding = await _brandingService.GetBrandingAsync(ct);
         var portalLink = new PortalTopBarLink(
-            branding.PortalDisplayName,
+            branding.PlatformName,
             PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         var cultureSelection = _cultureSelectionService.Resolve(options, request);
@@ -243,7 +243,7 @@ public sealed class PortalTopBarService
 
         var branding = await _brandingService.GetBrandingAsync(ct);
         var portalLink = new PortalTopBarLink(
-            branding.PortalDisplayName,
+            branding.PlatformName,
             PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         var cultureSelection = _cultureSelectionService.ResolveFromCurrentCulture(options);

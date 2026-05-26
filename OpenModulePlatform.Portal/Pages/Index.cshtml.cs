@@ -47,7 +47,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public bool DashboardAlignToGrid { get; private set; } = true;
 
-    public bool DashboardExpandedCanvas { get; private set; }
+    public bool DashboardExpandedCanvas { get; private set; } = true;
 
     public OverviewMetrics Metrics { get; private set; } = new();
 
@@ -113,8 +113,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             return Forbid();
         }
 
-        await _dashboard.SetPreferencesAsync(userId, alignToGrid, expandedCanvas, ct);
-        return new JsonResult(new { ok = true, alignToGrid, expandedCanvas });
+        await _dashboard.SetPreferencesAsync(userId, alignToGrid, expandedCanvas: true, ct);
+        return new JsonResult(new { ok = true, alignToGrid, expandedCanvas = true });
     }
 
     public async Task<IActionResult> OnPostRemoveWidget(long userActiveWidgetId, CancellationToken ct)
@@ -172,7 +172,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         {
             var preferences = await _dashboard.GetPreferencesAsync(userId.Value, ct);
             DashboardAlignToGrid = preferences.AlignToGrid;
-            DashboardExpandedCanvas = preferences.ExpandedCanvas;
+            DashboardExpandedCanvas = true;
             ActiveWidgets = await _dashboard.GetActiveWidgetsAsync(userId.Value, roleIds, permissions, ct);
             AvailableWidgets = await _dashboard.GetAvailableWidgetsAsync(roleIds, permissions, ct);
             AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId.Value, permissions, includeHidden: false, ct);
