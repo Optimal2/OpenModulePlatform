@@ -1275,6 +1275,8 @@ button {
 
 .portal-dashboard__canvas {
     position: relative;
+    width: var(--dashboard-canvas-width, 100%);
+    min-width: 100%;
     min-height: var(--dashboard-canvas-height, 760px);
     height: var(--dashboard-canvas-height, 760px);
     overflow: visible;

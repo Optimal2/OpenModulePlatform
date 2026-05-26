@@ -789,22 +789,28 @@
                 ? lowestWidgetBottom + (state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding))
                 : (state?.emptyCanvasHeight ?? parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight));
         canvas.style.setProperty('--dashboard-canvas-height', `${Math.ceil(nextHeight)}px`);
-        updatePageChromeWidth(canvas);
+        updateCanvasWidth(root, canvas, state);
     }
 
-    function updatePageChromeWidth(canvas) {
+    function updateCanvasWidth(root, canvas, state) {
         const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'));
         const lowestWidgetRight = widgets
             .reduce((max, widget) => Math.max(max, parsePixel(widget.style.left) + widget.offsetWidth), 0);
         if (lowestWidgetRight <= 0) {
+            canvas.style.setProperty('--dashboard-canvas-width', '100%');
             document.documentElement.style.setProperty('--portal-page-chrome-width', '100%');
             return;
         }
 
         const canvasLeft = Math.max(0, canvas.getBoundingClientRect().left);
         const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-        const pageWidth = Math.max(viewportWidth, Math.ceil(canvasLeft + lowestWidgetRight + 32));
+        const padding = root.classList.contains('is-editing')
+            ? state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)
+            : state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding);
+        const canvasWidth = Math.max(0, Math.ceil(lowestWidgetRight + padding));
+        const pageWidth = Math.max(viewportWidth, Math.ceil(canvasLeft + canvasWidth));
 
+        canvas.style.setProperty('--dashboard-canvas-width', `${canvasWidth}px`);
         document.documentElement.style.setProperty('--portal-page-chrome-width', `${pageWidth}px`);
     }
 
