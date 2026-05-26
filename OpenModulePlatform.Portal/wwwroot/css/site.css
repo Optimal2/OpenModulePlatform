@@ -1738,77 +1738,42 @@ a.dashboard-role-list__item:focus-visible {
     padding: 4px;
 }
 
-.dashboard-navbar-menu {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: flex-start;
+.dashboard-navbar-boxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+    gap: 10px;
+    align-items: start;
 }
 
-.dashboard-navbar-menu__link,
-.dashboard-navbar-dropdown summary {
-    min-height: 38px;
-    padding: 8px 12px;
-    border: 1px solid transparent;
+.dashboard-navbar-box {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--border);
     border-radius: 10px;
-    color: var(--text);
-    font-weight: 650;
-    text-decoration: none;
-}
-
-.dashboard-navbar-menu__link {
-    display: inline-flex;
-    align-items: center;
-}
-
-.dashboard-navbar-dropdown {
-    min-width: min(100%, 180px);
-}
-
-.dashboard-navbar-dropdown summary {
-    list-style: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    width: 100%;
     background: var(--surface);
-    cursor: pointer;
 }
 
-.dashboard-navbar-dropdown summary::-webkit-details-marker {
-    display: none;
-}
-
-.dashboard-navbar-dropdown summary::after {
-    content: "▾";
-    color: var(--text-muted);
-    font-size: 0.8rem;
-}
-
-.dashboard-navbar-menu__link:hover,
-.dashboard-navbar-menu__link:focus-visible,
-.dashboard-navbar-dropdown summary:hover,
-.dashboard-navbar-dropdown[open] summary {
-    border-color: var(--border);
-    background: var(--surface-muted);
+.dashboard-navbar-box h4 {
+    margin: 0;
     color: var(--text);
-    outline: none;
+    font-size: 0.82rem;
+    font-weight: 750;
 }
 
-.dashboard-navbar-dropdown__menu {
+.dashboard-navbar-box__links {
     display: grid;
     gap: 6px;
-    padding: 8px 0 0;
 }
 
-.dashboard-navbar-dropdown__menu a {
+.dashboard-navbar-box__links a {
     display: block;
     min-height: 34px;
     padding: 8px 10px;
-    border: 1px solid var(--border);
+    border: 1px solid transparent;
     border-radius: 8px;
-    background: var(--surface);
+    background: var(--surface-muted);
     color: var(--text);
     overflow: hidden;
     text-decoration: none;
@@ -1816,10 +1781,11 @@ a.dashboard-role-list__item:focus-visible {
     white-space: nowrap;
 }
 
-.dashboard-navbar-dropdown__menu a:hover,
-.dashboard-navbar-dropdown__menu a:focus-visible {
+.dashboard-navbar-box__links a:hover,
+.dashboard-navbar-box__links a:focus-visible {
     border-color: var(--border-strong);
-    background: var(--surface-muted);
+    background: var(--surface);
+    outline: none;
 }
 
 .dashboard-navbar-list__empty {
