@@ -1,14 +1,124 @@
 {
   "tracks": [
     {
-      "title": "Track 001",
-      "artist": "OpenModulePlatform",
-      "src": "001.mp3"
+      "title": "Glass Shop",
+      "artist": "Calima",
+      "src": "Calima - Glass Shop (freetouse.com).mp3",
+      "attribution": "Music track: Glass Shop by Calima",
+      "source": "https://freetouse.com/music",
+      "description": "Free Background Music for Video"
     },
     {
-      "title": "Track 002",
-      "artist": "OpenModulePlatform",
-      "src": "002.mp3"
+      "title": "Moving Mountains",
+      "artist": "Aeris",
+      "src": "Aeris - Moving Mountains (freetouse.com).mp3",
+      "attribution": "Music track: Moving Mountains by Aeris",
+      "source": "https://freetouse.com/music",
+      "description": "Copyright Free Music (Free Download)"
+    },
+    {
+      "title": "Momo Island",
+      "artist": "Piki",
+      "src": "Piki - Momo Island (freetouse.com).mp3",
+      "attribution": "Music track: Momo Island by Piki",
+      "source": "https://freetouse.com/music",
+      "description": "No Copyright Vlog Music for Video"
+    },
+    {
+      "title": "Uke Waves",
+      "artist": "Aylex",
+      "src": "Aylex - Uke Waves (freetouse.com).mp3",
+      "attribution": "Music track: Uke Waves by Aylex",
+      "source": "https://freetouse.com/music",
+      "description": "Free No Copyright Music Download"
+    },
+    {
+      "title": "Sentimental",
+      "artist": "Pufino",
+      "src": "Pufino - Sentimental (freetouse.com).mp3",
+      "attribution": "Music track: Sentimental by Pufino",
+      "source": "https://freetouse.com/music",
+      "description": "Background Music for Video (Free)"
+    },
+    {
+      "title": "Blue Skies",
+      "artist": "Zambolino",
+      "src": "Zambolino - Blue Skies (freetouse.com).mp3",
+      "attribution": "Music track: Blue Skies by Zambolino",
+      "source": "https://freetouse.com/music",
+      "description": "Royalty Free Music (Free Download)"
+    },
+    {
+      "title": "Dawn",
+      "artist": "Alegend",
+      "src": "Alegend - Dawn (freetouse.com).mp3",
+      "attribution": "Music track: Dawn by Alegend",
+      "source": "https://freetouse.com/music",
+      "description": "No Copyright Vlog Music for Videos"
+    },
+    {
+      "title": "Glamorous",
+      "artist": "Pufino",
+      "src": "Pufino - Glamorous (freetouse.com).mp3",
+      "attribution": "Music track: Glamorous by Pufino",
+      "source": "https://freetouse.com/music",
+      "description": "No Copyright Vlog Music for Videos"
+    },
+    {
+      "title": "We Are",
+      "artist": "Moavii",
+      "src": "Moavii - We Are (freetouse.com).mp3",
+      "attribution": "Music track: We Are by Moavii",
+      "source": "https://freetouse.com/music",
+      "description": "Copyright Free Music (Free Download)"
+    },
+    {
+      "title": "Sky Clearing",
+      "artist": "Epic Spectrum",
+      "src": "Epic Spectrum - Sky Clearing (freetouse.com).mp3",
+      "attribution": "Music track: Sky Clearing by Epic Spectrum",
+      "source": "https://freetouse.com/music",
+      "description": "Free To Use Music for Video"
+    },
+    {
+      "title": "Forest Zen",
+      "artist": "Calima",
+      "src": "Calima - Forest Zen (freetouse.com).mp3",
+      "attribution": "Music track: Forest Zen by Calima",
+      "source": "https://freetouse.com/music",
+      "description": "Vlog Music for Videos (Free Download)"
+    },
+    {
+      "title": "Soaked",
+      "artist": "Pufino",
+      "src": "Pufino - Soaked (freetouse.com).mp3",
+      "attribution": "Music track: Soaked by Pufino",
+      "source": "https://freetouse.com/music",
+      "description": "Background Music for Videos (Free)"
+    },
+    {
+      "title": "Mountain View",
+      "artist": "Zambolino",
+      "src": "Zambolino - Mountain View (freetouse.com).mp3",
+      "attribution": "Music track: Mountain View by Zambolino",
+      "source": "https://freetouse.com/music",
+      "description": "No Copyright Background Music"
+    },
+    {
+      "title": "Silhouette",
+      "artist": "Moavii",
+      "src": "Moavii - Silhouette (freetouse.com).mp3",
+      "attribution": "Music track: Silhouette by Moavii",
+      "source": "https://freetouse.com/music",
+      "description": "Free Background Music for Videos"
+    },
+    {
+      "title": "Enlivening",
+      "artist": "Pufino",
+      "src": "Pufino - Enlivening (freetouse.com).mp3",
+      "attribution": "Music track: Enlivening by Pufino",
+      "source": "https://freetouse.com/music",
+      "description": "Free Background Music for Videos"
     }
   ]
 }

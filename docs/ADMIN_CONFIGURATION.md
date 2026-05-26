@@ -117,11 +117,13 @@ the global widget definitions.
 
 The built-in music player widget reads its server playlist from
 `wwwroot/media/music-player/playlist.json` in the Portal web app. The playlist
-uses a simple `tracks` array with `title`, `artist`, and `src`; relative `src`
+uses a simple `tracks` array with `title`, `artist`, `src`, optional
+`attribution`, optional `source`, and optional `description`. Relative `src`
 values are resolved beside the JSON file, so `001.mp3` points to
-`wwwroot/media/music-player/001.mp3`. Users can also add local MP3 files in the
-browser session through the widget controls or drag-and-drop. Local files are
-held as browser object URLs and are never uploaded to the server.
+`wwwroot/media/music-player/001.mp3`. Attribution and source are shown in the
+widget for the active track. Users can also add local MP3 files in the browser
+session through the widget controls or drag-and-drop. Local files are held as
+browser object URLs and are never uploaded to the server.
 
 Portal administrators can import and export widget definitions from
 `/admin/dashboardwidgets`. This lets module-specific widgets live beside the
