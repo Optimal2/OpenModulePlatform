@@ -198,29 +198,19 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     private IReadOnlyList<DashboardNavbarSection> BuildDashboardNavbarSections(bool isPortalAdmin)
     {
-        var sections = new List<DashboardNavbarSection>
-        {
-            new(
-                "Portal",
-                [
-                    new DashboardNavbarLink("Home", Url.Content("~/"))
-                ])
-        };
-
         if (!isPortalAdmin)
         {
-            return sections;
+            return [];
         }
 
-        sections.AddRange(PortalAdminNavigation
+        return PortalAdminNavigation
             .CreateSections(relativePath => Url.Content($"~{relativePath}"))
             .Select(section => new DashboardNavbarSection(
                 section.TextKey,
                 section.Items
                     .Select(item => new DashboardNavbarLink(item.TextKey, item.Href))
-                    .ToArray())));
-
-        return sections;
+                    .ToArray()))
+            .ToArray();
     }
 
     private bool TryGetCurrentUserId(out int userId)
