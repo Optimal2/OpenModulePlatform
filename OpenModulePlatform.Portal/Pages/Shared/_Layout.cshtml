@@ -34,7 +34,8 @@
         @await Component.InvokeAsync("PortalTopBar")
         <div class="topbar">
         <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Home"]">
-            <div class="brand">@ompBranding.PlatformName</div>
+            <div class="brand">@ompBranding.PortalDisplayName</div>
+            <div class="brand-subtitle">@ompBranding.PortalName</div>
         </a>
         <nav class="nav nav--primary">
             <a href="~/">@L["Home"]</a>
