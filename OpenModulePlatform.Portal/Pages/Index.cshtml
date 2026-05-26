@@ -28,7 +28,12 @@
          data-widget-settings-label="@L["Widget settings"]"
          data-week-number-label="@L["Week number"]"
          data-show-week-number-label="@L["Show week number"]"
-         data-hide-week-number-label="@L["Hide week number"]">
+         data-hide-week-number-label="@L["Hide week number"]"
+         data-column-count-label="@L["Column count"]"
+         data-default-columns-label="@L["Default"]"
+         data-one-column-label="@L["1 column"]"
+         data-two-columns-label="@L["2 columns"]"
+         data-three-columns-label="@L["3 columns"]">
     <form class="visually-hidden" method="post" data-dashboard-token-form>
         @Html.AntiForgeryToken()
     </form>
@@ -86,6 +91,10 @@
                     {
                         <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
                     }
+                    else if (widget.Payload == "portal-navbar-links")
+                    {
+                        <partial name="_DashboardNavbarWidgetList" model="new DashboardNavbarWidgetList(Model.DashboardNavbarSections)" />
+                    }
                     else if (widget.Payload == "user-roles")
                     {
                         <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
@@ -112,7 +121,7 @@
                             aria-label="@L["Remove widget"]">
                         ×
                     </button>
-                    @if (widget.Payload == "weekday-date")
+                    @if (widget.Payload == "weekday-date" || widget.Payload == "portal-entry-list")
                     {
                         <button type="button"
                                 class="dashboard-widget__settings-toggle"
@@ -123,13 +132,29 @@
                             <span class="dashboard-widget__settings-icon" aria-hidden="true"></span>
                         </button>
                         <div class="dashboard-widget__settings-panel" data-widget-settings-panel hidden>
-                            <label>
-                                <span>@L["Week number"]</span>
-                                <select data-widget-int-data-control>
-                                    <option value="0" selected="@(widget.IntData != 1)">@L["Show week number"]</option>
-                                    <option value="1" selected="@(widget.IntData == 1)">@L["Hide week number"]</option>
-                                </select>
-                            </label>
+                            @if (widget.Payload == "weekday-date")
+                            {
+                                <label>
+                                    <span>@L["Week number"]</span>
+                                    <select data-widget-int-data-control>
+                                        <option value="0" selected="@(widget.IntData != 1)">@L["Show week number"]</option>
+                                        <option value="1" selected="@(widget.IntData == 1)">@L["Hide week number"]</option>
+                                    </select>
+                                </label>
+                            }
+                            else if (widget.Payload == "portal-entry-list")
+                            {
+                                var columnCount = widget.IntData is >= 1 and <= 3 ? widget.IntData.Value : 0;
+                                <label>
+                                    <span>@L["Column count"]</span>
+                                    <select data-widget-int-data-control>
+                                        <option value="0" selected="@(columnCount == 0)">@L["Default"]</option>
+                                        <option value="1" selected="@(columnCount == 1)">@L["1 column"]</option>
+                                        <option value="2" selected="@(columnCount == 2)">@L["2 columns"]</option>
+                                        <option value="3" selected="@(columnCount == 3)">@L["3 columns"]</option>
+                                    </select>
+                                </label>
+                            }
                         </div>
                     }
                     <span class="dashboard-widget__resize" data-widget-resize aria-hidden="true"></span>
@@ -194,6 +219,10 @@
 
         <template data-dashboard-widget-template="portal-entry-combolist">
             <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
+        </template>
+
+        <template data-dashboard-widget-template="portal-navbar-links">
+            <partial name="_DashboardNavbarWidgetList" model="new DashboardNavbarWidgetList(Model.DashboardNavbarSections)" />
         </template>
 
         <template data-dashboard-widget-template="user-roles">

@@ -343,6 +343,13 @@ USING
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
     UNION ALL
+    SELECT N'portal-navbar-links' AS widget_key,
+           N'Portal navigation' AS title,
+           N'portal' AS widget_type,
+           N'portal-navbar-links' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
+    UNION ALL
     SELECT N'user-roles' AS widget_key,
            N'User roles' AS title,
            N'portal' AS widget_type,

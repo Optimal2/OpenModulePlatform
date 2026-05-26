@@ -99,6 +99,21 @@ public sealed record DashboardPortalEntryComboWidgetList(
     IReadOnlyList<PortalEntry> AllEntries);
 
 /// <summary>
+/// Portal navbar links rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardNavbarWidgetList(IReadOnlyList<DashboardNavbarSection> Sections);
+
+/// <summary>
+/// One navbar section rendered inside the dashboard navbar widget.
+/// </summary>
+public sealed record DashboardNavbarSection(string TextKey, IReadOnlyList<DashboardNavbarLink> Links);
+
+/// <summary>
+/// One navbar destination rendered inside the dashboard navbar widget.
+/// </summary>
+public sealed record DashboardNavbarLink(string TextKey, string Href);
+
+/// <summary>
 /// Content pages rendered inside a dashboard widget.
 /// </summary>
 public sealed record DashboardContentPageWidgetList(IReadOnlyList<DashboardContentPageLink> Pages);

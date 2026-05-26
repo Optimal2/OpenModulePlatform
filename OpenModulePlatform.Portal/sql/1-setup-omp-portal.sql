@@ -113,6 +113,15 @@ USING
            N'Controls whether top bar dropdown menus open on hover for the signed-in user.' AS description,
            20 AS sort_order,
            CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Portal' AS setting_category,
+           N'ShowPortalNavbar' AS setting_name,
+           CAST(1 AS tinyint) AS value_kind,
+           CAST(1 AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           N'Controls whether the Portal navbar below the topbar is shown for the signed-in user.' AS description,
+           30 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
 ) AS source
 ON target.setting_category = source.setting_category
 AND target.setting_name = source.setting_name
@@ -710,6 +719,13 @@ USING
            N'Combolist' AS title,
            N'portal' AS widget_type,
            N'portal-entry-combolist' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
+    UNION ALL
+    SELECT N'portal-navbar-links' AS widget_key,
+           N'Portal navigation' AS title,
+           N'portal' AS widget_type,
+           N'portal-navbar-links' AS payload,
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
     UNION ALL

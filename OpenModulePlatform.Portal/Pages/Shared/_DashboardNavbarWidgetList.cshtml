@@ -1,0 +1,26 @@
+@using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Models
+@model DashboardNavbarWidgetList
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+<div class="dashboard-navbar-list">
+    @if (Model.Sections.Count == 0)
+    {
+        <div class="dashboard-navbar-list__empty">@L["No navigation links to show."]</div>
+    }
+    else
+    {
+        @foreach (var section in Model.Sections)
+        {
+            <section class="dashboard-navbar-list__section">
+                <h4>@L[section.TextKey]</h4>
+                <div class="dashboard-navbar-list__links">
+                    @foreach (var link in section.Links)
+                    {
+                        <a class="dashboard-navbar-list__link" href="@link.Href">@L[link.TextKey]</a>
+                    }
+                </div>
+            </section>
+        }
+    }
+</div>

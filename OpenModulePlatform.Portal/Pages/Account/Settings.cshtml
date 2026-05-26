@@ -79,6 +79,12 @@ else
         </div>
         <p class="muted">@L["When this is turned off, menus open only by click or keyboard shortcut."]</p>
 
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="PortalInput.ShowPortalNavbar" type="checkbox" />
+            <label for="PortalInput_ShowPortalNavbar">@L["Show portal navbar"]</label>
+        </div>
+        <p class="muted">@L["When this is turned off, the Portal navbar below the topbar is hidden."]</p>
+
         <div class="toolbar">
             <button type="submit">@L["Save"]</button>
         </div>

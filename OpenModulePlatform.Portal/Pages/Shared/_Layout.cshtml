@@ -1,9 +1,16 @@
 @using OpenModulePlatform.Web.Shared.Navigation
+@inject OpenModulePlatform.Portal.Services.PortalUserSettingsService PortalUserSettingsService
 @* File: OpenModulePlatform.Portal/Pages/Shared/_Layout.cshtml *@
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(Context.RequestAborted);
     var configuredPortalTitle = ViewData["PortalTitle"]?.ToString();
     var documentTitle = ViewData["Title"]?.ToString();
+    var showPortalNavbar = true;
+    var userIdClaim = User.FindFirst(OpenModulePlatform.Web.Shared.Security.OmpAuthDefaults.UserIdClaimType)?.Value;
+    if (int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var portalLayoutUserId))
+    {
+        showPortalNavbar = (await PortalUserSettingsService.GetForUserAsync(portalLayoutUserId, Context.RequestAborted)).ShowPortalNavbar;
+    }
 
     if (string.IsNullOrWhiteSpace(documentTitle))
     {
@@ -32,6 +39,8 @@
 <body>
     <header class="app-header">
         @await Component.InvokeAsync("PortalTopBar")
+        @if (showPortalNavbar)
+        {
         <div class="topbar">
         <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Home"]">
             <div class="brand">@ompBranding.PortalDisplayName</div>
@@ -62,6 +71,7 @@
             }
         </nav>
         </div>
+        }
     </header>
     <main class="content-shell">
         @RenderBody()

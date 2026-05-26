@@ -337,17 +337,24 @@
     }
 
     function applyWidgetSettings(widget) {
-        if (widget.dataset.widgetPayload !== 'weekday-date') {
+        if (widget.dataset.widgetPayload === 'weekday-date') {
+            const hideWeekNumber = parseNullableInteger(widget.dataset.widgetIntData) === 1;
+            widget.querySelectorAll('.dashboard-date-widget__week').forEach((week) => {
+                week.hidden = hideWeekNumber;
+            });
+            widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
+                control.value = hideWeekNumber ? '1' : '0';
+            });
             return;
         }
 
-        const hideWeekNumber = parseNullableInteger(widget.dataset.widgetIntData) === 1;
-        widget.querySelectorAll('.dashboard-date-widget__week').forEach((week) => {
-            week.hidden = hideWeekNumber;
-        });
-        widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
-            control.value = hideWeekNumber ? '1' : '0';
-        });
+        if (widget.dataset.widgetPayload === 'portal-entry-list') {
+            const columns = normalizeColumnCount(widget.dataset.widgetIntData);
+            widget.dataset.widgetColumns = columns > 0 ? String(columns) : '';
+            widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
+                control.value = String(columns);
+            });
+        }
     }
 
     function bindEntryFavoriteToggles(root, scope, token) {
@@ -723,6 +730,7 @@
         const widgetRect = widget.getBoundingClientRect();
         const startX = event.clientX;
         const startY = event.clientY;
+        const startScrollY = window.scrollY || window.pageYOffset || 0;
         const startLeft = widgetRect.left - canvasRect.left + canvas.scrollLeft;
         const startTop = widgetRect.top - canvasRect.top + canvas.scrollTop;
 
@@ -730,8 +738,10 @@
         widget.classList.add('is-moving');
 
         const move = (moveEvent) => {
+            autoScrollPageVertically(moveEvent);
             const nextLeft = Math.max(0, startLeft + moveEvent.clientX - startX);
-            const nextTop = Math.max(0, startTop + moveEvent.clientY - startY);
+            const scrollDeltaY = (window.scrollY || window.pageYOffset || 0) - startScrollY;
+            const nextTop = Math.max(0, startTop + moveEvent.clientY - startY + scrollDeltaY);
             widget.style.left = `${snapIfNeeded(nextLeft, state)}px`;
             widget.style.top = `${snapIfNeeded(nextTop, state)}px`;
             updateCanvasHeight(root, canvas, state);
@@ -749,6 +759,22 @@
         widget.addEventListener('pointermove', move);
         widget.addEventListener('pointerup', end);
         widget.addEventListener('pointercancel', end);
+    }
+
+    function autoScrollPageVertically(event) {
+        const edgeSize = 90;
+        const maxStep = 28;
+        let scrollDelta = 0;
+
+        if (event.clientY > window.innerHeight - edgeSize) {
+            scrollDelta = Math.ceil(((event.clientY - (window.innerHeight - edgeSize)) / edgeSize) * maxStep);
+        } else if (event.clientY < edgeSize) {
+            scrollDelta = -Math.ceil(((edgeSize - event.clientY) / edgeSize) * maxStep);
+        }
+
+        if (scrollDelta !== 0) {
+            window.scrollBy({ top: scrollDelta, left: 0, behavior: 'auto' });
+        }
     }
 
     function startResize(root, canvas, widget, event, state, onChange = () => {}) {
@@ -878,6 +904,11 @@
 
         const parsed = parseInt(value, 10);
         return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function normalizeColumnCount(value) {
+        const parsed = parseNullableInteger(value);
+        return parsed && parsed >= 1 && parsed <= 3 ? parsed : 0;
     }
 
     function normalizeWidgetDataValue(value) {
@@ -1087,6 +1118,9 @@
         element.querySelectorAll('[data-widget-settings-toggle]').forEach((button) => {
             delete button.dataset.dashboardWidgetSettingsBound;
         });
+        element.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
+            delete control.dataset.dashboardWidgetSettingsBound;
+        });
     }
 
     async function saveDashboardPreferences(root, token, state) {
@@ -1192,7 +1226,7 @@
     }
 
     function createWidgetSettingsControls(root, widget) {
-        if (widget.payload !== 'weekday-date') {
+        if (widget.payload !== 'weekday-date' && widget.payload !== 'portal-entry-list') {
             return null;
         }
 
@@ -1217,21 +1251,38 @@
 
         const fieldLabel = document.createElement('label');
         const text = document.createElement('span');
-        text.textContent = root.dataset.weekNumberLabel || 'Week number';
+        text.textContent = widget.payload === 'portal-entry-list'
+            ? root.dataset.columnCountLabel || 'Column count'
+            : root.dataset.weekNumberLabel || 'Week number';
         const select = document.createElement('select');
         select.dataset.widgetIntDataControl = '';
 
-        const showOption = document.createElement('option');
-        showOption.value = '0';
-        showOption.textContent = root.dataset.showWeekNumberLabel || 'Show week number';
+        if (widget.payload === 'portal-entry-list') {
+            [
+                ['0', root.dataset.defaultColumnsLabel || 'Default'],
+                ['1', root.dataset.oneColumnLabel || '1 column'],
+                ['2', root.dataset.twoColumnsLabel || '2 columns'],
+                ['3', root.dataset.threeColumnsLabel || '3 columns']
+            ].forEach(([value, labelText]) => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = labelText;
+                select.appendChild(option);
+            });
+            select.value = String(normalizeColumnCount(widget.intData));
+        } else {
+            const showOption = document.createElement('option');
+            showOption.value = '0';
+            showOption.textContent = root.dataset.showWeekNumberLabel || 'Show week number';
 
-        const hideOption = document.createElement('option');
-        hideOption.value = '1';
-        hideOption.textContent = root.dataset.hideWeekNumberLabel || 'Hide week number';
+            const hideOption = document.createElement('option');
+            hideOption.value = '1';
+            hideOption.textContent = root.dataset.hideWeekNumberLabel || 'Hide week number';
 
-        select.appendChild(showOption);
-        select.appendChild(hideOption);
-        select.value = parseNullableInteger(widget.intData) === 1 ? '1' : '0';
+            select.appendChild(showOption);
+            select.appendChild(hideOption);
+            select.value = parseNullableInteger(widget.intData) === 1 ? '1' : '0';
+        }
 
         fieldLabel.appendChild(text);
         fieldLabel.appendChild(select);

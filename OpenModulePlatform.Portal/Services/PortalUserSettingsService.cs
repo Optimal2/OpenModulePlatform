@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Web.Shared.Services;
 using System.Data;
+using System.Globalization;
 
 namespace OpenModulePlatform.Portal.Services;
 
@@ -13,6 +14,7 @@ public sealed class PortalUserSettingsService
     private const string PortalSettingCategory = "Portal";
     private const string AdminMetricsCollapsedSetting = "AdminMetricsCollapsed";
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
+    private const string ShowPortalNavbarSetting = "ShowPortalNavbar";
     private const byte IntValueKind = 1;
 
     private readonly SqlConnectionFactory _db;
@@ -27,7 +29,8 @@ public sealed class PortalUserSettingsService
         const string sql = @"
 SELECT u.display_name,
        CAST(COALESCE(admin_v.setting_value, admin_d.default_int_value, 0) AS bit),
-       CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit)
+       CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit),
+       CAST(COALESCE(navbar_v.setting_value, navbar_d.default_int_value, 1) AS bit)
 FROM omp.users u
 LEFT JOIN omp_portal.user_setting_definitions admin_d
     ON admin_d.setting_category = @setting_category
@@ -45,6 +48,14 @@ LEFT JOIN omp_portal.user_setting_definitions hover_d
 LEFT JOIN omp_portal.user_setting_int_values hover_v
     ON hover_v.user_id = u.user_id
    AND hover_v.user_setting_definition_id = hover_d.user_setting_definition_id
+LEFT JOIN omp_portal.user_setting_definitions navbar_d
+    ON navbar_d.setting_category = @setting_category
+   AND navbar_d.setting_name = @show_portal_navbar_setting_name
+   AND navbar_d.value_kind = @value_kind
+   AND navbar_d.is_enabled = 1
+LEFT JOIN omp_portal.user_setting_int_values navbar_v
+    ON navbar_v.user_id = u.user_id
+   AND navbar_v.user_setting_definition_id = navbar_d.user_setting_definition_id
 WHERE u.user_id = @user_id
   AND u.account_status = 1;";
 
@@ -63,7 +74,8 @@ WHERE u.user_id = @user_id
         return new PortalAccountSettings(
             rdr.GetString(0),
             rdr.GetBoolean(1),
-            rdr.GetBoolean(2));
+            rdr.GetBoolean(2),
+            rdr.GetBoolean(3));
     }
 
     public async Task<PortalUserSettings> GetForUserAsync(int userId, CancellationToken ct)
@@ -82,8 +94,14 @@ WHERE u.user_id = @user_id
             TopbarDropdownsOpenOnHoverSetting,
             defaultValue: true,
             ct);
+        var showPortalNavbar = await GetPortalBoolSettingAsync(
+            conn,
+            userId,
+            ShowPortalNavbarSetting,
+            defaultValue: true,
+            ct);
 
-        return new PortalUserSettings(adminMetricsCollapsed, topbarDropdownsOpenOnHover);
+        return new PortalUserSettings(adminMetricsCollapsed, topbarDropdownsOpenOnHover, showPortalNavbar);
     }
 
     public async Task<bool> UpdateDisplayNameAsync(int userId, string displayName, CancellationToken ct)
@@ -263,6 +281,77 @@ END;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public Task UpsertShowPortalNavbarAsync(int userId, bool value, CancellationToken ct)
+        => UpsertPortalBoolSettingAsync(
+            userId,
+            ShowPortalNavbarSetting,
+            value,
+            defaultValue: true,
+            missingDefinitionErrorNumber: 52013,
+            missingDefinitionMessage: "Portal user setting definition is missing: Portal/ShowPortalNavbar.",
+            ct);
+
+    private async Task UpsertPortalBoolSettingAsync(
+        int userId,
+        string settingName,
+        bool value,
+        bool defaultValue,
+        int missingDefinitionErrorNumber,
+        string missingDefinitionMessage,
+        CancellationToken ct)
+    {
+        var sql = $@"
+DECLARE @definition_id int;
+DECLARE @default_value int;
+DECLARE @setting_value int = CASE WHEN @setting_value_bit = 1 THEN 1 ELSE 0 END;
+
+SELECT @definition_id = user_setting_definition_id,
+       @default_value = ISNULL(default_int_value, @default_value_fallback)
+FROM omp_portal.user_setting_definitions
+WHERE setting_category = @setting_category
+  AND setting_name = @setting_name
+  AND value_kind = @value_kind
+  AND is_enabled = 1;
+
+IF @definition_id IS NULL
+BEGIN
+    THROW {missingDefinitionErrorNumber.ToString(CultureInfo.InvariantCulture)}, '{missingDefinitionMessage}', 1;
+END
+
+IF @setting_value = @default_value
+BEGIN
+    DELETE FROM omp_portal.user_setting_int_values
+    WHERE user_id = @user_id
+      AND user_setting_definition_id = @definition_id;
+END
+ELSE
+BEGIN
+    UPDATE omp_portal.user_setting_int_values
+    SET setting_value = @setting_value,
+        updated_at = SYSUTCDATETIME()
+    WHERE user_id = @user_id
+      AND user_setting_definition_id = @definition_id;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        INSERT INTO omp_portal.user_setting_int_values(user_id, user_setting_definition_id, setting_value)
+        VALUES(@user_id, @definition_id, @setting_value);
+    END
+END;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        AddUserId(cmd, userId);
+        cmd.Parameters.Add("@setting_value_bit", SqlDbType.Bit).Value = value;
+        cmd.Parameters.Add("@default_value_fallback", SqlDbType.Int).Value = defaultValue ? 1 : 0;
+        cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
+        cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = settingName;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task<bool> GetPortalBoolSettingAsync(
         SqlConnection conn,
         int userId,
@@ -302,6 +391,7 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@admin_metrics_setting_name", SqlDbType.NVarChar, 200).Value = AdminMetricsCollapsedSetting;
         cmd.Parameters.Add("@topbar_dropdowns_setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
+        cmd.Parameters.Add("@show_portal_navbar_setting_name", SqlDbType.NVarChar, 200).Value = ShowPortalNavbarSetting;
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
     }
 
@@ -415,11 +505,13 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), SYSUTCDATET
 public sealed record PortalAccountSettings(
     string DisplayName,
     bool AdminMetricsCollapsed,
-    bool TopbarDropdownsOpenOnHover);
+    bool TopbarDropdownsOpenOnHover,
+    bool ShowPortalNavbar);
 
 public sealed record PortalUserSettings(
     bool AdminMetricsCollapsed,
-    bool TopbarDropdownsOpenOnHover);
+    bool TopbarDropdownsOpenOnHover,
+    bool ShowPortalNavbar);
 
 public sealed record CreateSelfServiceAdAccountResult(
     CreateSelfServiceAdAccountStatus Status,

@@ -3,6 +3,7 @@ using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Security;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Mvc;
@@ -56,6 +57,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     public IReadOnlyList<PortalEntry> AllPortalEntries { get; private set; } = [];
 
     public IReadOnlyList<DashboardRoleOption> DashboardRoles { get; private set; } = [];
+
+    public IReadOnlyList<DashboardNavbarSection> DashboardNavbarSections { get; private set; } = [];
 
     public IReadOnlyList<DashboardContentPageLink> ContentPages { get; private set; } = [];
 
@@ -150,6 +153,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         var roleIds = roleContext.EffectiveRoleIds.ToHashSet();
         IsPortalAdmin = permissions.Contains(OmpPortalPermissions.Admin);
         ViewData["IsPortalAdmin"] = IsPortalAdmin;
+        DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
         DashboardRoles = roleContext.AvailableRoles
             .Select(role => new DashboardRoleOption(
                 role.RoleId,
@@ -187,8 +191,36 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             AvailableWidgets = [];
             AllPortalEntries = [];
             FavoritePortalEntries = [];
+            DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
             ContentPages = [];
         }
+    }
+
+    private IReadOnlyList<DashboardNavbarSection> BuildDashboardNavbarSections(bool isPortalAdmin)
+    {
+        var sections = new List<DashboardNavbarSection>
+        {
+            new(
+                "Portal",
+                [
+                    new DashboardNavbarLink("Home", Url.Content("~/"))
+                ])
+        };
+
+        if (!isPortalAdmin)
+        {
+            return sections;
+        }
+
+        sections.AddRange(PortalAdminNavigation
+            .CreateSections(relativePath => Url.Content($"~{relativePath}"))
+            .Select(section => new DashboardNavbarSection(
+                section.TextKey,
+                section.Items
+                    .Select(item => new DashboardNavbarLink(item.TextKey, item.Href))
+                    .ToArray())));
+
+        return sections;
     }
 
     private bool TryGetCurrentUserId(out int userId)
