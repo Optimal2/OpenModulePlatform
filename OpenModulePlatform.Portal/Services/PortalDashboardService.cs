@@ -13,7 +13,7 @@ namespace OpenModulePlatform.Portal.Services;
 public sealed class PortalDashboardService
 {
     private const bool DefaultAlignToGrid = true;
-    private const bool DefaultExpandedCanvas = false;
+    private const bool DefaultExpandedCanvas = true;
     private const int DefaultWidgetWidth = 320;
     private const int DefaultWidgetHeight = 192;
     private const int MinWidgetWidth = 160;

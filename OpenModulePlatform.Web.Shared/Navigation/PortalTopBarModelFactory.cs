@@ -26,7 +26,7 @@ public static class PortalTopBarModelFactory
         }
 
         var cultureSelection = new CultureSelectionService().ResolveFromCurrentCulture(options);
-        var portalLink = new PortalTopBarLink(OmpBranding.Default.PortalDisplayName, CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
+        var portalLink = new PortalTopBarLink(OmpBranding.Default.PlatformName, CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
         return new PortalTopBarModel
         {
