@@ -515,4 +515,18 @@
   <data name="1 column" xml:space="preserve"><value>1 column</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 columns</value></data>
   <data name="3 columns" xml:space="preserve"><value>3 columns</value></data>
+  <data name="Music player" xml:space="preserve"><value>Music player</value></data>
+  <data name="Loading playlist" xml:space="preserve"><value>Loading playlist</value></data>
+  <data name="No tracks available" xml:space="preserve"><value>No tracks available</value></data>
+  <data name="Could not play track" xml:space="preserve"><value>Could not play track</value></data>
+  <data name="Local file" xml:space="preserve"><value>Local file</value></data>
+  <data name="No track selected" xml:space="preserve"><value>No track selected</value></data>
+  <data name="Seek" xml:space="preserve"><value>Seek</value></data>
+  <data name="Previous track" xml:space="preserve"><value>Previous track</value></data>
+  <data name="Play" xml:space="preserve"><value>Play</value></data>
+  <data name="Pause" xml:space="preserve"><value>Pause</value></data>
+  <data name="Next track" xml:space="preserve"><value>Next track</value></data>
+  <data name="Shuffle" xml:space="preserve"><value>Shuffle</value></data>
+  <data name="Loop" xml:space="preserve"><value>Loop</value></data>
+  <data name="Add local MP3 files" xml:space="preserve"><value>Add local MP3 files</value></data>
 </root>
