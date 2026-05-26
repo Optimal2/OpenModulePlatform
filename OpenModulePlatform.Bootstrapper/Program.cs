@@ -21,6 +21,12 @@ internal static partial class Program
     private const int SqlDeadlockRetryCount = 3;
     private const int ServiceStopTimeoutSeconds = 60;
     private const int ArtifactHashBufferSize = 64 * 1024;
+    private const string HostAgentWindowsServiceExecutableName = "OpenModulePlatform.HostAgent.WindowsService.exe";
+    private static readonly string[] KnownHostAgentServiceNamePrefixes =
+    [
+        "OMP.HostAgent",
+        "OpenModulePlatform.HostAgent"
+    ];
     private static readonly IReadOnlyDictionary<string, string> EmptyStringDictionary =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -249,7 +255,7 @@ internal static partial class Program
                 {
                     EnsureRuntimeFilesystemAccess(config);
                     Console.WriteLine(
-                        $"> HostAgent service '{identity.ServiceName}' is missing, but an existing HostAgent service with prefix '{identity.ServiceNamePrefix}' is present; leaving runtime installation unchanged so self-upgrade can complete.");
+                        $"> HostAgent service '{identity.ServiceName}' is missing, but an existing HostAgent service is present; leaving runtime installation unchanged so self-upgrade can complete.");
                 }
                 else
                 {
@@ -3551,15 +3557,28 @@ VALUES
                 throw new DirectoryNotFoundException($"HostAgent package folder was not found: {sourceDirectory}");
             }
 
-            var serviceExists = ServiceExists(serviceIdentity.ServiceName);
-            var prefixServiceExists = !serviceIdentity.ServiceName.Equals(hostAgent.ServiceName, StringComparison.OrdinalIgnoreCase)
-                && ServiceExists(hostAgent.ServiceName);
-            if (prefixServiceExists)
+            var hostAgentServices = EnumerateHostAgentWindowsServices(serviceIdentity.ServiceNamePrefix, installPath);
+            foreach (var service in hostAgentServices)
             {
-                StopService(hostAgent.ServiceName);
-                DeleteWindowsService(hostAgent.ServiceName);
+                if (string.Equals(service.Name, serviceIdentity.ServiceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var usesTargetInstallPath = !string.IsNullOrWhiteSpace(service.ExecutablePath)
+                    && IsSameOrChildPath(installPath, service.ExecutablePath);
+                var isConfiguredBaseServiceName = !string.IsNullOrWhiteSpace(hostAgent.ServiceName)
+                    && string.Equals(service.Name, hostAgent.ServiceName, StringComparison.OrdinalIgnoreCase);
+                if (!usesTargetInstallPath && !isConfiguredBaseServiceName)
+                {
+                    continue;
+                }
+
+                Console.WriteLine($"> Remove duplicate HostAgent service {service.Name}");
+                DeleteWindowsService(service.Name);
             }
 
+            var serviceExists = ServiceExists(serviceIdentity.ServiceName);
             if (serviceExists)
             {
                 StopService(serviceIdentity.ServiceName);
@@ -4730,10 +4749,57 @@ VALUES
             return false;
         }
 
-        var versionedPrefix = prefix + ".";
-        return EnumerateWindowsServiceNames().Any(serviceName =>
+        return EnumerateHostAgentWindowsServices(prefix, installPath: null).Count > 0;
+    }
+
+    private static IReadOnlyList<WindowsServiceCandidate> EnumerateHostAgentWindowsServices(
+        string serviceNamePrefix,
+        string? installPath)
+    {
+        var prefixes = GetKnownHostAgentServiceNamePrefixes(serviceNamePrefix);
+        return EnumerateWindowsServiceNames()
+            .Select(serviceName => new WindowsServiceCandidate(
+                serviceName,
+                GetWindowsServiceExecutablePath(serviceName)))
+            .Where(service =>
+                IsKnownHostAgentServiceName(service.Name, prefixes)
+                || IsHostAgentWindowsServiceExecutable(service.ExecutablePath, installPath))
+            .OrderBy(service => service.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlySet<string> GetKnownHostAgentServiceNamePrefixes(string serviceNamePrefix)
+    {
+        var prefixes = new HashSet<string>(KnownHostAgentServiceNamePrefixes, StringComparer.OrdinalIgnoreCase);
+        var prefix = ResolveHostAgentServiceNamePrefix(serviceNamePrefix);
+        if (!string.IsNullOrWhiteSpace(prefix))
+        {
+            prefixes.Add(prefix);
+        }
+
+        return prefixes;
+    }
+
+    private static bool IsKnownHostAgentServiceName(string serviceName, IEnumerable<string> serviceNamePrefixes)
+        => serviceNamePrefixes.Any(prefix =>
             serviceName.Equals(prefix, StringComparison.OrdinalIgnoreCase)
-            || serviceName.StartsWith(versionedPrefix, StringComparison.OrdinalIgnoreCase));
+            || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsHostAgentWindowsServiceExecutable(string executablePath, string? installPath)
+    {
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return false;
+        }
+
+        var fullExecutablePath = Path.GetFullPath(executablePath);
+        if (!Path.GetFileName(fullExecutablePath).Equals(HostAgentWindowsServiceExecutableName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(installPath)
+            || IsSameOrChildPath(installPath, fullExecutablePath);
     }
 
     private static void StopService(string serviceName)
@@ -5537,6 +5603,10 @@ internal sealed record HostAgentBootstrapServiceIdentity(
     string InstallPath,
     string DisplayName,
     string? Version);
+
+internal sealed record WindowsServiceCandidate(
+    string Name,
+    string ExecutablePath);
 
 internal sealed class IisAppPoolIdentityOptions
 {

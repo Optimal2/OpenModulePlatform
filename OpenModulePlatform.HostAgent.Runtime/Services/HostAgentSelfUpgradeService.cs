@@ -17,6 +17,11 @@ public sealed class HostAgentSelfUpgradeService
     private const int DirectoryDeleteMaxAttempts = 20;
     private const string DefaultNLogAppName = "OpenModulePlatform.HostAgent.WindowsService";
     private const string DefaultNLogDirectory = "${basedir}/logs";
+    private static readonly string[] KnownHostAgentServiceNamePrefixes =
+    [
+        "OMP.HostAgent",
+        "OpenModulePlatform.HostAgent"
+    ];
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
@@ -61,6 +66,11 @@ public sealed class HostAgentSelfUpgradeService
 
         if (IsCurrentVersion(desired))
         {
+            if (string.Equals(ResolveServiceName(settings, desired), _process.ServiceName, StringComparison.OrdinalIgnoreCase))
+            {
+                await CleanupSupersededHostAgentServicesAsync(hostKey, hostId, cancellationToken);
+            }
+
             return;
         }
 
@@ -923,8 +933,9 @@ public sealed class HostAgentSelfUpgradeService
             return [];
         }
 
+        var prefixes = GetKnownHostAgentServiceNamePrefixes(prefix);
         return EnumerateHostAgentServices(prefix)
-            .Where(service => IsSupersededHostAgentServiceName(service.Name, prefix))
+            .Where(service => IsSupersededHostAgentServiceName(service.Name, prefixes))
             .ToArray();
     }
 
@@ -942,11 +953,12 @@ public sealed class HostAgentSelfUpgradeService
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
         }
 
+        var prefixes = GetKnownHostAgentServiceNamePrefixes(prefix);
         var serviceNames = result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
             .Select(line => line["SERVICE_NAME:".Length..].Trim())
-            .Where(name => IsHostAgentServiceName(name, prefix))
+            .Where(name => IsHostAgentServiceName(name, prefixes))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -956,12 +968,25 @@ public sealed class HostAgentSelfUpgradeService
             .ToArray();
     }
 
-    private static bool IsSupersededHostAgentServiceName(string serviceName, string serviceNamePrefix)
-        => IsHostAgentServiceName(serviceName, serviceNamePrefix);
+    private static bool IsSupersededHostAgentServiceName(string serviceName, IReadOnlySet<string> serviceNamePrefixes)
+        => IsHostAgentServiceName(serviceName, serviceNamePrefixes);
 
-    private static bool IsHostAgentServiceName(string serviceName, string serviceNamePrefix)
-        => string.Equals(serviceName, serviceNamePrefix, StringComparison.OrdinalIgnoreCase)
-            || serviceName.StartsWith(serviceNamePrefix + ".", StringComparison.OrdinalIgnoreCase);
+    private static bool IsHostAgentServiceName(string serviceName, IEnumerable<string> serviceNamePrefixes)
+        => serviceNamePrefixes.Any(prefix =>
+            string.Equals(serviceName, prefix, StringComparison.OrdinalIgnoreCase)
+            || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
+
+    private static IReadOnlySet<string> GetKnownHostAgentServiceNamePrefixes(string serviceNamePrefix)
+    {
+        var prefixes = new HashSet<string>(KnownHostAgentServiceNamePrefixes, StringComparer.OrdinalIgnoreCase);
+        var prefix = serviceNamePrefix.Trim().TrimEnd('.');
+        if (!string.IsNullOrWhiteSpace(prefix))
+        {
+            prefixes.Add(prefix);
+        }
+
+        return prefixes;
+    }
 
     private static string? TryGetServiceExecutablePath(string serviceName)
     {
@@ -1056,6 +1081,13 @@ public sealed class HostAgentSelfUpgradeService
         var allowedRoot = FirstNonEmpty(settings.SelfUpgrade.InstallRoot, settings.ServicesRoot, AppContext.BaseDirectory);
         var fullAllowedRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(allowedRoot));
         var fullInstallDirectory = Path.GetFullPath(installDirectory);
+        var currentInstallDirectory = Path.GetFullPath(AppContext.BaseDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(fullInstallDirectory, currentInstallDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         if (!fullInstallDirectory.StartsWith(fullAllowedRoot, StringComparison.OrdinalIgnoreCase))
         {
             return;
