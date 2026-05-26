@@ -895,6 +895,7 @@
         const audio = player.querySelector('[data-music-audio]');
         const title = player.querySelector('[data-music-title]');
         const artist = player.querySelector('[data-music-artist]');
+        const attribution = player.querySelector('[data-music-attribution]');
         const status = player.querySelector('[data-music-status]');
         const seek = player.querySelector('[data-music-seek]');
         const current = player.querySelector('[data-music-current]');
@@ -929,6 +930,9 @@
             }
             if (artist) {
                 artist.textContent = track?.artist || player.dataset.localArtistLabel || '';
+            }
+            if (attribution) {
+                setMusicAttribution(attribution, track);
             }
         };
 
@@ -1142,7 +1146,10 @@
         return {
             src: source,
             title: String(track.title || getFileStem(rawSource) || 'Track').trim(),
-            artist: String(track.artist || '').trim()
+            artist: String(track.artist || '').trim(),
+            attribution: String(track.attribution || '').trim(),
+            source: String(track.source || track.sourceUrl || '').trim(),
+            description: String(track.description || '').trim()
         };
     }
 
@@ -1155,9 +1162,45 @@
             state.tracks.push({
                 src: source,
                 title: getFileStem(file.name) || file.name,
-                artist: player.dataset.localArtistLabel || 'Local file'
+                artist: player.dataset.localArtistLabel || 'Local file',
+                attribution: '',
+                source: '',
+                description: ''
             });
         });
+    }
+
+    function setMusicAttribution(container, track) {
+        container.replaceChildren();
+        if (!track) {
+            return;
+        }
+
+        const text = [track.attribution, track.description].filter(Boolean).join(' - ');
+        if (text) {
+            container.appendChild(document.createTextNode(text));
+        }
+
+        if (track.source) {
+            if (container.childNodes.length > 0) {
+                container.appendChild(document.createTextNode(' - '));
+            }
+
+            const link = document.createElement('a');
+            link.href = track.source;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = getMusicSourceLabel(track.source);
+            container.appendChild(link);
+        }
+    }
+
+    function getMusicSourceLabel(source) {
+        try {
+            return new URL(source, document.baseURI).hostname || source;
+        } catch {
+            return source;
+        }
     }
 
     function hasMusicTransfer(dataTransfer) {
