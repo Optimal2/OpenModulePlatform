@@ -99,6 +99,22 @@ public sealed record DashboardPortalEntryComboWidgetList(
     IReadOnlyList<PortalEntry> AllEntries);
 
 /// <summary>
+/// Content pages rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardContentPageWidgetList(IReadOnlyList<DashboardContentPageLink> Pages);
+
+/// <summary>
+/// One readable Content page destination for the dashboard.
+/// </summary>
+public sealed record DashboardContentPageLink(
+    Guid ContentId,
+    string Title,
+    string Slug,
+    string Href,
+    string? AppDisplayName,
+    string ContentType);
+
+/// <summary>
 /// Role list rendered inside a dashboard widget.
 /// </summary>
 public sealed record DashboardRoleWidgetList(IReadOnlyList<DashboardRoleOption> Roles);
