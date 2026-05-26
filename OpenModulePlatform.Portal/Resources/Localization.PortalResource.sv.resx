@@ -2145,4 +2145,17 @@
   <data name="You have unsaved dashboard changes. Save them before leaving edit mode?" xml:space="preserve"><value>Du har osparade dashboardändringar. Vill du spara dem innan du lämnar redigeringsläget?</value></data>
   <data name="Keep editing" xml:space="preserve"><value>Fortsätt redigera</value></data>
   <data name="Week {0}" xml:space="preserve"><value>Vecka {0}</value></data>
+  <data name="Widget settings" xml:space="preserve"><value>Widgetinställningar</value></data>
+  <data name="Week number" xml:space="preserve"><value>Veckonummer</value></data>
+  <data name="Show week number" xml:space="preserve"><value>Visa veckonummer</value></data>
+  <data name="Hide week number" xml:space="preserve"><value>Dölj veckonummer</value></data>
+  <data name="No content pages to show." xml:space="preserve"><value>Inga content-sidor att visa.</value></data>
+  <data name="Blank widget" xml:space="preserve"><value>Tom widget</value></data>
+  <data name="Admin overview" xml:space="preserve"><value>Adminöversikt</value></data>
+  <data name="Favorite portal entries" xml:space="preserve"><value>Favoritposter</value></data>
+  <data name="All portal entries" xml:space="preserve"><value>Alla portalposter</value></data>
+  <data name="Combolist" xml:space="preserve"><value>Kombolista</value></data>
+  <data name="User roles" xml:space="preserve"><value>Användarroller</value></data>
+  <data name="Weekday and date" xml:space="preserve"><value>Veckodag och datum</value></data>
+  <data name="Content pages" xml:space="preserve"><value>Content-sidor</value></data>
 </root>

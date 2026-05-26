@@ -57,6 +57,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public IReadOnlyList<DashboardRoleOption> DashboardRoles { get; private set; } = [];
 
+    public IReadOnlyList<DashboardContentPageLink> ContentPages { get; private set; } = [];
+
     public async Task OnGet(bool manage = false, bool fullList = false, CancellationToken ct = default)
     {
         await LoadAsync(ct);
@@ -177,6 +179,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             AvailableWidgets = await _dashboard.GetAvailableWidgetsAsync(roleIds, permissions, ct);
             AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId.Value, permissions, includeHidden: false, ct);
             FavoritePortalEntries = await _portalEntries.GetNavigationFavoriteEntriesAsync(Request, userId.Value, permissions, ct);
+            ContentPages = await _dashboard.GetReadableContentPagesAsync(Request, roleIds, permissions, ct);
         }
         else
         {
@@ -184,6 +187,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             AvailableWidgets = [];
             AllPortalEntries = [];
             FavoritePortalEntries = [];
+            ContentPages = [];
         }
     }
 
@@ -205,6 +209,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             offsetLeft = widget.OffsetLeft,
             width = widget.Width,
             height = widget.Height,
-            orderPriority = widget.OrderPriority
+            orderPriority = widget.OrderPriority,
+            intData = widget.IntData,
+            stringData = widget.StringData
         };
 }

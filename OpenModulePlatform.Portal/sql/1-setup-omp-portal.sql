@@ -720,6 +720,13 @@ USING
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
     UNION ALL
+    SELECT N'content-pages' AS widget_key,
+           N'Content pages' AS title,
+           N'portal' AS widget_type,
+           N'content-pages' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
+    UNION ALL
     SELECT N'weekday-date' AS widget_key,
            N'Weekday and date' AS title,
            N'portal' AS widget_type,
