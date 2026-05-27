@@ -2066,6 +2066,7 @@
   <data name="3 columns" xml:space="preserve"><value>3 columns</value></data>
   <data name="Content scale" xml:space="preserve"><value>Content scale</value></data>
   <data name="Dashboard actions" xml:space="preserve"><value>Dashboard actions</value></data>
+  <data name="Dashboard layout reset." xml:space="preserve"><value>Dashboard layout reset.</value></data>
   <data name="Small" xml:space="preserve"><value>Small</value></data>
   <data name="Large" xml:space="preserve"><value>Large</value></data>
   <data name="Blank widget style" xml:space="preserve"><value>Blank widget style</value></data>

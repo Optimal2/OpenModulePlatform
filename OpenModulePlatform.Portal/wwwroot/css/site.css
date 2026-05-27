@@ -1382,16 +1382,25 @@ button {
 
 .dashboard-widget__body {
     min-height: 0;
+    overflow: auto;
+}
+
+.dashboard-widget__content {
+    width: calc(100% / var(--dashboard-widget-content-scale-factor, 1));
+    min-width: calc(100% / var(--dashboard-widget-content-scale-factor, 1));
+    height: calc(100% / var(--dashboard-widget-content-scale-factor, 1));
+    min-height: calc(100% / var(--dashboard-widget-content-scale-factor, 1));
     padding: 12px;
-    font-size: var(--dashboard-widget-content-font-size, 1rem);
+    transform: scale(var(--dashboard-widget-content-scale-factor, 1));
+    transform-origin: top left;
 }
 
 .dashboard-widget[data-widget-content-scale="1"] {
-    --dashboard-widget-content-font-size: 0.88rem;
+    --dashboard-widget-content-scale-factor: 0.75;
 }
 
 .dashboard-widget[data-widget-content-scale="2"] {
-    --dashboard-widget-content-font-size: 1.14rem;
+    --dashboard-widget-content-scale-factor: 1.4;
 }
 
 .dashboard-widget__blank {
@@ -2156,6 +2165,14 @@ a.dashboard-role-list__item:focus-visible {
     outline: none;
 }
 
+.dashboard-widget__remove-icon {
+    width: 15px;
+    height: 15px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+}
+
 .dashboard-widget__settings-toggle {
     position: absolute;
     top: 6px;
@@ -2281,7 +2298,8 @@ a.dashboard-role-list__item:focus-visible {
     padding: 8px;
     border: 1px solid var(--border);
     border-radius: 22px;
-    background: rgba(255, 255, 255, 0.96);
+    background: rgba(255, 255, 255, 0.64);
+    backdrop-filter: blur(10px);
     box-shadow: 0 18px 38px rgba(17, 24, 39, 0.16);
     opacity: 0;
     pointer-events: none;
@@ -2338,7 +2356,7 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .portal-dashboard.is-editing .dashboard-floating-button__icon {
-    --dashboard-floating-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+    --dashboard-floating-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/cancel.svg");
 }
 
 .dashboard-save-button,
@@ -2353,9 +2371,33 @@ a.dashboard-role-list__item:focus-visible {
     padding: 8px 12px;
     border: 1px solid var(--border);
     border-radius: 999px;
-    background: var(--surface-muted);
+    background: rgba(248, 250, 252, 0.68);
     color: var(--text);
     box-shadow: none;
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.dashboard-save-button:hover,
+.dashboard-save-button:focus-visible,
+.dashboard-reset-changes-button:hover,
+.dashboard-reset-changes-button:focus-visible {
+    border-color: var(--border-strong);
+    background: var(--surface);
+    outline: none;
+}
+
+.dashboard-add-button {
+    border-color: rgba(25, 135, 84, 0.78);
+    background: rgba(25, 135, 84, 0.78);
+    color: #ffffff;
+}
+
+.dashboard-add-button:hover,
+.dashboard-add-button:focus-visible {
+    border-color: #198754;
+    background: #198754;
+    color: #ffffff;
+    outline: none;
 }
 
 .dashboard-save-button:disabled {
@@ -2374,33 +2416,6 @@ a.dashboard-role-list__item:focus-visible {
 .portal-dashboard.is-editing .dashboard-save-button,
 .portal-dashboard.is-editing .dashboard-add-button,
 .portal-dashboard.is-editing .dashboard-reset-changes-button {
-    display: inline-flex;
-}
-
-.dashboard-reset-button {
-    display: none;
-    align-items: center;
-    gap: 8px;
-    justify-content: flex-start;
-    min-height: 38px;
-    width: 100%;
-    padding: 8px 12px;
-    border-color: #b42318;
-    border-radius: 999px;
-    background: #b42318;
-    color: #ffffff;
-    box-shadow: none;
-}
-
-.dashboard-reset-button:hover,
-.dashboard-reset-button:focus-visible {
-    border-color: #8a1f1f;
-    background: #8a1f1f;
-    color: #ffffff;
-    outline: none;
-}
-
-.portal-dashboard.is-editing .dashboard-reset-button {
     display: inline-flex;
 }
 
