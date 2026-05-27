@@ -55,6 +55,7 @@
             nextTemporaryWidgetId: -1,
             savedSnapshot: null,
             savedSignature: '',
+            editCanvasWidth: 0,
             draftWriteTimer: 0
         };
         const updateDirtyState = () => {
@@ -236,6 +237,7 @@
             root.classList.toggle('is-editing', isEditing);
             if (!isEditing) {
                 clearWidgetSelection(root, canvas);
+                state.editCanvasWidth = 0;
             }
             editToggle.setAttribute('aria-pressed', isEditing ? 'true' : 'false');
             if (editLabel) {
@@ -498,16 +500,42 @@
             });
         });
 
-        widget.querySelectorAll('[data-widget-content-scale-control]').forEach((control) => {
-            if (control.dataset.dashboardWidgetSettingsBound === 'true') {
+        widget.querySelectorAll('[data-widget-content-scale-control]').forEach((container) => {
+            if (container.dataset.dashboardWidgetSettingsBound === 'true') {
                 return;
             }
 
-            control.dataset.dashboardWidgetSettingsBound = 'true';
-            control.addEventListener('change', () => {
-                widget.dataset.widgetContentScale = String(normalizeContentScale(control.value));
+            container.dataset.dashboardWidgetSettingsBound = 'true';
+            const range = container.querySelector('[data-widget-content-scale-range]');
+            const input = container.querySelector('[data-widget-content-scale-input]');
+            const reset = container.querySelector('[data-widget-content-scale-reset]');
+            const setScale = (value, commit) => {
+                widget.dataset.widgetContentScale = String(normalizeContentScale(value));
                 applyWidgetSettings(widget);
-                onChange();
+                if (commit) {
+                    onChange();
+                }
+            };
+
+            range?.addEventListener('input', () => setScale(range.value, false));
+            range?.addEventListener('change', () => setScale(range.value, true));
+            input?.addEventListener('input', () => {
+                if (parseNullableInteger(input.value) !== null) {
+                    setScale(input.value, false);
+                }
+            });
+            input?.addEventListener('change', () => setScale(input.value, true));
+            input?.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    setScale(input.value, true);
+                    input.blur();
+                }
+            });
+            reset?.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setScale(0, true);
             });
         });
     }
@@ -515,9 +543,8 @@
     function applyWidgetSettings(widget) {
         const contentScale = normalizeContentScale(widget.dataset.widgetContentScale);
         widget.dataset.widgetContentScale = String(contentScale);
-        widget.querySelectorAll('[data-widget-content-scale-control]').forEach((control) => {
-            control.value = String(contentScale);
-        });
+        widget.style.setProperty('--dashboard-widget-content-scale-factor', formatScaleFactor(contentScale));
+        syncWidgetContentScaleControls(widget, contentScale);
 
         if (widget.dataset.widgetPayload === 'weekday-date') {
             const hideWeekNumber = parseNullableInteger(widget.dataset.widgetIntData) === 1;
@@ -1347,6 +1374,7 @@
         const widgetRect = widget.getBoundingClientRect();
         const startX = event.clientX;
         const startY = event.clientY;
+        const startScrollX = window.scrollX || window.pageXOffset || 0;
         const startScrollY = window.scrollY || window.pageYOffset || 0;
         const startLeft = widgetRect.left - canvasRect.left + canvas.scrollLeft;
         const startTop = widgetRect.top - canvasRect.top + canvas.scrollTop;
@@ -1367,8 +1395,9 @@
         dragWidgets.forEach((dragWidget) => dragWidget.classList.add('is-moving'));
 
         const move = (moveEvent) => {
-            autoScrollPageVertically(moveEvent);
-            const nextLeft = Math.max(0, startLeft + moveEvent.clientX - startX);
+            autoScrollPageNearEdges(moveEvent);
+            const scrollDeltaX = (window.scrollX || window.pageXOffset || 0) - startScrollX;
+            const nextLeft = Math.max(0, startLeft + moveEvent.clientX - startX + scrollDeltaX);
             const scrollDeltaY = (window.scrollY || window.pageYOffset || 0) - startScrollY;
             const nextTop = Math.max(0, startTop + moveEvent.clientY - startY + scrollDeltaY);
             const deltaLeft = Math.max(snapIfNeeded(nextLeft, state) - activeStart.left, -minStartLeft);
@@ -1395,10 +1424,11 @@
         widget.addEventListener('pointercancel', end);
     }
 
-    function autoScrollPageVertically(event) {
+    function autoScrollPageNearEdges(event) {
         const edgeSize = 90;
         const maxStep = 28;
         let scrollDelta = 0;
+        let scrollDeltaX = 0;
 
         if (event.clientY > window.innerHeight - edgeSize) {
             scrollDelta = Math.ceil(((event.clientY - (window.innerHeight - edgeSize)) / edgeSize) * maxStep);
@@ -1406,14 +1436,21 @@
             scrollDelta = -Math.ceil(((edgeSize - event.clientY) / edgeSize) * maxStep);
         }
 
-        if (scrollDelta !== 0) {
-            window.scrollBy({ top: scrollDelta, left: 0, behavior: 'auto' });
+        if (event.clientX > window.innerWidth - edgeSize) {
+            scrollDeltaX = Math.ceil(((event.clientX - (window.innerWidth - edgeSize)) / edgeSize) * maxStep);
+        } else if (event.clientX < edgeSize) {
+            scrollDeltaX = -Math.ceil(((edgeSize - event.clientX) / edgeSize) * maxStep);
+        }
+
+        if (scrollDelta !== 0 || scrollDeltaX !== 0) {
+            window.scrollBy({ top: scrollDelta, left: scrollDeltaX, behavior: 'auto' });
         }
     }
 
     function startResize(root, canvas, widget, event, state, onChange = () => {}) {
         const startX = event.clientX;
         const startY = event.clientY;
+        const startScrollX = window.scrollX || window.pageXOffset || 0;
         const startWidth = widget.offsetWidth;
         const startHeight = widget.offsetHeight;
 
@@ -1421,7 +1458,9 @@
         widget.classList.add('is-resizing');
 
         const move = (moveEvent) => {
-            const nextWidth = Math.max(minWidth, startWidth + moveEvent.clientX - startX);
+            autoScrollPageNearEdges(moveEvent);
+            const scrollDeltaX = (window.scrollX || window.pageXOffset || 0) - startScrollX;
+            const nextWidth = Math.max(minWidth, startWidth + moveEvent.clientX - startX + scrollDeltaX);
             const nextHeight = Math.max(minHeight, startHeight + moveEvent.clientY - startY);
             widget.style.width = `${snapSizeIfNeeded(nextWidth, minWidth, state)}px`;
             widget.style.height = `${snapSizeIfNeeded(nextHeight, minHeight, state)}px`;
@@ -1502,18 +1541,31 @@
         const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'));
         const lowestWidgetRight = widgets
             .reduce((max, widget) => Math.max(max, parsePixel(widget.style.left) + widget.offsetWidth), 0);
+        const isEditing = root.classList.contains('is-editing');
         if (lowestWidgetRight <= 0) {
             canvas.style.setProperty('--dashboard-canvas-width', '100%');
             document.documentElement.style.setProperty('--portal-page-chrome-width', '100%');
+            if (!isEditing && state) {
+                state.editCanvasWidth = 0;
+            }
             return;
         }
 
         const canvasLeft = Math.max(0, canvas.getBoundingClientRect().left);
         const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-        const padding = root.classList.contains('is-editing')
+        const padding = isEditing
             ? state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)
             : state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding);
-        const canvasWidth = Math.max(0, Math.ceil(lowestWidgetRight + padding));
+        let canvasWidth = Math.max(0, Math.ceil(lowestWidgetRight + padding));
+        if (isEditing && state) {
+            state.editCanvasWidth = Math.max(
+                state.editCanvasWidth || 0,
+                canvasWidth,
+                Math.ceil(canvas.getBoundingClientRect().width));
+            canvasWidth = state.editCanvasWidth;
+        } else if (state) {
+            state.editCanvasWidth = 0;
+        }
         const pageWidth = Math.max(viewportWidth, Math.ceil(canvasLeft + canvasWidth));
 
         canvas.style.setProperty('--dashboard-canvas-width', `${canvasWidth}px`);
@@ -1547,7 +1599,30 @@
 
     function normalizeContentScale(value) {
         const parsed = parseNullableInteger(value);
-        return parsed && parsed >= 1 && parsed <= 2 ? parsed : 0;
+        if (parsed === null) {
+            return 0;
+        }
+
+        return Math.max(-100, Math.min(100, parsed));
+    }
+
+    function formatScaleFactor(contentScale) {
+        const factor = Math.max(0.1, (100 + normalizeContentScale(contentScale)) / 100);
+        return factor.toFixed(3);
+    }
+
+    function syncWidgetContentScaleControls(widget, contentScale) {
+        widget.querySelectorAll('[data-widget-content-scale-control]').forEach((container) => {
+            const value = String(contentScale);
+            const range = container.querySelector('[data-widget-content-scale-range]');
+            const input = container.querySelector('[data-widget-content-scale-input]');
+            if (range) {
+                range.value = value;
+            }
+            if (input && input.value !== value) {
+                input.value = value;
+            }
+        });
     }
 
     function normalizeBlankWidgetVariant(value) {
@@ -2265,17 +2340,7 @@
         panel.dataset.widgetSettingsPanel = '';
         panel.hidden = true;
 
-        panel.appendChild(createSelectField(
-            root.dataset.contentScaleLabel || 'Content scale',
-            [
-                ['0', root.dataset.contentScaleDefaultLabel || 'Default'],
-                ['1', root.dataset.contentScaleSmallLabel || 'Small'],
-                ['2', root.dataset.contentScaleLargeLabel || 'Large']
-            ],
-            String(normalizeContentScale(widget.contentScale)),
-            (select) => {
-                select.dataset.widgetContentScaleControl = '';
-            }));
+        panel.appendChild(createContentScaleField(root, widget.contentScale));
 
         if (widget.payload === 'portal-entry-list') {
             panel.appendChild(createSelectField(
@@ -2316,6 +2381,56 @@
         }
 
         return { toggle, panel };
+    }
+
+    function createContentScaleField(root, value) {
+        const normalizedValue = normalizeContentScale(value);
+        const field = document.createElement('div');
+        field.className = 'dashboard-widget__settings-field';
+
+        const text = document.createElement('span');
+        text.textContent = root.dataset.contentScaleLabel || 'Zoom';
+        field.appendChild(text);
+
+        const control = document.createElement('div');
+        control.className = 'dashboard-widget__zoom-control';
+        control.dataset.widgetContentScaleControl = '';
+
+        const range = document.createElement('input');
+        range.type = 'range';
+        range.min = '-100';
+        range.max = '100';
+        range.value = String(normalizedValue);
+        range.dataset.widgetContentScaleRange = '';
+        range.setAttribute('aria-label', root.dataset.contentScaleLabel || 'Zoom');
+        control.appendChild(range);
+
+        const valueWrap = document.createElement('div');
+        valueWrap.className = 'dashboard-widget__zoom-value';
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '-100';
+        input.max = '100';
+        input.value = String(normalizedValue);
+        input.dataset.widgetContentScaleInput = '';
+        input.setAttribute('aria-label', root.dataset.contentScaleValueLabel || 'Zoom value');
+        valueWrap.appendChild(input);
+
+        const suffix = document.createElement('span');
+        suffix.textContent = '%';
+        valueWrap.appendChild(suffix);
+        control.appendChild(valueWrap);
+
+        const reset = document.createElement('button');
+        reset.type = 'button';
+        reset.className = 'btn-link';
+        reset.dataset.widgetContentScaleReset = '';
+        reset.textContent = root.dataset.contentScaleResetLabel || 'Reset zoom';
+        control.appendChild(reset);
+
+        field.appendChild(control);
+        return field;
     }
 
     function createSelectField(labelText, options, selectedValue, configureSelect) {

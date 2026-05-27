@@ -2,6 +2,23 @@
 (() => {
     'use strict';
 
+    function initAppHeaderOffset() {
+        const header = document.querySelector('.app-header');
+        if (!header) {
+            return;
+        }
+
+        const update = () => {
+            document.documentElement.style.setProperty('--app-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);
+        };
+
+        update();
+        window.addEventListener('resize', update);
+        if (window.ResizeObserver) {
+            new ResizeObserver(update).observe(header);
+        }
+    }
+
     function initPortalEntries(root) {
         const list = root.querySelector('[data-portal-pinned-list]');
         const form = root.querySelector('[data-portal-entry-sort-form]');
@@ -78,6 +95,7 @@
     }
 
     function initAll() {
+        initAppHeaderOffset();
         document.querySelectorAll('[data-portal-entries-root]').forEach(initPortalEntries);
     }
 
