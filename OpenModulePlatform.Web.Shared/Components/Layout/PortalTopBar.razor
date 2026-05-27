@@ -25,7 +25,16 @@
          data-shortcuts-enabled="@_portalTopBar.ShortcutsEnabled.ToString().ToLowerInvariant()"
          data-shortcut-all-modules="@_portalTopBar.AllModulesShortcut"
          data-shortcut-favorites="@_portalTopBar.FavoritesShortcut"
-         data-open-on-hover="@_portalTopBar.DropdownsOpenOnHover.ToString().ToLowerInvariant()">
+         data-open-on-hover="@_portalTopBar.DropdownsOpenOnHover.ToString().ToLowerInvariant()"
+         data-session-status-enabled="@_portalTopBar.SessionStatusCheckEnabled.ToString().ToLowerInvariant()"
+         data-session-status-url="@_portalTopBar.SessionStatusUrl"
+         data-session-login-url="@_portalTopBar.SessionLoginUrl"
+         data-session-status-visible-interval="@_portalTopBar.SessionStatusVisibleIntervalSeconds"
+         data-session-status-hidden-interval="@_portalTopBar.SessionStatusHiddenIntervalSeconds"
+         data-session-lost-text="@L["Your session appears to have expired. Sign in again before continuing."]"
+         data-session-network-lost-text="@L["The server could not be reached. Check the connection."]"
+         data-session-login-text="@L["Sign in again"]"
+         data-session-reload-text="@L["Reload"]">
         <nav class="portal-topbar__nav" aria-label="@_portalTopBar.PortalLink.TextKey" data-portal-topbar>
             <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@_portalTopBar.PortalLink.TextKey</a>
 

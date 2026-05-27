@@ -116,7 +116,8 @@ public sealed class PortalTopBarService
                 favoriteToggleUrl: BuildRequestEndpointHref(request, ToggleFavoritePath),
                 dropdownsOpenOnHover,
                 options,
-                GetLogoutUrl());
+                GetLogoutUrl(),
+                GetLoginUrl());
         }
         catch (SqlException ex)
         {
@@ -295,7 +296,8 @@ public sealed class PortalTopBarService
                 favoriteToggleUrl: BuildUriEndpointHref(currentUri, ToggleFavoritePath),
                 dropdownsOpenOnHover,
                 options,
-                GetLogoutUrl());
+                GetLogoutUrl(),
+                GetLoginUrl());
         }
         catch (SqlException ex)
         {
@@ -338,7 +340,8 @@ public sealed class PortalTopBarService
             favoriteToggleUrl: ToggleFavoritePath,
             dropdownsOpenOnHover: true,
             options,
-            logoutUrl);
+            logoutUrl,
+            OmpAuthDefaults.LoginPath);
 
     private static PortalTopBarModel CreateModel(
         PortalTopBarOptions topBarOptions,
@@ -354,7 +357,8 @@ public sealed class PortalTopBarService
         string favoriteToggleUrl,
         bool dropdownsOpenOnHover,
         WebAppOptions options,
-        string logoutUrl)
+        string logoutUrl,
+        string loginUrl)
     {
         var portalAdminSections = isPortalAdmin
             ? PortalAdminNavigation.CreateSections(relativePath => PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, relativePath))
@@ -399,7 +403,12 @@ public sealed class PortalTopBarService
             ShortcutsEnabled = options.TopbarShortcuts?.Enabled == true,
             AllModulesShortcut = options.TopbarShortcuts?.AllModules ?? "m",
             FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f",
-            DropdownsOpenOnHover = dropdownsOpenOnHover
+            DropdownsOpenOnHover = dropdownsOpenOnHover,
+            SessionStatusCheckEnabled = options.SessionStatusCheck?.Enabled != false,
+            SessionStatusUrl = PortalTopBarModel.DefaultSessionStatusPath,
+            SessionLoginUrl = loginUrl,
+            SessionStatusVisibleIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.VisibleIntervalSeconds, 60),
+            SessionStatusHiddenIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.HiddenIntervalSeconds, 180)
         };
     }
 
@@ -697,6 +706,14 @@ WHERE d.setting_category = @setting_category
         => string.IsNullOrWhiteSpace(_authOptions.Value.LogoutPath)
             ? OmpAuthDefaults.LogoutPath
             : _authOptions.Value.LogoutPath;
+
+    private string GetLoginUrl()
+        => string.IsNullOrWhiteSpace(_authOptions.Value.LoginPath)
+            ? OmpAuthDefaults.LoginPath
+            : _authOptions.Value.LoginPath;
+
+    private static int PositiveOrDefault(int? value, int fallback)
+        => value is > 0 ? value.Value : fallback;
 
     private static IReadOnlyList<PortalTopBarCultureOption> CreateLanguageOptions(
         WebAppOptions options,

@@ -2181,4 +2181,10 @@
   <data name="Shuffle" xml:space="preserve"><value>Blanda</value></data>
   <data name="Loop" xml:space="preserve"><value>Loopa</value></data>
   <data name="Add local MP3 files" xml:space="preserve"><value>Lägg till lokala MP3-filer</value></data>
+  <data name="Unsaved local dashboard changes were found. Restore them?" xml:space="preserve"><value>Det finns osparade lokala dashboardändringar. Vill du återställa dem?</value></data>
+  <data name="Restore draft" xml:space="preserve"><value>Återställ</value></data>
+  <data name="Discard draft" xml:space="preserve"><value>Kasta</value></data>
+  <data name="Dashboard changes could not be saved. Your local draft was kept." xml:space="preserve"><value>Dashboardändringarna kunde inte sparas. Det lokala utkastet behölls.</value></data>
+  <data name="Your session appears to have expired. Sign in again before saving dashboard changes." xml:space="preserve"><value>Din session verkar ha gått ut. Logga in igen innan du sparar dashboardändringar.</value></data>
+  <data name="The server could not be reached. Your local dashboard draft was kept." xml:space="preserve"><value>Servern kunde inte nås. Ditt lokala dashboardutkast behölls.</value></data>
 </root>

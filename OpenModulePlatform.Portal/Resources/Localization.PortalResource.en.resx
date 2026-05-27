@@ -537,4 +537,10 @@
   <data name="Shuffle" xml:space="preserve"><value>Shuffle</value></data>
   <data name="Loop" xml:space="preserve"><value>Loop</value></data>
   <data name="Add local MP3 files" xml:space="preserve"><value>Add local MP3 files</value></data>
+  <data name="Unsaved local dashboard changes were found. Restore them?" xml:space="preserve"><value>Unsaved local dashboard changes were found. Restore them?</value></data>
+  <data name="Restore draft" xml:space="preserve"><value>Restore draft</value></data>
+  <data name="Discard draft" xml:space="preserve"><value>Discard draft</value></data>
+  <data name="Dashboard changes could not be saved. Your local draft was kept." xml:space="preserve"><value>Dashboard changes could not be saved. Your local draft was kept.</value></data>
+  <data name="Your session appears to have expired. Sign in again before saving dashboard changes." xml:space="preserve"><value>Your session appears to have expired. Sign in again before saving dashboard changes.</value></data>
+  <data name="The server could not be reached. Your local dashboard draft was kept." xml:space="preserve"><value>The server could not be reached. Your local dashboard draft was kept.</value></data>
 </root>
