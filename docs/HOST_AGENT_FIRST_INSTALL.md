@@ -278,11 +278,16 @@ recommended action has a checked option to refresh package objects from source
 before it runs. The refresh first runs `git pull --ff-only` for each configured
 source repository so the object archive is built from the latest clean upstream
 state. If Git cannot fast-forward a repository, the refresh stops and the Git
-state must be resolved manually before continuing. After the repository update,
-the refresh copies newer or missing module definitions and artifact packages,
-and treats same-version/different-content packages as something to fix before
-continuing. On production servers without source repositories, source-dependent
-actions are disabled and hidden from the normal path.
+state must be resolved manually before continuing. Typical causes include a
+dirty worktree, a detached HEAD, or commits that require a merge. Run
+`git status` in the affected repository, commit or stash pending changes, and
+run `git pull --ff-only` to confirm the repository is current. Each pull has a
+two-minute timeout so a network or credential prompt cannot block the installer
+indefinitely. After the repository update, the refresh copies newer or missing
+module definitions and artifact packages, and treats same-version artifacts
+with different content as something to fix before continuing. On production
+servers without source repositories, source-dependent actions are disabled and
+hidden from the normal path.
 
 Advanced actions such as full bootstrap/reinstall, package-only refresh,
 complete package rebuild, and uninstall are behind `Show other functions`.
@@ -325,9 +330,10 @@ the package and installed database with the source repository manifest:
   the package object library from source manifests and selectively builds only
   missing .NET artifact packages. It first fast-forwards each configured source
   repository with `git pull --ff-only`; a repository that needs merge/conflict
-  handling stops the sync instead of continuing with stale source. Use this
-  before install/upgrade when a private developer package is intentionally
-  minimal. It may update artifact targets in the running installer
+  handling stops the sync instead of continuing with stale source. Git pulls are
+  limited to two minutes per repository. Use this before install/upgrade when a
+  private developer package is intentionally minimal. It may update artifact
+  targets in the running installer
   configuration so the current install/upgrade action uses the freshly synced
   versions, but it does not rewrite the tracked host profile files. Persisting
   host config changes is an explicit package refresh or manual config-editing
