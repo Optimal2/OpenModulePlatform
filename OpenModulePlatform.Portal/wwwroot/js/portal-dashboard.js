@@ -9,7 +9,12 @@
     const defaultBottomPadding = 64;
     const defaultViewBottomPadding = 32;
     const defaultEmptyCanvasHeight = 220;
+    const dashboardDraftStoragePrefix = 'omp.dashboardDraft.';
+    const dashboardDraftSchemaVersion = 1;
+    const dashboardDraftTtlMs = 24 * 60 * 60 * 1000;
+    const dashboardDraftWriteDelayMs = 600;
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
+    const sessionStatusWarningEvent = 'omp:session-status-warning';
     const musicObjectUrls = new Set();
 
     function initDashboard(root) {
@@ -49,9 +54,14 @@
             pendingRemovedWidgetIds: new Set(),
             nextTemporaryWidgetId: -1,
             savedSnapshot: null,
-            savedSignature: ''
+            savedSignature: '',
+            draftWriteTimer: 0
         };
-        const updateDirtyState = () => updateDashboardDirtyState(root, canvas, state, saveButton);
+        const updateDirtyState = () => {
+            const isDirty = updateDashboardDirtyState(root, canvas, state, saveButton);
+            updateDashboardDraftState(root, canvas, state, isDirty);
+            return isDirty;
+        };
 
         updateAlignToGridState(root, alignToggle, state.alignToGrid);
         updateExpandedCanvasState(root, null, state.expandedCanvas);
@@ -68,9 +78,13 @@
 
                 const choice = await requestDashboardDoneChoice(root);
                 if (choice === 'save') {
-                    await saveDashboardChanges(root, canvas, token, state);
-                    maxOrder = getMaxOrder(canvas);
-                    setEditing(false);
+                    try {
+                        await saveDashboardChanges(root, canvas, token, state);
+                        maxOrder = getMaxOrder(canvas);
+                        setEditing(false);
+                    } catch (error) {
+                        handleDashboardSaveError(root, error);
+                    }
                 } else if (choice === 'discard') {
                     const snapshot = state.savedSnapshot || captureDashboardSnapshot(canvas, state);
                     await resetDashboardChanges(root, canvas, token, state, snapshot, () => ++maxOrder, updateDirtyState);
@@ -89,8 +103,12 @@
                 return;
             }
 
-            await saveDashboardChanges(root, canvas, token, state);
-            maxOrder = getMaxOrder(canvas);
+            try {
+                await saveDashboardChanges(root, canvas, token, state);
+                maxOrder = getMaxOrder(canvas);
+            } catch (error) {
+                handleDashboardSaveError(root, error);
+            }
         });
 
         addButton?.addEventListener('click', () => {
@@ -190,6 +208,14 @@
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
         state.savedSignature = getDashboardSignature(canvas, state);
         updateDirtyState();
+        initDashboardDraftPrompt(root, canvas, token, state, updateDirtyState, () => {
+            if (!isEditing) {
+                setEditing(true);
+            }
+
+            maxOrder = getMaxOrder(canvas);
+            updateDirtyState();
+        });
 
         function setEditing(next) {
             if (isEditing === next) {
@@ -1568,12 +1594,317 @@
         return String(value).trim();
     }
 
+    function canUseDashboardDraft(root) {
+        return root?.dataset.canEdit === 'true' && !!root.dataset.dashboardDraftKey && storageAvailable();
+    }
+
+    function storageAvailable() {
+        try {
+            return typeof window.localStorage !== 'undefined';
+        } catch {
+            return false;
+        }
+    }
+
+    function getDashboardDraftStorageKey(root) {
+        if (!canUseDashboardDraft(root)) {
+            return '';
+        }
+
+        return `${dashboardDraftStoragePrefix}${root.dataset.dashboardDraftKey}`;
+    }
+
+    function updateDashboardDraftState(root, canvas, state, isDirty) {
+        if (!canUseDashboardDraft(root) || !root.classList.contains('is-editing')) {
+            return;
+        }
+
+        if (!isDirty) {
+            clearDashboardDraft(root, state);
+            return;
+        }
+
+        scheduleDashboardDraftWrite(root, canvas, state);
+    }
+
+    function scheduleDashboardDraftWrite(root, canvas, state) {
+        if (!canUseDashboardDraft(root)) {
+            return;
+        }
+
+        if (state.draftWriteTimer) {
+            window.clearTimeout(state.draftWriteTimer);
+        }
+
+        state.draftWriteTimer = window.setTimeout(() => {
+            state.draftWriteTimer = 0;
+            writeDashboardDraft(root, canvas, state);
+        }, dashboardDraftWriteDelayMs);
+    }
+
+    function writeDashboardDraft(root, canvas, state) {
+        const key = getDashboardDraftStorageKey(root);
+        if (!key) {
+            return;
+        }
+
+        const draft = {
+            schemaVersion: dashboardDraftSchemaVersion,
+            timestamp: Date.now(),
+            dashboardKey: root.dataset.dashboardDraftKey,
+            serverSignature: state.savedSignature || '',
+            layoutSignature: getDashboardSignature(canvas, state),
+            alignToGrid: !!state.alignToGrid,
+            expandedCanvas: !!state.expandedCanvas,
+            pendingRemovedWidgetIds: Array.from(state.pendingRemovedWidgetIds || []),
+            widgets: Array.from(canvas.querySelectorAll('[data-dashboard-widget]'))
+                .map((widget) => ({
+                    userActiveWidgetId: parseInt(widget.dataset.userActiveWidgetId || '0', 10),
+                    widgetId: parseInt(widget.dataset.widgetId || '0', 10),
+                    widgetType: widget.dataset.widgetType || '',
+                    payload: widget.dataset.widgetPayload || '',
+                    title: widget.querySelector('[data-widget-titlebar]')?.textContent?.trim() || '',
+                    offsetTop: parsePixel(widget.style.top),
+                    offsetLeft: parsePixel(widget.style.left),
+                    width: Math.round(widget.offsetWidth),
+                    height: Math.round(widget.offsetHeight),
+                    orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
+                    intData: parseNullableInteger(widget.dataset.widgetIntData),
+                    contentScale: normalizeContentScale(widget.dataset.widgetContentScale)
+                }))
+        };
+
+        try {
+            window.localStorage.setItem(key, JSON.stringify(draft));
+        } catch (error) {
+            if (window.console && typeof window.console.warn === 'function') {
+                window.console.warn('Could not write dashboard draft.', error);
+            }
+        }
+    }
+
+    function clearDashboardDraft(root, state) {
+        if (state?.draftWriteTimer) {
+            window.clearTimeout(state.draftWriteTimer);
+            state.draftWriteTimer = 0;
+        }
+
+        const key = getDashboardDraftStorageKey(root);
+        if (!key) {
+            return;
+        }
+
+        try {
+            window.localStorage.removeItem(key);
+        } catch {
+            // localStorage can be disabled by browser policy; draft support is best effort.
+        }
+    }
+
+    function readDashboardDraft(root) {
+        const key = getDashboardDraftStorageKey(root);
+        if (!key) {
+            return null;
+        }
+
+        try {
+            const raw = window.localStorage.getItem(key);
+            if (!raw) {
+                return null;
+            }
+
+            const draft = JSON.parse(raw);
+            if (!draft
+                || draft.schemaVersion !== dashboardDraftSchemaVersion
+                || draft.dashboardKey !== root.dataset.dashboardDraftKey
+                || !Array.isArray(draft.widgets)
+                || Date.now() - Number(draft.timestamp || 0) > dashboardDraftTtlMs) {
+                window.localStorage.removeItem(key);
+                return null;
+            }
+
+            return draft;
+        } catch {
+            try {
+                window.localStorage.removeItem(key);
+            } catch {
+                // Ignore cleanup failures.
+            }
+
+            return null;
+        }
+    }
+
+    function initDashboardDraftPrompt(root, canvas, token, state, onChange, afterRestore) {
+        const draft = readDashboardDraft(root);
+        if (!draft || draft.layoutSignature === getDashboardSignature(canvas, state)) {
+            if (draft) {
+                clearDashboardDraft(root, state);
+            }
+            return;
+        }
+
+        showDashboardDraftPrompt(root, () => {
+            hideDashboardDraftPrompt(root);
+            afterRestore?.();
+            restoreDashboardDraft(root, canvas, token, state, draft, onChange);
+            onChange();
+        }, () => {
+            clearDashboardDraft(root, state);
+            hideDashboardDraftPrompt(root);
+        });
+    }
+
+    function ensureDashboardDraftBanner(root) {
+        let banner = root.querySelector('[data-dashboard-draft-banner]');
+        if (banner) {
+            return banner;
+        }
+
+        banner = document.createElement('div');
+        banner.className = 'dashboard-draft-banner';
+        banner.setAttribute('data-dashboard-draft-banner', '');
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
+
+        const message = document.createElement('span');
+        message.className = 'dashboard-draft-banner__message';
+        message.setAttribute('data-dashboard-draft-message', '');
+        banner.appendChild(message);
+
+        const actions = document.createElement('span');
+        actions.className = 'dashboard-draft-banner__actions';
+        actions.setAttribute('data-dashboard-draft-actions', '');
+        banner.appendChild(actions);
+
+        const canvas = root.querySelector('[data-dashboard-canvas]');
+        root.insertBefore(banner, canvas || root.firstChild);
+        return banner;
+    }
+
+    function showDashboardDraftPrompt(root, restore, discard) {
+        const banner = ensureDashboardDraftBanner(root);
+        banner.classList.remove('dashboard-draft-banner--error');
+        banner.querySelector('[data-dashboard-draft-message]').textContent =
+            root.dataset.draftAvailableLabel || 'Unsaved local dashboard changes were found. Restore them?';
+
+        const actions = banner.querySelector('[data-dashboard-draft-actions]');
+        actions.replaceChildren(
+            createDraftButton(root.dataset.draftRestoreLabel || 'Restore draft', restore, true),
+            createDraftButton(root.dataset.draftDiscardLabel || 'Discard draft', discard, false));
+        banner.hidden = false;
+    }
+
+    function showDashboardStatus(root, message) {
+        const banner = ensureDashboardDraftBanner(root);
+        banner.classList.add('dashboard-draft-banner--error');
+        banner.querySelector('[data-dashboard-draft-message]').textContent = message;
+        banner.querySelector('[data-dashboard-draft-actions]').replaceChildren();
+        banner.hidden = false;
+    }
+
+    function hideDashboardDraftPrompt(root) {
+        const banner = root.querySelector('[data-dashboard-draft-banner]');
+        if (banner) {
+            banner.hidden = true;
+        }
+    }
+
+    function createDraftButton(text, handler, primary) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = primary ? 'btn btn-primary' : 'btn';
+        button.textContent = text;
+        button.addEventListener('click', handler);
+        return button;
+    }
+
+    function restoreDashboardDraft(root, canvas, token, state, draft, onChange) {
+        canvas.querySelectorAll('[data-dashboard-widget]').forEach(removeDashboardWidgetElement);
+        state.pendingRemovedWidgetIds.clear();
+        if (Array.isArray(draft.pendingRemovedWidgetIds)) {
+            draft.pendingRemovedWidgetIds.forEach((id) => {
+                const parsed = parseInt(id || '0', 10);
+                if (parsed > 0) {
+                    state.pendingRemovedWidgetIds.add(parsed);
+                }
+            });
+        }
+        state.addedWidgetIds.clear();
+        state.alignToGrid = draft.alignToGrid !== false;
+        state.expandedCanvas = draft.expandedCanvas !== false;
+        updateAlignToGridState(root, root.querySelector('[data-dashboard-align-toggle]'), state.alignToGrid);
+        updateExpandedCanvasState(root, null, state.expandedCanvas);
+
+        let nextTemporaryId = state.nextTemporaryWidgetId;
+        draft.widgets.forEach((item) => {
+            let userActiveWidgetId = Number.isFinite(Number(item.userActiveWidgetId))
+                ? Number(item.userActiveWidgetId)
+                : 0;
+            if (userActiveWidgetId === 0) {
+                userActiveWidgetId = nextTemporaryId--;
+            }
+
+            const widget = createWidgetElement(root, {
+                userActiveWidgetId,
+                widgetId: item.widgetId,
+                title: item.title,
+                widgetType: item.widgetType,
+                payload: item.payload,
+                offsetTop: item.offsetTop,
+                offsetLeft: item.offsetLeft,
+                width: item.width,
+                height: item.height,
+                orderPriority: item.orderPriority,
+                intData: item.intData,
+                stringData: null,
+                contentScale: item.contentScale
+            });
+
+            canvas.appendChild(widget);
+            if (userActiveWidgetId <= 0) {
+                state.addedWidgetIds.add(userActiveWidgetId);
+                nextTemporaryId = Math.min(nextTemporaryId, userActiveWidgetId - 1);
+            }
+
+            bindWidget(root, canvas, widget, token, () => getMaxOrder(canvas) + 1, state, onChange);
+            bindEntryFavoriteToggles(root, widget, token);
+            bindEntryListFilters(widget);
+            bindDashboardMusicPlayers(widget);
+        });
+
+        state.nextTemporaryWidgetId = nextTemporaryId;
+        updateWidgetSelectionState(root, canvas);
+        updateEmptyState(canvas);
+        updateCanvasHeight(root, canvas, state);
+    }
+
+    function handleDashboardSaveError(root, error) {
+        const kind = error?.ompKind === 'network' ? 'network' : error?.ompKind === 'auth' ? 'auth' : 'server';
+        if (kind === 'auth' || kind === 'network') {
+            window.dispatchEvent(new CustomEvent(sessionStatusWarningEvent, { detail: { kind } }));
+        }
+
+        const message = kind === 'auth'
+            ? root.dataset.draftSessionLostLabel || 'Your session appears to have expired. Sign in again before saving dashboard changes.'
+            : kind === 'network'
+                ? root.dataset.draftNetworkLostLabel || 'The server could not be reached. Your local dashboard draft was kept.'
+                : root.dataset.draftSaveFailedLabel || 'Dashboard changes could not be saved. Your local draft was kept.';
+        showDashboardStatus(root, message);
+    }
+
     async function saveDashboardChanges(root, canvas, token, state) {
+        if (getDashboardSignature(canvas, state) !== (state?.savedSignature || '')) {
+            writeDashboardDraft(root, canvas, state);
+        }
+
         await saveLayout(root, canvas, token, state);
         state.pendingRemovedWidgetIds.clear();
         state.addedWidgetIds.clear();
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
         state.savedSignature = getDashboardSignature(canvas, state);
+        clearDashboardDraft(root, state);
+        hideDashboardDraftPrompt(root);
         updateDashboardDirtyState(root, canvas, state);
     }
 
@@ -1808,22 +2139,48 @@
             body.append(key, value == null ? '' : String(value));
         });
 
-        const response = await fetch(url, {
-            method: 'POST',
-            body,
-            credentials: 'same-origin',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
+        let response;
+        try {
+            response = await fetch(url, {
+                method: 'POST',
+                body,
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+        } catch (error) {
+            throw createDashboardRequestError('network', 'Dashboard request could not reach the server.', 0, error);
+        }
+
+        if (response.status === 401 || response.status === 403 || isDashboardLoginRedirect(response)) {
+            throw createDashboardRequestError('auth', `Dashboard request failed with status ${response.status}.`, response.status);
+        }
 
         if (!response.ok) {
-            throw new Error(`Dashboard request failed with status ${response.status}.`);
+            throw createDashboardRequestError('server', `Dashboard request failed with status ${response.status}.`, response.status);
         }
 
         return response.headers.get('content-type')?.includes('application/json')
             ? response.json()
             : null;
+    }
+
+    function isDashboardLoginRedirect(response) {
+        const url = (response?.url || '').toLowerCase();
+        return (response?.redirected && url.includes('/login'))
+            || url.includes('/auth/login');
+    }
+
+    function createDashboardRequestError(kind, message, status, cause) {
+        const error = new Error(message);
+        error.ompKind = kind;
+        error.status = status;
+        if (cause) {
+            error.cause = cause;
+        }
+
+        return error;
     }
 
     function createWidgetElement(root, widget) {

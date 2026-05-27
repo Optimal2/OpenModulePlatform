@@ -9,6 +9,15 @@
     var globalHandlersRegistered = false;
     var rebalanceFrameRequested = false;
     var FAVORITE_CHANGED_EVENT = 'omp:navigation-favorite-changed';
+    var SESSION_STATUS_WARNING_EVENT = 'omp:session-status-warning';
+    var sessionStatusState = {
+        root: null,
+        timer: 0,
+        running: false,
+        failures: 0,
+        currentKind: '',
+        handlersRegistered: false
+    };
     var canHoverMedia = typeof window.matchMedia === 'function'
         ? window.matchMedia('(hover: hover) and (pointer: fine)')
         : null;
@@ -860,6 +869,239 @@
         });
     }
 
+    function parsePositiveInteger(value, fallback) {
+        var parsed = parseInt(value || '', 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    }
+
+    function getSessionStatusConfig(root) {
+        return {
+            enabled: !!root && root.getAttribute('data-session-status-enabled') === 'true',
+            url: root ? root.getAttribute('data-session-status-url') || '/auth/session-status' : '/auth/session-status',
+            loginUrl: root ? root.getAttribute('data-session-login-url') || '/auth/login' : '/auth/login',
+            visibleInterval: parsePositiveInteger(root ? root.getAttribute('data-session-status-visible-interval') : '', 60) * 1000,
+            hiddenInterval: parsePositiveInteger(root ? root.getAttribute('data-session-status-hidden-interval') : '', 180) * 1000,
+            sessionLostText: root ? root.getAttribute('data-session-lost-text') || 'Your session appears to have expired. Sign in again before continuing.' : 'Your session appears to have expired. Sign in again before continuing.',
+            networkLostText: root ? root.getAttribute('data-session-network-lost-text') || 'The server could not be reached. Check the connection.' : 'The server could not be reached. Check the connection.',
+            loginText: root ? root.getAttribute('data-session-login-text') || 'Sign in again' : 'Sign in again',
+            reloadText: root ? root.getAttribute('data-session-reload-text') || 'Reload' : 'Reload'
+        };
+    }
+
+    function getSessionStatusDelay(config) {
+        var baseDelay = document.visibilityState === 'hidden'
+            ? config.hiddenInterval
+            : config.visibleInterval;
+        if (sessionStatusState.currentKind === 'network' && sessionStatusState.failures > 0) {
+            return baseDelay * Math.min(6, sessionStatusState.failures + 1);
+        }
+
+        return baseDelay;
+    }
+
+    function scheduleSessionStatusCheck(delay) {
+        if (sessionStatusState.timer) {
+            window.clearTimeout(sessionStatusState.timer);
+        }
+
+        if (!sessionStatusState.root) {
+            return;
+        }
+
+        sessionStatusState.timer = window.setTimeout(runSessionStatusCheck, Math.max(0, delay));
+    }
+
+    function runSessionStatusCheckSoon() {
+        if (!sessionStatusState.root) {
+            return;
+        }
+
+        scheduleSessionStatusCheck(0);
+    }
+
+    function isSessionLoginResponse(response) {
+        if (!response) {
+            return false;
+        }
+
+        var url = (response.url || '').toLowerCase();
+        return (response.redirected && url.indexOf('/login') >= 0)
+            || url.indexOf('/auth/login') >= 0;
+    }
+
+    async function runSessionStatusCheck() {
+        var root = sessionStatusState.root;
+        var config = getSessionStatusConfig(root);
+        if (!config.enabled || !config.url) {
+            return;
+        }
+
+        if (sessionStatusState.running) {
+            scheduleSessionStatusCheck(config.visibleInterval);
+            return;
+        }
+
+        sessionStatusState.running = true;
+        try {
+            var response = await fetch(config.url, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                sessionStatusState.currentKind = 'auth';
+                showSessionStatusBanner('auth', config);
+                return;
+            }
+
+            if (!response.ok) {
+                sessionStatusState.failures += 1;
+                sessionStatusState.currentKind = 'network';
+                showSessionStatusBanner('network', config);
+                return;
+            }
+
+            var payload = response.headers.get('content-type')?.indexOf('application/json') >= 0
+                ? await response.json()
+                : null;
+            if (payload && payload.authenticated === false) {
+                sessionStatusState.currentKind = 'auth';
+                showSessionStatusBanner('auth', config);
+                return;
+            }
+
+            sessionStatusState.failures = 0;
+            sessionStatusState.currentKind = '';
+            hideSessionStatusBanner();
+        } catch {
+            sessionStatusState.failures += 1;
+            sessionStatusState.currentKind = 'network';
+            showSessionStatusBanner('network', config);
+        } finally {
+            sessionStatusState.running = false;
+            scheduleSessionStatusCheck(getSessionStatusDelay(config));
+        }
+    }
+
+    function createSessionStatusBanner() {
+        var banner = document.querySelector('[data-session-status-banner]');
+        if (banner) {
+            return banner;
+        }
+
+        banner = document.createElement('div');
+        banner.className = 'omp-session-status-banner';
+        banner.setAttribute('data-session-status-banner', '');
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
+
+        var message = document.createElement('span');
+        message.className = 'omp-session-status-banner__message';
+        message.setAttribute('data-session-status-message', '');
+        banner.appendChild(message);
+
+        var actions = document.createElement('span');
+        actions.className = 'omp-session-status-banner__actions';
+
+        var login = document.createElement('a');
+        login.className = 'omp-session-status-banner__action';
+        login.setAttribute('data-session-status-login', '');
+        actions.appendChild(login);
+
+        var reload = document.createElement('button');
+        reload.type = 'button';
+        reload.className = 'omp-session-status-banner__action';
+        reload.setAttribute('data-session-status-reload', '');
+        reload.addEventListener('click', function () {
+            window.location.reload();
+        });
+        actions.appendChild(reload);
+
+        banner.appendChild(actions);
+        document.body.appendChild(banner);
+        return banner;
+    }
+
+    function buildLoginUrl(loginUrl) {
+        var returnUrl = window.location.pathname + window.location.search;
+        var separator = loginUrl.indexOf('?') >= 0 ? '&' : '?';
+        return loginUrl + separator + 'returnUrl=' + encodeURIComponent(returnUrl || '/');
+    }
+
+    function showSessionStatusBanner(kind, config) {
+        var banner = createSessionStatusBanner();
+        var message = banner.querySelector('[data-session-status-message]');
+        var login = banner.querySelector('[data-session-status-login]');
+        var reload = banner.querySelector('[data-session-status-reload]');
+
+        banner.classList.toggle('omp-session-status-banner--auth', kind === 'auth');
+        banner.classList.toggle('omp-session-status-banner--network', kind !== 'auth');
+        if (message) {
+            message.textContent = kind === 'auth' ? config.sessionLostText : config.networkLostText;
+        }
+
+        if (login) {
+            login.textContent = config.loginText;
+            login.href = buildLoginUrl(config.loginUrl);
+            login.hidden = kind !== 'auth';
+        }
+
+        if (reload) {
+            reload.textContent = config.reloadText;
+        }
+
+        banner.hidden = false;
+    }
+
+    function hideSessionStatusBanner() {
+        var banner = document.querySelector('[data-session-status-banner]');
+        if (banner) {
+            banner.hidden = true;
+        }
+    }
+
+    function handleSessionStatusWarning(event) {
+        var root = sessionStatusState.root || document.querySelector('[data-portal-topbar-root][data-session-status-enabled="true"]');
+        var config = getSessionStatusConfig(root);
+        var kind = event && event.detail && event.detail.kind === 'network' ? 'network' : 'auth';
+        sessionStatusState.currentKind = kind;
+        if (kind === 'network') {
+            sessionStatusState.failures += 1;
+        }
+
+        showSessionStatusBanner(kind, config);
+    }
+
+    function initSessionStatusCheck(topbar) {
+        if (!topbar || topbar.getAttribute('data-session-status-enabled') !== 'true') {
+            return;
+        }
+
+        sessionStatusState.root = topbar;
+
+        if (!sessionStatusState.handlersRegistered) {
+            sessionStatusState.handlersRegistered = true;
+            window.addEventListener('focus', runSessionStatusCheckSoon);
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                    runSessionStatusCheckSoon();
+                } else {
+                    scheduleSessionStatusCheck(getSessionStatusDelay(getSessionStatusConfig(sessionStatusState.root)));
+                }
+            });
+            window.addEventListener(SESSION_STATUS_WARNING_EVENT, handleSessionStatusWarning);
+        }
+
+        if (!sessionStatusState.timer) {
+            scheduleSessionStatusCheck(0);
+        }
+    }
+
     function registerGlobalHandlers() {
         if (globalHandlersRegistered) {
             return;
@@ -909,6 +1151,7 @@
             topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
             topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
             topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
+            initSessionStatusCheck(topbar);
             scheduleRebalance(topbar);
             return;
         }
@@ -920,6 +1163,7 @@
         topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
         topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
+        initSessionStatusCheck(topbar);
 
         topbar.querySelectorAll('[data-portal-topbar-admin-menu]').forEach(function (menu) {
             var parentDetails = menu.closest('details');

@@ -65,7 +65,12 @@ public static class PortalTopBarModelFactory
             ShortcutsEnabled = options.TopbarShortcuts?.Enabled == true,
             AllModulesShortcut = options.TopbarShortcuts?.AllModules ?? "m",
             FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f",
-            DropdownsOpenOnHover = true
+            DropdownsOpenOnHover = true,
+            SessionStatusCheckEnabled = options.SessionStatusCheck?.Enabled != false,
+            SessionStatusUrl = PortalTopBarModel.DefaultSessionStatusPath,
+            SessionLoginUrl = OmpAuthDefaults.LoginPath,
+            SessionStatusVisibleIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.VisibleIntervalSeconds, 60),
+            SessionStatusHiddenIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.HiddenIntervalSeconds, 180)
         };
     }
 
@@ -114,4 +119,7 @@ public static class PortalTopBarModelFactory
             ? trimmed.TrimEnd('/')
             : $"/{trimmed.TrimStart('/').TrimEnd('/')}";
     }
+
+    private static int PositiveOrDefault(int? value, int fallback)
+        => value is > 0 ? value.Value : fallback;
 }

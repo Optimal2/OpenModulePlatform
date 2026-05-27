@@ -8,6 +8,7 @@ namespace OpenModulePlatform.Web.Shared.Navigation;
 public sealed class PortalTopBarModel
 {
     public const string DefaultSettingsPath = "/account/settings";
+    public const string DefaultSessionStatusPath = "/auth/session-status";
 
     public static PortalTopBarModel Hidden { get; } = new()
     {
@@ -36,7 +37,12 @@ public sealed class PortalTopBarModel
         AvailableRoles = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>(),
         LogoutUrl = OmpAuthDefaults.LogoutPath,
         SettingsUrl = DefaultSettingsPath,
-        DropdownsOpenOnHover = true
+        DropdownsOpenOnHover = true,
+        SessionStatusCheckEnabled = true,
+        SessionStatusUrl = DefaultSessionStatusPath,
+        SessionLoginUrl = OmpAuthDefaults.LoginPath,
+        SessionStatusVisibleIntervalSeconds = 60,
+        SessionStatusHiddenIntervalSeconds = 180
     };
 
     public bool IsVisible { get; init; }
@@ -115,4 +121,14 @@ public sealed class PortalTopBarModel
     public string FavoritesShortcut { get; init; } = "f";
 
     public bool DropdownsOpenOnHover { get; init; } = true;
+
+    public bool SessionStatusCheckEnabled { get; init; } = true;
+
+    public string SessionStatusUrl { get; init; } = DefaultSessionStatusPath;
+
+    public string SessionLoginUrl { get; init; } = OmpAuthDefaults.LoginPath;
+
+    public int SessionStatusVisibleIntervalSeconds { get; init; } = 60;
+
+    public int SessionStatusHiddenIntervalSeconds { get; init; } = 180;
 }
