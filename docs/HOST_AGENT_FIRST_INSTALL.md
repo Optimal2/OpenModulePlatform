@@ -275,11 +275,14 @@ same concrete host to both roles so role-targeted desired apps work immediately.
 
 On machines where the matched config resolves valid source repositories, the
 recommended action has a checked option to refresh package objects from source
-before it runs. The refresh copies newer or missing module definitions and
-artifact packages, and treats same-version/different-content packages as
-something to fix before continuing. On production servers without source
-repositories, source-dependent actions are disabled and hidden from the normal
-path.
+before it runs. The refresh first runs `git pull --ff-only` for each configured
+source repository so the object archive is built from the latest clean upstream
+state. If Git cannot fast-forward a repository, the refresh stops and the Git
+state must be resolved manually before continuing. After the repository update,
+the refresh copies newer or missing module definitions and artifact packages,
+and treats same-version/different-content packages as something to fix before
+continuing. On production servers without source repositories, source-dependent
+actions are disabled and hidden from the normal path.
 
 Advanced actions such as full bootstrap/reinstall, package-only refresh,
 complete package rebuild, and uninstall are behind `Show other functions`.
@@ -320,12 +323,15 @@ the package and installed database with the source repository manifest:
   package files that need to be replaced.
 - `Sync package objects` is the normal lightweight developer action. It fills
   the package object library from source manifests and selectively builds only
-  missing .NET artifact packages. Use this before install/upgrade when a private
-  developer package is intentionally minimal. It may update artifact targets in
-  the running installer configuration so the current install/upgrade action uses
-  the freshly synced versions, but it does not rewrite the tracked host profile
-  files. Persisting host config changes is an explicit package refresh or manual
-  config-editing step.
+  missing .NET artifact packages. It first fast-forwards each configured source
+  repository with `git pull --ff-only`; a repository that needs merge/conflict
+  handling stops the sync instead of continuing with stale source. Use this
+  before install/upgrade when a private developer package is intentionally
+  minimal. It may update artifact targets in the running installer
+  configuration so the current install/upgrade action uses the freshly synced
+  versions, but it does not rewrite the tracked host profile files. Persisting
+  host config changes is an explicit package refresh or manual config-editing
+  step.
 
 Private developer installer repositories can keep the committed package small:
 the root `OpenModulePlatform.Bootstrapper.exe` plus host profiles below
@@ -410,10 +416,11 @@ the bootstrapper itself needs host-local helper files, place them below
 `data/hosts/<profile>`.
 
 The GUI action `Sync package objects` is the lightweight alternative to
-`Create updated installer package`. It uses the same source manifest comparison
-as `Check source objects`, then updates module-definition JSON files and copies
-already-built standard artifact packages into the shared package library as
-needed. When a required standard artifact package is
+`Create updated installer package`. It first fast-forwards the configured source
+repositories, then uses the same source manifest comparison as `Check source
+objects`, updates module-definition JSON files, and copies already-built
+standard artifact packages into the shared package library as needed. When a
+required standard artifact package is
 missing and the component manifest points at a single .NET project through
 `projectPath`, the bootstrapper publishes only that project, wraps the publish
 output as an OMP artifact package, and writes it to `RuntimeRoot\ArtifactArchive`
