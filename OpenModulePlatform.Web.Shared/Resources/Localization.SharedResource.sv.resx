@@ -35,4 +35,8 @@
   <data name="Module definition editor" xml:space="preserve"><value>Moduldefinitionseditor</value></data>
   <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap-konfigurationseditor</value></data>
   <data name="Navigation" xml:space="preserve"><value>Navigering</value></data>
+  <data name="Your session appears to have expired. Sign in again before continuing." xml:space="preserve"><value>Din session verkar ha gått ut. Logga in igen innan du fortsätter.</value></data>
+  <data name="The server could not be reached. Check the connection." xml:space="preserve"><value>Servern kunde inte nås. Kontrollera anslutningen.</value></data>
+  <data name="Sign in again" xml:space="preserve"><value>Logga in igen</value></data>
+  <data name="Reload" xml:space="preserve"><value>Ladda om</value></data>
 </root>

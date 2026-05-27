@@ -65,6 +65,15 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
+app.MapGet("/session-status", (HttpContext context) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+
+    return context.User.Identity?.IsAuthenticated == true
+        ? Results.Json(new { authenticated = true })
+        : Results.Unauthorized();
+});
+
 app.MapPost("/logout", async (HttpContext context, IOptions<OmpAuthOptions> authOptions) =>
 {
     await context.SignOutAsync(OmpAuthDefaults.AuthenticationScheme);

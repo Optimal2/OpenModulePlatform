@@ -50,6 +50,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public bool DashboardExpandedCanvas { get; private set; } = true;
 
+    public string DashboardDraftKey { get; private set; } = string.Empty;
+
     public OverviewMetrics Metrics { get; private set; } = new();
 
     public IReadOnlyList<PortalEntry> FavoritePortalEntries { get; private set; } = [];
@@ -176,6 +178,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         if (userId.HasValue)
         {
+            DashboardDraftKey = $"portal-dashboard-user-{userId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             var preferences = await _dashboard.GetPreferencesAsync(userId.Value, ct);
             DashboardAlignToGrid = preferences.AlignToGrid;
             DashboardExpandedCanvas = true;
