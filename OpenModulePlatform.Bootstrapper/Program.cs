@@ -4956,7 +4956,8 @@ VALUES
         string fileName,
         IReadOnlyList<string> arguments,
         bool throwOnFailure = true,
-        string? workingDirectory = null)
+        string? workingDirectory = null,
+        TimeSpan? timeout = null)
     {
         var info = new ProcessStartInfo(fileName)
         {
@@ -4978,9 +4979,52 @@ VALUES
 
         using var process = Process.Start(info)
             ?? throw new InvalidOperationException($"Could not start process: {fileName}");
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        var exited = true;
+        if (timeout is { } maxWait)
+        {
+            exited = process.WaitForExit(GetProcessTimeoutMilliseconds(maxWait));
+        }
+        else
+        {
+            process.WaitForExit();
+        }
+
+        if (!exited)
+        {
+            var timeoutMessage = $"{Path.GetFileName(fileName)} timed out after {timeout!.Value.TotalSeconds:n0} seconds.";
+            try
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                var killFailureMessage = $"{timeoutMessage} Could not terminate the process: {ex.Message}";
+                if (throwOnFailure)
+                {
+                    throw new TimeoutException(killFailureMessage, ex);
+                }
+
+                return new ProcessResult(-1, string.Empty, killFailureMessage);
+            }
+
+            var timedOutStdout = stdoutTask.GetAwaiter().GetResult();
+            var timedOutStderr = stderrTask.GetAwaiter().GetResult();
+            var timedOutError = string.IsNullOrWhiteSpace(timedOutStderr)
+                ? timeoutMessage
+                : timedOutStderr + Environment.NewLine + timeoutMessage;
+            if (throwOnFailure)
+            {
+                throw new TimeoutException($"{timeoutMessage}: {timedOutStdout}{timedOutError}");
+            }
+
+            return new ProcessResult(-1, timedOutStdout, timedOutError);
+        }
+
+        var stdout = stdoutTask.GetAwaiter().GetResult();
+        var stderr = stderrTask.GetAwaiter().GetResult();
 
         if (throwOnFailure && process.ExitCode != 0)
         {
@@ -4989,6 +5033,21 @@ VALUES
         }
 
         return new ProcessResult(process.ExitCode, stdout, stderr);
+    }
+
+    private static int GetProcessTimeoutMilliseconds(TimeSpan timeout)
+    {
+        if (timeout.TotalMilliseconds <= 0)
+        {
+            return 1;
+        }
+
+        if (timeout.TotalMilliseconds >= int.MaxValue)
+        {
+            return int.MaxValue;
+        }
+
+        return (int)Math.Ceiling(timeout.TotalMilliseconds);
     }
 
     private static string GetScPath()

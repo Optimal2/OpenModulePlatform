@@ -12,6 +12,7 @@ internal static partial class Program
     private const int InstallerRefreshParentWaitSeconds = 120;
     private const int InstallerRefreshPathSafetyMargin = 240;
     private const int InstallerRefreshExpectedDeepSuffixLength = 190;
+    private const int DeveloperSourceGitPullTimeoutSeconds = 120;
 
     private static async Task<int> RunInstallerPackageRefreshAsync(CliOptions cli)
     {
@@ -630,11 +631,21 @@ internal static partial class Program
             }
 
             progress?.Invoke($"Updating source repository {displayName}...");
-            var result = RunProcess(
-                "git",
-                ["-C", sourceRoot, "pull", "--ff-only"],
-                throwOnFailure: false,
-                workingDirectory: sourceRoot);
+            ProcessResult result;
+            try
+            {
+                result = RunProcess(
+                    "git",
+                    ["-C", sourceRoot, "pull", "--ff-only"],
+                    throwOnFailure: false,
+                    workingDirectory: sourceRoot,
+                    timeout: TimeSpan.FromSeconds(DeveloperSourceGitPullTimeoutSeconds));
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                result = new ProcessResult(-1, string.Empty, "Could not start git.exe: " + ex.Message);
+            }
+
             var output = NormalizeProcessOutput(result.StdOut, result.StdErr);
             if (result.ExitCode == 0)
             {
