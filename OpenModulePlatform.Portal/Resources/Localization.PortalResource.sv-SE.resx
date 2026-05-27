@@ -2191,6 +2191,19 @@
   <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
   <data name="Zoom value" xml:space="preserve"><value>Zoomvärde</value></data>
   <data name="Reset zoom" xml:space="preserve"><value>Återställ zoom</value></data>
+  <data name="Manage music library" xml:space="preserve"><value>Hantera musikbibliotek</value></data>
+  <data name="Music library" xml:space="preserve"><value>Musikbibliotek</value></data>
+  <data name="MP3 file" xml:space="preserve"><value>MP3-fil</value></data>
+  <data name="Track title" xml:space="preserve"><value>Låttitel</value></data>
+  <data name="Artist" xml:space="preserve"><value>Artist</value></data>
+  <data name="Attribution" xml:space="preserve"><value>Attribution</value></data>
+  <data name="Source URL" xml:space="preserve"><value>Käll-URL</value></data>
+  <data name="Save track" xml:space="preserve"><value>Spara låt</value></data>
+  <data name="Import ZIP" xml:space="preserve"><value>Importera ZIP</value></data>
+  <data name="Music library updated." xml:space="preserve"><value>Musikbiblioteket uppdaterades.</value></data>
+  <data name="Could not update music library." xml:space="preserve"><value>Musikbiblioteket kunde inte uppdateras.</value></data>
+  <data name="Select an MP3 file." xml:space="preserve"><value>Välj en MP3-fil.</value></data>
+  <data name="Select a ZIP package." xml:space="preserve"><value>Välj ett ZIP-paket.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Visa dashboardens navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under topbaren.</value></data>
 </root>

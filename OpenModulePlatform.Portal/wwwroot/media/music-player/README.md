@@ -1,9 +1,10 @@
 # Portal Dashboard Music Player
 
-The built-in Portal dashboard music player reads `playlist.json` from this
-folder. The public repository intentionally stores only metadata, not MP3
-files, so fresh clones can show the widget and playlist format without carrying
-binary media.
+The built-in Portal dashboard music player stores its shared playlist metadata
+and MP3 media in the Portal database. This folder only documents the legacy
+static playlist format and provides a small public metadata sample for creating
+import zips. Runtime media must not be shipped inside the Portal web artifact,
+because web artifacts are replaced during upgrades.
 
 ## Playlist Format
 
@@ -25,39 +26,40 @@ or `url`; the other fields are display and attribution metadata.
 }
 ```
 
-Relative `src` values are resolved beside `playlist.json`, so `track-name.mp3`
-means `wwwroot/media/music-player/track-name.mp3` in the deployed Portal web
-app. `url` can be used for an absolute or externally hosted audio file.
+When `playlist.json` is used inside an admin import zip, relative `src` values
+refer to MP3 files in the same zip. `url` can be used for externally hosted
+audio metadata, but the built-in admin importer stores uploaded MP3 binaries in
+`omp_portal.widget_binary_data` and rewrites playback URLs server-side.
+
+The zip importer also accepts a `Songs.txt` file with repeated blocks in this
+shape:
+
+```text
+Music track: Track name by Artist
+Source: https://example.com/music
+License or usage description
+```
 
 ## Local Development
 
-Keep MP3 files outside the public OpenModulePlatform repository. Local Portal
-builds automatically include MP3 files from the sibling private folder
-`<workspace>\DEV\MP3` when that folder exists. This lets local installer and
-universal-package builds carry the test media without tracking the binary files
-in Git. The automatic build path expects the standard workspace layout where
-`DEV` and `OpenModulePlatform` are sibling folders; copy MP3 files manually if
-your private DEV repository lives somewhere else.
+Keep MP3 files outside the public OpenModulePlatform repository. For local
+testing, sign in as a Portal admin, add the music player widget, open its music
+library button, and upload MP3 files or a zip containing MP3 files plus
+`playlist.json` or `Songs.txt`.
 
-For direct static-file testing without rebuilding the Portal artifact, copy the
-private test files into this folder after cloning:
-
-```powershell
-Copy-Item "<workspace>\DEV\MP3\*.mp3" -Destination ".\OpenModulePlatform.Portal\wwwroot\media\music-player"
-```
-
-The widget still works when the server playlist or MP3 files are missing. It
-shows the empty-state label and lets the user add local MP3 files in the browser
-session through the file picker or drag-and-drop. Browser-added files are kept
-as client-side object URLs and are never uploaded to the server.
+The widget still works when the database playlist is empty. It shows the
+empty-state label and lets the user add local MP3 files in the browser session
+through the file picker or drag-and-drop. Browser-added files are kept as
+client-side object URLs and are never uploaded to the server.
 
 ## Deployment And Packages
 
-MP3 files should travel through private installation material, not through the
-public OpenModulePlatform repository. For customer or host-specific media, use
-the private installer host profile, a config overlay, or another universal
-package object that places the files beside the deployed Portal playlist.
+MP3 files should travel through Portal admin upload, a purpose-built SQL seed,
+or a future universal-package object that writes to `omp_portal.widget_data` and
+`omp_portal.widget_binary_data`. They should not travel as files in the Portal
+artifact folder.
 
 The dashboard widget definition itself is separate from the media files. Widget
 metadata can be exported and imported through Portal or universal packages under
-`widgets/`, while the MP3 files remain deployment-owned media.
+`widgets/`, while the shared widget runtime data remains in Portal database
+tables.
