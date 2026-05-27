@@ -125,6 +125,13 @@ widget for the active track. Users can also add local MP3 files in the browser
 session through the widget controls or drag-and-drop. Local files are held as
 browser object URLs and are never uploaded to the server.
 
+The public repository should keep only playlist metadata and documentation for
+this widget. MP3 files are deployment-owned media and should be supplied through
+private installer host profiles, config overlays, or another universal package
+object that places them beside `playlist.json`. See
+[`../OpenModulePlatform.Portal/wwwroot/media/music-player/README.md`](../OpenModulePlatform.Portal/wwwroot/media/music-player/README.md)
+for the playlist format and packaging guidance.
+
 Portal administrators can import and export widget definitions from
 `/admin/dashboardwidgets`. This lets module-specific widgets live beside the
 module that owns them, including modules maintained in private repositories.

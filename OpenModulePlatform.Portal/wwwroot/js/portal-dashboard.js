@@ -302,7 +302,7 @@
             if (userActiveWidgetId > 0) {
                 state.pendingRemovedWidgetIds.add(userActiveWidgetId);
             }
-            widget.remove();
+            removeDashboardWidgetElement(widget);
             updateWidgetSelectionState(root, canvas);
             updateEmptyState(canvas);
             updateCanvasHeight(root, canvas, state);
@@ -922,7 +922,8 @@
             index: 0,
             shuffle: false,
             loop: false,
-            seeking: false
+            seeking: false,
+            errorAdvanceTimer: null
         };
 
         const setStatus = (message) => {
@@ -968,6 +969,11 @@
         };
 
         const setTrack = (index, autoplay = false) => {
+            if (state.errorAdvanceTimer) {
+                window.clearTimeout(state.errorAdvanceTimer);
+                state.errorAdvanceTimer = null;
+            }
+
             if (state.tracks.length === 0) {
                 audio.removeAttribute('src');
                 setTrackText(null);
@@ -1060,8 +1066,31 @@
         audio.addEventListener('loadedmetadata', updateProgress);
         audio.addEventListener('timeupdate', updateProgress);
         audio.addEventListener('error', () => {
+            const failedSource = audio.currentSrc || audio.src;
             setStatus(player.dataset.errorLabel || 'Could not play track');
             updatePlayState();
+            if (state.tracks.length <= 1) {
+                return;
+            }
+
+            if (state.errorAdvanceTimer) {
+                window.clearTimeout(state.errorAdvanceTimer);
+            }
+
+            state.errorAdvanceTimer = window.setTimeout(() => {
+                state.errorAdvanceTimer = null;
+                const track = state.tracks[state.index];
+                const currentSource = audio.currentSrc || audio.src;
+                if (!track || track.src !== failedSource || currentSource !== failedSource) {
+                    return;
+                }
+
+                if (state.index >= state.tracks.length - 1 && !state.loop) {
+                    return;
+                }
+
+                move(1, true);
+            }, 1500);
         });
 
         files?.addEventListener('change', () => {
@@ -1165,7 +1194,7 @@
             .filter(isMusicFile);
         files.forEach((file) => {
             const source = URL.createObjectURL(file);
-            musicObjectUrls.add(source);
+            registerMusicObjectUrl(player, source);
             state.tracks.push({
                 src: source,
                 title: getFileStem(file.name) || file.name,
@@ -1200,6 +1229,44 @@
             link.textContent = getMusicSourceLabel(track.source);
             container.appendChild(link);
         }
+    }
+
+    function registerMusicObjectUrl(player, source) {
+        const playerUrls = getMusicPlayerObjectUrls(player);
+        playerUrls.add(source);
+        musicObjectUrls.add(source);
+    }
+
+    function getMusicPlayerObjectUrls(player) {
+        if (!player.__ompMusicObjectUrls) {
+            Object.defineProperty(player, '__ompMusicObjectUrls', {
+                value: new Set(),
+                configurable: true
+            });
+        }
+
+        return player.__ompMusicObjectUrls;
+    }
+
+    function revokeDashboardMusicPlayerObjectUrls(scope) {
+        const players = scope.matches?.('[data-dashboard-music-player]')
+            ? [scope, ...scope.querySelectorAll('[data-dashboard-music-player]')]
+            : Array.from(scope.querySelectorAll('[data-dashboard-music-player]'));
+
+        players.forEach((player) => {
+            const playerUrls = player.__ompMusicObjectUrls;
+            if (!playerUrls) {
+                return;
+            }
+
+            playerUrls.forEach(revokeMusicObjectUrl);
+            playerUrls.clear();
+        });
+    }
+
+    function revokeMusicObjectUrl(source) {
+        URL.revokeObjectURL(source);
+        musicObjectUrls.delete(source);
     }
 
     function getMusicSourceLabel(source) {
@@ -1684,7 +1751,7 @@
     }
 
     function restoreDashboardSnapshot(root, canvas, token, state, snapshot, nextOrder, onChange = () => {}) {
-        canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => widget.remove());
+        canvas.querySelectorAll('[data-dashboard-widget]').forEach(removeDashboardWidgetElement);
 
         snapshot.widgets.forEach((savedWidget) => {
             const widget = savedWidget.cloneNode(true);
@@ -1932,6 +1999,11 @@
         blank.className = 'dashboard-widget__blank';
         blank.dataset.blankWidget = '';
         return blank;
+    }
+
+    function removeDashboardWidgetElement(widget) {
+        revokeDashboardMusicPlayerObjectUrls(widget);
+        widget.remove();
     }
 
     function bringToFront(widget, order) {
