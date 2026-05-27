@@ -14,6 +14,8 @@ Use these files as the main map:
 
 - `AGENTS.md` - operational rules for Codex and other coding agents.
 - `README.md` - human project overview and quick start.
+- `docs/README.md` - documentation index and recommended reading order.
+- `docs/TERMINOLOGY.md` - platform, deployment, and operations glossary.
 - `docs/ARCHITECTURE.md` - platform model and request flows.
 - `docs/AUTHENTICATION_AND_RBAC.md` - shared OMP authentication, users, role principals, and RBAC.
 - `docs/ADMIN_CONFIGURATION.md` - manual Portal administration guidance.
@@ -29,6 +31,39 @@ Use these files as the main map:
 - `installer/README.md` - public sample HostAgent-first installer layout.
 - `scripts/README.md` - current script inventory.
 - `sql/README.md` - SQL setup and initialization conventions.
+
+## Reading Order For New Agents
+
+Use the smallest reading set that fits the task:
+
+- Orientation: `AGENTS.md`, `docs/README.md`, `docs/TERMINOLOGY.md`, and
+  `docs/ARCHITECTURE.md`.
+- Deployment pipeline: add `docs/PORTABLE_DEPLOYMENT_OBJECTS.md`,
+  `docs/MODULE_DEFINITIONS.md`, `docs/ARTIFACT_PACKAGES.md`,
+  `docs/CONFIG_OVERLAYS.md`, `docs/UNIVERSAL_MODULE_PACKAGES.md`,
+  `docs/HOST_AGENT_FIRST_INSTALL.md`, and `docs/HOST_AGENT.md`.
+- Repository packaging: add `docs/OMP_COMPONENT_MANIFEST.md`,
+  `docs/VERSIONING_AND_IDENTITIES.md`, `installer/README.md`, and
+  `scripts/README.md`.
+- Local runtime validation: add `PUBLISH_README.md`, `sql/README.md`, and the
+  relevant runtime docs such as `docs/HOSTING_WINDOWS_IIS.md` or
+  `docs/WORKER_RUNTIME.md`.
+
+## OMP-Compatible Repository Conventions
+
+Module repositories should be easy for both humans and agents to inspect. A
+well-formed OMP-compatible repository should normally provide:
+
+- `AGENTS.md` for repository-specific agent rules.
+- `omp-components.json` for module definitions and artifact components owned by
+  the repository.
+- `scripts/omp/export-universal-package.ps1` when the repository can export
+  portable objects directly.
+- README or docs that explain which module keys, app keys, artifacts, widgets,
+  and config overlays the repository owns.
+
+Private consumer repositories may include customer-specific data, but that data
+must not leak into this public OpenModulePlatform repository.
 
 ## Language and Documentation Policy
 
