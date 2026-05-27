@@ -176,6 +176,7 @@ internal static partial class Program
 
             if (config.HostAgent.Enabled)
             {
+                WriteHostAgentInstallOrUpdateIntent(config);
                 EnsureRuntimeFilesystemAccess(config);
                 await InstallHostAgentAsync(config, payloadRoot);
             }
@@ -3164,6 +3165,32 @@ SELECT COUNT(1) FROM @changes;
             installPath,
             displayName,
             version);
+    }
+
+    private static void WriteHostAgentInstallOrUpdateIntent(BootstrapConfig config)
+    {
+        if (!OperatingSystem.IsWindows()
+            || string.IsNullOrWhiteSpace(config.HostAgent.ServiceName))
+        {
+            return;
+        }
+
+        var identity = ResolveBootstrapHostAgentServiceIdentity(config);
+        if (ServiceExists(identity.ServiceName))
+        {
+            Console.WriteLine(
+                $"> HostAgent service '{identity.ServiceName}' already exists; full install/update will stop and reconfigure it from this profile.");
+            return;
+        }
+
+        if (HostAgentServiceWithPrefixExists(identity.ServiceNamePrefix))
+        {
+            Console.WriteLine(
+                $"> HostAgent service '{identity.ServiceName}' is missing, but another HostAgent service is present; full install/update will configure '{identity.ServiceName}' from this profile and may remove target-path duplicates.");
+            return;
+        }
+
+        Console.WriteLine($"> HostAgent service '{identity.ServiceName}' is missing; installing it.");
     }
 
     private static string ResolveBootstrapHostAgentInstallPath(

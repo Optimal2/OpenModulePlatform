@@ -793,7 +793,7 @@ internal static partial class Program
                 "Install / update",
                 "Advanced actions for full bootstrap passes or package catch-up runs.",
                 [
-                    (_installButton, "Runs the full bootstrap again with the matched profile. Use this for deliberate reconfiguration or repair."),
+                    (_installButton, "Runs the full bootstrap again with the matched profile. Use this for deliberate reconfiguration or repair; existing artifact folders and HostAgent service configuration may be updated."),
                     (_upgradeCompleteButton, "Adds newer or missing module definitions and missing artifacts from this package. Existing artifact folders and an existing HostAgent service are left unchanged.")
                 ]));
 

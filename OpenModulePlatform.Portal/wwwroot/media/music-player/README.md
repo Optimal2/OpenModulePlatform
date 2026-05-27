@@ -31,9 +31,16 @@ app. `url` can be used for an absolute or externally hosted audio file.
 
 ## Local Development
 
-Keep MP3 files outside the public OpenModulePlatform repository. For local
-testing, copy the private test files from the private installation repository
-into this folder after cloning:
+Keep MP3 files outside the public OpenModulePlatform repository. Local Portal
+builds automatically include MP3 files from the sibling private folder
+`<workspace>\DEV\MP3` when that folder exists. This lets local installer and
+universal-package builds carry the test media without tracking the binary files
+in Git. The automatic build path expects the standard workspace layout where
+`DEV` and `OpenModulePlatform` are sibling folders; copy MP3 files manually if
+your private DEV repository lives somewhere else.
+
+For direct static-file testing without rebuilding the Portal artifact, copy the
+private test files into this folder after cloning:
 
 ```powershell
 Copy-Item "<workspace>\DEV\MP3\*.mp3" -Destination ".\OpenModulePlatform.Portal\wwwroot\media\music-player"
