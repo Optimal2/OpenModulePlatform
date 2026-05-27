@@ -312,6 +312,13 @@ still leaves it unchanged. Start the intended service manually with Windows
 Services or `sc.exe start <service-name>`, or run a full `Install or update`
 when the service should be reconfigured from the selected host profile.
 
+Use `Install or update` for first installation, deliberate repair, or a full
+reconfiguration pass. That path runs the full bootstrap, uses install/update
+artifact handling, and reconfigures the HostAgent service from the selected host
+profile when HostAgent installation is enabled. Use `Upgrade / complete` for
+normal package catch-up on an existing installation when existing runtime
+folders and HostAgent service configuration should be left unchanged.
+
 When imported module definitions include validation SQL, the bootstrapper runs
 the read-only validation script first. Idempotent repair SQL runs only when the
 validation reports an unhealthy state or the validation itself cannot complete.
