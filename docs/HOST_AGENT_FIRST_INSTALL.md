@@ -307,6 +307,10 @@ cleans up duplicate HostAgent services, including older service-name prefixes,
 without deleting the active install directory. Existing artifact folders and an
 existing HostAgent service are deliberately left unchanged; use
 `Install or update` when a full bootstrap/reconfiguration pass is intended.
+If a HostAgent service exists but is stopped or failed, `Upgrade / complete`
+still leaves it unchanged. Start the intended service manually with Windows
+Services or `sc.exe start <service-name>`, or run a full `Install or update`
+when the service should be reconfigured from the selected host profile.
 
 When imported module definitions include validation SQL, the bootstrapper runs
 the read-only validation script first. Idempotent repair SQL runs only when the
