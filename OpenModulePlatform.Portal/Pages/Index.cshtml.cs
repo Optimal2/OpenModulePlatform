@@ -6,6 +6,7 @@ using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Web;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using SharedRbacService = OpenModulePlatform.Web.Shared.Services.RbacService;
@@ -21,6 +22,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 {
     private readonly PortalDashboardService _dashboard;
     private readonly PortalEntryService _portalEntries;
+    private readonly PortalMusicPlayerService _musicPlayer;
     private readonly SharedRbacService _rbac;
     private readonly OmpAdminRepository _repo;
 
@@ -28,12 +30,14 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         IOptions<WebAppOptions> options,
         PortalDashboardService dashboard,
         PortalEntryService portalEntries,
+        PortalMusicPlayerService musicPlayer,
         SharedRbacService rbac,
         OmpAdminRepository repo)
         : base(options)
     {
         _dashboard = dashboard;
         _portalEntries = portalEntries;
+        _musicPlayer = musicPlayer;
         _rbac = rbac;
         _repo = repo;
     }
@@ -67,6 +71,29 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     public async Task OnGet(bool manage = false, bool fullList = false, CancellationToken ct = default)
     {
         await LoadAsync(ct);
+    }
+
+    public async Task<IActionResult> OnGetMusicPlaylist(CancellationToken ct)
+    {
+        var playlist = await _musicPlayer.GetPlaylistAsync(
+            id => Url.Page("/Index", "MusicTrack", new { id }) ?? string.Empty,
+            ct);
+        return new JsonResult(playlist);
+    }
+
+    public async Task<IActionResult> OnGetMusicTrack(long id, CancellationToken ct)
+    {
+        var track = await _musicPlayer.GetTrackFileAsync(id, ct);
+        if (track is null)
+        {
+            return NotFound();
+        }
+
+        return new FileContentResult(track.Data, track.ContentType)
+        {
+            FileDownloadName = track.FileName,
+            EnableRangeProcessing = true
+        };
     }
 
     public async Task<IActionResult> OnPostAddWidget(int widgetId, CancellationToken ct)
@@ -146,6 +173,67 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         return new JsonResult(new { ok = true });
     }
 
+    public async Task<IActionResult> OnPostUploadMusicTrack(
+        IFormFile? file,
+        string? title,
+        string? artist,
+        string? attribution,
+        string? source,
+        string? description,
+        CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId) || !await IsPortalAdminAsync(ct))
+        {
+            return Forbid();
+        }
+
+        if (file is null)
+        {
+            return BadRequest(new { ok = false, message = "Upload one MP3 file." });
+        }
+
+        try
+        {
+            var result = await _musicPlayer.AddTrackAsync(
+                file,
+                new MusicPlayerTrackInput(title, artist, attribution, source, description),
+                userId,
+                ct);
+            return new JsonResult(new { ok = true, result.AddedTracks, result.ReusedTracks });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { ok = false, message = ex.Message });
+        }
+    }
+
+    public async Task<IActionResult> OnPostUploadMusicPlaylistZip(IFormFile? zipFile, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId) || !await IsPortalAdminAsync(ct))
+        {
+            return Forbid();
+        }
+
+        if (zipFile is null)
+        {
+            return BadRequest(new { ok = false, message = "Upload a zip file." });
+        }
+
+        try
+        {
+            var result = await _musicPlayer.ImportZipAsync(zipFile, userId, ct);
+            return new JsonResult(new { ok = true, result.AddedTracks, result.ReusedTracks });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { ok = false, message = ex.Message });
+        }
+        catch (InvalidDataException ex)
+        {
+            return BadRequest(new { ok = false, message = ex.Message });
+        }
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         SetTitles();
@@ -220,6 +308,12 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     {
         var userIdClaim = User.FindFirstValue(OpenModulePlatform.Web.Shared.Security.OmpAuthDefaults.UserIdClaimType);
         return int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out userId);
+    }
+
+    private async Task<bool> IsPortalAdminAsync(CancellationToken ct)
+    {
+        var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
+        return roleContext.EffectivePermissions.Contains(OmpPortalPermissions.Admin);
     }
 
     private static object ToDashboardWidgetDto(DashboardActiveWidget widget)

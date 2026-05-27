@@ -1,12 +1,21 @@
 @using OpenModulePlatform.Portal.Localization
 @inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+@{
+    var isPortalAdmin = ViewData["IsPortalAdmin"] is bool value && value;
+}
 
 <div class="dashboard-music-player"
      data-dashboard-music-player
-     data-playlist-url="@Url.Content("~/media/music-player/playlist.json")"
+     data-playlist-url="@Url.Page("/Index", "MusicPlaylist")"
+     data-upload-url="@Url.Page("/Index", "UploadMusicTrack")"
+     data-zip-upload-url="@Url.Page("/Index", "UploadMusicPlaylistZip")"
      data-loading-label="@L["Loading playlist"]"
      data-no-tracks-label="@L["No tracks available"]"
      data-error-label="@L["Could not play track"]"
+     data-upload-success-label="@L["Music library updated."]"
+     data-upload-error-label="@L["Could not update music library."]"
+     data-select-mp3-label="@L["Select an MP3 file."]"
+     data-select-zip-label="@L["Select a ZIP package."]"
      data-local-artist-label="@L["Local file"]">
     <audio preload="metadata" data-music-audio></audio>
     <div class="dashboard-music-player__track">
@@ -41,6 +50,54 @@
             <input type="file" accept="audio/mpeg,.mp3" multiple data-music-files />
             <span class="dashboard-music-player__icon dashboard-music-player__icon--add" aria-hidden="true"></span>
         </label>
+        @if (isPortalAdmin)
+        {
+            <button type="button" class="dashboard-music-player__button" data-music-admin-open aria-label="@L["Manage music library"]" title="@L["Manage music library"]">
+                <span class="dashboard-music-player__icon dashboard-music-player__icon--library" aria-hidden="true"></span>
+            </button>
+        }
     </div>
     <div class="dashboard-music-player__status" data-music-status>@L["Loading playlist"]</div>
+    @if (isPortalAdmin)
+    {
+        <div class="dashboard-music-player__admin" data-music-admin-panel hidden>
+            <div class="dashboard-music-player__admin-header">
+                <strong>@L["Music library"]</strong>
+                <button type="button" class="dashboard-music-player__admin-close" data-music-admin-close aria-label="@L["Close"]"></button>
+            </div>
+            <div class="dashboard-music-player__admin-grid">
+                <label>
+                    <span>@L["MP3 file"]</span>
+                    <input type="file" accept="audio/mpeg,.mp3" data-music-admin-file />
+                </label>
+                <label>
+                    <span>@L["Track title"]</span>
+                    <input type="text" maxlength="200" data-music-admin-title />
+                </label>
+                <label>
+                    <span>@L["Artist"]</span>
+                    <input type="text" maxlength="200" data-music-admin-artist />
+                </label>
+                <label>
+                    <span>@L["Attribution"]</span>
+                    <input type="text" maxlength="500" data-music-admin-attribution />
+                </label>
+                <label>
+                    <span>@L["Source URL"]</span>
+                    <input type="url" maxlength="1000" data-music-admin-source />
+                </label>
+                <label>
+                    <span>@L["Description"]</span>
+                    <input type="text" maxlength="1000" data-music-admin-description />
+                </label>
+            </div>
+            <div class="dashboard-music-player__admin-actions">
+                <button type="button" class="btn btn-primary" data-music-admin-upload>@L["Save track"]</button>
+                <label class="btn dashboard-music-player__zip">
+                    <input type="file" accept=".zip,application/zip" data-music-admin-zip />
+                    @L["Import ZIP"]
+                </label>
+            </div>
+        </div>
+    }
 </div>

@@ -11,13 +11,6 @@
     <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\..\DEV\MP3')">
-    <Content Include="$(MSBuildProjectDirectory)\..\..\DEV\MP3\*.mp3"
-             Link="wwwroot\media\music-player\%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
-  </ItemGroup>
-
   <ItemGroup>
     <Content Include="..\tools\module-definition-editor\**\*.*"
              Link="wwwroot\tools\module-definition-editor\%(RecursiveDir)%(Filename)%(Extension)"

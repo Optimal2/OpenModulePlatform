@@ -16,6 +16,8 @@ DECLARE @Missing int = 0;
         (N'omp_portal', N'widget_permissions'),
         (N'omp_portal', N'user_active_widgets'),
         (N'omp_portal', N'user_active_widget_data'),
+        (N'omp_portal', N'widget_data'),
+        (N'omp_portal', N'widget_binary_data'),
         (N'omp_portal', N'user_dashboard_preferences')
     ) AS v(SchemaName, TableName)
 )
@@ -47,6 +49,17 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'user_active_widgets', N'width'),
         (N'omp_portal', N'user_active_widgets', N'height'),
         (N'omp_portal', N'user_active_widgets', N'content_scale'),
+        (N'omp_portal', N'widget_data', N'widget_id'),
+        (N'omp_portal', N'widget_data', N'data_key'),
+        (N'omp_portal', N'widget_data', N'json_data'),
+        (N'omp_portal', N'widget_binary_data', N'binary_data_id'),
+        (N'omp_portal', N'widget_binary_data', N'owner_ref'),
+        (N'omp_portal', N'widget_binary_data', N'file_name'),
+        (N'omp_portal', N'widget_binary_data', N'content_type'),
+        (N'omp_portal', N'widget_binary_data', N'content_length'),
+        (N'omp_portal', N'widget_binary_data', N'content_hash'),
+        (N'omp_portal', N'widget_binary_data', N'data_value'),
+        (N'omp_portal', N'widget_binary_data', N'is_enabled'),
         (N'omp_portal', N'user_dashboard_preferences', N'user_id'),
         (N'omp_portal', N'user_dashboard_preferences', N'align_to_grid'),
         (N'omp_portal', N'user_dashboard_preferences', N'expanded_canvas')
@@ -64,7 +77,9 @@ WHERE COL_LENGTH(required.SchemaName + N'.' + required.TableName, required.Colum
         (N'omp_portal.portal_entries', N'IX_omp_portal_portal_entries_parent_sort'),
         (N'omp_portal.widgets', N'UX_omp_portal_widgets_widget_key'),
         (N'omp_portal.widget_permissions', N'IX_omp_portal_widget_permissions_widget'),
-        (N'omp_portal.user_active_widgets', N'IX_omp_portal_user_active_widgets_user_order')
+        (N'omp_portal.user_active_widgets', N'IX_omp_portal_user_active_widgets_user_order'),
+        (N'omp_portal.widget_binary_data', N'IX_omp_portal_widget_binary_data_owner'),
+        (N'omp_portal.widget_binary_data', N'IX_omp_portal_widget_binary_data_hash')
     ) AS v(ObjectName, IndexName)
 )
 SELECT @Missing = @Missing + COUNT(1)
