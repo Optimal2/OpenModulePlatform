@@ -2210,8 +2210,12 @@
   <data name="Import ZIP" xml:space="preserve"><value>Importera ZIP</value></data>
   <data name="Music library updated." xml:space="preserve"><value>Musikbiblioteket uppdaterades.</value></data>
   <data name="Could not update music library." xml:space="preserve"><value>Musikbiblioteket kunde inte uppdateras.</value></data>
+  <data name="Uploading music..." xml:space="preserve"><value>Laddar upp musik...</value></data>
+  <data name="The selected file is too large for this upload surface." xml:space="preserve"><value>Den valda filen är för stor för den här uppladdningen.</value></data>
   <data name="Select an MP3 file." xml:space="preserve"><value>Välj en MP3-fil.</value></data>
   <data name="Select a ZIP package." xml:space="preserve"><value>Välj ett ZIP-paket.</value></data>
+  <data name="Single MP3" xml:space="preserve"><value>Enstaka MP3</value></data>
+  <data name="ZIP package" xml:space="preserve"><value>ZIP-paket</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Visa dashboardens navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under topbaren.</value></data>
 </root>

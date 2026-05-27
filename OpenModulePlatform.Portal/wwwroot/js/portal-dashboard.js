@@ -1275,12 +1275,14 @@
         const panel = player.querySelector('[data-music-admin-panel]');
         const close = player.querySelector('[data-music-admin-close]');
         const upload = player.querySelector('[data-music-admin-upload]');
+        const zipUpload = player.querySelector('[data-music-admin-zip-upload]');
         const zip = player.querySelector('[data-music-admin-zip]');
         const file = player.querySelector('[data-music-admin-file]');
         if (!open || !panel) {
             return;
         }
 
+        bindMusicAdminTabs(panel);
         open.addEventListener('click', () => {
             panel.hidden = !panel.hidden;
             open.setAttribute('aria-expanded', String(!panel.hidden));
@@ -1297,6 +1299,11 @@
                 return;
             }
 
+            if (isMusicUploadTooLarge(player, selectedFile)) {
+                setStatus(player.dataset.uploadTooLargeLabel || 'The selected file is too large for this upload surface.');
+                return;
+            }
+
             const formData = new FormData();
             formData.append('file', selectedFile);
             appendMusicAdminField(formData, player, 'title');
@@ -1309,13 +1316,18 @@
                 const previousCount = state.tracks.length;
                 await refreshServerPlaylist(previousCount, false);
                 clearMusicAdminTrackFields(player);
-            }, setStatus);
+            }, setStatus, [upload]);
         });
 
-        zip?.addEventListener('change', async () => {
+        zipUpload?.addEventListener('click', async () => {
             const selectedZip = zip.files?.[0] || null;
             if (!selectedZip) {
                 setStatus(player.dataset.selectZipLabel || 'Select a ZIP package.');
+                return;
+            }
+
+            if (isMusicUploadTooLarge(player, selectedZip)) {
+                setStatus(player.dataset.uploadTooLargeLabel || 'The selected file is too large for this upload surface.');
                 return;
             }
 
@@ -1327,8 +1339,31 @@
                 if (state.tracks.length > 0) {
                     setTrack(state.index, false);
                 }
-            }, setStatus);
+            }, setStatus, [zipUpload]);
         });
+    }
+
+    function bindMusicAdminTabs(panel) {
+        const tabs = Array.from(panel.querySelectorAll('[data-music-admin-tab]'));
+        const panes = Array.from(panel.querySelectorAll('[data-music-admin-pane]'));
+        tabs.forEach((tab) => {
+            tab.addEventListener('click', () => {
+                const mode = tab.dataset.musicAdminTab || 'mp3';
+                tabs.forEach((candidate) => {
+                    const selected = candidate === tab;
+                    candidate.classList.toggle('is-active', selected);
+                    candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+                });
+                panes.forEach((pane) => {
+                    pane.hidden = pane.dataset.musicAdminPane !== mode;
+                });
+            });
+        });
+    }
+
+    function isMusicUploadTooLarge(player, file) {
+        const maxBytes = parsePositiveInteger(player.dataset.maxUploadBytes, 0);
+        return maxBytes > 0 && !!file && file.size > maxBytes;
     }
 
     function appendMusicAdminField(formData, player, field) {
@@ -1336,15 +1371,30 @@
         formData.append(field, input?.value || '');
     }
 
-    async function submitMusicAdminForm(player, url, formData, onSuccess, setStatus) {
+    async function submitMusicAdminForm(player, url, formData, onSuccess, setStatus, busyControls = []) {
         const root = player.closest('[data-dashboard-root]');
         const token = root?.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
+        busyControls.forEach((control) => {
+            if (control) {
+                control.disabled = true;
+            }
+        });
+        setStatus(player.dataset.uploadingLabel || 'Uploading music...');
         try {
             await postFormData(url, token, formData);
             setStatus(player.dataset.uploadSuccessLabel || 'Music library updated.');
             await onSuccess();
         } catch (error) {
-            setStatus(error?.message || player.dataset.uploadErrorLabel || 'Could not update music library.');
+            const message = error?.status === 413
+                ? player.dataset.uploadTooLargeLabel || 'The selected file is too large for this upload surface.'
+                : error?.message || player.dataset.uploadErrorLabel || 'Could not update music library.';
+            setStatus(message);
+        } finally {
+            busyControls.forEach((control) => {
+                if (control) {
+                    control.disabled = false;
+                }
+            });
         }
     }
 

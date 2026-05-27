@@ -8,6 +8,15 @@ using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.Security;
 
 var builder = WebApplication.CreateBuilder(args);
+var maxUploadBytes = builder.Configuration.GetValue<long?>(
+    $"{ArtifactUploadOptions.SectionName}:MaxUploadBytes") is > 0 and var configuredMaxUploadBytes
+        ? configuredMaxUploadBytes
+        : ArtifactUploadOptions.DefaultMaxUploadBytes;
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = maxUploadBytes;
+});
 
 builder.AddOmpWebDefaults<PortalResource>(optionsSectionName: "Portal");
 
@@ -27,13 +36,13 @@ builder.Services.AddScoped<PortableModulePackageService>();
 builder.Services.AddScoped<ConfigOverlayObjectService>();
 builder.Services.Configure<ArtifactUploadOptions>(
     builder.Configuration.GetSection(ArtifactUploadOptions.SectionName));
+builder.Services.Configure<IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = maxUploadBytes;
+});
 builder.Services.Configure<FormOptions>(options =>
 {
-    var maxUploadBytes = builder.Configuration.GetValue<long?>(
-        $"{ArtifactUploadOptions.SectionName}:MaxUploadBytes");
-    options.MultipartBodyLengthLimit = maxUploadBytes is > 0
-        ? maxUploadBytes.Value
-        : ArtifactUploadOptions.DefaultMaxUploadBytes;
+    options.MultipartBodyLengthLimit = maxUploadBytes;
 });
 
 builder.Services.Configure<RazorPagesOptions>(options =>

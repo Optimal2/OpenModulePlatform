@@ -2208,7 +2208,7 @@ a.dashboard-role-list__item:focus-visible {
     inset: 10px;
     z-index: 3;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: 10px;
     padding: 12px;
     border: 1px solid var(--border);
@@ -2269,13 +2269,58 @@ a.dashboard-role-list__item:focus-visible {
     transform: rotate(-45deg);
 }
 
-.dashboard-music-player__admin-grid {
+.dashboard-music-player__admin-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface) 86%, var(--surface-alt));
+}
+
+.dashboard-music-player__admin-tabs button {
+    min-width: 0;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.dashboard-music-player__admin-tabs button.is-active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.dashboard-music-player__admin-pane {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+    min-height: 0;
+    overflow: auto;
+}
+
+.dashboard-music-player__admin-pane[hidden] {
+    display: none;
+}
+
+.dashboard-music-player__admin-fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
 }
 
-.dashboard-music-player__admin-grid label {
+.dashboard-music-player__admin-fields--single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.dashboard-music-player__admin-fields label {
     display: grid;
     gap: 4px;
     min-width: 0;
@@ -2284,7 +2329,7 @@ a.dashboard-role-list__item:focus-visible {
     font-weight: 650;
 }
 
-.dashboard-music-player__admin-grid input {
+.dashboard-music-player__admin-fields input {
     width: 100%;
     min-width: 0;
     padding: 6px 8px;
