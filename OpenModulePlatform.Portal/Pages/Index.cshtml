@@ -1,15 +1,21 @@
 @page
 @model OpenModulePlatform.Portal.Pages.IndexModel
 @using System.Globalization
+@using OpenModulePlatform.Portal.Services
 
 <section class="portal-dashboard is-expanded-canvas"
          data-dashboard-root
          data-can-edit="@Model.CanEditDashboard.ToString().ToLowerInvariant()"
+         data-is-portal-admin="@Model.IsPortalAdmin.ToString().ToLowerInvariant()"
          data-dashboard-draft-key="@Model.DashboardDraftKey"
          data-add-url="@Url.Page("/Index", "AddWidget")"
          data-save-url="@Url.Page("/Index", "SaveDashboard")"
          data-preference-url="@Url.Page("/Index", "SaveDashboardPreference")"
          data-remove-url="@Url.Page("/Index", "RemoveWidget")"
+         data-blank-widget-images-url="@Url.Page("/Index", "BlankWidgetImages")"
+         data-blank-widget-image-url-template="@Url.Page("/Index", "BlankWidgetImage", new { id = "__id__" })"
+         data-upload-blank-widget-image-url="@Url.Page("/Index", "UploadBlankWidgetImage")"
+         data-upload-blank-widget-images-zip-url="@Url.Page("/Index", "UploadBlankWidgetImagesZip")"
          data-favorite-toggle-url="@Url.Content("~/navigation/favorites/toggle")"
          data-align-to-grid="@Model.DashboardAlignToGrid.ToString().ToLowerInvariant()"
          data-expanded-canvas="true"
@@ -45,7 +51,20 @@
          data-blank-widget-style-label="@L["Blank widget style"]"
          data-blank-widget-default-label="@L["Default"]"
          data-blank-widget-one-label="@L["Variant 1"]"
-         data-blank-widget-two-label="@L["Variant 2"]">
+         data-blank-widget-two-label="@L["Variant 2"]"
+         data-blank-widget-custom-label="@L["Custom image"]"
+         data-blank-widget-no-custom-images-label="@L["No custom images"]"
+         data-blank-widget-image-file-label="@L["Image or GIF file"]"
+         data-blank-widget-display-name-label="@L["Display name"]"
+         data-blank-widget-upload-label="@L["Upload image"]"
+         data-blank-widget-import-zip-label="@L["Import ZIP"]"
+         data-blank-widget-select-image-label="@L["Select an image or GIF file."]"
+         data-blank-widget-uploading-label="@L["Uploading image..."]"
+         data-blank-widget-upload-success-label="@L["Blank widget image library updated."]"
+         data-blank-widget-upload-error-label="@L["Could not update blank widget image library."]"
+         data-blank-widget-upload-too-large-label="@L["The selected image is too large."]"
+         data-blank-widget-max-image-bytes="@PortalBlankWidgetService.MaxImageBytes.ToString(CultureInfo.InvariantCulture)"
+         data-blank-widget-max-zip-bytes="@PortalBlankWidgetService.MaxZipBytes.ToString(CultureInfo.InvariantCulture)">
     <form class="visually-hidden" method="post" data-dashboard-token-form>
         @Html.AntiForgeryToken()
     </form>
@@ -75,6 +94,11 @@
             var widgetContentScaleFactor = Math.Max(0.1, (100 + widgetContentScale) / 100.0);
             var isBlankWidget = string.Equals(widget.Payload, "blank-rectangle", StringComparison.OrdinalIgnoreCase);
             var blankWidgetVariant = isBlankWidget && widget.IntData is 1 or 2 ? widget.IntData.Value : 0;
+            var blankWidgetImageId = isBlankWidget
+                && long.TryParse(widget.StringData, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedBlankWidgetImageId)
+                && parsedBlankWidgetImageId > 0
+                    ? parsedBlankWidgetImageId
+                    : (long?)null;
             <article class="dashboard-widget"
                      data-dashboard-widget
                      data-user-active-widget-id="@widget.UserActiveWidgetId"
@@ -128,6 +152,12 @@
                         else if (widget.Payload == "music-player")
                         {
                             <partial name="_DashboardMusicPlayerWidget" />
+                        }
+                        else if (blankWidgetImageId.HasValue)
+                        {
+                            <div class="dashboard-widget__blank dashboard-widget__blank--image" data-blank-widget data-blank-widget-image-id="@blankWidgetImageId.Value">
+                                <img src="@Url.Page("/Index", "BlankWidgetImage", new { id = blankWidgetImageId.Value })" alt="" />
+                            </div>
                         }
                         else if (blankWidgetVariant > 0)
                         {
@@ -207,12 +237,37 @@
                         {
                             <label>
                                 <span>@L["Blank widget style"]</span>
-                                <select data-widget-int-data-control>
-                                    <option value="0" selected="@(blankWidgetVariant == 0)">@L["Default"]</option>
-                                    <option value="1" selected="@(blankWidgetVariant == 1)">@L["Variant 1"]</option>
-                                    <option value="2" selected="@(blankWidgetVariant == 2)">@L["Variant 2"]</option>
+                                <select data-blank-widget-style-control>
+                                    <option value="static:0" selected="@(blankWidgetVariant == 0 && !blankWidgetImageId.HasValue)">@L["Default"]</option>
+                                    <option value="static:1" selected="@(blankWidgetVariant == 1 && !blankWidgetImageId.HasValue)">@L["Variant 1"]</option>
+                                    <option value="static:2" selected="@(blankWidgetVariant == 2 && !blankWidgetImageId.HasValue)">@L["Variant 2"]</option>
+                                    @if (blankWidgetImageId.HasValue)
+                                    {
+                                        <option value="image:@blankWidgetImageId.Value" selected>@L["Custom image"] #@blankWidgetImageId.Value</option>
+                                    }
                                 </select>
                             </label>
+                            @if (Model.IsPortalAdmin)
+                            {
+                                <div class="dashboard-widget__blank-admin" data-blank-widget-admin>
+                                    <label>
+                                        <span>@L["Image or GIF file"]</span>
+                                        <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-file />
+                                    </label>
+                                    <label>
+                                        <span>@L["Display name"]</span>
+                                        <input type="text" maxlength="200" data-blank-widget-display-name />
+                                    </label>
+                                    <div class="dashboard-widget__blank-admin-actions">
+                                        <button type="button" class="btn btn-primary" data-blank-widget-upload>@L["Upload image"]</button>
+                                        <label class="btn dashboard-widget__blank-admin-zip">
+                                            <input type="file" accept=".zip,application/zip" data-blank-widget-zip />
+                                            @L["Import ZIP"]
+                                        </label>
+                                    </div>
+                                    <div class="dashboard-widget__blank-admin-status" data-blank-widget-status></div>
+                                </div>
+                            }
                         }
                     </div>
                     <span class="dashboard-widget__resize" data-widget-resize aria-hidden="true"></span>

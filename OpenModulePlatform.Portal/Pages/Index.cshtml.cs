@@ -22,6 +22,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 {
     private readonly PortalDashboardService _dashboard;
     private readonly PortalEntryService _portalEntries;
+    private readonly PortalBlankWidgetService _blankWidget;
     private readonly PortalMusicPlayerService _musicPlayer;
     private readonly SharedRbacService _rbac;
     private readonly OmpAdminRepository _repo;
@@ -30,6 +31,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         IOptions<WebAppOptions> options,
         PortalDashboardService dashboard,
         PortalEntryService portalEntries,
+        PortalBlankWidgetService blankWidget,
         PortalMusicPlayerService musicPlayer,
         SharedRbacService rbac,
         OmpAdminRepository repo)
@@ -37,6 +39,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     {
         _dashboard = dashboard;
         _portalEntries = portalEntries;
+        _blankWidget = blankWidget;
         _musicPlayer = musicPlayer;
         _rbac = rbac;
         _repo = repo;
@@ -93,6 +96,39 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         {
             FileDownloadName = track.FileName,
             EnableRangeProcessing = true
+        };
+    }
+
+    public async Task<IActionResult> OnGetBlankWidgetImages(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out _))
+        {
+            return Forbid();
+        }
+
+        var images = await _blankWidget.GetImagesAsync(
+            id => Url.Page("/Index", "BlankWidgetImage", new { id }) ?? string.Empty,
+            ct);
+        return new JsonResult(images);
+    }
+
+    public async Task<IActionResult> OnGetBlankWidgetImage(long id, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out _))
+        {
+            return Forbid();
+        }
+
+        var image = await _blankWidget.GetImageFileAsync(id, ct);
+        if (image is null)
+        {
+            return NotFound();
+        }
+
+        return new FileContentResult(image.Data, image.ContentType)
+        {
+            FileDownloadName = image.FileName,
+            EnableRangeProcessing = false
         };
     }
 
@@ -223,6 +259,79 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         {
             var result = await _musicPlayer.ImportZipAsync(zipFile, userId, ct);
             return new JsonResult(new { ok = true, result.AddedTracks, result.ReusedTracks });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { ok = false, message = ex.Message });
+        }
+        catch (InvalidDataException ex)
+        {
+            return BadRequest(new { ok = false, message = ex.Message });
+        }
+    }
+
+    public async Task<IActionResult> OnPostUploadBlankWidgetImage(
+        IFormFile? file,
+        string? displayName,
+        CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId) || !await IsPortalAdminAsync(ct))
+        {
+            return Forbid();
+        }
+
+        if (file is null)
+        {
+            return BadRequest(new { ok = false, message = "Upload one image or GIF file." });
+        }
+
+        try
+        {
+            var result = await _blankWidget.AddImageAsync(file, displayName, userId, ct);
+            var images = await _blankWidget.GetImagesAsync(
+                id => Url.Page("/Index", "BlankWidgetImage", new { id }) ?? string.Empty,
+                ct);
+            return new JsonResult(new
+            {
+                ok = true,
+                result.AddedImages,
+                result.ReusedImages,
+                selectedImageId = result.ImageIds.LastOrDefault(),
+                images = images.Images
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { ok = false, message = ex.Message });
+        }
+    }
+
+    public async Task<IActionResult> OnPostUploadBlankWidgetImagesZip(IFormFile? zipFile, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId) || !await IsPortalAdminAsync(ct))
+        {
+            return Forbid();
+        }
+
+        if (zipFile is null)
+        {
+            return BadRequest(new { ok = false, message = "Upload a zip file." });
+        }
+
+        try
+        {
+            var result = await _blankWidget.ImportZipAsync(zipFile, userId, ct);
+            var images = await _blankWidget.GetImagesAsync(
+                id => Url.Page("/Index", "BlankWidgetImage", new { id }) ?? string.Empty,
+                ct);
+            return new JsonResult(new
+            {
+                ok = true,
+                result.AddedImages,
+                result.ReusedImages,
+                selectedImageId = result.ImageIds.LastOrDefault(),
+                images = images.Images
+            });
         }
         catch (InvalidOperationException ex)
         {
