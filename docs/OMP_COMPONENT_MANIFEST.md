@@ -99,6 +99,26 @@ refresh:
   -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'
 ```
 
+Every OMP-compatible module repository should expose a root wrapper with the
+same command shape:
+
+```text
+build-omp-objects.ps1
+```
+
+The wrapper should delegate to the canonical OpenModulePlatform
+`scripts/omp/build-repository-objects.ps1` implementation and support the
+shared object parameters:
+
+- `-ArtifactConfigurationFile`
+- `-HostConfigurationFile`
+- `-ConfigOverlayFile`
+- `-WidgetFile`
+
+Sibling repositories should also accept `-OmpRepositoryRoot` and the
+`OMP_REPOSITORY_ROOT` environment variable so CI and non-sibling checkouts can
+locate the canonical OMP scripts without hardcoded local paths.
+
 The output shape is always:
 
 ```text
@@ -197,3 +217,21 @@ universal zip is created. The hook receives `-RepositoryRoot`, `-OutputRoot`,
 It should write generated `host-configs`, `config-overlays`, or `widgets` under
 `OutputRoot`. The hook is owned by the module repository, so the module decides
 how to interpret its `modules.<moduleKey>` settings.
+
+## Repository Conformance Checklist
+
+A well-formed OMP-compatible module repository should normally provide:
+
+- `AGENTS.md` with repository-specific agent and safety rules.
+- `README.md` or equivalent development documentation.
+- `omp-components.json` for module definitions and artifact components owned by
+  the repository.
+- `build-omp-objects.ps1` as the root portable-object build wrapper.
+- `scripts/omp/export-universal-package.ps1` as the universal package export
+  wrapper.
+- `scripts/omp/README.md` or equivalent notes when repository-local OMP scripts
+  exist.
+
+The root wrapper and export wrapper should stay thin. Keep the canonical
+implementation in OpenModulePlatform so parameter behavior, host-profile
+handling, and object folder layout stay consistent across module repositories.
