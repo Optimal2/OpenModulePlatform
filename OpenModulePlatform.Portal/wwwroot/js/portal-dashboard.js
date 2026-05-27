@@ -966,6 +966,7 @@
         const shuffle = player.querySelector('[data-music-shuffle]');
         const loop = player.querySelector('[data-music-loop]');
         const files = player.querySelector('[data-music-files]');
+        const adminOpen = player.querySelector('[data-music-admin-open]');
         if (!audio || !play) {
             return;
         }
@@ -1075,6 +1076,12 @@
             setTrack(nextIndex, autoplay);
         };
 
+        const refreshServerPlaylist = async (preferredIndex = 0, autoplay = false) => {
+            state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl || '');
+            const nextIndex = Math.min(Math.max(preferredIndex, 0), Math.max(state.tracks.length - 1, 0));
+            setTrack(nextIndex, autoplay);
+        };
+
         play.addEventListener('click', () => {
             if (!audio.src && state.tracks.length > 0) {
                 setTrack(state.index, false);
@@ -1146,6 +1153,8 @@
             }, 1500);
         });
 
+        bindMusicPlayerAdmin(player, state, setTrack, refreshServerPlaylist, setStatus);
+
         files?.addEventListener('change', () => {
             const previousCount = state.tracks.length;
             addLocalMusicFiles(state, files.files, player);
@@ -1179,8 +1188,10 @@
         });
 
         setStatus(player.dataset.loadingLabel || 'Loading playlist');
-        state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl || '');
-        setTrack(0, false);
+        await refreshServerPlaylist(0, false);
+        if (!adminOpen) {
+            player.classList.add('dashboard-music-player--no-admin');
+        }
     }
 
     async function playAudio(audio, player) {
@@ -1256,6 +1267,93 @@
                 source: '',
                 description: ''
             });
+        });
+    }
+
+    function bindMusicPlayerAdmin(player, state, setTrack, refreshServerPlaylist, setStatus) {
+        const open = player.querySelector('[data-music-admin-open]');
+        const panel = player.querySelector('[data-music-admin-panel]');
+        const close = player.querySelector('[data-music-admin-close]');
+        const upload = player.querySelector('[data-music-admin-upload]');
+        const zip = player.querySelector('[data-music-admin-zip]');
+        const file = player.querySelector('[data-music-admin-file]');
+        if (!open || !panel) {
+            return;
+        }
+
+        open.addEventListener('click', () => {
+            panel.hidden = !panel.hidden;
+            open.setAttribute('aria-expanded', String(!panel.hidden));
+        });
+        close?.addEventListener('click', () => {
+            panel.hidden = true;
+            open.setAttribute('aria-expanded', 'false');
+        });
+
+        upload?.addEventListener('click', async () => {
+            const selectedFile = file?.files?.[0] || null;
+            if (!isMusicFile(selectedFile)) {
+                setStatus(player.dataset.selectMp3Label || 'Select an MP3 file.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            appendMusicAdminField(formData, player, 'title');
+            appendMusicAdminField(formData, player, 'artist');
+            appendMusicAdminField(formData, player, 'attribution');
+            appendMusicAdminField(formData, player, 'source');
+            appendMusicAdminField(formData, player, 'description');
+
+            await submitMusicAdminForm(player, player.dataset.uploadUrl, formData, async () => {
+                const previousCount = state.tracks.length;
+                await refreshServerPlaylist(previousCount, false);
+                clearMusicAdminTrackFields(player);
+            }, setStatus);
+        });
+
+        zip?.addEventListener('change', async () => {
+            const selectedZip = zip.files?.[0] || null;
+            if (!selectedZip) {
+                setStatus(player.dataset.selectZipLabel || 'Select a ZIP package.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('zipFile', selectedZip);
+            await submitMusicAdminForm(player, player.dataset.zipUploadUrl, formData, async () => {
+                await refreshServerPlaylist(state.index, false);
+                zip.value = '';
+                if (state.tracks.length > 0) {
+                    setTrack(state.index, false);
+                }
+            }, setStatus);
+        });
+    }
+
+    function appendMusicAdminField(formData, player, field) {
+        const input = player.querySelector(`[data-music-admin-${field}]`);
+        formData.append(field, input?.value || '');
+    }
+
+    async function submitMusicAdminForm(player, url, formData, onSuccess, setStatus) {
+        const root = player.closest('[data-dashboard-root]');
+        const token = root?.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
+        try {
+            await postFormData(url, token, formData);
+            setStatus(player.dataset.uploadSuccessLabel || 'Music library updated.');
+            await onSuccess();
+        } catch (error) {
+            setStatus(error?.message || player.dataset.uploadErrorLabel || 'Could not update music library.');
+        }
+    }
+
+    function clearMusicAdminTrackFields(player) {
+        ['file', 'title', 'artist', 'attribution', 'source', 'description'].forEach((field) => {
+            const input = player.querySelector(`[data-music-admin-${field}]`);
+            if (input) {
+                input.value = '';
+            }
         });
     }
 
@@ -2249,6 +2347,45 @@
 
         if (!response.ok) {
             throw createDashboardRequestError('server', `Dashboard request failed with status ${response.status}.`, response.status);
+        }
+
+        return response.headers.get('content-type')?.includes('application/json')
+            ? response.json()
+            : null;
+    }
+
+    async function postFormData(url, token, body) {
+        if (!url) {
+            return null;
+        }
+
+        if (token) {
+            body.append('__RequestVerificationToken', token);
+        }
+
+        let response;
+        try {
+            response = await fetch(url, {
+                method: 'POST',
+                body,
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+        } catch (error) {
+            throw createDashboardRequestError('network', 'Dashboard request could not reach the server.', 0, error);
+        }
+
+        if (response.status === 401 || response.status === 403 || isDashboardLoginRedirect(response)) {
+            throw createDashboardRequestError('auth', `Dashboard request failed with status ${response.status}.`, response.status);
+        }
+
+        if (!response.ok) {
+            const payload = response.headers.get('content-type')?.includes('application/json')
+                ? await response.json().catch(() => null)
+                : null;
+            throw createDashboardRequestError('server', payload?.message || `Dashboard request failed with status ${response.status}.`, response.status);
         }
 
         return response.headers.get('content-type')?.includes('application/json')

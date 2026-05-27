@@ -565,6 +565,76 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp_portal.widget_data', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.widget_data
+    (
+        widget_id int NOT NULL,
+        data_key nvarchar(128) NOT NULL,
+        json_data nvarchar(max) NOT NULL,
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_widget_data_updated_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_widget_data PRIMARY KEY(widget_id, data_key),
+        CONSTRAINT FK_omp_portal_widget_data_widget FOREIGN KEY(widget_id)
+            REFERENCES omp_portal.widgets(widget_id)
+            ON DELETE CASCADE,
+        CONSTRAINT CK_omp_portal_widget_data_json CHECK(ISJSON(json_data) = 1)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.widget_binary_data', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.widget_binary_data
+    (
+        binary_data_id bigint IDENTITY(1,1) NOT NULL,
+        owner_ref nvarchar(128) NOT NULL,
+        file_name nvarchar(260) NOT NULL,
+        content_type nvarchar(128) NOT NULL,
+        content_length bigint NOT NULL,
+        content_hash varbinary(32) NOT NULL,
+        data_value varbinary(max) NOT NULL,
+        is_enabled bit NOT NULL CONSTRAINT DF_omp_portal_widget_binary_data_is_enabled DEFAULT(1),
+        created_by_user_id int NULL,
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_widget_binary_data_created_at DEFAULT(SYSUTCDATETIME()),
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_widget_binary_data_updated_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_widget_binary_data PRIMARY KEY(binary_data_id),
+        CONSTRAINT FK_omp_portal_widget_binary_data_created_by_user FOREIGN KEY(created_by_user_id)
+            REFERENCES omp.users(user_id),
+        CONSTRAINT CK_omp_portal_widget_binary_data_length CHECK(content_length >= 0)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_portal_widget_binary_data_owner'
+      AND object_id = OBJECT_ID(N'omp_portal.widget_binary_data')
+)
+BEGIN
+    CREATE INDEX IX_omp_portal_widget_binary_data_owner
+        ON omp_portal.widget_binary_data(owner_ref, is_enabled, binary_data_id)
+        INCLUDE(file_name, content_type, content_length, content_hash);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_portal_widget_binary_data_hash'
+      AND object_id = OBJECT_ID(N'omp_portal.widget_binary_data')
+)
+BEGIN
+    CREATE INDEX IX_omp_portal_widget_binary_data_hash
+        ON omp_portal.widget_binary_data(content_hash, content_length)
+        INCLUDE(owner_ref, file_name, is_enabled);
+END
+GO
+
 IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NULL
 BEGIN
     CREATE TABLE omp_portal.user_dashboard_preferences

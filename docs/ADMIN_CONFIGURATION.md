@@ -102,6 +102,10 @@ Portal navigation entries:
   position, size, z-order, optional title, and small typed values
 - `omp_portal.user_active_widget_data` is reserved for larger per-widget user
   data when a future widget needs more than the inline int/string fields
+- `omp_portal.widget_data` stores shared widget-level JSON data that belongs to
+  a widget definition rather than to one user's placed widget
+- `omp_portal.widget_binary_data` stores shared widget-owned binary media, such
+  as MP3 files for the built-in music player
 
 The current dashboard renderer supports Portal-owned widgets. `payload` selects
 which server-rendered widget body is used; for example, `admin-overview` renders
@@ -115,22 +119,20 @@ saved when the user leaves dashboard edit mode with the Done button. Resetting
 the dashboard removes the current user's active widget rows and does not change
 the global widget definitions.
 
-The built-in music player widget reads its server playlist from
-`wwwroot/media/music-player/playlist.json` in the Portal web app. The playlist
-uses a simple `tracks` array with `title`, `artist`, `src`, optional
-`attribution`, optional `source`, and optional `description`. Relative `src`
-values are resolved beside the JSON file, so `001.mp3` points to
-`wwwroot/media/music-player/001.mp3`. Attribution and source are shown in the
-widget for the active track. Users can also add local MP3 files in the browser
-session through the widget controls or drag-and-drop. Local files are held as
-browser object URLs and are never uploaded to the server.
+The built-in music player widget reads its shared server playlist from
+`omp_portal.widget_data` and streams MP3 files from
+`omp_portal.widget_binary_data`. Portal administrators can open the music
+library control on the widget and upload one MP3 with manual metadata, or import
+a zip containing MP3 files plus `playlist.json` or `Songs.txt` metadata. Users
+can still add local MP3 files in the browser session through the widget controls
+or drag-and-drop. Local files are held as browser object URLs and are never
+uploaded to the server.
 
-The public repository should keep only playlist metadata and documentation for
-this widget. MP3 files are deployment-owned media and should be supplied through
-private installer host profiles, config overlays, or another universal package
-object that places them beside `playlist.json`. See
+The public repository should keep only playlist format samples and
+documentation for this widget. MP3 files are runtime data and must not be placed
+inside the Portal web artifact because upgrades replace that folder. See
 [`../OpenModulePlatform.Portal/wwwroot/media/music-player/README.md`](../OpenModulePlatform.Portal/wwwroot/media/music-player/README.md)
-for the playlist format and packaging guidance.
+for the import format and storage guidance.
 
 Portal administrators can import and export widget definitions from
 `/admin/dashboardwidgets`. This lets module-specific widgets live beside the
