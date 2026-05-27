@@ -293,6 +293,8 @@ public sealed class DashboardActiveWidget
 
     public string? StringData { get; set; }
 
+    public int ContentScale { get; set; }
+
     public string EffectiveTitle => string.IsNullOrWhiteSpace(Title) ? WidgetTitle : Title.Trim();
 }
 
@@ -320,6 +322,8 @@ public sealed class DashboardWidgetLayoutUpdate
     public int? IntData { get; set; }
 
     public string? StringData { get; set; }
+
+    public int ContentScale { get; set; }
 }
 
 /// <summary>
