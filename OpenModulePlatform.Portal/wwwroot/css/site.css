@@ -21,11 +21,13 @@
 html {
     background: var(--bg);
     min-width: 100%;
+    scroll-padding-top: var(--app-header-height, 0px);
 }
 
 body {
     font-family: Segoe UI, Arial, sans-serif;
     margin: 0;
+    padding-top: var(--app-header-height, 0px);
     color: var(--text);
     background: var(--bg);
     min-width: 100%;
@@ -40,21 +42,27 @@ a:hover {
 }
 
 .app-header {
-    position: sticky;
+    position: fixed;
     top: 0;
     left: 0;
-    right: 0;
-    z-index: 10;
-    width: max(100%, var(--portal-page-chrome-width, 100%));
+    right: auto;
+    z-index: 40000;
+    width: 100%;
     min-width: 100%;
+    max-width: 100%;
     border-bottom: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.94);
     backdrop-filter: blur(8px);
+    overflow: visible;
 }
 
-.app-header > .portal-topbar,
-.app-header > .topbar {
+.app-header > .portal-topbar {
     width: 100%;
+    min-width: 0;
+}
+
+.app-header > .topbar {
+    width: max(100%, var(--portal-page-chrome-width, 100%));
     min-width: 100%;
 }
 
@@ -299,10 +307,17 @@ a:hover {
     padding: 24px;
 }
 
+.content-shell:has(.portal-dashboard) {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    overflow-x: visible;
+}
+
 .content-shell--expanded-dashboard,
 .content-shell:has(.portal-dashboard.is-expanded-canvas) {
     max-width: none;
-    overflow-x: auto;
+    overflow-x: visible;
 }
 
 .content {
@@ -1330,7 +1345,7 @@ button {
 }
 
 .portal-dashboard.is-editing .portal-dashboard__canvas {
-    overflow: hidden;
+    overflow: visible;
     border-color: var(--border);
     border-radius: 16px;
     background:
@@ -1352,7 +1367,7 @@ button {
 }
 
 .portal-dashboard.is-editing.is-expanded-canvas .portal-dashboard__canvas {
-    overflow: auto;
+    overflow: visible;
 }
 
 .portal-dashboard.is-editing.is-free-placement .portal-dashboard__canvas {
@@ -1435,14 +1450,6 @@ button {
     padding: 12px;
     transform: scale(var(--dashboard-widget-content-scale-factor, 1));
     transform-origin: top left;
-}
-
-.dashboard-widget[data-widget-content-scale="1"] {
-    --dashboard-widget-content-scale-factor: 0.75;
-}
-
-.dashboard-widget[data-widget-content-scale="2"] {
-    --dashboard-widget-content-scale-factor: 1.4;
 }
 
 .dashboard-widget__blank {
@@ -2278,7 +2285,8 @@ a.dashboard-role-list__item:focus-visible {
     display: none;
 }
 
-.dashboard-widget__settings-panel label {
+.dashboard-widget__settings-panel label,
+.dashboard-widget__settings-field {
     display: grid;
     gap: 6px;
     color: var(--text);
@@ -2286,12 +2294,53 @@ a.dashboard-role-list__item:focus-visible {
     font-weight: 700;
 }
 
-.dashboard-widget__settings-panel select {
+.dashboard-widget__settings-panel select,
+.dashboard-widget__settings-panel input[type="number"] {
     min-height: 32px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
     color: var(--text);
+}
+
+.dashboard-widget__zoom-control {
+    display: grid;
+    gap: 8px;
+}
+
+.dashboard-widget__zoom-control input[type="range"] {
+    width: 100%;
+}
+
+.dashboard-widget__zoom-value {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.dashboard-widget__zoom-value input {
+    width: 100%;
+    padding: 4px 8px;
+}
+
+.dashboard-widget__zoom-control .btn-link {
+    justify-self: start;
+    min-height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--link);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    text-decoration: underline;
+}
+
+.dashboard-widget__zoom-control .btn-link:hover,
+.dashboard-widget__zoom-control .btn-link:focus-visible {
+    color: var(--link-hover);
+    outline: none;
 }
 
 .dashboard-widget__resize {
@@ -2513,6 +2562,19 @@ a.dashboard-role-list__item:focus-visible {
     margin: 0;
 }
 
+.dashboard-widget-picker__close {
+    flex: 0 0 auto;
+}
+
+.dashboard-widget-picker__close::before {
+    content: "";
+    width: 15px;
+    height: 15px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+}
+
 .dashboard-widget-picker__list {
     display: grid;
     gap: 8px;
@@ -2524,14 +2586,21 @@ a.dashboard-role-list__item:focus-visible {
 .dashboard-widget-option {
     display: grid;
     justify-items: start;
-    gap: 3px;
+    align-content: start;
+    grid-template-rows: minmax(2.5em, auto) auto;
+    gap: 4px;
     width: 100%;
-    min-height: 68px;
+    min-height: 72px;
     padding: 12px;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--surface);
     color: var(--text);
+    text-align: left;
+}
+
+.dashboard-widget-option > span {
+    width: 100%;
     text-align: left;
 }
 
@@ -2543,11 +2612,13 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-widget-option__title {
+    align-self: end;
     font-weight: 700;
     line-height: 1.25;
 }
 
 .dashboard-widget-option__meta {
+    align-self: start;
     color: var(--text-muted);
     font-size: 0.82rem;
     line-height: 1.25;

@@ -18,7 +18,7 @@
          data-canvas-bottom-padding="64"
          data-canvas-view-bottom-padding="32"
          data-empty-canvas-height="220"
-         data-done-label="@L["Done"]"
+         data-done-label="@L["Exit edit mode"]"
          data-edit-label="@L["Edit dashboard"]"
          data-remove-label="@L["Remove widget"]"
          data-done-fallback-confirm="@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]"
@@ -39,10 +39,9 @@
          data-one-column-label="@L["1 column"]"
          data-two-columns-label="@L["2 columns"]"
          data-three-columns-label="@L["3 columns"]"
-         data-content-scale-label="@L["Content scale"]"
-         data-content-scale-default-label="@L["Default"]"
-         data-content-scale-small-label="@L["Small"]"
-         data-content-scale-large-label="@L["Large"]"
+         data-content-scale-label="@L["Zoom"]"
+         data-content-scale-value-label="@L["Zoom value"]"
+         data-content-scale-reset-label="@L["Reset zoom"]"
          data-blank-widget-style-label="@L["Blank widget style"]"
          data-blank-widget-default-label="@L["Default"]"
          data-blank-widget-one-label="@L["Variant 1"]"
@@ -72,7 +71,8 @@
 
         @foreach (var widget in Model.ActiveWidgets)
         {
-            var widgetContentScale = widget.ContentScale is >= 1 and <= 2 ? widget.ContentScale : 0;
+            var widgetContentScale = Math.Clamp(widget.ContentScale, -100, 100);
+            var widgetContentScaleFactor = Math.Max(0.1, (100 + widgetContentScale) / 100.0);
             var isBlankWidget = string.Equals(widget.Payload, "blank-rectangle", StringComparison.OrdinalIgnoreCase);
             var blankWidgetVariant = isBlankWidget && widget.IntData is 1 or 2 ? widget.IntData.Value : 0;
             <article class="dashboard-widget"
@@ -84,7 +84,7 @@
                      data-widget-int-data="@(widget.IntData?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)"
                      data-widget-string-data="@widget.StringData"
                      data-widget-content-scale="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
-                     style="top: @(widget.OffsetTop)px; left: @(widget.OffsetLeft)px; width: @(widget.Width)px; height: @(widget.Height)px; z-index: @(widget.OrderPriority);">
+                     style="top: @(widget.OffsetTop)px; left: @(widget.OffsetLeft)px; width: @(widget.Width)px; height: @(widget.Height)px; z-index: @(widget.OrderPriority); --dashboard-widget-content-scale-factor: @widgetContentScaleFactor.ToString("0.###", CultureInfo.InvariantCulture);">
                 @if (!string.IsNullOrWhiteSpace(widget.EffectiveTitle))
                 {
                     <div class="dashboard-widget__titlebar" data-widget-titlebar>@L[widget.EffectiveTitle]</div>
@@ -159,14 +159,27 @@
                         <span class="dashboard-widget__settings-icon" aria-hidden="true"></span>
                     </button>
                     <div class="dashboard-widget__settings-panel" data-widget-settings-panel hidden>
-                        <label>
-                            <span>@L["Content scale"]</span>
-                            <select data-widget-content-scale-control>
-                                <option value="0" selected="@(widgetContentScale == 0)">@L["Default"]</option>
-                                <option value="1" selected="@(widgetContentScale == 1)">@L["Small"]</option>
-                                <option value="2" selected="@(widgetContentScale == 2)">@L["Large"]</option>
-                            </select>
-                        </label>
+                        <div class="dashboard-widget__settings-field">
+                            <span>@L["Zoom"]</span>
+                            <div class="dashboard-widget__zoom-control" data-widget-content-scale-control>
+                                <input type="range"
+                                       min="-100"
+                                       max="100"
+                                       value="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
+                                       aria-label="@L["Zoom"]"
+                                       data-widget-content-scale-range />
+                                <div class="dashboard-widget__zoom-value">
+                                    <input type="number"
+                                           min="-100"
+                                           max="100"
+                                           value="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
+                                           aria-label="@L["Zoom value"]"
+                                           data-widget-content-scale-input />
+                                    <span>%</span>
+                                </div>
+                                <button type="button" class="btn-link" data-widget-content-scale-reset>@L["Reset zoom"]</button>
+                            </div>
+                        </div>
                         @if (widget.Payload == "weekday-date")
                         {
                             <label>
@@ -282,7 +295,7 @@
         <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">
             <div class="dashboard-widget-picker__header">
                 <h3 id="dashboard-widget-picker-title">@L["Add widget"]</h3>
-                <button type="button" class="icon-button" data-widget-picker-close aria-label="@L["Close"]">×</button>
+                <button type="button" class="icon-button dashboard-widget-picker__close" data-widget-picker-close aria-label="@L["Close"]"></button>
             </div>
             @if (Model.AvailableWidgets.Count == 0)
             {

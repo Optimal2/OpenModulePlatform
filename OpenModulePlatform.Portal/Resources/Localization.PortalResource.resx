@@ -2092,4 +2092,10 @@
   <data name="Dashboard changes could not be saved. Your local draft was kept." xml:space="preserve"><value>Dashboard changes could not be saved. Your local draft was kept.</value></data>
   <data name="Your session appears to have expired. Sign in again before saving dashboard changes." xml:space="preserve"><value>Your session appears to have expired. Sign in again before saving dashboard changes.</value></data>
   <data name="The server could not be reached. Your local dashboard draft was kept." xml:space="preserve"><value>The server could not be reached. Your local dashboard draft was kept.</value></data>
+  <data name="Exit edit mode" xml:space="preserve"><value>Exit edit mode</value></data>
+  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
+  <data name="Zoom value" xml:space="preserve"><value>Zoom value</value></data>
+  <data name="Reset zoom" xml:space="preserve"><value>Reset zoom</value></data>
+  <data name="Show dashboard navbar" xml:space="preserve"><value>Show dashboard navbar</value></data>
+  <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>When this is turned off, the dashboard navbar below the topbar is hidden.</value></data>
 </root>
