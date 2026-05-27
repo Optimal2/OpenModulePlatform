@@ -81,3 +81,107 @@ The shared web UI for navigation and administration in OMP.
 The host-local automation component that reads installation topology, provisions
 artifacts, writes runtime configuration, and creates or updates IIS apps,
 Windows services, and worker runtimes.
+
+## Desired state
+
+The database-backed target state that tells HostAgent what should exist on a
+host. Desired state covers selected artifacts, host placement, runtime paths,
+and whether apps, services, or workers should run.
+
+## Artifact store
+
+The central storage root for registered artifact payloads. HostAgent reads from
+the artifact store and copies deployable content into a host-local artifact
+cache before deploying it.
+
+## Artifact cache
+
+The host-local extracted copy of artifact content. Deployments use this cache as
+their source so the central artifact store can remain shared and immutable.
+
+## Package library
+
+The installer-local library of portable objects that can be imported during a
+bootstrap, upgrade, or package refresh. In the universal installer layout this
+normally lives under `installer/data/global/`.
+
+## Available library
+
+The runtime library of available portable objects that have been staged for
+Portal or HostAgent import but are not necessarily selected as desired state.
+
+## Import folder
+
+A watched folder where universal packages, artifact packages, module
+definitions, widgets, host configs, or config overlays can be dropped for
+HostAgent to import.
+
+## Universal package
+
+A zip container that can carry any mix of portable OMP objects, such as module
+definitions, artifacts, host configs, config overlays, and widgets. See
+`UNIVERSAL_MODULE_PACKAGES.md`.
+
+## Config overlay
+
+Host-specific configuration that is stored separately from the artifact binary
+payload. This keeps environment-specific config out of artifact hashes and lets
+the same artifact content be used by multiple hosts.
+
+## Artifact configuration file
+
+A runtime configuration file associated with an artifact and written by
+HostAgent during deployment. These files live outside the binary artifact hash
+and are stored in OMP metadata.
+
+## Registered module definition
+
+A module definition that exists in the OMP database or available library. A
+registered definition may still need to be applied before it affects module,
+app, SQL, or desired-state metadata.
+
+## Applied module definition
+
+A module definition whose SQL and metadata have been applied to the OMP
+database. Applying a definition is idempotent and may run repair scripts.
+
+## HostAgent-first install
+
+The installation model where the bootstrapper creates the minimum database
+state, installs HostAgent, imports portable objects, and then lets HostAgent
+materialize the rest of the runtime.
+
+## HostAgent self-upgrade
+
+The process where a newer HostAgent artifact is installed beside the current
+service, started, and allowed to take over before the old service is quiesced
+and removed.
+
+## Host lease
+
+A database lease used by HostAgent instances to coordinate which running
+HostAgent owns host-local automation at a given moment.
+
+## Takeover mode
+
+A temporary HostAgent runtime mode used during self-upgrade when a newer
+HostAgent starts, proves it can run, and takes responsibility for cleaning up
+the older HostAgent service.
+
+## Bootstrap configuration
+
+The host-specific configuration used by the bootstrapper to connect to SQL,
+locate package data, configure paths, install HostAgent, and seed initial OMP
+state.
+
+## Sync package objects
+
+The installer action that refreshes package-library module definitions,
+artifacts, SQL, and related portable objects from configured source roots before
+an install or upgrade.
+
+## Minimal runner
+
+The committed installer shape that keeps only the bootstrapper executable and
+source-of-truth host configuration in version control. Generated package data is
+rebuilt locally or staged separately.
