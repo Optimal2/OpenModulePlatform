@@ -2167,6 +2167,13 @@
   <data name="1 column" xml:space="preserve"><value>1 kolumn</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 kolumner</value></data>
   <data name="3 columns" xml:space="preserve"><value>3 kolumner</value></data>
+  <data name="Content scale" xml:space="preserve"><value>Innehållsskala</value></data>
+  <data name="Dashboard actions" xml:space="preserve"><value>Dashboardåtgärder</value></data>
+  <data name="Small" xml:space="preserve"><value>Liten</value></data>
+  <data name="Large" xml:space="preserve"><value>Stor</value></data>
+  <data name="Blank widget style" xml:space="preserve"><value>Tom widget-stil</value></data>
+  <data name="Variant 1" xml:space="preserve"><value>Variant 1</value></data>
+  <data name="Variant 2" xml:space="preserve"><value>Variant 2</value></data>
   <data name="Music player" xml:space="preserve"><value>Musikspelare</value></data>
   <data name="Loading playlist" xml:space="preserve"><value>Laddar spellista</value></data>
   <data name="No tracks available" xml:space="preserve"><value>Inga låtar tillgängliga</value></data>
