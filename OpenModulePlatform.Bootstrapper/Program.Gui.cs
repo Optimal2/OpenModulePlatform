@@ -1784,6 +1784,21 @@ internal static partial class Program
             Report("Resolving developer source repositories...");
             var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
             Report($"Resolved {sourceRoots.Count} developer source root(s).");
+            var warnings = 0;
+            lines.Add("Source repository updates:");
+            warnings += PullDeveloperSourceRepositories(
+                sourceRoots,
+                lines.Add,
+                Report,
+                throwOnFailure: false);
+            lines.Add(string.Empty);
+            if (warnings > 0)
+            {
+                lines.Add("Package object refresh stopped because one or more source repositories could not be updated.");
+                lines.Add($"Summary: 0 updated, 0 already current, {warnings} warning(s).");
+                return new DeveloperPackageObjectSyncResult(HasWarnings: true, ConfigUpdated: false, Lines: lines);
+            }
+
             Report("Reading developer component manifests...");
             var manifests = await ReadDeveloperManifestsAsync(sourceRoots);
             Report($"Read {manifests.Count} developer component manifest(s).");
@@ -1797,7 +1812,6 @@ internal static partial class Program
             var artifactSearchRoots = EnumerateArtifactPackageSearchRoots(sourceRoots).ToArray();
             var updated = 0;
             var unchanged = 0;
-            var warnings = 0;
             var configUpdated = false;
             var builtPackages = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 

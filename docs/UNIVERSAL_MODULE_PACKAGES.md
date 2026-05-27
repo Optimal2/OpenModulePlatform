@@ -126,7 +126,9 @@ object library.
 
 Use the installer action `Refresh object archive` to populate or update
 `data/global` from configured source repositories without starting an
-installation. Then use `Create universal package` to choose:
+installation. The refresh first runs `git pull --ff-only` for every configured
+source repository and stops if any repository needs manual merge/conflict
+handling. Then use `Create universal package` to choose:
 
 - the target host profile, or a global-only package
 - global module definitions, artifacts, host configs, overlays, and widgets

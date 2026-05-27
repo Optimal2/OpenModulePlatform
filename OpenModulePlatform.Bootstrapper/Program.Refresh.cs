@@ -155,7 +155,15 @@ internal static partial class Program
         Console.WriteLine($"Log file:       {logPath}");
         Console.WriteLine();
 
-        foreach (var root in ResolveDeveloperSourceRoots(config, payloadRoot, configPath))
+        var sourceRoots = ResolveDeveloperSourceRoots(config, payloadRoot, configPath);
+        Console.WriteLine("Source repository updates:");
+        PullDeveloperSourceRepositories(
+            sourceRoots,
+            line => Console.WriteLine(line),
+            throwOnFailure: true);
+        Console.WriteLine();
+
+        foreach (var root in sourceRoots)
         {
             var embedScript = Path.Join(root, "scripts", "dev", "embed-module-definition-sql.ps1");
             if (!File.Exists(embedScript))
@@ -597,6 +605,81 @@ internal static partial class Program
 
     private static bool RisksInstallerRefreshPathLimit(string path)
         => Path.GetFullPath(path).Length + InstallerRefreshExpectedDeepSuffixLength > InstallerRefreshPathSafetyMargin;
+
+    private static int PullDeveloperSourceRepositories(
+        IReadOnlyList<string> sourceRoots,
+        Action<string> writeLine,
+        Action<string>? progress = null,
+        bool throwOnFailure = false)
+    {
+        var warnings = 0;
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var sourceRoot in sourceRoots.Select(Path.GetFullPath).Where(emitted.Add))
+        {
+            var displayName = Path.GetFileName(Path.TrimEndingDirectorySeparator(sourceRoot));
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = sourceRoot;
+            }
+
+            if (!IsGitWorkTreeRoot(sourceRoot))
+            {
+                writeLine($"  SKIP    {displayName}: source root is not a Git worktree ({sourceRoot}).");
+                continue;
+            }
+
+            progress?.Invoke($"Updating source repository {displayName}...");
+            var result = RunProcess(
+                "git",
+                ["-C", sourceRoot, "pull", "--ff-only"],
+                throwOnFailure: false,
+                workingDirectory: sourceRoot);
+            var output = NormalizeProcessOutput(result.StdOut, result.StdErr);
+            if (result.ExitCode == 0)
+            {
+                writeLine($"  OK      {displayName}: {SummarizeProcessOutput(output, "already up to date")}");
+                continue;
+            }
+
+            var message = $"  WARN    {displayName}: git pull --ff-only failed with exit code {result.ExitCode}: {SummarizeProcessOutput(output, "no output")}";
+            if (throwOnFailure)
+            {
+                throw new InvalidOperationException(
+                    $"Could not update source repository '{sourceRoot}' before refreshing installer objects. Resolve the Git state manually and run refresh again. {NormalizeWhitespace(output)}");
+            }
+
+            writeLine(message);
+            warnings++;
+        }
+
+        return warnings;
+    }
+
+    private static bool IsGitWorkTreeRoot(string sourceRoot)
+        => Directory.Exists(sourceRoot)
+           && (Directory.Exists(Path.Join(sourceRoot, ".git"))
+               || File.Exists(Path.Join(sourceRoot, ".git")));
+
+    private static string NormalizeProcessOutput(string stdout, string stderr)
+        => string.Join(
+            Environment.NewLine,
+            new[] { stdout, stderr }
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim()));
+
+    private static string SummarizeProcessOutput(string output, string fallback)
+    {
+        var firstLine = output
+            .Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+        return string.IsNullOrWhiteSpace(firstLine) ? fallback : firstLine;
+    }
+
+    private static string NormalizeWhitespace(string value)
+        => string.Join(
+            " ",
+            value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private static IEnumerable<string> ParseDeveloperSourceRoots(string value)
         => value
