@@ -19,7 +19,6 @@
         const saveButton = root.querySelector('[data-dashboard-save]');
         const addButton = root.querySelector('[data-dashboard-add-open]');
         const resetChangesButton = root.querySelector('[data-dashboard-reset-changes]');
-        const resetButton = root.querySelector('[data-dashboard-reset]');
         const alignToggle = root.querySelector('[data-dashboard-align-toggle]');
         const picker = root.querySelector('[data-widget-picker]');
         const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
@@ -110,25 +109,6 @@
             const snapshot = state.savedSnapshot || captureDashboardSnapshot(canvas, state);
             await resetDashboardChanges(root, canvas, token, state, snapshot, () => ++maxOrder, updateDirtyState);
             maxOrder = snapshot.maxOrder;
-            updateDirtyState();
-        });
-
-        resetButton?.addEventListener('click', async () => {
-            const message = root.dataset.resetConfirm || 'This clears your current dashboard widgets. Continue?';
-            if (!window.confirm(message)) {
-                return;
-            }
-
-            await postForm(root.dataset.resetUrl, token, {});
-            canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => widget.remove());
-            maxOrder = 0;
-            updateWidgetSelectionState(root, canvas);
-            updateEmptyState(canvas);
-            updateCanvasHeight(root, canvas, state);
-            state.addedWidgetIds.clear();
-            state.pendingRemovedWidgetIds.clear();
-            state.savedSnapshot = captureDashboardSnapshot(canvas, state);
-            state.savedSignature = getDashboardSignature(canvas, state);
             updateDirtyState();
         });
 
@@ -233,9 +213,7 @@
             }
             editToggle.setAttribute('aria-pressed', isEditing ? 'true' : 'false');
             if (editLabel) {
-                editLabel.textContent = isEditing
-                    ? root.dataset.doneLabel || 'Done'
-                    : '';
+                editLabel.textContent = '';
             }
             const buttonLabel = isEditing
                 ? root.dataset.doneLabel || 'Done'
@@ -1808,7 +1786,11 @@
 
         const body = document.createElement('div');
         body.className = 'dashboard-widget__body';
-        body.appendChild(createWidgetBodyContent(root, widget.payload));
+        const content = document.createElement('div');
+        content.className = 'dashboard-widget__content';
+        content.dataset.widgetContent = '';
+        content.appendChild(createWidgetBodyContent(root, widget.payload));
+        body.appendChild(content);
         element.appendChild(body);
 
         const remove = document.createElement('button');
@@ -1817,7 +1799,10 @@
         remove.dataset.widgetRemove = '';
         remove.title = root.dataset.removeLabel || 'Remove widget';
         remove.setAttribute('aria-label', root.dataset.removeLabel || 'Remove widget');
-        remove.textContent = '×';
+        const removeIcon = document.createElement('span');
+        removeIcon.className = 'dashboard-widget__remove-icon';
+        removeIcon.setAttribute('aria-hidden', 'true');
+        remove.appendChild(removeIcon);
         element.appendChild(remove);
 
         const settings = createWidgetSettingsControls(root, widget);

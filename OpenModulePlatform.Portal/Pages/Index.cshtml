@@ -9,7 +9,6 @@
          data-save-url="@Url.Page("/Index", "SaveDashboard")"
          data-preference-url="@Url.Page("/Index", "SaveDashboardPreference")"
          data-remove-url="@Url.Page("/Index", "RemoveWidget")"
-         data-reset-url="@Url.Page("/Index", "ResetDashboard")"
          data-favorite-toggle-url="@Url.Content("~/navigation/favorites/toggle")"
          data-align-to-grid="@Model.DashboardAlignToGrid.ToString().ToLowerInvariant()"
          data-expanded-canvas="true"
@@ -21,7 +20,6 @@
          data-done-label="@L["Done"]"
          data-edit-label="@L["Edit dashboard"]"
          data-remove-label="@L["Remove widget"]"
-         data-reset-confirm="@L["This clears your current dashboard widgets. Continue?"]"
          data-done-fallback-confirm="@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]"
          data-add-favorite-label="@L["Add favorite"]"
          data-remove-favorite-label="@L["Remove favorite"]"
@@ -85,54 +83,56 @@
                     <div class="dashboard-widget__titlebar" data-widget-titlebar>@L[widget.EffectiveTitle]</div>
                 }
                 <div class="dashboard-widget__body">
-                    @if (widget.Payload == "admin-overview")
-                    {
-                        <div class="dashboard-widget__admin-overview">
-                            <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
-                        </div>
-                    }
-                    else if (widget.Payload == "portal-entry-favorites")
-                    {
-                        <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.FavoritePortalEntries, true)" />
-                    }
-                    else if (widget.Payload == "portal-entry-list")
-                    {
-                        <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.AllPortalEntries, false, true)" />
-                    }
-                    else if (widget.Payload == "portal-entry-combolist")
-                    {
-                        <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
-                    }
-                    else if (widget.Payload == "portal-navbar-links")
-                    {
-                        <partial name="_DashboardNavbarWidgetList" model="new DashboardNavbarWidgetList(Model.DashboardNavbarSections)" />
-                    }
-                    else if (widget.Payload == "user-roles")
-                    {
-                        <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
-                    }
-                    else if (widget.Payload == "content-pages")
-                    {
-                        <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
-                    }
-                    else if (widget.Payload == "weekday-date")
-                    {
-                        <partial name="_DashboardDateWidget" model="widget.IntData == 1" />
-                    }
-                    else if (widget.Payload == "music-player")
-                    {
-                        <partial name="_DashboardMusicPlayerWidget" />
-                    }
-                    else if (blankWidgetVariant > 0)
-                    {
-                        <div class="dashboard-widget__blank dashboard-widget__blank--image" data-blank-widget>
-                            <img src="~/img/blank-widget/@(blankWidgetVariant).gif" alt="" />
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="dashboard-widget__blank" data-blank-widget></div>
-                    }
+                    <div class="dashboard-widget__content" data-widget-content>
+                        @if (widget.Payload == "admin-overview")
+                        {
+                            <div class="dashboard-widget__admin-overview">
+                                <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
+                            </div>
+                        }
+                        else if (widget.Payload == "portal-entry-favorites")
+                        {
+                            <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.FavoritePortalEntries, true)" />
+                        }
+                        else if (widget.Payload == "portal-entry-list")
+                        {
+                            <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.AllPortalEntries, false, true)" />
+                        }
+                        else if (widget.Payload == "portal-entry-combolist")
+                        {
+                            <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
+                        }
+                        else if (widget.Payload == "portal-navbar-links")
+                        {
+                            <partial name="_DashboardNavbarWidgetList" model="new DashboardNavbarWidgetList(Model.DashboardNavbarSections)" />
+                        }
+                        else if (widget.Payload == "user-roles")
+                        {
+                            <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
+                        }
+                        else if (widget.Payload == "content-pages")
+                        {
+                            <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
+                        }
+                        else if (widget.Payload == "weekday-date")
+                        {
+                            <partial name="_DashboardDateWidget" model="widget.IntData == 1" />
+                        }
+                        else if (widget.Payload == "music-player")
+                        {
+                            <partial name="_DashboardMusicPlayerWidget" />
+                        }
+                        else if (blankWidgetVariant > 0)
+                        {
+                            <div class="dashboard-widget__blank dashboard-widget__blank--image" data-blank-widget>
+                                <img src="~/img/blank-widget/@(blankWidgetVariant).gif" alt="" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="dashboard-widget__blank" data-blank-widget></div>
+                        }
+                    </div>
                 </div>
                 @if (Model.CanEditDashboard)
                 {
@@ -141,7 +141,7 @@
                             data-widget-remove
                             title="@L["Remove widget"]"
                             aria-label="@L["Remove widget"]">
-                        ×
+                        <span class="dashboard-widget__remove-icon" aria-hidden="true"></span>
                     </button>
                     <button type="button"
                             class="dashboard-widget__settings-toggle"
@@ -205,6 +205,11 @@
     {
         <div class="dashboard-edit-menu">
             <div class="dashboard-edit-menu__actions" aria-label="@L["Dashboard actions"]">
+                <button type="button" class="dashboard-add-button" data-dashboard-add-open>
+                    <span class="dashboard-action-icon dashboard-action-icon--add" aria-hidden="true"></span>
+                    @L["Add widget"]
+                </button>
+
                 <button type="button" class="dashboard-save-button" data-dashboard-save disabled aria-disabled="true">
                     <span class="dashboard-action-icon dashboard-action-icon--save" aria-hidden="true"></span>
                     @L["Save"]
@@ -213,16 +218,6 @@
                 <button type="button" class="dashboard-reset-changes-button" data-dashboard-reset-changes>
                     <span class="dashboard-action-icon dashboard-action-icon--reset-history" aria-hidden="true"></span>
                     @L["Reset changes"]
-                </button>
-
-                <button type="button" class="dashboard-add-button" data-dashboard-add-open>
-                    <span class="dashboard-action-icon dashboard-action-icon--add" aria-hidden="true"></span>
-                    @L["Add widget"]
-                </button>
-
-                <button type="button" class="dashboard-reset-button" data-dashboard-reset>
-                    <span class="dashboard-action-icon dashboard-action-icon--reset" aria-hidden="true"></span>
-                    @L["Reset layout"]
                 </button>
             </div>
             <button type="button"

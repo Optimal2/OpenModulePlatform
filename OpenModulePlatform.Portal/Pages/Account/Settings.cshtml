@@ -89,6 +89,17 @@ else
             <button type="submit">@L["Save"]</button>
         </div>
     </form>
+
+    <form method="post"
+          asp-page-handler="ResetDashboard"
+          class="card danger-zone"
+          onsubmit="return confirm('@L["This clears your current dashboard widgets. Continue?"]');">
+        <h3>@L["Dashboard"]</h3>
+        <p class="muted">@L["Reset layout"]</p>
+        <div class="toolbar">
+            <button type="submit" class="btn btn-danger">@L["Reset layout"]</button>
+        </div>
+    </form>
 }
 
 @section Scripts {

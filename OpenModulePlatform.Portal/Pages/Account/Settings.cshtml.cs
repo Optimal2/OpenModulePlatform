@@ -20,14 +20,17 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     public const string PortalTab = "portal";
 
     private readonly PortalUserSettingsService _settings;
+    private readonly PortalDashboardService _dashboard;
 
     public SettingsModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        PortalUserSettingsService settings)
+        PortalUserSettingsService settings,
+        PortalDashboardService dashboard)
         : base(options, rbac)
     {
         _settings = settings;
+        _dashboard = dashboard;
     }
 
     [BindProperty]
@@ -191,6 +194,18 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         await _settings.UpsertShowPortalNavbarAsync(userId, PortalInput.ShowPortalNavbar, ct);
 
         StatusMessage = T("Settings saved.");
+        return RedirectToSettings(PortalTab);
+    }
+
+    public async Task<IActionResult> OnPostResetDashboard(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        await _dashboard.ResetDashboardAsync(userId, ct);
+        StatusMessage = T("Dashboard layout reset.");
         return RedirectToSettings(PortalTab);
     }
 
