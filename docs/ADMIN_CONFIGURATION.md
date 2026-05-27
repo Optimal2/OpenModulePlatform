@@ -134,6 +134,15 @@ inside the Portal web artifact because upgrades replace that folder. See
 [`../OpenModulePlatform.Portal/wwwroot/media/music-player/README.md`](../OpenModulePlatform.Portal/wwwroot/media/music-player/README.md)
 for the import format and storage guidance.
 
+The blank widget keeps its built-in static variants for existing dashboards, but
+Portal administrators can also attach shared custom images or GIF files. Custom
+blank-widget media is stored in the same generic widget storage tables:
+`omp_portal.widget_data` stores the shared image list and
+`omp_portal.widget_binary_data` stores the image bytes. A user's placed blank
+widget stores only the selected image id in `user_active_widgets.string_data`.
+This keeps image media out of the Portal web artifact so upgrades do not remove
+administrator-uploaded dashboard decoration.
+
 Portal administrators can import and export widget definitions from
 `/admin/dashboardwidgets`. This lets module-specific widgets live beside the
 module that owns them, including modules maintained in private repositories.

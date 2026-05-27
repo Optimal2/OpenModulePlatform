@@ -558,6 +558,16 @@
   <data name="Select a ZIP package." xml:space="preserve"><value>Select a ZIP package.</value></data>
   <data name="Single MP3" xml:space="preserve"><value>Single MP3</value></data>
   <data name="ZIP package" xml:space="preserve"><value>ZIP package</value></data>
+  <data name="Display name" xml:space="preserve"><value>Display name</value></data>
+  <data name="Custom image" xml:space="preserve"><value>Custom image</value></data>
+  <data name="No custom images" xml:space="preserve"><value>No custom images</value></data>
+  <data name="Image or GIF file" xml:space="preserve"><value>Image or GIF file</value></data>
+  <data name="Upload image" xml:space="preserve"><value>Upload image</value></data>
+  <data name="Select an image or GIF file." xml:space="preserve"><value>Select an image or GIF file.</value></data>
+  <data name="Uploading image..." xml:space="preserve"><value>Uploading image...</value></data>
+  <data name="Blank widget image library updated." xml:space="preserve"><value>Blank widget image library updated.</value></data>
+  <data name="Could not update blank widget image library." xml:space="preserve"><value>Could not update blank widget image library.</value></data>
+  <data name="The selected image is too large." xml:space="preserve"><value>The selected image is too large.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Show dashboard navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>When this is turned off, the dashboard navbar below the topbar is hidden.</value></data>
 </root>

@@ -2216,6 +2216,15 @@
   <data name="Select a ZIP package." xml:space="preserve"><value>Välj ett ZIP-paket.</value></data>
   <data name="Single MP3" xml:space="preserve"><value>Enstaka MP3</value></data>
   <data name="ZIP package" xml:space="preserve"><value>ZIP-paket</value></data>
+  <data name="Custom image" xml:space="preserve"><value>Egen bild</value></data>
+  <data name="No custom images" xml:space="preserve"><value>Inga egna bilder</value></data>
+  <data name="Image or GIF file" xml:space="preserve"><value>Bild eller GIF-fil</value></data>
+  <data name="Upload image" xml:space="preserve"><value>Ladda upp bild</value></data>
+  <data name="Select an image or GIF file." xml:space="preserve"><value>Välj en bild eller GIF-fil.</value></data>
+  <data name="Uploading image..." xml:space="preserve"><value>Laddar upp bild...</value></data>
+  <data name="Blank widget image library updated." xml:space="preserve"><value>Bildbiblioteket för tom widget uppdaterades.</value></data>
+  <data name="Could not update blank widget image library." xml:space="preserve"><value>Bildbiblioteket för tom widget kunde inte uppdateras.</value></data>
+  <data name="The selected image is too large." xml:space="preserve"><value>Den valda bilden är för stor.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Visa dashboardens navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under topbaren.</value></data>
 </root>
