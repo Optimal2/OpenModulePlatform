@@ -914,7 +914,7 @@
     }
 
     function bindDashboardMusicPlayers(scope) {
-        scope.querySelectorAll('[data-dashboard-music-player]').forEach((player) => {
+        getDashboardMusicPlayers(scope).forEach((player) => {
             if (player.dataset.dashboardMusicBound === 'true') {
                 return;
             }
@@ -1275,11 +1275,7 @@
     }
 
     function revokeDashboardMusicPlayerObjectUrls(scope) {
-        const players = scope.matches?.('[data-dashboard-music-player]')
-            ? [scope, ...scope.querySelectorAll('[data-dashboard-music-player]')]
-            : Array.from(scope.querySelectorAll('[data-dashboard-music-player]'));
-
-        players.forEach((player) => {
+        getDashboardMusicPlayers(scope).forEach((player) => {
             const playerUrls = player.__ompMusicObjectUrls;
             if (!playerUrls) {
                 return;
@@ -2091,6 +2087,7 @@
             bindWidget(root, canvas, widget, token, nextOrder, state, onChange);
             bindEntryFavoriteToggles(root, widget, token);
             bindEntryListFilters(widget);
+            bindDashboardMusicPlayers(widget);
         });
     }
 
@@ -2107,6 +2104,24 @@
         element.querySelectorAll('[data-widget-content-scale-control]').forEach((control) => {
             delete control.dataset.dashboardWidgetSettingsBound;
         });
+        getDashboardMusicPlayers(element).forEach((player) => {
+            delete player.dataset.dashboardMusicBound;
+        });
+    }
+
+    function getDashboardMusicPlayers(scope) {
+        if (!scope) {
+            return [];
+        }
+
+        const players = scope.matches?.('[data-dashboard-music-player]') ? [scope] : [];
+        scope.querySelectorAll?.('[data-dashboard-music-player]').forEach((player) => {
+            if (!players.includes(player)) {
+                players.push(player);
+            }
+        });
+
+        return players;
     }
 
     async function saveDashboardPreferences(root, token, state) {
