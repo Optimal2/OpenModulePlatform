@@ -558,8 +558,12 @@
   <data name="Import ZIP" xml:space="preserve"><value>Import ZIP</value></data>
   <data name="Music library updated." xml:space="preserve"><value>Music library updated.</value></data>
   <data name="Could not update music library." xml:space="preserve"><value>Could not update music library.</value></data>
+  <data name="Uploading music..." xml:space="preserve"><value>Uploading music...</value></data>
+  <data name="The selected file is too large for this upload surface." xml:space="preserve"><value>The selected file is too large for this upload surface.</value></data>
   <data name="Select an MP3 file." xml:space="preserve"><value>Select an MP3 file.</value></data>
   <data name="Select a ZIP package." xml:space="preserve"><value>Select a ZIP package.</value></data>
+  <data name="Single MP3" xml:space="preserve"><value>Single MP3</value></data>
+  <data name="ZIP package" xml:space="preserve"><value>ZIP package</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Show dashboard navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>When this is turned off, the dashboard navbar below the topbar is hidden.</value></data>
 </root>

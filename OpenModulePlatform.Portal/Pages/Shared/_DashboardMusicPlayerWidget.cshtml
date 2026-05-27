@@ -1,7 +1,12 @@
 @using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Options
 @inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+@inject Microsoft.Extensions.Options.IOptions<ArtifactUploadOptions> UploadOptions
 @{
     var isPortalAdmin = ViewData["IsPortalAdmin"] is bool value && value;
+    var maxUploadBytes = UploadOptions.Value.MaxUploadBytes > 0
+        ? UploadOptions.Value.MaxUploadBytes
+        : ArtifactUploadOptions.DefaultMaxUploadBytes;
 }
 
 <div class="dashboard-music-player"
@@ -14,9 +19,12 @@
      data-error-label="@L["Could not play track"]"
      data-upload-success-label="@L["Music library updated."]"
      data-upload-error-label="@L["Could not update music library."]"
+     data-uploading-label="@L["Uploading music..."]"
+     data-upload-too-large-label="@L["The selected file is too large for this upload surface."]"
      data-select-mp3-label="@L["Select an MP3 file."]"
      data-select-zip-label="@L["Select a ZIP package."]"
-     data-local-artist-label="@L["Local file"]">
+     data-local-artist-label="@L["Local file"]"
+     data-max-upload-bytes="@maxUploadBytes">
     <audio preload="metadata" data-music-audio></audio>
     <div class="dashboard-music-player__track">
         <div class="dashboard-music-player__cover" aria-hidden="true">
@@ -65,38 +73,51 @@
                 <strong>@L["Music library"]</strong>
                 <button type="button" class="dashboard-music-player__admin-close" data-music-admin-close aria-label="@L["Close"]"></button>
             </div>
-            <div class="dashboard-music-player__admin-grid">
-                <label>
-                    <span>@L["MP3 file"]</span>
-                    <input type="file" accept="audio/mpeg,.mp3" data-music-admin-file />
-                </label>
-                <label>
-                    <span>@L["Track title"]</span>
-                    <input type="text" maxlength="200" data-music-admin-title />
-                </label>
-                <label>
-                    <span>@L["Artist"]</span>
-                    <input type="text" maxlength="200" data-music-admin-artist />
-                </label>
-                <label>
-                    <span>@L["Attribution"]</span>
-                    <input type="text" maxlength="500" data-music-admin-attribution />
-                </label>
-                <label>
-                    <span>@L["Source URL"]</span>
-                    <input type="url" maxlength="1000" data-music-admin-source />
-                </label>
-                <label>
-                    <span>@L["Description"]</span>
-                    <input type="text" maxlength="1000" data-music-admin-description />
-                </label>
+            <div class="dashboard-music-player__admin-tabs" role="tablist" aria-label="@L["Music library"]">
+                <button type="button" class="is-active" data-music-admin-tab="mp3" role="tab" aria-selected="true">@L["Single MP3"]</button>
+                <button type="button" data-music-admin-tab="zip" role="tab" aria-selected="false">@L["ZIP package"]</button>
             </div>
-            <div class="dashboard-music-player__admin-actions">
-                <button type="button" class="btn btn-primary" data-music-admin-upload>@L["Save track"]</button>
-                <label class="btn dashboard-music-player__zip">
-                    <input type="file" accept=".zip,application/zip" data-music-admin-zip />
-                    @L["Import ZIP"]
-                </label>
+            <div class="dashboard-music-player__admin-pane" data-music-admin-pane="mp3">
+                <div class="dashboard-music-player__admin-fields">
+                    <label>
+                        <span>@L["MP3 file"]</span>
+                        <input type="file" accept="audio/mpeg,.mp3" data-music-admin-file />
+                    </label>
+                    <label>
+                        <span>@L["Track title"]</span>
+                        <input type="text" maxlength="200" data-music-admin-title />
+                    </label>
+                    <label>
+                        <span>@L["Artist"]</span>
+                        <input type="text" maxlength="200" data-music-admin-artist />
+                    </label>
+                    <label>
+                        <span>@L["Attribution"]</span>
+                        <input type="text" maxlength="500" data-music-admin-attribution />
+                    </label>
+                    <label>
+                        <span>@L["Source URL"]</span>
+                        <input type="url" maxlength="1000" data-music-admin-source />
+                    </label>
+                    <label>
+                        <span>@L["Description"]</span>
+                        <input type="text" maxlength="1000" data-music-admin-description />
+                    </label>
+                </div>
+                <div class="dashboard-music-player__admin-actions">
+                    <button type="button" class="btn btn-primary" data-music-admin-upload>@L["Save track"]</button>
+                </div>
+            </div>
+            <div class="dashboard-music-player__admin-pane" data-music-admin-pane="zip" hidden>
+                <div class="dashboard-music-player__admin-fields dashboard-music-player__admin-fields--single">
+                    <label>
+                        <span>@L["ZIP package"]</span>
+                        <input type="file" accept=".zip,application/zip" data-music-admin-zip />
+                    </label>
+                </div>
+                <div class="dashboard-music-player__admin-actions">
+                    <button type="button" class="btn btn-primary" data-music-admin-zip-upload>@L["Import ZIP"]</button>
+                </div>
             </div>
         </div>
     }
