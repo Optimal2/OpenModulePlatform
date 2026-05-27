@@ -537,4 +537,10 @@
   <data name="Shuffle" xml:space="preserve"><value>Shuffle</value></data>
   <data name="Loop" xml:space="preserve"><value>Loop</value></data>
   <data name="Add local MP3 files" xml:space="preserve"><value>Add local MP3 files</value></data>
+  <data name="Exit edit mode" xml:space="preserve"><value>Exit edit mode</value></data>
+  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
+  <data name="Zoom value" xml:space="preserve"><value>Zoom value</value></data>
+  <data name="Reset zoom" xml:space="preserve"><value>Reset zoom</value></data>
+  <data name="Show dashboard navbar" xml:space="preserve"><value>Show dashboard navbar</value></data>
+  <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>When this is turned off, the dashboard navbar below the topbar is hidden.</value></data>
 </root>

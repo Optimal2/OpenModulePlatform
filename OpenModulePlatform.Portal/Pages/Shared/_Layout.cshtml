@@ -6,8 +6,13 @@
     var configuredPortalTitle = ViewData["PortalTitle"]?.ToString();
     var documentTitle = ViewData["Title"]?.ToString();
     var showPortalNavbar = true;
+    var requestPath = Context.Request.Path.Value ?? "/";
+    var isDashboardPage = string.IsNullOrEmpty(requestPath)
+        || string.Equals(requestPath, "/", System.StringComparison.OrdinalIgnoreCase)
+        || string.Equals(requestPath.TrimEnd('/'), "/Index", System.StringComparison.OrdinalIgnoreCase);
     var userIdClaim = User.FindFirst(OpenModulePlatform.Web.Shared.Security.OmpAuthDefaults.UserIdClaimType)?.Value;
-    if (int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var portalLayoutUserId))
+    if (isDashboardPage
+        && int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var portalLayoutUserId))
     {
         showPortalNavbar = (await PortalUserSettingsService.GetForUserAsync(portalLayoutUserId, Context.RequestAborted)).ShowPortalNavbar;
     }

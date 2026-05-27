@@ -25,7 +25,8 @@ public sealed class PortalDashboardService
     private const int MaxWidgetHeight = 1400;
     private const int MaxWidgetOffset = 10000;
     private const int MaxWidgetOrder = 10000;
-    private const int MaxWidgetContentScale = 2;
+    private const int MinWidgetContentScale = -100;
+    private const int MaxWidgetContentScale = 100;
 
     private readonly SqlConnectionFactory _db;
     private readonly AppCatalogService _catalog;
@@ -590,7 +591,7 @@ ORDER BY w.title,
         cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = CleanTitle(update.Title) ?? (object)DBNull.Value;
         cmd.Parameters.Add("@int_data", SqlDbType.Int).Value = update.IntData.HasValue ? update.IntData.Value : DBNull.Value;
         cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(update.StringData) ?? (object)DBNull.Value;
-        cmd.Parameters.Add("@content_scale", SqlDbType.Int).Value = Clamp(update.ContentScale, 0, MaxWidgetContentScale);
+        cmd.Parameters.Add("@content_scale", SqlDbType.Int).Value = Clamp(update.ContentScale, MinWidgetContentScale, MaxWidgetContentScale);
     }
 
     private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)

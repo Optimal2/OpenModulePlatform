@@ -2187,4 +2187,10 @@
   <data name="Dashboard changes could not be saved. Your local draft was kept." xml:space="preserve"><value>Dashboardändringarna kunde inte sparas. Det lokala utkastet behölls.</value></data>
   <data name="Your session appears to have expired. Sign in again before saving dashboard changes." xml:space="preserve"><value>Din session verkar ha gått ut. Logga in igen innan du sparar dashboardändringar.</value></data>
   <data name="The server could not be reached. Your local dashboard draft was kept." xml:space="preserve"><value>Servern kunde inte nås. Ditt lokala dashboardutkast behölls.</value></data>
+  <data name="Exit edit mode" xml:space="preserve"><value>Avsluta redigering</value></data>
+  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
+  <data name="Zoom value" xml:space="preserve"><value>Zoomvärde</value></data>
+  <data name="Reset zoom" xml:space="preserve"><value>Återställ zoom</value></data>
+  <data name="Show dashboard navbar" xml:space="preserve"><value>Visa dashboardens navbar</value></data>
+  <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under topbaren.</value></data>
 </root>
