@@ -40,6 +40,10 @@ coverage/
 *.swo
 /scripts/tmp
 
+# Local dashboard music test files. Metadata stays public; MP3 binaries are
+# supplied from private/local installer material when packages are built.
+/OpenModulePlatform.Portal/wwwroot/media/music-player/*.mp3
+
 # Machine- and environment-specific deployment settings
 /scripts/deployment/*.local.psd1
 
