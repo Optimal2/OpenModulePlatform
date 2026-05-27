@@ -35,7 +35,9 @@ Keep MP3 files outside the public OpenModulePlatform repository. Local Portal
 builds automatically include MP3 files from the sibling private folder
 `<workspace>\DEV\MP3` when that folder exists. This lets local installer and
 universal-package builds carry the test media without tracking the binary files
-in Git.
+in Git. The automatic build path expects the standard workspace layout where
+`DEV` and `OpenModulePlatform` are sibling folders; copy MP3 files manually if
+your private DEV repository lives somewhere else.
 
 For direct static-file testing without rebuilding the Portal artifact, copy the
 private test files into this folder after cloning:
