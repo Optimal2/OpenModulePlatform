@@ -16,6 +16,7 @@
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
     const sessionStatusWarningEvent = 'omp:session-status-warning';
     const musicObjectUrls = new Set();
+    let blankWidgetImagesCache = null;
 
     function initDashboard(root) {
         const canvas = root.querySelector('[data-dashboard-canvas]');
@@ -500,6 +501,24 @@
             });
         });
 
+        widget.querySelectorAll('[data-blank-widget-style-control]').forEach((control) => {
+            if (control.dataset.dashboardWidgetSettingsBound === 'true') {
+                return;
+            }
+
+            control.dataset.dashboardWidgetSettingsBound = 'true';
+            control.addEventListener('change', () => {
+                applyBlankWidgetStyleValue(widget, control.value);
+                applyWidgetSettings(widget);
+                onChange();
+            });
+        });
+
+        if (isBlankWidgetPayload(widget.dataset.widgetPayload)) {
+            bindBlankWidgetAdmin(root, widget, onChange);
+            refreshBlankWidgetImageOptions(root).catch(() => {});
+        }
+
         widget.querySelectorAll('[data-widget-content-scale-control]').forEach((container) => {
             if (container.dataset.dashboardWidgetSettingsBound === 'true') {
                 return;
@@ -567,12 +586,12 @@
         }
 
         if (isBlankWidgetPayload(widget.dataset.widgetPayload)) {
+            const imageId = normalizeBlankWidgetImageId(widget.dataset.widgetStringData);
             const variant = normalizeBlankWidgetVariant(widget.dataset.widgetIntData);
-            widget.dataset.widgetIntData = variant > 0 ? String(variant) : '';
-            widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
-                control.value = String(variant);
-            });
-            renderBlankWidgetVariant(widget, variant);
+            widget.dataset.widgetStringData = imageId > 0 ? String(imageId) : '';
+            widget.dataset.widgetIntData = imageId > 0 ? '' : variant > 0 ? String(variant) : '';
+            syncBlankWidgetStyleControls(widget, imageId > 0 ? 0 : variant, imageId);
+            renderBlankWidgetVariant(widget, imageId > 0 ? 0 : variant, imageId);
         }
     }
 
@@ -1407,6 +1426,241 @@
         });
     }
 
+    async function loadBlankWidgetImages(root, force = false) {
+        if (!force && Array.isArray(blankWidgetImagesCache)) {
+            return blankWidgetImagesCache;
+        }
+
+        const url = root?.dataset?.blankWidgetImagesUrl || '';
+        if (!url) {
+            blankWidgetImagesCache = [];
+            return blankWidgetImagesCache;
+        }
+
+        try {
+            const response = await fetch(url, { credentials: 'same-origin' });
+            if (!response.ok) {
+                blankWidgetImagesCache = [];
+                return blankWidgetImagesCache;
+            }
+
+            const payload = await response.json();
+            blankWidgetImagesCache = Array.isArray(payload?.images)
+                ? payload.images.map(normalizeBlankWidgetImage).filter(Boolean)
+                : [];
+            return blankWidgetImagesCache;
+        } catch {
+            blankWidgetImagesCache = [];
+            return blankWidgetImagesCache;
+        }
+    }
+
+    function normalizeBlankWidgetImage(image) {
+        const id = normalizeBlankWidgetImageId(image?.id ?? image?.binaryDataId);
+        if (id <= 0) {
+            return null;
+        }
+
+        return {
+            id,
+            displayName: String(image.displayName || image.fileName || `Image ${id}`).trim(),
+            src: String(image.src || image.url || '').trim(),
+            fileName: String(image.fileName || '').trim(),
+            contentType: String(image.contentType || '').trim()
+        };
+    }
+
+    async function refreshBlankWidgetImageOptions(root, selectedWidget = null, selectedValue = '') {
+        const images = await loadBlankWidgetImages(root);
+        root.querySelectorAll('[data-blank-widget-style-control]').forEach((select) => {
+            const widget = select.closest('[data-dashboard-widget]');
+            const desired = selectedWidget && widget === selectedWidget
+                ? selectedValue
+                : getBlankWidgetStyleValue(widget);
+            updateBlankWidgetStyleOptions(root, select, images, desired);
+        });
+    }
+
+    function updateBlankWidgetStyleOptions(root, select, images, selectedValue) {
+        const selected = String(selectedValue || 'static:0');
+        select.replaceChildren(
+            createBlankWidgetOption('static:0', root.dataset.blankWidgetDefaultLabel || 'Default'),
+            createBlankWidgetOption('static:1', root.dataset.blankWidgetOneLabel || 'Variant 1'),
+            createBlankWidgetOption('static:2', root.dataset.blankWidgetTwoLabel || 'Variant 2'));
+
+        const group = document.createElement('optgroup');
+        group.label = root.dataset.blankWidgetCustomLabel || 'Custom image';
+        group.dataset.blankWidgetCustomGroup = '';
+        if (images.length === 0) {
+            const empty = createBlankWidgetOption('', root.dataset.blankWidgetNoCustomImagesLabel || 'No custom images');
+            empty.disabled = true;
+            group.appendChild(empty);
+        } else {
+            images.forEach((image) => {
+                group.appendChild(createBlankWidgetOption(`image:${image.id}`, image.displayName || `Image ${image.id}`));
+            });
+        }
+        select.appendChild(group);
+
+        if (selected.startsWith('image:')
+            && !Array.from(select.options).some((option) => option.value === selected)) {
+            const fallback = createBlankWidgetOption(selected, `${root.dataset.blankWidgetCustomLabel || 'Custom image'} ${selected.slice('image:'.length)}`);
+            group.appendChild(fallback);
+        }
+
+        select.value = Array.from(select.options).some((option) => option.value === selected)
+            ? selected
+            : 'static:0';
+    }
+
+    function createBlankWidgetOption(value, label) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        return option;
+    }
+
+    function bindBlankWidgetAdmin(root, widget, onChange) {
+        const panel = widget.querySelector('[data-blank-widget-admin]');
+        if (!panel || panel.dataset.blankWidgetAdminBound === 'true') {
+            return;
+        }
+
+        panel.dataset.blankWidgetAdminBound = 'true';
+        const file = panel.querySelector('[data-blank-widget-file]');
+        const displayName = panel.querySelector('[data-blank-widget-display-name]');
+        const upload = panel.querySelector('[data-blank-widget-upload]');
+        const zip = panel.querySelector('[data-blank-widget-zip]');
+        const status = panel.querySelector('[data-blank-widget-status]');
+
+        upload?.addEventListener('click', async () => {
+            const selectedFile = file?.files?.[0] || null;
+            if (!isBlankWidgetImageFile(selectedFile)) {
+                setBlankWidgetStatus(status, root.dataset.blankWidgetSelectImageLabel || 'Select an image or GIF file.');
+                return;
+            }
+
+            if (isBlankWidgetUploadTooLarge(root, selectedFile, 'blankWidgetMaxImageBytes')) {
+                setBlankWidgetStatus(status, root.dataset.blankWidgetUploadTooLargeLabel || 'The selected image is too large.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('displayName', displayName?.value || '');
+            await submitBlankWidgetAdminForm(
+                root,
+                root.dataset.uploadBlankWidgetImageUrl,
+                formData,
+                [upload],
+                status,
+                async (result) => {
+                    await applyBlankWidgetUploadResult(root, widget, result, onChange);
+                    if (file) {
+                        file.value = '';
+                    }
+                    if (displayName) {
+                        displayName.value = '';
+                    }
+                });
+        });
+
+        zip?.addEventListener('change', async () => {
+            const selectedZip = zip.files?.[0] || null;
+            if (!selectedZip) {
+                return;
+            }
+
+            if (isBlankWidgetUploadTooLarge(root, selectedZip, 'blankWidgetMaxZipBytes')) {
+                setBlankWidgetStatus(status, root.dataset.blankWidgetUploadTooLargeLabel || 'The selected image is too large.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('zipFile', selectedZip);
+            await submitBlankWidgetAdminForm(
+                root,
+                root.dataset.uploadBlankWidgetImagesZipUrl,
+                formData,
+                [zip],
+                status,
+                async (result) => {
+                    await applyBlankWidgetUploadResult(root, widget, result, onChange);
+                    zip.value = '';
+                });
+        });
+    }
+
+    function isBlankWidgetImageFile(file) {
+        if (!file) {
+            return false;
+        }
+
+        const name = String(file.name || '').toLowerCase();
+        return file.type === 'image/gif'
+            || file.type === 'image/png'
+            || file.type === 'image/jpeg'
+            || name.endsWith('.gif')
+            || name.endsWith('.png')
+            || name.endsWith('.jpg')
+            || name.endsWith('.jpeg');
+    }
+
+    function isBlankWidgetUploadTooLarge(root, file, dataKey) {
+        const maxBytes = parsePositiveInteger(root?.dataset?.[dataKey], 0);
+        return maxBytes > 0 && !!file && file.size > maxBytes;
+    }
+
+    async function submitBlankWidgetAdminForm(root, url, formData, busyControls, status, onSuccess) {
+        const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
+        busyControls.forEach((control) => {
+            if (control) {
+                control.disabled = true;
+            }
+        });
+        setBlankWidgetStatus(status, root.dataset.blankWidgetUploadingLabel || 'Uploading image...');
+
+        try {
+            const result = await postFormData(url, token, formData);
+            setBlankWidgetStatus(status, root.dataset.blankWidgetUploadSuccessLabel || 'Blank widget image library updated.');
+            await onSuccess(result);
+        } catch (error) {
+            const message = error?.status === 413
+                ? root.dataset.blankWidgetUploadTooLargeLabel || 'The selected image is too large.'
+                : error?.message || root.dataset.blankWidgetUploadErrorLabel || 'Could not update blank widget image library.';
+            setBlankWidgetStatus(status, message);
+        } finally {
+            busyControls.forEach((control) => {
+                if (control) {
+                    control.disabled = false;
+                }
+            });
+        }
+    }
+
+    async function applyBlankWidgetUploadResult(root, widget, result, onChange) {
+        if (Array.isArray(result?.images)) {
+            blankWidgetImagesCache = result.images.map(normalizeBlankWidgetImage).filter(Boolean);
+        } else {
+            blankWidgetImagesCache = null;
+        }
+
+        const selectedImageId = normalizeBlankWidgetImageId(result?.selectedImageId ?? result?.SelectedImageId);
+        const selectedValue = selectedImageId > 0 ? `image:${selectedImageId}` : getBlankWidgetStyleValue(widget);
+        await refreshBlankWidgetImageOptions(root, widget, selectedValue);
+        if (selectedImageId > 0) {
+            applyBlankWidgetStyleValue(widget, selectedValue);
+            applyWidgetSettings(widget);
+            onChange();
+        }
+    }
+
+    function setBlankWidgetStatus(status, message) {
+        if (status) {
+            status.textContent = message || '';
+        }
+    }
+
     function setMusicAttribution(container, track) {
         container.replaceChildren();
         if (!track) {
@@ -1774,20 +2028,72 @@
         return parsed && parsed >= 1 && parsed <= 2 ? parsed : 0;
     }
 
+    function normalizeBlankWidgetImageId(value) {
+        const parsed = parseNullableInteger(value);
+        return parsed && parsed > 0 ? parsed : 0;
+    }
+
     function isBlankWidgetPayload(payload) {
         return !payload || payload === 'blank-rectangle';
     }
 
-    function renderBlankWidgetVariant(widget, variant) {
+    function getBlankWidgetStyleValue(widget) {
+        const imageId = normalizeBlankWidgetImageId(widget?.dataset?.widgetStringData);
+        if (imageId > 0) {
+            return `image:${imageId}`;
+        }
+
+        return `static:${normalizeBlankWidgetVariant(widget?.dataset?.widgetIntData)}`;
+    }
+
+    function applyBlankWidgetStyleValue(widget, value) {
+        const raw = String(value || '').trim();
+        if (raw.startsWith('image:')) {
+            const imageId = normalizeBlankWidgetImageId(raw.slice('image:'.length));
+            widget.dataset.widgetStringData = imageId > 0 ? String(imageId) : '';
+            widget.dataset.widgetIntData = '';
+            return;
+        }
+
+        const rawVariant = raw.startsWith('static:') ? raw.slice('static:'.length) : raw;
+        const variant = normalizeBlankWidgetVariant(rawVariant);
+        widget.dataset.widgetStringData = '';
+        widget.dataset.widgetIntData = variant > 0 ? String(variant) : '';
+    }
+
+    function syncBlankWidgetStyleControls(widget, variant, imageId) {
+        const value = imageId > 0 ? `image:${imageId}` : `static:${variant}`;
+        widget.querySelectorAll('[data-blank-widget-style-control]').forEach((control) => {
+            if (control.value !== value) {
+                control.value = value;
+            }
+        });
+    }
+
+    function getBlankWidgetImageUrl(widget, imageId) {
+        const root = widget?.closest?.('[data-dashboard-root]');
+        const template = root?.dataset?.blankWidgetImageUrlTemplate || '';
+        return template
+            ? template.replace('__id__', encodeURIComponent(String(imageId)))
+            : '';
+    }
+
+    function renderBlankWidgetVariant(widget, variant, imageId = 0) {
         const blank = widget.querySelector('[data-blank-widget]');
         if (!blank) {
             return;
         }
 
-        blank.classList.toggle('dashboard-widget__blank--image', variant > 0);
+        const imageSource = imageId > 0
+            ? getBlankWidgetImageUrl(widget, imageId)
+            : variant > 0
+                ? `/img/blank-widget/${variant}.gif`
+                : '';
+        blank.classList.toggle('dashboard-widget__blank--image', !!imageSource);
         blank.dataset.blankWidgetVariant = variant > 0 ? String(variant) : '';
+        blank.dataset.blankWidgetImageId = imageId > 0 ? String(imageId) : '';
 
-        if (variant <= 0) {
+        if (!imageSource) {
             blank.replaceChildren();
             return;
         }
@@ -1799,9 +2105,8 @@
             blank.replaceChildren(image);
         }
 
-        const nextSrc = `/img/blank-widget/${variant}.gif`;
-        if (!image.src.endsWith(nextSrc)) {
-            image.src = nextSrc;
+        if (image.getAttribute('src') !== imageSource && image.src !== imageSource) {
+            image.src = imageSource;
         }
     }
 
@@ -1889,6 +2194,7 @@
                     height: Math.round(widget.offsetHeight),
                     orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
                     intData: parseNullableInteger(widget.dataset.widgetIntData),
+                    stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData),
                     contentScale: normalizeContentScale(widget.dataset.widgetContentScale)
                 }))
         };
@@ -2076,7 +2382,7 @@
                 height: item.height,
                 orderPriority: item.orderPriority,
                 intData: item.intData,
-                stringData: null,
+                stringData: item.stringData || null,
                 contentScale: item.contentScale
             });
 
@@ -2569,17 +2875,10 @@
                     select.dataset.widgetIntDataControl = '';
                 }));
         } else if (isBlankWidgetPayload(widget.payload)) {
-            panel.appendChild(createSelectField(
-                root.dataset.blankWidgetStyleLabel || 'Blank widget style',
-                [
-                    ['0', root.dataset.blankWidgetDefaultLabel || 'Default'],
-                    ['1', root.dataset.blankWidgetOneLabel || 'Variant 1'],
-                    ['2', root.dataset.blankWidgetTwoLabel || 'Variant 2']
-                ],
-                String(normalizeBlankWidgetVariant(widget.intData)),
-                (select) => {
-                    select.dataset.widgetIntDataControl = '';
-                }));
+            panel.appendChild(createBlankWidgetStyleField(root, widget));
+            if (root.dataset.isPortalAdmin === 'true') {
+                panel.appendChild(createBlankWidgetAdminControls(root));
+            }
         }
 
         return { toggle, panel };
@@ -2655,6 +2954,76 @@
         fieldLabel.appendChild(text);
         fieldLabel.appendChild(select);
         return fieldLabel;
+    }
+
+    function createBlankWidgetStyleField(root, widget) {
+        const imageId = normalizeBlankWidgetImageId(widget?.stringData);
+        const selected = imageId > 0
+            ? `image:${imageId}`
+            : `static:${normalizeBlankWidgetVariant(widget?.intData)}`;
+        return createSelectField(
+            root.dataset.blankWidgetStyleLabel || 'Blank widget style',
+            [
+                ['static:0', root.dataset.blankWidgetDefaultLabel || 'Default'],
+                ['static:1', root.dataset.blankWidgetOneLabel || 'Variant 1'],
+                ['static:2', root.dataset.blankWidgetTwoLabel || 'Variant 2']
+            ],
+            selected,
+            (select) => {
+                select.dataset.blankWidgetStyleControl = '';
+            });
+    }
+
+    function createBlankWidgetAdminControls(root) {
+        const panel = document.createElement('div');
+        panel.className = 'dashboard-widget__blank-admin';
+        panel.dataset.blankWidgetAdmin = '';
+
+        const fileLabel = document.createElement('label');
+        const fileText = document.createElement('span');
+        fileText.textContent = root.dataset.blankWidgetImageFileLabel || 'Image or GIF file';
+        const file = document.createElement('input');
+        file.type = 'file';
+        file.accept = 'image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg';
+        file.dataset.blankWidgetFile = '';
+        fileLabel.append(fileText, file);
+        panel.appendChild(fileLabel);
+
+        const displayNameLabel = document.createElement('label');
+        const displayNameText = document.createElement('span');
+        displayNameText.textContent = root.dataset.blankWidgetDisplayNameLabel || 'Display name';
+        const displayName = document.createElement('input');
+        displayName.type = 'text';
+        displayName.maxLength = 200;
+        displayName.dataset.blankWidgetDisplayName = '';
+        displayNameLabel.append(displayNameText, displayName);
+        panel.appendChild(displayNameLabel);
+
+        const actions = document.createElement('div');
+        actions.className = 'dashboard-widget__blank-admin-actions';
+        const upload = document.createElement('button');
+        upload.type = 'button';
+        upload.className = 'btn btn-primary';
+        upload.dataset.blankWidgetUpload = '';
+        upload.textContent = root.dataset.blankWidgetUploadLabel || 'Upload image';
+        actions.appendChild(upload);
+
+        const zipLabel = document.createElement('label');
+        zipLabel.className = 'btn dashboard-widget__blank-admin-zip';
+        const zip = document.createElement('input');
+        zip.type = 'file';
+        zip.accept = '.zip,application/zip';
+        zip.dataset.blankWidgetZip = '';
+        zipLabel.appendChild(zip);
+        zipLabel.appendChild(document.createTextNode(root.dataset.blankWidgetImportZipLabel || 'Import ZIP'));
+        actions.appendChild(zipLabel);
+        panel.appendChild(actions);
+
+        const status = document.createElement('div');
+        status.className = 'dashboard-widget__blank-admin-status';
+        status.dataset.blankWidgetStatus = '';
+        panel.appendChild(status);
+        return panel;
     }
 
     function createWidgetBodyContent(root, payload) {
