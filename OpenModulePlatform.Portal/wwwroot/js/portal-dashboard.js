@@ -493,9 +493,28 @@
                 onChange();
             });
         });
+
+        widget.querySelectorAll('[data-widget-content-scale-control]').forEach((control) => {
+            if (control.dataset.dashboardWidgetSettingsBound === 'true') {
+                return;
+            }
+
+            control.dataset.dashboardWidgetSettingsBound = 'true';
+            control.addEventListener('change', () => {
+                widget.dataset.widgetContentScale = String(normalizeContentScale(control.value));
+                applyWidgetSettings(widget);
+                onChange();
+            });
+        });
     }
 
     function applyWidgetSettings(widget) {
+        const contentScale = normalizeContentScale(widget.dataset.widgetContentScale);
+        widget.dataset.widgetContentScale = String(contentScale);
+        widget.querySelectorAll('[data-widget-content-scale-control]').forEach((control) => {
+            control.value = String(contentScale);
+        });
+
         if (widget.dataset.widgetPayload === 'weekday-date') {
             const hideWeekNumber = parseNullableInteger(widget.dataset.widgetIntData) === 1;
             widget.querySelectorAll('.dashboard-date-widget__week').forEach((week) => {
@@ -513,6 +532,16 @@
             widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
                 control.value = String(columns);
             });
+            return;
+        }
+
+        if (isBlankWidgetPayload(widget.dataset.widgetPayload)) {
+            const variant = normalizeBlankWidgetVariant(widget.dataset.widgetIntData);
+            widget.dataset.widgetIntData = variant > 0 ? String(variant) : '';
+            widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
+                control.value = String(variant);
+            });
+            renderBlankWidgetVariant(widget, variant);
         }
     }
 
@@ -1445,6 +1474,47 @@
         return parsed && parsed >= 1 && parsed <= 3 ? parsed : 0;
     }
 
+    function normalizeContentScale(value) {
+        const parsed = parseNullableInteger(value);
+        return parsed && parsed >= 1 && parsed <= 2 ? parsed : 0;
+    }
+
+    function normalizeBlankWidgetVariant(value) {
+        const parsed = parseNullableInteger(value);
+        return parsed && parsed >= 1 && parsed <= 2 ? parsed : 0;
+    }
+
+    function isBlankWidgetPayload(payload) {
+        return !payload || payload === 'blank-rectangle';
+    }
+
+    function renderBlankWidgetVariant(widget, variant) {
+        const blank = widget.querySelector('[data-blank-widget]');
+        if (!blank) {
+            return;
+        }
+
+        blank.classList.toggle('dashboard-widget__blank--image', variant > 0);
+        blank.dataset.blankWidgetVariant = variant > 0 ? String(variant) : '';
+
+        if (variant <= 0) {
+            blank.replaceChildren();
+            return;
+        }
+
+        let image = blank.querySelector('img');
+        if (!image) {
+            image = document.createElement('img');
+            image.alt = '';
+            blank.replaceChildren(image);
+        }
+
+        const nextSrc = `/img/blank-widget/${variant}.gif`;
+        if (!image.src.endsWith(nextSrc)) {
+            image.src = nextSrc;
+        }
+    }
+
     function normalizeWidgetDataValue(value) {
         if (value === null || value === undefined) {
             return '';
@@ -1485,7 +1555,8 @@
                 orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
                 title: '',
                 intData: parseNullableInteger(widget.dataset.widgetIntData),
-                stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData)
+                stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData),
+                contentScale: normalizeContentScale(widget.dataset.widgetContentScale)
             }))
             .sort((left, right) => {
                 const idCompare = left.userActiveWidgetId - right.userActiveWidgetId;
@@ -1553,7 +1624,8 @@
                 orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
                 title: null,
                 intData: parseNullableInteger(widget.dataset.widgetIntData),
-                stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData) || null
+                stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData) || null,
+                contentScale: normalizeContentScale(widget.dataset.widgetContentScale)
             }))
             .filter((widget) => widget.widgetId > 0);
 
@@ -1656,6 +1728,9 @@
         element.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
             delete control.dataset.dashboardWidgetSettingsBound;
         });
+        element.querySelectorAll('[data-widget-content-scale-control]').forEach((control) => {
+            delete control.dataset.dashboardWidgetSettingsBound;
+        });
     }
 
     async function saveDashboardPreferences(root, token, state) {
@@ -1716,6 +1791,7 @@
         element.dataset.widgetPayload = widget.payload || '';
         element.dataset.widgetIntData = normalizeWidgetDataValue(widget.intData);
         element.dataset.widgetStringData = normalizeWidgetDataValue(widget.stringData);
+        element.dataset.widgetContentScale = String(normalizeContentScale(widget.contentScale));
         element.style.top = `${widget.offsetTop || 0}px`;
         element.style.left = `${widget.offsetLeft || 0}px`;
         element.style.width = `${widget.width || 320}px`;
@@ -1761,10 +1837,6 @@
     }
 
     function createWidgetSettingsControls(root, widget) {
-        if (widget.payload !== 'weekday-date' && widget.payload !== 'portal-entry-list') {
-            return null;
-        }
-
         const label = root.dataset.widgetSettingsLabel || 'Widget settings';
         const toggle = document.createElement('button');
         toggle.type = 'button';
@@ -1784,46 +1856,79 @@
         panel.dataset.widgetSettingsPanel = '';
         panel.hidden = true;
 
-        const fieldLabel = document.createElement('label');
-        const text = document.createElement('span');
-        text.textContent = widget.payload === 'portal-entry-list'
-            ? root.dataset.columnCountLabel || 'Column count'
-            : root.dataset.weekNumberLabel || 'Week number';
-        const select = document.createElement('select');
-        select.dataset.widgetIntDataControl = '';
+        panel.appendChild(createSelectField(
+            root.dataset.contentScaleLabel || 'Content scale',
+            [
+                ['0', root.dataset.contentScaleDefaultLabel || 'Default'],
+                ['1', root.dataset.contentScaleSmallLabel || 'Small'],
+                ['2', root.dataset.contentScaleLargeLabel || 'Large']
+            ],
+            String(normalizeContentScale(widget.contentScale)),
+            (select) => {
+                select.dataset.widgetContentScaleControl = '';
+            }));
 
         if (widget.payload === 'portal-entry-list') {
-            [
-                ['0', root.dataset.defaultColumnsLabel || 'Default'],
-                ['1', root.dataset.oneColumnLabel || '1 column'],
-                ['2', root.dataset.twoColumnsLabel || '2 columns'],
-                ['3', root.dataset.threeColumnsLabel || '3 columns']
-            ].forEach(([value, labelText]) => {
-                const option = document.createElement('option');
-                option.value = value;
-                option.textContent = labelText;
-                select.appendChild(option);
-            });
-            select.value = String(normalizeColumnCount(widget.intData));
-        } else {
-            const showOption = document.createElement('option');
-            showOption.value = '0';
-            showOption.textContent = root.dataset.showWeekNumberLabel || 'Show week number';
-
-            const hideOption = document.createElement('option');
-            hideOption.value = '1';
-            hideOption.textContent = root.dataset.hideWeekNumberLabel || 'Hide week number';
-
-            select.appendChild(showOption);
-            select.appendChild(hideOption);
-            select.value = parseNullableInteger(widget.intData) === 1 ? '1' : '0';
+            panel.appendChild(createSelectField(
+                root.dataset.columnCountLabel || 'Column count',
+                [
+                    ['0', root.dataset.defaultColumnsLabel || 'Default'],
+                    ['1', root.dataset.oneColumnLabel || '1 column'],
+                    ['2', root.dataset.twoColumnsLabel || '2 columns'],
+                    ['3', root.dataset.threeColumnsLabel || '3 columns']
+                ],
+                String(normalizeColumnCount(widget.intData)),
+                (select) => {
+                    select.dataset.widgetIntDataControl = '';
+                }));
+        } else if (widget.payload === 'weekday-date') {
+            panel.appendChild(createSelectField(
+                root.dataset.weekNumberLabel || 'Week number',
+                [
+                    ['0', root.dataset.showWeekNumberLabel || 'Show week number'],
+                    ['1', root.dataset.hideWeekNumberLabel || 'Hide week number']
+                ],
+                parseNullableInteger(widget.intData) === 1 ? '1' : '0',
+                (select) => {
+                    select.dataset.widgetIntDataControl = '';
+                }));
+        } else if (isBlankWidgetPayload(widget.payload)) {
+            panel.appendChild(createSelectField(
+                root.dataset.blankWidgetStyleLabel || 'Blank widget style',
+                [
+                    ['0', root.dataset.blankWidgetDefaultLabel || 'Default'],
+                    ['1', root.dataset.blankWidgetOneLabel || 'Variant 1'],
+                    ['2', root.dataset.blankWidgetTwoLabel || 'Variant 2']
+                ],
+                String(normalizeBlankWidgetVariant(widget.intData)),
+                (select) => {
+                    select.dataset.widgetIntDataControl = '';
+                }));
         }
+
+        return { toggle, panel };
+    }
+
+    function createSelectField(labelText, options, selectedValue, configureSelect) {
+        const fieldLabel = document.createElement('label');
+        const text = document.createElement('span');
+        text.textContent = labelText;
+        const select = document.createElement('select');
+        if (configureSelect) {
+            configureSelect(select);
+        }
+
+        options.forEach(([value, optionText]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = optionText;
+            select.appendChild(option);
+        });
+        select.value = selectedValue;
 
         fieldLabel.appendChild(text);
         fieldLabel.appendChild(select);
-        panel.appendChild(fieldLabel);
-
-        return { toggle, panel };
+        return fieldLabel;
     }
 
     function createWidgetBodyContent(root, payload) {
@@ -1840,6 +1945,7 @@
 
         const blank = document.createElement('div');
         blank.className = 'dashboard-widget__blank';
+        blank.dataset.blankWidget = '';
         return blank;
     }
 

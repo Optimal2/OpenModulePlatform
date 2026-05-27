@@ -1383,6 +1383,15 @@ button {
 .dashboard-widget__body {
     min-height: 0;
     padding: 12px;
+    font-size: var(--dashboard-widget-content-font-size, 1rem);
+}
+
+.dashboard-widget[data-widget-content-scale="1"] {
+    --dashboard-widget-content-font-size: 0.88rem;
+}
+
+.dashboard-widget[data-widget-content-scale="2"] {
+    --dashboard-widget-content-font-size: 1.14rem;
 }
 
 .dashboard-widget__blank {
@@ -1392,6 +1401,20 @@ button {
     border: 1px dashed var(--border-strong);
     border-radius: 6px;
     background: #ffffff;
+}
+
+.dashboard-widget__blank--image {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-style: solid;
+    background: #000000;
+}
+
+.dashboard-widget__blank--image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .dashboard-widget__admin-overview {
@@ -2178,6 +2201,8 @@ a.dashboard-role-list__item:focus-visible {
     top: 40px;
     right: 6px;
     z-index: 2;
+    display: grid;
+    gap: 10px;
     min-width: 190px;
     padding: 10px;
     border: 1px solid var(--border);
@@ -2239,21 +2264,58 @@ a.dashboard-role-list__item:focus-visible {
     display: none;
 }
 
-.dashboard-floating-button {
+.dashboard-edit-menu {
     position: fixed;
     left: 22px;
     bottom: 22px;
     z-index: 20000;
+    display: grid;
+    gap: 8px;
+    justify-items: start;
+}
+
+.dashboard-edit-menu__actions {
+    display: grid;
+    gap: 8px;
+    min-width: 168px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 18px 38px rgba(17, 24, 39, 0.16);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(12px) scaleY(0.88);
+    transform-origin: bottom left;
+    transition: opacity 140ms ease, transform 160ms ease;
+}
+
+.portal-dashboard.is-editing .dashboard-edit-menu__actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scaleY(1);
+}
+
+.dashboard-floating-button {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     min-height: 42px;
     padding: 10px 14px;
-    border: 1px solid var(--border);
+    border: 1px solid transparent;
     border-radius: 999px;
-    background: var(--surface);
+    background: rgba(255, 255, 255, 0.24);
     color: var(--text);
+    box-shadow: 0 8px 22px rgba(17, 24, 39, 0.08);
+    transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.dashboard-floating-button:hover,
+.dashboard-floating-button:focus-visible {
+    border-color: var(--border);
+    background: var(--surface);
     box-shadow: 0 16px 36px rgba(17, 24, 39, 0.18);
+    outline: none;
 }
 
 .dashboard-floating-button__icon {
@@ -2282,31 +2344,18 @@ a.dashboard-role-list__item:focus-visible {
 .dashboard-save-button,
 .dashboard-add-button,
 .dashboard-reset-changes-button {
-    position: fixed;
-    left: 22px;
-    z-index: 20000;
     display: none;
     align-items: center;
     gap: 8px;
+    justify-content: flex-start;
     min-height: 38px;
+    width: 100%;
     padding: 8px 12px;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface-muted);
     color: var(--text);
-    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
-}
-
-.dashboard-save-button {
-    bottom: 66px;
-}
-
-.dashboard-add-button {
-    bottom: 110px;
-}
-
-.dashboard-reset-changes-button {
-    bottom: 154px;
+    box-shadow: none;
 }
 
 .dashboard-save-button:disabled {
@@ -2329,20 +2378,18 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-reset-button {
-    position: fixed;
-    left: 150px;
-    bottom: 22px;
-    z-index: 20000;
     display: none;
     align-items: center;
     gap: 8px;
+    justify-content: flex-start;
     min-height: 38px;
+    width: 100%;
     padding: 8px 12px;
     border-color: #b42318;
     border-radius: 999px;
     background: #b42318;
     color: #ffffff;
-    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
+    box-shadow: none;
 }
 
 .dashboard-reset-button:hover,
@@ -2381,35 +2428,6 @@ a.dashboard-role-list__item:focus-visible {
 
 .dashboard-action-icon--reset {
     --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
-}
-
-.dashboard-grid-toggle {
-    position: fixed;
-    left: 22px;
-    z-index: 20000;
-    display: none;
-    align-items: center;
-    gap: 8px;
-    min-height: 38px;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--surface-muted);
-    color: var(--text);
-    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
-    cursor: pointer;
-}
-
-.dashboard-grid-toggle {
-    bottom: 198px;
-}
-
-.portal-dashboard.is-editing .dashboard-grid-toggle {
-    display: inline-flex;
-}
-
-.dashboard-grid-toggle input {
-    margin: 0;
 }
 
 .dashboard-widget-picker {

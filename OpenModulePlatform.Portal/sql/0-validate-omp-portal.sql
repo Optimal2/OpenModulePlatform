@@ -46,6 +46,7 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'user_active_widgets', N'widget_id'),
         (N'omp_portal', N'user_active_widgets', N'width'),
         (N'omp_portal', N'user_active_widgets', N'height'),
+        (N'omp_portal', N'user_active_widgets', N'content_scale'),
         (N'omp_portal', N'user_dashboard_preferences', N'user_id'),
         (N'omp_portal', N'user_dashboard_preferences', N'align_to_grid'),
         (N'omp_portal', N'user_dashboard_preferences', N'expanded_canvas')

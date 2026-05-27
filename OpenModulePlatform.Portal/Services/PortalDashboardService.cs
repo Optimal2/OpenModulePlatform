@@ -25,6 +25,7 @@ public sealed class PortalDashboardService
     private const int MaxWidgetHeight = 1400;
     private const int MaxWidgetOffset = 10000;
     private const int MaxWidgetOrder = 10000;
+    private const int MaxWidgetContentScale = 2;
 
     private readonly SqlConnectionFactory _db;
     private readonly AppCatalogService _catalog;
@@ -104,7 +105,8 @@ SELECT uaw.user_active_widget_id,
        uaw.order_priority,
        uaw.title,
        uaw.int_data,
-       uaw.string_data
+       uaw.string_data,
+       uaw.content_scale
 FROM omp_portal.user_active_widgets uaw
 WHERE uaw.user_id = @user_id
 ORDER BY uaw.order_priority,
@@ -139,7 +141,8 @@ ORDER BY uaw.order_priority,
                 OrderPriority = rdr.GetInt32(6),
                 Title = rdr.IsDBNull(7) ? null : rdr.GetString(7),
                 IntData = rdr.IsDBNull(8) ? null : rdr.GetInt32(8),
-                StringData = rdr.IsDBNull(9) ? null : rdr.GetString(9)
+                StringData = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                ContentScale = rdr.GetInt32(10)
             });
         }
 
@@ -284,7 +287,8 @@ ORDER BY COALESCE(c.sort_order, 2147483647),
             OffsetLeft = 32,
             Width = defaultWidth,
             Height = defaultHeight,
-            OrderPriority = 10
+            OrderPriority = 10,
+            ContentScale = 0
         };
     }
 
@@ -321,7 +325,8 @@ SET offset_top = @offset_top,
     order_priority = @order_priority,
     title = @title,
     int_data = @int_data,
-    string_data = @string_data
+    string_data = @string_data,
+    content_scale = @content_scale
 WHERE user_active_widget_id = @user_active_widget_id
   AND user_id = @user_id;";
 
@@ -352,7 +357,8 @@ INSERT INTO omp_portal.user_active_widgets
     order_priority,
     title,
     int_data,
-    string_data
+    string_data,
+    content_scale
 )
 OUTPUT INSERTED.user_active_widget_id
 VALUES
@@ -366,7 +372,8 @@ VALUES
     @order_priority,
     @title,
     @int_data,
-    @string_data
+    @string_data,
+    @content_scale
 );";
 
                 await using var insertCmd = new SqlCommand(insertSql, conn, tx);
@@ -583,6 +590,7 @@ ORDER BY w.title,
         cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = CleanTitle(update.Title) ?? (object)DBNull.Value;
         cmd.Parameters.Add("@int_data", SqlDbType.Int).Value = update.IntData.HasValue ? update.IntData.Value : DBNull.Value;
         cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(update.StringData) ?? (object)DBNull.Value;
+        cmd.Parameters.Add("@content_scale", SqlDbType.Int).Value = Clamp(update.ContentScale, 0, MaxWidgetContentScale);
     }
 
     private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)

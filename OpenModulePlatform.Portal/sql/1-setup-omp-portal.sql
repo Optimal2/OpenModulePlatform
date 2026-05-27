@@ -515,6 +515,7 @@ BEGIN
         title nvarchar(200) NULL,
         int_data int NULL,
         string_data nvarchar(20) NULL,
+        content_scale int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(0),
 
         CONSTRAINT PK_omp_portal_user_active_widgets PRIMARY KEY(user_active_widget_id),
         CONSTRAINT FK_omp_portal_user_active_widgets_widget FOREIGN KEY(widget_id)
@@ -524,6 +525,14 @@ BEGIN
         CONSTRAINT CK_omp_portal_user_active_widgets_size CHECK(width >= 160 AND height >= 96),
         CONSTRAINT CK_omp_portal_user_active_widgets_offset CHECK(offset_top >= 0 AND offset_left >= 0)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp_portal.user_active_widgets', N'content_scale') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.user_active_widgets
+        ADD content_scale int NOT NULL
+            CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(0);
 END
 GO
 
@@ -537,7 +546,7 @@ IF NOT EXISTS
 BEGIN
     CREATE INDEX IX_omp_portal_user_active_widgets_user_order
         ON omp_portal.user_active_widgets(user_id, order_priority, user_active_widget_id)
-        INCLUDE(widget_id, offset_top, offset_left, width, height, title, int_data, string_data);
+        INCLUDE(widget_id, offset_top, offset_left, width, height, title, int_data, string_data, content_scale);
 END
 GO
 
