@@ -1,5 +1,9 @@
 # HostAgent-First Installation Package
 
+This file is the authoritative HostAgent-first installation guide. Package
+builders copy it to generated installer packages as `INSTALLATION.md`; do not
+maintain separate long-form installer instructions in private package folders.
+
 The HostAgent-first package is the preferred installation model for new OMP
 environments. The package performs only the bootstrap work that cannot be done
 by HostAgent itself:
