@@ -14,6 +14,10 @@ still part of the current OMP object/installer model.
 - `omp/` contains repository-object builders that turn `omp-components.json`
   entries into portable module, artifact, host config, config overlay, widget,
   and universal-package objects.
+  OMP-compatible module repositories should expose a root
+  `build-omp-objects.ps1` wrapper and `scripts/omp/export-universal-package.ps1`.
+  See `docs/OMP_COMPONENT_MANIFEST.md` for the conformance checklist and
+  `scripts/omp/README.md` for the canonical object-builder behavior.
 
 ## Removed Legacy Scripts
 
