@@ -92,6 +92,13 @@ Supported item kinds:
 | `dashboard-widget` | `widgets/` | `.json` | Portal dashboard widget package JSON. |
 | `widget-data` | `widget-data/` | `.zip` | Portal shared widget runtime data package containing `widget_data` JSON plus remappable `widget_binary_data` files. |
 
+`widget-data` objects are zip files inside the universal package. They contain
+an `omp-widget-runtime-data.json` manifest and binary entries. Runtime JSON may
+refer to media with `binaryDataHash`; `binaryDataId` remains supported for
+backward compatibility and is remapped on import. New exporters include both
+when possible, and new importers can resolve hash-only references before the
+target installation has assigned database ids.
+
 Paths in the manifest must be relative package paths. Absolute paths, drive
 letters, `..` segments, and invalid file-name characters are rejected.
 

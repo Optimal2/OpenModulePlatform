@@ -14,7 +14,8 @@ public sealed record BlankWidgetImage(
     string DisplayName,
     string Src,
     string FileName,
-    string ContentType);
+    string ContentType,
+    string ContentHash);
 
 /// <summary>
 /// Binary image media loaded from Portal widget media storage.

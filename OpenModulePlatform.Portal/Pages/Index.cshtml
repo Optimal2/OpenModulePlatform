@@ -27,6 +27,7 @@
          data-done-label="@L["Exit edit mode"]"
          data-edit-label="@L["Edit dashboard"]"
          data-remove-label="@L["Remove widget"]"
+         data-close-label="@L["Close"]"
          data-titlebar-toggle-label="@L["Hide title bar outside edit mode"]"
          data-done-fallback-confirm="@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]"
          data-draft-available-label="@L["Unsaved local dashboard changes were found. Restore them?"]"
@@ -59,7 +60,16 @@
          data-blank-widget-display-name-label="@L["Display name"]"
          data-blank-widget-upload-label="@L["Upload image"]"
          data-blank-widget-import-zip-label="@L["Import ZIP"]"
+         data-blank-widget-manage-library-label="@L["Manage image library"]"
+         data-blank-widget-image-library-label="@L["Image library"]"
+         data-blank-widget-single-image-label="@L["Single image"]"
+         data-blank-widget-zip-package-label="@L["ZIP package"]"
+         data-blank-widget-previous-label="@L["Previous image"]"
+         data-blank-widget-next-label="@L["Next image"]"
+         data-blank-widget-add-local-label="@L["Add local image"]"
+         data-blank-widget-local-label="@L["Local image"]"
          data-blank-widget-select-image-label="@L["Select an image or GIF file."]"
+         data-blank-widget-select-zip-label="@L["Select a ZIP package."]"
          data-blank-widget-uploading-label="@L["Uploading image..."]"
          data-blank-widget-upload-success-label="@L["Blank widget image library updated."]"
          data-blank-widget-upload-error-label="@L["Could not update blank widget image library."]"
@@ -104,6 +114,11 @@
                 && parsedBlankWidgetImageId > 0
                     ? parsedBlankWidgetImageId
                     : (long?)null;
+            var blankWidgetImageSource = blankWidgetImageId is long selectedBlankImageId
+                ? Url.Page("/Index", "BlankWidgetImage", new { id = selectedBlankImageId })
+                : blankWidgetVariant > 0
+                    ? Url.Content($"~/img/blank-widget/{blankWidgetVariant}.gif")
+                    : null;
             <article class="dashboard-widget@(widget.HideTitlebarWhenViewing ? " is-titlebar-hidden" : string.Empty)"
                      data-dashboard-widget
                      data-user-active-widget-id="@widget.UserActiveWidgetId"
@@ -159,21 +174,80 @@
                         {
                             <partial name="_DashboardMusicPlayerWidget" />
                         }
-                        else if (blankWidgetImageId is long selectedBlankWidgetImageId)
+                        else if (isBlankWidget)
                         {
-                            <div class="dashboard-widget__blank dashboard-widget__blank--image" data-blank-widget data-blank-widget-image-id="@selectedBlankWidgetImageId">
-                                <img src="@Url.Page("/Index", "BlankWidgetImage", new { id = selectedBlankWidgetImageId })" alt="" />
-                            </div>
-                        }
-                        else if (blankWidgetVariant > 0)
-                        {
-                            <div class="dashboard-widget__blank dashboard-widget__blank--image" data-blank-widget>
-                                <img src="~/img/blank-widget/@(blankWidgetVariant).gif" alt="" />
+                            <div class="dashboard-widget__blank@(string.IsNullOrWhiteSpace(blankWidgetImageSource) ? string.Empty : " dashboard-widget__blank--image")"
+                                 data-blank-widget
+                                 data-blank-widget-variant="@(blankWidgetVariant > 0 ? blankWidgetVariant.ToString(CultureInfo.InvariantCulture) : string.Empty)"
+                                 data-blank-widget-image-id="@(blankWidgetImageId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)">
+                                <div class="dashboard-widget__blank-media" data-blank-widget-media>
+                                    @if (!string.IsNullOrWhiteSpace(blankWidgetImageSource))
+                                    {
+                                        <img src="@blankWidgetImageSource" alt="" />
+                                    }
+                                </div>
+                                @if (Model.CanEditDashboard)
+                                {
+                                    <div class="dashboard-widget__blank-controls" data-blank-widget-controls>
+                                        <button type="button" class="dashboard-widget__blank-button" data-blank-widget-previous aria-label="@L["Previous image"]" title="@L["Previous image"]">
+                                            <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--previous" aria-hidden="true"></span>
+                                        </button>
+                                        <button type="button" class="dashboard-widget__blank-button" data-blank-widget-next aria-label="@L["Next image"]" title="@L["Next image"]">
+                                            <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--next" aria-hidden="true"></span>
+                                        </button>
+                                        <label class="dashboard-widget__blank-button dashboard-widget__blank-local" aria-label="@L["Add local image"]" title="@L["Add local image"]">
+                                            <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-local-file />
+                                            <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--add" aria-hidden="true"></span>
+                                        </label>
+                                        @if (Model.IsPortalAdmin)
+                                        {
+                                            <button type="button" class="dashboard-widget__blank-button" data-blank-widget-admin-open aria-label="@L["Manage image library"]" title="@L["Manage image library"]">
+                                                <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--library" aria-hidden="true"></span>
+                                            </button>
+                                        }
+                                    </div>
+                                    @if (Model.IsPortalAdmin)
+                                    {
+                                        <div class="dashboard-widget__blank-admin" data-blank-widget-admin hidden>
+                                            <div class="dashboard-widget__blank-admin-header">
+                                                <strong>@L["Image library"]</strong>
+                                                <button type="button" class="dashboard-widget__blank-admin-close" data-blank-widget-admin-close aria-label="@L["Close"]"></button>
+                                            </div>
+                                            <div class="dashboard-widget__blank-admin-tabs" role="tablist" aria-label="@L["Image library"]">
+                                                <button type="button" class="is-active" data-blank-widget-admin-tab="image" role="tab" aria-selected="true">@L["Single image"]</button>
+                                                <button type="button" data-blank-widget-admin-tab="zip" role="tab" aria-selected="false">@L["ZIP package"]</button>
+                                            </div>
+                                            <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="image">
+                                                <label>
+                                                    <span>@L["Image or GIF file"]</span>
+                                                    <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-file />
+                                                </label>
+                                                <label>
+                                                    <span>@L["Display name"]</span>
+                                                    <input type="text" maxlength="200" data-blank-widget-display-name />
+                                                </label>
+                                                <div class="dashboard-widget__blank-admin-actions">
+                                                    <button type="button" class="btn btn-primary" data-blank-widget-upload>@L["Upload image"]</button>
+                                                </div>
+                                            </div>
+                                            <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="zip" hidden>
+                                                <label>
+                                                    <span>@L["ZIP package"]</span>
+                                                    <input type="file" accept=".zip,application/zip" data-blank-widget-zip />
+                                                </label>
+                                                <div class="dashboard-widget__blank-admin-actions">
+                                                    <button type="button" class="btn btn-primary" data-blank-widget-zip-upload>@L["Import ZIP"]</button>
+                                                </div>
+                                            </div>
+                                            <div class="dashboard-widget__blank-admin-status" data-blank-widget-status></div>
+                                        </div>
+                                    }
+                                }
                             </div>
                         }
                         else
                         {
-                            <div class="dashboard-widget__blank" data-blank-widget></div>
+                            <div class="dashboard-widget__blank"></div>
                         }
                     </div>
                 </div>
@@ -276,27 +350,6 @@
                                     }
                                 </select>
                             </label>
-                            @if (Model.IsPortalAdmin)
-                            {
-                                <div class="dashboard-widget__blank-admin" data-blank-widget-admin>
-                                    <label>
-                                        <span>@L["Image or GIF file"]</span>
-                                        <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-file />
-                                    </label>
-                                    <label>
-                                        <span>@L["Display name"]</span>
-                                        <input type="text" maxlength="200" data-blank-widget-display-name />
-                                    </label>
-                                    <div class="dashboard-widget__blank-admin-actions">
-                                        <button type="button" class="btn btn-primary" data-blank-widget-upload>@L["Upload image"]</button>
-                                        <label class="btn dashboard-widget__blank-admin-zip">
-                                            <input type="file" accept=".zip,application/zip" data-blank-widget-zip />
-                                            @L["Import ZIP"]
-                                        </label>
-                                    </div>
-                                    <div class="dashboard-widget__blank-admin-status" data-blank-widget-status></div>
-                                </div>
-                            }
                         }
                     </div>
                     }

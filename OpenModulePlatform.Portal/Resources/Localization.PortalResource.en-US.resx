@@ -543,6 +543,13 @@
   <data name="Reset zoom" xml:space="preserve"><value>Reset zoom</value></data>
   <data name="Manage music library" xml:space="preserve"><value>Manage music library</value></data>
   <data name="Music library" xml:space="preserve"><value>Music library</value></data>
+  <data name="Manage image library" xml:space="preserve"><value>Manage image library</value></data>
+  <data name="Image library" xml:space="preserve"><value>Image library</value></data>
+  <data name="Single image" xml:space="preserve"><value>Single image</value></data>
+  <data name="Previous image" xml:space="preserve"><value>Previous image</value></data>
+  <data name="Next image" xml:space="preserve"><value>Next image</value></data>
+  <data name="Add local image" xml:space="preserve"><value>Add local image</value></data>
+  <data name="Local image" xml:space="preserve"><value>Local image</value></data>
   <data name="MP3 file" xml:space="preserve"><value>MP3 file</value></data>
   <data name="Track title" xml:space="preserve"><value>Track title</value></data>
   <data name="Artist" xml:space="preserve"><value>Artist</value></data>

@@ -22,6 +22,7 @@ public sealed class PortalWidgetRuntimeDataPackageService
     private const string WidgetDataFolder = "widget-data";
     private const string BinaryFolder = "binary";
     private const string BinaryDataIdPropertyName = "binaryDataId";
+    private const string BinaryDataHashPropertyName = "binaryDataHash";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -60,12 +61,11 @@ public sealed class PortalWidgetRuntimeDataPackageService
             return null;
         }
 
-        var binaryIds = documents
-            .SelectMany(static document => CollectBinaryDataIds(document.JsonData))
-            .Distinct()
-            .Order()
-            .ToArray();
-        var binaryRows = await GetBinaryRowsAsync(conn, binaryIds, ct);
+        var binaryReferences = documents
+            .Select(static document => CollectBinaryDataReferences(document.JsonData))
+            .Aggregate(BinaryDataReferences.Empty, static (left, right) => left.Merge(right));
+        var binaryRows = await GetBinaryRowsAsync(conn, binaryReferences.BinaryDataIds, binaryReferences.ContentHashes, ct);
+        var binaryRowsById = binaryRows.ToDictionary(static row => row.BinaryDataId);
 
         var tempRoot = CreateTempRoot("portal-widget-runtime-data-export");
         var firstWidgetKey = documents
@@ -88,11 +88,12 @@ public sealed class PortalWidgetRuntimeDataPackageService
                 var dataArray = new JsonArray();
                 foreach (var document in documents)
                 {
+                    var jsonData = AddBinaryDataHashes(document.JsonData, binaryRowsById);
                     dataArray.Add(new JsonObject
                     {
                         ["widgetKey"] = document.WidgetKey,
                         ["dataKey"] = document.DataKey,
-                        ["jsonData"] = JsonNode.Parse(document.JsonData)
+                        ["jsonData"] = jsonData
                     });
                 }
 
@@ -155,6 +156,7 @@ public sealed class PortalWidgetRuntimeDataPackageService
             var insertedBinaryRows = 0;
             var reusedBinaryRows = 0;
             var binaryIdMap = new Dictionary<long, long>();
+            var binaryHashMap = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             foreach (var binary in package.BinaryData)
             {
                 var targetId = await FindExistingBinaryDataIdAsync(conn, tx, binary, ct);
@@ -169,7 +171,12 @@ public sealed class PortalWidgetRuntimeDataPackageService
                     insertedBinaryRows++;
                 }
 
-                binaryIdMap[binary.SourceBinaryDataId] = targetId.Value;
+                if (binary.SourceBinaryDataId > 0)
+                {
+                    binaryIdMap[binary.SourceBinaryDataId] = targetId.Value;
+                }
+
+                binaryHashMap[ToSha256Hex(binary.ContentHash)] = targetId.Value;
             }
 
             var dataDocuments = 0;
@@ -177,7 +184,7 @@ public sealed class PortalWidgetRuntimeDataPackageService
             {
                 var widgetId = await GetWidgetIdAsync(conn, tx, document.WidgetKey, ct)
                     ?? throw new InvalidOperationException($"Dashboard widget '{document.WidgetKey}' was not found. Import the widget definition before importing widget runtime data.");
-                var jsonData = RemapBinaryDataIds(document.JsonData, binaryIdMap);
+                var jsonData = RemapBinaryDataReferences(document.JsonData, binaryIdMap, binaryHashMap);
                 await UpsertWidgetDataAsync(conn, tx, widgetId, document.DataKey, jsonData, ct);
                 dataDocuments++;
             }
@@ -231,9 +238,10 @@ ORDER BY w.widget_key, wd.data_key;";
     private static async Task<IReadOnlyList<WidgetBinaryDataExportRow>> GetBinaryRowsAsync(
         SqlConnection conn,
         IReadOnlyList<long> binaryIds,
+        IReadOnlyList<string> contentHashes,
         CancellationToken ct)
     {
-        if (binaryIds.Count == 0)
+        if (binaryIds.Count == 0 && contentHashes.Count == 0)
         {
             return [];
         }
@@ -241,6 +249,20 @@ ORDER BY w.widget_key, wd.data_key;";
         var parameters = binaryIds
             .Select((_, index) => $"@binary_id{index.ToString(CultureInfo.InvariantCulture)}")
             .ToArray();
+        var hashParameters = contentHashes
+            .Select((_, index) => $"@content_hash{index.ToString(CultureInfo.InvariantCulture)}")
+            .ToArray();
+        var filters = new List<string>();
+        if (parameters.Length > 0)
+        {
+            filters.Add($"binary_data_id IN ({string.Join(", ", parameters)})");
+        }
+
+        if (hashParameters.Length > 0)
+        {
+            filters.Add($"content_hash IN ({string.Join(", ", hashParameters)})");
+        }
+
         var sql = $@"
 SELECT binary_data_id,
        owner_ref,
@@ -251,13 +273,18 @@ SELECT binary_data_id,
        data_value,
        is_enabled
 FROM omp_portal.widget_binary_data
-WHERE binary_data_id IN ({string.Join(", ", parameters)})
+WHERE {string.Join(" OR ", filters)}
 ORDER BY binary_data_id;";
 
         await using var cmd = new SqlCommand(sql, conn);
         for (var i = 0; i < binaryIds.Count; i++)
         {
             cmd.Parameters.Add(parameters[i], SqlDbType.BigInt).Value = binaryIds[i];
+        }
+
+        for (var i = 0; i < contentHashes.Count; i++)
+        {
+            cmd.Parameters.Add(hashParameters[i], SqlDbType.VarBinary, 32).Value = Convert.FromHexString(contentHashes[i]);
         }
 
         var rows = new List<WidgetBinaryDataExportRow>();
@@ -329,8 +356,6 @@ WHERE widget_key = @widget_key;";
 SELECT TOP (1) binary_data_id
 FROM omp_portal.widget_binary_data
 WHERE owner_ref = @owner_ref
-  AND file_name = @file_name
-  AND content_type = @content_type
   AND content_hash = @content_hash
   AND content_length = @content_length
 ORDER BY binary_data_id;";
@@ -437,47 +462,60 @@ WHEN NOT MATCHED THEN
         PortableWidgetRuntimeBinaryData binary)
     {
         cmd.Parameters.Add("@owner_ref", SqlDbType.NVarChar, 128).Value = binary.OwnerRef;
-        cmd.Parameters.Add("@file_name", SqlDbType.NVarChar, 260).Value = binary.FileName;
-        cmd.Parameters.Add("@content_type", SqlDbType.NVarChar, 128).Value = binary.ContentType;
         cmd.Parameters.Add("@content_hash", SqlDbType.VarBinary, 32).Value = binary.ContentHash;
         cmd.Parameters.Add("@content_length", SqlDbType.BigInt).Value = binary.ContentLength;
     }
 
-    private static string RemapBinaryDataIds(
+    private static string RemapBinaryDataReferences(
         JsonNode source,
-        IReadOnlyDictionary<long, long> binaryIdMap)
+        IReadOnlyDictionary<long, long> binaryIdMap,
+        IReadOnlyDictionary<string, long> binaryHashMap)
     {
         var clone = JsonNode.Parse(source.ToJsonString(JsonOptions))
             ?? throw new InvalidOperationException("Widget runtime data jsonData must be valid JSON.");
-        RemapBinaryDataIdsInPlace(clone, binaryIdMap);
+        RemapBinaryDataReferencesInPlace(clone, binaryIdMap, binaryHashMap);
         return clone.ToJsonString(JsonOptions);
     }
 
-    private static void RemapBinaryDataIdsInPlace(
+    private static void RemapBinaryDataReferencesInPlace(
         JsonNode node,
-        IReadOnlyDictionary<long, long> binaryIdMap)
+        IReadOnlyDictionary<long, long> binaryIdMap,
+        IReadOnlyDictionary<string, long> binaryHashMap)
     {
         if (node is JsonObject obj)
         {
+            var binaryDataIdPropertyName = FindPropertyName(obj, BinaryDataIdPropertyName);
+            var hashTargetId = TryResolveBinaryDataHash(obj, binaryHashMap, out var targetFromHash)
+                ? targetFromHash
+                : (long?)null;
+            if (binaryDataIdPropertyName is not null
+                && obj[binaryDataIdPropertyName] is JsonValue idValue
+                && idValue.TryGetValue<long>(out var sourceId))
+            {
+                if (sourceId > 0 && binaryIdMap.TryGetValue(sourceId, out var targetId))
+                {
+                    obj[binaryDataIdPropertyName] = targetId;
+                }
+                else if (hashTargetId.HasValue)
+                {
+                    obj[binaryDataIdPropertyName] = hashTargetId.Value;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Widget runtime data references missing binaryDataId {sourceId.ToString(CultureInfo.InvariantCulture)}.");
+                }
+            }
+            else if (hashTargetId.HasValue)
+            {
+                obj[BinaryDataIdPropertyName] = hashTargetId.Value;
+            }
+
             foreach (var propertyName in obj.Select(static property => property.Key).ToArray())
             {
                 var value = obj[propertyName];
-                if (propertyName.Equals(BinaryDataIdPropertyName, StringComparison.OrdinalIgnoreCase)
-                    && value is JsonValue jsonValue
-                    && jsonValue.TryGetValue<long>(out var sourceId))
-                {
-                    if (!binaryIdMap.TryGetValue(sourceId, out var targetId))
-                    {
-                        throw new InvalidOperationException($"Widget runtime data references missing binaryDataId {sourceId.ToString(CultureInfo.InvariantCulture)}.");
-                    }
-
-                    obj[propertyName] = targetId;
-                    continue;
-                }
-
                 if (value is not null)
                 {
-                    RemapBinaryDataIdsInPlace(value, binaryIdMap);
+                    RemapBinaryDataReferencesInPlace(value, binaryIdMap, binaryHashMap);
                 }
             }
         }
@@ -485,32 +523,74 @@ WHEN NOT MATCHED THEN
         {
             foreach (var child in array.Where(static child => child is not null))
             {
-                RemapBinaryDataIdsInPlace(child!, binaryIdMap);
+                RemapBinaryDataReferencesInPlace(child!, binaryIdMap, binaryHashMap);
             }
         }
     }
 
-    private static IReadOnlyList<long> CollectBinaryDataIds(string jsonData)
+    private static JsonNode AddBinaryDataHashes(
+        string jsonData,
+        IReadOnlyDictionary<long, WidgetBinaryDataExportRow> binaryRowsById)
+    {
+        var clone = JsonNode.Parse(jsonData)
+            ?? throw new InvalidOperationException("Widget runtime data jsonData must be valid JSON.");
+        AddBinaryDataHashesInPlace(clone, binaryRowsById);
+        return clone;
+    }
+
+    private static void AddBinaryDataHashesInPlace(
+        JsonNode node,
+        IReadOnlyDictionary<long, WidgetBinaryDataExportRow> binaryRowsById)
+    {
+        if (node is JsonObject obj)
+        {
+            var binaryDataIdPropertyName = FindPropertyName(obj, BinaryDataIdPropertyName);
+            var binaryDataHashPropertyName = FindPropertyName(obj, BinaryDataHashPropertyName);
+            if (binaryDataIdPropertyName is not null
+                && binaryDataHashPropertyName is null
+                && obj[binaryDataIdPropertyName] is JsonValue idValue
+                && idValue.TryGetValue<long>(out var sourceId)
+                && binaryRowsById.TryGetValue(sourceId, out var row))
+            {
+                obj[BinaryDataHashPropertyName] = ToSha256Hex(row.ContentHash);
+            }
+
+            foreach (var child in obj.Select(static property => property.Value).Where(static value => value is not null).ToArray())
+            {
+                AddBinaryDataHashesInPlace(child!, binaryRowsById);
+            }
+        }
+        else if (node is JsonArray array)
+        {
+            foreach (var child in array.Where(static child => child is not null))
+            {
+                AddBinaryDataHashesInPlace(child!, binaryRowsById);
+            }
+        }
+    }
+
+    private static BinaryDataReferences CollectBinaryDataReferences(string jsonData)
     {
         try
         {
             var root = JsonNode.Parse(jsonData);
             if (root is null)
             {
-                return [];
+                return BinaryDataReferences.Empty;
             }
 
             var ids = new HashSet<long>();
-            CollectBinaryDataIds(root, ids);
-            return ids.ToArray();
+            var hashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectBinaryDataReferences(root, ids, hashes);
+            return new BinaryDataReferences(ids.Order().ToArray(), hashes.OrderBy(static hash => hash, StringComparer.OrdinalIgnoreCase).ToArray());
         }
         catch (JsonException)
         {
-            return [];
+            return BinaryDataReferences.Empty;
         }
     }
 
-    private static void CollectBinaryDataIds(JsonNode node, HashSet<long> ids)
+    private static void CollectBinaryDataReferences(JsonNode node, HashSet<long> ids, HashSet<string> hashes)
     {
         if (node is JsonObject obj)
         {
@@ -525,9 +605,18 @@ WHEN NOT MATCHED THEN
                     continue;
                 }
 
+                if (property.Key.Equals(BinaryDataHashPropertyName, StringComparison.OrdinalIgnoreCase)
+                    && property.Value is JsonValue hashValue
+                    && hashValue.TryGetValue<string>(out var hashText)
+                    && TryNormalizeSha256Hex(hashText, out var normalizedHash))
+                {
+                    hashes.Add(normalizedHash);
+                    continue;
+                }
+
                 if (property.Value is not null)
                 {
-                    CollectBinaryDataIds(property.Value, ids);
+                    CollectBinaryDataReferences(property.Value, ids, hashes);
                 }
             }
         }
@@ -535,10 +624,61 @@ WHEN NOT MATCHED THEN
         {
             foreach (var child in array.Where(static child => child is not null))
             {
-                CollectBinaryDataIds(child!, ids);
+                CollectBinaryDataReferences(child!, ids, hashes);
             }
         }
     }
+
+    private static bool TryResolveBinaryDataHash(
+        JsonObject obj,
+        IReadOnlyDictionary<string, long> binaryHashMap,
+        out long targetId)
+    {
+        targetId = 0;
+        var propertyName = FindPropertyName(obj, BinaryDataHashPropertyName);
+        if (propertyName is null
+            || obj[propertyName] is not JsonValue hashValue
+            || !hashValue.TryGetValue<string>(out var hashText)
+            || !TryNormalizeSha256Hex(hashText, out var normalizedHash))
+        {
+            return false;
+        }
+
+        return binaryHashMap.TryGetValue(normalizedHash, out targetId);
+    }
+
+    private static string? FindPropertyName(JsonObject obj, string propertyName)
+        => obj.Select(static property => property.Key)
+            .FirstOrDefault(key => key.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+
+    private static bool TryNormalizeSha256Hex(string? value, out string normalized)
+    {
+        normalized = string.Empty;
+        var text = value?.Trim();
+        if (text?.Length != 64)
+        {
+            return false;
+        }
+
+        try
+        {
+            var bytes = Convert.FromHexString(text);
+            if (bytes.Length != 32)
+            {
+                return false;
+            }
+
+            normalized = Convert.ToHexString(bytes).ToLowerInvariant();
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static string ToSha256Hex(byte[] hash)
+        => Convert.ToHexString(hash).ToLowerInvariant();
 
     private static string BuildBinaryEntryName(
         long binaryDataId,
@@ -658,6 +798,22 @@ WHEN NOT MATCHED THEN
         byte[] ContentHash,
         byte[] Data,
         bool IsEnabled);
+
+    private sealed record BinaryDataReferences(
+        IReadOnlyList<long> BinaryDataIds,
+        IReadOnlyList<string> ContentHashes)
+    {
+        public static BinaryDataReferences Empty { get; } = new([], []);
+
+        public BinaryDataReferences Merge(BinaryDataReferences other)
+            => new(
+                BinaryDataIds.Concat(other.BinaryDataIds).Distinct().Order().ToArray(),
+                ContentHashes
+                    .Concat(other.ContentHashes)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static hash => hash, StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+    }
 }
 
 public sealed record WidgetRuntimeDataPackageExportResult(

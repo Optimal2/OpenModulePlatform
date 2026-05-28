@@ -63,7 +63,10 @@ public sealed class PortalMusicPlayerService
                 CleanForDisplay(track.Source, 1000) ?? string.Empty,
                 CleanForDisplay(track.Description, 1000) ?? string.Empty,
                 media[track.BinaryDataId].FileName,
-                media[track.BinaryDataId].ContentType))
+                media[track.BinaryDataId].ContentType,
+                string.IsNullOrWhiteSpace(track.BinaryDataHash)
+                    ? media[track.BinaryDataId].ContentHash
+                    : track.BinaryDataHash))
             .ToArray();
 
         return new MusicPlayerPlaylist(tracks);
@@ -205,7 +208,7 @@ WHERE binary_data_id = @binary_data_id
             foreach (var track in tracks)
             {
                 var hash = SHA256.HashData(track.Bytes);
-                var binaryDataId = await FindExistingBinaryDataIdAsync(conn, tx, hash, track.Bytes.LongLength, track.FileName, ct);
+                var binaryDataId = await FindExistingBinaryDataIdAsync(conn, tx, hash, track.Bytes.LongLength, ct);
                 if (!binaryDataId.HasValue)
                 {
                     binaryDataId = await InsertBinaryDataAsync(conn, tx, track, hash, userId, ct);
@@ -221,6 +224,7 @@ WHERE binary_data_id = @binary_data_id
                     document.Tracks.Add(new MusicPlayerTrackDocumentItem
                     {
                         BinaryDataId = binaryDataId.Value,
+                        BinaryDataHash = ToSha256Hex(hash),
                         Title = track.Title,
                         Artist = track.Artist,
                         Attribution = track.Attribution,
@@ -427,26 +431,34 @@ WHERE w.widget_key = @widget_key
             return new Dictionary<long, MusicPlayerMediaRow>();
         }
 
-        const string sql = @"
+        var parameters = ids
+            .Select((_, index) => $"@id{index.ToString(CultureInfo.InvariantCulture)}")
+            .ToArray();
+        var sql = $@"
 SELECT data.binary_data_id,
        data.file_name,
-       data.content_type
+       data.content_type,
+       data.content_hash
 FROM omp_portal.widget_binary_data AS data
-INNER JOIN OPENJSON(@binary_data_ids_json)
-WITH (binary_data_id bigint '$') AS requested
-    ON requested.binary_data_id = data.binary_data_id
 WHERE data.owner_ref = @owner_ref
-  AND data.is_enabled = 1;";
+  AND data.is_enabled = 1
+  AND data.binary_data_id IN ({string.Join(", ", parameters)});";
 
         var media = new Dictionary<long, MusicPlayerMediaRow>();
         await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.Add("@owner_ref", SqlDbType.NVarChar, 128).Value = OwnerRef;
-        cmd.Parameters.Add("@binary_data_ids_json", SqlDbType.NVarChar, -1).Value = JsonSerializer.Serialize(ids);
+        for (var i = 0; i < ids.Length; i++)
+        {
+            cmd.Parameters.Add(parameters[i], SqlDbType.BigInt).Value = ids[i];
+        }
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            media[rdr.GetInt64(0)] = new MusicPlayerMediaRow(rdr.GetString(1), rdr.GetString(2));
+            media[rdr.GetInt64(0)] = new MusicPlayerMediaRow(
+                rdr.GetString(1),
+                rdr.GetString(2),
+                ToSha256Hex((byte[])rdr.GetValue(3)));
         }
 
         return media;
@@ -457,7 +469,6 @@ WHERE data.owner_ref = @owner_ref
         SqlTransaction tx,
         byte[] hash,
         long contentLength,
-        string fileName,
         CancellationToken ct)
     {
         const string sql = @"
@@ -466,7 +477,6 @@ FROM omp_portal.widget_binary_data
 WHERE owner_ref = @owner_ref
   AND content_hash = @content_hash
   AND content_length = @content_length
-  AND file_name = @file_name
   AND is_enabled = 1
 ORDER BY binary_data_id;";
 
@@ -474,7 +484,6 @@ ORDER BY binary_data_id;";
         cmd.Parameters.Add("@owner_ref", SqlDbType.NVarChar, 128).Value = OwnerRef;
         cmd.Parameters.Add("@content_hash", SqlDbType.VarBinary, 32).Value = hash;
         cmd.Parameters.Add("@content_length", SqlDbType.BigInt).Value = contentLength;
-        cmd.Parameters.Add("@file_name", SqlDbType.NVarChar, 260).Value = fileName;
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is null || result == DBNull.Value
             ? null
@@ -641,6 +650,9 @@ WHEN NOT MATCHED THEN
         return builder.ToString();
     }
 
+    private static string ToSha256Hex(byte[] hash)
+        => Convert.ToHexString(hash).ToLowerInvariant();
+
     private sealed record TrackMetadata(
         string? Title,
         string? Artist,
@@ -657,7 +669,7 @@ WHEN NOT MATCHED THEN
         string FileName,
         byte[] Bytes);
 
-    private sealed record MusicPlayerMediaRow(string FileName, string ContentType);
+    private sealed record MusicPlayerMediaRow(string FileName, string ContentType, string ContentHash);
 
     private sealed class MusicPlayerWidgetDataDocument
     {
@@ -669,6 +681,8 @@ WHEN NOT MATCHED THEN
     private sealed class MusicPlayerTrackDocumentItem
     {
         public long BinaryDataId { get; set; }
+
+        public string BinaryDataHash { get; set; } = string.Empty;
 
         public string Title { get; set; } = string.Empty;
 

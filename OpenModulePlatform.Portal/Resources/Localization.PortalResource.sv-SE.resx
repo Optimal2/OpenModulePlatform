@@ -2193,6 +2193,13 @@
   <data name="Reset zoom" xml:space="preserve"><value>Återställ zoom</value></data>
   <data name="Manage music library" xml:space="preserve"><value>Hantera musikbibliotek</value></data>
   <data name="Music library" xml:space="preserve"><value>Musikbibliotek</value></data>
+  <data name="Manage image library" xml:space="preserve"><value>Hantera bildbibliotek</value></data>
+  <data name="Image library" xml:space="preserve"><value>Bildbibliotek</value></data>
+  <data name="Single image" xml:space="preserve"><value>Enskild bild</value></data>
+  <data name="Previous image" xml:space="preserve"><value>Föregående bild</value></data>
+  <data name="Next image" xml:space="preserve"><value>Nästa bild</value></data>
+  <data name="Add local image" xml:space="preserve"><value>Lägg till lokal bild</value></data>
+  <data name="Local image" xml:space="preserve"><value>Lokal bild</value></data>
   <data name="MP3 file" xml:space="preserve"><value>MP3-fil</value></data>
   <data name="Track title" xml:space="preserve"><value>Låttitel</value></data>
   <data name="Artist" xml:space="preserve"><value>Artist</value></data>
