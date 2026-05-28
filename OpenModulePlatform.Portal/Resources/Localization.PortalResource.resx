@@ -2124,6 +2124,20 @@
   <data name="The selected image is too large." xml:space="preserve"><value>The selected image is too large.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Show dashboard navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>When this is turned off, the dashboard navbar below the topbar is hidden.</value></data>
+  <data name="Hide title bar outside edit mode" xml:space="preserve"><value>Hide title bar outside edit mode</value></data>
+  <data name="Dashboard layout reset to default." xml:space="preserve"><value>Dashboard layout reset to default.</value></data>
+  <data name="Dashboard cleared." xml:space="preserve"><value>Dashboard cleared.</value></data>
+  <data name="Default dashboard layout saved. Widgets: {0}." xml:space="preserve"><value>Default dashboard layout saved. Widgets: {0}.</value></data>
+  <data name="This resets your dashboard to the shared default layout. Continue?" xml:space="preserve"><value>This resets your dashboard to the shared default layout. Continue?</value></data>
+  <data name="Reset to the shared default dashboard layout." xml:space="preserve"><value>Reset to the shared default dashboard layout.</value></data>
+  <data name="Reset to default" xml:space="preserve"><value>Reset to default</value></data>
+  <data name="This removes all widgets from your dashboard. Continue?" xml:space="preserve"><value>This removes all widgets from your dashboard. Continue?</value></data>
+  <data name="Clear your dashboard and keep it empty until you add widgets again." xml:space="preserve"><value>Clear your dashboard and keep it empty until you add widgets again.</value></data>
+  <data name="Clear dashboard" xml:space="preserve"><value>Clear dashboard</value></data>
+  <data name="Default dashboard layout" xml:space="preserve"><value>Default dashboard layout</value></data>
+  <data name="This replaces the shared default dashboard layout with your current dashboard layout. Continue?" xml:space="preserve"><value>This replaces the shared default dashboard layout with your current dashboard layout. Continue?</value></data>
+  <data name="Users without a personal dashboard layout use the shared default layout." xml:space="preserve"><value>Users without a personal dashboard layout use the shared default layout.</value></data>
+  <data name="Save current layout as default" xml:space="preserve"><value>Save current layout as default</value></data>
   <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data.</value></data>
   <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Include runtime data for selected widgets</value></data>
 </root>

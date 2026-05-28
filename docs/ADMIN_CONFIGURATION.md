@@ -99,7 +99,8 @@ Portal navigation entries:
   permission; widgets without rows in this table are available to every signed-in
   OMP user
 - `omp_portal.user_active_widgets` stores one user's placed widgets, including
-  position, size, z-order, optional title, and small typed values
+  position, size, z-order, optional title, titlebar display preference, and
+  small typed values
 - `omp_portal.user_active_widget_data` is reserved for larger per-widget user
   data when a future widget needs more than the inline int/string fields
 - `omp_portal.widget_data` stores shared widget-level JSON data that belongs to
@@ -114,10 +115,22 @@ the Portal administration metric cards and is restricted by
 definitions, permissions, and seeded widgets are owned by Portal SQL/module
 definition upgrades.
 
-Adding or removing a widget is saved immediately. Moving and resizing widgets is
-saved when the user leaves dashboard edit mode with the Done button. Resetting
-the dashboard removes the current user's active widget rows and does not change
-the global widget definitions.
+`user_id = 0` in `omp_portal.user_active_widgets` is reserved for the shared
+default dashboard layout. A signed-in OMP user who has no personal dashboard
+layout sees this default layout, filtered through the same widget access rules
+as any other dashboard. When the user saves, removes, clears, or otherwise
+changes the dashboard, Portal marks that user as having a custom dashboard
+layout in `omp_portal.user_dashboard_preferences` and future loads use only that
+user's rows. Resetting to default clears the user's rows and removes that custom
+layout marker; clearing the dashboard clears the rows but keeps the marker so
+the dashboard stays empty instead of falling back to `user_id = 0`.
+
+Adding or removing a widget is saved as a local dashboard change and becomes the
+user's personal layout when saved. Moving and resizing widgets is saved when the
+user leaves dashboard edit mode with the Done button. Portal administrators can
+save their current dashboard as the shared default layout from
+`/account/settings?tab=admin`; this replaces the rows stored for `user_id = 0`
+and does not change global widget definitions.
 
 The built-in music player widget reads its shared server playlist from
 `omp_portal.widget_data` and streams MP3 files from

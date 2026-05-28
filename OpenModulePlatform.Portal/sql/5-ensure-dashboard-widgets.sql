@@ -121,6 +121,18 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.users', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM omp.users WHERE user_id = 0)
+BEGIN
+    SET IDENTITY_INSERT omp.users ON;
+
+    INSERT INTO omp.users(user_id, display_name, account_status, created_at, updated_at)
+    VALUES(0, N'Portal default dashboard', 3, SYSUTCDATETIME(), SYSUTCDATETIME());
+
+    SET IDENTITY_INSERT omp.users OFF;
+END
+GO
+
 IF OBJECT_ID(N'omp_portal.user_active_widgets', N'U') IS NULL
 BEGIN
     CREATE TABLE omp_portal.user_active_widgets
@@ -137,6 +149,7 @@ BEGIN
         int_data int NULL,
         string_data nvarchar(20) NULL,
         content_scale int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(0),
+        hide_titlebar_when_viewing bit NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_hide_titlebar_when_viewing DEFAULT(0),
 
         CONSTRAINT PK_omp_portal_user_active_widgets PRIMARY KEY(user_active_widget_id),
         CONSTRAINT FK_omp_portal_user_active_widgets_widget FOREIGN KEY(widget_id)
@@ -154,6 +167,14 @@ BEGIN
     ALTER TABLE omp_portal.user_active_widgets
         ADD content_scale int NOT NULL
             CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(0);
+END
+GO
+
+IF COL_LENGTH(N'omp_portal.user_active_widgets', N'hide_titlebar_when_viewing') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.user_active_widgets
+        ADD hide_titlebar_when_viewing bit NOT NULL
+            CONSTRAINT DF_omp_portal_user_active_widgets_hide_titlebar_when_viewing DEFAULT(0);
 END
 GO
 
@@ -263,12 +284,22 @@ BEGIN
         user_id int NOT NULL,
         align_to_grid bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_align_to_grid DEFAULT(1),
         expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(0),
+        has_custom_dashboard_layout bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_has_custom_dashboard_layout DEFAULT(0),
         updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_updated_at DEFAULT(SYSUTCDATETIME()),
 
         CONSTRAINT PK_omp_portal_user_dashboard_preferences PRIMARY KEY(user_id),
         CONSTRAINT FK_omp_portal_user_dashboard_preferences_user FOREIGN KEY(user_id)
             REFERENCES omp.users(user_id)
     );
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp_portal.user_dashboard_preferences', N'has_custom_dashboard_layout') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.user_dashboard_preferences
+        ADD has_custom_dashboard_layout bit NOT NULL
+            CONSTRAINT DF_omp_portal_user_dashboard_preferences_has_custom_dashboard_layout DEFAULT(0);
 END
 GO
 
@@ -381,6 +412,35 @@ BEGIN
     CREATE UNIQUE INDEX UX_omp_portal_widgets_widget_key
         ON omp_portal.widgets(widget_key)
         WHERE widget_key IS NOT NULL;
+END
+GO
+
+IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NOT NULL
+   AND OBJECT_ID(N'omp_portal.user_active_widgets', N'U') IS NOT NULL
+BEGIN
+    INSERT INTO omp_portal.user_dashboard_preferences(user_id, align_to_grid, expanded_canvas, has_custom_dashboard_layout, updated_at)
+    SELECT DISTINCT aw.user_id, 1, 1, 1, SYSUTCDATETIME()
+    FROM omp_portal.user_active_widgets aw
+    WHERE aw.user_id <> 0
+      AND NOT EXISTS
+      (
+          SELECT 1
+          FROM omp_portal.user_dashboard_preferences p
+          WHERE p.user_id = aw.user_id
+      );
+
+    UPDATE p
+    SET has_custom_dashboard_layout = 1,
+        updated_at = SYSUTCDATETIME()
+    FROM omp_portal.user_dashboard_preferences p
+    WHERE p.user_id <> 0
+      AND p.has_custom_dashboard_layout = 0
+      AND EXISTS
+      (
+          SELECT 1
+          FROM omp_portal.user_active_widgets aw
+          WHERE aw.user_id = p.user_id
+      );
 END
 GO
 

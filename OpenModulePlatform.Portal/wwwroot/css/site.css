@@ -1441,9 +1441,26 @@ button {
     white-space: nowrap;
 }
 
+.portal-dashboard:not(.is-editing) .dashboard-widget.is-titlebar-hidden .dashboard-widget__titlebar {
+    display: none;
+}
+
 .dashboard-widget__body {
     min-height: 0;
     overflow: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.dashboard-widget__body::-webkit-scrollbar,
+.dashboard-entry-list::-webkit-scrollbar,
+.dashboard-entry-combo-list::-webkit-scrollbar,
+.dashboard-widget__admin-overview::-webkit-scrollbar,
+.dashboard-navbar-list::-webkit-scrollbar,
+.dashboard-role-list::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
 }
 
 .dashboard-widget__content {
@@ -1482,6 +1499,8 @@ button {
 .dashboard-widget__admin-overview {
     height: 100%;
     overflow: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .dashboard-widget__admin-overview .portal-admin-metrics {
@@ -1506,6 +1525,8 @@ button {
     min-height: 0;
     overflow: auto;
     padding: 4px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .dashboard-entry-combo-list {
@@ -1516,6 +1537,8 @@ button {
     min-height: 0;
     overflow: auto;
     padding: 4px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .dashboard-entry-combo-list .dashboard-entry-list {
@@ -2406,7 +2429,7 @@ a.dashboard-role-list__item:focus-visible {
 .dashboard-widget__settings-toggle {
     position: absolute;
     top: 6px;
-    right: 74px;
+    right: 108px;
     display: none;
     width: 28px;
     height: 28px;
@@ -2443,10 +2466,55 @@ a.dashboard-role-list__item:focus-visible {
     mask: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg") center / contain no-repeat;
 }
 
-.dashboard-widget__zoom-toggle {
+.dashboard-widget__titlebar-toggle {
     position: absolute;
     top: 6px;
     right: 40px;
+    display: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.portal-dashboard.is-editing .dashboard-widget__titlebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.portal-dashboard.has-multi-selected-widgets .dashboard-widget.is-selected .dashboard-widget__titlebar-toggle {
+    display: none;
+}
+
+.dashboard-widget__titlebar-toggle[aria-pressed="true"] {
+    border-color: var(--link);
+    color: var(--link);
+}
+
+.dashboard-widget__titlebar-toggle:hover,
+.dashboard-widget__titlebar-toggle:focus-visible {
+    border-color: var(--link);
+    color: var(--link);
+    outline: none;
+}
+
+.dashboard-widget__titlebar-toggle-icon {
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/frame-off.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/frame-off.svg") center / contain no-repeat;
+}
+
+.dashboard-widget__zoom-toggle {
+    position: absolute;
+    top: 6px;
+    right: 74px;
     display: none;
     width: 28px;
     height: 28px;
