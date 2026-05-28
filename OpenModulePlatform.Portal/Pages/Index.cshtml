@@ -93,6 +93,9 @@
             var widgetContentScale = Math.Clamp(widget.ContentScale, -100, 100);
             var widgetContentScaleFactor = Math.Max(0.1, (100 + widgetContentScale) / 100.0);
             var isBlankWidget = string.Equals(widget.Payload, "blank-rectangle", StringComparison.OrdinalIgnoreCase);
+            var hasWidgetSettings = widget.Payload == "weekday-date"
+                || widget.Payload == "portal-entry-list"
+                || isBlankWidget;
             var blankWidgetVariant = isBlankWidget && widget.IntData is 1 or 2 ? widget.IntData.Value : 0;
             var blankWidgetImageId = isBlankWidget
                 && long.TryParse(widget.StringData, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedBlankWidgetImageId)
@@ -181,14 +184,14 @@
                         <span class="dashboard-widget__remove-icon" aria-hidden="true"></span>
                     </button>
                     <button type="button"
-                            class="dashboard-widget__settings-toggle"
-                            data-widget-settings-toggle
-                            title="@L["Widget settings"]"
-                            aria-label="@L["Widget settings"]"
+                            class="dashboard-widget__zoom-toggle"
+                            data-widget-zoom-toggle
+                            title="@L["Zoom"]"
+                            aria-label="@L["Zoom"]"
                             aria-expanded="false">
-                        <span class="dashboard-widget__settings-icon" aria-hidden="true"></span>
+                        <span class="dashboard-widget__zoom-icon" aria-hidden="true"></span>
                     </button>
-                    <div class="dashboard-widget__settings-panel" data-widget-settings-panel hidden>
+                    <div class="dashboard-widget__zoom-panel" data-widget-zoom-panel hidden>
                         <div class="dashboard-widget__settings-field">
                             <span>@L["Zoom"]</span>
                             <div class="dashboard-widget__zoom-control" data-widget-content-scale-control>
@@ -210,6 +213,18 @@
                                 <button type="button" class="btn-link" data-widget-content-scale-reset>@L["Reset zoom"]</button>
                             </div>
                         </div>
+                    </div>
+                    @if (hasWidgetSettings)
+                    {
+                    <button type="button"
+                            class="dashboard-widget__settings-toggle"
+                            data-widget-settings-toggle
+                            title="@L["Widget settings"]"
+                            aria-label="@L["Widget settings"]"
+                            aria-expanded="false">
+                        <span class="dashboard-widget__settings-icon" aria-hidden="true"></span>
+                    </button>
+                    <div class="dashboard-widget__settings-panel" data-widget-settings-panel hidden>
                         @if (widget.Payload == "weekday-date")
                         {
                             <label>
@@ -270,6 +285,7 @@
                             }
                         }
                     </div>
+                    }
                     <span class="dashboard-widget__resize" data-widget-resize aria-hidden="true"></span>
                 }
             </article>
@@ -382,7 +398,7 @@
                 <h3 id="dashboard-unsaved-title">@L["Unsaved changes"]</h3>
                 <p class="muted">@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]</p>
                 <div class="toolbar">
-                    <button type="button" class="btn btn-primary" data-dashboard-unsaved-save>@L["Save changes"]</button>
+                    <button type="button" class="btn btn-primary" data-dashboard-unsaved-save autofocus>@L["Save changes"]</button>
                     <button type="button" class="btn" data-dashboard-unsaved-discard>@L["Discard changes"]</button>
                     <button type="button" class="btn" data-dashboard-unsaved-cancel>@L["Keep editing"]</button>
                 </div>

@@ -1349,8 +1349,9 @@ button {
 
 .portal-dashboard.is-editing .portal-dashboard__canvas {
     overflow: visible;
-    border: 2px solid var(--dashboard-edit-accent);
-    border-radius: 16px;
+    border: 0;
+    border-top: 2px solid var(--dashboard-edit-accent);
+    border-radius: 0;
     background:
         linear-gradient(90deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
         linear-gradient(180deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
@@ -2405,7 +2406,7 @@ a.dashboard-role-list__item:focus-visible {
 .dashboard-widget__settings-toggle {
     position: absolute;
     top: 6px;
-    right: 40px;
+    right: 74px;
     display: none;
     width: 28px;
     height: 28px;
@@ -2442,6 +2443,46 @@ a.dashboard-role-list__item:focus-visible {
     mask: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg") center / contain no-repeat;
 }
 
+.dashboard-widget__zoom-toggle {
+    position: absolute;
+    top: 6px;
+    right: 40px;
+    display: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.portal-dashboard.is-editing .dashboard-widget__zoom-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.portal-dashboard.has-multi-selected-widgets .dashboard-widget.is-selected .dashboard-widget__zoom-toggle {
+    display: none;
+}
+
+.dashboard-widget__zoom-toggle:hover,
+.dashboard-widget__zoom-toggle:focus-visible {
+    border-color: var(--link);
+    color: var(--link);
+    outline: none;
+}
+
+.dashboard-widget__zoom-icon {
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/search.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/search.svg") center / contain no-repeat;
+}
+
 .dashboard-widget__settings-panel {
     position: absolute;
     top: 40px;
@@ -2457,7 +2498,26 @@ a.dashboard-role-list__item:focus-visible {
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.16);
 }
 
+.dashboard-widget__zoom-panel {
+    position: absolute;
+    top: 40px;
+    right: 40px;
+    z-index: 2;
+    display: grid;
+    gap: 10px;
+    min-width: 190px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.16);
+}
+
 .dashboard-widget__settings-panel[hidden] {
+    display: none;
+}
+
+.dashboard-widget__zoom-panel[hidden] {
     display: none;
 }
 
@@ -2465,7 +2525,12 @@ a.dashboard-role-list__item:focus-visible {
     display: none;
 }
 
+.portal-dashboard:not(.is-editing) .dashboard-widget__zoom-panel {
+    display: none;
+}
+
 .dashboard-widget__settings-panel label,
+.dashboard-widget__zoom-panel label,
 .dashboard-widget__settings-field {
     display: grid;
     gap: 6px;
@@ -2475,6 +2540,7 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-widget__settings-panel select,
+.dashboard-widget__zoom-panel select,
 .dashboard-widget__settings-panel input[type="number"] {
     min-height: 32px;
     border: 1px solid var(--border);
@@ -2484,7 +2550,8 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-widget__settings-panel input[type="text"],
-.dashboard-widget__settings-panel input[type="file"] {
+.dashboard-widget__settings-panel input[type="file"],
+.dashboard-widget__zoom-panel input[type="number"] {
     min-width: 0;
     min-height: 32px;
     padding: 5px 8px;
@@ -3102,7 +3169,7 @@ a.dashboard-role-list__item:focus-visible {
 
 
 .unsaved-dialog {
-    width: min(30rem, calc(100vw - 2rem));
+    width: min(44rem, calc(100vw - 2rem));
     border: 1px solid var(--border);
     border-radius: 18px;
     padding: 0;
@@ -3119,7 +3186,21 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .unsaved-dialog__body .toolbar {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
     margin-top: 16px;
+    overflow-x: auto;
+}
+
+.unsaved-dialog__body .toolbar .btn {
+    white-space: nowrap;
+}
+
+.unsaved-dialog__body .toolbar .btn-primary:focus-visible {
+    border-color: var(--link);
+    box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.25);
 }
 
 .form-field--compact {
