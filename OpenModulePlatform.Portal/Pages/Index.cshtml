@@ -361,16 +361,17 @@
                 <div class="dashboard-widget-picker__list">
                     @foreach (var widget in Model.AvailableWidgets)
                     {
-                        <button type="button"
-                                class="dashboard-widget-option"
-                                data-widget-option
-                                data-widget-id="@widget.WidgetId"
-                                data-widget-title="@L[widget.Title]"
-                                data-widget-type="@widget.WidgetType"
-                                data-widget-payload="@widget.Payload">
+                        <div role="button"
+                             tabindex="0"
+                             class="dashboard-widget-option"
+                             data-widget-option
+                             data-widget-id="@widget.WidgetId"
+                             data-widget-title="@L[widget.Title]"
+                             data-widget-type="@widget.WidgetType"
+                             data-widget-payload="@widget.Payload">
                             <span class="dashboard-widget-option__title">@L[widget.Title]</span>
                             <span class="dashboard-widget-option__meta">@L["Portal widget"]</span>
-                        </button>
+                        </div>
                     }
                 </div>
             }

@@ -10,6 +10,9 @@
     --link: #0b57d0;
     --link-hover: #0842a1;
     --accent: #e8f0fe;
+    --dashboard-edit-accent: #f59e0b;
+    --dashboard-edit-accent-soft: rgba(245, 158, 11, 0.28);
+    --dashboard-edit-accent-surface: rgba(245, 158, 11, 0.16);
     --shadow: 0 8px 24px rgba(17, 24, 39, 0.05);
     --portal-page-chrome-width: 100%;
 }
@@ -1346,7 +1349,9 @@ button {
 
 .portal-dashboard.is-editing .portal-dashboard__canvas {
     overflow: visible;
-    border-color: var(--border);
+    border-color: var(--dashboard-edit-accent-soft);
+    border-top-width: 2px;
+    border-top-color: var(--dashboard-edit-accent);
     border-radius: 16px;
     background:
         linear-gradient(90deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
@@ -2637,19 +2642,20 @@ a.dashboard-role-list__item:focus-visible {
     gap: 8px;
     min-height: 42px;
     padding: 10px 14px;
-    border: 1px solid transparent;
+    border: 1px solid var(--dashboard-edit-accent-soft);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.24);
-    color: var(--text);
-    box-shadow: 0 8px 22px rgba(17, 24, 39, 0.08);
-    transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+    background: var(--dashboard-edit-accent-surface);
+    color: #9a5b00;
+    box-shadow: 0 8px 22px rgba(245, 158, 11, 0.12);
+    transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
 }
 
 .dashboard-floating-button:hover,
 .dashboard-floating-button:focus-visible {
-    border-color: var(--border);
-    background: var(--surface);
-    box-shadow: 0 16px 36px rgba(17, 24, 39, 0.18);
+    border-color: var(--dashboard-edit-accent);
+    background: rgba(245, 158, 11, 0.24);
+    color: #7c4600;
+    box-shadow: 0 16px 36px rgba(245, 158, 11, 0.22);
     outline: none;
 }
 
@@ -2822,7 +2828,9 @@ a.dashboard-role-list__item:focus-visible {
     border-radius: 10px;
     background: var(--surface);
     color: var(--text);
+    cursor: pointer;
     text-align: left;
+    user-select: none;
 }
 
 .dashboard-widget-option > span {
