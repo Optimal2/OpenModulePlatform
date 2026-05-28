@@ -619,9 +619,9 @@ public sealed class HostAgentSelfUpgradeService
     private static JsonObject? LoadCurrentSettingsJson()
     {
         JsonObject? merged = null;
-        foreach (var fileName in new[] { "appsettings.json", "appsettings.Production.json" })
+        foreach (var path in new[] { "appsettings.json", "appsettings.Production.json" }
+                     .Select(fileName => Path.Join(AppContext.BaseDirectory, fileName)))
         {
-            var path = Path.Join(AppContext.BaseDirectory, fileName);
             if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path)) is not JsonObject json)
             {
                 continue;

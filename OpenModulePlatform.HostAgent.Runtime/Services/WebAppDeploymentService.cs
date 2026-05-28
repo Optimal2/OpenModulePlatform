@@ -679,15 +679,14 @@ public sealed class WebAppDeploymentService
 
         using var store = new X509Store(storeName, StoreLocation.LocalMachine);
         store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
-        foreach (var certificate in store.Certificates)
+        var certificate = store.Certificates.OfType<X509Certificate2>().FirstOrDefault(certificate =>
+            string.Equals(
+                NormalizeCertificateHex(certificate.SerialNumber),
+                serialNumber,
+                StringComparison.OrdinalIgnoreCase));
+        if (certificate is not null)
         {
-            if (string.Equals(
-                    NormalizeCertificateHex(certificate.SerialNumber),
-                    serialNumber,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return NormalizeCertificateHex(certificate.Thumbprint);
-            }
+            return NormalizeCertificateHex(certificate.Thumbprint);
         }
 
         throw new InvalidOperationException(

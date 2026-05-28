@@ -816,10 +816,10 @@ public sealed class PortableModulePackageService
                             moduleKey,
                             request.IncludeAllArtifactVersions,
                             ct);
-                        foreach (var artifact in moduleArtifacts)
+                        foreach (var artifact in moduleArtifacts.Where(artifact => !exportedArtifactIds.Contains(artifact.ArtifactId)))
                         {
-                            if (exportedArtifactIds.Add(artifact.ArtifactId)
-                                && await AddArtifactPackageEntryAsync(
+                            exportedArtifactIds.Add(artifact.ArtifactId);
+                            if (await AddArtifactPackageEntryAsync(
                                     archive,
                                     usedEntryNames,
                                     artifact.ArtifactId,

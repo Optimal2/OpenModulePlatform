@@ -3239,10 +3239,12 @@ SELECT COUNT(1) FROM @changes;
 
     private static string? ResolveConfiguredHostAgentArtifactVersion(BootstrapConfig config)
     {
-        foreach (var artifact in config.Artifacts.Where(static artifact => artifact.Enabled))
+        foreach (var version in config.Artifacts
+                     .Where(static artifact => artifact.Enabled)
+                     .Select(static artifact =>
+                         TryResolveHostAgentVersionFromTarget(artifact.Target)
+                         ?? TryResolveHostAgentVersionFromPackageName(artifact.Source)))
         {
-            var version = TryResolveHostAgentVersionFromTarget(artifact.Target)
-                ?? TryResolveHostAgentVersionFromPackageName(artifact.Source);
             if (!string.IsNullOrWhiteSpace(version))
             {
                 return version;

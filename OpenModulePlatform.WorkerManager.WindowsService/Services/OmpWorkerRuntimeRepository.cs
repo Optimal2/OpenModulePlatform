@@ -107,7 +107,7 @@ ORDER BY
             return null;
         }
 
-        return Path.Combine(localPath.Trim(), WorkerProcessHostExecutableName);
+        return Path.Join(localPath.Trim(), WorkerProcessHostExecutableName);
     }
 
     public async Task PublishObservationAsync(
