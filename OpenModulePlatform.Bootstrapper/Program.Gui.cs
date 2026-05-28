@@ -467,6 +467,7 @@ internal static partial class Program
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
         private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
         private readonly Button _refreshObjectArchiveButton = new() { Text = "Refresh object archive", AutoSize = true };
+        private readonly Button _prunePackageArchiveButton = new() { Text = "Keep latest package objects", AutoSize = true };
         private readonly Button _createUniversalPackageButton = new() { Text = "Create universal package", AutoSize = true };
         private readonly Button _createUpdatedInstallerPackageButton = new() { Text = "Create updated installer package", AutoSize = true };
         private readonly Button _uninstallRuntimeButton = new() { Text = "Uninstall runtime", AutoSize = true };
@@ -601,6 +602,7 @@ internal static partial class Program
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
             _syncPackageObjectsButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
             _refreshObjectArchiveButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
+            _prunePackageArchiveButton.Click += async (_, _) => await PrunePackageArchiveAsync();
             _createUniversalPackageButton.Click += async (_, _) => await CreateUniversalPackageAsync();
             _createUpdatedInstallerPackageButton.Click += async (_, _) => await CreateUpdatedInstallerPackageAsync();
             _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
@@ -803,6 +805,7 @@ internal static partial class Program
                 [
                     (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
                     (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
+                    (_prunePackageArchiveButton, "Deletes older module definitions and artifact package zips from this installer package while keeping the latest version for each module/app slot. Files referenced by the current profile are kept."),
                     (_createUniversalPackageButton, "Creates a universal module package zip from this installer's object archive. You can choose global objects and host-specific overlays for any available host profile."),
                     (_createUpdatedInstallerPackageButton, "Starts a separate refresh process that creates a fresh installer package from source and restarts the updated installer.")
                 ]);
@@ -1143,6 +1146,7 @@ internal static partial class Program
 
             _checkSourceButton.Enabled = _hasDeveloperSource;
             _syncPackageObjectsButton.Enabled = _hasDeveloperSource;
+            _prunePackageArchiveButton.Enabled = HasPackageArchivePruneRoots();
             _createUpdatedInstallerPackageButton.Enabled = _hasDeveloperSource;
             _createUniversalPackageButton.Enabled = HasUniversalPackageCandidates();
         }
@@ -1474,6 +1478,58 @@ internal static partial class Program
                 });
         }
 
+        private async Task PrunePackageArchiveAsync()
+        {
+            ApplyValues();
+
+            var plan = await BuildPackageArchivePrunePlanAsync();
+            if (plan.DeleteCandidates.Count == 0)
+            {
+                var message = plan.HasWarnings
+                    ? "No old package object files can be removed. Review the log for skipped files."
+                    : "No old package object files were found.";
+                _logBox.Clear();
+                foreach (var line in plan.Lines)
+                {
+                    _logBox.AppendText(line + Environment.NewLine);
+                }
+
+                MessageBox.Show(
+                    message,
+                    "Keep latest package objects",
+                    MessageBoxButtons.OK,
+                    plan.HasWarnings ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                return;
+            }
+
+            var confirmation = MessageBox.Show(
+                BuildPackageArchivePruneConfirmation(plan),
+                "Keep latest package objects",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            await RunGuiOperationAsync(
+                "Removing older package objects...",
+                "Old package objects removed.",
+                "Old package object cleanup completed with warnings. Review the log for details.",
+                "Old package object cleanup failed.",
+                () =>
+                {
+                    var result = PrunePackageArchiveCore(plan);
+                    foreach (var line in result.Lines)
+                    {
+                        Console.WriteLine(line);
+                    }
+
+                    return Task.FromResult(result.HasWarnings ? 1 : 0);
+                });
+        }
+
         private async Task CreateUpdatedInstallerPackageAsync()
         {
             ApplyValues();
@@ -1536,6 +1592,263 @@ internal static partial class Program
 
                     return Task.FromResult(0);
                 });
+        }
+
+        private bool HasPackageArchivePruneRoots()
+            => Directory.Exists(ResolvePackageModuleDefinitionsRoot(_payloadRoot))
+                || Directory.Exists(ResolvePackageArtifactsRoot(_payloadRoot));
+
+        private async Task<PackageArchivePrunePlan> BuildPackageArchivePrunePlanAsync()
+        {
+            var lines = new List<string>
+            {
+                "Package archive cleanup plan:",
+                $"  Installer package: {_payloadRoot}"
+            };
+            var candidates = new List<PackageArchivePruneCandidate>();
+            var warningCount = 0;
+
+            warningCount += await AddModuleDefinitionPruneCandidatesAsync(candidates, lines);
+            warningCount += AddArtifactPackagePruneCandidates(candidates, lines);
+
+            var protectedPaths = GetConfiguredPackageObjectPaths();
+            var olderCandidates = SelectOlderPackageArchiveCandidates(candidates);
+            var protectedCandidates = olderCandidates
+                .Where(candidate => protectedPaths.Contains(Path.GetFullPath(candidate.Path)))
+                .OrderBy(static candidate => candidate.Kind, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var deleteCandidates = olderCandidates
+                .Where(candidate => !protectedPaths.Contains(Path.GetFullPath(candidate.Path)))
+                .OrderBy(static candidate => candidate.Kind, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var latestKeptCount = candidates.Count - olderCandidates.Count;
+
+            lines.Add($"  Candidate files: {candidates.Count}");
+            lines.Add($"  Latest-version files kept: {latestKeptCount}");
+            lines.Add($"  Older files kept because the current profile references them: {protectedCandidates.Length}");
+            lines.Add($"  Older files to delete: {deleteCandidates.Length}");
+            if (warningCount > 0)
+            {
+                lines.Add($"  Warnings: {warningCount}");
+            }
+
+            if (protectedCandidates.Length > 0)
+            {
+                lines.Add(string.Empty);
+                lines.Add("Configured older files kept:");
+                foreach (var candidate in protectedCandidates.Take(20))
+                {
+                    lines.Add($"  KEEP   {candidate.DisplayName}: {GetDisplayPath(_payloadRoot, candidate.Path)}");
+                }
+
+                if (protectedCandidates.Length > 20)
+                {
+                    lines.Add($"  ...and {protectedCandidates.Length - 20} more configured older file(s).");
+                }
+            }
+
+            return new PackageArchivePrunePlan(
+                deleteCandidates,
+                protectedCandidates,
+                latestKeptCount,
+                warningCount,
+                lines);
+        }
+
+        private async Task<int> AddModuleDefinitionPruneCandidatesAsync(
+            List<PackageArchivePruneCandidate> candidates,
+            List<string> lines)
+        {
+            var root = ResolvePackageModuleDefinitionsRoot(_payloadRoot);
+            if (!Directory.Exists(root))
+            {
+                return 0;
+            }
+
+            var warningCount = 0;
+            foreach (var path in Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
+                         .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var definition = await ReadModuleDefinitionAsync(path);
+                    candidates.Add(new PackageArchivePruneCandidate(
+                        "module definition",
+                        definition.ModuleKey,
+                        definition.DefinitionVersion,
+                        path,
+                        $"{definition.ModuleKey} {definition.DefinitionVersion}"));
+                }
+                catch (SystemException ex)
+                {
+                    warningCount++;
+                    lines.Add($"  WARN   module-definition skipped {GetDisplayPath(_payloadRoot, path)}: {ex.Message}");
+                }
+                catch (JsonException ex)
+                {
+                    warningCount++;
+                    lines.Add($"  WARN   module-definition skipped {GetDisplayPath(_payloadRoot, path)}: {ex.Message}");
+                }
+            }
+
+            return warningCount;
+        }
+
+        private int AddArtifactPackagePruneCandidates(
+            List<PackageArchivePruneCandidate> candidates,
+            List<string> lines)
+        {
+            var root = ResolvePackageArtifactsRoot(_payloadRoot);
+            if (!Directory.Exists(root))
+            {
+                return 0;
+            }
+
+            var warningCount = 0;
+            foreach (var path in Directory.EnumerateFiles(root, "*.zip", SearchOption.AllDirectories)
+                         .OrderBy(static item => item, StringComparer.OrdinalIgnoreCase))
+            {
+                var identity = ParseArtifactPackageIdentity(path);
+                if (identity is null)
+                {
+                    warningCount++;
+                    lines.Add($"  WARN   artifact package skipped {GetDisplayPath(_payloadRoot, path)}: file name does not follow the OMP artifact package identity format.");
+                    continue;
+                }
+
+                candidates.Add(new PackageArchivePruneCandidate(
+                    "artifact package",
+                    string.Join('\u001f', identity.ModuleKey, identity.AppKey, identity.PackageType, identity.TargetName),
+                    identity.Version,
+                    path,
+                    $"{identity.ModuleKey}/{identity.AppKey}/{identity.PackageType}/{identity.TargetName} {identity.Version}"));
+            }
+
+            return warningCount;
+        }
+
+        private static IReadOnlyList<PackageArchivePruneCandidate> SelectOlderPackageArchiveCandidates(
+            IReadOnlyList<PackageArchivePruneCandidate> candidates)
+        {
+            var latestPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var group in candidates.GroupBy(static candidate => candidate.GroupKey, StringComparer.OrdinalIgnoreCase))
+            {
+                var latestVersion = group
+                    .Select(static candidate => candidate.Version)
+                    .Aggregate((current, next) => CompareVersionText(next, current) > 0 ? next : current);
+                foreach (var candidate in group.Where(candidate => CompareVersionText(candidate.Version, latestVersion) == 0))
+                {
+                    latestPaths.Add(Path.GetFullPath(candidate.Path));
+                }
+            }
+
+            return candidates
+                .Where(candidate => !latestPaths.Contains(Path.GetFullPath(candidate.Path)))
+                .ToArray();
+        }
+
+        private HashSet<string> GetConfiguredPackageObjectPaths()
+        {
+            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void AddPath(string? path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return;
+                }
+
+                try
+                {
+                    var resolved = Path.IsPathRooted(path)
+                        ? Path.GetFullPath(path)
+                        : ResolvePackagePath(path);
+                    paths.Add(Path.GetFullPath(resolved));
+                }
+                catch (SystemException)
+                {
+                    // Invalid configured paths are reported by the install readiness checks; pruning should not fail because of them.
+                }
+            }
+
+            foreach (var artifact in _config.Artifacts)
+            {
+                AddPath(artifact.Source);
+            }
+
+            if (_config.HostAgent.Enabled)
+            {
+                AddPath(_config.HostAgent.PackagePath);
+            }
+
+            return paths;
+        }
+
+        private string BuildPackageArchivePruneConfirmation(PackageArchivePrunePlan plan)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("This will delete older package object files from this installer package.");
+            builder.AppendLine();
+            builder.AppendLine("The cleanup keeps:");
+            builder.AppendLine("- the latest module definition version for each module");
+            builder.AppendLine("- the latest artifact package version for each module/app/package slot");
+            builder.AppendLine("- older files still referenced by the current host profile");
+            builder.AppendLine();
+            builder.AppendLine($"Files to delete: {plan.DeleteCandidates.Count}");
+            builder.AppendLine($"Latest files kept: {plan.LatestKeptCount}");
+            builder.AppendLine($"Configured older files kept: {plan.ProtectedCandidates.Count}");
+            if (plan.WarningCount > 0)
+            {
+                builder.AppendLine($"Skipped/warning files: {plan.WarningCount}");
+            }
+
+            builder.AppendLine();
+            builder.AppendLine("First files to delete:");
+            foreach (var candidate in plan.DeleteCandidates.Take(12))
+            {
+                builder.AppendLine($"- {GetDisplayPath(_payloadRoot, candidate.Path)}");
+            }
+
+            if (plan.DeleteCandidates.Count > 12)
+            {
+                builder.AppendLine($"- ...and {plan.DeleteCandidates.Count - 12} more file(s).");
+            }
+
+            builder.AppendLine();
+            builder.Append("Continue?");
+            return builder.ToString();
+        }
+
+        private PackageArchivePruneResult PrunePackageArchiveCore(PackageArchivePrunePlan plan)
+        {
+            var lines = new List<string>(plan.Lines)
+            {
+                string.Empty,
+                "Deleting older package object files:"
+            };
+            var warningCount = plan.WarningCount;
+            var deletedCount = 0;
+
+            foreach (var candidate in plan.DeleteCandidates)
+            {
+                try
+                {
+                    File.Delete(candidate.Path);
+                    deletedCount++;
+                    lines.Add($"  DELETE {candidate.DisplayName}: {GetDisplayPath(_payloadRoot, candidate.Path)}");
+                }
+                catch (SystemException ex)
+                {
+                    warningCount++;
+                    lines.Add($"  WARN   could not delete {GetDisplayPath(_payloadRoot, candidate.Path)}: {ex.Message}");
+                }
+            }
+
+            lines.Add(string.Empty);
+            lines.Add($"Summary: {deletedCount} deleted, {plan.LatestKeptCount} latest kept, {plan.ProtectedCandidates.Count} configured older kept, {warningCount} warning(s).");
+            return new PackageArchivePruneResult(warningCount > 0, lines);
         }
 
         private void StartDetachedInstallerPackageRefresh()
@@ -3144,6 +3457,7 @@ ORDER BY ar.ArtifactId DESC;
             _upgradeCompleteButton.Enabled = enabled;
             _checkSourceButton.Enabled = enabled && _hasDeveloperSource;
             _syncPackageObjectsButton.Enabled = enabled && _hasDeveloperSource;
+            _prunePackageArchiveButton.Enabled = enabled && HasPackageArchivePruneRoots();
             _createUniversalPackageButton.Enabled = enabled && HasUniversalPackageCandidates();
             _createUpdatedInstallerPackageButton.Enabled = enabled && _hasDeveloperSource;
             _uninstallRuntimeButton.Enabled = enabled;
@@ -3996,4 +4310,25 @@ ORDER BY ar.ArtifactId DESC;
         string PackageType,
         string TargetName,
         string Version);
+
+    private sealed record PackageArchivePruneCandidate(
+        string Kind,
+        string GroupKey,
+        string Version,
+        string Path,
+        string DisplayName);
+
+    private sealed record PackageArchivePrunePlan(
+        IReadOnlyList<PackageArchivePruneCandidate> DeleteCandidates,
+        IReadOnlyList<PackageArchivePruneCandidate> ProtectedCandidates,
+        int LatestKeptCount,
+        int WarningCount,
+        IReadOnlyList<string> Lines)
+    {
+        public bool HasWarnings => WarningCount > 0;
+    }
+
+    private sealed record PackageArchivePruneResult(
+        bool HasWarnings,
+        IReadOnlyList<string> Lines);
 }
