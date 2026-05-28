@@ -49,6 +49,7 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'user_active_widgets', N'width'),
         (N'omp_portal', N'user_active_widgets', N'height'),
         (N'omp_portal', N'user_active_widgets', N'content_scale'),
+        (N'omp_portal', N'user_active_widgets', N'hide_titlebar_when_viewing'),
         (N'omp_portal', N'widget_data', N'widget_id'),
         (N'omp_portal', N'widget_data', N'data_key'),
         (N'omp_portal', N'widget_data', N'json_data'),
@@ -62,7 +63,8 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'widget_binary_data', N'is_enabled'),
         (N'omp_portal', N'user_dashboard_preferences', N'user_id'),
         (N'omp_portal', N'user_dashboard_preferences', N'align_to_grid'),
-        (N'omp_portal', N'user_dashboard_preferences', N'expanded_canvas')
+        (N'omp_portal', N'user_dashboard_preferences', N'expanded_canvas'),
+        (N'omp_portal', N'user_dashboard_preferences', N'has_custom_dashboard_layout')
     ) AS v(SchemaName, TableName, ColumnName)
 )
 SELECT @Missing = @Missing + COUNT(1)

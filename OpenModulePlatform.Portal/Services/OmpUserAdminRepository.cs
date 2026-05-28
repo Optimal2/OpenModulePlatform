@@ -36,6 +36,7 @@ SELECT u.user_id,
 FROM omp.users u
 LEFT JOIN omp.user_auth ua ON ua.user_id = u.user_id
 LEFT JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+WHERE u.user_id > 0
 ORDER BY u.display_name,
          u.user_id,
          ap.display_name,

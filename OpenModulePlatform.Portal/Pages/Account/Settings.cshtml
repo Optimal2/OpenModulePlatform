@@ -31,6 +31,12 @@
         <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.PortalTab) ? " is-active" : string.Empty)"
            asp-page="/Account/Settings"
            asp-route-tab="@SettingsModel.PortalTab">@ompBranding.PortalName</a>
+        @if (Model.IsPortalAdmin)
+        {
+            <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.AdminTab) ? " is-active" : string.Empty)"
+               asp-page="/Account/Settings"
+               asp-route-tab="@SettingsModel.AdminTab">@L["Admin"]</a>
+        }
     }
 </nav>
 
@@ -69,7 +75,7 @@
         </form>
     }
 }
-else
+else if (Model.IsActiveTab(SettingsModel.PortalTab))
 {
     <form method="post" asp-page-handler="Portal" class="card form-grid settings-panel">
         <h3>@ompBranding.PortalName</h3>
@@ -93,13 +99,40 @@ else
     <form method="post"
           asp-page-handler="ResetDashboard"
           class="card danger-zone"
-          onsubmit="return confirm('@L["This clears your current dashboard widgets. Continue?"]');">
+          onsubmit="return confirm('@L["This resets your dashboard to the shared default layout. Continue?"]');">
         <h3>@L["Dashboard"]</h3>
-        <p class="muted">@L["Reset layout"]</p>
+        <p class="muted">@L["Reset to the shared default dashboard layout."]</p>
         <div class="toolbar">
-            <button type="submit" class="btn btn-danger">@L["Reset layout"]</button>
+            <button type="submit" class="btn btn-danger">@L["Reset to default"]</button>
         </div>
     </form>
+
+    <form method="post"
+          asp-page-handler="ClearDashboard"
+          class="card danger-zone"
+          onsubmit="return confirm('@L["This removes all widgets from your dashboard. Continue?"]');">
+        <h3>@L["Dashboard"]</h3>
+        <p class="muted">@L["Clear your dashboard and keep it empty until you add widgets again."]</p>
+        <div class="toolbar">
+            <button type="submit" class="btn btn-danger">@L["Clear dashboard"]</button>
+        </div>
+    </form>
+}
+else if (Model.IsPortalAdmin)
+{
+    <section class="card form-grid settings-panel">
+        <h3>@L["Dashboard"]</h3>
+        <p class="muted">@L["Default dashboard layout"]</p>
+
+        <form method="post"
+              asp-page-handler="SaveDefaultDashboard"
+              onsubmit="return confirm('@L["This replaces the shared default dashboard layout with your current dashboard layout. Continue?"]');">
+            <p>@L["Users without a personal dashboard layout use the shared default layout."]</p>
+            <div class="toolbar">
+                <button type="submit" class="btn btn-danger">@L["Save current layout as default"]</button>
+            </div>
+        </form>
+    </section>
 }
 
 @section Scripts {

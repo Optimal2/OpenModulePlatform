@@ -290,6 +290,7 @@
         const resizeHandle = widget.querySelector('[data-widget-resize]');
 
         bindWidgetSettings(root, widget, onChange);
+        bindWidgetTitlebarToggle(widget, onChange);
         applyWidgetSettings(widget);
 
         widget.addEventListener('pointerdown', (event) => {
@@ -594,11 +595,33 @@
         });
     }
 
+    function bindWidgetTitlebarToggle(widget, onChange = () => {}) {
+        const toggle = widget.querySelector('[data-widget-titlebar-toggle]');
+        if (!toggle || toggle.dataset.dashboardWidgetTitlebarBound === 'true') {
+            return;
+        }
+
+        toggle.dataset.dashboardWidgetTitlebarBound = 'true';
+        toggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const next = widget.dataset.widgetTitlebarHidden !== 'true';
+            widget.dataset.widgetTitlebarHidden = next ? 'true' : 'false';
+            applyWidgetSettings(widget);
+            onChange();
+        });
+    }
+
     function applyWidgetSettings(widget) {
         const contentScale = normalizeContentScale(widget.dataset.widgetContentScale);
         widget.dataset.widgetContentScale = String(contentScale);
         widget.style.setProperty('--dashboard-widget-content-scale-factor', formatScaleFactor(contentScale));
         syncWidgetContentScaleControls(widget, contentScale);
+        const hideTitlebar = widget.dataset.widgetTitlebarHidden === 'true';
+        widget.classList.toggle('is-titlebar-hidden', hideTitlebar);
+        widget.querySelectorAll('[data-widget-titlebar-toggle]').forEach((button) => {
+            button.setAttribute('aria-pressed', hideTitlebar ? 'true' : 'false');
+        });
 
         if (widget.dataset.widgetPayload === 'weekday-date') {
             const hideWeekNumber = parseNullableInteger(widget.dataset.widgetIntData) === 1;
@@ -2239,7 +2262,8 @@
                     orderPriority: parseInt(widget.style.zIndex || '0', 10) || 0,
                     intData: parseNullableInteger(widget.dataset.widgetIntData),
                     stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData),
-                    contentScale: normalizeContentScale(widget.dataset.widgetContentScale)
+                    contentScale: normalizeContentScale(widget.dataset.widgetContentScale),
+                    hideTitlebarWhenViewing: widget.dataset.widgetTitlebarHidden === 'true'
                 }))
         };
 
@@ -2427,7 +2451,8 @@
                 orderPriority: item.orderPriority,
                 intData: item.intData,
                 stringData: item.stringData || null,
-                contentScale: item.contentScale
+                contentScale: item.contentScale,
+                hideTitlebarWhenViewing: item.hideTitlebarWhenViewing === true
             });
 
             canvas.appendChild(widget);
@@ -2501,7 +2526,8 @@
                 title: '',
                 intData: parseNullableInteger(widget.dataset.widgetIntData),
                 stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData),
-                contentScale: normalizeContentScale(widget.dataset.widgetContentScale)
+                contentScale: normalizeContentScale(widget.dataset.widgetContentScale),
+                hideTitlebarWhenViewing: widget.dataset.widgetTitlebarHidden === 'true'
             }))
             .sort((left, right) => {
                 const idCompare = left.userActiveWidgetId - right.userActiveWidgetId;
@@ -2573,7 +2599,8 @@
                 title: null,
                 intData: parseNullableInteger(widget.dataset.widgetIntData),
                 stringData: normalizeWidgetDataValue(widget.dataset.widgetStringData) || null,
-                contentScale: normalizeContentScale(widget.dataset.widgetContentScale)
+                contentScale: normalizeContentScale(widget.dataset.widgetContentScale),
+                hideTitlebarWhenViewing: widget.dataset.widgetTitlebarHidden === 'true'
             }))
             .filter((widget) => widget.widgetId > 0);
 
@@ -2676,6 +2703,9 @@
         });
         element.querySelectorAll('[data-widget-zoom-toggle]').forEach((button) => {
             delete button.dataset.dashboardWidgetSettingsBound;
+        });
+        element.querySelectorAll('[data-widget-titlebar-toggle]').forEach((button) => {
+            delete button.dataset.dashboardWidgetTitlebarBound;
         });
         element.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
             delete control.dataset.dashboardWidgetSettingsBound;
@@ -2827,6 +2857,7 @@
         element.dataset.widgetIntData = normalizeWidgetDataValue(widget.intData);
         element.dataset.widgetStringData = normalizeWidgetDataValue(widget.stringData);
         element.dataset.widgetContentScale = String(normalizeContentScale(widget.contentScale));
+        element.dataset.widgetTitlebarHidden = widget.hideTitlebarWhenViewing === true ? 'true' : 'false';
         element.style.top = `${widget.offsetTop || 0}px`;
         element.style.left = `${widget.offsetLeft || 0}px`;
         element.style.width = `${widget.width || 320}px`;
@@ -2861,6 +2892,21 @@
         removeIcon.setAttribute('aria-hidden', 'true');
         remove.appendChild(removeIcon);
         element.appendChild(remove);
+
+        if (widget.title) {
+            const titlebarToggle = document.createElement('button');
+            titlebarToggle.type = 'button';
+            titlebarToggle.className = 'dashboard-widget__titlebar-toggle';
+            titlebarToggle.dataset.widgetTitlebarToggle = '';
+            titlebarToggle.title = root.dataset.titlebarToggleLabel || 'Hide title bar outside edit mode';
+            titlebarToggle.setAttribute('aria-label', root.dataset.titlebarToggleLabel || 'Hide title bar outside edit mode');
+            titlebarToggle.setAttribute('aria-pressed', element.dataset.widgetTitlebarHidden === 'true' ? 'true' : 'false');
+            const titlebarIcon = document.createElement('span');
+            titlebarIcon.className = 'dashboard-widget__titlebar-toggle-icon';
+            titlebarIcon.setAttribute('aria-hidden', 'true');
+            titlebarToggle.appendChild(titlebarIcon);
+            element.appendChild(titlebarToggle);
+        }
 
         const settings = createWidgetSettingsControls(root, widget);
         if (settings) {

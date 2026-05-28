@@ -13,6 +13,8 @@ namespace OpenModulePlatform.Portal.Services;
 /// </summary>
 public sealed class PortalDashboardService
 {
+    public const int DefaultDashboardUserId = 0;
+
     private const string ContentManagePermission = "ContentWebAppModule.Manage";
     private const string ContentAppKey = "content_webapp_webapp";
     private const bool DefaultAlignToGrid = true;
@@ -41,7 +43,8 @@ public sealed class PortalDashboardService
     {
         const string sql = @"
 SELECT align_to_grid,
-       expanded_canvas
+       expanded_canvas,
+       has_custom_dashboard_layout
 FROM omp_portal.user_dashboard_preferences
 WHERE user_id = @user_id;";
 
@@ -53,12 +56,13 @@ WHERE user_id = @user_id;";
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
         {
-            return new DashboardPreferences(DefaultAlignToGrid, DefaultExpandedCanvas);
+            return new DashboardPreferences(DefaultAlignToGrid, DefaultExpandedCanvas, HasCustomLayout: false);
         }
 
         return new DashboardPreferences(
             rdr.IsDBNull(0) ? DefaultAlignToGrid : Convert.ToBoolean(rdr.GetValue(0), CultureInfo.InvariantCulture),
-            rdr.IsDBNull(1) ? DefaultExpandedCanvas : Convert.ToBoolean(rdr.GetValue(1), CultureInfo.InvariantCulture));
+            rdr.IsDBNull(1) ? DefaultExpandedCanvas : Convert.ToBoolean(rdr.GetValue(1), CultureInfo.InvariantCulture),
+            !rdr.IsDBNull(2) && Convert.ToBoolean(rdr.GetValue(2), CultureInfo.InvariantCulture));
     }
 
     public async Task SetPreferencesAsync(int userId, bool alignToGrid, bool expandedCanvas, CancellationToken ct)
@@ -72,8 +76,8 @@ WHEN MATCHED THEN
                expanded_canvas = @expanded_canvas,
                updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(user_id, align_to_grid, expanded_canvas, updated_at)
-    VALUES(@user_id, @align_to_grid, @expanded_canvas, SYSUTCDATETIME());";
+    INSERT(user_id, align_to_grid, expanded_canvas, has_custom_dashboard_layout, updated_at)
+    VALUES(@user_id, @align_to_grid, @expanded_canvas, 0, SYSUTCDATETIME());";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -96,6 +100,21 @@ WHEN NOT MATCHED THEN
             return [];
         }
 
+        var widgets = await LoadActiveWidgetsForUserAsync(userId, definitions, cloneAsDraft: false, ct);
+        if (widgets.Count > 0 || await HasCustomDashboardLayoutAsync(userId, ct))
+        {
+            return widgets;
+        }
+
+        return await LoadActiveWidgetsForUserAsync(DefaultDashboardUserId, definitions, cloneAsDraft: true, ct);
+    }
+
+    private async Task<IReadOnlyList<DashboardActiveWidget>> LoadActiveWidgetsForUserAsync(
+        int layoutUserId,
+        IReadOnlyDictionary<int, DashboardWidgetDefinition> definitions,
+        bool cloneAsDraft,
+        CancellationToken ct)
+    {
         const string sql = @"
 SELECT uaw.user_active_widget_id,
        uaw.widget_id,
@@ -107,7 +126,8 @@ SELECT uaw.user_active_widget_id,
        uaw.title,
        uaw.int_data,
        uaw.string_data,
-       uaw.content_scale
+       uaw.content_scale,
+       uaw.hide_titlebar_when_viewing
 FROM omp_portal.user_active_widgets uaw
 WHERE uaw.user_id = @user_id
 ORDER BY uaw.order_priority,
@@ -117,7 +137,7 @@ ORDER BY uaw.order_priority,
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = layoutUserId;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -130,7 +150,7 @@ ORDER BY uaw.order_priority,
 
             widgets.Add(new DashboardActiveWidget
             {
-                UserActiveWidgetId = rdr.GetInt64(0),
+                UserActiveWidgetId = cloneAsDraft ? -Math.Abs(rdr.GetInt64(0)) : rdr.GetInt64(0),
                 WidgetId = widgetId,
                 WidgetTitle = definition.Title,
                 WidgetType = definition.WidgetType,
@@ -143,7 +163,8 @@ ORDER BY uaw.order_priority,
                 Title = rdr.IsDBNull(7) ? null : rdr.GetString(7),
                 IntData = rdr.IsDBNull(8) ? null : rdr.GetInt32(8),
                 StringData = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-                ContentScale = rdr.GetInt32(10)
+                ContentScale = rdr.GetInt32(10),
+                HideTitlebarWhenViewing = !rdr.IsDBNull(11) && Convert.ToBoolean(rdr.GetValue(11), CultureInfo.InvariantCulture)
             });
         }
 
@@ -302,6 +323,7 @@ ORDER BY COALESCE(c.sort_order, 2147483647),
     {
         if (updates.Count == 0)
         {
+            await SetCustomLayoutFlagAsync(userId, hasCustomLayout: true, ct);
             return new DashboardWidgetSaveResult([]);
         }
 
@@ -327,7 +349,8 @@ SET offset_top = @offset_top,
     title = @title,
     int_data = @int_data,
     string_data = @string_data,
-    content_scale = @content_scale
+    content_scale = @content_scale,
+    hide_titlebar_when_viewing = @hide_titlebar_when_viewing
 WHERE user_active_widget_id = @user_active_widget_id
   AND user_id = @user_id;";
 
@@ -359,7 +382,8 @@ INSERT INTO omp_portal.user_active_widgets
     title,
     int_data,
     string_data,
-    content_scale
+    content_scale,
+    hide_titlebar_when_viewing
 )
 OUTPUT INSERTED.user_active_widget_id
 VALUES
@@ -374,7 +398,8 @@ VALUES
     @title,
     @int_data,
     @string_data,
-    @content_scale
+    @content_scale,
+    @hide_titlebar_when_viewing
 );";
 
                 await using var insertCmd = new SqlCommand(insertSql, conn, tx);
@@ -384,6 +409,7 @@ VALUES
                 createdWidgets.Add(new DashboardWidgetSaveCreatedItem(update.UserActiveWidgetId, userActiveWidgetId));
             }
 
+            await SetCustomLayoutFlagAsync(conn, tx, userId, hasCustomLayout: true, ct);
             await tx.CommitAsync(ct);
             return new DashboardWidgetSaveResult(createdWidgets);
         }
@@ -410,13 +436,143 @@ WHERE user_id = @user_id
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-        cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = userActiveWidgetId;
-        await cmd.ExecuteNonQueryAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@user_active_widget_id", SqlDbType.BigInt).Value = userActiveWidgetId;
+            await cmd.ExecuteNonQueryAsync(ct);
+            await SetCustomLayoutFlagAsync(conn, tx, userId, hasCustomLayout: true, ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task ResetDashboardAsync(int userId, CancellationToken ct)
+        => await ResetDashboardToDefaultAsync(userId, ct);
+
+    public async Task ResetDashboardToDefaultAsync(int userId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await DeleteLayoutAsync(conn, tx, userId, ct);
+            await SetCustomLayoutFlagAsync(conn, tx, userId, hasCustomLayout: false, ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task ClearDashboardAsync(int userId, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await DeleteLayoutAsync(conn, tx, userId, ct);
+            await SetCustomLayoutFlagAsync(conn, tx, userId, hasCustomLayout: true, ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<int> SaveCurrentLayoutAsDefaultAsync(
+        int sourceUserId,
+        IReadOnlySet<int> roleIds,
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var sourceWidgets = await GetActiveWidgetsAsync(sourceUserId, roleIds, permissions, ct);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            await DeleteLayoutAsync(conn, tx, DefaultDashboardUserId, ct);
+            foreach (var widget in sourceWidgets)
+            {
+                await InsertLayoutWidgetAsync(conn, tx, DefaultDashboardUserId, widget, ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return sourceWidgets.Count;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    private async Task<bool> HasCustomDashboardLayoutAsync(int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CAST(CASE WHEN has_custom_dashboard_layout = 1 THEN 1 ELSE 0 END AS bit)
+FROM omp_portal.user_dashboard_preferences
+WHERE user_id = @user_id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is not null
+            && result != DBNull.Value
+            && Convert.ToBoolean(result, CultureInfo.InvariantCulture);
+    }
+
+    private async Task SetCustomLayoutFlagAsync(int userId, bool hasCustomLayout, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await SetCustomLayoutFlagAsync(conn, tx: null, userId, hasCustomLayout, ct);
+    }
+
+    private static async Task SetCustomLayoutFlagAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int userId,
+        bool hasCustomLayout,
+        CancellationToken ct)
+    {
+        const string sql = @"
+MERGE omp_portal.user_dashboard_preferences AS target
+USING (SELECT @user_id AS user_id) AS source
+ON target.user_id = source.user_id
+WHEN MATCHED THEN
+    UPDATE SET has_custom_dashboard_layout = @has_custom_dashboard_layout,
+               updated_at = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(user_id, align_to_grid, expanded_canvas, has_custom_dashboard_layout, updated_at)
+    VALUES(@user_id, 1, 1, @has_custom_dashboard_layout, SYSUTCDATETIME());";
+
+        await using var cmd = tx is null
+            ? new SqlCommand(sql, conn)
+            : new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@has_custom_dashboard_layout", SqlDbType.Bit).Value = hasCustomLayout;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task DeleteLayoutAsync(SqlConnection conn, SqlTransaction tx, int userId, CancellationToken ct)
     {
         const string sql = @"
 DELETE awd
@@ -428,10 +584,63 @@ WHERE aw.user_id = @user_id;
 DELETE FROM omp_portal.user_active_widgets
 WHERE user_id = @user_id;";
 
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task InsertLayoutWidgetAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        DashboardActiveWidget widget,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp_portal.user_active_widgets
+(
+    widget_id,
+    user_id,
+    offset_top,
+    offset_left,
+    width,
+    height,
+    order_priority,
+    title,
+    int_data,
+    string_data,
+    content_scale,
+    hide_titlebar_when_viewing
+)
+VALUES
+(
+    @widget_id,
+    @user_id,
+    @offset_top,
+    @offset_left,
+    @width,
+    @height,
+    @order_priority,
+    @title,
+    @int_data,
+    @string_data,
+    @content_scale,
+    @hide_titlebar_when_viewing
+);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widget.WidgetId;
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@offset_top", SqlDbType.Int).Value = Clamp(widget.OffsetTop, 0, MaxWidgetOffset);
+        cmd.Parameters.Add("@offset_left", SqlDbType.Int).Value = Clamp(widget.OffsetLeft, 0, MaxWidgetOffset);
+        cmd.Parameters.Add("@width", SqlDbType.Int).Value = Clamp(widget.Width, MinWidgetWidth, MaxWidgetWidth);
+        cmd.Parameters.Add("@height", SqlDbType.Int).Value = Clamp(widget.Height, MinWidgetHeight, MaxWidgetHeight);
+        cmd.Parameters.Add("@order_priority", SqlDbType.Int).Value = Clamp(widget.OrderPriority, 0, MaxWidgetOrder);
+        cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = CleanTitle(widget.Title) ?? (object)DBNull.Value;
+        cmd.Parameters.Add("@int_data", SqlDbType.Int).Value = widget.IntData.HasValue ? widget.IntData.Value : DBNull.Value;
+        cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(widget.StringData) ?? (object)DBNull.Value;
+        cmd.Parameters.Add("@content_scale", SqlDbType.Int).Value = Clamp(widget.ContentScale, MinWidgetContentScale, MaxWidgetContentScale);
+        cmd.Parameters.Add("@hide_titlebar_when_viewing", SqlDbType.Bit).Value = widget.HideTitlebarWhenViewing;
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -592,6 +801,7 @@ ORDER BY w.title,
         cmd.Parameters.Add("@int_data", SqlDbType.Int).Value = update.IntData.HasValue ? update.IntData.Value : DBNull.Value;
         cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(update.StringData) ?? (object)DBNull.Value;
         cmd.Parameters.Add("@content_scale", SqlDbType.Int).Value = Clamp(update.ContentScale, MinWidgetContentScale, MaxWidgetContentScale);
+        cmd.Parameters.Add("@hide_titlebar_when_viewing", SqlDbType.Bit).Value = update.HideTitlebarWhenViewing;
     }
 
     private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)

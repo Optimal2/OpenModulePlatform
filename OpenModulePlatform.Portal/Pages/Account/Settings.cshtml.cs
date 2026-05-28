@@ -18,9 +18,11 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 {
     public const string UserTab = "user";
     public const string PortalTab = "portal";
+    public const string AdminTab = "admin";
 
     private readonly PortalUserSettingsService _settings;
     private readonly PortalDashboardService _dashboard;
+    private readonly RbacService _rbac;
 
     public SettingsModel(
         IOptions<WebAppOptions> options,
@@ -31,6 +33,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     {
         _settings = settings;
         _dashboard = dashboard;
+        _rbac = rbac;
     }
 
     [BindProperty]
@@ -204,9 +207,52 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             return Forbid();
         }
 
-        await _dashboard.ResetDashboardAsync(userId, ct);
-        StatusMessage = T("Dashboard layout reset.");
+        await _dashboard.ResetDashboardToDefaultAsync(userId, ct);
+        StatusMessage = T("Dashboard layout reset to default.");
         return RedirectToSettings(PortalTab);
+    }
+
+    public async Task<IActionResult> OnPostClearDashboard(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        await _dashboard.ClearDashboardAsync(userId, ct);
+        StatusMessage = T("Dashboard cleared.");
+        return RedirectToSettings(PortalTab);
+    }
+
+    public async Task<IActionResult> OnPostSaveDefaultDashboard(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        var guard = await LoadAsync(userId, AdminTab, loadUserInput: true, loadPortalInput: true, ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        if (!IsPortalAdmin)
+        {
+            return Forbid();
+        }
+
+        var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
+        var count = await _dashboard.SaveCurrentLayoutAsDefaultAsync(
+            userId,
+            roleContext.EffectiveRoleIds.ToHashSet(),
+            roleContext.EffectivePermissions,
+            ct);
+        StatusMessage = string.Format(
+            CultureInfo.CurrentCulture,
+            T("Default dashboard layout saved. Widgets: {0}."),
+            count);
+        return RedirectToSettings(AdminTab);
     }
 
     public bool IsActiveTab(string tab)
@@ -244,6 +290,10 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         var permissions = await GetUserPermissionsAsync(ct);
         IsPortalAdmin = permissions.Contains(OmpPortalPermissions.Admin);
         ViewData["IsPortalAdmin"] = IsPortalAdmin;
+        if (!IsPortalAdmin && string.Equals(ActiveTab, AdminTab, StringComparison.OrdinalIgnoreCase))
+        {
+            ActiveTab = PortalTab;
+        }
 
         return null;
     }
@@ -259,9 +309,11 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     }
 
     private static string NormalizeTab(string? tab)
-        => string.Equals(tab, PortalTab, StringComparison.OrdinalIgnoreCase)
-            ? PortalTab
-            : UserTab;
+        => string.Equals(tab, AdminTab, StringComparison.OrdinalIgnoreCase)
+            ? AdminTab
+            : string.Equals(tab, PortalTab, StringComparison.OrdinalIgnoreCase)
+                ? PortalTab
+                : UserTab;
 
     private LocalRedirectResult RedirectToSettings(string tab)
         => LocalRedirect($"/account/settings?tab={Uri.EscapeDataString(tab)}");
