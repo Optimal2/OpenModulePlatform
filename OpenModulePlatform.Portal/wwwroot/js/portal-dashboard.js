@@ -57,6 +57,7 @@
             savedSnapshot: null,
             savedSignature: '',
             editCanvasWidth: 0,
+            editCanvasHeight: 0,
             draftWriteTimer: 0
         };
         const updateDirtyState = () => {
@@ -249,6 +250,7 @@
             if (!isEditing) {
                 clearWidgetSelection(root, canvas);
                 state.editCanvasWidth = 0;
+                state.editCanvasHeight = 0;
             }
             editToggle.setAttribute('aria-pressed', isEditing ? 'true' : 'false');
             if (editLabel) {
@@ -1934,13 +1936,22 @@
         const lowestWidgetBottom = widgets
             .reduce((max, widget) => Math.max(max, parsePixel(widget.style.top) + widget.offsetHeight), 0);
         const isEditing = root.classList.contains('is-editing');
-        const nextHeight = isEditing
+        let nextHeight = isEditing
             ? Math.max(
                 getMinCanvasHeight(root, canvas, state),
                 lowestWidgetBottom + (state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)))
             : widgets.length > 0
                 ? lowestWidgetBottom + (state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding))
                 : (state?.emptyCanvasHeight ?? parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight));
+        if (isEditing && state) {
+            state.editCanvasHeight = Math.max(
+                state.editCanvasHeight || 0,
+                nextHeight,
+                Math.ceil(canvas.getBoundingClientRect().height));
+            nextHeight = state.editCanvasHeight;
+        } else if (state) {
+            state.editCanvasHeight = 0;
+        }
         canvas.style.setProperty('--dashboard-canvas-height', `${Math.ceil(nextHeight)}px`);
         updateCanvasWidth(root, canvas, state);
     }
