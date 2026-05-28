@@ -65,6 +65,7 @@ artifacts/
 host-configs/
 config-overlays/
 widgets/
+widget-data/
 ```
 
 Host-specific objects use the same root folders. Put them in a host subfolder
@@ -89,6 +90,7 @@ Supported item kinds:
 | `host-configuration` | `host-configs/` | `.json`, `.zip` | Host bootstrap/configuration object. |
 | `config-overlay` | `config-overlays/` | `.json`, `.zip` | Host-specific config files applied outside artifact hashes. |
 | `dashboard-widget` | `widgets/` | `.json` | Portal dashboard widget package JSON. |
+| `widget-data` | `widget-data/` | `.zip` | Portal shared widget runtime data package containing `widget_data` JSON plus remappable `widget_binary_data` files. |
 
 Paths in the manifest must be relative package paths. Absolute paths, drive
 letters, `..` segments, and invalid file-name characters are rejected.
@@ -108,11 +110,13 @@ installer/
       host-configs/
       config-overlays/
       widgets/
+      widget-data/
     hosts/
       <host-key>/
         host-configs/
         config-overlays/
         widgets/
+        widget-data/
 ```
 
 The private deployment repository can also keep host profiles beside the
@@ -133,8 +137,8 @@ prompt does not block the installer indefinitely. Then use `Create universal
 package` to choose:
 
 - the target host profile, or a global-only package
-- global module definitions, artifacts, host configs, overlays, and widgets
-- host-specific host configs, overlays, and widgets for the selected profile
+- global module definitions, artifacts, host configs, overlays, widgets, and widget data
+- host-specific host configs, overlays, widgets, and widget data for the selected profile
 - the output zip path
 
 The generated zip contains `omp-universal-package.json` and only the selected
@@ -146,8 +150,10 @@ Portal also supports universal package import and export. Universal imports can
 be run in two modes: import all supported items immediately, or preview the zip
 and select individual manifest paths before importing. Universal export lets an
 administrator choose module definitions, artifacts, host configurations, config
-overlays, and widgets from the current OMP installation and emits the same folder
-layout and manifest format.
+overlays, widgets, and optionally the shared runtime data for selected widgets
+from the current OMP installation. Widget runtime data is exported under
+`widget-data/` as a zip whose inner manifest remaps source `binaryDataId` values
+to the target installation during import.
 
 The standalone tool at `tools/universal-package-builder/index.html` creates the
 same zip format entirely in the browser. It is available in Portal through the

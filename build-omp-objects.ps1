@@ -16,7 +16,8 @@ param(
     [string[]]$ArtifactConfigurationFile = @(),
     [string[]]$HostConfigurationFile = @(),
     [string[]]$ConfigOverlayFile = @(),
-    [string[]]$WidgetFile = @()
+    [string[]]$WidgetFile = @(),
+    [string[]]$WidgetDataFile = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,4 +37,5 @@ $scriptPath = Join-Path $repositoryRoot 'scripts\omp\build-repository-objects.ps
     -ArtifactConfigurationFile $ArtifactConfigurationFile `
     -HostConfigurationFile $HostConfigurationFile `
     -ConfigOverlayFile $ConfigOverlayFile `
-    -WidgetFile $WidgetFile
+    -WidgetFile $WidgetFile `
+    -WidgetDataFile $WidgetDataFile
