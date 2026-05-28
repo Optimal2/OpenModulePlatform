@@ -1128,9 +1128,10 @@ public sealed class HostAgentSelfUpgradeService
             .Concat(GetCredentialStoreProtectedDirectories(settings))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var directory in Directory.EnumerateDirectories(allowedRoot, "HostAgent-*", SearchOption.TopDirectoryOnly))
+        foreach (var fullDirectory in Directory
+                     .EnumerateDirectories(allowedRoot, "HostAgent-*", SearchOption.TopDirectoryOnly)
+                     .Select(Path.GetFullPath))
         {
-            var fullDirectory = Path.GetFullPath(directory);
             if (protectedDirectories.Contains(fullDirectory))
             {
                 continue;

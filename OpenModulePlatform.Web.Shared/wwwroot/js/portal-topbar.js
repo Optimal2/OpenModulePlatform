@@ -180,6 +180,12 @@
         }
 
         return new Promise(function (resolve, reject) {
+            function reportFallbackFailure(error) {
+                if (window.console && typeof window.console.warn === 'function') {
+                    window.console.warn('Clipboard fallback copy failed.', error);
+                }
+            }
+
             try {
                 var textArea = document.createElement('textarea');
                 textArea.value = text;
@@ -198,8 +204,11 @@
                 }
 
                 document.body.removeChild(textArea);
-                reject(new Error('Copy command failed.'));
+                var failure = new Error('Copy command failed.');
+                reportFallbackFailure(failure);
+                reject(failure);
             } catch (error) {
+                reportFallbackFailure(error);
                 reject(error);
             }
         });

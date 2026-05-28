@@ -900,9 +900,11 @@ public sealed class WebAppDeploymentService
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start '{fileName}'.");
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
+        var output = outputTask.GetAwaiter().GetResult();
+        var error = errorTask.GetAwaiter().GetResult();
 
         return new ProcessResult(process.ExitCode, output, error);
     }

@@ -603,7 +603,8 @@ WHEN NOT MATCHED THEN
     private static string CleanFileName(string value)
     {
         var fileName = Path.GetFileName(value.Replace('\\', '/'));
-        var cleaned = string.Concat(fileName.Where(ch => !Path.GetInvalidFileNameChars().Contains(ch))).Trim();
+        var invalidFileNameChars = Path.GetInvalidFileNameChars();
+        var cleaned = string.Concat(fileName.Where(ch => !invalidFileNameChars.Contains(ch))).Trim();
         return string.IsNullOrWhiteSpace(cleaned)
             ? "track.mp3"
             : cleaned.Length > 260 ? cleaned[..260] : cleaned;
