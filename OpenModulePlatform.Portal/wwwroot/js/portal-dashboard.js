@@ -164,7 +164,7 @@
         });
 
         picker?.querySelectorAll('[data-widget-option]').forEach((option) => {
-            option.addEventListener('click', async () => {
+            const addSelectedWidget = async () => {
                 const widgetId = parseInt(option.dataset.widgetId || '0', 10);
                 if (!widgetId) {
                     return;
@@ -198,6 +198,16 @@
                 if (!isEditing) {
                     setEditing(true);
                 }
+            };
+
+            option.addEventListener('click', addSelectedWidget);
+            option.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') {
+                    return;
+                }
+
+                event.preventDefault();
+                addSelectedWidget();
             });
         });
 
