@@ -27,8 +27,8 @@ public sealed class PortalDashboardService
     private const int MaxWidgetHeight = 1400;
     private const int MaxWidgetOffset = 10000;
     private const int MaxWidgetOrder = 10000;
-    private const int MinWidgetContentScale = -100;
-    private const int MaxWidgetContentScale = 100;
+    private const int MinWidgetContentScale = 25;
+    private const int MaxWidgetContentScale = 200;
 
     private readonly SqlConnectionFactory _db;
     private readonly AppCatalogService _catalog;
@@ -310,7 +310,7 @@ ORDER BY COALESCE(c.sort_order, 2147483647),
             Width = defaultWidth,
             Height = defaultHeight,
             OrderPriority = 10,
-            ContentScale = 0
+            ContentScale = 100
         };
     }
 

@@ -2159,6 +2159,8 @@
   <data name="1 column" xml:space="preserve"><value>1 kolumn</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 kolumner</value></data>
   <data name="3 columns" xml:space="preserve"><value>3 kolumner</value></data>
+  <data name="4 columns" xml:space="preserve"><value>4 kolumner</value></data>
+  <data name="5 columns" xml:space="preserve"><value>5 kolumner</value></data>
   <data name="Content scale" xml:space="preserve"><value>Innehållsskala</value></data>
   <data name="Dashboard actions" xml:space="preserve"><value>Dashboardåtgärder</value></data>
   <data name="Dashboard layout reset." xml:space="preserve"><value>Dashboard-layouten har återställts.</value></data>
