@@ -3643,12 +3643,11 @@ ORDER BY ar.ArtifactId DESC;
         IReadOnlyList<BootstrapConfigProfile> configProfiles)
     {
         var choices = new Dictionary<string, UniversalPackageHostChoice>(StringComparer.OrdinalIgnoreCase);
-        foreach (var choice in configProfiles.Select(CreateUniversalPackageHostChoice))
+        foreach (var choice in configProfiles
+                     .Select(CreateUniversalPackageHostChoice)
+                     .Where(static choice => !string.IsNullOrWhiteSpace(choice.HostKey)))
         {
-            if (!string.IsNullOrWhiteSpace(choice.HostKey))
-            {
-                choices.TryAdd(choice.HostKey, choice);
-            }
+            choices.TryAdd(choice.HostKey!, choice);
         }
 
         return choices.Values

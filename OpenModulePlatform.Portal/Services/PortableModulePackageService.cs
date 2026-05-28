@@ -343,7 +343,7 @@ public sealed class PortableModulePackageService
 
         try
         {
-            var preview = await PreviewUniversalPackageFileAsync(packagePath, token, ct);
+            var preview = PreviewUniversalPackageFile(packagePath, token);
             return preview;
         }
         catch
@@ -388,10 +388,9 @@ public sealed class PortableModulePackageService
         }
     }
 
-    private async Task<UniversalPackagePreviewResult> PreviewUniversalPackageFileAsync(
+    private UniversalPackagePreviewResult PreviewUniversalPackageFile(
         string packagePath,
-        string token,
-        CancellationToken ct)
+        string token)
     {
         var extractionRoot = CreateTempRoot("portal-universal-module-package-preview");
         try
@@ -403,7 +402,6 @@ public sealed class PortableModulePackageService
                     item.Path,
                     item.SourceName))
                 .ToArray();
-            await Task.CompletedTask;
             return new UniversalPackagePreviewResult(
                 token,
                 package.SourceName,
