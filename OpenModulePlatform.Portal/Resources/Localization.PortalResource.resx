@@ -2064,6 +2064,8 @@
   <data name="1 column" xml:space="preserve"><value>1 column</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 columns</value></data>
   <data name="3 columns" xml:space="preserve"><value>3 columns</value></data>
+  <data name="4 columns" xml:space="preserve"><value>4 columns</value></data>
+  <data name="5 columns" xml:space="preserve"><value>5 columns</value></data>
   <data name="Content scale" xml:space="preserve"><value>Content scale</value></data>
   <data name="Dashboard actions" xml:space="preserve"><value>Dashboard actions</value></data>
   <data name="Dashboard layout reset." xml:space="preserve"><value>Dashboard layout reset.</value></data>
