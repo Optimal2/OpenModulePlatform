@@ -14,6 +14,7 @@ one universal zip containing:
   host-configs/
   config-overlays/
   widgets/
+  widget-data/
 
 Run without a host profile to create a global package. Pass -HostProfilePath or
 -TargetHostProfile with host-specific config/overlay/widget inputs to create a
@@ -26,6 +27,7 @@ The optional host profile is JSON. Its supported fields are:
   hostConfigurationFiles
   configOverlayFiles
   widgetFiles
+  widgetDataFiles
   modules
 
 Each file list may contain either strings in the same syntax as the matching
@@ -54,7 +56,8 @@ param(
     [string[]]$ArtifactConfigurationFile = @(),
     [string[]]$HostConfigurationFile = @(),
     [string[]]$ConfigOverlayFile = @(),
-    [string[]]$WidgetFile = @()
+    [string[]]$WidgetFile = @(),
+    [string[]]$WidgetDataFile = @()
 )
 
 Set-StrictMode -Version Latest
@@ -231,6 +234,14 @@ function Add-ProfileObjectArguments {
 
         $script:WidgetFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'widgetFiles')
     }
+
+    foreach ($entry in @((Get-JsonPropertyValue -Object $Profile -Name 'widgetDataFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $script:WidgetDataFile += (Convert-ProfilePortableFile -Entry $entry -BasePath $basePath -ListName 'widgetDataFiles')
+    }
 }
 
 function Add-HostProfileArguments {
@@ -362,7 +373,8 @@ function Get-UniversalPackageFiles {
         @{ Folder = 'host-configs'; Kind = 'host-configuration'; Pattern = '*.zip' },
         @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Pattern = '*.json' },
         @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Pattern = '*.zip' },
-        @{ Folder = 'widgets'; Kind = 'dashboard-widget'; Pattern = '*.json' }
+        @{ Folder = 'widgets'; Kind = 'dashboard-widget'; Pattern = '*.json' },
+        @{ Folder = 'widget-data'; Kind = 'widget-data'; Pattern = '*.zip' }
     )
 
     $items = [System.Collections.Generic.List[object]]::new()
@@ -477,6 +489,10 @@ try {
 
     if ($WidgetFile.Count -gt 0) {
         $builderArgs.WidgetFile = $WidgetFile
+    }
+
+    if ($WidgetDataFile.Count -gt 0) {
+        $builderArgs.WidgetDataFile = $WidgetDataFile
     }
 
     & $buildRepositoryObjectsScript @builderArgs

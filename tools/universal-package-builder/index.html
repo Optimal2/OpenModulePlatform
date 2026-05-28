@@ -185,7 +185,7 @@
 <main class="page">
     <header>
         <h1>OMP Universal Package Builder</h1>
-        <p>Create a universal package zip with module definitions, artifact packages, host configs, config overlays, and widgets.</p>
+        <p>Create a universal package zip with module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data.</p>
     </header>
 
     <section class="card">
@@ -225,6 +225,7 @@
                     <option value="host-config">Host configuration JSON/zip</option>
                     <option value="config-overlay">Config overlay JSON/zip</option>
                     <option value="dashboard-widget">Dashboard widget JSON</option>
+                    <option value="widget-data">Widget runtime data zip</option>
                 </select>
             </div>
             <div class="field">
@@ -269,7 +270,8 @@
         "artifact-package": "artifacts",
         "host-config": "host-configs",
         "config-overlay": "config-overlays",
-        "dashboard-widget": "widgets"
+        "dashboard-widget": "widgets",
+        "widget-data": "widget-data"
     };
 
     const items = [];
@@ -328,7 +330,7 @@
         const folder = folderByKind[kind];
         const host = sanitizeSegment(hostFolder.value);
         const useHostFolder = hostFolder.value.trim().length > 0
-            && (kind === "host-config" || kind === "config-overlay" || kind === "dashboard-widget");
+            && (kind === "host-config" || kind === "config-overlay" || kind === "dashboard-widget" || kind === "widget-data");
         const selectedFiles = Array.from(objectFiles.files || []);
         for (const file of selectedFiles) {
             const path = normalizePath(`${folder}/${useHostFolder ? `${host}/` : ""}${file.name}`);

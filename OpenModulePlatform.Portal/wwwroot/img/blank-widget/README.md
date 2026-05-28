@@ -26,3 +26,10 @@ panel on the dashboard. A ZIP import can include `.gif`, `.png`, `.jpg`, or
   ]
 }
 ```
+
+Universal packages can also carry shared blank-widget runtime data. Export the
+blank widget definition from Portal and enable `Include runtime data for
+selected widgets` to add a `widget-data/*.zip` object with the image-list JSON
+and binary media. Importers remap source `binaryDataId` values to the target
+database, so the package can be moved between installations without storing
+custom media in the Portal web artifact.
