@@ -510,13 +510,9 @@ WHEN NOT MATCHED THEN
                 obj[BinaryDataIdPropertyName] = hashTargetId.Value;
             }
 
-            foreach (var propertyName in obj.Select(static property => property.Key).ToArray())
+            foreach (var value in obj.Select(static property => property.Value).Where(static value => value is not null).ToArray())
             {
-                var value = obj[propertyName];
-                if (value is not null)
-                {
-                    RemapBinaryDataReferencesInPlace(value, binaryIdMap, binaryHashMap);
-                }
+                RemapBinaryDataReferencesInPlace(value!, binaryIdMap, binaryHashMap);
             }
         }
         else if (node is JsonArray array)

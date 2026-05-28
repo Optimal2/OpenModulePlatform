@@ -3635,13 +3635,9 @@ WHEN NOT MATCHED THEN
                 obj["binaryDataId"] = hashTargetId.Value;
             }
 
-            foreach (var propertyName in obj.Select(static property => property.Key).ToArray())
+            foreach (var value in obj.Select(static property => property.Value).Where(static value => value is not null).ToArray())
             {
-                var value = obj[propertyName];
-                if (value is not null)
-                {
-                    RemapWidgetRuntimeBinaryDataReferencesInPlace(value, binaryIdMap, binaryHashMap);
-                }
+                RemapWidgetRuntimeBinaryDataReferencesInPlace(value!, binaryIdMap, binaryHashMap);
             }
         }
         else if (node is JsonArray array)

@@ -2808,14 +2808,11 @@ internal static partial class Program
                 yield break;
             }
 
-            foreach (var item in path.Split(
-                         Path.PathSeparator,
-                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            foreach (var item in path
+                         .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                         .Where(Directory.Exists))
             {
-                if (Directory.Exists(item))
-                {
-                    yield return item;
-                }
+                yield return item;
             }
         }
 
