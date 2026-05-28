@@ -2227,4 +2227,6 @@
   <data name="The selected image is too large." xml:space="preserve"><value>Den valda bilden är för stor.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Visa dashboardens navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under topbaren.</value></data>
+  <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Skapa en universal-zip med valfri mix av moduldefinitioner, artefaktpaket, host-konfigurationer, config overlays, widgets och widget-runtime-data.</value></data>
+  <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Inkludera runtime-data för valda widgets</value></data>
 </root>

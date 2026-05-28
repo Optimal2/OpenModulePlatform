@@ -2124,4 +2124,6 @@
   <data name="The selected image is too large." xml:space="preserve"><value>The selected image is too large.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Show dashboard navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>When this is turned off, the dashboard navbar below the topbar is hidden.</value></data>
+  <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data.</value></data>
+  <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Include runtime data for selected widgets</value></data>
 </root>

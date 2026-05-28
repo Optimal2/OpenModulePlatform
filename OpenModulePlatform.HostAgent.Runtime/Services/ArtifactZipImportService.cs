@@ -532,6 +532,11 @@ public sealed class ArtifactZipImportService
             itemResults.Add(await ImportUniversalDashboardWidgetItemAsync(item, cancellationToken));
         }
 
+        foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.WidgetRuntimeData))
+        {
+            itemResults.Add(await ImportUniversalWidgetRuntimeDataItemAsync(item, cancellationToken));
+        }
+
         foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.Unknown))
         {
             itemResults.Add(new UniversalHostAgentImportItemResult(
@@ -748,6 +753,27 @@ public sealed class ArtifactZipImportService
         catch (Exception ex) when (IsExpectedImportFailure(ex))
         {
             return new UniversalHostAgentImportItemResult("dashboard-widget", item.Path, "Failed", ex.Message);
+        }
+    }
+
+    private async Task<UniversalHostAgentImportItemResult> ImportUniversalWidgetRuntimeDataItemAsync(
+        PortableUniversalModulePackageItem item,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var reader = new WidgetRuntimeDataPackageReader();
+            var package = reader.Read(item.ExtractedPath);
+            var result = await _repository.SaveImportedWidgetRuntimeDataAsync(package, cancellationToken);
+            return new UniversalHostAgentImportItemResult(
+                "widget-data",
+                item.Path,
+                "Imported",
+                $"Data documents: {result.DataDocumentCount}; binary rows inserted: {result.InsertedBinaryDataCount}; binary rows reused: {result.ReusedBinaryDataCount}.");
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            return new UniversalHostAgentImportItemResult("widget-data", item.Path, "Failed", ex.Message);
         }
     }
 

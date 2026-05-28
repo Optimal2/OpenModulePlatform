@@ -3374,11 +3374,16 @@ SELECT COUNT(1) FROM @changes;
             Path.Join(availableRoot, "widgets"),
             "*.json",
             overwrite);
+        var widgetDataCopied = CopyAvailableDeploymentObjects(
+            ResolvePackageWidgetDataRoot(payloadRoot),
+            Path.Join(availableRoot, "widget-data"),
+            "*.zip",
+            overwrite);
 
-        if (definitionsCopied > 0 || artifactsCopied > 0 || hostConfigsCopied > 0 || configOverlaysCopied > 0 || widgetsCopied > 0)
+        if (definitionsCopied > 0 || artifactsCopied > 0 || hostConfigsCopied > 0 || configOverlaysCopied > 0 || widgetsCopied > 0 || widgetDataCopied > 0)
         {
             Console.WriteLine(
-                $"> Available package library: {definitionsCopied} module definition(s), {artifactsCopied} artifact package(s), {hostConfigsCopied} host config(s), {configOverlaysCopied} config overlay(s), {widgetsCopied} widget(s)");
+                $"> Available package library: {definitionsCopied} module definition(s), {artifactsCopied} artifact package(s), {hostConfigsCopied} host config(s), {configOverlaysCopied} config overlay(s), {widgetsCopied} widget(s), {widgetDataCopied} widget data package(s)");
         }
     }
 
@@ -5166,6 +5171,9 @@ VALUES
 
     private static string ResolvePackageWidgetsRoot(string packageRoot)
         => ResolvePath(packageRoot, Path.Join("data", "global", "widgets"));
+
+    private static string ResolvePackageWidgetDataRoot(string packageRoot)
+        => ResolvePath(packageRoot, Path.Join("data", "global", "widget-data"));
 
     private static IEnumerable<string> EnumerateHostAndGlobalDataRoots(string packageRoot, string configPath)
     {

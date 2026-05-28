@@ -3323,7 +3323,7 @@ ORDER BY ar.ArtifactId DESC;
             {
                 AutoSize = true,
                 MaximumSize = new Size(880, 0),
-                Text = "Create a universal package zip from the installer's object archive. The zip uses the same folders as the local archive: module-definitions, artifacts, host-configs, config-overlays, and widgets."
+                Text = "Create a universal package zip from the installer's object archive. The zip uses the same folders as the local archive: module-definitions, artifacts, host-configs, config-overlays, widgets, and widget-data."
             }, 0, 0);
 
             var identityGrid = new TableLayoutPanel
@@ -3699,8 +3699,14 @@ ORDER BY ar.ArtifactId DESC;
                 candidates,
                 ResolvePackageWidgetsRoot(payloadRoot),
                 "widgets",
-                "widget",
+                "dashboard-widget",
                 "*.json");
+            AddUniversalPackageCandidates(
+                candidates,
+                ResolvePackageWidgetDataRoot(payloadRoot),
+                "widget-data",
+                "widget-data",
+                "*.zip");
         }
 
         if (includeHostSpecific && !string.IsNullOrWhiteSpace(hostChoice?.HostKey))
@@ -3726,8 +3732,14 @@ ORDER BY ar.ArtifactId DESC;
                     candidates,
                     Path.Join(root, "widgets"),
                     $"widgets/{hostSegment}",
-                    "widget",
+                    "dashboard-widget",
                     "*.json");
+                AddUniversalPackageCandidates(
+                    candidates,
+                    Path.Join(root, "widget-data"),
+                    $"widget-data/{hostSegment}",
+                    "widget-data",
+                    "*.zip");
             }
         }
 

@@ -31,6 +31,7 @@ builder.Services.AddScoped<PortalDashboardService>();
 builder.Services.AddScoped<PortalBlankWidgetService>();
 builder.Services.AddScoped<PortalMusicPlayerService>();
 builder.Services.AddScoped<PortalDashboardWidgetPackageService>();
+builder.Services.AddScoped<PortalWidgetRuntimeDataPackageService>();
 builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<RbacAdminRepository>();
 builder.Services.AddScoped<PortableModulePackageService>();

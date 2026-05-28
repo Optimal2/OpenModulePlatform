@@ -114,6 +114,7 @@ shared object parameters:
 - `-HostConfigurationFile`
 - `-ConfigOverlayFile`
 - `-WidgetFile`
+- `-WidgetDataFile`
 
 Sibling repositories should also accept `-OmpRepositoryRoot` and the
 `OMP_REPOSITORY_ROOT` environment variable so CI and non-sibling checkouts can
@@ -127,6 +128,7 @@ artifacts/
 host-configs/
 config-overlays/
 widgets/
+widget-data/
 ```
 
 When `-ComponentKey` is used, the generated object set is scoped to the selected

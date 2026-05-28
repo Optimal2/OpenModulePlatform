@@ -674,7 +674,7 @@
 
     <section class="card workflow-panel" data-workflow-panel="export-universal" hidden>
         <h3>@L["Export universal module package"]</h3>
-        <p class="muted">@L["Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, and widgets."]</p>
+        <p class="muted">@L["Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data."]</p>
 
         <form method="get" asp-page-handler="ExportUniversal" class="form-grid top-gap">
             <div class="field-grid field-grid--2">
@@ -710,6 +710,10 @@
                 <label class="checkbox-row checkbox-row--boxed">
                     <input asp-for="UniversalExportInput.IncludeAllArtifactVersions" type="checkbox" />
                     <span>@L["Include historical artifact versions for selected modules"]</span>
+                </label>
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalExportInput.IncludeWidgetRuntimeData" type="checkbox" />
+                    <span>@L["Include runtime data for selected widgets"]</span>
                 </label>
             </div>
 

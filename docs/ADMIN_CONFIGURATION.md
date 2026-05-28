@@ -143,6 +143,15 @@ widget stores only the selected image id in `user_active_widgets.string_data`.
 This keeps image media out of the Portal web artifact so upgrades do not remove
 administrator-uploaded dashboard decoration.
 
+Shared widget runtime data can be transported in universal packages. Select the
+widget definitions in the universal export form and enable `Include runtime data
+for selected widgets`. Portal writes a `widget-data/*.zip` object containing the
+shared `widget_data` JSON plus the referenced `widget_binary_data` rows. During
+import, Portal and HostAgent insert or reuse binary rows and remap source
+`binaryDataId` values in the JSON to the target installation's database ids.
+This is the preferred transport for music-player MP3s and custom blank-widget
+images when moving dashboard media between environments.
+
 Portal administrators can import and export widget definitions from
 `/admin/dashboardwidgets`. This lets module-specific widgets live beside the
 module that owns them, including modules maintained in private repositories.

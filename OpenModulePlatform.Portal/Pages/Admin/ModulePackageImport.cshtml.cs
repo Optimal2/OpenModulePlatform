@@ -989,6 +989,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
         public List<int> WidgetIds { get; set; } = [];
 
+        public bool IncludeWidgetRuntimeData { get; set; }
+
         public UniversalPackageExportRequest ToRequest()
             => new(
                 PackageKey,
@@ -1002,7 +1004,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 ArtifactIds,
                 HostConfigurationDocumentIds,
                 ConfigOverlayDocumentIds,
-                WidgetIds);
+                WidgetIds,
+                IncludeWidgetRuntimeData);
     }
 
     public sealed class ArtifactUploadInputModel

@@ -27,6 +27,7 @@ public sealed class PortableModulePackageService
     private const string HostConfigurationsFolder = "host-configs";
     private const string ConfigOverlaysFolder = "config-overlays";
     private const string WidgetsFolder = "widgets";
+    private const string WidgetDataFolder = "widget-data";
 
     private static readonly Regex MetadataTokenPattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
@@ -42,15 +43,18 @@ public sealed class PortableModulePackageService
     private readonly OmpAdminRepository _repo;
     private readonly ArtifactUploadOptions _options;
     private readonly PortalDashboardWidgetPackageService _widgets;
+    private readonly PortalWidgetRuntimeDataPackageService _widgetRuntimeData;
 
     public PortableModulePackageService(
         OmpAdminRepository repo,
         IOptions<ArtifactUploadOptions> options,
-        PortalDashboardWidgetPackageService widgets)
+        PortalDashboardWidgetPackageService widgets,
+        PortalWidgetRuntimeDataPackageService widgetRuntimeData)
     {
         _repo = repo;
         _options = options.Value;
         _widgets = widgets;
+        _widgetRuntimeData = widgetRuntimeData;
     }
 
     public IReadOnlyList<AvailablePortableModulePackage> GetAvailablePackages()
@@ -504,6 +508,11 @@ public sealed class PortableModulePackageService
                 results.Add(await ImportUniversalWidgetItemAsync(item, ct));
             }
 
+            foreach (var item in packageItems.Where(static item => item.Kind == UniversalModulePackageItemKind.WidgetRuntimeData))
+            {
+                results.Add(await ImportUniversalWidgetRuntimeDataItemAsync(item, ct));
+            }
+
             foreach (var item in packageItems.Where(static item => item.Kind == UniversalModulePackageItemKind.Unknown))
             {
                 results.Add(new UniversalPackageImportItemResult(
@@ -629,6 +638,25 @@ public sealed class PortableModulePackageService
         catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
         {
             return new UniversalPackageImportItemResult("dashboard-widget", item.Path, "Failed", ex.Message);
+        }
+    }
+
+    private async Task<UniversalPackageImportItemResult> ImportUniversalWidgetRuntimeDataItemAsync(
+        PortableUniversalModulePackageItem item,
+        CancellationToken ct)
+    {
+        try
+        {
+            var result = await _widgetRuntimeData.ImportAsync(item.ExtractedPath, ct);
+            return new UniversalPackageImportItemResult(
+                "widget-data",
+                item.Path,
+                "Imported",
+                $"Data documents: {result.DataDocumentCount}; binary rows inserted: {result.InsertedBinaryDataCount}; binary rows reused: {result.ReusedBinaryDataCount}.");
+        }
+        catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+        {
+            return new UniversalPackageImportItemResult("widget-data", item.Path, "Failed", ex.Message);
         }
     }
 
@@ -869,6 +897,18 @@ public sealed class PortableModulePackageService
                     var entryName = $"{WidgetsFolder}/{Path.GetFileName(widgets.FileName)}";
                     await AddBytesEntryAsync(archive, usedEntryNames, entryName, widgets.Content, ct);
                     items.Add(CreateUniversalPackageItem("dashboard-widget", entryName));
+
+                    if (request.IncludeWidgetRuntimeData)
+                    {
+                        var runtimeData = await _widgetRuntimeData.ExportAsync(request.WidgetIds, ct);
+                        if (runtimeData is not null)
+                        {
+                            var runtimeDataEntryName = $"{WidgetDataFolder}/{Path.GetFileName(runtimeData.FileName)}";
+                            AddFileEntry(archive, usedEntryNames, runtimeData.PackagePath, runtimeDataEntryName);
+                            items.Add(CreateUniversalPackageItem("widget-data", runtimeDataEntryName));
+                            TryDelete(Path.GetDirectoryName(runtimeData.PackagePath)!);
+                        }
+                    }
                 }
 
                 if (items.Count == 0)
@@ -2342,7 +2382,8 @@ public sealed record UniversalPackageExportRequest(
     IReadOnlyList<int> ArtifactIds,
     IReadOnlyList<int> HostConfigurationDocumentIds,
     IReadOnlyList<int> ConfigOverlayDocumentIds,
-    IReadOnlyList<int> WidgetIds);
+    IReadOnlyList<int> WidgetIds,
+    bool IncludeWidgetRuntimeData);
 
 public sealed record UniversalPackagePreviewResult(
     string Token,

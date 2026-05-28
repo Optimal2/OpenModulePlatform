@@ -54,12 +54,14 @@ client-side object URLs and are never uploaded to the server.
 
 ## Deployment And Packages
 
-MP3 files should travel through Portal admin upload, a purpose-built SQL seed,
-or a future universal-package object that writes to `omp_portal.widget_data` and
+MP3 files should travel through Portal admin upload or a universal package
+`widget-data/` object that writes to `omp_portal.widget_data` and
 `omp_portal.widget_binary_data`. They should not travel as files in the Portal
 artifact folder.
 
 The dashboard widget definition itself is separate from the media files. Widget
 metadata can be exported and imported through Portal or universal packages under
-`widgets/`, while the shared widget runtime data remains in Portal database
-tables.
+`widgets/`. When exporting a universal package from Portal, enable
+`Include runtime data for selected widgets` to add a `widget-data/*.zip` object
+with the playlist JSON and MP3 binaries. Importers remap `binaryDataId` values
+so the package can move between installations safely.

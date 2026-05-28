@@ -14,6 +14,13 @@ public sealed class OmpHostArtifactRepository
 {
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
 
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        WriteIndented = true
+    };
+
     private readonly SqlConnectionFactory _db;
 
     public OmpHostArtifactRepository(SqlConnectionFactory db)
@@ -692,6 +699,58 @@ WHERE OverlayKey = @overlayKey
 
             await tx.CommitAsync(ct);
             return (created, updated, permissionRows);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<(int DataDocumentCount, int InsertedBinaryDataCount, int ReusedBinaryDataCount)> SaveImportedWidgetRuntimeDataAsync(
+        PortableWidgetRuntimeDataPackage input,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            await EnsureWidgetRuntimeDataTablesAsync(conn, tx, ct);
+
+            var insertedBinaryRows = 0;
+            var reusedBinaryRows = 0;
+            var binaryIdMap = new Dictionary<long, long>();
+            foreach (var binary in input.BinaryData)
+            {
+                var targetId = await FindExistingWidgetRuntimeBinaryDataIdAsync(conn, tx, binary, ct);
+                if (targetId.HasValue)
+                {
+                    reusedBinaryRows++;
+                    await UpdateWidgetRuntimeBinaryDataEnabledStateAsync(conn, tx, targetId.Value, binary.IsEnabled, ct);
+                }
+                else
+                {
+                    targetId = await InsertWidgetRuntimeBinaryDataAsync(conn, tx, binary, ct);
+                    insertedBinaryRows++;
+                }
+
+                binaryIdMap[binary.SourceBinaryDataId] = targetId.Value;
+            }
+
+            var dataDocuments = 0;
+            foreach (var document in input.DataDocuments)
+            {
+                var widgetId = await GetWidgetRuntimeDataWidgetIdAsync(conn, tx, document.WidgetKey, ct)
+                    ?? throw new InvalidOperationException($"Dashboard widget '{document.WidgetKey}' was not found. Import the widget definition before importing widget runtime data.");
+                var jsonData = RemapWidgetRuntimeBinaryDataIds(document.JsonData, binaryIdMap);
+                await UpsertWidgetRuntimeDataAsync(conn, tx, widgetId, document.DataKey, jsonData, ct);
+                dataDocuments++;
+            }
+
+            await tx.CommitAsync(ct);
+            return (dataDocuments, insertedBinaryRows, reusedBinaryRows);
         }
         catch
         {
@@ -3361,6 +3420,222 @@ END;";
         {
             throw new InvalidOperationException(
                 "Portal dashboard widget tables are not available. Apply the Portal module definition before importing dashboard widgets through HostAgent.");
+        }
+    }
+
+    private static async Task EnsureWidgetRuntimeDataTablesAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CASE
+    WHEN OBJECT_ID(N'omp_portal.widgets', N'U') IS NOT NULL
+     AND OBJECT_ID(N'omp_portal.widget_data', N'U') IS NOT NULL
+     AND OBJECT_ID(N'omp_portal.widget_binary_data', N'U') IS NOT NULL
+    THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        var value = await cmd.ExecuteScalarAsync(ct);
+        if (value is not bool isAvailable || !isAvailable)
+        {
+            throw new InvalidOperationException(
+                "Portal widget runtime data tables are not available. Apply the Portal module definition before importing widget runtime data through HostAgent.");
+        }
+    }
+
+    private static async Task<int?> GetWidgetRuntimeDataWidgetIdAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string widgetKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT widget_id
+FROM omp_portal.widgets
+WHERE widget_key = @widget_key;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@widget_key", SqlDbType.NVarChar, 200).Value = widgetKey;
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null || result == DBNull.Value
+            ? null
+            : Convert.ToInt32(result);
+    }
+
+    private static async Task<long?> FindExistingWidgetRuntimeBinaryDataIdAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableWidgetRuntimeBinaryData binary,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (1) binary_data_id
+FROM omp_portal.widget_binary_data
+WHERE owner_ref = @owner_ref
+  AND file_name = @file_name
+  AND content_type = @content_type
+  AND content_hash = @content_hash
+  AND content_length = @content_length
+ORDER BY binary_data_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        AddWidgetRuntimeBinaryIdentityParameters(cmd, binary);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null || result == DBNull.Value
+            ? null
+            : Convert.ToInt64(result);
+    }
+
+    private static async Task UpdateWidgetRuntimeBinaryDataEnabledStateAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        long binaryDataId,
+        bool isEnabled,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp_portal.widget_binary_data
+SET is_enabled = @is_enabled,
+    updated_at = SYSUTCDATETIME()
+WHERE binary_data_id = @binary_data_id
+  AND is_enabled <> @is_enabled;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@binary_data_id", SqlDbType.BigInt).Value = binaryDataId;
+        cmd.Parameters.Add("@is_enabled", SqlDbType.Bit).Value = isEnabled;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<long> InsertWidgetRuntimeBinaryDataAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableWidgetRuntimeBinaryData binary,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp_portal.widget_binary_data
+(
+    owner_ref,
+    file_name,
+    content_type,
+    content_length,
+    content_hash,
+    data_value,
+    is_enabled,
+    created_by_user_id,
+    created_at,
+    updated_at
+)
+OUTPUT INSERTED.binary_data_id
+VALUES
+(
+    @owner_ref,
+    @file_name,
+    @content_type,
+    @content_length,
+    @content_hash,
+    @data_value,
+    @is_enabled,
+    NULL,
+    SYSUTCDATETIME(),
+    SYSUTCDATETIME()
+);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        AddWidgetRuntimeBinaryIdentityParameters(cmd, binary);
+        cmd.Parameters.Add("@data_value", SqlDbType.VarBinary, -1).Value = binary.Data;
+        cmd.Parameters.Add("@is_enabled", SqlDbType.Bit).Value = binary.IsEnabled;
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task UpsertWidgetRuntimeDataAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int widgetId,
+        string dataKey,
+        string jsonData,
+        CancellationToken ct)
+    {
+        const string sql = @"
+MERGE omp_portal.widget_data AS target
+USING (SELECT @widget_id AS widget_id, @data_key AS data_key) AS source
+ON target.widget_id = source.widget_id
+AND target.data_key = source.data_key
+WHEN MATCHED THEN
+    UPDATE SET json_data = @json_data,
+               updated_at = SYSUTCDATETIME()
+WHEN NOT MATCHED THEN
+    INSERT(widget_id, data_key, json_data, updated_at)
+    VALUES(@widget_id, @data_key, @json_data, SYSUTCDATETIME());";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+        cmd.Parameters.Add("@data_key", SqlDbType.NVarChar, 128).Value = dataKey;
+        cmd.Parameters.Add("@json_data", SqlDbType.NVarChar, -1).Value = jsonData;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static void AddWidgetRuntimeBinaryIdentityParameters(
+        SqlCommand cmd,
+        PortableWidgetRuntimeBinaryData binary)
+    {
+        cmd.Parameters.Add("@owner_ref", SqlDbType.NVarChar, 128).Value = binary.OwnerRef;
+        cmd.Parameters.Add("@file_name", SqlDbType.NVarChar, 260).Value = binary.FileName;
+        cmd.Parameters.Add("@content_type", SqlDbType.NVarChar, 128).Value = binary.ContentType;
+        cmd.Parameters.Add("@content_hash", SqlDbType.VarBinary, 32).Value = binary.ContentHash;
+        cmd.Parameters.Add("@content_length", SqlDbType.BigInt).Value = binary.ContentLength;
+    }
+
+    private static string RemapWidgetRuntimeBinaryDataIds(
+        JsonNode source,
+        IReadOnlyDictionary<long, long> binaryIdMap)
+    {
+        var clone = JsonNode.Parse(source.ToJsonString(JsonOptions))
+            ?? throw new InvalidOperationException("Widget runtime data jsonData must be valid JSON.");
+        RemapWidgetRuntimeBinaryDataIdsInPlace(clone, binaryIdMap);
+        return clone.ToJsonString(JsonOptions);
+    }
+
+    private static void RemapWidgetRuntimeBinaryDataIdsInPlace(
+        JsonNode node,
+        IReadOnlyDictionary<long, long> binaryIdMap)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var propertyName in obj.Select(static property => property.Key).ToArray())
+            {
+                var value = obj[propertyName];
+                if (propertyName.Equals("binaryDataId", StringComparison.OrdinalIgnoreCase)
+                    && value is JsonValue jsonValue
+                    && jsonValue.TryGetValue<long>(out var sourceId))
+                {
+                    if (!binaryIdMap.TryGetValue(sourceId, out var targetId))
+                    {
+                        throw new InvalidOperationException($"Widget runtime data references missing binaryDataId {sourceId}.");
+                    }
+
+                    obj[propertyName] = targetId;
+                    continue;
+                }
+
+                if (value is not null)
+                {
+                    RemapWidgetRuntimeBinaryDataIdsInPlace(value, binaryIdMap);
+                }
+            }
+        }
+        else if (node is JsonArray array)
+        {
+            foreach (var child in array)
+            {
+                if (child is not null)
+                {
+                    RemapWidgetRuntimeBinaryDataIdsInPlace(child, binaryIdMap);
+                }
+            }
         }
     }
 

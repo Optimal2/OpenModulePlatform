@@ -12,7 +12,8 @@ public enum UniversalModulePackageItemKind
     ArtifactPackage,
     HostConfiguration,
     ConfigOverlay,
-    DashboardWidget
+    DashboardWidget,
+    WidgetRuntimeData
 }
 
 public sealed record PortableUniversalModulePackage(
@@ -35,7 +36,7 @@ public sealed record PortableUniversalModulePackageItem(
 /// <summary>
 /// Reads universal OMP module packages: a neutral container for portable OMP
 /// objects such as module definitions, artifact packages, host configurations,
-/// config overlays, and dashboard widget JSON files.
+/// config overlays, dashboard widget JSON files, and widget runtime data.
 /// </summary>
 public sealed class UniversalModulePackageReader
 {
@@ -141,6 +142,7 @@ public sealed class UniversalModulePackageReader
         AddDiscoveredItems(items, extractionRoot, "config-overlays", "*.json", UniversalModulePackageItemKind.ConfigOverlay);
         AddDiscoveredItems(items, extractionRoot, "config-overlays", "*.zip", UniversalModulePackageItemKind.ConfigOverlay);
         AddDiscoveredItems(items, extractionRoot, "widgets", "*.json", UniversalModulePackageItemKind.DashboardWidget);
+        AddDiscoveredItems(items, extractionRoot, "widget-data", "*.zip", UniversalModulePackageItemKind.WidgetRuntimeData);
         return items
             .OrderBy(static item => item.Kind)
             .ThenBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
@@ -195,6 +197,7 @@ public sealed class UniversalModulePackageReader
             "host-config" or "host-configs" or "host-configuration" or "host-configurations" => UniversalModulePackageItemKind.HostConfiguration,
             "config-overlay" or "config-overlays" => UniversalModulePackageItemKind.ConfigOverlay,
             "widget" or "widgets" or "dashboard-widgets" => UniversalModulePackageItemKind.DashboardWidget,
+            "widget-data" or "widget-runtime-data" => UniversalModulePackageItemKind.WidgetRuntimeData,
             _ => UniversalModulePackageItemKind.Unknown
         };
     }
@@ -207,6 +210,7 @@ public sealed class UniversalModulePackageReader
             "host-config" or "host-configuration" or "hostconfiguration" => UniversalModulePackageItemKind.HostConfiguration,
             "config-overlay" or "configoverlay" or "overlay" => UniversalModulePackageItemKind.ConfigOverlay,
             "widget" or "dashboard-widget" or "dashboardwidget" => UniversalModulePackageItemKind.DashboardWidget,
+            "widget-data" or "widgetdata" or "widget-runtime-data" or "widgetruntimedata" => UniversalModulePackageItemKind.WidgetRuntimeData,
             _ => UniversalModulePackageItemKind.Unknown
         };
 

@@ -9,6 +9,7 @@ artifacts/
 host-configs/
 config-overlays/
 widgets/
+widget-data/
 ```
 
 Use this script when a module repository needs to publish objects for Portal,
@@ -18,6 +19,11 @@ mappings, not committed to the public repository.
 
 Use `-WidgetFile` for dashboard widget JSON objects that should be copied into
 the same output shape as the other portable OMP objects.
+
+Use `-WidgetDataFile` for widget runtime-data zips that contain shared
+`widget_data` JSON and referenced `widget_binary_data` rows. Portal can export
+these objects from the universal package form for database-backed widget media
+such as music-player tracks and custom blank-widget images.
 
 When `-ComponentKey` is used, the builder exports only those component artifact
 packages and the module definition files whose `moduleKey` belongs to the
@@ -48,7 +54,7 @@ Examples:
 
 The optional host profile is JSON and can provide `targetHostProfile`,
 `artifactConfigurationFiles`, `hostConfigurationFiles`, `configOverlayFiles`,
-`widgetFiles`, and `modules`.
+`widgetFiles`, `widgetDataFiles`, and `modules`.
 
 Use `modules.<moduleKey>` when one shared host profile contains values for many
 modules. The exporter applies only the segments that match module keys owned by
@@ -59,7 +65,7 @@ objects can add an optional hook at
 `scripts/omp/build-host-profile-objects.ps1`. The hook receives
 `-RepositoryRoot`, `-OutputRoot`, `-HostProfilePath`, `-TargetHostProfile`,
 `-ModuleKey`, and `-Configuration`, and should write generated host configs,
-config overlays, or widgets below `OutputRoot`.
+config overlays, widgets, or widget runtime-data zips below `OutputRoot`.
 
 Keep private host profiles in the private installer or DEV repository, not in
 public module repositories.
