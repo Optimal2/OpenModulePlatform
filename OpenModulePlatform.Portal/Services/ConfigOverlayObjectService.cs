@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Options;
+using System.Text.Json;
 
 namespace OpenModulePlatform.Portal.Services;
 
@@ -49,7 +50,23 @@ public sealed class ConfigOverlayObjectService
                     document.ConfigurationVersion,
                     Path.GetFileName(path)));
             }
-            catch
+            catch (IOException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (InvalidDataException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (JsonException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (InvalidOperationException)
             {
                 // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
             }
@@ -91,7 +108,23 @@ public sealed class ConfigOverlayObjectService
                     document.ArtifactVersion,
                     Path.GetFileName(path)));
             }
-            catch
+            catch (IOException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (InvalidDataException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (JsonException)
+            {
+                // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
+            }
+            catch (InvalidOperationException)
             {
                 // Library scans ignore invalid files. Explicit imports still report detailed validation errors.
             }
@@ -309,11 +342,16 @@ public sealed class ConfigOverlayObjectService
                 File.Delete(path);
             }
         }
-        catch
+        catch (IOException)
+        {
+            // Temporary cleanup is best-effort; upload validation has already completed or failed.
+        }
+        catch (UnauthorizedAccessException)
         {
             // Temporary cleanup is best-effort; upload validation has already completed or failed.
         }
     }
+
 }
 
 public sealed record AvailableHostConfigurationObject(

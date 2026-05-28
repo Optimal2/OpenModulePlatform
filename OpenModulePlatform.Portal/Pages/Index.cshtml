@@ -3,7 +3,7 @@
 @using System.Globalization
 @using OpenModulePlatform.Portal.Services
 
-<section class="portal-dashboard is-expanded-canvas"
+<section class="portal-dashboard @(Model.DashboardExpandedCanvas ? "is-expanded-canvas" : string.Empty)"
          data-dashboard-root
          data-can-edit="@Model.CanEditDashboard.ToString().ToLowerInvariant()"
          data-is-portal-admin="@Model.IsPortalAdmin.ToString().ToLowerInvariant()"
@@ -18,7 +18,7 @@
          data-upload-blank-widget-images-zip-url="@Url.Page("/Index", "UploadBlankWidgetImagesZip")"
          data-favorite-toggle-url="@Url.Content("~/navigation/favorites/toggle")"
          data-align-to-grid="@Model.DashboardAlignToGrid.ToString().ToLowerInvariant()"
-         data-expanded-canvas="true"
+         data-expanded-canvas="@Model.DashboardExpandedCanvas.ToString().ToLowerInvariant()"
          data-grid-size="32"
          data-min-canvas-height="640"
          data-canvas-bottom-padding="64"
@@ -156,10 +156,10 @@
                         {
                             <partial name="_DashboardMusicPlayerWidget" />
                         }
-                        else if (blankWidgetImageId.HasValue)
+                        else if (blankWidgetImageId is long selectedBlankWidgetImageId)
                         {
-                            <div class="dashboard-widget__blank dashboard-widget__blank--image" data-blank-widget data-blank-widget-image-id="@blankWidgetImageId.Value">
-                                <img src="@Url.Page("/Index", "BlankWidgetImage", new { id = blankWidgetImageId.Value })" alt="" />
+                            <div class="dashboard-widget__blank dashboard-widget__blank--image" data-blank-widget data-blank-widget-image-id="@selectedBlankWidgetImageId">
+                                <img src="@Url.Page("/Index", "BlankWidgetImage", new { id = selectedBlankWidgetImageId })" alt="" />
                             </div>
                         }
                         else if (blankWidgetVariant > 0)
@@ -256,9 +256,9 @@
                                     <option value="static:0" selected="@(blankWidgetVariant == 0 && !blankWidgetImageId.HasValue)">@L["Default"]</option>
                                     <option value="static:1" selected="@(blankWidgetVariant == 1 && !blankWidgetImageId.HasValue)">@L["Variant 1"]</option>
                                     <option value="static:2" selected="@(blankWidgetVariant == 2 && !blankWidgetImageId.HasValue)">@L["Variant 2"]</option>
-                                    @if (blankWidgetImageId.HasValue)
+                                    @if (blankWidgetImageId is long selectedBlankWidgetImageId)
                                     {
-                                        <option value="image:@blankWidgetImageId.Value" selected>@L["Custom image"] #@blankWidgetImageId.Value</option>
+                                        <option value="image:@selectedBlankWidgetImageId" selected>@L["Custom image"] #@selectedBlankWidgetImageId</option>
                                     }
                                 </select>
                             </label>

@@ -341,13 +341,12 @@ public sealed class WidgetRuntimeDataPackageReader
 
     private static bool TryGetProperty(JsonObject obj, string propertyName, out JsonNode? value)
     {
-        foreach (var property in obj)
+        var property = obj.FirstOrDefault(property =>
+            property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+        if (property.Key is not null)
         {
-            if (property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                value = property.Value;
-                return true;
-            }
+            value = property.Value;
+            return true;
         }
 
         value = null;
