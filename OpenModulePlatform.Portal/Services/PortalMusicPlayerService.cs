@@ -324,7 +324,8 @@ WHERE binary_data_id = @binary_data_id
                 continue;
             }
 
-            var title = musicLine["Music track:".Length..].Trim();
+            var trackCredit = musicLine["Music track:".Length..].Trim();
+            var title = trackCredit;
             var artist = string.Empty;
             var byIndex = title.LastIndexOf(" by ", StringComparison.OrdinalIgnoreCase);
             if (byIndex > 0)
@@ -340,7 +341,7 @@ WHERE binary_data_id = @binary_data_id
             tracks.Add(new TrackMetadata(
                 CleanForDisplay(title, 200),
                 CleanForDisplay(artist, 200),
-                CleanForDisplay(musicLine, 500),
+                CleanForDisplay(trackCredit, 500),
                 CleanForDisplay(source?["Source:".Length..], 1000),
                 CleanForDisplay(description, 1000)));
         }
