@@ -591,7 +591,7 @@
             reset?.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                setScale(0, true);
+                setScale(100, true);
             });
         });
     }
@@ -635,9 +635,9 @@
             return;
         }
 
-        if (widget.dataset.widgetPayload === 'portal-entry-list') {
+        if (isColumnCountWidgetPayload(widget.dataset.widgetPayload)) {
             const columns = normalizeColumnCount(widget.dataset.widgetIntData);
-            widget.dataset.widgetColumns = columns > 0 ? String(columns) : '';
+            widget.dataset.widgetColumns = String(columns);
             widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
                 control.value = String(columns);
             });
@@ -2401,20 +2401,20 @@
 
     function normalizeColumnCount(value) {
         const parsed = parseNullableInteger(value);
-        return parsed && parsed >= 1 && parsed <= 3 ? parsed : 0;
+        return parsed && parsed >= 1 && parsed <= 5 ? parsed : 1;
     }
 
     function normalizeContentScale(value) {
         const parsed = parseNullableInteger(value);
         if (parsed === null) {
-            return 0;
+            return 100;
         }
 
-        return Math.max(-100, Math.min(100, parsed));
+        return Math.max(25, Math.min(200, parsed));
     }
 
     function formatScaleFactor(contentScale) {
-        const factor = Math.max(0.1, (100 + normalizeContentScale(contentScale)) / 100);
+        const factor = normalizeContentScale(contentScale) / 100;
         return factor.toFixed(3);
     }
 
@@ -2444,6 +2444,13 @@
 
     function isBlankWidgetPayload(payload) {
         return !payload || payload === 'blank-rectangle';
+    }
+
+    function isColumnCountWidgetPayload(payload) {
+        return payload === 'portal-entry-favorites'
+            || payload === 'portal-entry-list'
+            || payload === 'portal-entry-combolist'
+            || payload === 'content-pages';
     }
 
     function getBlankWidgetStyleValue(widget) {
@@ -3215,6 +3222,9 @@
         element.dataset.widgetIntData = normalizeWidgetDataValue(widget.intData);
         element.dataset.widgetStringData = normalizeWidgetDataValue(widget.stringData);
         element.dataset.widgetContentScale = String(normalizeContentScale(widget.contentScale));
+        element.dataset.widgetColumns = isColumnCountWidgetPayload(element.dataset.widgetPayload)
+            ? String(normalizeColumnCount(widget.intData))
+            : '';
         element.dataset.widgetTitlebarHidden = widget.hideTitlebarWhenViewing === true ? 'true' : 'false';
         element.style.top = `${widget.offsetTop || 0}px`;
         element.style.left = `${widget.offsetLeft || 0}px`;
@@ -3305,14 +3315,15 @@
 
         const settingFields = [];
 
-        if (widget.payload === 'portal-entry-list') {
+        if (isColumnCountWidgetPayload(widget.payload)) {
             settingFields.push(createSelectField(
                 root.dataset.columnCountLabel || 'Column count',
                 [
-                    ['0', root.dataset.defaultColumnsLabel || 'Default'],
                     ['1', root.dataset.oneColumnLabel || '1 column'],
                     ['2', root.dataset.twoColumnsLabel || '2 columns'],
-                    ['3', root.dataset.threeColumnsLabel || '3 columns']
+                    ['3', root.dataset.threeColumnsLabel || '3 columns'],
+                    ['4', root.dataset.fourColumnsLabel || '4 columns'],
+                    ['5', root.dataset.fiveColumnsLabel || '5 columns']
                 ],
                 String(normalizeColumnCount(widget.intData)),
                 (select) => {
@@ -3384,8 +3395,8 @@
 
         const range = document.createElement('input');
         range.type = 'range';
-        range.min = '-100';
-        range.max = '100';
+        range.min = '25';
+        range.max = '200';
         range.value = String(normalizedValue);
         range.dataset.widgetContentScaleRange = '';
         range.setAttribute('aria-label', root.dataset.contentScaleLabel || 'Zoom');
@@ -3396,8 +3407,8 @@
 
         const input = document.createElement('input');
         input.type = 'number';
-        input.min = '-100';
-        input.max = '100';
+        input.min = '25';
+        input.max = '200';
         input.value = String(normalizedValue);
         input.dataset.widgetContentScaleInput = '';
         input.setAttribute('aria-label', root.dataset.contentScaleValueLabel || 'Zoom value');

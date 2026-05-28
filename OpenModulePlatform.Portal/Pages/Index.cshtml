@@ -43,10 +43,11 @@
          data-show-week-number-label="@L["Show week number"]"
          data-hide-week-number-label="@L["Hide week number"]"
          data-column-count-label="@L["Column count"]"
-         data-default-columns-label="@L["Default"]"
          data-one-column-label="@L["1 column"]"
          data-two-columns-label="@L["2 columns"]"
          data-three-columns-label="@L["3 columns"]"
+         data-four-columns-label="@L["4 columns"]"
+         data-five-columns-label="@L["5 columns"]"
          data-content-scale-label="@L["Zoom"]"
          data-content-scale-value-label="@L["Zoom value"]"
          data-content-scale-reset-label="@L["Reset zoom"]"
@@ -101,11 +102,15 @@
 
         @foreach (var widget in Model.ActiveWidgets)
         {
-            var widgetContentScale = Math.Clamp(widget.ContentScale, -100, 100);
-            var widgetContentScaleFactor = Math.Max(0.1, (100 + widgetContentScale) / 100.0);
+            var widgetContentScale = Math.Clamp(widget.ContentScale, 25, 200);
+            var widgetContentScaleFactor = widgetContentScale / 100.0;
             var isBlankWidget = string.Equals(widget.Payload, "blank-rectangle", StringComparison.OrdinalIgnoreCase);
+            var hasColumnSettings = widget.Payload is "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "content-pages";
+            var widgetColumnCount = hasColumnSettings && widget.IntData is >= 1 and <= 5
+                ? widget.IntData.Value
+                : 1;
             var hasWidgetSettings = widget.Payload == "weekday-date"
-                || widget.Payload == "portal-entry-list"
+                || hasColumnSettings
                 || isBlankWidget;
             var hasTitleBar = !string.IsNullOrWhiteSpace(widget.EffectiveTitle);
             var blankWidgetVariant = isBlankWidget && widget.IntData is 1 or 2 ? widget.IntData.Value : 0;
@@ -128,6 +133,7 @@
                      data-widget-int-data="@(widget.IntData?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)"
                      data-widget-string-data="@widget.StringData"
                      data-widget-content-scale="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
+                     data-widget-columns="@(hasColumnSettings ? widgetColumnCount.ToString(CultureInfo.InvariantCulture) : string.Empty)"
                      data-widget-titlebar-hidden="@widget.HideTitlebarWhenViewing.ToString().ToLowerInvariant()"
                      style="top: @(widget.OffsetTop)px; left: @(widget.OffsetLeft)px; width: @(widget.Width)px; height: @(widget.Height)px; z-index: @(widget.OrderPriority); --dashboard-widget-content-scale-factor: @widgetContentScaleFactor.ToString("0.###", CultureInfo.InvariantCulture);">
                 @if (hasTitleBar)
@@ -284,15 +290,15 @@
                             <span>@L["Zoom"]</span>
                             <div class="dashboard-widget__zoom-control" data-widget-content-scale-control>
                                 <input type="range"
-                                       min="-100"
-                                       max="100"
+                                       min="25"
+                                       max="200"
                                        value="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
                                        aria-label="@L["Zoom"]"
                                        data-widget-content-scale-range />
                                 <div class="dashboard-widget__zoom-value">
                                     <input type="number"
-                                           min="-100"
-                                           max="100"
+                                           min="25"
+                                           max="200"
                                            value="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
                                            aria-label="@L["Zoom value"]"
                                            data-widget-content-scale-input />
@@ -323,16 +329,16 @@
                                 </select>
                             </label>
                         }
-                        else if (widget.Payload == "portal-entry-list")
+                        else if (hasColumnSettings)
                         {
-                            var columnCount = widget.IntData is >= 1 and <= 3 ? widget.IntData.Value : 0;
                             <label>
                                 <span>@L["Column count"]</span>
                                 <select data-widget-int-data-control>
-                                    <option value="0" selected="@(columnCount == 0)">@L["Default"]</option>
-                                    <option value="1" selected="@(columnCount == 1)">@L["1 column"]</option>
-                                    <option value="2" selected="@(columnCount == 2)">@L["2 columns"]</option>
-                                    <option value="3" selected="@(columnCount == 3)">@L["3 columns"]</option>
+                                    <option value="1" selected="@(widgetColumnCount == 1)">@L["1 column"]</option>
+                                    <option value="2" selected="@(widgetColumnCount == 2)">@L["2 columns"]</option>
+                                    <option value="3" selected="@(widgetColumnCount == 3)">@L["3 columns"]</option>
+                                    <option value="4" selected="@(widgetColumnCount == 4)">@L["4 columns"]</option>
+                                    <option value="5" selected="@(widgetColumnCount == 5)">@L["5 columns"]</option>
                                 </select>
                             </label>
                         }

@@ -23,6 +23,18 @@ IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'omp_portal')
     EXEC('CREATE SCHEMA [omp_portal]');
 GO
 
+IF OBJECT_ID(N'omp_portal.schema_migrations', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.schema_migrations
+    (
+        migration_key nvarchar(200) NOT NULL,
+        applied_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_schema_migrations_applied_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_schema_migrations PRIMARY KEY(migration_key)
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp_portal.widgets', N'U') IS NULL
 BEGIN
     CREATE TABLE omp_portal.widgets
@@ -148,7 +160,7 @@ BEGIN
         title nvarchar(200) NULL,
         int_data int NULL,
         string_data nvarchar(20) NULL,
-        content_scale int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(0),
+        content_scale int NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(100),
         hide_titlebar_when_viewing bit NOT NULL CONSTRAINT DF_omp_portal_user_active_widgets_hide_titlebar_when_viewing DEFAULT(0),
 
         CONSTRAINT PK_omp_portal_user_active_widgets PRIMARY KEY(user_active_widget_id),
@@ -166,7 +178,59 @@ IF COL_LENGTH(N'omp_portal.user_active_widgets', N'content_scale') IS NULL
 BEGIN
     ALTER TABLE omp_portal.user_active_widgets
         ADD content_scale int NOT NULL
-            CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(0);
+            CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(100);
+END
+GO
+
+DECLARE @contentScaleDefaultConstraint sysname;
+
+SELECT @contentScaleDefaultConstraint = dc.name
+FROM sys.default_constraints dc
+INNER JOIN sys.columns c
+    ON c.object_id = dc.parent_object_id
+   AND c.column_id = dc.parent_column_id
+WHERE dc.parent_object_id = OBJECT_ID(N'omp_portal.user_active_widgets')
+  AND c.name = N'content_scale'
+  AND REPLACE(REPLACE(dc.definition, N'(', N''), N')', N'') <> N'100';
+
+IF @contentScaleDefaultConstraint IS NOT NULL
+BEGIN
+    EXEC(N'ALTER TABLE omp_portal.user_active_widgets DROP CONSTRAINT [' + @contentScaleDefaultConstraint + N'];');
+END
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.default_constraints dc
+    INNER JOIN sys.columns c
+        ON c.object_id = dc.parent_object_id
+       AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID(N'omp_portal.user_active_widgets')
+      AND c.name = N'content_scale'
+)
+BEGIN
+    ALTER TABLE omp_portal.user_active_widgets
+        ADD CONSTRAINT DF_omp_portal_user_active_widgets_content_scale DEFAULT(100) FOR content_scale;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp_portal.schema_migrations
+    WHERE migration_key = N'20260528-dashboard-content-scale-percent'
+)
+BEGIN
+    UPDATE omp_portal.user_active_widgets
+    SET content_scale =
+        CASE
+            WHEN content_scale <= -75 THEN 25
+            WHEN content_scale >= 100 THEN 200
+            ELSE content_scale + 100
+        END;
+
+    INSERT INTO omp_portal.schema_migrations(migration_key)
+    VALUES(N'20260528-dashboard-content-scale-percent');
 END
 GO
 
