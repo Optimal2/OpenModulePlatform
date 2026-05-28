@@ -2227,6 +2227,20 @@
   <data name="The selected image is too large." xml:space="preserve"><value>Den valda bilden är för stor.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Visa dashboardens navbar</value></data>
   <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under topbaren.</value></data>
+  <data name="Hide title bar outside edit mode" xml:space="preserve"><value>Dölj titelrad utanför redigeringsläge</value></data>
+  <data name="Dashboard layout reset to default." xml:space="preserve"><value>Dashboard-layouten har återställts till standard.</value></data>
+  <data name="Dashboard cleared." xml:space="preserve"><value>Dashboarden har rensats.</value></data>
+  <data name="Default dashboard layout saved. Widgets: {0}." xml:space="preserve"><value>Standardlayouten för dashboarden har sparats. Widgets: {0}.</value></data>
+  <data name="This resets your dashboard to the shared default layout. Continue?" xml:space="preserve"><value>Detta återställer din dashboard till den gemensamma standardlayouten. Fortsätt?</value></data>
+  <data name="Reset to the shared default dashboard layout." xml:space="preserve"><value>Återställ till den gemensamma standardlayouten för dashboarden.</value></data>
+  <data name="Reset to default" xml:space="preserve"><value>Återställ till standard</value></data>
+  <data name="This removes all widgets from your dashboard. Continue?" xml:space="preserve"><value>Detta tar bort alla widgets från din dashboard. Fortsätt?</value></data>
+  <data name="Clear your dashboard and keep it empty until you add widgets again." xml:space="preserve"><value>Rensa din dashboard och håll den tom tills du lägger till widgets igen.</value></data>
+  <data name="Clear dashboard" xml:space="preserve"><value>Rensa dashboard</value></data>
+  <data name="Default dashboard layout" xml:space="preserve"><value>Standardlayout för dashboard</value></data>
+  <data name="This replaces the shared default dashboard layout with your current dashboard layout. Continue?" xml:space="preserve"><value>Detta ersätter den gemensamma standardlayouten med din nuvarande dashboard-layout. Fortsätt?</value></data>
+  <data name="Users without a personal dashboard layout use the shared default layout." xml:space="preserve"><value>Användare utan personlig dashboard-layout använder den gemensamma standardlayouten.</value></data>
+  <data name="Save current layout as default" xml:space="preserve"><value>Spara nuvarande layout som standard</value></data>
   <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Skapa en universal-zip med valfri mix av moduldefinitioner, artefaktpaket, host-konfigurationer, config overlays, widgets och widget-runtime-data.</value></data>
   <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Inkludera runtime-data för valda widgets</value></data>
 </root>

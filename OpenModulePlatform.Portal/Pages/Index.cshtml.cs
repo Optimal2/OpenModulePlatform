@@ -440,6 +440,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             orderPriority = widget.OrderPriority,
             intData = widget.IntData,
             stringData = widget.StringData,
-            contentScale = widget.ContentScale
+            contentScale = widget.ContentScale,
+            hideTitlebarWhenViewing = widget.HideTitlebarWhenViewing
         };
 }

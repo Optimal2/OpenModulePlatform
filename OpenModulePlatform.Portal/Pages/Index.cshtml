@@ -27,6 +27,7 @@
          data-done-label="@L["Exit edit mode"]"
          data-edit-label="@L["Edit dashboard"]"
          data-remove-label="@L["Remove widget"]"
+         data-titlebar-toggle-label="@L["Hide title bar outside edit mode"]"
          data-done-fallback-confirm="@L["You have unsaved dashboard changes. Save them before leaving edit mode?"]"
          data-draft-available-label="@L["Unsaved local dashboard changes were found. Restore them?"]"
          data-draft-restore-label="@L["Restore draft"]"
@@ -96,13 +97,14 @@
             var hasWidgetSettings = widget.Payload == "weekday-date"
                 || widget.Payload == "portal-entry-list"
                 || isBlankWidget;
+            var hasTitleBar = !string.IsNullOrWhiteSpace(widget.EffectiveTitle);
             var blankWidgetVariant = isBlankWidget && widget.IntData is 1 or 2 ? widget.IntData.Value : 0;
             var blankWidgetImageId = isBlankWidget
                 && long.TryParse(widget.StringData, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedBlankWidgetImageId)
                 && parsedBlankWidgetImageId > 0
                     ? parsedBlankWidgetImageId
                     : (long?)null;
-            <article class="dashboard-widget"
+            <article class="dashboard-widget@(widget.HideTitlebarWhenViewing ? " is-titlebar-hidden" : string.Empty)"
                      data-dashboard-widget
                      data-user-active-widget-id="@widget.UserActiveWidgetId"
                      data-widget-id="@widget.WidgetId"
@@ -111,8 +113,9 @@
                      data-widget-int-data="@(widget.IntData?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)"
                      data-widget-string-data="@widget.StringData"
                      data-widget-content-scale="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
+                     data-widget-titlebar-hidden="@widget.HideTitlebarWhenViewing.ToString().ToLowerInvariant()"
                      style="top: @(widget.OffsetTop)px; left: @(widget.OffsetLeft)px; width: @(widget.Width)px; height: @(widget.Height)px; z-index: @(widget.OrderPriority); --dashboard-widget-content-scale-factor: @widgetContentScaleFactor.ToString("0.###", CultureInfo.InvariantCulture);">
-                @if (!string.IsNullOrWhiteSpace(widget.EffectiveTitle))
+                @if (hasTitleBar)
                 {
                     <div class="dashboard-widget__titlebar" data-widget-titlebar>@L[widget.EffectiveTitle]</div>
                 }
@@ -183,6 +186,17 @@
                             aria-label="@L["Remove widget"]">
                         <span class="dashboard-widget__remove-icon" aria-hidden="true"></span>
                     </button>
+                    @if (hasTitleBar)
+                    {
+                    <button type="button"
+                            class="dashboard-widget__titlebar-toggle"
+                            data-widget-titlebar-toggle
+                            title="@L["Hide title bar outside edit mode"]"
+                            aria-label="@L["Hide title bar outside edit mode"]"
+                            aria-pressed="@widget.HideTitlebarWhenViewing.ToString().ToLowerInvariant()">
+                        <span class="dashboard-widget__titlebar-toggle-icon" aria-hidden="true"></span>
+                    </button>
+                    }
                     <button type="button"
                             class="dashboard-widget__zoom-toggle"
                             data-widget-zoom-toggle

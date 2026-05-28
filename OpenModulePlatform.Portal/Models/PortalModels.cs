@@ -142,7 +142,7 @@ public sealed record DashboardRoleOption(int RoleId, string Name, string? Descri
 /// <summary>
 /// Per-user dashboard behavior preferences.
 /// </summary>
-public sealed record DashboardPreferences(bool AlignToGrid, bool ExpandedCanvas);
+public sealed record DashboardPreferences(bool AlignToGrid, bool ExpandedCanvas, bool HasCustomLayout);
 
 /// <summary>
 /// Admin list row for Portal Entries.
@@ -295,6 +295,8 @@ public sealed class DashboardActiveWidget
 
     public int ContentScale { get; set; }
 
+    public bool HideTitlebarWhenViewing { get; set; }
+
     public string EffectiveTitle => string.IsNullOrWhiteSpace(Title) ? WidgetTitle : Title.Trim();
 }
 
@@ -324,6 +326,8 @@ public sealed class DashboardWidgetLayoutUpdate
     public string? StringData { get; set; }
 
     public int ContentScale { get; set; }
+
+    public bool HideTitlebarWhenViewing { get; set; }
 }
 
 /// <summary>
