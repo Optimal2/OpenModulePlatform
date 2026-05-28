@@ -106,7 +106,10 @@ Portal navigation entries:
 - `omp_portal.widget_data` stores shared widget-level JSON data that belongs to
   a widget definition rather than to one user's placed widget
 - `omp_portal.widget_binary_data` stores shared widget-owned binary media, such
-  as MP3 files for the built-in music player
+  as MP3 files for the built-in music player. Code that inserts binary media
+  must calculate and store the SHA-256 content hash; this keeps the database
+  model independent of SQL Server computed-column or trigger behavior and gives
+  portable packages a stable way to reference media before target ids exist.
 
 The current dashboard renderer supports Portal-owned widgets. `payload` selects
 which server-rendered widget body is used; for example, `admin-overview` renders
@@ -151,10 +154,15 @@ The blank widget keeps its built-in static variants for existing dashboards, but
 Portal administrators can also attach shared custom images or GIF files. Custom
 blank-widget media is stored in the same generic widget storage tables:
 `omp_portal.widget_data` stores the shared image list and
-`omp_portal.widget_binary_data` stores the image bytes. A user's placed blank
-widget stores only the selected image id in `user_active_widgets.string_data`.
-This keeps image media out of the Portal web artifact so upgrades do not remove
-administrator-uploaded dashboard decoration.
+`omp_portal.widget_binary_data` stores the image bytes. Portal administrators
+upload shared images from the blank widget in normal view mode; dashboard edit
+mode is only needed to add, move, resize, or remove the widget. Users who can
+edit their dashboard can switch between shared images with the widget controls,
+and can add session-only local images through the file picker or drag-and-drop.
+Local images are browser object URLs and are never uploaded to the server. A
+user's placed blank widget stores only the selected shared image id in
+`user_active_widgets.string_data`. This keeps image media out of the Portal web
+artifact so upgrades do not remove administrator-uploaded dashboard decoration.
 
 Shared widget runtime data can be transported in universal packages. Select the
 widget definitions in the universal export form and enable `Include runtime data
@@ -162,8 +170,11 @@ for selected widgets`. Portal writes a `widget-data/*.zip` object containing the
 shared `widget_data` JSON plus the referenced `widget_binary_data` rows. During
 import, Portal and HostAgent insert or reuse binary rows and remap source
 `binaryDataId` values in the JSON to the target installation's database ids.
-This is the preferred transport for music-player MP3s and custom blank-widget
-images when moving dashboard media between environments.
+New packages also include `binaryDataHash` beside those ids. Importers prefer
+the hash when the target id is not known, so widget runtime JSON can refer to
+media deterministically across installations. This is the preferred transport
+for music-player MP3s and custom blank-widget images when moving dashboard media
+between environments.
 
 Portal administrators can import and export widget definitions from
 `/admin/dashboardwidgets`. This lets module-specific widgets live beside the

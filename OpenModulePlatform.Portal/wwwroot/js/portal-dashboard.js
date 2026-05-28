@@ -16,6 +16,7 @@
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
     const sessionStatusWarningEvent = 'omp:session-status-warning';
     const musicObjectUrls = new Set();
+    const blankImageObjectUrls = new Set();
     let blankWidgetImagesCache = null;
 
     function initDashboard(root) {
@@ -292,13 +293,14 @@
         bindWidgetSettings(root, widget, onChange);
         bindWidgetTitlebarToggle(widget, onChange);
         applyWidgetSettings(widget);
+        bindBlankWidgetRuntimeControls(root, canvas, widget, token, state);
 
         widget.addEventListener('pointerdown', (event) => {
             if (!root.classList.contains('is-editing') || event.button !== 0) {
                 return;
             }
 
-            if (event.target.closest('button, a, input, textarea, select, label, summary, [data-widget-resize], [data-widget-settings-panel], [data-widget-zoom-panel]')) {
+            if (event.target.closest('button, a, input, textarea, select, label, summary, [data-widget-resize], [data-widget-settings-panel], [data-widget-zoom-panel], [data-blank-widget-admin]')) {
                 return;
             }
 
@@ -551,7 +553,6 @@
         });
 
         if (isBlankWidgetPayload(widget.dataset.widgetPayload)) {
-            bindBlankWidgetAdmin(root, widget, onChange);
             refreshBlankWidgetImageOptions(root).catch(() => {});
         }
 
@@ -1524,8 +1525,282 @@
             displayName: String(image.displayName || image.fileName || `Image ${id}`).trim(),
             src: String(image.src || image.url || '').trim(),
             fileName: String(image.fileName || '').trim(),
-            contentType: String(image.contentType || '').trim()
+            contentType: String(image.contentType || '').trim(),
+            contentHash: String(image.contentHash || image.binaryDataHash || '').trim()
         };
+    }
+
+    function bindBlankWidgetRuntimeControls(root, canvas, widget, token, state) {
+        if (!isBlankWidgetPayload(widget.dataset.widgetPayload)) {
+            return;
+        }
+
+        ensureBlankWidgetRuntimeMarkup(root, widget);
+        const blank = widget.querySelector('[data-blank-widget]');
+        if (!blank || blank.dataset.blankWidgetRuntimeBound === 'true') {
+            return;
+        }
+
+        blank.dataset.blankWidgetRuntimeBound = 'true';
+        const previous = blank.querySelector('[data-blank-widget-previous]');
+        const next = blank.querySelector('[data-blank-widget-next]');
+        const localFile = blank.querySelector('[data-blank-widget-local-file]');
+
+        previous?.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await moveBlankWidgetChoice(root, canvas, widget, token, state, -1);
+        });
+
+        next?.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            await moveBlankWidgetChoice(root, canvas, widget, token, state, 1);
+        });
+
+        localFile?.addEventListener('change', () => {
+            const choices = addLocalBlankWidgetImages(root, widget, localFile.files);
+            if (choices.length > 0) {
+                selectBlankWidgetChoice(root, canvas, widget, token, state, choices[0], false);
+            }
+
+            localFile.value = '';
+        });
+
+        blank.addEventListener('dragover', (event) => {
+            if (!hasBlankWidgetImageTransfer(event.dataTransfer)) {
+                return;
+            }
+
+            event.preventDefault();
+            blank.classList.add('is-dragover');
+        });
+
+        blank.addEventListener('dragleave', () => {
+            blank.classList.remove('is-dragover');
+        });
+
+        blank.addEventListener('drop', (event) => {
+            if (!hasBlankWidgetImageTransfer(event.dataTransfer)) {
+                return;
+            }
+
+            event.preventDefault();
+            blank.classList.remove('is-dragover');
+            const choices = addLocalBlankWidgetImages(root, widget, event.dataTransfer?.files);
+            if (choices.length > 0) {
+                selectBlankWidgetChoice(root, canvas, widget, token, state, choices[0], false);
+            }
+        });
+
+        bindBlankWidgetAdmin(root, widget, () => {});
+        refreshBlankWidgetImageOptions(root).catch(() => {});
+    }
+
+    function ensureBlankWidgetRuntimeMarkup(root, widget) {
+        const blank = widget.querySelector('[data-blank-widget]');
+        if (!blank) {
+            return;
+        }
+
+        let media = blank.querySelector('[data-blank-widget-media]');
+        if (!media) {
+            media = document.createElement('div');
+            media.className = 'dashboard-widget__blank-media';
+            media.dataset.blankWidgetMedia = '';
+            const existingChildren = Array.from(blank.childNodes);
+            existingChildren.forEach((child) => {
+                if (child.nodeType === Node.ELEMENT_NODE
+                    && child.matches?.('[data-blank-widget-controls], [data-blank-widget-admin]')) {
+                    return;
+                }
+
+                media.appendChild(child);
+            });
+            blank.prepend(media);
+        }
+
+        if (!blank.querySelector('[data-blank-widget-controls]') && root.dataset.canEdit === 'true') {
+            const controls = document.createElement('div');
+            controls.className = 'dashboard-widget__blank-controls';
+            controls.dataset.blankWidgetControls = '';
+            controls.appendChild(createBlankWidgetControlButton(root.dataset.blankWidgetPreviousLabel || 'Previous image', 'previous'));
+            controls.appendChild(createBlankWidgetControlButton(root.dataset.blankWidgetNextLabel || 'Next image', 'next'));
+
+            const local = document.createElement('label');
+            local.className = 'dashboard-widget__blank-button dashboard-widget__blank-local';
+            local.title = root.dataset.blankWidgetAddLocalLabel || 'Add local image';
+            local.setAttribute('aria-label', root.dataset.blankWidgetAddLocalLabel || 'Add local image');
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg';
+            input.dataset.blankWidgetLocalFile = '';
+            const icon = document.createElement('span');
+            icon.className = 'dashboard-widget__blank-icon dashboard-widget__blank-icon--add';
+            icon.setAttribute('aria-hidden', 'true');
+            local.append(input, icon);
+            controls.appendChild(local);
+
+            if (root.dataset.isPortalAdmin === 'true') {
+                controls.appendChild(createBlankWidgetControlButton(root.dataset.blankWidgetManageLibraryLabel || 'Manage image library', 'library'));
+            }
+
+            blank.appendChild(controls);
+        }
+
+        if (root.dataset.isPortalAdmin === 'true' && !blank.querySelector('[data-blank-widget-admin]')) {
+            blank.appendChild(createBlankWidgetAdminControls(root));
+        }
+    }
+
+    function createBlankWidgetControlButton(label, kind) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'dashboard-widget__blank-button';
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        if (kind === 'previous') {
+            button.dataset.blankWidgetPrevious = '';
+        } else if (kind === 'next') {
+            button.dataset.blankWidgetNext = '';
+        } else if (kind === 'library') {
+            button.dataset.blankWidgetAdminOpen = '';
+        }
+
+        const icon = document.createElement('span');
+        icon.className = `dashboard-widget__blank-icon dashboard-widget__blank-icon--${kind}`;
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+        return button;
+    }
+
+    async function moveBlankWidgetChoice(root, canvas, widget, token, state, direction) {
+        const choices = await getBlankWidgetChoices(root, widget);
+        if (choices.length === 0) {
+            return;
+        }
+
+        const currentValue = getCurrentBlankWidgetChoiceValue(widget);
+        const currentIndex = Math.max(0, choices.findIndex((choice) => choice.value === currentValue));
+        const nextIndex = normalizeTrackIndex(currentIndex + direction, choices.length);
+        await selectBlankWidgetChoice(root, canvas, widget, token, state, choices[nextIndex], true);
+    }
+
+    async function getBlankWidgetChoices(root, widget) {
+        const images = await loadBlankWidgetImages(root);
+        const choices = [
+            {
+                kind: 'static',
+                value: 'static:0',
+                label: root.dataset.blankWidgetDefaultLabel || 'Default',
+                variant: 0,
+                src: ''
+            },
+            {
+                kind: 'static',
+                value: 'static:1',
+                label: root.dataset.blankWidgetOneLabel || 'Variant 1',
+                variant: 1,
+                src: '/img/blank-widget/1.gif'
+            },
+            {
+                kind: 'static',
+                value: 'static:2',
+                label: root.dataset.blankWidgetTwoLabel || 'Variant 2',
+                variant: 2,
+                src: '/img/blank-widget/2.gif'
+            }
+        ];
+
+        images.forEach((image) => {
+            choices.push({
+                kind: 'server',
+                value: `image:${image.id}`,
+                label: image.displayName || `Image ${image.id}`,
+                imageId: image.id,
+                src: image.src
+            });
+        });
+
+        getBlankWidgetLocalImages(widget).forEach((image) => choices.push(image));
+        return choices;
+    }
+
+    function getCurrentBlankWidgetChoiceValue(widget) {
+        const selectedLocal = widget.__ompBlankWidgetSelectedLocalValue || '';
+        return selectedLocal || getBlankWidgetStyleValue(widget);
+    }
+
+    async function selectBlankWidgetChoice(root, canvas, widget, token, state, choice, persistServerChoice) {
+        if (!choice) {
+            return;
+        }
+
+        if (choice.kind === 'local') {
+            widget.__ompBlankWidgetSelectedLocalValue = choice.value;
+            widget.__ompBlankWidgetSelectedLocalUrl = choice.src;
+            widget.dataset.widgetStringData = '';
+            widget.dataset.widgetIntData = '';
+            renderBlankWidgetVariant(widget, 0, 0);
+            return;
+        }
+
+        widget.__ompBlankWidgetSelectedLocalValue = '';
+        widget.__ompBlankWidgetSelectedLocalUrl = '';
+        applyBlankWidgetStyleValue(widget, choice.value);
+        applyWidgetSettings(widget);
+        if (persistServerChoice) {
+            await persistDashboardWidgetSelection(root, canvas, token, state);
+        }
+    }
+
+    async function persistDashboardWidgetSelection(root, canvas, token, state) {
+        if (!root || !canvas || !state || root.dataset.canEdit !== 'true') {
+            return;
+        }
+
+        try {
+            await saveDashboardChanges(root, canvas, token, state);
+        } catch (error) {
+            handleDashboardSaveError(root, error);
+        }
+    }
+
+    function addLocalBlankWidgetImages(root, widget, fileList) {
+        const images = getBlankWidgetLocalImages(widget);
+        const added = [];
+        Array.from(fileList || []).filter(isBlankWidgetImageFile).forEach((file) => {
+            const source = URL.createObjectURL(file);
+            registerBlankWidgetObjectUrl(widget, source);
+            const choice = {
+                kind: 'local',
+                value: `local:${Date.now().toString(36)}:${images.length}`,
+                label: getFileStem(file.name) || root.dataset.blankWidgetLocalLabel || 'Local image',
+                src: source
+            };
+            images.push(choice);
+            added.push(choice);
+        });
+
+        return added;
+    }
+
+    function getBlankWidgetLocalImages(widget) {
+        if (!widget.__ompBlankWidgetLocalImages) {
+            Object.defineProperty(widget, '__ompBlankWidgetLocalImages', {
+                value: [],
+                configurable: true
+            });
+        }
+
+        return widget.__ompBlankWidgetLocalImages;
+    }
+
+    function hasBlankWidgetImageTransfer(dataTransfer) {
+        return Array.from(dataTransfer?.items || []).some((item) => {
+            const file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
+            return item.type?.startsWith('image/') || isBlankWidgetImageFile(file);
+        }) || Array.from(dataTransfer?.files || []).some(isBlankWidgetImageFile);
     }
 
     async function refreshBlankWidgetImageOptions(root, selectedWidget = null, selectedValue = '') {
@@ -1585,11 +1860,29 @@
         }
 
         panel.dataset.blankWidgetAdminBound = 'true';
+        const blank = widget.querySelector('[data-blank-widget]');
+        const open = blank?.querySelector('[data-blank-widget-admin-open]');
+        const close = panel.querySelector('[data-blank-widget-admin-close]');
         const file = panel.querySelector('[data-blank-widget-file]');
         const displayName = panel.querySelector('[data-blank-widget-display-name]');
         const upload = panel.querySelector('[data-blank-widget-upload]');
         const zip = panel.querySelector('[data-blank-widget-zip]');
+        const zipUpload = panel.querySelector('[data-blank-widget-zip-upload]');
         const status = panel.querySelector('[data-blank-widget-status]');
+
+        bindBlankWidgetAdminTabs(panel);
+        open?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            panel.hidden = !panel.hidden;
+            open.setAttribute('aria-expanded', String(!panel.hidden));
+        });
+        close?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            panel.hidden = true;
+            open?.setAttribute('aria-expanded', 'false');
+        });
 
         upload?.addEventListener('click', async () => {
             const selectedFile = file?.files?.[0] || null;
@@ -1613,7 +1906,7 @@
                 [upload],
                 status,
                 async (result) => {
-                    await applyBlankWidgetUploadResult(root, widget, result, onChange);
+                    await applyBlankWidgetUploadResult(root, widget, result, onChange, false);
                     if (file) {
                         file.value = '';
                     }
@@ -1623,9 +1916,10 @@
                 });
         });
 
-        zip?.addEventListener('change', async () => {
+        zipUpload?.addEventListener('click', async () => {
             const selectedZip = zip.files?.[0] || null;
             if (!selectedZip) {
+                setBlankWidgetStatus(status, root.dataset.blankWidgetSelectZipLabel || 'Select a ZIP package.');
                 return;
             }
 
@@ -1640,12 +1934,30 @@
                 root,
                 root.dataset.uploadBlankWidgetImagesZipUrl,
                 formData,
-                [zip],
+                [zipUpload],
                 status,
                 async (result) => {
-                    await applyBlankWidgetUploadResult(root, widget, result, onChange);
+                    await applyBlankWidgetUploadResult(root, widget, result, onChange, false);
                     zip.value = '';
                 });
+        });
+    }
+
+    function bindBlankWidgetAdminTabs(panel) {
+        const tabs = Array.from(panel.querySelectorAll('[data-blank-widget-admin-tab]'));
+        const panes = Array.from(panel.querySelectorAll('[data-blank-widget-admin-pane]'));
+        tabs.forEach((tab) => {
+            tab.addEventListener('click', () => {
+                const mode = tab.dataset.blankWidgetAdminTab || 'image';
+                tabs.forEach((candidate) => {
+                    const selected = candidate === tab;
+                    candidate.classList.toggle('is-active', selected);
+                    candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+                });
+                panes.forEach((pane) => {
+                    pane.hidden = pane.dataset.blankWidgetAdminPane !== mode;
+                });
+            });
         });
     }
 
@@ -1696,7 +2008,7 @@
         }
     }
 
-    async function applyBlankWidgetUploadResult(root, widget, result, onChange) {
+    async function applyBlankWidgetUploadResult(root, widget, result, onChange, selectUploadedImage = false) {
         if (Array.isArray(result?.images)) {
             blankWidgetImagesCache = result.images.map(normalizeBlankWidgetImage).filter(Boolean);
         } else {
@@ -1706,7 +2018,7 @@
         const selectedImageId = normalizeBlankWidgetImageId(result?.selectedImageId ?? result?.SelectedImageId);
         const selectedValue = selectedImageId > 0 ? `image:${selectedImageId}` : getBlankWidgetStyleValue(widget);
         await refreshBlankWidgetImageOptions(root, widget, selectedValue);
-        if (selectedImageId > 0) {
+        if (selectUploadedImage && selectedImageId > 0) {
             applyBlankWidgetStyleValue(widget, selectedValue);
             applyWidgetSettings(widget);
             onChange();
@@ -1776,6 +2088,36 @@
     function revokeMusicObjectUrl(source) {
         URL.revokeObjectURL(source);
         musicObjectUrls.delete(source);
+    }
+
+    function registerBlankWidgetObjectUrl(widget, source) {
+        const widgetUrls = getBlankWidgetObjectUrls(widget);
+        widgetUrls.add(source);
+        blankImageObjectUrls.add(source);
+    }
+
+    function getBlankWidgetObjectUrls(widget) {
+        if (!widget.__ompBlankWidgetObjectUrls) {
+            Object.defineProperty(widget, '__ompBlankWidgetObjectUrls', {
+                value: new Set(),
+                configurable: true
+            });
+        }
+
+        return widget.__ompBlankWidgetObjectUrls;
+    }
+
+    function revokeBlankWidgetObjectUrls(widget) {
+        const widgetUrls = widget.__ompBlankWidgetObjectUrls;
+        if (!widgetUrls) {
+            return;
+        }
+
+        widgetUrls.forEach((source) => {
+            URL.revokeObjectURL(source);
+            blankImageObjectUrls.delete(source);
+        });
+        widgetUrls.clear();
     }
 
     function getMusicSourceLabel(source) {
@@ -2115,6 +2457,8 @@
 
     function applyBlankWidgetStyleValue(widget, value) {
         const raw = String(value || '').trim();
+        widget.__ompBlankWidgetSelectedLocalValue = '';
+        widget.__ompBlankWidgetSelectedLocalUrl = '';
         if (raw.startsWith('image:')) {
             const imageId = normalizeBlankWidgetImageId(raw.slice('image:'.length));
             widget.dataset.widgetStringData = imageId > 0 ? String(imageId) : '';
@@ -2151,25 +2495,39 @@
             return;
         }
 
-        const imageSource = imageId > 0
+        let media = blank.querySelector('[data-blank-widget-media]');
+        if (!media) {
+            media = document.createElement('div');
+            media.className = 'dashboard-widget__blank-media';
+            media.dataset.blankWidgetMedia = '';
+            const existingImage = blank.querySelector(':scope > img');
+            if (existingImage) {
+                media.appendChild(existingImage);
+            }
+            blank.prepend(media);
+        }
+
+        const imageSource = widget.__ompBlankWidgetSelectedLocalUrl
+            || (imageId > 0
             ? getBlankWidgetImageUrl(widget, imageId)
             : variant > 0
                 ? `/img/blank-widget/${variant}.gif`
-                : '';
+                : '');
         blank.classList.toggle('dashboard-widget__blank--image', !!imageSource);
+        blank.classList.toggle('dashboard-widget__blank--local', !!widget.__ompBlankWidgetSelectedLocalUrl);
         blank.dataset.blankWidgetVariant = variant > 0 ? String(variant) : '';
         blank.dataset.blankWidgetImageId = imageId > 0 ? String(imageId) : '';
 
         if (!imageSource) {
-            blank.replaceChildren();
+            media.replaceChildren();
             return;
         }
 
-        let image = blank.querySelector('img');
+        let image = media.querySelector('img');
         if (!image) {
             image = document.createElement('img');
             image.alt = '';
-            blank.replaceChildren(image);
+            media.replaceChildren(image);
         }
 
         if (image.getAttribute('src') !== imageSource && image.src !== imageSource) {
@@ -2973,9 +3331,6 @@
                 }));
         } else if (isBlankWidgetPayload(widget.payload)) {
             settingFields.push(createBlankWidgetStyleField(root, widget));
-            if (root.dataset.isPortalAdmin === 'true') {
-                settingFields.push(createBlankWidgetAdminControls(root));
-            }
         }
 
         if (settingFields.length === 0) {
@@ -3108,7 +3463,43 @@
         const panel = document.createElement('div');
         panel.className = 'dashboard-widget__blank-admin';
         panel.dataset.blankWidgetAdmin = '';
+        panel.hidden = true;
 
+        const header = document.createElement('div');
+        header.className = 'dashboard-widget__blank-admin-header';
+        const title = document.createElement('strong');
+        title.textContent = root.dataset.blankWidgetImageLibraryLabel || 'Image library';
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'dashboard-widget__blank-admin-close';
+        close.dataset.blankWidgetAdminClose = '';
+        close.setAttribute('aria-label', root.dataset.closeLabel || 'Close');
+        header.append(title, close);
+        panel.appendChild(header);
+
+        const tabs = document.createElement('div');
+        tabs.className = 'dashboard-widget__blank-admin-tabs';
+        tabs.setAttribute('role', 'tablist');
+        tabs.setAttribute('aria-label', root.dataset.blankWidgetImageLibraryLabel || 'Image library');
+        const imageTab = document.createElement('button');
+        imageTab.type = 'button';
+        imageTab.className = 'is-active';
+        imageTab.dataset.blankWidgetAdminTab = 'image';
+        imageTab.setAttribute('role', 'tab');
+        imageTab.setAttribute('aria-selected', 'true');
+        imageTab.textContent = root.dataset.blankWidgetSingleImageLabel || 'Single image';
+        const zipTab = document.createElement('button');
+        zipTab.type = 'button';
+        zipTab.dataset.blankWidgetAdminTab = 'zip';
+        zipTab.setAttribute('role', 'tab');
+        zipTab.setAttribute('aria-selected', 'false');
+        zipTab.textContent = root.dataset.blankWidgetZipPackageLabel || 'ZIP package';
+        tabs.append(imageTab, zipTab);
+        panel.appendChild(tabs);
+
+        const imagePane = document.createElement('div');
+        imagePane.className = 'dashboard-widget__blank-admin-pane';
+        imagePane.dataset.blankWidgetAdminPane = 'image';
         const fileLabel = document.createElement('label');
         const fileText = document.createElement('span');
         fileText.textContent = root.dataset.blankWidgetImageFileLabel || 'Image or GIF file';
@@ -3117,7 +3508,7 @@
         file.accept = 'image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg';
         file.dataset.blankWidgetFile = '';
         fileLabel.append(fileText, file);
-        panel.appendChild(fileLabel);
+        imagePane.appendChild(fileLabel);
 
         const displayNameLabel = document.createElement('label');
         const displayNameText = document.createElement('span');
@@ -3127,7 +3518,7 @@
         displayName.maxLength = 200;
         displayName.dataset.blankWidgetDisplayName = '';
         displayNameLabel.append(displayNameText, displayName);
-        panel.appendChild(displayNameLabel);
+        imagePane.appendChild(displayNameLabel);
 
         const actions = document.createElement('div');
         actions.className = 'dashboard-widget__blank-admin-actions';
@@ -3137,17 +3528,32 @@
         upload.dataset.blankWidgetUpload = '';
         upload.textContent = root.dataset.blankWidgetUploadLabel || 'Upload image';
         actions.appendChild(upload);
+        imagePane.appendChild(actions);
+        panel.appendChild(imagePane);
 
+        const zipPane = document.createElement('div');
+        zipPane.className = 'dashboard-widget__blank-admin-pane';
+        zipPane.dataset.blankWidgetAdminPane = 'zip';
+        zipPane.hidden = true;
         const zipLabel = document.createElement('label');
-        zipLabel.className = 'btn dashboard-widget__blank-admin-zip';
+        const zipText = document.createElement('span');
+        zipText.textContent = root.dataset.blankWidgetZipPackageLabel || 'ZIP package';
         const zip = document.createElement('input');
         zip.type = 'file';
         zip.accept = '.zip,application/zip';
         zip.dataset.blankWidgetZip = '';
-        zipLabel.appendChild(zip);
-        zipLabel.appendChild(document.createTextNode(root.dataset.blankWidgetImportZipLabel || 'Import ZIP'));
-        actions.appendChild(zipLabel);
-        panel.appendChild(actions);
+        zipLabel.append(zipText, zip);
+        zipPane.appendChild(zipLabel);
+        const zipActions = document.createElement('div');
+        zipActions.className = 'dashboard-widget__blank-admin-actions';
+        const zipUpload = document.createElement('button');
+        zipUpload.type = 'button';
+        zipUpload.className = 'btn btn-primary';
+        zipUpload.dataset.blankWidgetZipUpload = '';
+        zipUpload.textContent = root.dataset.blankWidgetImportZipLabel || 'Import ZIP';
+        zipActions.appendChild(zipUpload);
+        zipPane.appendChild(zipActions);
+        panel.appendChild(zipPane);
 
         const status = document.createElement('div');
         status.className = 'dashboard-widget__blank-admin-status';
@@ -3176,6 +3582,7 @@
 
     function removeDashboardWidgetElement(widget) {
         revokeDashboardMusicPlayerObjectUrls(widget);
+        revokeBlankWidgetObjectUrls(widget);
         widget.remove();
     }
 
@@ -3241,5 +3648,7 @@
     window.addEventListener('beforeunload', () => {
         musicObjectUrls.forEach((url) => URL.revokeObjectURL(url));
         musicObjectUrls.clear();
+        blankImageObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+        blankImageObjectUrls.clear();
     });
 })();

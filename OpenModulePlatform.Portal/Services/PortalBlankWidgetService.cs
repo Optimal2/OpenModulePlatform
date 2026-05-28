@@ -25,6 +25,8 @@ public sealed class PortalBlankWidgetService
     private const string OwnerRef = "widget:blank-widget";
     private const string DocumentFormat = "omp.portal.blank-widget-images.v1";
 
+    private static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars()];
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -49,7 +51,7 @@ public sealed class PortalBlankWidgetService
             return new BlankWidgetImageList([]);
         }
 
-        var media = await GetEnabledMediaMapAsync(conn, document.Images.Select(image => image.BinaryDataId), ct);
+        var media = await GetEnabledMediaMapAsync(conn, tx: null, document.Images.Select(image => image.BinaryDataId), ct);
         var images = document.Images
             .Where(image => media.ContainsKey(image.BinaryDataId))
             .OrderBy(image => image.SortOrder)
@@ -59,7 +61,10 @@ public sealed class PortalBlankWidgetService
                 CleanForDisplay(image.DisplayName, 200) ?? media[image.BinaryDataId].FileName,
                 imageUrlFactory(image.BinaryDataId),
                 media[image.BinaryDataId].FileName,
-                media[image.BinaryDataId].ContentType))
+                media[image.BinaryDataId].ContentType,
+                string.IsNullOrWhiteSpace(image.BinaryDataHash)
+                    ? media[image.BinaryDataId].ContentHash
+                    : image.BinaryDataHash))
             .ToArray();
 
         return new BlankWidgetImageList(images);
@@ -213,6 +218,7 @@ WHERE binary_data_id = @binary_data_id
                     document.Images.Add(new BlankWidgetImageDocumentItem
                     {
                         BinaryDataId = binaryDataId.Value,
+                        BinaryDataHash = ToSha256Hex(hash),
                         DisplayName = image.DisplayName,
                         SortOrder = document.Images.Count + 1
                     });
@@ -282,10 +288,14 @@ WHERE w.widget_key = @widget_key
 
     private static async Task<IReadOnlyDictionary<long, BlankWidgetMediaRow>> GetEnabledMediaMapAsync(
         SqlConnection conn,
+        SqlTransaction? tx,
         IEnumerable<long> binaryDataIds,
         CancellationToken ct)
     {
-        var ids = binaryDataIds.Distinct().ToArray();
+        var ids = binaryDataIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
         if (ids.Length == 0)
         {
             return new Dictionary<long, BlankWidgetMediaRow>();
@@ -295,16 +305,17 @@ WHERE w.widget_key = @widget_key
             .Select((_, index) => $"@id{index.ToString(CultureInfo.InvariantCulture)}")
             .ToArray();
         var sql = $@"
-SELECT binary_data_id,
-       file_name,
-       content_type
-FROM omp_portal.widget_binary_data
-WHERE owner_ref = @owner_ref
-  AND is_enabled = 1
-  AND binary_data_id IN ({string.Join(", ", parameters)});";
+SELECT data.binary_data_id,
+       data.file_name,
+       data.content_type,
+       data.content_hash
+FROM omp_portal.widget_binary_data AS data
+WHERE data.owner_ref = @owner_ref
+  AND data.is_enabled = 1
+  AND data.binary_data_id IN ({string.Join(", ", parameters)});";
 
         var media = new Dictionary<long, BlankWidgetMediaRow>();
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.Add("@owner_ref", SqlDbType.NVarChar, 128).Value = OwnerRef;
         for (var i = 0; i < ids.Length; i++)
         {
@@ -314,7 +325,10 @@ WHERE owner_ref = @owner_ref
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            media[rdr.GetInt64(0)] = new BlankWidgetMediaRow(rdr.GetString(1), rdr.GetString(2));
+            media[rdr.GetInt64(0)] = new BlankWidgetMediaRow(
+                rdr.GetString(1),
+                rdr.GetString(2),
+                ToSha256Hex((byte[])rdr.GetValue(3)));
         }
 
         return media;
@@ -517,7 +531,7 @@ WHEN NOT MATCHED THEN
     private static string CleanFileName(string value, string contentType)
     {
         var fileName = Path.GetFileName(value.Replace('\\', '/'));
-        var cleaned = string.Concat(fileName.Where(ch => !Path.GetInvalidFileNameChars().Contains(ch))).Trim();
+        var cleaned = string.Concat(fileName.Where(ch => !InvalidFileNameChars.Contains(ch))).Trim();
         if (string.IsNullOrWhiteSpace(cleaned))
         {
             cleaned = "blank-widget-image";
@@ -599,13 +613,16 @@ WHEN NOT MATCHED THEN
             ? displayName
             : null;
 
+    private static string ToSha256Hex(byte[] hash)
+        => Convert.ToHexString(hash).ToLowerInvariant();
+
     private sealed record ImportedImage(
         string DisplayName,
         string FileName,
         string ContentType,
         byte[] Bytes);
 
-    private sealed record BlankWidgetMediaRow(string FileName, string ContentType);
+    private sealed record BlankWidgetMediaRow(string FileName, string ContentType, string ContentHash);
 
     private sealed class BlankWidgetDataDocument
     {
@@ -617,6 +634,8 @@ WHEN NOT MATCHED THEN
     private sealed class BlankWidgetImageDocumentItem
     {
         public long BinaryDataId { get; set; }
+
+        public string BinaryDataHash { get; set; } = string.Empty;
 
         public string DisplayName { get; set; } = string.Empty;
 

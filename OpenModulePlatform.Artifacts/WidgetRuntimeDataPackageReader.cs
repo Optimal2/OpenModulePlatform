@@ -115,10 +115,15 @@ public sealed class WidgetRuntimeDataPackageReader
         {
             var item = binaryNode as JsonObject
                 ?? throw new InvalidOperationException("Widget runtime binary data entries must be objects.");
-            var sourceBinaryDataId = GetRequiredLong(item, "sourceBinaryDataId");
-            if (sourceBinaryDataId <= 0 || !seenSourceIds.Add(sourceBinaryDataId))
+            var sourceBinaryDataId = GetLong(item, "sourceBinaryDataId", defaultValue: 0);
+            if (sourceBinaryDataId < 0)
             {
-                throw new InvalidOperationException("Widget runtime binary data sourceBinaryDataId values must be positive and unique.");
+                throw new InvalidOperationException("Widget runtime binary data sourceBinaryDataId values must not be negative.");
+            }
+
+            if (sourceBinaryDataId > 0 && !seenSourceIds.Add(sourceBinaryDataId))
+            {
+                throw new InvalidOperationException("Widget runtime binary data sourceBinaryDataId values must be unique when present.");
             }
 
             var ownerRef = GetRequiredString(item, "ownerRef", 128);
@@ -303,6 +308,23 @@ public sealed class WidgetRuntimeDataPackageReader
         return value.TryGetValue<string>(out var text) && long.TryParse(text, out var parsed)
             ? parsed
             : throw new InvalidOperationException($"Widget runtime data package {propertyName} must be a number.");
+    }
+
+    private static long GetLong(JsonObject obj, string propertyName, long defaultValue)
+    {
+        if (!TryGetProperty(obj, propertyName, out var node) || node is not JsonValue value)
+        {
+            return defaultValue;
+        }
+
+        if (value.TryGetValue<long>(out var number))
+        {
+            return number;
+        }
+
+        return value.TryGetValue<string>(out var text) && long.TryParse(text, out var parsed)
+            ? parsed
+            : defaultValue;
     }
 
     private static int GetInt(JsonObject obj, string propertyName, int defaultValue)

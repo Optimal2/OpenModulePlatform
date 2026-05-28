@@ -18,7 +18,8 @@ public sealed record MusicPlayerTrack(
     string Source,
     string Description,
     string FileName,
-    string ContentType);
+    string ContentType,
+    string ContentHash);
 
 /// <summary>
 /// Admin-provided metadata for a newly uploaded music player track.
