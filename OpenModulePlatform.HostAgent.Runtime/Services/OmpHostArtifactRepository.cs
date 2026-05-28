@@ -722,6 +722,7 @@ WHERE OverlayKey = @overlayKey
             var insertedBinaryRows = 0;
             var reusedBinaryRows = 0;
             var binaryIdMap = new Dictionary<long, long>();
+            var binaryHashMap = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             foreach (var binary in input.BinaryData)
             {
                 var targetId = await FindExistingWidgetRuntimeBinaryDataIdAsync(conn, tx, binary, ct);
@@ -736,7 +737,12 @@ WHERE OverlayKey = @overlayKey
                     insertedBinaryRows++;
                 }
 
-                binaryIdMap[binary.SourceBinaryDataId] = targetId.Value;
+                if (binary.SourceBinaryDataId > 0)
+                {
+                    binaryIdMap[binary.SourceBinaryDataId] = targetId.Value;
+                }
+
+                binaryHashMap[ToSha256Hex(binary.ContentHash)] = targetId.Value;
             }
 
             var dataDocuments = 0;
@@ -744,7 +750,7 @@ WHERE OverlayKey = @overlayKey
             {
                 var widgetId = await GetWidgetRuntimeDataWidgetIdAsync(conn, tx, document.WidgetKey, ct)
                     ?? throw new InvalidOperationException($"Dashboard widget '{document.WidgetKey}' was not found. Import the widget definition before importing widget runtime data.");
-                var jsonData = RemapWidgetRuntimeBinaryDataIds(document.JsonData, binaryIdMap);
+                var jsonData = RemapWidgetRuntimeBinaryDataReferences(document.JsonData, binaryIdMap, binaryHashMap);
                 await UpsertWidgetRuntimeDataAsync(conn, tx, widgetId, document.DataKey, jsonData, ct);
                 dataDocuments++;
             }
@@ -3475,8 +3481,6 @@ WHERE widget_key = @widget_key;";
 SELECT TOP (1) binary_data_id
 FROM omp_portal.widget_binary_data
 WHERE owner_ref = @owner_ref
-  AND file_name = @file_name
-  AND content_type = @content_type
   AND content_hash = @content_hash
   AND content_length = @content_length
 ORDER BY binary_data_id;";
@@ -3583,47 +3587,60 @@ WHEN NOT MATCHED THEN
         PortableWidgetRuntimeBinaryData binary)
     {
         cmd.Parameters.Add("@owner_ref", SqlDbType.NVarChar, 128).Value = binary.OwnerRef;
-        cmd.Parameters.Add("@file_name", SqlDbType.NVarChar, 260).Value = binary.FileName;
-        cmd.Parameters.Add("@content_type", SqlDbType.NVarChar, 128).Value = binary.ContentType;
         cmd.Parameters.Add("@content_hash", SqlDbType.VarBinary, 32).Value = binary.ContentHash;
         cmd.Parameters.Add("@content_length", SqlDbType.BigInt).Value = binary.ContentLength;
     }
 
-    private static string RemapWidgetRuntimeBinaryDataIds(
+    private static string RemapWidgetRuntimeBinaryDataReferences(
         JsonNode source,
-        IReadOnlyDictionary<long, long> binaryIdMap)
+        IReadOnlyDictionary<long, long> binaryIdMap,
+        IReadOnlyDictionary<string, long> binaryHashMap)
     {
         var clone = JsonNode.Parse(source.ToJsonString(JsonOptions))
             ?? throw new InvalidOperationException("Widget runtime data jsonData must be valid JSON.");
-        RemapWidgetRuntimeBinaryDataIdsInPlace(clone, binaryIdMap);
+        RemapWidgetRuntimeBinaryDataReferencesInPlace(clone, binaryIdMap, binaryHashMap);
         return clone.ToJsonString(JsonOptions);
     }
 
-    private static void RemapWidgetRuntimeBinaryDataIdsInPlace(
+    private static void RemapWidgetRuntimeBinaryDataReferencesInPlace(
         JsonNode node,
-        IReadOnlyDictionary<long, long> binaryIdMap)
+        IReadOnlyDictionary<long, long> binaryIdMap,
+        IReadOnlyDictionary<string, long> binaryHashMap)
     {
         if (node is JsonObject obj)
         {
+            var binaryDataIdPropertyName = FindJsonPropertyName(obj, "binaryDataId");
+            var hashTargetId = TryResolveWidgetRuntimeBinaryHash(obj, binaryHashMap, out var targetFromHash)
+                ? targetFromHash
+                : (long?)null;
+            if (binaryDataIdPropertyName is not null
+                && obj[binaryDataIdPropertyName] is JsonValue idValue
+                && idValue.TryGetValue<long>(out var sourceId))
+            {
+                if (sourceId > 0 && binaryIdMap.TryGetValue(sourceId, out var targetId))
+                {
+                    obj[binaryDataIdPropertyName] = targetId;
+                }
+                else if (hashTargetId.HasValue)
+                {
+                    obj[binaryDataIdPropertyName] = hashTargetId.Value;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Widget runtime data references missing binaryDataId {sourceId}.");
+                }
+            }
+            else if (hashTargetId.HasValue)
+            {
+                obj["binaryDataId"] = hashTargetId.Value;
+            }
+
             foreach (var propertyName in obj.Select(static property => property.Key).ToArray())
             {
                 var value = obj[propertyName];
-                if (propertyName.Equals("binaryDataId", StringComparison.OrdinalIgnoreCase)
-                    && value is JsonValue jsonValue
-                    && jsonValue.TryGetValue<long>(out var sourceId))
-                {
-                    if (!binaryIdMap.TryGetValue(sourceId, out var targetId))
-                    {
-                        throw new InvalidOperationException($"Widget runtime data references missing binaryDataId {sourceId}.");
-                    }
-
-                    obj[propertyName] = targetId;
-                    continue;
-                }
-
                 if (value is not null)
                 {
-                    RemapWidgetRuntimeBinaryDataIdsInPlace(value, binaryIdMap);
+                    RemapWidgetRuntimeBinaryDataReferencesInPlace(value, binaryIdMap, binaryHashMap);
                 }
             }
         }
@@ -3631,10 +3648,61 @@ WHEN NOT MATCHED THEN
         {
             foreach (var child in array.Where(static child => child is not null))
             {
-                RemapWidgetRuntimeBinaryDataIdsInPlace(child!, binaryIdMap);
+                RemapWidgetRuntimeBinaryDataReferencesInPlace(child!, binaryIdMap, binaryHashMap);
             }
         }
     }
+
+    private static bool TryResolveWidgetRuntimeBinaryHash(
+        JsonObject obj,
+        IReadOnlyDictionary<string, long> binaryHashMap,
+        out long targetId)
+    {
+        targetId = 0;
+        var propertyName = FindJsonPropertyName(obj, "binaryDataHash");
+        if (propertyName is null
+            || obj[propertyName] is not JsonValue hashValue
+            || !hashValue.TryGetValue<string>(out var hashText)
+            || !TryNormalizeSha256Hex(hashText, out var normalizedHash))
+        {
+            return false;
+        }
+
+        return binaryHashMap.TryGetValue(normalizedHash, out targetId);
+    }
+
+    private static string? FindJsonPropertyName(JsonObject obj, string propertyName)
+        => obj.Select(static property => property.Key)
+            .FirstOrDefault(key => key.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+
+    private static bool TryNormalizeSha256Hex(string? value, out string normalized)
+    {
+        normalized = string.Empty;
+        var text = value?.Trim();
+        if (text?.Length != 64)
+        {
+            return false;
+        }
+
+        try
+        {
+            var bytes = Convert.FromHexString(text);
+            if (bytes.Length != 32)
+            {
+                return false;
+            }
+
+            normalized = Convert.ToHexString(bytes).ToLowerInvariant();
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static string ToSha256Hex(byte[] hash)
+        => Convert.ToHexString(hash).ToLowerInvariant();
 
     private static async Task<int?> FindDashboardWidgetIdAsync(
         SqlConnection conn,
