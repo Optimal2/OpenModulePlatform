@@ -465,7 +465,7 @@ internal static partial class Program
         private readonly Button _installButton = new() { Text = "Install or update", AutoSize = true };
         private readonly Button _upgradeCompleteButton = new() { Text = "Upgrade / complete", AutoSize = true };
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
-        private readonly Button _syncPackageObjectsButton = new() { Text = "Refresh object archive", AutoSize = true };
+        private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
         private readonly Button _refreshObjectArchiveButton = new() { Text = "Refresh object archive", AutoSize = true };
         private readonly Button _createUniversalPackageButton = new() { Text = "Create universal package", AutoSize = true };
         private readonly Button _createUpdatedInstallerPackageButton = new() { Text = "Create updated installer package", AutoSize = true };
@@ -2484,7 +2484,8 @@ internal static partial class Program
         private static string? FindOnPath(string fileName)
             => GetPathDirectories()
                 .Select(directory => Path.Join(directory, fileName))
-                .FirstOrDefault(File.Exists);
+                .Where(File.Exists)
+                .FirstOrDefault();
 
         private static IEnumerable<string> GetPathDirectories()
         {
@@ -2571,11 +2572,10 @@ internal static partial class Program
                 return false;
             }
 
-            using var sha256 = SHA256.Create();
             using var firstStream = File.OpenRead(firstPath);
             using var secondStream = File.OpenRead(secondPath);
-            var firstHash = sha256.ComputeHash(firstStream);
-            var secondHash = sha256.ComputeHash(secondStream);
+            var firstHash = SHA256.HashData(firstStream);
+            var secondHash = SHA256.HashData(secondStream);
             return firstHash.SequenceEqual(secondHash);
         }
 
@@ -2871,7 +2871,7 @@ ORDER BY ar.ArtifactId DESC;
                 var validRoots = configuredRoots
                     .Where(root => File.Exists(Path.Join(root, "omp-components.json")))
                     .ToArray();
-                if (validRoots.Any(root => IsDeveloperSourceRoot(root)))
+                if (validRoots.Any(IsDeveloperSourceRoot))
                 {
                     return validRoots;
                 }

@@ -25,6 +25,8 @@ public sealed class PortalMusicPlayerService
     private const long MaxTrackBytes = 50L * 1024L * 1024L;
     private const long MaxZipBytes = 512L * 1024L * 1024L;
 
+    private static readonly HashSet<char> InvalidFileNameChars = [.. Path.GetInvalidFileNameChars()];
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -49,7 +51,7 @@ public sealed class PortalMusicPlayerService
             return new MusicPlayerPlaylist([]);
         }
 
-        var media = await GetEnabledMediaMapAsync(conn, document.Tracks.Select(track => track.BinaryDataId), ct);
+        var media = await GetEnabledMediaMapAsync(conn, tx: null, document.Tracks.Select(track => track.BinaryDataId), ct);
         var tracks = document.Tracks
             .Where(track => media.ContainsKey(track.BinaryDataId))
             .Select(track => new MusicPlayerTrack(
@@ -412,34 +414,34 @@ WHERE w.widget_key = @widget_key
 
     private static async Task<IReadOnlyDictionary<long, MusicPlayerMediaRow>> GetEnabledMediaMapAsync(
         SqlConnection conn,
+        SqlTransaction? tx,
         IEnumerable<long> binaryDataIds,
         CancellationToken ct)
     {
-        var ids = binaryDataIds.Distinct().ToArray();
+        var ids = binaryDataIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
         if (ids.Length == 0)
         {
             return new Dictionary<long, MusicPlayerMediaRow>();
         }
 
-        var parameters = ids
-            .Select((_, index) => $"@id{index.ToString(CultureInfo.InvariantCulture)}")
-            .ToArray();
-        var sql = $@"
-SELECT binary_data_id,
-       file_name,
-       content_type
-FROM omp_portal.widget_binary_data
-WHERE owner_ref = @owner_ref
-  AND is_enabled = 1
-  AND binary_data_id IN ({string.Join(", ", parameters)});";
+        const string sql = @"
+SELECT data.binary_data_id,
+       data.file_name,
+       data.content_type
+FROM omp_portal.widget_binary_data AS data
+INNER JOIN OPENJSON(@binary_data_ids_json)
+WITH (binary_data_id bigint '$') AS requested
+    ON requested.binary_data_id = data.binary_data_id
+WHERE data.owner_ref = @owner_ref
+  AND data.is_enabled = 1;";
 
         var media = new Dictionary<long, MusicPlayerMediaRow>();
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.Add("@owner_ref", SqlDbType.NVarChar, 128).Value = OwnerRef;
-        for (var i = 0; i < ids.Length; i++)
-        {
-            cmd.Parameters.Add(parameters[i], SqlDbType.BigInt).Value = ids[i];
-        }
+        cmd.Parameters.Add("@binary_data_ids_json", SqlDbType.NVarChar, -1).Value = JsonSerializer.Serialize(ids);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -547,6 +549,7 @@ WHEN NOT MATCHED THEN
     VALUES(@widget_id, @data_key, @json_data, SYSUTCDATETIME());";
 
         document.Format = DocumentFormat;
+        // Keep persisted widget data unique even if a future import path bypasses ImportTracksAsync's in-memory filter.
         document.Tracks = document.Tracks
             .GroupBy(track => track.BinaryDataId)
             .Select(group => group.Last())
@@ -604,8 +607,7 @@ WHEN NOT MATCHED THEN
     private static string CleanFileName(string value)
     {
         var fileName = Path.GetFileName(value.Replace('\\', '/'));
-        var invalidFileNameChars = Path.GetInvalidFileNameChars();
-        var cleaned = string.Concat(fileName.Where(ch => !invalidFileNameChars.Contains(ch))).Trim();
+        var cleaned = string.Concat(fileName.Where(ch => !InvalidFileNameChars.Contains(ch))).Trim();
         return string.IsNullOrWhiteSpace(cleaned)
             ? "track.mp3"
             : cleaned.Length > 260 ? cleaned[..260] : cleaned;
