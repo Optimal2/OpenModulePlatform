@@ -2412,16 +2412,15 @@ internal static partial class Program
             string publishRoot,
             List<string> lines)
         {
-            var npm = OperatingSystem.IsWindows() ? "npm.cmd" : "npm";
             var packageLockPath = Path.Join(projectDirectory, "package-lock.json");
             if (File.Exists(packageLockPath))
             {
                 lines.Add($"  BUILD   {component.ComponentKey}: restoring npm packages in {GetDisplayPath(component.SourceRoot, projectDirectory)}.");
-                RunProcess(npm, ["ci"], workingDirectory: projectDirectory);
+                RunNpm(["ci"], workingDirectory: projectDirectory);
             }
 
             lines.Add($"  BUILD   {component.ComponentKey}: running npm build in {GetDisplayPath(component.SourceRoot, projectDirectory)}.");
-            RunProcess(npm, ["run", "build"], workingDirectory: projectDirectory);
+            RunNpm(["run", "build"], workingDirectory: projectDirectory);
 
             var distPath = Path.Join(projectDirectory, "dist");
             if (!Directory.Exists(distPath))
@@ -2430,6 +2429,80 @@ internal static partial class Program
             }
 
             CopyDirectory(distPath, publishRoot);
+        }
+
+        private static void RunNpm(
+            IReadOnlyList<string> arguments,
+            string workingDirectory)
+        {
+            if (OperatingSystem.IsWindows()
+                && TryResolveNodeBackedNpm(out var nodePath, out var npmCliPath))
+            {
+                // npm.cmd probes project-local npm installations on Windows; invoking the global CLI through node avoids stale node_modules\npm shims.
+                RunProcess(nodePath, [npmCliPath, .. arguments], workingDirectory: workingDirectory);
+                return;
+            }
+
+            RunProcess(OperatingSystem.IsWindows() ? "npm.cmd" : "npm", arguments, workingDirectory: workingDirectory);
+        }
+
+        private static bool TryResolveNodeBackedNpm(
+            out string nodePath,
+            out string npmCliPath)
+        {
+            nodePath = FindOnPath("node.exe") ?? string.Empty;
+            npmCliPath = string.Empty;
+            if (string.IsNullOrWhiteSpace(nodePath))
+            {
+                return false;
+            }
+
+            var nodeDirectory = Path.GetDirectoryName(nodePath);
+            if (!string.IsNullOrWhiteSpace(nodeDirectory))
+            {
+                var siblingNpmCli = Path.Join(nodeDirectory, "node_modules", "npm", "bin", "npm-cli.js");
+                if (File.Exists(siblingNpmCli))
+                {
+                    npmCliPath = siblingNpmCli;
+                    return true;
+                }
+            }
+
+            foreach (var directory in GetPathDirectories())
+            {
+                var npmCli = Path.Join(directory, "node_modules", "npm", "bin", "npm-cli.js");
+                if (File.Exists(npmCli))
+                {
+                    npmCliPath = npmCli;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string? FindOnPath(string fileName)
+            => GetPathDirectories()
+                .Select(directory => Path.Join(directory, fileName))
+                .FirstOrDefault(File.Exists);
+
+        private static IEnumerable<string> GetPathDirectories()
+        {
+            var path = Environment.GetEnvironmentVariable("PATH");
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                yield break;
+            }
+
+            foreach (var item in path.Split(
+                         Path.PathSeparator,
+                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Directory.Exists(item))
+                {
+                    yield return item;
+                }
+            }
         }
 
         private static string GetDisplayPath(string root, string path)
