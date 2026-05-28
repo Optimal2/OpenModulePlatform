@@ -24,6 +24,8 @@ public sealed class PortalWidgetRuntimeDataPackageService
     private const string BinaryDataIdPropertyName = "binaryDataId";
     private const string BinaryDataHashPropertyName = "binaryDataHash";
 
+    private static readonly UTF8Encoding Utf8NoBom = new(false);
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         AllowTrailingCommas = true,
@@ -703,7 +705,7 @@ WHEN NOT MATCHED THEN
         => await AddBytesEntryAsync(
             archive,
             entryName,
-            new UTF8Encoding(false).GetBytes(content),
+            Utf8NoBom.GetBytes(content),
             ct);
 
     private static async Task AddBytesEntryAsync(
