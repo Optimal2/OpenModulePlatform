@@ -297,7 +297,7 @@
                 return;
             }
 
-            if (event.target.closest('button, a, input, textarea, select, label, summary, [data-widget-resize], [data-widget-settings-panel]')) {
+            if (event.target.closest('button, a, input, textarea, select, label, summary, [data-widget-resize], [data-widget-settings-panel], [data-widget-zoom-panel]')) {
                 return;
             }
 
@@ -487,14 +487,37 @@
     }
 
     function bindWidgetSettings(root, widget, onChange = () => {}) {
+        const zoomToggle = widget.querySelector('[data-widget-zoom-toggle]');
+        const zoomPanel = widget.querySelector('[data-widget-zoom-panel]');
         const toggle = widget.querySelector('[data-widget-settings-toggle]');
         const panel = widget.querySelector('[data-widget-settings-panel]');
+        if (zoomToggle && zoomPanel && zoomToggle.dataset.dashboardWidgetSettingsBound !== 'true') {
+            zoomToggle.dataset.dashboardWidgetSettingsBound = 'true';
+            zoomToggle.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const isOpen = zoomPanel.hidden;
+                if (panel && isOpen) {
+                    panel.hidden = true;
+                    toggle?.setAttribute('aria-expanded', 'false');
+                }
+
+                zoomPanel.hidden = !isOpen;
+                zoomToggle.setAttribute('aria-expanded', String(isOpen));
+            });
+        }
+
         if (toggle && panel && toggle.dataset.dashboardWidgetSettingsBound !== 'true') {
             toggle.dataset.dashboardWidgetSettingsBound = 'true';
             toggle.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 const isOpen = panel.hidden;
+                if (zoomPanel && isOpen) {
+                    zoomPanel.hidden = true;
+                    zoomToggle?.setAttribute('aria-expanded', 'false');
+                }
+
                 panel.hidden = !isOpen;
                 toggle.setAttribute('aria-expanded', String(isOpen));
             });
@@ -2526,6 +2549,9 @@
             cancelButton?.addEventListener('click', cancel);
             dialog.addEventListener('cancel', cancel);
             dialog.showModal();
+            window.requestAnimationFrame(() => {
+                saveButton?.focus();
+            });
         });
     }
 
@@ -2646,6 +2672,9 @@
             delete button.dataset.dashboardFavoriteBound;
         });
         element.querySelectorAll('[data-widget-settings-toggle]').forEach((button) => {
+            delete button.dataset.dashboardWidgetSettingsBound;
+        });
+        element.querySelectorAll('[data-widget-zoom-toggle]').forEach((button) => {
             delete button.dataset.dashboardWidgetSettingsBound;
         });
         element.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
@@ -2835,8 +2864,15 @@
 
         const settings = createWidgetSettingsControls(root, widget);
         if (settings) {
-            element.appendChild(settings.toggle);
-            element.appendChild(settings.panel);
+            if (settings.zoomToggle && settings.zoomPanel) {
+                element.appendChild(settings.zoomToggle);
+                element.appendChild(settings.zoomPanel);
+            }
+
+            if (settings.toggle && settings.panel) {
+                element.appendChild(settings.toggle);
+                element.appendChild(settings.panel);
+            }
         }
 
         const resize = document.createElement('span');
@@ -2850,29 +2886,23 @@
     }
 
     function createWidgetSettingsControls(root, widget) {
-        const label = root.dataset.widgetSettingsLabel || 'Widget settings';
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'dashboard-widget__settings-toggle';
-        toggle.dataset.widgetSettingsToggle = '';
-        toggle.title = label;
-        toggle.setAttribute('aria-label', label);
-        toggle.setAttribute('aria-expanded', 'false');
+        const zoomLabel = root.dataset.contentScaleLabel || 'Zoom';
+        const zoomToggle = createWidgetPanelToggle(
+            'dashboard-widget__zoom-toggle',
+            'data-widget-zoom-toggle',
+            'dashboard-widget__zoom-icon',
+            zoomLabel);
 
-        const icon = document.createElement('span');
-        icon.className = 'dashboard-widget__settings-icon';
-        icon.setAttribute('aria-hidden', 'true');
-        toggle.appendChild(icon);
+        const zoomPanel = document.createElement('div');
+        zoomPanel.className = 'dashboard-widget__zoom-panel';
+        zoomPanel.dataset.widgetZoomPanel = '';
+        zoomPanel.hidden = true;
+        zoomPanel.appendChild(createContentScaleField(root, widget.contentScale));
 
-        const panel = document.createElement('div');
-        panel.className = 'dashboard-widget__settings-panel';
-        panel.dataset.widgetSettingsPanel = '';
-        panel.hidden = true;
-
-        panel.appendChild(createContentScaleField(root, widget.contentScale));
+        const settingFields = [];
 
         if (widget.payload === 'portal-entry-list') {
-            panel.appendChild(createSelectField(
+            settingFields.push(createSelectField(
                 root.dataset.columnCountLabel || 'Column count',
                 [
                     ['0', root.dataset.defaultColumnsLabel || 'Default'],
@@ -2885,7 +2915,7 @@
                     select.dataset.widgetIntDataControl = '';
                 }));
         } else if (widget.payload === 'weekday-date') {
-            panel.appendChild(createSelectField(
+            settingFields.push(createSelectField(
                 root.dataset.weekNumberLabel || 'Week number',
                 [
                     ['0', root.dataset.showWeekNumberLabel || 'Show week number'],
@@ -2896,13 +2926,46 @@
                     select.dataset.widgetIntDataControl = '';
                 }));
         } else if (isBlankWidgetPayload(widget.payload)) {
-            panel.appendChild(createBlankWidgetStyleField(root, widget));
+            settingFields.push(createBlankWidgetStyleField(root, widget));
             if (root.dataset.isPortalAdmin === 'true') {
-                panel.appendChild(createBlankWidgetAdminControls(root));
+                settingFields.push(createBlankWidgetAdminControls(root));
             }
         }
 
-        return { toggle, panel };
+        if (settingFields.length === 0) {
+            return { zoomToggle, zoomPanel };
+        }
+
+        const label = root.dataset.widgetSettingsLabel || 'Widget settings';
+        const toggle = createWidgetPanelToggle(
+            'dashboard-widget__settings-toggle',
+            'data-widget-settings-toggle',
+            'dashboard-widget__settings-icon',
+            label);
+
+        const panel = document.createElement('div');
+        panel.className = 'dashboard-widget__settings-panel';
+        panel.dataset.widgetSettingsPanel = '';
+        panel.hidden = true;
+        settingFields.forEach((field) => panel.appendChild(field));
+
+        return { zoomToggle, zoomPanel, toggle, panel };
+    }
+
+    function createWidgetPanelToggle(className, dataAttributeName, iconClassName, label) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = className;
+        toggle.setAttribute(dataAttributeName, '');
+        toggle.title = label;
+        toggle.setAttribute('aria-label', label);
+        toggle.setAttribute('aria-expanded', 'false');
+
+        const icon = document.createElement('span');
+        icon.className = iconClassName;
+        icon.setAttribute('aria-hidden', 'true');
+        toggle.appendChild(icon);
+        return toggle;
     }
 
     function createContentScaleField(root, value) {
