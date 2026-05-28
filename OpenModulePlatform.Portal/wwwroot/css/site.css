@@ -1349,9 +1349,7 @@ button {
 
 .portal-dashboard.is-editing .portal-dashboard__canvas {
     overflow: visible;
-    border-color: var(--dashboard-edit-accent-soft);
-    border-top-width: 2px;
-    border-top-color: var(--dashboard-edit-accent);
+    border: 2px solid var(--dashboard-edit-accent);
     border-radius: 16px;
     background:
         linear-gradient(90deg, rgba(215, 222, 234, 0.36) 1px, transparent 1px),
