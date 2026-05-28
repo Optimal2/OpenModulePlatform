@@ -3629,12 +3629,9 @@ WHEN NOT MATCHED THEN
         }
         else if (node is JsonArray array)
         {
-            foreach (var child in array)
+            foreach (var child in array.Where(static child => child is not null))
             {
-                if (child is not null)
-                {
-                    RemapWidgetRuntimeBinaryDataIdsInPlace(child, binaryIdMap);
-                }
+                RemapWidgetRuntimeBinaryDataIdsInPlace(child!, binaryIdMap);
             }
         }
     }

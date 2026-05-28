@@ -1137,6 +1137,15 @@
         window.addEventListener(FAVORITE_CHANGED_EVENT, handleExternalFavoriteChanged);
     }
 
+    function initTopbarComponents(topbar) {
+        topbar.querySelectorAll('[data-portal-topbar-hover-menu]').forEach(initHoverMenu);
+        topbar.querySelectorAll('[data-portal-topbar-admin-submenu]').forEach(initAdminSubmenu);
+        topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
+        topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
+        topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
+        initSessionStatusCheck(topbar);
+    }
+
     function initTopbar(topbar) {
         if (!topbar) {
             return;
@@ -1146,24 +1155,17 @@
 
         if (topbar.dataset.portalTopbarInitialized === 'true') {
             initializedTopbars.add(topbar);
-            topbar.querySelectorAll('[data-portal-topbar-hover-menu]').forEach(initHoverMenu);
-            topbar.querySelectorAll('[data-portal-topbar-admin-submenu]').forEach(initAdminSubmenu);
-            topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
-            topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
-            topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
-            initSessionStatusCheck(topbar);
+            initTopbarComponents(topbar);
             scheduleRebalance(topbar);
+            if (resizeObserver) {
+                resizeObserver.observe(topbar);
+            }
             return;
         }
 
         topbar.dataset.portalTopbarInitialized = 'true';
         initializedTopbars.add(topbar);
-        topbar.querySelectorAll('[data-portal-topbar-hover-menu]').forEach(initHoverMenu);
-        topbar.querySelectorAll('[data-portal-topbar-admin-submenu]').forEach(initAdminSubmenu);
-        topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
-        topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
-        topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
-        initSessionStatusCheck(topbar);
+        initTopbarComponents(topbar);
 
         topbar.querySelectorAll('[data-portal-topbar-admin-menu]').forEach(function (menu) {
             var parentDetails = menu.closest('details');

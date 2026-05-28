@@ -483,12 +483,9 @@ WHEN NOT MATCHED THEN
         }
         else if (node is JsonArray array)
         {
-            foreach (var child in array)
+            foreach (var child in array.Where(static child => child is not null))
             {
-                if (child is not null)
-                {
-                    RemapBinaryDataIdsInPlace(child, binaryIdMap);
-                }
+                RemapBinaryDataIdsInPlace(child!, binaryIdMap);
             }
         }
     }
@@ -536,12 +533,9 @@ WHEN NOT MATCHED THEN
         }
         else if (node is JsonArray array)
         {
-            foreach (var child in array)
+            foreach (var child in array.Where(static child => child is not null))
             {
-                if (child is not null)
-                {
-                    CollectBinaryDataIds(child, ids);
-                }
+                CollectBinaryDataIds(child!, ids);
             }
         }
     }

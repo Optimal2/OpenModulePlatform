@@ -3480,9 +3480,7 @@ ORDER BY ar.ArtifactId DESC;
             foreach (var candidate in candidates)
             {
                 var item = new UniversalPackageCandidateListItem(candidate);
-                var isChecked = hadSelection
-                    ? previouslyChecked.Contains(candidate.PackagePath)
-                    : true;
+                var isChecked = !hadSelection || previouslyChecked.Contains(candidate.PackagePath);
                 _itemList.Items.Add(item, isChecked);
             }
 
@@ -3645,9 +3643,8 @@ ORDER BY ar.ArtifactId DESC;
         IReadOnlyList<BootstrapConfigProfile> configProfiles)
     {
         var choices = new Dictionary<string, UniversalPackageHostChoice>(StringComparer.OrdinalIgnoreCase);
-        foreach (var profile in configProfiles)
+        foreach (var choice in configProfiles.Select(CreateUniversalPackageHostChoice))
         {
-            var choice = CreateUniversalPackageHostChoice(profile);
             if (!string.IsNullOrWhiteSpace(choice.HostKey))
             {
                 choices.TryAdd(choice.HostKey, choice);

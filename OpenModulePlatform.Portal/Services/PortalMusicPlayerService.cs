@@ -314,11 +314,10 @@ WHERE binary_data_id = @binary_data_id
         var blocks = reader.ReadToEnd()
             .Split(["\r\n\r\n", "\n\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var tracks = new List<TrackMetadata>();
-        foreach (var block in blocks)
+        foreach (var lines in blocks.Select(block =>
+                     block.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                         .ToArray()))
         {
-            var lines = block
-                .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToArray();
             var musicLine = lines.FirstOrDefault(line => line.StartsWith("Music track:", StringComparison.OrdinalIgnoreCase));
             if (string.IsNullOrWhiteSpace(musicLine))
             {
@@ -630,12 +629,9 @@ WHEN NOT MATCHED THEN
     private static string NormalizeMatchText(string value)
     {
         var builder = new StringBuilder(value.Length);
-        foreach (var ch in value.ToLowerInvariant())
+        foreach (var ch in value.ToLowerInvariant().Where(char.IsLetterOrDigit))
         {
-            if (char.IsLetterOrDigit(ch))
-            {
-                builder.Append(ch);
-            }
+            builder.Append(ch);
         }
 
         return builder.ToString();
