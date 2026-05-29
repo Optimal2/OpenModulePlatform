@@ -136,12 +136,16 @@ credentials that belong to the installer profile rather than to the portable OMP
 object library.
 
 Use the installer action `Refresh object archive` to populate or update
-`data/global` from configured source repositories without starting an
-installation. The refresh first runs `git pull --ff-only` for every configured
-source repository and stops if any repository needs manual merge/conflict
-handling. Each pull has a two-minute timeout so a stuck network or credential
-prompt does not block the installer indefinitely. Then use `Create universal
-package` to choose:
+`data/global` from the matched profile's configured source repositories without
+starting an installation. The refresh first runs `git pull --ff-only` for every
+configured source repository and stops if any repository needs manual
+merge/conflict handling. Each pull has a two-minute timeout so a stuck network
+or credential prompt does not block the installer indefinitely. A developer
+installer that contains profiles for multiple target hosts can use
+`Refresh all host profiles` to run the same refresh for every discovered profile
+whose source repositories exist on the current computer. Profiles with missing
+source roots are skipped instead of falling back to an unrelated local source
+tree. Then use `Create universal package` to choose:
 
 - the target host profile, or a global-only package
 - global module definitions, artifacts, host configs, overlays, widgets, and widget data
@@ -152,6 +156,14 @@ The generated zip contains `omp-universal-package.json` and only the selected
 objects. This is the recommended way to create a customer or host-specific
 transport package from a developer machine and then import it through Portal, the
 HostAgent import folder, or another installer instance.
+
+The installer can also import a universal package into its own object archive.
+`Import universal package` copies package items into `data/global` and maps
+host-specific package paths such as `config-overlays/<host-key>/...` or
+`widget-data/<host-key>/...` into `data/hosts/<host-key>/...`. This is a staging
+operation only: it does not apply module definitions, copy artifacts to a target
+ArtifactStore, or change an installed OMP database. It lets an offline installer
+receive objects from another installer and later use them for upgrade or export.
 
 Portal also supports universal package import and export. Universal imports can
 be run in two modes: import all supported items immediately, or preview the zip

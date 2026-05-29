@@ -349,6 +349,16 @@ the package and installed database with the source repository manifest:
   versions, but it does not rewrite the tracked host profile files. Persisting
   host config changes is an explicit package refresh or manual config-editing
   step.
+- `Refresh all host profiles` runs the same lightweight sync for every
+  discovered host profile that has usable developer source roots on the current
+  computer. Profiles whose repositories are not present are skipped. Use this
+  before creating a host-specific universal package from a developer installer
+  that contains profiles for other target hosts.
+- `Import universal package` imports a universal module package zip into the
+  installer-local object archive. It updates `data/global` and, for
+  host-specific paths such as `config-overlays/<host-key>/...`,
+  `data/hosts/<host-key>` inside the installer package. It does not install
+  anything into the target OMP database or ArtifactStore.
 
 Private developer installer repositories can keep the committed package small:
 the root `OpenModulePlatform.Bootstrapper.exe` plus host profiles below
@@ -454,6 +464,19 @@ The sync action writes a timestamped diagnostic log to the user's temp folder
 (`omp-installer-sync-*.log`) and keeps tracked host config files unchanged.
 The command-line installer can use the same behavior before a bootstrap or
 upgrade with `--sync-package-objects-before-action`.
+
+`Refresh all host profiles` repeats this sync for every discovered host profile
+whose configured source repositories exist locally. This is intended for private
+developer installer packages that can export universal packages for machines
+other than the one currently running the installer. It is conservative: profiles
+with missing source roots are reported as skipped instead of being resolved from
+some other repository by accident.
+
+`Import universal package` is the inverse staging operation for installers that
+do not have source repository access. It reads a universal package zip and copies
+the contained portable objects into this installer package's object archive. A
+later install, upgrade, or export can then use those objects as if they had been
+generated locally.
 
 For non-interactive console installation, run:
 
