@@ -604,6 +604,168 @@
         });
     }
 
+    function notificationBadgeText(count) {
+        return count > 99 ? '99+' : String(Math.max(0, count));
+    }
+
+    function updateNotificationBadge(root, count) {
+        if (!root) {
+            return;
+        }
+
+        var badge = root.querySelector('[data-portal-topbar-notification-badge]');
+        if (!badge) {
+            return;
+        }
+
+        var safeCount = Math.max(0, Number(count) || 0);
+        badge.textContent = notificationBadgeText(safeCount);
+        badge.hidden = safeCount === 0;
+    }
+
+    function updateNotificationEmptyState(root) {
+        if (!root) {
+            return;
+        }
+
+        var list = root.querySelector('[data-portal-topbar-notifications-list]');
+        var empty = root.querySelector('[data-portal-topbar-notifications-empty]');
+        var markAll = root.querySelector('[data-portal-topbar-notification-mark-all-form]');
+        var hasRows = !!(list && list.querySelector('[data-portal-topbar-notification-form]'));
+
+        if (empty) {
+            empty.hidden = hasRows;
+        }
+
+        if (markAll) {
+            markAll.hidden = !hasRows;
+        }
+    }
+
+    function reportNotificationSessionWarning(kind) {
+        window.dispatchEvent(new CustomEvent(SESSION_STATUS_WARNING_EVENT, {
+            detail: { kind: kind || 'auth' }
+        }));
+    }
+
+    function initNotificationForm(form) {
+        if (!form || form.dataset.portalTopbarNotificationFormInitialized === 'true') {
+            return;
+        }
+
+        form.dataset.portalTopbarNotificationFormInitialized = 'true';
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var root = form.closest('[data-portal-topbar-root]');
+            var button = form.querySelector('button[type="submit"]');
+            if (button) {
+                button.disabled = true;
+            }
+
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (response) {
+                    if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                        reportNotificationSessionWarning('auth');
+                        throw new Error('Notification action requires sign-in.');
+                    }
+
+                    if (!response.ok) {
+                        throw new Error('Notification mark-read failed with status ' + response.status + '.');
+                    }
+
+                    return response.json();
+                })
+                .then(function (payload) {
+                    form.remove();
+                    updateNotificationBadge(root, payload.unreadCount);
+                    updateNotificationEmptyState(root);
+
+                    if (payload.destinationUrl) {
+                        window.location.href = payload.destinationUrl;
+                    }
+                })
+                .catch(function (error) {
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn('OMP topbar notification action failed.', error);
+                    }
+                })
+                .finally(function () {
+                    if (button) {
+                        button.disabled = false;
+                    }
+                });
+        });
+    }
+
+    function initNotificationMarkAllForm(form) {
+        if (!form || form.dataset.portalTopbarNotificationMarkAllFormInitialized === 'true') {
+            return;
+        }
+
+        form.dataset.portalTopbarNotificationMarkAllFormInitialized = 'true';
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var root = form.closest('[data-portal-topbar-root]');
+            var button = form.querySelector('button[type="submit"]');
+            if (button) {
+                button.disabled = true;
+            }
+
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (response) {
+                    if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                        reportNotificationSessionWarning('auth');
+                        throw new Error('Notification action requires sign-in.');
+                    }
+
+                    if (!response.ok) {
+                        throw new Error('Notification mark-all-read failed with status ' + response.status + '.');
+                    }
+
+                    return response.json();
+                })
+                .then(function (payload) {
+                    var list = root ? root.querySelector('[data-portal-topbar-notifications-list]') : null;
+                    if (list) {
+                        list.querySelectorAll('[data-portal-topbar-notification-form]').forEach(function (row) {
+                            row.remove();
+                        });
+                    }
+
+                    updateNotificationBadge(root, payload.unreadCount);
+                    updateNotificationEmptyState(root);
+                })
+                .catch(function (error) {
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn('OMP topbar notification action failed.', error);
+                    }
+                })
+                .finally(function () {
+                    if (button) {
+                        button.disabled = false;
+                    }
+                });
+        });
+    }
+
     function handleExternalFavoriteChanged(event) {
         var payload = normalizeFavoritePayload(event.detail);
         if (!payload || payload.source === 'topbar') {
@@ -1152,6 +1314,9 @@
         topbar.querySelectorAll('[data-portal-topbar-entry-filter]').forEach(initEntryFilter);
         topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
+        topbar.querySelectorAll('[data-portal-topbar-notification-form]').forEach(initNotificationForm);
+        topbar.querySelectorAll('[data-portal-topbar-notification-mark-all-form]').forEach(initNotificationMarkAllForm);
+        updateNotificationEmptyState(topbar);
         initSessionStatusCheck(topbar);
     }
 
