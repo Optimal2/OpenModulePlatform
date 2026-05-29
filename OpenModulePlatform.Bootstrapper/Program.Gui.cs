@@ -2752,24 +2752,31 @@ internal static partial class Program
                 }
 
                 Report($"Preparing host profile {profile.DisplayName}...");
-                if (!TryCreateProfilePreparationForm(profile, out var profileForm, out var skipReason))
+                try
                 {
-                    skipped++;
-                    lines.Add($"> Profile {profile.DisplayName}: skipped - {skipReason}");
-                    Report($"Skipped host profile {profile.DisplayName}: {skipReason}");
-                    continue;
+                    var profilePayloadRoot = ResolvePayloadRoot(_cli, profile.ConfigPath);
+                    lines.Add($"> Profile {profile.DisplayName}");
+                    lines.Add($"  Config: {profile.ConfigPath}");
+                    lines.Add($"  Package root: {profilePayloadRoot}");
+
+                    warnings += SyncHostSpecificPackageObjectsCore(
+                        hookSourceRoots,
+                        lines,
+                        profile.ConfigPath,
+                        profilePayloadRoot,
+                        Report);
+
+                    synced++;
+                    Report($"Prepared host profile {profile.DisplayName}.");
+                    lines.Add(string.Empty);
                 }
-
-                using var disposableProfileForm = ReferenceEquals(profileForm, this) ? null : profileForm;
-                lines.Add($"> Profile {profile.DisplayName}");
-                lines.Add($"  Config: {profile.ConfigPath}");
-                lines.Add($"  Package root: {profileForm!._payloadRoot}");
-
-                warnings += profileForm.SyncHostSpecificPackageObjectsCore(hookSourceRoots, lines);
-
-                synced++;
-                Report($"Prepared host profile {profile.DisplayName}.");
-                lines.Add(string.Empty);
+                catch (SystemException ex)
+                {
+                    warnings++;
+                    skipped++;
+                    lines.Add($"> Profile {profile.DisplayName}: skipped - {ex.Message}");
+                    Report($"Skipped host profile {profile.DisplayName}: {ex.Message}");
+                }
             }
 
             if (synced == 0)
@@ -2784,15 +2791,20 @@ internal static partial class Program
 
         private int SyncHostSpecificPackageObjectsCore(
             IReadOnlyList<string> sourceRoots,
-            List<string> lines)
+            List<string> lines,
+            string? configPathOverride = null,
+            string? payloadRootOverride = null,
+            Action<string>? progress = null)
         {
             var warnings = 0;
             var copied = 0;
             var unchanged = 0;
-            var targetHostProfile = TryResolveInstallerHostProfileKey(_configPath, out var hostProfileKey)
+            var configPath = configPathOverride ?? _configPath;
+            var payloadRoot = payloadRootOverride ?? _payloadRoot;
+            var targetHostProfile = TryResolveInstallerHostProfileKey(configPath, out var hostProfileKey)
                 ? hostProfileKey
                 : string.Empty;
-            var profileDirectory = Path.GetDirectoryName(_configPath) ?? Environment.CurrentDirectory;
+            var profileDirectory = Path.GetDirectoryName(configPath) ?? Environment.CurrentDirectory;
 
             lines.Add("  Host-specific package objects:");
             if (string.IsNullOrWhiteSpace(targetHostProfile))
@@ -2802,7 +2814,8 @@ internal static partial class Program
             }
 
             lines.Add($"    Target host profile: {targetHostProfile}");
-            var hostArchiveRoot = Path.Join(_payloadRoot, "data", "hosts", targetHostProfile);
+            var hostArchiveRoot = Path.Join(payloadRoot, "data", "hosts", targetHostProfile);
+            progress?.Invoke($"Preparing host archive {targetHostProfile}...");
             Directory.CreateDirectory(hostArchiveRoot);
 
             foreach (var folder in GetHostSpecificObjectFolders())
@@ -2817,20 +2830,23 @@ internal static partial class Program
                     sourceFolder,
                     Path.Join(hostArchiveRoot, folder.FolderName),
                     folder,
+                    payloadRoot,
                     lines,
                     ref copied,
                     ref unchanged,
                     ref warnings);
             }
 
-            if (File.Exists(_configPath))
+            if (File.Exists(configPath))
             {
-                using var document = JsonDocument.Parse(File.ReadAllText(_configPath));
+                progress?.Invoke($"Reading host profile {targetHostProfile}...");
+                using var document = JsonDocument.Parse(File.ReadAllText(configPath));
                 CopyHostSpecificObjectLists(
                     document.RootElement,
                     profileDirectory,
                     hostArchiveRoot,
                     "profile",
+                    payloadRoot,
                     lines,
                     ref copied,
                     ref unchanged,
@@ -2846,6 +2862,7 @@ internal static partial class Program
                             profileDirectory,
                             hostArchiveRoot,
                             $"module {module.Name}",
+                            payloadRoot,
                             lines,
                             ref copied,
                             ref unchanged,
@@ -2858,9 +2875,12 @@ internal static partial class Program
                 sourceRoots,
                 targetHostProfile,
                 hostArchiveRoot,
+                configPath,
+                payloadRoot,
                 lines,
                 ref copied,
-                ref unchanged);
+                ref unchanged,
+                progress);
 
             lines.Add($"    Summary: {copied} copied/updated, {unchanged} already current, {warnings} warning(s).");
             return warnings;
@@ -2879,6 +2899,7 @@ internal static partial class Program
             string sourceFolder,
             string targetFolder,
             HostSpecificObjectFolder folder,
+            string payloadRoot,
             List<string> lines,
             ref int copied,
             ref int unchanged,
@@ -2898,6 +2919,7 @@ internal static partial class Program
                     targetFolder,
                     relativePath,
                     $"{folder.FolderName}/{relativePath}",
+                    payloadRoot,
                     lines,
                     ref copied,
                     ref unchanged,
@@ -2910,6 +2932,7 @@ internal static partial class Program
             string profileDirectory,
             string hostArchiveRoot,
             string sourceLabel,
+            string payloadRoot,
             List<string> lines,
             ref int copied,
             ref int unchanged,
@@ -2943,6 +2966,7 @@ internal static partial class Program
                         Path.Join(hostArchiveRoot, folder.FolderName),
                         destinationName,
                         $"{sourceLabel}/{folder.ProfileListName}/{destinationName}",
+                        payloadRoot,
                         lines,
                         ref copied,
                         ref unchanged,
@@ -3046,6 +3070,7 @@ internal static partial class Program
             string targetRoot,
             string destinationName,
             string displayName,
+            string payloadRoot,
             List<string> lines,
             ref int copied,
             ref int unchanged,
@@ -3064,7 +3089,7 @@ internal static partial class Program
                 }
 
                 copied++;
-                lines.Add($"    UPDATED {displayName}: copied to {GetDisplayPath(_payloadRoot, targetPath)}.");
+                lines.Add($"    UPDATED {displayName}: copied to {GetDisplayPath(payloadRoot, targetPath)}.");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
             {
@@ -3077,9 +3102,12 @@ internal static partial class Program
             IReadOnlyList<string> sourceRoots,
             string targetHostProfile,
             string hostArchiveRoot,
+            string hostProfilePath,
+            string payloadRoot,
             List<string> lines,
             ref int copied,
-            ref int unchanged)
+            ref int unchanged,
+            Action<string>? progress = null)
         {
             var warnings = 0;
             foreach (var sourceRoot in sourceRoots.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
@@ -3112,7 +3140,7 @@ internal static partial class Program
                         "-OutputRoot",
                         tempRoot,
                         "-HostProfilePath",
-                        _configPath,
+                        hostProfilePath,
                         "-TargetHostProfile",
                         targetHostProfile,
                         "-Configuration",
@@ -3146,6 +3174,7 @@ internal static partial class Program
                             generatedRoot,
                             Path.Join(hostArchiveRoot, folder.FolderName),
                             folder,
+                            payloadRoot,
                             lines,
                             ref copied,
                             ref unchanged,
@@ -3198,38 +3227,6 @@ internal static partial class Program
             }
 
             return keys.OrderBy(static key => key, StringComparer.OrdinalIgnoreCase).ToArray();
-        }
-
-        private bool TryCreateProfilePreparationForm(
-            BootstrapConfigProfile profile,
-            out InstallerForm? profileForm,
-            out string skipReason)
-        {
-            profileForm = null;
-            try
-            {
-                var isCurrentProfile = profile.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase);
-                var profileConfig = isCurrentProfile
-                    ? _config
-                    : ReadJsonAsync<BootstrapConfig>(profile.ConfigPath).GetAwaiter().GetResult();
-
-                profileForm = isCurrentProfile
-                    ? this
-                    : new InstallerForm(
-                        _configProfiles,
-                        profileConfig,
-                        profile.ConfigPath,
-                        ResolvePayloadRoot(_cli, profile.ConfigPath),
-                        _cli,
-                        initializeUi: false);
-                skipReason = string.Empty;
-                return true;
-            }
-            catch (SystemException ex)
-            {
-                skipReason = ex.Message;
-                return false;
-            }
         }
 
         private bool TryUpdateHostAgentPackagePathFromSyncedArtifacts(
