@@ -505,7 +505,12 @@
 
         @if (Model.AvailablePackages.Count == 0)
         {
-            <div class="empty-state">@L["No available module packages found."]</div>
+            <div class="empty-state">
+                @L["No available module packages found."]
+                <div class="muted top-gap">
+                    @L["Check that ArtifactUpload:AvailableModuleDefinitionsRoot and ArtifactUpload:AvailableArtifactsRoot point to the HostAgent _available package library folders and that the Portal appsettings.json has been redeployed."]
+                </div>
+            </div>
         }
         else
         {
