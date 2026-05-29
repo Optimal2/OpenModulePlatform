@@ -349,11 +349,14 @@ the package and installed database with the source repository manifest:
   versions, but it does not rewrite the tracked host profile files. Persisting
   host config changes is an explicit package refresh or manual config-editing
   step.
-- `Refresh all host profiles` runs the same lightweight sync for every
-  discovered host profile that has usable developer source roots on the current
-  computer. Profiles whose repositories are not present are skipped. Use this
-  before creating a host-specific universal package from a developer installer
-  that contains profiles for other target hosts.
+- `Prepare all host profiles` refreshes the shared object archive and
+  materializes host-specific portable objects for every discovered host profile
+  that has usable developer source roots on the current computer. It copies
+  profile-local and profile-declared `host-configs`, `config-overlays`,
+  `widgets`, and `widget-data` into `data/hosts/<host-profile>/...`, and runs
+  repository-owned host-profile object hooks when present. Use this before
+  creating a host-specific universal package from a developer installer that
+  contains profiles for other target hosts.
 - `Import universal package` imports a universal module package zip into the
   installer-local object archive. It updates `data/global` and, for
   host-specific paths such as `config-overlays/<host-key>/...`,
@@ -465,12 +468,17 @@ The sync action writes a timestamped diagnostic log to the user's temp folder
 The command-line installer can use the same behavior before a bootstrap or
 upgrade with `--sync-package-objects-before-action`.
 
-`Refresh all host profiles` repeats this sync for every discovered host profile
-whose configured source repositories exist locally. This is intended for private
-developer installer packages that can export universal packages for machines
-other than the one currently running the installer. It is conservative: profiles
-with missing source roots are reported as skipped instead of being resolved from
-some other repository by accident.
+`Prepare all host profiles` repeats this sync for every discovered host profile
+whose configured source repositories exist locally, then prepares that profile's
+host-specific object archive under `data/hosts/<host-profile>`. Profile-local
+folders and entries declared in `hostConfigurationFiles`, `configOverlayFiles`,
+`widgetFiles`, and `widgetDataFiles` are copied there. If a source repository
+contains `scripts/omp/build-host-profile-objects.ps1`, the installer calls it so
+the repository can generate module-owned host-specific objects from the selected
+profile. This is intended for private developer installer packages that can
+export universal packages for machines other than the one currently running the
+installer. It is conservative: profiles with missing source roots are reported
+as skipped instead of being resolved from some other repository by accident.
 
 `Import universal package` is the inverse staging operation for installers that
 do not have source repository access. It reads a universal package zip and copies

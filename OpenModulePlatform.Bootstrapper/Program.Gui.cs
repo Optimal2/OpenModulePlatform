@@ -467,7 +467,7 @@ internal static partial class Program
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
         private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
         private readonly Button _refreshObjectArchiveButton = new() { Text = "Refresh object archive", AutoSize = true };
-        private readonly Button _syncAllProfilePackageObjectsButton = new() { Text = "Refresh all host profiles", AutoSize = true };
+        private readonly Button _syncAllProfilePackageObjectsButton = new() { Text = "Prepare all host profiles", AutoSize = true };
         private readonly Button _importUniversalPackageButton = new() { Text = "Import universal package", AutoSize = true };
         private readonly Button _prunePackageArchiveButton = new() { Text = "Keep latest package objects", AutoSize = true };
         private readonly Button _createUniversalPackageButton = new() { Text = "Create universal package", AutoSize = true };
@@ -810,7 +810,7 @@ internal static partial class Program
                 [
                     (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
                     (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
-                    (_syncAllProfilePackageObjectsButton, "Runs package-object sync for every discovered host profile that has usable developer source roots. Profiles with missing local source repositories are skipped."),
+                    (_syncAllProfilePackageObjectsButton, "Refreshes the shared object archive and materializes host-specific host configs, config overlays, widgets, and widget data for every discovered host profile. Use this before exporting a universal package for another host."),
                     (_importUniversalPackageButton, "Imports a universal module package zip into this installer's object archive without touching the installed OMP runtime."),
                     (_prunePackageArchiveButton, "Deletes older module definitions and artifact package zips from this installer package while keeping the latest version for each module/app slot. Files referenced by the current profile are kept."),
                     (_createUniversalPackageButton, "Creates a universal module package zip from this installer's object archive. You can choose global objects and host-specific overlays for any available host profile."),
@@ -1503,8 +1503,8 @@ internal static partial class Program
         {
             ApplyValues();
             var confirmation = MessageBox.Show(
-                "This updates this installer package by running package-object sync for every discovered host profile that has usable developer source roots on this computer. Profiles whose source repositories are not present are skipped. Continue?",
-                "Refresh all host profiles",
+                "This updates this installer package by refreshing shared objects and materializing host-specific objects for every discovered host profile that has usable developer source roots on this computer. Profiles whose source repositories are not present are skipped. Continue?",
+                "Prepare all host profiles",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2);
@@ -1514,10 +1514,10 @@ internal static partial class Program
             }
 
             await RunGuiOperationAsync(
-                "Syncing package objects for all host profiles...",
-                "All-profile package object sync completed.",
-                "All-profile package object sync completed with warnings. Review the log for details.",
-                "All-profile package object sync failed.",
+                "Preparing package objects for all host profiles...",
+                "All host profiles prepared.",
+                "Host profile preparation completed with warnings. Review the log for details.",
+                "Host profile preparation failed.",
                 async () =>
                 {
                     var result = await SyncAllProfilePackageObjectsCoreAsync();
@@ -2697,7 +2697,7 @@ internal static partial class Program
         {
             var lines = new List<string>
             {
-                "All-profile package object refresh:",
+                "All-profile host package object preparation:",
                 $"  Installer package: {_payloadRoot}",
                 $"  Profiles discovered: {_configProfiles.Count}",
                 string.Empty
@@ -2742,6 +2742,9 @@ internal static partial class Program
                     warnings++;
                 }
 
+                var sourceRoots = profileForm.ResolveDeveloperSourceRoots(throwIfMissing: true);
+                warnings += profileForm.SyncHostSpecificPackageObjectsCore(sourceRoots, lines);
+
                 synced++;
                 lines.Add(string.Empty);
             }
@@ -2752,8 +2755,424 @@ internal static partial class Program
                 lines.Add("WARN: No profile had usable developer source roots on this computer.");
             }
 
-            lines.Add($"Summary: {synced} profile(s) synced, {skipped} skipped, {warnings} warning(s).");
+            lines.Add($"Summary: {synced} profile(s) prepared, {skipped} skipped, {warnings} warning(s).");
             return new DeveloperPackageObjectSyncResult(warnings > 0, false, lines);
+        }
+
+        private int SyncHostSpecificPackageObjectsCore(
+            IReadOnlyList<string> sourceRoots,
+            List<string> lines)
+        {
+            var warnings = 0;
+            var copied = 0;
+            var unchanged = 0;
+            var targetHostProfile = ResolveUniversalPackageHostKey(_configPath);
+            var profileDirectory = Path.GetDirectoryName(_configPath) ?? Environment.CurrentDirectory;
+
+            lines.Add("  Host-specific package objects:");
+            if (string.IsNullOrWhiteSpace(targetHostProfile))
+            {
+                lines.Add("    WARN    could not resolve target host profile from config path.");
+                return 1;
+            }
+
+            lines.Add($"    Target host profile: {targetHostProfile}");
+            var hostArchiveRoot = Path.Join(_payloadRoot, "data", "hosts", targetHostProfile);
+            Directory.CreateDirectory(hostArchiveRoot);
+
+            foreach (var folder in GetHostSpecificObjectFolders())
+            {
+                var sourceFolder = Path.Join(profileDirectory, folder.FolderName);
+                if (!Directory.Exists(sourceFolder))
+                {
+                    continue;
+                }
+
+                CopyHostSpecificObjectDirectory(
+                    sourceFolder,
+                    Path.Join(hostArchiveRoot, folder.FolderName),
+                    folder,
+                    lines,
+                    ref copied,
+                    ref unchanged,
+                    ref warnings);
+            }
+
+            if (File.Exists(_configPath))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(_configPath));
+                CopyHostSpecificObjectLists(
+                    document.RootElement,
+                    profileDirectory,
+                    hostArchiveRoot,
+                    "profile",
+                    lines,
+                    ref copied,
+                    ref unchanged,
+                    ref warnings);
+
+                if (document.RootElement.TryGetProperty("modules", out var modules)
+                    && modules.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var module in modules.EnumerateObject())
+                    {
+                        CopyHostSpecificObjectLists(
+                            module.Value,
+                            profileDirectory,
+                            hostArchiveRoot,
+                            $"module {module.Name}",
+                            lines,
+                            ref copied,
+                            ref unchanged,
+                            ref warnings);
+                    }
+                }
+            }
+
+            warnings += RunHostProfileObjectHooks(
+                sourceRoots,
+                targetHostProfile,
+                hostArchiveRoot,
+                lines,
+                ref copied,
+                ref unchanged);
+
+            lines.Add($"    Summary: {copied} copied/updated, {unchanged} already current, {warnings} warning(s).");
+            return warnings;
+        }
+
+        private static IReadOnlyList<HostSpecificObjectFolder> GetHostSpecificObjectFolders()
+            =>
+            [
+                new("host-configs", "hostConfigurationFiles", IsJsonOrZipFile),
+                new("config-overlays", "configOverlayFiles", IsJsonOrZipFile),
+                new("widgets", "widgetFiles", static path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)),
+                new("widget-data", "widgetDataFiles", static path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            ];
+
+        private void CopyHostSpecificObjectDirectory(
+            string sourceFolder,
+            string targetFolder,
+            HostSpecificObjectFolder folder,
+            List<string> lines,
+            ref int copied,
+            ref int unchanged,
+            ref int warnings)
+        {
+            foreach (var sourcePath in Directory.EnumerateFiles(sourceFolder, "*.*", SearchOption.AllDirectories)
+                         .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                if (!folder.Filter(sourcePath))
+                {
+                    continue;
+                }
+
+                var relativePath = Path.GetRelativePath(sourceFolder, sourcePath);
+                CopyHostSpecificObjectFile(
+                    sourcePath,
+                    targetFolder,
+                    relativePath,
+                    $"{folder.FolderName}/{relativePath}",
+                    lines,
+                    ref copied,
+                    ref unchanged,
+                    ref warnings);
+            }
+        }
+
+        private void CopyHostSpecificObjectLists(
+            JsonElement profile,
+            string profileDirectory,
+            string hostArchiveRoot,
+            string sourceLabel,
+            List<string> lines,
+            ref int copied,
+            ref int unchanged,
+            ref int warnings)
+        {
+            foreach (var folder in GetHostSpecificObjectFolders())
+            {
+                if (!profile.TryGetProperty(folder.ProfileListName, out var list)
+                    || list.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var entry in list.EnumerateArray())
+                {
+                    if (!TryResolveHostSpecificProfileEntry(
+                            entry,
+                            profileDirectory,
+                            folder,
+                            out var sourcePath,
+                            out var destinationName,
+                            out var warning))
+                    {
+                        warnings++;
+                        lines.Add($"    WARN    {sourceLabel}/{folder.ProfileListName}: {warning}");
+                        continue;
+                    }
+
+                    CopyHostSpecificObjectFile(
+                        sourcePath,
+                        Path.Join(hostArchiveRoot, folder.FolderName),
+                        destinationName,
+                        $"{sourceLabel}/{folder.ProfileListName}/{destinationName}",
+                        lines,
+                        ref copied,
+                        ref unchanged,
+                        ref warnings);
+                }
+            }
+        }
+
+        private static bool TryResolveHostSpecificProfileEntry(
+            JsonElement entry,
+            string profileDirectory,
+            HostSpecificObjectFolder folder,
+            out string sourcePath,
+            out string destinationName,
+            out string warning)
+        {
+            sourcePath = string.Empty;
+            destinationName = string.Empty;
+            warning = string.Empty;
+
+            if (entry.ValueKind == JsonValueKind.String)
+            {
+                var value = entry.GetString() ?? string.Empty;
+                var separatorIndex = value.IndexOf('=');
+                if (separatorIndex >= 0)
+                {
+                    destinationName = value[..separatorIndex].Trim();
+                    sourcePath = value[(separatorIndex + 1)..].Trim();
+                }
+                else
+                {
+                    sourcePath = value.Trim();
+                    destinationName = Path.GetFileName(sourcePath);
+                }
+            }
+            else if (entry.ValueKind == JsonValueKind.Object)
+            {
+                sourcePath = TryGetStringProperty(entry, "sourcePath");
+                if (string.IsNullOrWhiteSpace(sourcePath))
+                {
+                    sourcePath = TryGetStringProperty(entry, "path");
+                }
+
+                destinationName = TryGetStringProperty(entry, "destinationName");
+            }
+            else
+            {
+                warning = "entry must be a string or object.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(sourcePath))
+            {
+                warning = "source path is empty.";
+                return false;
+            }
+
+            sourcePath = ResolveProfileRelativePath(sourcePath, profileDirectory);
+            if (!File.Exists(sourcePath))
+            {
+                warning = $"source file was not found: {sourcePath}";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(destinationName))
+            {
+                destinationName = Path.GetFileName(sourcePath);
+            }
+
+            destinationName = NormalizeUniversalPackagePath(destinationName);
+            if (string.IsNullOrWhiteSpace(destinationName))
+            {
+                warning = "destination name is empty.";
+                return false;
+            }
+
+            if (!folder.Filter(destinationName))
+            {
+                warning = $"destination file type is not supported for {folder.FolderName}: {destinationName}";
+                return false;
+            }
+
+            return true;
+        }
+
+        private static string TryGetStringProperty(JsonElement element, string propertyName)
+        {
+            return element.TryGetProperty(propertyName, out var property)
+                && property.ValueKind == JsonValueKind.String
+                ? property.GetString() ?? string.Empty
+                : string.Empty;
+        }
+
+        private static string ResolveProfileRelativePath(string path, string profileDirectory)
+            => Path.IsPathRooted(path)
+                ? Path.GetFullPath(path)
+                : Path.GetFullPath(Path.Join(profileDirectory, path.Replace('/', Path.DirectorySeparatorChar)));
+
+        private void CopyHostSpecificObjectFile(
+            string sourcePath,
+            string targetRoot,
+            string destinationName,
+            string displayName,
+            List<string> lines,
+            ref int copied,
+            ref int unchanged,
+            ref int warnings)
+        {
+            try
+            {
+                var normalizedDestination = NormalizeUniversalPackagePath(destinationName);
+                var targetPath = CombineUnderRoot(targetRoot, normalizedDestination);
+                if (Path.GetFullPath(sourcePath).Equals(Path.GetFullPath(targetPath), StringComparison.OrdinalIgnoreCase)
+                    || !CopyFileIfDifferent(sourcePath, targetPath))
+                {
+                    unchanged++;
+                    lines.Add($"    OK      {displayName}: already current.");
+                    return;
+                }
+
+                copied++;
+                lines.Add($"    UPDATED {displayName}: copied to {GetDisplayPath(_payloadRoot, targetPath)}.");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                warnings++;
+                lines.Add($"    WARN    {displayName}: {ex.Message}");
+            }
+        }
+
+        private int RunHostProfileObjectHooks(
+            IReadOnlyList<string> sourceRoots,
+            string targetHostProfile,
+            string hostArchiveRoot,
+            List<string> lines,
+            ref int copied,
+            ref int unchanged)
+        {
+            var warnings = 0;
+            foreach (var sourceRoot in sourceRoots.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                var hookPath = Path.Join(sourceRoot, "scripts", "omp", "build-host-profile-objects.ps1");
+                if (!File.Exists(hookPath))
+                {
+                    continue;
+                }
+
+                var moduleKeys = ReadRepositoryModuleKeys(sourceRoot);
+                if (moduleKeys.Count == 0)
+                {
+                    continue;
+                }
+
+                var tempRoot = Path.Join(
+                    Path.GetTempPath(),
+                    "omp-host-profile-objects-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    Directory.CreateDirectory(tempRoot);
+                    var arguments = new List<string>
+                    {
+                        "-NoProfile",
+                        "-File",
+                        hookPath,
+                        "-RepositoryRoot",
+                        sourceRoot,
+                        "-OutputRoot",
+                        tempRoot,
+                        "-HostProfilePath",
+                        _configPath,
+                        "-TargetHostProfile",
+                        targetHostProfile,
+                        "-Configuration",
+                        "Release",
+                        "-ModuleKey"
+                    };
+                    arguments.AddRange(moduleKeys);
+
+                    var result = RunProcess(
+                        "powershell",
+                        arguments,
+                        throwOnFailure: false,
+                        workingDirectory: sourceRoot,
+                        timeout: TimeSpan.FromMinutes(5));
+                    if (result.ExitCode != 0)
+                    {
+                        warnings++;
+                        lines.Add($"    WARN    {Path.GetFileName(sourceRoot)} host-profile hook failed: {result.StdOut}{result.StdErr}");
+                        continue;
+                    }
+
+                    foreach (var folder in GetHostSpecificObjectFolders())
+                    {
+                        var generatedRoot = Path.Join(tempRoot, folder.FolderName);
+                        if (!Directory.Exists(generatedRoot))
+                        {
+                            continue;
+                        }
+
+                        CopyHostSpecificObjectDirectory(
+                            generatedRoot,
+                            Path.Join(hostArchiveRoot, folder.FolderName),
+                            folder,
+                            lines,
+                            ref copied,
+                            ref unchanged,
+                            ref warnings);
+                    }
+                }
+                finally
+                {
+                    DeleteDirectoryBestEffort(tempRoot);
+                }
+            }
+
+            return warnings;
+        }
+
+        private static IReadOnlyList<string> ReadRepositoryModuleKeys(string sourceRoot)
+        {
+            var manifestPath = Path.Join(sourceRoot, "omp-components.json");
+            if (!File.Exists(manifestPath))
+            {
+                return [];
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (document.RootElement.TryGetProperty("moduleDefinitions", out var definitions)
+                && definitions.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var definition in definitions.EnumerateArray())
+                {
+                    var moduleKey = TryGetStringProperty(definition, "moduleKey");
+                    if (!string.IsNullOrWhiteSpace(moduleKey))
+                    {
+                        keys.Add(moduleKey.Trim());
+                    }
+                }
+            }
+
+            if (document.RootElement.TryGetProperty("components", out var components)
+                && components.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var component in components.EnumerateArray())
+                {
+                    var moduleKey = TryGetStringProperty(component, "moduleKey");
+                    if (!string.IsNullOrWhiteSpace(moduleKey))
+                    {
+                        keys.Add(moduleKey.Trim());
+                    }
+                }
+            }
+
+            return keys.OrderBy(static key => key, StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
         private bool TryCreateProfilePackageSyncForm(
@@ -4728,6 +5147,11 @@ ORDER BY ar.ArtifactId DESC;
         var sanitized = new string(chars).Trim('.', ' ', '_');
         return string.IsNullOrWhiteSpace(sanitized) ? "package" : sanitized;
     }
+
+    private sealed record HostSpecificObjectFolder(
+        string FolderName,
+        string ProfileListName,
+        Func<string, bool> Filter);
 
     private sealed record DeveloperSourceCheckResult(
         bool HasUpdates,
