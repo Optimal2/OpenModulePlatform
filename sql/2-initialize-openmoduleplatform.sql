@@ -53,6 +53,8 @@ DECLARE @BaselineWorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
 DECLARE @DefaultHostKey nvarchar(128) = N'sample-host';
 DECLARE @DefaultHostDisplayName nvarchar(200) = N'Sample Host';
 DECLARE @DefaultHostEnvironment nvarchar(50) = N'Development';
+DECLARE @SeedDefaultHost bit = 1;
+DECLARE @SuppressedDefaultHostId uniqueidentifier;
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
 -- automation should patch it from a protected environment-specific value; the
@@ -284,14 +286,61 @@ FROM omp.Hosts
 WHERE InstanceId = @DefaultInstanceId
   AND HostKey = @DefaultHostKey;
 
-IF @DefaultHostId IS NULL
+IF @DefaultHostKey = N'sample-host'
+   AND EXISTS
+   (
+       SELECT 1
+       FROM omp.Hosts
+       WHERE InstanceId = @DefaultInstanceId
+         AND HostKey <> @DefaultHostKey
+         AND IsEnabled = 1
+   )
+BEGIN
+    -- sample-host is only a source-controlled bootstrap placeholder. Once a
+    -- real host exists in the installation, repair scripts must not recreate
+    -- or keep the placeholder in desired topology or HostAgent upgrade views.
+    SET @SeedDefaultHost = 0;
+
+    SELECT @SuppressedDefaultHostId = HostId
+    FROM omp.Hosts
+    WHERE InstanceId = @DefaultInstanceId
+      AND HostKey = @DefaultHostKey;
+
+    IF @SuppressedDefaultHostId IS NOT NULL
+    BEGIN
+        UPDATE omp.Hosts
+        SET IsEnabled = 0,
+            UpdatedUtc = SYSUTCDATETIME()
+        WHERE HostId = @SuppressedDefaultHostId;
+
+        UPDATE omp.HostDeploymentAssignments
+        SET IsActive = 0,
+            UpdatedUtc = SYSUTCDATETIME()
+        WHERE HostId = @SuppressedDefaultHostId;
+
+        UPDATE omp.HostAgentDesiredStates
+        SET IsEnabled = 0,
+            UpdatedUtc = SYSUTCDATETIME()
+        WHERE HostId = @SuppressedDefaultHostId;
+    END
+
+    UPDATE omp.InstanceTemplateHosts
+    SET IsEnabled = 0,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE InstanceTemplateId = @DefaultInstanceTemplateId
+      AND HostKey = @DefaultHostKey;
+
+    SET @DefaultHostId = NULL;
+END
+
+IF @SeedDefaultHost = 1 AND @DefaultHostId IS NULL
 BEGIN
     SET @DefaultHostId = NEWID();
 
     INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture)
     VALUES(@DefaultHostId, @DefaultInstanceId, @DefaultHostKey, @DefaultHostDisplayName, NULL, @DefaultHostEnvironment, N'Windows', @DefaultHostArchitecture);
 END
-ELSE
+ELSE IF @SeedDefaultHost = 1
 BEGIN
     UPDATE omp.Hosts
     SET InstanceId = @DefaultInstanceId,
@@ -306,28 +355,32 @@ BEGIN
     WHERE HostId = @DefaultHostId;
 END
 
-IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateHosts WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = @DefaultHostKey)
+IF @SeedDefaultHost = 1
+   AND NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateHosts WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = @DefaultHostKey)
 BEGIN
     INSERT INTO omp.InstanceTemplateHosts(InstanceTemplateId, HostTemplateId, HostKey, DisplayName, Environment, SortOrder)
     VALUES(@DefaultInstanceTemplateId, @DefaultHostTemplateId, @DefaultHostKey, @DefaultHostDisplayName, @DefaultHostEnvironment, 100);
 END
 
-MERGE omp.HostDeploymentAssignments AS target
-USING
-(
-    VALUES
-        (@DefaultHostId, @DefaultHostTemplateId, N'install-script', CONVERT(bit, 1)),
-        (@DefaultHostId, @IisHostTemplateId, N'install-script', CONVERT(bit, 1)),
-        (@DefaultHostId, @ServiceHostTemplateId, N'install-script', CONVERT(bit, 1))
-) AS source(HostId, HostTemplateId, AssignedBy, IsActive)
-ON target.HostId = source.HostId
-AND target.HostTemplateId = source.HostTemplateId
-WHEN MATCHED THEN
-    UPDATE SET AssignedBy = source.AssignedBy,
-               IsActive = source.IsActive
-WHEN NOT MATCHED THEN
-    INSERT(HostId, HostTemplateId, AssignedBy, IsActive)
-    VALUES(source.HostId, source.HostTemplateId, source.AssignedBy, source.IsActive);
+IF @SeedDefaultHost = 1 AND @DefaultHostId IS NOT NULL
+BEGIN
+    MERGE omp.HostDeploymentAssignments AS target
+    USING
+    (
+        VALUES
+            (@DefaultHostId, @DefaultHostTemplateId, N'install-script', CONVERT(bit, 1)),
+            (@DefaultHostId, @IisHostTemplateId, N'install-script', CONVERT(bit, 1)),
+            (@DefaultHostId, @ServiceHostTemplateId, N'install-script', CONVERT(bit, 1))
+    ) AS source(HostId, HostTemplateId, AssignedBy, IsActive)
+    ON target.HostId = source.HostId
+    AND target.HostTemplateId = source.HostTemplateId
+    WHEN MATCHED THEN
+        UPDATE SET AssignedBy = source.AssignedBy,
+                   IsActive = source.IsActive
+    WHEN NOT MATCHED THEN
+        INSERT(HostId, HostTemplateId, AssignedBy, IsActive)
+        VALUES(source.HostId, source.HostTemplateId, source.AssignedBy, source.IsActive);
+END
 
 -------------------------------------------------------------------------------
 -- Seed core module metadata
