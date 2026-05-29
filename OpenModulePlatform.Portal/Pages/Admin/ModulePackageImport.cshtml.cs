@@ -51,6 +51,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     public UniversalExportInputModel UniversalExportInput { get; set; } = new();
 
     [BindProperty]
+    public ExportToLibraryInputModel ExportToLibraryInput { get; set; } = new();
+
+    [BindProperty]
     public ArtifactUploadInputModel ArtifactUploadInput { get; set; } = new();
 
     [BindProperty]
@@ -618,6 +621,44 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnPostExportModuleToLibrary(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Import/export");
+        if (string.IsNullOrWhiteSpace(ExportToLibraryInput.ModuleKey))
+        {
+            ActivePanel = "export-module";
+            ModelState.AddModelError(nameof(ExportToLibraryInput.ModuleKey), T("Module key is required."));
+            await LoadAsync(ct);
+            return Page();
+        }
+
+        try
+        {
+            var result = await _packages.ExportModulePackageToLibraryAsync(
+                ExportToLibraryInput.ModuleKey.Trim(),
+                ExportToLibraryInput.IncludeAllVersions,
+                ct);
+
+            ActivePanel = "export-module";
+            StatusMessage = BuildPackageLibraryExportStatus(result);
+            await LoadAsync(ct);
+            return Page();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            ActivePanel = "export-module";
+            ModelState.AddModelError(string.Empty, T(ex.Message));
+            await LoadAsync(ct);
+            return Page();
+        }
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         var availablePackages = _packages.GetAvailablePackages();
@@ -781,6 +822,24 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             message += " " + string.Format(
                 T("Configuration files: {0}."),
                 result.ConfigurationFileCount);
+        }
+
+        return message;
+    }
+
+    private string BuildPackageLibraryExportStatus(PackageLibraryExportResult result)
+    {
+        var message = string.Format(
+            T("Exported module {0} {1} to the package library. Definition file: {2}. Artifacts exported: {3}. Skipped: {4}."),
+            result.ModuleKey,
+            result.DefinitionVersion,
+            result.ModuleDefinitionFileName,
+            result.ExportedArtifactCount,
+            result.SkippedArtifactCount);
+
+        if (result.Messages.Count > 0)
+        {
+            message += " " + T("Export details:") + " " + string.Join(" | ", result.Messages);
         }
 
         return message;
@@ -1006,6 +1065,13 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 ConfigOverlayDocumentIds,
                 WidgetIds,
                 IncludeWidgetRuntimeData);
+    }
+
+    public sealed class ExportToLibraryInputModel
+    {
+        public string ModuleKey { get; set; } = string.Empty;
+
+        public bool IncludeAllVersions { get; set; }
     }
 
     public sealed class ArtifactUploadInputModel
