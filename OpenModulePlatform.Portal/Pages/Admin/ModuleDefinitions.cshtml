@@ -28,7 +28,83 @@
 @{
     var integrityRows = Model.IntegrityRows.ToList();
     var repairableActiveRows = integrityRows.Where(row => row.IsApplied).ToList();
+    var appliedRows = Model.Rows
+        .Where(row => row.IsApplied)
+        .OrderBy(row => row.ModuleKey, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+    var storedVersionCounts = Model.Rows
+        .GroupBy(row => row.ModuleKey, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+    var activeIntegrityRows = integrityRows
+        .Where(row => row.IsApplied)
+        .ToDictionary(row => row.ModuleKey, StringComparer.OrdinalIgnoreCase);
 }
+
+<section class="card top-gap">
+    <div class="section-heading-row">
+        <div>
+            <h3>@L["Applied module definitions"]</h3>
+            <p class="lede">@L["Current module definition versions stored in this OMP database. Use this list to confirm which database and metadata contract is active before troubleshooting artifact behavior."]</p>
+        </div>
+    </div>
+
+    @if (appliedRows.Count == 0)
+    {
+        <div class="empty-state">@L["No applied module definitions found."]</div>
+    }
+    else
+    {
+        <div class="table-scroll module-definitions-scroll">
+            <table class="grid module-definitions-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Module key"]</th>
+                        <th>@L["Applied version"]</th>
+                        <th>@L["Stored versions"]</th>
+                        <th>@L["Integrity"]</th>
+                        <th>@L["Applied UTC"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in appliedRows)
+                {
+                    var storedCount = storedVersionCounts.TryGetValue(row.ModuleKey, out var count) ? count : 1;
+                    var hasIntegrity = activeIntegrityRows.TryGetValue(row.ModuleKey, out var integrity);
+                    <tr>
+                        <td><code>@row.ModuleKey</code></td>
+                        <td>@row.DefinitionVersion</td>
+                        <td>@storedCount</td>
+                        <td>
+                            @if (hasIntegrity && integrity is not null)
+                            {
+                                <span class="integrity-pill integrity-pill--@integrity.OverallStatus">@L[integrity.OverallStatusLabel]</span>
+                                @foreach (var message in integrity.Messages.Take(2))
+                                {
+                                    <div class="muted small-text">@L[message]</div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="integrity-pill integrity-pill--neutral">@L["Not checked"]</span>
+                            }
+                        </td>
+                        <td>@(row.AppliedUtc?.ToString("u") ?? L["Unknown"].Value)</td>
+                        <td class="admin-action-cell">
+                            <a class="action-link admin-icon-button admin-icon-button--clarify"
+                               href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId"
+                               title="@L["View"]"
+                               aria-label="@L["View"]">
+                                <span class="visually-hidden">@L["View"]</span>
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
 
 <section class="card top-gap">
     <div class="section-heading-row">
@@ -40,7 +116,12 @@
 
     @if (Model.AvailablePackages.Count == 0)
     {
-        <div class="empty-state">@L["No available module packages found."]</div>
+        <div class="empty-state">
+            @L["No available module packages found."]
+            <div class="muted top-gap">
+                @L["Check that ArtifactUpload:AvailableModuleDefinitionsRoot and ArtifactUpload:AvailableArtifactsRoot point to the HostAgent _available package library folders and that the Portal appsettings.json has been redeployed."]
+            </div>
+        </div>
     }
     else
     {

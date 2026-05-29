@@ -322,6 +322,15 @@ folders and HostAgent service configuration should be left unchanged.
 When imported module definitions include validation SQL, the bootstrapper runs
 the read-only validation script first. Idempotent repair SQL runs only when the
 validation reports an unhealthy state or the validation itself cannot complete.
+`Upgrade / complete` uses the same repair path for already-applied definitions,
+including platform core definitions, so a package catch-up can add missing
+idempotent schema objects without requiring a full reinstall.
+
+When a configured artifact has no package-owned configuration files, the
+bootstrapper copies configuration-file rows from the latest previous artifact
+version in the same app slot if the new artifact has no rows yet. This keeps
+artifact-only code releases from losing `appsettings.json` or similar
+artifact-owned configuration.
 
 On a development machine where the installer package still lives below an
 OpenModulePlatform source checkout, the graphical installer can also compare

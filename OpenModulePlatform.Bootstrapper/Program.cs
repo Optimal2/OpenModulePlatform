@@ -172,6 +172,9 @@ internal static partial class Program
                 ArtifactPreparationMode.InstallOrUpdate);
             await RegisterPackageArtifactsAsync(config);
             await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
+            await CopyMissingArtifactConfigurationFilesFromPreviousVersionsAsync(
+                config,
+                preparedArtifactConfigurationFiles);
             PublishAvailableDeploymentObjects(config, payloadRoot);
 
             if (config.HostAgent.Enabled)
@@ -230,6 +233,9 @@ internal static partial class Program
                 ArtifactPreparationMode.AddMissingOnly);
             await RegisterPackageArtifactsAsync(config);
             await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
+            await CopyMissingArtifactConfigurationFilesFromPreviousVersionsAsync(
+                config,
+                preparedArtifactConfigurationFiles);
             PublishAvailableDeploymentObjects(config, payloadRoot, overwrite: false);
 
             if (!config.HostAgent.Enabled)
@@ -1668,11 +1674,6 @@ END;";
         int documentId,
         ModuleDefinitionDocument definition)
     {
-        if (IsInstallerManagedModuleDefinitionSql(definition.DefinitionJson))
-        {
-            return 0;
-        }
-
         var scripts = ReadPortableSqlScripts(definition.DefinitionJson)
             .OrderBy(static script => script.Order)
             .ThenBy(static script => script.Key, StringComparer.OrdinalIgnoreCase)
@@ -2711,6 +2712,19 @@ END;
             if (mode == ArtifactPreparationMode.AddMissingOnly
                 && (File.Exists(target) || Directory.Exists(target)))
             {
+                if (File.Exists(source) && source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    var configurationFiles = ExtractArtifactPackageConfigurationFiles(
+                        source,
+                        artifactStoreRoot);
+                    if (configurationFiles.Count > 0)
+                    {
+                        preparedConfigurationFiles.Add(new PreparedArtifactConfigurationFiles(
+                            artifact.Target,
+                            configurationFiles));
+                    }
+                }
+
                 Console.WriteLine($"> Artifact {artifact.Target} already exists; skipped.");
                 continue;
             }
@@ -2780,6 +2794,27 @@ END;
         }
 
         return preparedConfigurationFiles;
+    }
+
+    private static IReadOnlyList<ArtifactPackageConfigurationFile> ExtractArtifactPackageConfigurationFiles(
+        string source,
+        string artifactStoreRoot)
+    {
+        var stagingPath = Path.Join(
+            artifactStoreRoot,
+            ".bootstrapper-artifact-config-staging",
+            Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var package = new ArtifactPackageExtractor()
+                .Extract(source, stagingPath);
+            return package.ConfigurationFiles;
+        }
+        finally
+        {
+            TryDeleteDirectory(stagingPath);
+        }
     }
 
     private static async Task RegisterPackageArtifactsAsync(BootstrapConfig config)
@@ -3446,6 +3481,198 @@ SELECT COUNT(1) FROM @changes;
             Console.WriteLine(
                 $"> Artifact config files {prepared.ArtifactRelativePath}: {prepared.ConfigurationFiles.Count}");
         }
+    }
+
+    private static async Task CopyMissingArtifactConfigurationFilesFromPreviousVersionsAsync(
+        BootstrapConfig config,
+        IReadOnlyList<PreparedArtifactConfigurationFiles> explicitlyPreparedConfigurationFiles)
+    {
+        if (!config.Sql.Enabled)
+        {
+            return;
+        }
+
+        var explicitTargets = explicitlyPreparedConfigurationFiles
+            .Select(static item => NormalizePathForMatch(item.ArtifactRelativePath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
+        await connection.OpenAsync();
+
+        foreach (var artifact in config.Artifacts.Where(static item => item.Enabled))
+        {
+            if (artifact.IsExample && !config.IncludeExampleApps)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(artifact.Target))
+            {
+                continue;
+            }
+
+            var artifactRelativePath = NormalizePathForMatch(artifact.Target);
+            if (explicitTargets.Contains(artifactRelativePath))
+            {
+                continue;
+            }
+
+            var copied = await CopyMissingArtifactConfigurationFilesFromPreviousVersionAsync(
+                connection,
+                artifactRelativePath,
+                config.Sql.CommandTimeoutSeconds);
+            if (copied > 0)
+            {
+                Console.WriteLine(
+                    $"> Artifact config files {artifactRelativePath}: copied {copied} from latest previous artifact version.");
+            }
+        }
+    }
+
+    private static async Task<int> CopyMissingArtifactConfigurationFilesFromPreviousVersionAsync(
+        SqlConnection connection,
+        string artifactRelativePath,
+        int commandTimeoutSeconds)
+    {
+        var target = await QueryArtifactConfigurationCopyTargetAsync(
+            connection,
+            artifactRelativePath,
+            commandTimeoutSeconds);
+        if (target is null || target.ConfigurationFileCount > 0)
+        {
+            return 0;
+        }
+
+        var candidates = await QueryArtifactConfigurationCopyCandidatesAsync(
+            connection,
+            target.ArtifactId,
+            commandTimeoutSeconds);
+        var sourceCandidates = candidates
+            .Where(candidate => CompareVersionText(candidate.Version, target.Version) < 0)
+            .ToList();
+        var source = sourceCandidates.Count == 0
+            ? null
+            : sourceCandidates.Aggregate(static (current, candidate) =>
+                CompareVersionText(candidate.Version, current.Version) > 0
+                    || (CompareVersionText(candidate.Version, current.Version) == 0
+                        && candidate.ArtifactId > current.ArtifactId)
+                    ? candidate
+                    : current);
+        if (source is null)
+        {
+            return 0;
+        }
+
+        const string sql = """
+INSERT INTO omp.ArtifactConfigurationFiles
+(
+    ArtifactId,
+    RelativePath,
+    FileContent,
+    IsEnabled
+)
+SELECT @targetArtifactId,
+       sourceFile.RelativePath,
+       sourceFile.FileContent,
+       sourceFile.IsEnabled
+FROM omp.ArtifactConfigurationFiles sourceFile
+WHERE sourceFile.ArtifactId = @sourceArtifactId
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.ArtifactConfigurationFiles existing
+      WHERE existing.ArtifactId = @targetArtifactId
+        AND existing.RelativePath = sourceFile.RelativePath
+  );
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@targetArtifactId", target.ArtifactId);
+        command.Parameters.AddWithValue("@sourceArtifactId", source.ArtifactId);
+        return await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<ArtifactConfigurationCopyTarget?> QueryArtifactConfigurationCopyTargetAsync(
+        SqlConnection connection,
+        string artifactRelativePath,
+        int commandTimeoutSeconds)
+    {
+        const string sql = """
+SELECT a.ArtifactId,
+       a.Version,
+       COUNT(cf.ArtifactConfigurationFileId) AS ConfigurationFileCount
+FROM omp.Artifacts a
+LEFT JOIN omp.ArtifactConfigurationFiles cf
+    ON cf.ArtifactId = a.ArtifactId
+WHERE a.RelativePath = @relativePath
+  AND a.IsEnabled = 1
+GROUP BY a.ArtifactId,
+         a.Version
+ORDER BY a.ArtifactId;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@relativePath", artifactRelativePath);
+
+        var rows = new List<ArtifactConfigurationCopyTarget>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new ArtifactConfigurationCopyTarget(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.GetInt32(2)));
+        }
+
+        return rows.Count switch
+        {
+            0 => null,
+            1 => rows[0],
+            _ => throw new InvalidOperationException(
+                $"Cannot copy artifact configuration files because multiple enabled artifact rows have RelativePath '{artifactRelativePath}'.")
+        };
+    }
+
+    private static async Task<IReadOnlyList<ArtifactConfigurationCopyCandidate>> QueryArtifactConfigurationCopyCandidatesAsync(
+        SqlConnection connection,
+        int targetArtifactId,
+        int commandTimeoutSeconds)
+    {
+        const string sql = """
+SELECT candidate.ArtifactId,
+       candidate.Version
+FROM omp.Artifacts target
+INNER JOIN omp.Artifacts candidate
+    ON candidate.AppId = target.AppId
+   AND candidate.PackageType = target.PackageType
+   AND ISNULL(candidate.TargetName, N'') = ISNULL(target.TargetName, N'')
+WHERE target.ArtifactId = @targetArtifactId
+  AND candidate.ArtifactId <> target.ArtifactId
+  AND candidate.IsEnabled = 1
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.ArtifactConfigurationFiles sourceFile
+      WHERE sourceFile.ArtifactId = candidate.ArtifactId
+  );
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@targetArtifactId", targetArtifactId);
+
+        var rows = new List<ArtifactConfigurationCopyCandidate>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new ArtifactConfigurationCopyCandidate(
+                reader.GetInt32(0),
+                reader.GetString(1)));
+        }
+
+        return rows;
     }
 
     private static async Task<int> ResolveArtifactIdByRelativePathAsync(
@@ -5264,6 +5491,15 @@ VALUES
 internal sealed record PreparedArtifactConfigurationFiles(
     string ArtifactRelativePath,
     IReadOnlyList<ArtifactPackageConfigurationFile> ConfigurationFiles);
+
+internal sealed record ArtifactConfigurationCopyTarget(
+    int ArtifactId,
+    string Version,
+    int ConfigurationFileCount);
+
+internal sealed record ArtifactConfigurationCopyCandidate(
+    int ArtifactId,
+    string Version);
 
 internal sealed record ConfiguredArtifactIdentity(
     string ModuleKey,
