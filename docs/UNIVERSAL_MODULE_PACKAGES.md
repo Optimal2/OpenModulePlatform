@@ -142,10 +142,14 @@ configured source repository and stops if any repository needs manual
 merge/conflict handling. Each pull has a two-minute timeout so a stuck network
 or credential prompt does not block the installer indefinitely. A developer
 installer that contains profiles for multiple target hosts can use
-`Refresh all host profiles` to run the same refresh for every discovered profile
-whose source repositories exist on the current computer. Profiles with missing
-source roots are skipped instead of falling back to an unrelated local source
-tree. Then use `Create universal package` to choose:
+`Prepare all host profiles` to refresh shared objects and materialize
+host-specific package objects for every discovered profile whose source
+repositories exist on the current computer. Host-specific output is written to
+`data/hosts/<host-profile>/host-configs`, `config-overlays`, `widgets`, and
+`widget-data`, using profile-local folders, profile-declared object files, and
+repository-owned host-profile hooks when present. Profiles with missing source
+roots are skipped instead of falling back to an unrelated local source tree.
+Then use `Create universal package` to choose:
 
 - the target host profile, or a global-only package
 - global module definitions, artifacts, host configs, overlays, widgets, and widget data
