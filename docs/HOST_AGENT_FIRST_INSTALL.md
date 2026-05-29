@@ -307,6 +307,11 @@ cleans up duplicate HostAgent services, including older service-name prefixes,
 without deleting the active install directory. Existing artifact folders and an
 existing HostAgent service are deliberately left unchanged; use
 `Install or update` when a full bootstrap/reconfiguration pass is intended.
+When the selected package contains newer standard artifact packages than the
+versions pinned in an older host profile, the bootstrapper selects the newest
+available package for each matching app slot at runtime. This keeps portable
+packages from accidentally re-selecting stale desired artifact versions while
+still allowing older package files to remain in the archive as history.
 If a HostAgent service exists but is stopped or failed, `Upgrade / complete`
 still leaves it unchanged. Start the intended service manually with Windows
 Services or `sc.exe start <service-name>`, or run a full `Install or update`
