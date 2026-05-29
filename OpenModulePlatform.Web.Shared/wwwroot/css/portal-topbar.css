@@ -10,6 +10,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    align-content: center;
     gap: 12px;
     --portal-topbar-dropdown-bridge: 16px;
     min-height: 34px;
@@ -685,6 +687,99 @@ span.portal-topbar__nav-group-link {
     padding: 10px;
     color: var(--portal-topbar-text-muted);
     font-size: 0.86rem;
+}
+
+.portal-topbar__notification-banners {
+    display: grid;
+    flex: 0 0 100%;
+    gap: 6px;
+    width: 100%;
+}
+
+.portal-topbar__notification-banner-form {
+    margin: 0;
+}
+
+.portal-topbar__notification-banner {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 32px;
+    padding: 4px 8px;
+    border: 1px solid rgba(2, 132, 199, 0.22);
+    border-radius: 8px;
+    background: rgba(224, 242, 254, 0.72);
+    color: var(--portal-topbar-text);
+}
+
+.portal-topbar__notification-banner-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
+.portal-topbar__notification-banner-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.portal-topbar__notification-banner-copy {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.portal-topbar__notification-banner-title {
+    flex: 0 1 auto;
+    overflow: hidden;
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.portal-topbar__notification-banner-content {
+    flex: 1 1 auto;
+    overflow: hidden;
+    color: var(--portal-topbar-text-muted);
+    font-size: 0.76rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.portal-topbar__notification-banner-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--portal-topbar-text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.portal-topbar__notification-banner-dismiss:hover,
+.portal-topbar__notification-banner-dismiss:focus-visible {
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--portal-topbar-text);
+    outline: none;
 }
 
 .portal-topbar__admin-submenu {

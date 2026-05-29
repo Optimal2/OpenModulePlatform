@@ -2163,6 +2163,9 @@
   <data name="Portal navigation" xml:space="preserve"><value>Portalnavigering</value></data>
   <data name="No navigation links to show." xml:space="preserve"><value>Inga navigeringslänkar att visa.</value></data>
   <data name="Column count" xml:space="preserve"><value>Antal kolumner</value></data>
+  <data name="Entry filter" xml:space="preserve"><value>Entry-filter</value></data>
+  <data name="Show all entries" xml:space="preserve"><value>Visa alla entries</value></data>
+  <data name="Top-level entries only" xml:space="preserve"><value>Endast toppnivå-entries</value></data>
   <data name="Default" xml:space="preserve"><value>Standard</value></data>
   <data name="1 column" xml:space="preserve"><value>1 kolumn</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 kolumner</value></data>

@@ -97,12 +97,14 @@ public sealed class PortalTopBarService
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
+            IReadOnlyList<PortalTopBarNotification> bannerNotifications = [];
             var unreadNotificationCount = 0;
             if (userId is int resolvedUserId)
             {
                 dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetUnreadForUserAsync(resolvedUserId, 10, ct);
+                bannerNotifications = await _notifications.GetUnreadBannersForUserAsync(resolvedUserId, 3, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
             }
 
@@ -122,6 +124,7 @@ public sealed class PortalTopBarService
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildRequestEndpointHref(request, ToggleFavoritePath),
                 notifications,
+                bannerNotifications,
                 canUseNotifications: userId.HasValue,
                 unreadNotificationCount,
                 notificationMarkReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkReadPath),
@@ -286,12 +289,14 @@ public sealed class PortalTopBarService
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
+            IReadOnlyList<PortalTopBarNotification> bannerNotifications = [];
             var unreadNotificationCount = 0;
             if (userId is int resolvedUserId)
             {
                 dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetUnreadForUserAsync(resolvedUserId, 10, ct);
+                bannerNotifications = await _notifications.GetUnreadBannersForUserAsync(resolvedUserId, 3, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
             }
 
@@ -311,6 +316,7 @@ public sealed class PortalTopBarService
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildUriEndpointHref(currentUri, ToggleFavoritePath),
                 notifications,
+                bannerNotifications,
                 canUseNotifications: userId.HasValue,
                 unreadNotificationCount,
                 notificationMarkReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkReadPath),
@@ -360,6 +366,7 @@ public sealed class PortalTopBarService
             canUsePersistentFavorites: false,
             favoriteToggleUrl: ToggleFavoritePath,
             notifications: Array.Empty<PortalTopBarNotification>(),
+            bannerNotifications: Array.Empty<PortalTopBarNotification>(),
             canUseNotifications: false,
             unreadNotificationCount: 0,
             notificationMarkReadUrl: NotificationService.MarkReadPath,
@@ -382,6 +389,7 @@ public sealed class PortalTopBarService
         bool canUsePersistentFavorites,
         string favoriteToggleUrl,
         IReadOnlyList<PortalTopBarNotification> notifications,
+        IReadOnlyList<PortalTopBarNotification> bannerNotifications,
         bool canUseNotifications,
         int unreadNotificationCount,
         string notificationMarkReadUrl,
@@ -405,6 +413,7 @@ public sealed class PortalTopBarService
             CanUsePersistentFavorites = canUsePersistentFavorites,
             FavoriteToggleUrl = favoriteToggleUrl,
             Notifications = notifications,
+            BannerNotifications = bannerNotifications,
             CanUseNotifications = canUseNotifications,
             UnreadNotificationCount = unreadNotificationCount,
             NotificationMarkReadUrl = notificationMarkReadUrl,

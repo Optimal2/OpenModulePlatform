@@ -2060,6 +2060,9 @@
   <data name="Portal navigation" xml:space="preserve"><value>Portal navigation</value></data>
   <data name="No navigation links to show." xml:space="preserve"><value>No navigation links to show.</value></data>
   <data name="Column count" xml:space="preserve"><value>Column count</value></data>
+  <data name="Entry filter" xml:space="preserve"><value>Entry filter</value></data>
+  <data name="Show all entries" xml:space="preserve"><value>Show all entries</value></data>
+  <data name="Top-level entries only" xml:space="preserve"><value>Top-level entries only</value></data>
   <data name="Default" xml:space="preserve"><value>Default</value></data>
   <data name="1 column" xml:space="preserve"><value>1 column</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 columns</value></data>
