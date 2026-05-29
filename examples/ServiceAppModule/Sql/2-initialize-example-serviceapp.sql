@@ -266,6 +266,15 @@ WHERE AppId = @ServiceAppId
   AND TargetName = N'example-serviceapp-service'
   AND @ServiceArtifactId IS NULL;
 
+SELECT @ServiceModuleInstanceId = COALESCE(
+    (
+        SELECT ModuleInstanceId
+        FROM omp.ModuleInstances
+        WHERE InstanceId = @InstanceId
+          AND ModuleInstanceKey = N'example_serviceapp'
+    ),
+    @ServiceModuleInstanceId);
+
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @ServiceModuleInstanceId)
 BEGIN
     INSERT INTO omp.ModuleInstances(
@@ -329,6 +338,15 @@ SELECT @ServiceTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
 FROM omp.InstanceTemplateModuleInstances
 WHERE InstanceTemplateId = @InstanceTemplateId
   AND ModuleInstanceKey = N'example_serviceapp';
+
+SELECT @ServiceWebAppInstanceId = COALESCE(
+    (
+        SELECT AppInstanceId
+        FROM omp.AppInstances
+        WHERE ModuleInstanceId = @ServiceModuleInstanceId
+          AND AppInstanceKey = N'example_serviceapp_webapp'
+    ),
+    @ServiceWebAppInstanceId);
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @ServiceWebAppInstanceId)
 BEGIN
@@ -421,6 +439,15 @@ UPDATE omp.InstanceTemplateAppInstances
 SET DesiredArtifactId = @ServiceWebArtifactId
 WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
   AND AppInstanceKey = N'example_serviceapp_webapp';
+
+SELECT @ServiceAppInstanceId = COALESCE(
+    (
+        SELECT AppInstanceId
+        FROM omp.AppInstances
+        WHERE ModuleInstanceId = @ServiceModuleInstanceId
+          AND AppInstanceKey = N'example_serviceapp_service'
+    ),
+    @ServiceAppInstanceId);
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @ServiceAppInstanceId)
 BEGIN

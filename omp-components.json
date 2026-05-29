@@ -20,7 +20,7 @@
     },
     {
       "moduleKey": "iframe_webapp",
-      "definitionVersion": "0.3.9",
+      "definitionVersion": "0.3.10",
       "path": "OpenModulePlatform.Web.iFrameWebAppModule/iframe_webapp.module-definition.json"
     },
     {
@@ -30,7 +30,7 @@
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.9",
+      "definitionVersion": "0.3.10",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
@@ -40,12 +40,12 @@
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.10",
+      "definitionVersion": "0.3.11",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.9",
+      "definitionVersion": "0.3.10",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
