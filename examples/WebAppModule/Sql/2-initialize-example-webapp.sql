@@ -204,6 +204,15 @@ IF @PortalAdminsRoleId IS NOT NULL
     INSERT INTO omp.RolePermissions(RoleId, PermissionId)
     VALUES(@PortalAdminsRoleId, @WebAdminPermissionId);
 
+SELECT @WebModuleInstanceId = COALESCE(
+    (
+        SELECT ModuleInstanceId
+        FROM omp.ModuleInstances
+        WHERE InstanceId = @InstanceId
+          AND ModuleInstanceKey = N'example_webapp'
+    ),
+    @WebModuleInstanceId);
+
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @WebModuleInstanceId)
 BEGIN
     INSERT INTO omp.ModuleInstances(
@@ -267,6 +276,15 @@ SELECT @WebTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
 FROM omp.InstanceTemplateModuleInstances
 WHERE InstanceTemplateId = @InstanceTemplateId
   AND ModuleInstanceKey = N'example_webapp';
+
+SELECT @WebAppInstanceId = COALESCE(
+    (
+        SELECT AppInstanceId
+        FROM omp.AppInstances
+        WHERE ModuleInstanceId = @WebModuleInstanceId
+          AND AppInstanceKey = N'example_webapp_webapp'
+    ),
+    @WebAppInstanceId);
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @WebAppInstanceId)
 BEGIN

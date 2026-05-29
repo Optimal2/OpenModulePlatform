@@ -292,6 +292,15 @@ BEGIN
         1);
 END
 
+SELECT @WorkerModuleInstanceId = COALESCE(
+    (
+        SELECT ModuleInstanceId
+        FROM omp.ModuleInstances
+        WHERE InstanceId = @InstanceId
+          AND ModuleInstanceKey = N'example_workerapp'
+    ),
+    @WorkerModuleInstanceId);
+
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @WorkerModuleInstanceId)
 BEGIN
     INSERT INTO omp.ModuleInstances(
@@ -355,6 +364,15 @@ SELECT @WorkerTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
 FROM omp.InstanceTemplateModuleInstances
 WHERE InstanceTemplateId = @InstanceTemplateId
   AND ModuleInstanceKey = N'example_workerapp';
+
+SELECT @WorkerWebAppInstanceId = COALESCE(
+    (
+        SELECT AppInstanceId
+        FROM omp.AppInstances
+        WHERE ModuleInstanceId = @WorkerModuleInstanceId
+          AND AppInstanceKey = N'example_workerapp_webapp'
+    ),
+    @WorkerWebAppInstanceId);
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @WorkerWebAppInstanceId)
 BEGIN
@@ -447,6 +465,15 @@ UPDATE omp.InstanceTemplateAppInstances
 SET DesiredArtifactId = @WorkerWebArtifactId
 WHERE InstanceTemplateModuleInstanceId = @WorkerTemplateModuleInstanceId
   AND AppInstanceKey = N'example_workerapp_webapp';
+
+SELECT @WorkerAppInstanceId = COALESCE(
+    (
+        SELECT AppInstanceId
+        FROM omp.AppInstances
+        WHERE ModuleInstanceId = @WorkerModuleInstanceId
+          AND AppInstanceKey = N'example_workerapp_worker'
+    ),
+    @WorkerAppInstanceId);
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @WorkerAppInstanceId)
 BEGIN
