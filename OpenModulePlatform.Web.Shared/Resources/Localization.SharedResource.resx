@@ -39,4 +39,7 @@
   <data name="The server could not be reached. Check the connection." xml:space="preserve"><value>The server could not be reached. Check the connection.</value></data>
   <data name="Sign in again" xml:space="preserve"><value>Sign in again</value></data>
   <data name="Reload" xml:space="preserve"><value>Reload</value></data>
+  <data name="Notifications" xml:space="preserve"><value>Notifications</value></data>
+  <data name="No new notifications" xml:space="preserve"><value>No new notifications</value></data>
+  <data name="Mark all as read" xml:space="preserve"><value>Mark all as read</value></data>
 </root>

@@ -210,6 +210,25 @@ a:hover {
     white-space: nowrap;
 }
 
+.notice {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-muted);
+    color: var(--text);
+}
+
+.notice--success {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+
+.notice--warning {
+    border-color: #fbbf24;
+    background: #fffbeb;
+}
+
 .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -384,6 +403,5 @@ code {
         margin-left: 0;
     }
 }
-
 
 

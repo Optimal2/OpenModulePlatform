@@ -32,6 +32,7 @@ public sealed class PortalTopBarService
     private readonly CultureSelectionService _cultureSelectionService;
     private readonly IOptions<OmpAuthOptions> _authOptions;
     private readonly OmpBrandingService _brandingService;
+    private readonly NotificationService _notifications;
     private readonly ILogger<PortalTopBarService> _log;
 
     public PortalTopBarService(
@@ -40,6 +41,7 @@ public sealed class PortalTopBarService
         CultureSelectionService cultureSelectionService,
         IOptions<OmpAuthOptions> authOptions,
         OmpBrandingService brandingService,
+        NotificationService notifications,
         ILogger<PortalTopBarService> log)
     {
         _db = db;
@@ -47,6 +49,7 @@ public sealed class PortalTopBarService
         _cultureSelectionService = cultureSelectionService;
         _authOptions = authOptions;
         _brandingService = brandingService;
+        _notifications = notifications;
         _log = log;
     }
 
@@ -93,10 +96,14 @@ public sealed class PortalTopBarService
             var userId = TryGetOmpUserId(user);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
+            IReadOnlyList<PortalTopBarNotification> notifications = [];
+            var unreadNotificationCount = 0;
             if (userId is int resolvedUserId)
             {
                 dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
+                notifications = await _notifications.GetUnreadForUserAsync(resolvedUserId, 10, ct);
+                unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -114,6 +121,11 @@ public sealed class PortalTopBarService
                 BuildFavoriteEntries(navigationEntries),
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildRequestEndpointHref(request, ToggleFavoritePath),
+                notifications,
+                canUseNotifications: userId.HasValue,
+                unreadNotificationCount,
+                notificationMarkReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkReadPath),
+                notificationMarkAllReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkAllReadPath),
                 dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl(),
@@ -273,10 +285,14 @@ public sealed class PortalTopBarService
             var userId = TryGetOmpUserId(user);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
+            IReadOnlyList<PortalTopBarNotification> notifications = [];
+            var unreadNotificationCount = 0;
             if (userId is int resolvedUserId)
             {
                 dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
+                notifications = await _notifications.GetUnreadForUserAsync(resolvedUserId, 10, ct);
+                unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -294,6 +310,11 @@ public sealed class PortalTopBarService
                 BuildFavoriteEntries(navigationEntries),
                 canUsePersistentFavorites: userId.HasValue,
                 favoriteToggleUrl: BuildUriEndpointHref(currentUri, ToggleFavoritePath),
+                notifications,
+                canUseNotifications: userId.HasValue,
+                unreadNotificationCount,
+                notificationMarkReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkReadPath),
+                notificationMarkAllReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkAllReadPath),
                 dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl(),
@@ -338,6 +359,11 @@ public sealed class PortalTopBarService
             favoriteEntries: Array.Empty<PortalTopBarNavigationEntry>(),
             canUsePersistentFavorites: false,
             favoriteToggleUrl: ToggleFavoritePath,
+            notifications: Array.Empty<PortalTopBarNotification>(),
+            canUseNotifications: false,
+            unreadNotificationCount: 0,
+            notificationMarkReadUrl: NotificationService.MarkReadPath,
+            notificationMarkAllReadUrl: NotificationService.MarkAllReadPath,
             dropdownsOpenOnHover: true,
             options,
             logoutUrl,
@@ -355,6 +381,11 @@ public sealed class PortalTopBarService
         IReadOnlyList<PortalTopBarNavigationEntry> favoriteEntries,
         bool canUsePersistentFavorites,
         string favoriteToggleUrl,
+        IReadOnlyList<PortalTopBarNotification> notifications,
+        bool canUseNotifications,
+        int unreadNotificationCount,
+        string notificationMarkReadUrl,
+        string notificationMarkAllReadUrl,
         bool dropdownsOpenOnHover,
         WebAppOptions options,
         string logoutUrl,
@@ -373,6 +404,11 @@ public sealed class PortalTopBarService
             FavoriteEntries = favoriteEntries,
             CanUsePersistentFavorites = canUsePersistentFavorites,
             FavoriteToggleUrl = favoriteToggleUrl,
+            Notifications = notifications,
+            CanUseNotifications = canUseNotifications,
+            UnreadNotificationCount = unreadNotificationCount,
+            NotificationMarkReadUrl = notificationMarkReadUrl,
+            NotificationMarkAllReadUrl = notificationMarkAllReadUrl,
             Links = [portalLink, .. moduleLinks],
             IsPortalAdmin = isPortalAdmin,
             PortalAdminSections = portalAdminSections,
@@ -394,6 +430,9 @@ public sealed class PortalTopBarService
             FavoritesToggleTextKey = "Favorites",
             NavigationFilterPlaceholderTextKey = "Search modules",
             NoFavoritesTextKey = "No favorites",
+            NotificationsToggleTextKey = "Notifications",
+            NoNotificationsTextKey = "No new notifications",
+            MarkAllNotificationsReadTextKey = "Mark all as read",
             AddFavoriteTextKey = "Add favorite",
             RemoveFavoriteTextKey = "Remove favorite",
             PortalAdminToggleTextKey = "Admin",

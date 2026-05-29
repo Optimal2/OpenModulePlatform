@@ -14,6 +14,15 @@
     </div>
 </div>
 
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="notice notice--success" role="status">@Model.StatusMessage</div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="notice notice--warning" role="status">@Model.ErrorMessage</div>
+}
+
 <div class="section-grid section-grid--wide">
     <section class="card section-card">
         <h3>@L["Overview"]</h3>
@@ -32,5 +41,15 @@
         <div class="toolbar">
             <a class="action-link" href="~/configurations">@L["Open configurations"]</a>
         </div>
+    </section>
+
+    <section class="card section-card">
+        <h3>@L["Notifications"]</h3>
+        <p class="muted small-text">
+            @L["Send a personal test notification to the current OMP user."]
+        </p>
+        <form method="post" asp-page-handler="SendTestNotification" class="toolbar" data-enhance="false">
+            <button type="submit" class="action-link">@L["Send test notification"]</button>
+        </form>
     </section>
 </div>

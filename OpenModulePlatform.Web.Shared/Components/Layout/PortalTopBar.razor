@@ -249,6 +249,71 @@
                 </details>
             }
 
+            @if (_portalTopBar.CanUseNotifications)
+            {
+                <details class="portal-topbar__notifications" data-portal-topbar-overlay data-portal-topbar-hover-menu data-portal-topbar-notifications>
+                    <summary title="@L[_portalTopBar.NotificationsToggleTextKey]" aria-label="@L[_portalTopBar.NotificationsToggleTextKey]">
+                        <span class="portal-topbar__summary-icon">
+                            <span class="portal-topbar__icon portal-topbar__icon--notifications" aria-hidden="true"></span>
+                            <span class="portal-topbar__notification-badge" data-portal-topbar-notification-badge hidden="@(_portalTopBar.UnreadNotificationCount == 0)">
+                                @NotificationBadgeText(_portalTopBar.UnreadNotificationCount)
+                            </span>
+                        </span>
+                        <span class="visually-hidden">@L[_portalTopBar.NotificationsToggleTextKey]</span>
+                    </summary>
+                    <div class="portal-topbar__notifications-menu">
+                        <div class="portal-topbar__notifications-header">
+                            <span>@L[_portalTopBar.NotificationsToggleTextKey]</span>
+                            @if (_portalTopBar.Notifications.Count > 0)
+                            {
+                                <form method="post"
+                                      action="@_portalTopBar.NotificationMarkAllReadUrl"
+                                      class="portal-topbar__notifications-mark-all-form"
+                                      data-portal-topbar-notification-mark-all-form
+                                      data-enhance="false">
+                                    <button type="submit" class="portal-topbar__notifications-mark-all">
+                                        @L[_portalTopBar.MarkAllNotificationsReadTextKey]
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                        <div class="portal-topbar__notifications-list" data-portal-topbar-notifications-list>
+                            @foreach (var notification in _portalTopBar.Notifications)
+                            {
+                                <form method="post"
+                                      action="@_portalTopBar.NotificationMarkReadUrl"
+                                      class="portal-topbar__notification-form"
+                                      data-portal-topbar-notification-form
+                                      data-enhance="false">
+                                    <input type="hidden" name="notificationId" value="@notification.NotificationId" />
+                                    <button type="submit"
+                                            class="portal-topbar__notification-row portal-topbar__notification-row--@notification.Level"
+                                            data-destination-url="@(notification.DestinationUrl ?? string.Empty)">
+                                        <span class="portal-topbar__notification-caller-icon" aria-hidden="true">
+                                            @if (!string.IsNullOrWhiteSpace(notification.CallerIcon))
+                                            {
+                                                <img src="@notification.CallerIcon" alt="" />
+                                            }
+                                            else
+                                            {
+                                                <span>@NotificationCallerText(notification)</span>
+                                            }
+                                        </span>
+                                        <span class="portal-topbar__notification-copy">
+                                            <span class="portal-topbar__notification-title">@notification.Title</span>
+                                            <span class="portal-topbar__notification-content">@notification.Content</span>
+                                        </span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                        <div class="portal-topbar__notifications-empty" data-portal-topbar-notifications-empty hidden="@(_portalTopBar.Notifications.Count > 0)">
+                            @L[_portalTopBar.NoNotificationsTextKey]
+                        </div>
+                    </div>
+                </details>
+            }
+
             @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
             {
                 <details class="portal-topbar__profile" data-portal-topbar-overlay data-portal-topbar-hover-menu>
@@ -430,6 +495,19 @@
 
     private static string GroupSearchText(PortalTopBarNavigationGroup group)
         => $"{group.SearchText} {group.Title} {group.Href.Trim('/')}";
+
+    private static string NotificationBadgeText(int count)
+        => count > 99 ? "99+" : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string NotificationCallerText(PortalTopBarNotification notification)
+    {
+        var source = string.IsNullOrWhiteSpace(notification.CallerDisplayName)
+            ? notification.CallerKey
+            : notification.CallerDisplayName;
+        return string.IsNullOrWhiteSpace(source)
+            ? "!"
+            : source.Trim()[0].ToString().ToUpperInvariant();
+    }
 
     private static string DisplayUserName(string? value)
     {
