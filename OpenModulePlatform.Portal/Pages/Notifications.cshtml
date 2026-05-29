@@ -1,0 +1,66 @@
+@page "/notifications"
+@model OpenModulePlatform.Portal.Pages.NotificationsModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Portal"]</div>
+        <h2>@L["Notifications"]</h2>
+        <p class="lede">@L["Review recent personal notifications for your OMP user."]</p>
+    </div>
+    @if (Model.CanUseNotifications && Model.Rows.Count > 0)
+    {
+        <form method="post" asp-page-handler="MarkAllRead" data-enhance="false">
+            <button type="submit" class="btn btn-primary">@L["Mark all as read"]</button>
+        </form>
+    }
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!Model.CanUseNotifications)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["Notifications require an OMP user"]</div>
+    </section>
+}
+else if (Model.Rows.Count == 0)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["No notifications"]</div>
+    </section>
+}
+else
+{
+    <section class="card top-gap portal-notifications-page">
+        @foreach (var row in Model.Rows)
+        {
+            <form method="post"
+                  asp-page-handler="Open"
+                  asp-route-notificationId="@row.NotificationId"
+                  class="portal-notifications-page__item@(row.IsUnread ? " is-unread" : " is-read")"
+                  data-enhance="false">
+                <button type="submit" class="portal-notifications-page__button">
+                    <span class="portal-notifications-page__icon" aria-hidden="true">
+                        @if (!string.IsNullOrWhiteSpace(row.CallerIcon))
+                        {
+                            <img src="@row.CallerIcon" alt="" />
+                        }
+                        else
+                        {
+                            var caller = string.IsNullOrWhiteSpace(row.CallerDisplayName) ? row.CallerKey : row.CallerDisplayName;
+                            <span>@(string.IsNullOrWhiteSpace(caller) ? "!" : caller.Trim()[0].ToString().ToUpperInvariant())</span>
+                        }
+                    </span>
+                    <span class="portal-notifications-page__copy">
+                        <span class="portal-notifications-page__title">@row.Title</span>
+                        <span class="portal-notifications-page__content">@row.Content</span>
+                        <span class="portal-notifications-page__meta">@row.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
+                    </span>
+                </button>
+            </form>
+        }
+    </section>
+}

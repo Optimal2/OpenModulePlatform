@@ -15,6 +15,7 @@ public static class PortalAdminNavigation
                     new PortalAdminMenuItem("Installation", hrefFactory("/admin/instancetemplateedit?id=1")),
                     new PortalAdminMenuItem("Import/export", hrefFactory("/admin/modulepackageimport")),
                     new PortalAdminMenuItem("Artifacts", hrefFactory("/admin/artifacts")),
+                    new PortalAdminMenuItem("Banners", hrefFactory("/admin/banners")),
                     new PortalAdminMenuItem("Operations", hrefFactory("/admin/hostdeployments"))
                 ]),
             new(

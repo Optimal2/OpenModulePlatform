@@ -2049,7 +2049,7 @@ BEGIN
         notification_id bigint IDENTITY(1,1) NOT NULL,
 
         -- user_id > 0 targets a personal OMP user. user_id = 0 is reserved for
-        -- future system-wide notification/banner semantics and is intentionally
+        -- future system-wide notification semantics and is intentionally
         -- validated in application services before personal notifications are created.
         user_id int NOT NULL,
 
@@ -2067,7 +2067,7 @@ BEGIN
 
         CONSTRAINT PK_omp_notifications PRIMARY KEY(notification_id),
         CONSTRAINT CK_omp_notifications_user_id CHECK(user_id >= 0),
-        CONSTRAINT CK_omp_notifications_level CHECK(level IN (N'info', N'success', N'warning', N'error', N'banner')),
+        CONSTRAINT CK_omp_notifications_level CHECK(level IN (N'info', N'success', N'warning', N'error')),
         CONSTRAINT CK_omp_notifications_status CHECK(status IN (N'unread', N'read'))
     );
 END
@@ -2075,6 +2075,13 @@ GO
 
 IF OBJECT_ID(N'omp.notifications', N'U') IS NOT NULL
 BEGIN
+    UPDATE omp.notifications
+    SET level = N'info',
+        status = N'read',
+        read_at = COALESCE(read_at, SYSUTCDATETIME()),
+        expires_at = COALESCE(expires_at, SYSUTCDATETIME())
+    WHERE level = N'banner';
+
     IF EXISTS
     (
         SELECT 1
@@ -2088,7 +2095,7 @@ BEGIN
 
     ALTER TABLE omp.notifications WITH CHECK
         ADD CONSTRAINT CK_omp_notifications_level
-            CHECK(level IN (N'info', N'success', N'warning', N'error', N'banner'));
+            CHECK(level IN (N'info', N'success', N'warning', N'error'));
 END
 GO
 
@@ -2103,6 +2110,95 @@ BEGIN
     CREATE INDEX IX_omp_notifications_user_status_created
         ON omp.notifications(user_id, status, read_at, created_at DESC)
         INCLUDE(title, content, destination_url, level, caller_key, caller_display_name, caller_icon, expires_at);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_notifications_user_created'
+      AND object_id = OBJECT_ID(N'omp.notifications')
+)
+BEGIN
+    CREATE INDEX IX_omp_notifications_user_created
+        ON omp.notifications(user_id, created_at DESC, notification_id DESC)
+        INCLUDE(title, content, destination_url, level, caller_key, caller_display_name, caller_icon, status, read_at, expires_at);
+END
+GO
+
+-------------------------------------------------------------------------------
+-- Banners
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.banners', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.banners
+    (
+        banner_id bigint IDENTITY(1,1) NOT NULL,
+        title nvarchar(200) NOT NULL,
+        content nvarchar(1000) NOT NULL,
+        status nvarchar(40) NOT NULL CONSTRAINT DF_omp_banners_status DEFAULT(N'active'),
+        level int NOT NULL CONSTRAINT DF_omp_banners_level DEFAULT(1),
+        starts_at datetime2(3) NULL,
+        expires_at datetime2(3) NULL,
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_banners_created_at DEFAULT SYSUTCDATETIME(),
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_banners_updated_at DEFAULT SYSUTCDATETIME(),
+
+        CONSTRAINT PK_omp_banners PRIMARY KEY(banner_id),
+        CONSTRAINT CK_omp_banners_status CHECK(status IN (N'active', N'disabled')),
+        CONSTRAINT CK_omp_banners_level CHECK(level IN (1, 2, 3)),
+        CONSTRAINT CK_omp_banners_window CHECK(expires_at IS NULL OR starts_at IS NULL OR expires_at > starts_at)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.banner_targets', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.banner_targets
+    (
+        banner_target_id bigint IDENTITY(1,1) NOT NULL,
+        banner_id bigint NOT NULL,
+        target_type nvarchar(40) NOT NULL,
+        role_id int NULL,
+
+        CONSTRAINT PK_omp_banner_targets PRIMARY KEY(banner_target_id),
+        CONSTRAINT FK_omp_banner_targets_banner FOREIGN KEY(banner_id) REFERENCES omp.banners(banner_id) ON DELETE CASCADE,
+        CONSTRAINT FK_omp_banner_targets_role FOREIGN KEY(role_id) REFERENCES omp.Roles(RoleId),
+        CONSTRAINT CK_omp_banner_targets_type CHECK(target_type IN (N'global', N'role')),
+        CONSTRAINT CK_omp_banner_targets_role CHECK
+        (
+            (target_type = N'global' AND role_id IS NULL)
+            OR (target_type = N'role' AND role_id IS NOT NULL)
+        ),
+        CONSTRAINT UQ_omp_banner_targets_unique UNIQUE(banner_id, target_type, role_id)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_banners_status_window'
+      AND object_id = OBJECT_ID(N'omp.banners')
+)
+BEGIN
+    CREATE INDEX IX_omp_banners_status_window
+        ON omp.banners(status, starts_at, expires_at, level DESC, created_at DESC)
+        INCLUDE(title, content);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_banner_targets_lookup'
+      AND object_id = OBJECT_ID(N'omp.banner_targets')
+)
+BEGIN
+    CREATE INDEX IX_omp_banner_targets_lookup
+        ON omp.banner_targets(target_type, role_id, banner_id);
 END
 GO
 

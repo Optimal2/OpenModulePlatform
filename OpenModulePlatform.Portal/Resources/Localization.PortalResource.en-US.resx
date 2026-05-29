@@ -598,4 +598,33 @@
   <data name="Save current layout as default" xml:space="preserve"><value>Save current layout as default</value></data>
   <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data.</value></data>
   <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Include runtime data for selected widgets</value></data>
+  <data name="Banners" xml:space="preserve"><value>Banners</value></data>
+  <data name="Create system-controlled banners for all users or selected roles. Users cannot dismiss banners." xml:space="preserve"><value>Create system-controlled banners for all users or selected roles. Users cannot dismiss banners.</value></data>
+  <data name="Edit banner" xml:space="preserve"><value>Edit banner</value></data>
+  <data name="Create banner" xml:space="preserve"><value>Create banner</value></data>
+  <data name="Announcement" xml:space="preserve"><value>Announcement</value></data>
+  <data name="Critical" xml:space="preserve"><value>Critical</value></data>
+  <data name="Global" xml:space="preserve"><value>Global</value></data>
+  <data name="Specific roles" xml:space="preserve"><value>Specific roles</value></data>
+  <data name="Banner targets" xml:space="preserve"><value>Banner targets</value></data>
+  <data name="Targets" xml:space="preserve"><value>Targets</value></data>
+  <data name="Window" xml:space="preserve"><value>Window</value></data>
+  <data name="No targets" xml:space="preserve"><value>No targets</value></data>
+  <data name="Disable this banner?" xml:space="preserve"><value>Disable this banner?</value></data>
+  <data name="Disable" xml:space="preserve"><value>Disable</value></data>
+  <data name="Select a valid banner level." xml:space="preserve"><value>Select a valid banner level.</value></data>
+  <data name="Select a valid status." xml:space="preserve"><value>Select a valid status.</value></data>
+  <data name="Select a valid target." xml:space="preserve"><value>Select a valid target.</value></data>
+  <data name="Select at least one role." xml:space="preserve"><value>Select at least one role.</value></data>
+  <data name="Expires at must be after starts at." xml:space="preserve"><value>Expires at must be after starts at.</value></data>
+  <data name="Banner created." xml:space="preserve"><value>Banner created.</value></data>
+  <data name="Banner updated." xml:space="preserve"><value>Banner updated.</value></data>
+  <data name="Banner disabled." xml:space="preserve"><value>Banner disabled.</value></data>
+  <data name="Banner was not found." xml:space="preserve"><value>Banner was not found.</value></data>
+  <data name="Starts" xml:space="preserve"><value>Starts</value></data>
+  <data name="Expires" xml:space="preserve"><value>Expires</value></data>
+  <data name="Notifications marked as read." xml:space="preserve"><value>Notifications marked as read.</value></data>
+  <data name="Review recent personal notifications for your OMP user." xml:space="preserve"><value>Review recent personal notifications for your OMP user.</value></data>
+  <data name="No notifications" xml:space="preserve"><value>No notifications</value></data>
+  <data name="Notifications require an OMP user" xml:space="preserve"><value>Notifications require an OMP user</value></data>
 </root>
