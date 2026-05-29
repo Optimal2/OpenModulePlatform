@@ -204,6 +204,15 @@ IF @PortalAdminsRoleId IS NOT NULL
     INSERT INTO omp.RolePermissions(RoleId, PermissionId)
     VALUES(@PortalAdminsRoleId, @WebBlazorAdminPermissionId);
 
+SELECT @WebBlazorModuleInstanceId = COALESCE(
+    (
+        SELECT ModuleInstanceId
+        FROM omp.ModuleInstances
+        WHERE InstanceId = @InstanceId
+          AND ModuleInstanceKey = N'example_webapp_blazor'
+    ),
+    @WebBlazorModuleInstanceId);
+
 IF NOT EXISTS (SELECT 1 FROM omp.ModuleInstances WHERE ModuleInstanceId = @WebBlazorModuleInstanceId)
 BEGIN
     INSERT INTO omp.ModuleInstances(
@@ -267,6 +276,15 @@ SELECT @WebBlazorTemplateModuleInstanceId = InstanceTemplateModuleInstanceId
 FROM omp.InstanceTemplateModuleInstances
 WHERE InstanceTemplateId = @InstanceTemplateId
   AND ModuleInstanceKey = N'example_webapp_blazor';
+
+SELECT @WebBlazorAppInstanceId = COALESCE(
+    (
+        SELECT AppInstanceId
+        FROM omp.AppInstances
+        WHERE ModuleInstanceId = @WebBlazorModuleInstanceId
+          AND AppInstanceKey = N'example_webapp_blazor_webapp'
+    ),
+    @WebBlazorAppInstanceId);
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @WebBlazorAppInstanceId)
 BEGIN
