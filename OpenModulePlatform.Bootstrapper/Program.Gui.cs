@@ -810,7 +810,7 @@ internal static partial class Program
                 [
                     (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
                     (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
-                    (_syncAllProfilePackageObjectsButton, "Refreshes the shared object archive and materializes host-specific host configs, config overlays, widgets, and widget data for every discovered host profile. Use this before exporting a universal package for another host."),
+                    (_syncAllProfilePackageObjectsButton, "Materializes host-specific host configs, config overlays, widgets, and widget data for every discovered host profile. Profiles with source repositories also refresh shared objects and repository-generated host objects."),
                     (_importUniversalPackageButton, "Imports a universal module package zip into this installer's object archive without touching the installed OMP runtime."),
                     (_prunePackageArchiveButton, "Deletes older module definitions and artifact package zips from this installer package while keeping the latest version for each module/app slot. Files referenced by the current profile are kept."),
                     (_createUniversalPackageButton, "Creates a universal module package zip from this installer's object archive. You can choose global objects and host-specific overlays for any available host profile."),
@@ -1165,7 +1165,7 @@ internal static partial class Program
 
             _checkSourceButton.Enabled = _hasDeveloperSource;
             _syncPackageObjectsButton.Enabled = _hasDeveloperSource;
-            _syncAllProfilePackageObjectsButton.Enabled = HasAnyProfileDeveloperSourceAvailable();
+            _syncAllProfilePackageObjectsButton.Enabled = _configProfiles.Count > 0;
             _importUniversalPackageButton.Enabled = true;
             _prunePackageArchiveButton.Enabled = HasPackageArchivePruneRoots();
             _createUpdatedInstallerPackageButton.Enabled = _hasDeveloperSource;
@@ -1503,7 +1503,7 @@ internal static partial class Program
         {
             ApplyValues();
             var confirmation = MessageBox.Show(
-                "This updates this installer package by refreshing shared objects and materializing host-specific objects for every discovered host profile that has usable developer source roots on this computer. Profiles whose source repositories are not present are skipped. Continue?",
+                "This prepares host-specific package objects for every discovered host profile in this installer package. Profiles do not need source repository links; if a profile has usable source repositories, shared objects and repository-generated host objects are refreshed as an extra step. Continue?",
                 "Prepare all host profiles",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
@@ -2714,7 +2714,7 @@ internal static partial class Program
                     continue;
                 }
 
-                if (!TryCreateProfilePackageSyncForm(profile, out var profileForm, out var skipReason))
+                if (!TryCreateProfilePreparationForm(profile, out var profileForm, out var skipReason))
                 {
                     skipped++;
                     lines.Add($"> Profile {profile.DisplayName}: skipped - {skipReason}");
@@ -2726,23 +2726,32 @@ internal static partial class Program
                 lines.Add($"  Config: {profile.ConfigPath}");
                 lines.Add($"  Package root: {profileForm!._payloadRoot}");
 
-                var result = await profileForm.SyncDeveloperPackageObjectsCoreAsync();
-                foreach (var line in result.Lines)
+                IReadOnlyList<string> sourceRoots = [];
+                if (HasUsableConfiguredDeveloperSourceRoots(profileForm._config, out var sourceRootSkipReason))
                 {
-                    lines.Add("  " + line);
+                    var result = await profileForm.SyncDeveloperPackageObjectsCoreAsync();
+                    foreach (var line in result.Lines)
+                    {
+                        lines.Add("  " + line);
+                    }
+
+                    if (result.ConfigUpdated)
+                    {
+                        lines.Add("  > Configuration targets were updated in memory for this profile. Package-object sync does not rewrite tracked host config files.");
+                    }
+
+                    if (result.HasWarnings)
+                    {
+                        warnings++;
+                    }
+
+                    sourceRoots = profileForm.ResolveDeveloperSourceRoots(throwIfMissing: true);
+                }
+                else
+                {
+                    lines.Add($"  Shared source refresh: skipped - {sourceRootSkipReason}. Host-specific profile files are still prepared.");
                 }
 
-                if (result.ConfigUpdated)
-                {
-                    lines.Add("  > Configuration targets were updated in memory for this profile. Package-object sync does not rewrite tracked host config files.");
-                }
-
-                if (result.HasWarnings)
-                {
-                    warnings++;
-                }
-
-                var sourceRoots = profileForm.ResolveDeveloperSourceRoots(throwIfMissing: true);
                 warnings += profileForm.SyncHostSpecificPackageObjectsCore(sourceRoots, lines);
 
                 synced++;
@@ -2752,7 +2761,7 @@ internal static partial class Program
             if (synced == 0)
             {
                 warnings++;
-                lines.Add("WARN: No profile had usable developer source roots on this computer.");
+                lines.Add("WARN: No readable host profiles were found.");
             }
 
             lines.Add($"Summary: {synced} profile(s) prepared, {skipped} skipped, {warnings} warning(s).");
@@ -3175,7 +3184,7 @@ internal static partial class Program
             return keys.OrderBy(static key => key, StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
-        private bool TryCreateProfilePackageSyncForm(
+        private bool TryCreateProfilePreparationForm(
             BootstrapConfigProfile profile,
             out InstallerForm? profileForm,
             out string skipReason)
@@ -3187,10 +3196,6 @@ internal static partial class Program
                 var profileConfig = isCurrentProfile
                     ? _config
                     : ReadJsonAsync<BootstrapConfig>(profile.ConfigPath).GetAwaiter().GetResult();
-                if (!HasUsableConfiguredDeveloperSourceRoots(profileConfig, out skipReason))
-                {
-                    return false;
-                }
 
                 profileForm = isCurrentProfile
                     ? this
@@ -3209,34 +3214,6 @@ internal static partial class Program
                 skipReason = ex.Message;
                 return false;
             }
-        }
-
-        private bool HasAnyProfileDeveloperSourceAvailable()
-        {
-            if (_hasDeveloperSource)
-            {
-                return true;
-            }
-
-            foreach (var profile in _configProfiles)
-            {
-                try
-                {
-                    var config = profile.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase)
-                        ? _config
-                        : ReadJsonAsync<BootstrapConfig>(profile.ConfigPath).GetAwaiter().GetResult();
-                    if (HasUsableConfiguredDeveloperSourceRoots(config, out _))
-                    {
-                        return true;
-                    }
-                }
-                catch (SystemException)
-                {
-                    // Missing or invalid non-selected profiles must not disable the whole installer UI.
-                }
-            }
-
-            return false;
         }
 
         private static bool HasUsableConfiguredDeveloperSourceRoots(BootstrapConfig config, out string reason)
@@ -4343,7 +4320,7 @@ ORDER BY ar.ArtifactId DESC;
             _upgradeCompleteButton.Enabled = enabled;
             _checkSourceButton.Enabled = enabled && _hasDeveloperSource;
             _syncPackageObjectsButton.Enabled = enabled && _hasDeveloperSource;
-            _syncAllProfilePackageObjectsButton.Enabled = enabled && HasAnyProfileDeveloperSourceAvailable();
+            _syncAllProfilePackageObjectsButton.Enabled = enabled && _configProfiles.Count > 0;
             _importUniversalPackageButton.Enabled = enabled;
             _prunePackageArchiveButton.Enabled = enabled && HasPackageArchivePruneRoots();
             _createUniversalPackageButton.Enabled = enabled && HasUniversalPackageCandidates();
