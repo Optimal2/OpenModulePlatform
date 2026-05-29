@@ -467,6 +467,8 @@ internal static partial class Program
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
         private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
         private readonly Button _refreshObjectArchiveButton = new() { Text = "Refresh object archive", AutoSize = true };
+        private readonly Button _syncAllProfilePackageObjectsButton = new() { Text = "Refresh all host profiles", AutoSize = true };
+        private readonly Button _importUniversalPackageButton = new() { Text = "Import universal package", AutoSize = true };
         private readonly Button _prunePackageArchiveButton = new() { Text = "Keep latest package objects", AutoSize = true };
         private readonly Button _createUniversalPackageButton = new() { Text = "Create universal package", AutoSize = true };
         private readonly Button _createUpdatedInstallerPackageButton = new() { Text = "Create updated installer package", AutoSize = true };
@@ -602,6 +604,8 @@ internal static partial class Program
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
             _syncPackageObjectsButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
             _refreshObjectArchiveButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
+            _syncAllProfilePackageObjectsButton.Click += async (_, _) => await SyncAllProfilePackageObjectsAsync();
+            _importUniversalPackageButton.Click += async (_, _) => await ImportUniversalPackageIntoArchiveAsync();
             _prunePackageArchiveButton.Click += async (_, _) => await PrunePackageArchiveAsync();
             _createUniversalPackageButton.Click += async (_, _) => await CreateUniversalPackageAsync();
             _createUpdatedInstallerPackageButton.Click += async (_, _) => await CreateUpdatedInstallerPackageAsync();
@@ -805,6 +809,8 @@ internal static partial class Program
                 [
                     (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
                     (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
+                    (_syncAllProfilePackageObjectsButton, "Runs package-object sync for every discovered host profile that has usable developer source roots. Profiles with missing local source repositories are skipped."),
+                    (_importUniversalPackageButton, "Imports a universal module package zip into this installer's object archive without touching the installed OMP runtime."),
                     (_prunePackageArchiveButton, "Deletes older module definitions and artifact package zips from this installer package while keeping the latest version for each module/app slot. Files referenced by the current profile are kept."),
                     (_createUniversalPackageButton, "Creates a universal module package zip from this installer's object archive. You can choose global objects and host-specific overlays for any available host profile."),
                     (_createUpdatedInstallerPackageButton, "Starts a separate refresh process that creates a fresh installer package from source and restarts the updated installer.")
@@ -1146,6 +1152,8 @@ internal static partial class Program
 
             _checkSourceButton.Enabled = _hasDeveloperSource;
             _syncPackageObjectsButton.Enabled = _hasDeveloperSource;
+            _syncAllProfilePackageObjectsButton.Enabled = HasAnyProfileDeveloperSourceAvailable();
+            _importUniversalPackageButton.Enabled = true;
             _prunePackageArchiveButton.Enabled = HasPackageArchivePruneRoots();
             _createUpdatedInstallerPackageButton.Enabled = _hasDeveloperSource;
             _createUniversalPackageButton.Enabled = HasUniversalPackageCandidates();
@@ -1475,6 +1483,72 @@ internal static partial class Program
                     }
 
                     return result.HasWarnings ? 1 : 0;
+                });
+        }
+
+        private async Task SyncAllProfilePackageObjectsAsync()
+        {
+            ApplyValues();
+            var confirmation = MessageBox.Show(
+                "This updates this installer package by running package-object sync for every discovered host profile that has usable developer source roots on this computer. Profiles whose source repositories are not present are skipped. Continue?",
+                "Refresh all host profiles",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            await RunGuiOperationAsync(
+                "Syncing package objects for all host profiles...",
+                "All-profile package object sync completed.",
+                "All-profile package object sync completed with warnings. Review the log for details.",
+                "All-profile package object sync failed.",
+                async () =>
+                {
+                    var result = await SyncAllProfilePackageObjectsCoreAsync();
+                    foreach (var line in result.Lines)
+                    {
+                        Console.WriteLine(line);
+                    }
+
+                    return result.HasWarnings ? 1 : 0;
+                });
+        }
+
+        private async Task ImportUniversalPackageIntoArchiveAsync()
+        {
+            ApplyValues();
+            using var dialog = new OpenFileDialog
+            {
+                AddExtension = true,
+                CheckFileExists = true,
+                DefaultExt = "zip",
+                Filter = "Universal package (*.zip)|*.zip|All files (*.*)|*.*",
+                Title = "Import universal package into installer object archive"
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            var packagePath = dialog.FileName;
+            await RunGuiOperationAsync(
+                "Importing universal module package into installer object archive...",
+                "Universal module package imported into installer object archive.",
+                "Universal module package import completed with warnings. Review the log for details.",
+                "Universal module package import failed.",
+                () =>
+                {
+                    var result = ImportUniversalPackageIntoArchiveCore(packagePath);
+                    foreach (var line in result.Lines)
+                    {
+                        Console.WriteLine(line);
+                    }
+
+                    return Task.FromResult(result.HasWarnings ? 1 : 0);
                 });
         }
 
@@ -1958,6 +2032,238 @@ internal static partial class Program
             return new UniversalPackageBuildResult(outputPath, request.Items.Count);
         }
 
+        private UniversalPackageArchiveImportResult ImportUniversalPackageIntoArchiveCore(string packagePath)
+        {
+            var fullPackagePath = Path.GetFullPath(packagePath);
+            var extractionRoot = Path.Join(
+                Path.GetTempPath(),
+                "omp-installer-universal-import-" + Guid.NewGuid().ToString("N"));
+            var lines = new List<string>
+            {
+                "Universal package import into installer object archive:",
+                $"  Package: {fullPackagePath}",
+                $"  Installer archive: {_payloadRoot}"
+            };
+            var warnings = 0;
+            var imported = 0;
+            var updated = 0;
+            var skipped = 0;
+
+            try
+            {
+                var package = new UniversalModulePackageReader().ExtractToDirectory(fullPackagePath, extractionRoot);
+                lines.Add($"  Package key: {package.PackageKey ?? "(none)"}");
+                lines.Add($"  Package version: {package.PackageVersion ?? "(none)"}");
+                lines.Add($"  Target host profile: {package.TargetHostProfile ?? "(none)"}");
+                lines.Add($"  Items: {package.Items.Count}");
+                lines.Add(string.Empty);
+
+                var knownHostKeys = BuildHostChoices(_configProfiles)
+                    .Select(static choice => choice.HostKey)
+                    .Where(static hostKey => !string.IsNullOrWhiteSpace(hostKey))
+                    .Select(static hostKey => hostKey!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var item in package.Items)
+                {
+                    if (!TryResolveUniversalPackageArchiveImportTarget(
+                            package,
+                            item,
+                            knownHostKeys,
+                            out var targetPath,
+                            out var targetDisplayPath,
+                            out var warning))
+                    {
+                        warnings++;
+                        lines.Add($"  WARN   {item.Path}: {warning}");
+                        continue;
+                    }
+
+                    var existed = File.Exists(targetPath);
+                    if (!CopyFileIfDifferent(item.ExtractedPath, targetPath))
+                    {
+                        skipped++;
+                        lines.Add($"  SKIP   {item.Kind,-18} {item.Path} -> {targetDisplayPath} (identical)");
+                        continue;
+                    }
+
+                    if (existed)
+                    {
+                        updated++;
+                        lines.Add($"  UPDATE {item.Kind,-18} {item.Path} -> {targetDisplayPath}");
+                    }
+                    else
+                    {
+                        imported++;
+                        lines.Add($"  ADD    {item.Kind,-18} {item.Path} -> {targetDisplayPath}");
+                    }
+                }
+            }
+            finally
+            {
+                DeleteDirectoryBestEffort(extractionRoot);
+            }
+
+            lines.Add(string.Empty);
+            lines.Add($"Summary: {imported} added, {updated} updated, {skipped} identical skipped, {warnings} warning(s).");
+            return new UniversalPackageArchiveImportResult(warnings > 0, lines);
+        }
+
+        private bool TryResolveUniversalPackageArchiveImportTarget(
+            PortableUniversalModulePackage package,
+            PortableUniversalModulePackageItem item,
+            IReadOnlySet<string> knownHostKeys,
+            out string targetPath,
+            out string targetDisplayPath,
+            out string warning)
+        {
+            targetPath = string.Empty;
+            targetDisplayPath = string.Empty;
+            warning = string.Empty;
+
+            if (!File.Exists(item.ExtractedPath))
+            {
+                warning = "extracted item file is missing";
+                return false;
+            }
+
+            var path = NormalizeUniversalPackagePath(item.Path);
+            var rootRelativePath = GetUniversalPackageItemRelativePath(path, item.Kind);
+            if (string.IsNullOrWhiteSpace(rootRelativePath))
+            {
+                warning = "item path does not contain a file name";
+                return false;
+            }
+
+            var targetRoot = item.Kind switch
+            {
+                UniversalModulePackageItemKind.ModuleDefinition => ResolvePackageModuleDefinitionsRoot(_payloadRoot),
+                UniversalModulePackageItemKind.ArtifactPackage => ResolvePackageArtifactsRoot(_payloadRoot),
+                UniversalModulePackageItemKind.HostConfiguration => ResolveHostAwareArchiveImportRoot(
+                    package,
+                    rootRelativePath,
+                    knownHostKeys,
+                    "host-configs",
+                    ResolvePackageHostConfigurationsRoot(_payloadRoot),
+                    out rootRelativePath),
+                UniversalModulePackageItemKind.ConfigOverlay => ResolveHostAwareArchiveImportRoot(
+                    package,
+                    rootRelativePath,
+                    knownHostKeys,
+                    "config-overlays",
+                    ResolvePackageConfigOverlaysRoot(_payloadRoot),
+                    out rootRelativePath),
+                UniversalModulePackageItemKind.DashboardWidget => ResolveHostAwareArchiveImportRoot(
+                    package,
+                    rootRelativePath,
+                    knownHostKeys,
+                    "widgets",
+                    ResolvePackageWidgetsRoot(_payloadRoot),
+                    out rootRelativePath),
+                UniversalModulePackageItemKind.WidgetRuntimeData => ResolveHostAwareArchiveImportRoot(
+                    package,
+                    rootRelativePath,
+                    knownHostKeys,
+                    "widget-data",
+                    ResolvePackageWidgetDataRoot(_payloadRoot),
+                    out rootRelativePath),
+                _ => string.Empty
+            };
+
+            if (string.IsNullOrWhiteSpace(targetRoot))
+            {
+                warning = $"unsupported universal package item kind '{item.Kind}'";
+                return false;
+            }
+
+            targetPath = CombineUnderRoot(targetRoot, rootRelativePath);
+            targetDisplayPath = GetDisplayPath(_payloadRoot, targetPath);
+            return true;
+        }
+
+        private string ResolveHostAwareArchiveImportRoot(
+            PortableUniversalModulePackage package,
+            string relativePath,
+            IReadOnlySet<string> knownHostKeys,
+            string archiveFolder,
+            string globalRoot,
+            out string adjustedRelativePath)
+        {
+            adjustedRelativePath = relativePath;
+            if (TrySplitHostSpecificUniversalPath(
+                    package,
+                    relativePath,
+                    knownHostKeys,
+                    out var hostKey,
+                    out var hostRelativePath))
+            {
+                adjustedRelativePath = hostRelativePath;
+                return Path.Join(_payloadRoot, "data", "hosts", hostKey, archiveFolder);
+            }
+
+            return globalRoot;
+        }
+
+        private static bool TrySplitHostSpecificUniversalPath(
+            PortableUniversalModulePackage package,
+            string relativePath,
+            IReadOnlySet<string> knownHostKeys,
+            out string hostKey,
+            out string hostRelativePath)
+        {
+            hostKey = string.Empty;
+            hostRelativePath = relativePath;
+            var segments = NormalizeUniversalPackagePath(relativePath)
+                .Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length < 2)
+            {
+                return false;
+            }
+
+            var firstSegment = segments[0];
+            var targetHostProfile = string.IsNullOrWhiteSpace(package.TargetHostProfile)
+                ? string.Empty
+                : SanitizeUniversalPackagePathSegment(package.TargetHostProfile);
+            if (!firstSegment.Equals(targetHostProfile, StringComparison.OrdinalIgnoreCase)
+                && !knownHostKeys.Contains(firstSegment))
+            {
+                return false;
+            }
+
+            hostKey = firstSegment;
+            hostRelativePath = string.Join('/', segments.Skip(1));
+            return true;
+        }
+
+        private static string GetUniversalPackageItemRelativePath(
+            string packagePath,
+            UniversalModulePackageItemKind kind)
+        {
+            var normalized = NormalizeUniversalPackagePath(packagePath);
+            var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var rootAliases = kind switch
+            {
+                UniversalModulePackageItemKind.ModuleDefinition => new[] { "module-definition", "module-definitions" },
+                UniversalModulePackageItemKind.ArtifactPackage => new[] { "artifact", "artifacts" },
+                UniversalModulePackageItemKind.HostConfiguration => new[] { "host-config", "host-configs", "host-configuration", "host-configurations" },
+                UniversalModulePackageItemKind.ConfigOverlay => new[] { "config-overlay", "config-overlays" },
+                UniversalModulePackageItemKind.DashboardWidget => new[] { "widget", "widgets", "dashboard-widgets" },
+                UniversalModulePackageItemKind.WidgetRuntimeData => new[] { "widget-data", "widget-runtime-data" },
+                _ => []
+            };
+            if (segments.Length > 1 && rootAliases.Contains(segments[0], StringComparer.OrdinalIgnoreCase))
+            {
+                return string.Join('/', segments.Skip(1));
+            }
+
+            return string.Join('/', segments);
+        }
+
         private static void CopyInstallerRunnerFiles(string currentExecutable, string runnerRoot)
         {
             var executableDirectory = Path.GetDirectoryName(currentExecutable)
@@ -2372,6 +2678,157 @@ internal static partial class Program
             lines.Add(string.Empty);
             lines.Add($"Summary: {updated} updated, {unchanged} already current, {warnings} warning(s).");
             return new DeveloperPackageObjectSyncResult(warnings > 0, configUpdated, lines);
+        }
+
+        private async Task<DeveloperPackageObjectSyncResult> SyncAllProfilePackageObjectsCoreAsync()
+        {
+            var lines = new List<string>
+            {
+                "All-profile package object refresh:",
+                $"  Installer package: {_payloadRoot}",
+                $"  Profiles discovered: {_configProfiles.Count}",
+                string.Empty
+            };
+            var warnings = 0;
+            var synced = 0;
+            var skipped = 0;
+            var seenProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var profile in _configProfiles.OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase))
+            {
+                if (!seenProfiles.Add(Path.GetFullPath(profile.ConfigPath)))
+                {
+                    continue;
+                }
+
+                if (!TryCreateProfilePackageSyncForm(profile, out var profileForm, out var skipReason))
+                {
+                    skipped++;
+                    lines.Add($"> Profile {profile.DisplayName}: skipped - {skipReason}");
+                    continue;
+                }
+
+                using var disposableProfileForm = ReferenceEquals(profileForm, this) ? null : profileForm;
+                lines.Add($"> Profile {profile.DisplayName}");
+                lines.Add($"  Config: {profile.ConfigPath}");
+                lines.Add($"  Package root: {profileForm!._payloadRoot}");
+
+                var result = await profileForm.SyncDeveloperPackageObjectsCoreAsync();
+                foreach (var line in result.Lines)
+                {
+                    lines.Add("  " + line);
+                }
+
+                if (result.ConfigUpdated)
+                {
+                    lines.Add("  > Configuration targets were updated in memory for this profile. Package-object sync does not rewrite tracked host config files.");
+                }
+
+                if (result.HasWarnings)
+                {
+                    warnings++;
+                }
+
+                synced++;
+                lines.Add(string.Empty);
+            }
+
+            if (synced == 0)
+            {
+                warnings++;
+                lines.Add("WARN: No profile had usable developer source roots on this computer.");
+            }
+
+            lines.Add($"Summary: {synced} profile(s) synced, {skipped} skipped, {warnings} warning(s).");
+            return new DeveloperPackageObjectSyncResult(warnings > 0, false, lines);
+        }
+
+        private bool TryCreateProfilePackageSyncForm(
+            BootstrapConfigProfile profile,
+            out InstallerForm? profileForm,
+            out string skipReason)
+        {
+            profileForm = null;
+            try
+            {
+                var isCurrentProfile = profile.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase);
+                var profileConfig = isCurrentProfile
+                    ? _config
+                    : ReadJsonAsync<BootstrapConfig>(profile.ConfigPath).GetAwaiter().GetResult();
+                if (!HasUsableConfiguredDeveloperSourceRoots(profileConfig, out skipReason))
+                {
+                    return false;
+                }
+
+                profileForm = isCurrentProfile
+                    ? this
+                    : new InstallerForm(
+                        _configProfiles,
+                        profileConfig,
+                        profile.ConfigPath,
+                        ResolvePayloadRoot(_cli, profile.ConfigPath),
+                        _cli,
+                        initializeUi: false);
+                skipReason = string.Empty;
+                return true;
+            }
+            catch (SystemException ex)
+            {
+                skipReason = ex.Message;
+                return false;
+            }
+        }
+
+        private bool HasAnyProfileDeveloperSourceAvailable()
+        {
+            if (_hasDeveloperSource)
+            {
+                return true;
+            }
+
+            foreach (var profile in _configProfiles)
+            {
+                try
+                {
+                    var config = profile.ConfigPath.Equals(_configPath, StringComparison.OrdinalIgnoreCase)
+                        ? _config
+                        : ReadJsonAsync<BootstrapConfig>(profile.ConfigPath).GetAwaiter().GetResult();
+                    if (HasUsableConfiguredDeveloperSourceRoots(config, out _))
+                    {
+                        return true;
+                    }
+                }
+                catch (SystemException)
+                {
+                    // Missing or invalid non-selected profiles must not disable the whole installer UI.
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasUsableConfiguredDeveloperSourceRoots(BootstrapConfig config, out string reason)
+        {
+            var configuredRoots = ParseConfiguredDeveloperSourceRoots(config.DeveloperSource.SourceRoot)
+                .Select(Path.GetFullPath)
+                .ToArray();
+            if (configuredRoots.Length == 0)
+            {
+                reason = "no developer source roots are configured";
+                return false;
+            }
+
+            var validRoots = configuredRoots
+                .Where(root => File.Exists(Path.Join(root, "omp-components.json")))
+                .ToArray();
+            if (!validRoots.Any(IsDeveloperSourceRoot))
+            {
+                reason = "configured source roots are not present on this computer or do not include OpenModulePlatform";
+                return false;
+            }
+
+            reason = string.Empty;
+            return true;
         }
 
         private bool TryUpdateHostAgentPackagePathFromSyncedArtifacts(
@@ -3454,6 +3911,8 @@ ORDER BY ar.ArtifactId DESC;
             _upgradeCompleteButton.Enabled = enabled;
             _checkSourceButton.Enabled = enabled && _hasDeveloperSource;
             _syncPackageObjectsButton.Enabled = enabled && _hasDeveloperSource;
+            _syncAllProfilePackageObjectsButton.Enabled = enabled && HasAnyProfileDeveloperSourceAvailable();
+            _importUniversalPackageButton.Enabled = enabled;
             _prunePackageArchiveButton.Enabled = enabled && HasPackageArchivePruneRoots();
             _createUniversalPackageButton.Enabled = enabled && HasUniversalPackageCandidates();
             _createUpdatedInstallerPackageButton.Enabled = enabled && _hasDeveloperSource;
@@ -4326,6 +4785,10 @@ ORDER BY ar.ArtifactId DESC;
     }
 
     private sealed record PackageArchivePruneResult(
+        bool HasWarnings,
+        IReadOnlyList<string> Lines);
+
+    private sealed record UniversalPackageArchiveImportResult(
         bool HasWarnings,
         IReadOnlyList<string> Lines);
 }
