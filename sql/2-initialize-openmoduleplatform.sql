@@ -314,8 +314,7 @@ BEGIN
         WHERE HostId = @SuppressedDefaultHostId;
 
         UPDATE omp.HostDeploymentAssignments
-        SET IsActive = 0,
-            UpdatedUtc = SYSUTCDATETIME()
+        SET IsActive = 0
         WHERE HostId = @SuppressedDefaultHostId;
 
         UPDATE omp.HostAgentDesiredStates
