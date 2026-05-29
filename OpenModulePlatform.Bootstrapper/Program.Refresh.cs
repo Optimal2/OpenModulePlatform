@@ -13,6 +13,8 @@ internal static partial class Program
     private const int InstallerRefreshPathSafetyMargin = 240;
     private const int InstallerRefreshExpectedDeepSuffixLength = 190;
     private const int DeveloperSourceGitPullTimeoutSeconds = 120;
+    private const int DeveloperSourcePullLockTimeoutSeconds = 180;
+    private const string DeveloperSourcePullMutexName = @"Local\OpenModulePlatform.Bootstrapper.DeveloperSourcePull";
 
     private static async Task<int> RunInstallerPackageRefreshAsync(CliOptions cli)
     {
@@ -619,6 +621,11 @@ internal static partial class Program
     {
         var warnings = 0;
         var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var pullLock = TryAcquireDeveloperSourcePullLock(writeLine, progress, throwOnFailure);
+        if (pullLock is null)
+        {
+            return 1;
+        }
 
         foreach (var sourceRoot in sourceRoots.Select(Path.GetFullPath).Where(emitted.Add))
         {
@@ -669,6 +676,64 @@ internal static partial class Program
         }
 
         return warnings;
+    }
+
+    private static IDisposable? TryAcquireDeveloperSourcePullLock(
+        Action<string> writeLine,
+        Action<string>? progress,
+        bool throwOnFailure)
+    {
+        progress?.Invoke("Waiting for source repository update lock...");
+        var mutex = new Mutex(initiallyOwned: false, DeveloperSourcePullMutexName);
+        try
+        {
+            if (mutex.WaitOne(TimeSpan.FromSeconds(DeveloperSourcePullLockTimeoutSeconds)))
+            {
+                return new MutexReleaseHandle(mutex);
+            }
+
+            mutex.Dispose();
+            var message = $"Another OpenModulePlatform installer source repository update is already running. Try again when that operation has completed. Waited {DeveloperSourcePullLockTimeoutSeconds} seconds.";
+            if (throwOnFailure)
+            {
+                throw new TimeoutException(message);
+            }
+
+            writeLine("  WARN    " + message);
+            return null;
+        }
+        catch (AbandonedMutexException)
+        {
+            return new MutexReleaseHandle(mutex);
+        }
+        catch
+        {
+            mutex.Dispose();
+            throw;
+        }
+    }
+
+    private sealed class MutexReleaseHandle(Mutex mutex) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            try
+            {
+                mutex.ReleaseMutex();
+            }
+            finally
+            {
+                mutex.Dispose();
+            }
+        }
     }
 
     private static bool IsGitWorkTreeRoot(string sourceRoot)
