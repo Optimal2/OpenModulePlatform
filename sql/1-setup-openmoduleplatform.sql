@@ -2067,9 +2067,28 @@ BEGIN
 
         CONSTRAINT PK_omp_notifications PRIMARY KEY(notification_id),
         CONSTRAINT CK_omp_notifications_user_id CHECK(user_id >= 0),
-        CONSTRAINT CK_omp_notifications_level CHECK(level IN (N'info', N'success', N'warning', N'error')),
+        CONSTRAINT CK_omp_notifications_level CHECK(level IN (N'info', N'success', N'warning', N'error', N'banner')),
         CONSTRAINT CK_omp_notifications_status CHECK(status IN (N'unread', N'read'))
     );
+END
+GO
+
+IF OBJECT_ID(N'omp.notifications', N'U') IS NOT NULL
+BEGIN
+    IF EXISTS
+    (
+        SELECT 1
+        FROM sys.check_constraints
+        WHERE name = N'CK_omp_notifications_level'
+          AND parent_object_id = OBJECT_ID(N'omp.notifications')
+    )
+    BEGIN
+        ALTER TABLE omp.notifications DROP CONSTRAINT CK_omp_notifications_level;
+    END;
+
+    ALTER TABLE omp.notifications WITH CHECK
+        ADD CONSTRAINT CK_omp_notifications_level
+            CHECK(level IN (N'info', N'success', N'warning', N'error', N'banner'));
 END
 GO
 

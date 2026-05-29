@@ -706,6 +706,60 @@
         });
     }
 
+    function initNotificationBannerForm(form) {
+        if (!form || form.dataset.portalTopbarNotificationBannerFormInitialized === 'true') {
+            return;
+        }
+
+        form.dataset.portalTopbarNotificationBannerFormInitialized = 'true';
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var root = form.closest('[data-portal-topbar-root]');
+            var button = form.querySelector('button[type="submit"]');
+            if (button) {
+                button.disabled = true;
+            }
+
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (response) {
+                    if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                        reportNotificationSessionWarning('auth');
+                        throw new Error('Notification action requires sign-in.');
+                    }
+
+                    if (!response.ok) {
+                        throw new Error('Notification banner dismiss failed with status ' + response.status + '.');
+                    }
+
+                    return response.json();
+                })
+                .then(function (payload) {
+                    form.remove();
+                    updateNotificationBadge(root, payload.unreadCount);
+                    updateNotificationEmptyState(root);
+                })
+                .catch(function (error) {
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn('OMP topbar notification banner action failed.', error);
+                    }
+                })
+                .finally(function () {
+                    if (button) {
+                        button.disabled = false;
+                    }
+                });
+        });
+    }
+
     function initNotificationMarkAllForm(form) {
         if (!form || form.dataset.portalTopbarNotificationMarkAllFormInitialized === 'true') {
             return;
@@ -1315,6 +1369,7 @@
         topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-form]').forEach(initNotificationForm);
+        topbar.querySelectorAll('[data-portal-topbar-notification-banner-form]').forEach(initNotificationBannerForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-mark-all-form]').forEach(initNotificationMarkAllForm);
         updateNotificationEmptyState(topbar);
         initSessionStatusCheck(topbar);

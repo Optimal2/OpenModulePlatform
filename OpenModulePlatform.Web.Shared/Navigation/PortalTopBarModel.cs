@@ -18,6 +18,7 @@ public sealed class PortalTopBarModel
         NavigationGroups = Array.Empty<PortalTopBarNavigationGroup>(),
         FavoriteEntries = Array.Empty<PortalTopBarNavigationEntry>(),
         Notifications = Array.Empty<PortalTopBarNotification>(),
+        BannerNotifications = Array.Empty<PortalTopBarNotification>(),
         PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
         PortalAdminSections = Array.Empty<PortalAdminMenuSection>(),
         LanguageOptions = Array.Empty<PortalTopBarCultureOption>(),
@@ -69,6 +70,8 @@ public sealed class PortalTopBarModel
     public string FavoriteToggleUrl { get; init; } = "/navigation/favorites/toggle";
 
     public IReadOnlyList<PortalTopBarNotification> Notifications { get; init; } = Array.Empty<PortalTopBarNotification>();
+
+    public IReadOnlyList<PortalTopBarNotification> BannerNotifications { get; init; } = Array.Empty<PortalTopBarNotification>();
 
     public bool CanUseNotifications { get; init; }
 

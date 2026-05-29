@@ -42,4 +42,5 @@
   <data name="Notifications" xml:space="preserve"><value>Notifikationer</value></data>
   <data name="No new notifications" xml:space="preserve"><value>Inga nya notifikationer</value></data>
   <data name="Mark all as read" xml:space="preserve"><value>Markera alla som lästa</value></data>
+  <data name="Dismiss notification" xml:space="preserve"><value>Stäng notifikation</value></data>
 </root>

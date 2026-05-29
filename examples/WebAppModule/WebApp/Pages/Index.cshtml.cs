@@ -85,6 +85,37 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostSendTestBanner(CancellationToken ct)
+    {
+        var guard = await RequireViewAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var userId = NotificationService.TryGetOmpUserId(User);
+        if (userId is null)
+        {
+            ErrorMessage = T("Notifications require an OMP user");
+            return RedirectToPage();
+        }
+
+        await _notifications.CreateForUserAsync(
+            userId.Value,
+            new NotificationCreateRequest(
+                Title: T("Test banner"),
+                Content: T("This banner was sent from ExampleModule."),
+                DestinationUrl: BuildCurrentRelativeUrl(),
+                Level: "banner",
+                CallerKey: "ExampleModule",
+                CallerDisplayName: "ExampleModule",
+                CallerIcon: "/_content/OpenModulePlatform.Web.Shared/icons/notifications.svg"),
+            ct);
+
+        StatusMessage = T("Banner sent");
+        return RedirectToPage();
+    }
+
     private string BuildCurrentRelativeUrl()
     {
         var url = string.Concat(Request.PathBase, Request.Path);

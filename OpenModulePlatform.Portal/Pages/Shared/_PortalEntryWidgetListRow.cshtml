@@ -14,6 +14,7 @@
      data-entry-context="@Model.ContextName"
      data-entry-description="@Model.Description"
      data-entry-href="@Model.TargetHref"
+     data-entry-is-child="@Model.ParentEntryId.HasValue.ToString().ToLowerInvariant()"
      data-entry-logo-url="@Model.LogoUrl"
      data-entry-logo-fallback="@Model.LogoFallbackText">
     <a class="dashboard-entry-list__item" href="@Model.TargetHref">

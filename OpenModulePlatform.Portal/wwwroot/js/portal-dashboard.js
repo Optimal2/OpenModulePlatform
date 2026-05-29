@@ -539,6 +539,19 @@
             });
         });
 
+        widget.querySelectorAll('[data-widget-entry-filter-control]').forEach((control) => {
+            if (control.dataset.dashboardWidgetSettingsBound === 'true') {
+                return;
+            }
+
+            control.dataset.dashboardWidgetSettingsBound = 'true';
+            control.addEventListener('change', () => {
+                widget.dataset.widgetStringData = normalizeMainModuleFilterValue(control.value);
+                applyWidgetSettings(widget);
+                onChange();
+            });
+        });
+
         widget.querySelectorAll('[data-blank-widget-style-control]').forEach((control) => {
             if (control.dataset.dashboardWidgetSettingsBound === 'true') {
                 return;
@@ -641,6 +654,19 @@
             widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
                 control.value = String(columns);
             });
+        }
+
+        if (isMainModuleFilterWidgetPayload(widget.dataset.widgetPayload)) {
+            const filterMode = normalizeMainModuleFilterValue(widget.dataset.widgetStringData);
+            widget.dataset.widgetStringData = filterMode;
+            widget.querySelectorAll('[data-widget-entry-filter-control]').forEach((control) => {
+                control.value = filterMode;
+            });
+            widget.querySelectorAll('[data-dashboard-entry-list]').forEach(applyEntryListFilter);
+            return;
+        }
+
+        if (isColumnCountWidgetPayload(widget.dataset.widgetPayload)) {
             return;
         }
 
@@ -996,9 +1022,14 @@
             || list.querySelector('[data-dashboard-entry-filter]');
         const query = normalizeSearchText(filterInput?.value || '');
         const isFiltering = query.length > 0;
+        const widget = list.closest('[data-dashboard-widget]');
+        const mainOnly = isMainModuleFilterWidgetPayload(widget?.dataset?.widgetPayload)
+            && normalizeMainModuleFilterValue(widget?.dataset?.widgetStringData) === 'main-only';
 
         list.querySelectorAll('[data-dashboard-entry-row]').forEach((row) => {
-            row.hidden = isFiltering && !getEntryRowSearchText(row).includes(query);
+            const hiddenBySearch = isFiltering && !getEntryRowSearchText(row).includes(query);
+            const hiddenByMainOnly = mainOnly && row.dataset.entryIsChild === 'true';
+            row.hidden = hiddenBySearch || hiddenByMainOnly;
         });
 
         list.querySelectorAll('[data-dashboard-entry-list-section]').forEach((section) => {
@@ -2453,6 +2484,17 @@
             || payload === 'content-pages';
     }
 
+    function isMainModuleFilterWidgetPayload(payload) {
+        return payload === 'portal-entry-list'
+            || payload === 'portal-entry-combolist';
+    }
+
+    function normalizeMainModuleFilterValue(value) {
+        return String(value || '').trim().toLowerCase() === 'main-only'
+            ? 'main-only'
+            : '';
+    }
+
     function getBlankWidgetStyleValue(widget) {
         const imageId = normalizeBlankWidgetImageId(widget?.dataset?.widgetStringData);
         if (imageId > 0) {
@@ -3329,6 +3371,18 @@
                 (select) => {
                     select.dataset.widgetIntDataControl = '';
                 }));
+            if (isMainModuleFilterWidgetPayload(widget.payload)) {
+                settingFields.push(createSelectField(
+                    root.dataset.entryFilterModeLabel || 'Entry filter',
+                    [
+                        ['', root.dataset.entryFilterAllLabel || 'Show all entries'],
+                        ['main-only', root.dataset.entryFilterMainOnlyLabel || 'Top-level entries only']
+                    ],
+                    normalizeMainModuleFilterValue(widget.stringData),
+                    (select) => {
+                        select.dataset.widgetEntryFilterControl = '';
+                    }));
+            }
         } else if (widget.payload === 'weekday-date') {
             settingFields.push(createSelectField(
                 root.dataset.weekNumberLabel || 'Week number',

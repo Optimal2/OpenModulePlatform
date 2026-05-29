@@ -413,5 +413,42 @@
                 </details>
             }
         </div>
+        @if (Model.BannerNotifications.Count > 0)
+        {
+            <div class="portal-topbar__notification-banners" data-portal-topbar-notification-banners>
+                @foreach (var notification in Model.BannerNotifications)
+                {
+                    <form method="post"
+                          action="@Model.NotificationMarkReadUrl"
+                          class="portal-topbar__notification-banner-form"
+                          data-portal-topbar-notification-banner-form
+                          data-enhance="false">
+                        <input type="hidden" name="notificationId" value="@notification.NotificationId" />
+                        <div class="portal-topbar__notification-banner" role="status">
+                            <span class="portal-topbar__notification-banner-icon" aria-hidden="true">
+                                @if (!string.IsNullOrWhiteSpace(notification.CallerIcon))
+                                {
+                                    <img src="@notification.CallerIcon" alt="" />
+                                }
+                                else
+                                {
+                                    <span>@NotificationCallerText(notification)</span>
+                                }
+                            </span>
+                            <span class="portal-topbar__notification-banner-copy">
+                                <span class="portal-topbar__notification-banner-title">@notification.Title</span>
+                                <span class="portal-topbar__notification-banner-content">@notification.Content</span>
+                            </span>
+                            <button type="submit"
+                                    class="portal-topbar__notification-banner-dismiss"
+                                    title="@L["Dismiss notification"]"
+                                    aria-label="@L["Dismiss notification"]">
+                                ×
+                            </button>
+                        </div>
+                    </form>
+                }
+            </div>
+        }
     </div>
 }
