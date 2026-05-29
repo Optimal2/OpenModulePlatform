@@ -151,7 +151,9 @@ internal static partial class Program
                 payloadRoot = temporaryPayloadRoot;
             }
 
+            var artifactSelectionMessages = SelectLatestAvailableArtifactPackages(config, payloadRoot);
             WritePlan(config, configPath, payloadRoot);
+            WriteArtifactSelectionMessages(artifactSelectionMessages);
             if (!yes && !Confirm("Continue with OpenModulePlatform bootstrap?"))
             {
                 Console.WriteLine("Bootstrap cancelled.");
@@ -218,7 +220,9 @@ internal static partial class Program
                 payloadRoot = temporaryPayloadRoot;
             }
 
+            var artifactSelectionMessages = SelectLatestAvailableArtifactPackages(config, payloadRoot);
             WritePlan(config, configPath, payloadRoot);
+            WriteArtifactSelectionMessages(artifactSelectionMessages);
 
             if (config.Sql.Enabled)
             {
@@ -1041,6 +1045,14 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
         }
 
         return 0;
+    }
+
+    private sealed class VersionTextComparer : IComparer<string>
+    {
+        public static readonly VersionTextComparer Instance = new();
+
+        public int Compare(string? x, string? y)
+            => CompareVersionText(x ?? string.Empty, y ?? string.Empty);
     }
 
     private static async Task<int> UpsertModuleDefinitionDocumentAsync(
@@ -2796,6 +2808,157 @@ END;
         return preparedConfigurationFiles;
     }
 
+    private static IReadOnlyList<string> SelectLatestAvailableArtifactPackages(
+        BootstrapConfig config,
+        string payloadRoot)
+    {
+        var availablePackages = DiscoverAvailableArtifactPackages(payloadRoot);
+        if (availablePackages.Count == 0)
+        {
+            return [];
+        }
+
+        var messages = new List<string>();
+        foreach (var artifact in config.Artifacts.Where(static item => item.Enabled))
+        {
+            var currentIdentity = ParseConfiguredArtifactIdentity(artifact.Source);
+            if (currentIdentity is null)
+            {
+                continue;
+            }
+
+            var latest = FindLatestAvailableArtifactPackage(availablePackages, currentIdentity);
+            if (latest is null)
+            {
+                continue;
+            }
+
+            if (CompareVersionText(latest.Identity.Version, currentIdentity.Version) <= 0
+                && File.Exists(ResolvePackageDataPath(payloadRoot, artifact.Source)))
+            {
+                continue;
+            }
+
+            if (!TryReplaceArtifactTargetVersion(
+                    artifact.Target,
+                    currentIdentity.Version,
+                    latest.Identity.Version,
+                    out var latestTarget))
+            {
+                messages.Add(
+                    $"> Artifact {artifact.Target}: kept configured version {currentIdentity.Version}; could not map target path to latest available version {latest.Identity.Version}.");
+                continue;
+            }
+
+            var oldSource = artifact.Source;
+            var oldTarget = artifact.Target;
+            artifact.Source = latest.PackageRelativePath;
+            artifact.Target = latestTarget;
+            messages.Add($"> Artifact {oldTarget}: selected latest available package {artifact.Target} from {Path.GetFileName(latest.PackageRelativePath)}.");
+
+            if (IsHostAgentArtifact(currentIdentity)
+                && (string.IsNullOrWhiteSpace(config.HostAgent.PackagePath)
+                    || string.Equals(NormalizePathForMatch(config.HostAgent.PackagePath), NormalizePathForMatch(oldSource), StringComparison.OrdinalIgnoreCase)
+                    || CompareVersionText(latest.Identity.Version, currentIdentity.Version) > 0))
+            {
+                config.HostAgent.PackagePath = latest.PackageRelativePath;
+                messages.Add($"> HostAgent package path: selected latest available package {Path.GetFileName(latest.PackageRelativePath)}.");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(config.HostAgent.PackagePath))
+        {
+            var currentHostAgentIdentity = ParseConfiguredArtifactIdentity(config.HostAgent.PackagePath);
+            if (currentHostAgentIdentity is not null && IsHostAgentArtifact(currentHostAgentIdentity))
+            {
+                var latestHostAgent = FindLatestAvailableArtifactPackage(availablePackages, currentHostAgentIdentity);
+                if (latestHostAgent is not null
+                    && CompareVersionText(latestHostAgent.Identity.Version, currentHostAgentIdentity.Version) > 0)
+                {
+                    config.HostAgent.PackagePath = latestHostAgent.PackageRelativePath;
+                    messages.Add($"> HostAgent package path: selected latest available package {Path.GetFileName(latestHostAgent.PackageRelativePath)}.");
+                }
+            }
+        }
+
+        return messages;
+    }
+
+    private static void WriteArtifactSelectionMessages(IReadOnlyList<string> messages)
+    {
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine("> Latest available artifact selection");
+        foreach (var message in messages.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(message);
+        }
+
+        Console.WriteLine();
+    }
+
+    private static IReadOnlyList<AvailableArtifactPackage> DiscoverAvailableArtifactPackages(string payloadRoot)
+    {
+        var artifactRoot = ResolvePackageArtifactsRoot(payloadRoot);
+        if (!Directory.Exists(artifactRoot))
+        {
+            return [];
+        }
+
+        var packages = new List<AvailableArtifactPackage>();
+        foreach (var packagePath in Directory.EnumerateFiles(artifactRoot, "*.zip", SearchOption.TopDirectoryOnly))
+        {
+            var packageRelativePath = NormalizePathForMatch(Path.GetRelativePath(payloadRoot, packagePath));
+            var identity = ParseConfiguredArtifactIdentity(packageRelativePath);
+            if (identity is null)
+            {
+                continue;
+            }
+
+            packages.Add(new AvailableArtifactPackage(identity, packageRelativePath));
+        }
+
+        return packages;
+    }
+
+    private static AvailableArtifactPackage? FindLatestAvailableArtifactPackage(
+        IReadOnlyList<AvailableArtifactPackage> packages,
+        ConfiguredArtifactIdentity identity)
+        => packages
+            .Where(package => IsSameArtifactSlot(package.Identity, identity))
+            .OrderByDescending(package => package.Identity.Version, VersionTextComparer.Instance)
+            .FirstOrDefault();
+
+    private static bool IsSameArtifactSlot(ConfiguredArtifactIdentity left, ConfiguredArtifactIdentity right)
+        => left.ModuleKey.Equals(right.ModuleKey, StringComparison.OrdinalIgnoreCase)
+            && left.AppKey.Equals(right.AppKey, StringComparison.OrdinalIgnoreCase)
+            && left.PackageType.Equals(right.PackageType, StringComparison.OrdinalIgnoreCase)
+            && left.TargetName.Equals(right.TargetName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsHostAgentArtifact(ConfiguredArtifactIdentity identity)
+        => identity.PackageType.Equals("host-agent", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryReplaceArtifactTargetVersion(
+        string target,
+        string currentVersion,
+        string latestVersion,
+        out string latestTarget)
+    {
+        latestTarget = target;
+        var normalizedTarget = NormalizePathForMatch(target);
+        var normalizedCurrentVersion = NormalizePathForMatch(currentVersion);
+        if (!normalizedTarget.EndsWith("/" + normalizedCurrentVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        latestTarget = normalizedTarget[..^normalizedCurrentVersion.Length] + latestVersion;
+        return true;
+    }
+
     private static IReadOnlyList<ArtifactPackageConfigurationFile> ExtractArtifactPackageConfigurationFiles(
         string source,
         string artifactStoreRoot)
@@ -3278,7 +3441,8 @@ SELECT COUNT(1) FROM @changes;
             .Select(static artifact =>
                 TryResolveHostAgentVersionFromTarget(artifact.Target)
                 ?? TryResolveHostAgentVersionFromPackageName(artifact.Source))
-            .FirstOrDefault(static version => !string.IsNullOrWhiteSpace(version));
+            .FirstOrDefault(static version => !string.IsNullOrWhiteSpace(version))
+            ?? TryResolveHostAgentVersionFromPackageName(config.HostAgent.PackagePath);
 
     private static string? TryResolveHostAgentVersionFromTarget(string target)
     {
@@ -5507,6 +5671,10 @@ internal sealed record ConfiguredArtifactIdentity(
     string PackageType,
     string TargetName,
     string Version);
+
+internal sealed record AvailableArtifactPackage(
+    ConfiguredArtifactIdentity Identity,
+    string PackageRelativePath);
 
 internal sealed class CliOptions
 {
