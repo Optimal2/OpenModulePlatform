@@ -11,6 +11,7 @@ public sealed class ArtifactPackageExtractor
 
     private const long MaxManifestBytes = 1024 * 1024;
     private const long MaxConfigurationFileBytes = 1024 * 1024 * 5;
+    private const int MaxArchiveEntryCount = 10000;
 
     private readonly Action<string>? _validatePayloadEntry;
 
@@ -22,6 +23,7 @@ public sealed class ArtifactPackageExtractor
     public ArtifactPackageExtractionResult Extract(string zipPath, string stagingPath)
     {
         using var archive = ZipFile.OpenRead(zipPath);
+        ValidateArchiveEntryCount(archive, "Artifact package");
         var manifestEntry = archive.Entries.FirstOrDefault(
             entry => string.Equals(
                 NormalizeZipEntryName(entry.FullName),
@@ -110,18 +112,26 @@ public sealed class ArtifactPackageExtractor
         var nestedZipPath = Path.Join(stagingPath, "artifact-payload.zip");
         Directory.CreateDirectory(Path.GetDirectoryName(nestedZipPath)!);
 
-        using (var source = payloadEntry.Open())
-        using (var target = File.Create(nestedZipPath))
+        try
         {
-            source.CopyTo(target);
-        }
+            using (var source = payloadEntry.Open())
+            using (var target = File.Create(nestedZipPath))
+            {
+                source.CopyTo(target);
+            }
 
-        using var payloadArchive = ZipFile.OpenRead(nestedZipPath);
-        return ExtractArchiveEntries(
-            payloadArchive,
-            artifactContentPath,
-            string.Empty,
-            _validatePayloadEntry);
+            using var payloadArchive = ZipFile.OpenRead(nestedZipPath);
+            ValidateArchiveEntryCount(payloadArchive, "Artifact package nested payload");
+            return ExtractArchiveEntries(
+                payloadArchive,
+                artifactContentPath,
+                string.Empty,
+                _validatePayloadEntry);
+        }
+        finally
+        {
+            TryDeleteFile(nestedZipPath);
+        }
     }
 
     private static int ExtractArchiveEntries(
@@ -268,6 +278,32 @@ public sealed class ArtifactPackageExtractor
 
         return entry ?? throw new InvalidOperationException(
             $"Artifact package references missing file '{entryPath}'.");
+    }
+
+    private static void ValidateArchiveEntryCount(ZipArchive archive, string packageDescription)
+    {
+        if (archive.Entries.Count > MaxArchiveEntryCount)
+        {
+            throw new InvalidOperationException(
+                $"{packageDescription} contains {archive.Entries.Count} entries, which exceeds the limit of {MaxArchiveEntryCount}.");
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private static bool IsZipPayload(string payloadPath, string? payloadType)
