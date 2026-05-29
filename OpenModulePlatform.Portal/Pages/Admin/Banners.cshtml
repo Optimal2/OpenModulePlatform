@@ -1,0 +1,177 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.BannersModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["System"]</div>
+        <h2>@L["Banners"]</h2>
+        <p class="lede">@L["Create system-controlled banners for all users or selected roles. Users cannot dismiss banners."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<section class="card top-gap">
+    <div class="section-header">
+        <div>
+            <h3>@(Model.IsEdit ? L["Edit banner"] : L["Create banner"])</h3>
+        </div>
+        @if (Model.IsEdit)
+        {
+            <a class="action-link" asp-page="/Admin/Banners">@L["Create banner"]</a>
+        }
+    </div>
+
+    <form method="post" asp-page-handler="Save" class="settings-form">
+        <input asp-for="Input.BannerId" type="hidden" />
+
+        <div class="field-grid field-grid--2">
+            <div class="form-field">
+                <label asp-for="Input.Title"></label>
+                <input asp-for="Input.Title" />
+                <span asp-validation-for="Input.Title" class="field-validation-error"></span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="Input.Status"></label>
+                <select asp-for="Input.Status">
+                    <option value="active">@L["Active"]</option>
+                    <option value="disabled">@L["Disabled"]</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.Content"></label>
+            <textarea asp-for="Input.Content" rows="3"></textarea>
+            <span asp-validation-for="Input.Content" class="field-validation-error"></span>
+        </div>
+
+        <div class="field-grid field-grid--3">
+            <div class="form-field">
+                <label asp-for="Input.Level"></label>
+                <select asp-for="Input.Level">
+                    <option value="1">@L["Announcement"]</option>
+                    <option value="2">@L["Warning"]</option>
+                    <option value="3">@L["Critical"]</option>
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="Input.StartsAtUtc"></label>
+                <input asp-for="Input.StartsAtUtc" type="datetime-local" />
+                <span asp-validation-for="Input.StartsAtUtc" class="field-validation-error"></span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="Input.ExpiresAtUtc"></label>
+                <input asp-for="Input.ExpiresAtUtc" type="datetime-local" />
+                <span asp-validation-for="Input.ExpiresAtUtc" class="field-validation-error"></span>
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.TargetMode"></label>
+            <div class="segmented-control" role="group" aria-label="@L["Banner targets"]">
+                <label>
+                    <input asp-for="Input.TargetMode" type="radio" value="global" />
+                    <span>@L["Global"]</span>
+                </label>
+                <label>
+                    <input asp-for="Input.TargetMode" type="radio" value="roles" />
+                    <span>@L["Specific roles"]</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.SelectedRoleIds"></label>
+            <div class="checkbox-list">
+                @foreach (var role in Model.RoleOptions)
+                {
+                    var checkedAttr = Model.Input.SelectedRoleIds.Contains(role.RoleId);
+                    <label class="checkbox-row">
+                        <input type="checkbox" name="Input.SelectedRoleIds" value="@role.RoleId" checked="@checkedAttr" />
+                        <span>@role.Name</span>
+                    </label>
+                }
+            </div>
+            <span asp-validation-for="Input.SelectedRoleIds" class="field-validation-error"></span>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit" class="btn btn-primary">@(Model.IsEdit ? L["Save changes"] : L["Create banner"])</button>
+        </div>
+    </form>
+</section>
+
+<section class="card top-gap">
+    <div class="section-header">
+        <div>
+            <h3>@L["Banners"]</h3>
+        </div>
+    </div>
+
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty-state">@L["No entries to show"]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>@L["Title"]</th>
+                        <th>@L["Level"]</th>
+                        <th>@L["Status"]</th>
+                        <th>@L["Targets"]</th>
+                        <th>@L["Window"]</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Rows)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@row.Title</strong>
+                                <div class="muted small-text">@row.Content</div>
+                            </td>
+                            <td>@Model.LevelText(row.Level)</td>
+                            <td>@Model.StateText(row.DisplayState)</td>
+                            <td>@(string.IsNullOrWhiteSpace(row.TargetSummary) ? L["No targets"] : row.TargetSummary)</td>
+                            <td class="small-text">
+                                <div>@L["Starts"]: @(row.StartsAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
+                                <div>@L["Expires"]: @(row.ExpiresAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
+                            </td>
+                            <td class="actions-cell">
+                                <a class="admin-icon-button admin-icon-button--edit" asp-page="/Admin/Banners" asp-route-bannerId="@row.BannerId" title="@L["Edit"]" aria-label="@L["Edit"]">
+                                    <span class="visually-hidden">@L["Edit"]</span>
+                                </a>
+                                @if (!string.Equals(row.Status, "disabled", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <form method="post" asp-page-handler="Disable" asp-route-bannerId="@row.BannerId" data-enhance="false">
+                                        <button type="submit"
+                                                class="btn-danger-subtle"
+                                                data-confirm="@L["Disable this banner?"]">
+                                            @L["Disable"]
+                                        </button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

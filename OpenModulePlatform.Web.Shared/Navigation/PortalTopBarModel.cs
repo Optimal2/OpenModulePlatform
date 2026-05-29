@@ -18,7 +18,7 @@ public sealed class PortalTopBarModel
         NavigationGroups = Array.Empty<PortalTopBarNavigationGroup>(),
         FavoriteEntries = Array.Empty<PortalTopBarNavigationEntry>(),
         Notifications = Array.Empty<PortalTopBarNotification>(),
-        BannerNotifications = Array.Empty<PortalTopBarNotification>(),
+        Banners = Array.Empty<PortalTopBarBanner>(),
         PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
         PortalAdminSections = Array.Empty<PortalAdminMenuSection>(),
         LanguageOptions = Array.Empty<PortalTopBarCultureOption>(),
@@ -29,8 +29,9 @@ public sealed class PortalTopBarModel
         NavigationFilterPlaceholderTextKey = "Search modules",
         NoFavoritesTextKey = "No favorites",
         NotificationsToggleTextKey = "Notifications",
-        NoNotificationsTextKey = "No new notifications",
+        NoNotificationsTextKey = "No notifications",
         MarkAllNotificationsReadTextKey = "Mark all as read",
+        ViewAllNotificationsTextKey = "View all notifications",
         AddFavoriteTextKey = "Add favorite",
         RemoveFavoriteTextKey = "Remove favorite",
         PortalAdminToggleTextKey = "Admin",
@@ -71,7 +72,7 @@ public sealed class PortalTopBarModel
 
     public IReadOnlyList<PortalTopBarNotification> Notifications { get; init; } = Array.Empty<PortalTopBarNotification>();
 
-    public IReadOnlyList<PortalTopBarNotification> BannerNotifications { get; init; } = Array.Empty<PortalTopBarNotification>();
+    public IReadOnlyList<PortalTopBarBanner> Banners { get; init; } = Array.Empty<PortalTopBarBanner>();
 
     public bool CanUseNotifications { get; init; }
 
@@ -80,6 +81,10 @@ public sealed class PortalTopBarModel
     public string NotificationMarkReadUrl { get; init; } = "/notifications/mark-read";
 
     public string NotificationMarkAllReadUrl { get; init; } = "/notifications/mark-all-read";
+
+    public string NotificationRecentUrl { get; init; } = "/notifications/recent";
+
+    public string NotificationsUrl { get; init; } = "/notifications";
 
     public bool IsPortalAdmin { get; init; }
 
@@ -121,9 +126,11 @@ public sealed class PortalTopBarModel
 
     public string NotificationsToggleTextKey { get; init; } = "Notifications";
 
-    public string NoNotificationsTextKey { get; init; } = "No new notifications";
+    public string NoNotificationsTextKey { get; init; } = "No notifications";
 
     public string MarkAllNotificationsReadTextKey { get; init; } = "Mark all as read";
+
+    public string ViewAllNotificationsTextKey { get; init; } = "View all notifications";
 
     public string AddFavoriteTextKey { get; init; } = "Add favorite";
 

@@ -134,6 +134,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<OmpBrandingService>();
         builder.Services.AddScoped<RbacService>();
         builder.Services.AddScoped<NotificationService>();
+        builder.Services.AddScoped<BannerService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
 
         return builder;
@@ -367,6 +368,58 @@ public static class OmpWebHostingExtensions
                 success = true,
                 markedCount,
                 unreadCount = 0
+            });
+        }).RequireAuthorization();
+
+        app.MapGet(NotificationService.RecentPath, async (
+            HttpContext context,
+            NotificationService notificationService,
+            int? limit,
+            string? beforeCreatedAt,
+            long? beforeNotificationId,
+            CancellationToken ct) =>
+        {
+            var userId = NotificationService.TryGetOmpUserId(context.User);
+            if (userId is null)
+            {
+                return Results.Forbid();
+            }
+
+            DateTime? before = null;
+            if (!string.IsNullOrWhiteSpace(beforeCreatedAt)
+                && DateTime.TryParse(
+                    beforeCreatedAt,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var parsedBefore))
+            {
+                before = parsedBefore.ToUniversalTime();
+            }
+
+            var pageSize = Math.Clamp(limit.GetValueOrDefault(10), 1, 50);
+            var rows = await notificationService.GetRecentForUserAsync(
+                userId.Value,
+                pageSize,
+                before,
+                beforeNotificationId,
+                ct);
+
+            return Results.Json(new
+            {
+                items = rows.Select(row => new
+                {
+                    notificationId = row.NotificationId,
+                    title = row.Title,
+                    content = row.Content,
+                    level = row.Level,
+                    destinationUrl = row.DestinationUrl ?? string.Empty,
+                    callerKey = row.CallerKey ?? string.Empty,
+                    callerDisplayName = row.CallerDisplayName ?? string.Empty,
+                    callerIcon = row.CallerIcon ?? string.Empty,
+                    createdAt = row.CreatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+                    isUnread = row.IsUnread
+                }),
+                hasMore = rows.Count >= pageSize
             });
         }).RequireAuthorization();
 
