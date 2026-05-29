@@ -875,6 +875,34 @@ public sealed class ArtifactZipImportService
                 if ((allowExistingIdentical || package.ConfigurationFiles.Count > 0)
                     && existingContentMatches)
                 {
+                    var existingRelativePath = existingIdentity.RelativePath ?? relativePath;
+                    var existingFinalPath = ResolveUnderRoot(storeRoot, existingRelativePath);
+                    var restoredMissingContent = false;
+                    if (File.Exists(existingFinalPath))
+                    {
+                        throw new InvalidOperationException(
+                            $"The existing artifact path is a file, not a directory below the artifact store: {existingRelativePath}.");
+                    }
+
+                    if (Directory.Exists(existingFinalPath))
+                    {
+                        var existingContentHash = await ComputeDirectorySha256Async(
+                            existingFinalPath,
+                            cancellationToken);
+                        if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException(
+                                $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}.");
+                        }
+                    }
+                    else
+                    {
+                        MoveDirectory(package.ArtifactContentPath, existingFinalPath);
+                        finalPath = existingFinalPath;
+                        movedToFinal = true;
+                        restoredMissingContent = true;
+                    }
+
                     var updatedConfigurationFiles = 0;
                     if (package.ConfigurationFiles.Count > 0)
                     {
@@ -901,20 +929,29 @@ public sealed class ArtifactZipImportService
                             cancellationToken);
                     }
 
+                    var status = updatedConfigurationFiles > 0 || restoredMissingContent
+                        ? "Updated"
+                        : "Skipped";
+                    var message = updatedConfigurationFiles > 0
+                        ? $"The same artifact identity and content already exists. Updated {updatedConfigurationFiles} configuration file row(s)."
+                        : "The same artifact identity and content already exists.";
+                    if (restoredMissingContent)
+                    {
+                        message = $"{message} Restored missing artifact files below the artifact store path: {existingRelativePath}.";
+                    }
+
                     return new ArtifactZipImportResult(
                         existingIdentity.ArtifactId,
                         existingIdentity.Version,
-                        existingIdentity.RelativePath ?? relativePath,
+                        existingRelativePath,
                         updatedConfigurationFiles,
                         existingApplication.TemplateAppRowsUpdated,
                         existingApplication.AppInstanceRowsUpdated,
                         existingApplication.WorkerInstanceRowsUpdated,
                         existingHostAgentDesiredRows,
                         AdoptedExistingContent: true,
-                        Status: updatedConfigurationFiles > 0 ? "Updated" : "Skipped",
-                        Message: updatedConfigurationFiles > 0
-                            ? $"The same artifact identity and content already exists. Updated {updatedConfigurationFiles} configuration file row(s)."
-                            : "The same artifact identity and content already exists.");
+                        Status: status,
+                        Message: message);
                 }
 
                 throw new InvalidOperationException(

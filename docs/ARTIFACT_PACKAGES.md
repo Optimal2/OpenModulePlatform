@@ -133,6 +133,10 @@ For a manifest envelope:
 - importing the same artifact identity with the same payload hash is still
   allowed to update configuration-file rows from the package; the immutable
   artifact payload is left unchanged
+- if metadata for the same artifact identity and payload hash already exists
+  but the artifact store payload folder is missing, Portal and HostAgent import
+  repair the missing folder from the package instead of treating the import as
+  a no-op
 - if no configuration files are declared, the existing "copy from previous
   version" behavior can still apply
 - matching config overlays can override these artifact-owned files for one host
