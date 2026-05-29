@@ -40,6 +40,8 @@ public sealed class PortableModulePackageService
         WriteIndented = true
     };
 
+    private static readonly UTF8Encoding Utf8NoBom = new(false);
+
     private readonly OmpAdminRepository _repo;
     private readonly ArtifactUploadOptions _options;
     private readonly PortalDashboardWidgetPackageService _widgets;
@@ -760,6 +762,67 @@ public sealed class PortableModulePackageService
             TryDelete(packagePath);
             throw;
         }
+    }
+
+    public async Task<PackageLibraryExportResult> ExportModulePackageToLibraryAsync(
+        string moduleKey,
+        bool includeAllArtifactVersions,
+        CancellationToken ct)
+    {
+        var definition = await _repo.GetAppliedModuleDefinitionDocumentAsync(moduleKey, ct)
+            ?? throw new InvalidOperationException($"No applied module definition exists for module '{moduleKey}'.");
+        if (string.IsNullOrWhiteSpace(definition.DefinitionJson))
+        {
+            throw new InvalidOperationException($"Applied module definition '{moduleKey}' has no JSON content to export.");
+        }
+
+        var definitionsRoot = RequireConfiguredRoot(_options.AvailableModuleDefinitionsRoot, "AvailableModuleDefinitionsRoot");
+        var artifactsRoot = RequireConfiguredRoot(_options.AvailableArtifactsRoot, "AvailableArtifactsRoot");
+        Directory.CreateDirectory(definitionsRoot);
+        Directory.CreateDirectory(artifactsRoot);
+
+        var definitionFileName = $"{SanitizePathSegment(moduleKey)}.module-definition.json";
+        var definitionPath = ResolveUnderRoot(definitionsRoot, definitionFileName);
+        await File.WriteAllTextAsync(definitionPath, definition.DefinitionJson, Utf8NoBom, ct);
+
+        var artifactRows = await _repo.GetModuleArtifactPackagesAsync(moduleKey, includeAllArtifactVersions, ct);
+        var exportedArtifacts = 0;
+        var skippedArtifacts = 0;
+        var messages = new List<string>();
+
+        foreach (var artifact in artifactRows)
+        {
+            PortableModulePackageExportResult? export = null;
+            try
+            {
+                export = await ExportArtifactPackageAsync(artifact.ArtifactId, ct);
+                var targetPath = ResolveUnderRoot(artifactsRoot, export.FileName);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? artifactsRoot);
+                File.Copy(export.PackagePath, targetPath, overwrite: true);
+                exportedArtifacts++;
+            }
+            catch (InvalidOperationException ex)
+            {
+                skippedArtifacts++;
+                messages.Add($"{artifact.AppKey} {artifact.PackageType} {artifact.Version}: {ex.Message}");
+            }
+            finally
+            {
+                if (export is not null)
+                {
+                    TryDelete(export.PackagePath);
+                }
+            }
+        }
+
+        return new PackageLibraryExportResult(
+            moduleKey,
+            definition.DefinitionVersion,
+            definitionFileName,
+            artifactRows.Count,
+            exportedArtifacts,
+            skippedArtifacts,
+            messages);
     }
 
     public async Task<PortableModulePackageExportResult> ExportUniversalPackageAsync(
@@ -1828,7 +1891,7 @@ public sealed class PortableModulePackageService
             archive,
             usedEntryNames,
             entryName,
-            new UTF8Encoding(false).GetBytes(content),
+            Utf8NoBom.GetBytes(content),
             ct);
 
     private static async Task AddBytesEntryAsync(
@@ -2412,6 +2475,15 @@ public sealed record PortableModulePackageArtifactImportResult(
 public sealed record PortableModulePackageExportResult(
     string PackagePath,
     string FileName);
+
+public sealed record PackageLibraryExportResult(
+    string ModuleKey,
+    string DefinitionVersion,
+    string ModuleDefinitionFileName,
+    int ArtifactCount,
+    int ExportedArtifactCount,
+    int SkippedArtifactCount,
+    IReadOnlyList<string> Messages);
 
 public sealed record UniversalPackageExportRequest(
     string PackageKey,

@@ -875,11 +875,76 @@ WHERE InstanceTemplateHostId = @InstanceTemplateHostId;";
         return input.InstanceTemplateHostId;
     }
 
-    public Task DeleteInstanceTemplateHostAsync(int instanceTemplateHostId, CancellationToken ct)
-        => DeleteAsync(
-            "DELETE FROM omp.InstanceTemplateHosts WHERE InstanceTemplateHostId = @Id;",
-            instanceTemplateHostId,
-            ct);
+    public async Task DeleteInstanceTemplateHostAsync(int instanceTemplateHostId, CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @InstanceTemplateId int;
+DECLARE @HostKey nvarchar(128);
+DECLARE @InstanceId uniqueidentifier;
+
+SELECT @InstanceTemplateId = InstanceTemplateId,
+       @HostKey = HostKey
+FROM omp.InstanceTemplateHosts
+WHERE InstanceTemplateHostId = @Id;
+
+DELETE FROM omp.InstanceTemplateHosts
+WHERE InstanceTemplateHostId = @Id;
+
+SELECT TOP (1) @InstanceId = InstanceId
+FROM omp.Instances
+WHERE InstanceTemplateId = @InstanceTemplateId
+ORDER BY CreatedUtc, InstanceId;
+
+IF @InstanceId IS NOT NULL
+   AND @HostKey IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.InstanceTemplateHosts
+       WHERE InstanceTemplateId = @InstanceTemplateId
+         AND HostKey = @HostKey
+         AND IsEnabled = 1
+   )
+BEGIN
+    UPDATE omp.Hosts
+    SET IsEnabled = 0,
+        UpdatedUtc = SYSUTCDATETIME()
+    WHERE InstanceId = @InstanceId
+      AND HostKey = @HostKey;
+
+    UPDATE assignment
+    SET IsActive = 0,
+        UpdatedUtc = SYSUTCDATETIME()
+    FROM omp.HostDeploymentAssignments assignment
+    INNER JOIN omp.Hosts host ON host.HostId = assignment.HostId
+    WHERE host.InstanceId = @InstanceId
+      AND host.HostKey = @HostKey;
+
+    UPDATE desired
+    SET IsEnabled = 0,
+        UpdatedUtc = SYSUTCDATETIME()
+    FROM omp.HostAgentDesiredStates desired
+    INNER JOIN omp.Hosts host ON host.HostId = desired.HostId
+    WHERE host.InstanceId = @InstanceId
+      AND host.HostKey = @HostKey;
+END";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            Add(cmd, "@Id", instanceTemplateHostId);
+            await cmd.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
 
     public async Task<InstanceTemplateModuleEditData?> GetInstanceTemplateModuleAsync(
         int instanceTemplateModuleInstanceId,

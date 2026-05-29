@@ -633,4 +633,10 @@
   <data name="Review recent personal notifications for your OMP user." xml:space="preserve"><value>Review recent personal notifications for your OMP user.</value></data>
   <data name="No notifications" xml:space="preserve"><value>No notifications</value></data>
   <data name="Notifications require an OMP user" xml:space="preserve"><value>Notifications require an OMP user</value></data>
+  <data name="Copies the applied module definition and exportable installed artifacts into the shared package library so they can be imported later from Available package library." xml:space="preserve"><value>Copies the applied module definition and exportable installed artifacts into the shared package library so they can be imported later from Available package library.</value></data>
+  <data name="Include all historical artifact versions" xml:space="preserve"><value>Include all historical artifact versions</value></data>
+  <data name="Export to package library" xml:space="preserve"><value>Export to package library</value></data>
+  <data name="Module key is required." xml:space="preserve"><value>Module key is required.</value></data>
+  <data name="Exported module {0} {1} to the package library. Definition file: {2}. Artifacts exported: {3}. Skipped: {4}." xml:space="preserve"><value>Exported module {0} {1} to the package library. Definition file: {2}. Artifacts exported: {3}. Skipped: {4}.</value></data>
+  <data name="Export details:" xml:space="preserve"><value>Export details:</value></data>
 </root>

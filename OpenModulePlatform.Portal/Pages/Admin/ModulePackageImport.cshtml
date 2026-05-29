@@ -825,6 +825,28 @@
                     <button type="submit">@L["Export module package"]</button>
                 </div>
             </form>
+
+            <form method="post" asp-page-handler="ExportModuleToLibrary" class="form-grid top-gap">
+                <div class="form-field">
+                    <label asp-for="ExportToLibraryInput.ModuleKey">@L["Module key"]</label>
+                    <select asp-for="ExportToLibraryInput.ModuleKey">
+                        @foreach (var definition in Model.AppliedDefinitions)
+                        {
+                            <option value="@definition.ModuleKey">@definition.ModuleKey (@definition.DefinitionVersion)</option>
+                        }
+                    </select>
+                    <div class="field-help">@L["Copies the applied module definition and exportable installed artifacts into the shared package library so they can be imported later from Available package library."]</div>
+                </div>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="ExportToLibraryInput.IncludeAllVersions" type="checkbox" />
+                    <span>@L["Include all historical artifact versions"]</span>
+                </label>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Export to package library"]</button>
+                </div>
+            </form>
         }
     </section>
 
