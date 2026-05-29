@@ -48,6 +48,9 @@
          data-three-columns-label="@L["3 columns"]"
          data-four-columns-label="@L["4 columns"]"
          data-five-columns-label="@L["5 columns"]"
+         data-entry-filter-mode-label="@L["Entry filter"]"
+         data-entry-filter-all-label="@L["Show all entries"]"
+         data-entry-filter-main-only-label="@L["Top-level entries only"]"
          data-content-scale-label="@L["Zoom"]"
          data-content-scale-value-label="@L["Zoom value"]"
          data-content-scale-reset-label="@L["Reset zoom"]"
@@ -106,12 +109,17 @@
             var widgetContentScaleFactor = widgetContentScale / 100.0;
             var isBlankWidget = string.Equals(widget.Payload, "blank-rectangle", StringComparison.OrdinalIgnoreCase);
             var hasColumnSettings = widget.Payload is "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "content-pages";
+            var hasEntryFilterSettings = widget.Payload is "portal-entry-list" or "portal-entry-combolist";
             var widgetColumnCount = hasColumnSettings && widget.IntData is >= 1 and <= 5
                 ? widget.IntData.Value
                 : 1;
             var hasWidgetSettings = widget.Payload == "weekday-date"
                 || hasColumnSettings
+                || hasEntryFilterSettings
                 || isBlankWidget;
+            var entryFilterMode = hasEntryFilterSettings && string.Equals(widget.StringData, "main-only", StringComparison.OrdinalIgnoreCase)
+                ? "main-only"
+                : string.Empty;
             var hasTitleBar = !string.IsNullOrWhiteSpace(widget.EffectiveTitle);
             var blankWidgetVariant = isBlankWidget && widget.IntData is 1 or 2 ? widget.IntData.Value : 0;
             var blankWidgetImageId = isBlankWidget
@@ -341,6 +349,16 @@
                                     <option value="5" selected="@(widgetColumnCount == 5)">@L["5 columns"]</option>
                                 </select>
                             </label>
+                            @if (hasEntryFilterSettings)
+                            {
+                                <label>
+                                    <span>@L["Entry filter"]</span>
+                                    <select data-widget-entry-filter-control>
+                                        <option value="" selected="@(entryFilterMode.Length == 0)">@L["Show all entries"]</option>
+                                        <option value="main-only" selected="@(entryFilterMode == "main-only")">@L["Top-level entries only"]</option>
+                                    </select>
+                                </label>
+                            }
                         }
                         else if (isBlankWidget)
                         {

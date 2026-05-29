@@ -48,8 +48,13 @@
         <p class="muted small-text">
             @L["Send a personal test notification to the current OMP user."]
         </p>
-        <form method="post" asp-page-handler="SendTestNotification" class="toolbar" data-enhance="false">
-            <button type="submit" class="action-link">@L["Send test notification"]</button>
-        </form>
+        <div class="toolbar">
+            <form method="post" asp-page-handler="SendTestNotification" data-enhance="false">
+                <button type="submit" class="action-link">@L["Send test notification"]</button>
+            </form>
+            <form method="post" asp-page-handler="SendTestBanner" data-enhance="false">
+                <button type="submit" class="action-link">@L["Send test banner"]</button>
+            </form>
+        </div>
     </section>
 </div>

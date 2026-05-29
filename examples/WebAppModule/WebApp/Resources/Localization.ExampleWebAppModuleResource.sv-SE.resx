@@ -58,4 +58,12 @@
     <value>Notifikation skickad</value>
   </data><data name="Notifications require an OMP user" xml:space="preserve">
     <value>Notifikationer kräver OMP-user</value>
+  </data><data name="Send test banner" xml:space="preserve">
+    <value>Skicka testbanner</value>
+  </data><data name="Test banner" xml:space="preserve">
+    <value>Testbanner</value>
+  </data><data name="This banner was sent from ExampleModule." xml:space="preserve">
+    <value>Den här bannern skickades från ExampleModule.</value>
+  </data><data name="Banner sent" xml:space="preserve">
+    <value>Banner skickad</value>
   </data></root>

@@ -35,4 +35,5 @@
   <data name="Notifications" xml:space="preserve"><value>Notifications</value></data>
   <data name="No new notifications" xml:space="preserve"><value>No new notifications</value></data>
   <data name="Mark all as read" xml:space="preserve"><value>Mark all as read</value></data>
+  <data name="Dismiss notification" xml:space="preserve"><value>Dismiss notification</value></data>
 </root>

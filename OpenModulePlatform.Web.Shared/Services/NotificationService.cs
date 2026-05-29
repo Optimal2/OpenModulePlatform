@@ -20,7 +20,8 @@ public sealed class NotificationService
         "info",
         "success",
         "warning",
-        "error"
+        "error",
+        "banner"
     };
 
     private readonly SqlConnectionFactory _db;
@@ -150,6 +151,68 @@ FROM omp.notifications
 WHERE user_id = @user_id
   AND status = N'unread'
   AND read_at IS NULL
+  AND level <> N'banner'
+  AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME())
+ORDER BY created_at DESC,
+         notification_id DESC;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@limit", SqlDbType.Int).Value = limit;
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<PortalTopBarNotification>();
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new PortalTopBarNotification(
+                rdr.GetInt64(0),
+                rdr.GetString(1),
+                rdr.GetString(2),
+                rdr.GetString(3),
+                rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                rdr.GetDateTime(8)));
+        }
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<PortalTopBarNotification>> GetUnreadBannersForUserAsync(
+        int userId,
+        int limit,
+        CancellationToken ct)
+    {
+        if (userId <= 0 || limit <= 0)
+        {
+            return Array.Empty<PortalTopBarNotification>();
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await NotificationsTableExistsAsync(conn, ct))
+        {
+            return Array.Empty<PortalTopBarNotification>();
+        }
+
+        const string sql = @"
+SELECT TOP (@limit)
+       notification_id,
+       title,
+       content,
+       level,
+       destination_url,
+       caller_key,
+       caller_display_name,
+       caller_icon,
+       created_at
+FROM omp.notifications
+WHERE user_id = @user_id
+  AND status = N'unread'
+  AND read_at IS NULL
+  AND level = N'banner'
   AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME())
 ORDER BY created_at DESC,
          notification_id DESC;";
@@ -198,6 +261,7 @@ FROM omp.notifications
 WHERE user_id = @user_id
   AND status = N'unread'
   AND read_at IS NULL
+  AND level <> N'banner'
   AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn);
@@ -288,6 +352,7 @@ SET status = N'read',
 WHERE user_id = @user_id
   AND status = N'unread'
   AND read_at IS NULL
+  AND level <> N'banner'
   AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn);
