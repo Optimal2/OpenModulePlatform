@@ -810,7 +810,7 @@ internal static partial class Program
                 [
                     (_checkSourceButton, "Compares package objects and installed database state with the configured source repository manifests."),
                     (_syncPackageObjectsButton, "Copies newer or missing module definitions and already-built artifact packages into this installer package. Missing .NET artifacts can be built selectively."),
-                    (_syncAllProfilePackageObjectsButton, "Materializes host-specific host configs, config overlays, widgets, and widget data for every discovered host profile. Profiles with source repositories also refresh shared objects and repository-generated host objects."),
+                    (_syncAllProfilePackageObjectsButton, "Materializes host-specific host configs, config overlays, widgets, and widget data for every discovered host profile. Optional repository hooks run when source roots are available, but profile source links are not required."),
                     (_importUniversalPackageButton, "Imports a universal module package zip into this installer's object archive without touching the installed OMP runtime."),
                     (_prunePackageArchiveButton, "Deletes older module definitions and artifact package zips from this installer package while keeping the latest version for each module/app slot. Files referenced by the current profile are kept."),
                     (_createUniversalPackageButton, "Creates a universal module package zip from this installer's object archive. You can choose global objects and host-specific overlays for any available host profile."),
@@ -1503,7 +1503,7 @@ internal static partial class Program
         {
             ApplyValues();
             var confirmation = MessageBox.Show(
-                "This prepares host-specific package objects for every discovered host profile in this installer package. Profiles do not need source repository links; if a profile has usable source repositories, shared objects and repository-generated host objects are refreshed as an extra step. Continue?",
+                "This prepares host-specific package objects for every discovered host profile in this installer package. Profiles do not need source repository links. If local source roots are available, only optional host-profile object hooks are run; shared package objects are not refreshed by this action. Continue?",
                 "Prepare all host profiles",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
@@ -1520,7 +1520,7 @@ internal static partial class Program
                 "Host profile preparation failed.",
                 async () =>
                 {
-                    var result = await SyncAllProfilePackageObjectsCoreAsync();
+                    var result = await SyncAllProfilePackageObjectsCoreAsync(Console.WriteLine);
                     foreach (var line in result.Lines)
                     {
                         Console.WriteLine(line);
@@ -2693,8 +2693,10 @@ internal static partial class Program
             return new DeveloperPackageObjectSyncResult(warnings > 0, configUpdated, lines);
         }
 
-        private async Task<DeveloperPackageObjectSyncResult> SyncAllProfilePackageObjectsCoreAsync()
+        private Task<DeveloperPackageObjectSyncResult> SyncAllProfilePackageObjectsCoreAsync(Action<string>? progress = null)
         {
+            void Report(string message) => progress?.Invoke(message);
+
             var lines = new List<string>
             {
                 "All-profile host package object preparation:",
@@ -2706,6 +2708,32 @@ internal static partial class Program
             var synced = 0;
             var skipped = 0;
             var seenProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var hookSourceRoots = Array.Empty<string>();
+
+            try
+            {
+                Report("Resolving optional developer source roots for host-profile object hooks...");
+                hookSourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: false).ToArray();
+                if (hookSourceRoots.Length == 0)
+                {
+                    lines.Add("Host-profile hooks: skipped - no local developer source roots are available.");
+                }
+                else
+                {
+                    lines.Add("Host-profile hook source roots:");
+                    foreach (var sourceRoot in hookSourceRoots)
+                    {
+                        lines.Add($"  {sourceRoot}");
+                    }
+                }
+            }
+            catch (SystemException ex)
+            {
+                warnings++;
+                lines.Add($"WARN: Host-profile hooks are skipped because source roots could not be resolved: {ex.Message}");
+            }
+
+            lines.Add(string.Empty);
 
             foreach (var profile in _configProfiles.OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase))
             {
@@ -2714,10 +2742,12 @@ internal static partial class Program
                     continue;
                 }
 
+                Report($"Preparing host profile {profile.DisplayName}...");
                 if (!TryCreateProfilePreparationForm(profile, out var profileForm, out var skipReason))
                 {
                     skipped++;
                     lines.Add($"> Profile {profile.DisplayName}: skipped - {skipReason}");
+                    Report($"Skipped host profile {profile.DisplayName}: {skipReason}");
                     continue;
                 }
 
@@ -2726,35 +2756,10 @@ internal static partial class Program
                 lines.Add($"  Config: {profile.ConfigPath}");
                 lines.Add($"  Package root: {profileForm!._payloadRoot}");
 
-                IReadOnlyList<string> sourceRoots = [];
-                if (HasUsableConfiguredDeveloperSourceRoots(profileForm._config, out var sourceRootSkipReason))
-                {
-                    var result = await profileForm.SyncDeveloperPackageObjectsCoreAsync();
-                    foreach (var line in result.Lines)
-                    {
-                        lines.Add("  " + line);
-                    }
-
-                    if (result.ConfigUpdated)
-                    {
-                        lines.Add("  > Configuration targets were updated in memory for this profile. Package-object sync does not rewrite tracked host config files.");
-                    }
-
-                    if (result.HasWarnings)
-                    {
-                        warnings++;
-                    }
-
-                    sourceRoots = profileForm.ResolveDeveloperSourceRoots(throwIfMissing: true);
-                }
-                else
-                {
-                    lines.Add($"  Shared source refresh: skipped - {sourceRootSkipReason}. Host-specific profile files are still prepared.");
-                }
-
-                warnings += profileForm.SyncHostSpecificPackageObjectsCore(sourceRoots, lines);
+                warnings += profileForm.SyncHostSpecificPackageObjectsCore(hookSourceRoots, lines);
 
                 synced++;
+                Report($"Prepared host profile {profile.DisplayName}.");
                 lines.Add(string.Empty);
             }
 
@@ -2765,7 +2770,7 @@ internal static partial class Program
             }
 
             lines.Add($"Summary: {synced} profile(s) prepared, {skipped} skipped, {warnings} warning(s).");
-            return new DeveloperPackageObjectSyncResult(warnings > 0, false, lines);
+            return Task.FromResult(new DeveloperPackageObjectSyncResult(warnings > 0, false, lines));
         }
 
         private int SyncHostSpecificPackageObjectsCore(
@@ -3214,30 +3219,6 @@ internal static partial class Program
                 skipReason = ex.Message;
                 return false;
             }
-        }
-
-        private static bool HasUsableConfiguredDeveloperSourceRoots(BootstrapConfig config, out string reason)
-        {
-            var configuredRoots = ParseConfiguredDeveloperSourceRoots(config.DeveloperSource.SourceRoot)
-                .Select(Path.GetFullPath)
-                .ToArray();
-            if (configuredRoots.Length == 0)
-            {
-                reason = "no developer source roots are configured";
-                return false;
-            }
-
-            var validRoots = configuredRoots
-                .Where(root => File.Exists(Path.Join(root, "omp-components.json")))
-                .ToArray();
-            if (!validRoots.Any(IsDeveloperSourceRoot))
-            {
-                reason = "configured source roots are not present on this computer or do not include OpenModulePlatform";
-                return false;
-            }
-
-            reason = string.Empty;
-            return true;
         }
 
         private bool TryUpdateHostAgentPackagePathFromSyncedArtifacts(
