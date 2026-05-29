@@ -2040,6 +2040,54 @@ END
 GO
 
 -------------------------------------------------------------------------------
+-- Notifications
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.notifications', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.notifications
+    (
+        notification_id bigint IDENTITY(1,1) NOT NULL,
+
+        -- user_id > 0 targets a personal OMP user. user_id = 0 is reserved for
+        -- future system-wide notification/banner semantics and is intentionally
+        -- validated in application services before personal notifications are created.
+        user_id int NOT NULL,
+
+        title nvarchar(200) NOT NULL,
+        content nvarchar(1000) NOT NULL,
+        destination_url nvarchar(600) NULL,
+        level nvarchar(40) NOT NULL CONSTRAINT DF_omp_notifications_level DEFAULT(N'info'),
+        caller_key nvarchar(200) NULL,
+        caller_display_name nvarchar(200) NULL,
+        caller_icon nvarchar(600) NULL,
+        status nvarchar(40) NOT NULL CONSTRAINT DF_omp_notifications_status DEFAULT(N'unread'),
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_notifications_created_at DEFAULT SYSUTCDATETIME(),
+        expires_at datetime2(3) NULL,
+        read_at datetime2(3) NULL,
+
+        CONSTRAINT PK_omp_notifications PRIMARY KEY(notification_id),
+        CONSTRAINT CK_omp_notifications_user_id CHECK(user_id >= 0),
+        CONSTRAINT CK_omp_notifications_level CHECK(level IN (N'info', N'success', N'warning', N'error')),
+        CONSTRAINT CK_omp_notifications_status CHECK(status IN (N'unread', N'read'))
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_notifications_user_status_created'
+      AND object_id = OBJECT_ID(N'omp.notifications')
+)
+BEGIN
+    CREATE INDEX IX_omp_notifications_user_status_created
+        ON omp.notifications(user_id, status, read_at, created_at DESC)
+        INCLUDE(title, content, destination_url, level, caller_key, caller_display_name, caller_icon, expires_at);
+END
+GO
+
+-------------------------------------------------------------------------------
 -- Authentication providers
 -------------------------------------------------------------------------------
 IF OBJECT_ID(N'omp.auth_providers', N'U') IS NULL

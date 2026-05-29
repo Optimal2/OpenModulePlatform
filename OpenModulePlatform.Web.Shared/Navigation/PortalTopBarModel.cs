@@ -17,6 +17,7 @@ public sealed class PortalTopBarModel
         ModuleLinks = Array.Empty<PortalTopBarLink>(),
         NavigationGroups = Array.Empty<PortalTopBarNavigationGroup>(),
         FavoriteEntries = Array.Empty<PortalTopBarNavigationEntry>(),
+        Notifications = Array.Empty<PortalTopBarNotification>(),
         PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
         PortalAdminSections = Array.Empty<PortalAdminMenuSection>(),
         LanguageOptions = Array.Empty<PortalTopBarCultureOption>(),
@@ -26,6 +27,9 @@ public sealed class PortalTopBarModel
         FavoritesToggleTextKey = "Favorites",
         NavigationFilterPlaceholderTextKey = "Search modules",
         NoFavoritesTextKey = "No favorites",
+        NotificationsToggleTextKey = "Notifications",
+        NoNotificationsTextKey = "No new notifications",
+        MarkAllNotificationsReadTextKey = "Mark all as read",
         AddFavoriteTextKey = "Add favorite",
         RemoveFavoriteTextKey = "Remove favorite",
         PortalAdminToggleTextKey = "Admin",
@@ -64,6 +68,16 @@ public sealed class PortalTopBarModel
 
     public string FavoriteToggleUrl { get; init; } = "/navigation/favorites/toggle";
 
+    public IReadOnlyList<PortalTopBarNotification> Notifications { get; init; } = Array.Empty<PortalTopBarNotification>();
+
+    public bool CanUseNotifications { get; init; }
+
+    public int UnreadNotificationCount { get; init; }
+
+    public string NotificationMarkReadUrl { get; init; } = "/notifications/mark-read";
+
+    public string NotificationMarkAllReadUrl { get; init; } = "/notifications/mark-all-read";
+
     public bool IsPortalAdmin { get; init; }
 
     public IReadOnlyList<PortalTopBarLink> PortalAdminLinks { get; init; } = Array.Empty<PortalTopBarLink>();
@@ -101,6 +115,12 @@ public sealed class PortalTopBarModel
     public string NavigationFilterPlaceholderTextKey { get; init; } = "Search modules";
 
     public string NoFavoritesTextKey { get; init; } = "No favorites";
+
+    public string NotificationsToggleTextKey { get; init; } = "Notifications";
+
+    public string NoNotificationsTextKey { get; init; } = "No new notifications";
+
+    public string MarkAllNotificationsReadTextKey { get; init; } = "Mark all as read";
 
     public string AddFavoriteTextKey { get; init; } = "Add favorite";
 

@@ -133,6 +133,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<OmpConfigurationService>();
         builder.Services.AddScoped<OmpBrandingService>();
         builder.Services.AddScoped<RbacService>();
+        builder.Services.AddScoped<NotificationService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
 
         return builder;
@@ -309,6 +310,63 @@ public static class OmpWebHostingExtensions
                 groupTitle = result.Entry.GroupTitle,
                 entryTitle = result.Entry.TextKey,
                 label = result.Entry.FavoriteLabel
+            });
+        }).RequireAuthorization();
+
+        app.MapPost(NotificationService.MarkReadPath, async (
+            HttpContext context,
+            NotificationService notificationService,
+            CancellationToken ct) =>
+        {
+            if (!context.Request.HasFormContentType)
+            {
+                return Results.BadRequest();
+            }
+
+            var userId = NotificationService.TryGetOmpUserId(context.User);
+            if (userId is null)
+            {
+                return Results.Forbid();
+            }
+
+            var form = await context.Request.ReadFormAsync(ct);
+            if (!long.TryParse(form["notificationId"].ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var notificationId))
+            {
+                return Results.BadRequest();
+            }
+
+            var result = await notificationService.MarkAsReadAsync(userId.Value, notificationId, ct);
+            if (!result.Success)
+            {
+                return Results.Forbid();
+            }
+
+            return Results.Json(new
+            {
+                success = true,
+                notificationId,
+                unreadCount = result.UnreadCount,
+                destinationUrl = result.DestinationUrl ?? string.Empty
+            });
+        }).RequireAuthorization();
+
+        app.MapPost(NotificationService.MarkAllReadPath, async (
+            HttpContext context,
+            NotificationService notificationService,
+            CancellationToken ct) =>
+        {
+            var userId = NotificationService.TryGetOmpUserId(context.User);
+            if (userId is null)
+            {
+                return Results.Forbid();
+            }
+
+            var markedCount = await notificationService.MarkAllAsReadAsync(userId.Value, ct);
+            return Results.Json(new
+            {
+                success = true,
+                markedCount,
+                unreadCount = 0
             });
         }).RequireAuthorization();
 
