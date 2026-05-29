@@ -645,12 +645,7 @@ internal static partial class Program
             ProcessResult result;
             try
             {
-                result = RunProcess(
-                    "git",
-                    ["-C", sourceRoot, "pull", "--ff-only"],
-                    throwOnFailure: false,
-                    workingDirectory: sourceRoot,
-                    timeout: TimeSpan.FromSeconds(DeveloperSourceGitPullTimeoutSeconds));
+                result = UpdateDeveloperSourceRepository(sourceRoot);
             }
             catch (System.ComponentModel.Win32Exception ex)
             {
@@ -664,7 +659,7 @@ internal static partial class Program
                 continue;
             }
 
-            var message = $"  WARN    {displayName}: git pull --ff-only failed with exit code {result.ExitCode}: {SummarizeProcessOutput(output, "no output")}";
+            var message = $"  WARN    {displayName}: git fast-forward update failed with exit code {result.ExitCode}: {SummarizeProcessOutput(output, "no output")}";
             if (throwOnFailure)
             {
                 throw new InvalidOperationException(
@@ -677,6 +672,98 @@ internal static partial class Program
 
         return warnings;
     }
+
+    private static ProcessResult UpdateDeveloperSourceRepository(string sourceRoot)
+    {
+        var branchResult = RunProcess(
+            "git",
+            ["-C", sourceRoot, "branch", "--show-current"],
+            throwOnFailure: false,
+            workingDirectory: sourceRoot,
+            timeout: TimeSpan.FromSeconds(DeveloperSourceGitPullTimeoutSeconds));
+        if (branchResult.ExitCode != 0)
+        {
+            return branchResult;
+        }
+
+        var branchName = GetFirstProcessOutputLine(branchResult);
+        if (string.IsNullOrWhiteSpace(branchName))
+        {
+            return new ProcessResult(1, string.Empty, "Repository is in detached HEAD state; cannot determine a single branch to fast-forward.");
+        }
+
+        var remoteName = GetSingleGitConfigValue(sourceRoot, $"branch.{branchName}.remote");
+        var mergeRefs = GetGitConfigValues(sourceRoot, $"branch.{branchName}.merge");
+        if (string.IsNullOrWhiteSpace(remoteName) || mergeRefs.Count != 1)
+        {
+            return new ProcessResult(
+                1,
+                string.Empty,
+                $"Branch '{branchName}' must have exactly one upstream remote and merge ref configured for installer refresh.");
+        }
+
+        const string headsPrefix = "refs/heads/";
+        var mergeRef = mergeRefs[0];
+        if (!mergeRef.StartsWith(headsPrefix, StringComparison.Ordinal))
+        {
+            return new ProcessResult(1, string.Empty, $"Branch '{branchName}' upstream merge ref '{mergeRef}' is not a branch ref.");
+        }
+
+        var upstreamBranchName = mergeRef[headsPrefix.Length..];
+        var upstreamTrackingRef = $"refs/remotes/{remoteName}/{upstreamBranchName}";
+        var fetchResult = RunProcess(
+            "git",
+            ["-C", sourceRoot, "fetch", "--prune", remoteName, $"+{mergeRef}:{upstreamTrackingRef}"],
+            throwOnFailure: false,
+            workingDirectory: sourceRoot,
+            timeout: TimeSpan.FromSeconds(DeveloperSourceGitPullTimeoutSeconds));
+        if (fetchResult.ExitCode != 0)
+        {
+            return fetchResult;
+        }
+
+        var mergeResult = RunProcess(
+            "git",
+            ["-C", sourceRoot, "merge", "--ff-only", upstreamTrackingRef],
+            throwOnFailure: false,
+            workingDirectory: sourceRoot,
+            timeout: TimeSpan.FromSeconds(DeveloperSourceGitPullTimeoutSeconds));
+
+        return new ProcessResult(
+            mergeResult.ExitCode,
+            NormalizeProcessOutput(fetchResult.StdOut, mergeResult.StdOut),
+            NormalizeProcessOutput(fetchResult.StdErr, mergeResult.StdErr));
+    }
+
+    private static string GetSingleGitConfigValue(string sourceRoot, string key)
+    {
+        var values = GetGitConfigValues(sourceRoot, key);
+        return values.Count == 1 ? values[0] : string.Empty;
+    }
+
+    private static IReadOnlyList<string> GetGitConfigValues(string sourceRoot, string key)
+    {
+        var result = RunProcess(
+            "git",
+            ["-C", sourceRoot, "config", "--get-all", key],
+            throwOnFailure: false,
+            workingDirectory: sourceRoot,
+            timeout: TimeSpan.FromSeconds(DeveloperSourceGitPullTimeoutSeconds));
+        if (result.ExitCode != 0)
+        {
+            return [];
+        }
+
+        return result.StdOut
+            .Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+    }
+
+    private static string GetFirstProcessOutputLine(ProcessResult result)
+        => NormalizeProcessOutput(result.StdOut, result.StdErr)
+            .Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault() ?? string.Empty;
 
     private static IDisposable? TryAcquireDeveloperSourcePullLock(
         Action<string> writeLine,
