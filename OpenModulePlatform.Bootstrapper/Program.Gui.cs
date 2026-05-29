@@ -2697,11 +2697,14 @@ internal static partial class Program
         {
             void Report(string message) => progress?.Invoke(message);
 
+            var hostProfiles = _configProfiles
+                .Where(static profile => TryResolveInstallerHostProfileKey(profile.ConfigPath, out _))
+                .ToList();
             var lines = new List<string>
             {
                 "All-profile host package object preparation:",
                 $"  Installer package: {_payloadRoot}",
-                $"  Profiles discovered: {_configProfiles.Count}",
+                $"  Host profiles discovered: {hostProfiles.Count}",
                 string.Empty
             };
             var warnings = 0;
@@ -2709,6 +2712,12 @@ internal static partial class Program
             var skipped = 0;
             var seenProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var hookSourceRoots = Array.Empty<string>();
+            var nonHostProfiles = _configProfiles.Count - hostProfiles.Count;
+            if (nonHostProfiles > 0)
+            {
+                lines.Add($"  Non-host config profiles skipped: {nonHostProfiles}");
+                lines.Add(string.Empty);
+            }
 
             try
             {
@@ -2735,7 +2744,7 @@ internal static partial class Program
 
             lines.Add(string.Empty);
 
-            foreach (var profile in _configProfiles.OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase))
+            foreach (var profile in hostProfiles.OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase))
             {
                 if (!seenProfiles.Add(Path.GetFullPath(profile.ConfigPath)))
                 {
@@ -2780,7 +2789,9 @@ internal static partial class Program
             var warnings = 0;
             var copied = 0;
             var unchanged = 0;
-            var targetHostProfile = ResolveUniversalPackageHostKey(_configPath);
+            var targetHostProfile = TryResolveInstallerHostProfileKey(_configPath, out var hostProfileKey)
+                ? hostProfileKey
+                : string.Empty;
             var profileDirectory = Path.GetDirectoryName(_configPath) ?? Environment.CurrentDirectory;
 
             lines.Add("  Host-specific package objects:");
@@ -4857,12 +4868,14 @@ ORDER BY ar.ArtifactId DESC;
             => _hostBox.SelectedItem as UniversalPackageHostChoice;
     }
 
-    private static UniversalPackageHostChoice CreateUniversalPackageHostChoice(BootstrapConfigProfile profile)
+    private static UniversalPackageHostChoice? CreateUniversalPackageHostChoice(BootstrapConfigProfile profile)
     {
-        var hostKey = ResolveUniversalPackageHostKey(profile.ConfigPath);
-        var externalDataRoot = Path.GetFileName(profile.ConfigPath).Equals("bootstrap.json", StringComparison.OrdinalIgnoreCase)
-            ? Path.GetDirectoryName(profile.ConfigPath)
-            : null;
+        if (!TryResolveInstallerHostProfileKey(profile.ConfigPath, out var hostKey))
+        {
+            return null;
+        }
+
+        var externalDataRoot = Path.GetDirectoryName(profile.ConfigPath);
         var displayName = string.Equals(profile.DisplayName, hostKey, StringComparison.OrdinalIgnoreCase)
             ? profile.DisplayName
             : $"{profile.DisplayName} ({hostKey})";
@@ -4879,7 +4892,8 @@ ORDER BY ar.ArtifactId DESC;
         var choices = new Dictionary<string, UniversalPackageHostChoice>(StringComparer.OrdinalIgnoreCase);
         foreach (var choice in configProfiles
                      .Select(CreateUniversalPackageHostChoice)
-                     .Where(static choice => !string.IsNullOrWhiteSpace(choice.HostKey)))
+                     .Where(static choice => choice is not null && !string.IsNullOrWhiteSpace(choice.HostKey))
+                     .Select(static choice => choice!))
         {
             choices.TryAdd(choice.HostKey!, choice);
         }
@@ -5058,6 +5072,27 @@ ORDER BY ar.ArtifactId DESC;
         }
 
         return SanitizeUniversalPackagePathSegment(Path.GetFileNameWithoutExtension(configPath));
+    }
+
+    private static bool TryResolveInstallerHostProfileKey(string configPath, out string hostProfileKey)
+    {
+        hostProfileKey = string.Empty;
+        var fullPath = Path.GetFullPath(configPath);
+        var profileDirectory = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrWhiteSpace(profileDirectory))
+        {
+            return false;
+        }
+
+        var hostsDirectory = Directory.GetParent(profileDirectory);
+        if (hostsDirectory is null
+            || !hostsDirectory.Name.Equals("hosts", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        hostProfileKey = SanitizeUniversalPackagePathSegment(Path.GetFileName(profileDirectory));
+        return !string.IsNullOrWhiteSpace(hostProfileKey);
     }
 
     private static string NormalizeUniversalPackagePath(string value)

@@ -1130,6 +1130,42 @@ public sealed class PortableModulePackageService
             if (existingIdentity is not null
                 && string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
             {
+                var existingRelativePathSource = existingIdentity.RelativePath
+                    ?? BuildRelativePath(compatibility, identity.TargetName, identity.PackageType, identity.Version);
+                var existingRelativePath = NormalizeRelativePath(existingRelativePathSource)
+                    ?? throw new InvalidOperationException("The existing artifact relative path is invalid.");
+                finalPath = ResolveUnderRoot(storeRoot, existingRelativePath);
+
+                var restoredMissingContent = false;
+                if (File.Exists(finalPath))
+                {
+                    return new PortableModulePackageArtifactImportResult(
+                        identity.FileName,
+                        "Failed",
+                        $"The existing artifact path is a file, not a directory: {existingRelativePath}",
+                        existingIdentity.ArtifactId);
+                }
+
+                if (Directory.Exists(finalPath))
+                {
+                    var existingContentHash = await ComputeDirectorySha256Async(finalPath, ct);
+                    if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new PortableModulePackageArtifactImportResult(
+                            identity.FileName,
+                            "Failed",
+                            $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}",
+                            existingIdentity.ArtifactId);
+                    }
+                }
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                    MoveFileOrDirectory(package.ArtifactContentPath, finalPath);
+                    movedArtifactToFinal = true;
+                    restoredMissingContent = true;
+                }
+
                 var existingWarning = string.Empty;
                 var configurationFileCount = 0;
                 if (package.ConfigurationFiles.Count > 0)
@@ -1163,13 +1199,22 @@ public sealed class PortableModulePackageService
                     }
                 }
 
+                var status = configurationFileCount > 0 || restoredMissingContent ? "Updated" : "Skipped";
+                var message = configurationFileCount > 0
+                    ? $"The same artifact identity and content already exists. Updated {configurationFileCount} configuration file row(s)."
+                    : "The same artifact identity and content already exists.";
+                if (restoredMissingContent)
+                {
+                    message = AppendWarning(
+                        message,
+                        $"Restored missing artifact files below the artifact store path: {existingRelativePath}");
+                }
+
                 return new PortableModulePackageArtifactImportResult(
                     identity.FileName,
-                    configurationFileCount > 0 ? "Updated" : "Skipped",
+                    status,
                     AppendWarning(
-                        configurationFileCount > 0
-                            ? $"The same artifact identity and content already exists. Updated {configurationFileCount} configuration file row(s)."
-                            : "The same artifact identity and content already exists.",
+                        message,
                         existingWarning),
                     existingIdentity.ArtifactId);
             }
