@@ -353,11 +353,13 @@ the package and installed database with the source repository manifest:
   every discovered host profile in the installer package. It copies
   profile-local and profile-declared `host-configs`, `config-overlays`,
   `widgets`, and `widget-data` into `data/hosts/<host-profile>/...`. Profiles
-  do not need source repository links. When a profile does have usable source
-  repositories, the action also refreshes shared objects and runs
-  repository-owned host-profile object hooks when present. Use this before
-  creating a host-specific universal package from a developer installer that
-  contains profiles for other target hosts.
+  do not need source repository links. When local source roots are available,
+  the action also runs optional repository-owned host-profile object hooks for
+  each target profile, but it does not pull repositories, build artifacts, or
+  refresh shared package objects. Use `Refresh object archive` for shared
+  objects, then use this action before creating a host-specific universal
+  package from a developer installer that contains profiles for other target
+  hosts.
 - `Import universal package` imports a universal module package zip into the
   installer-local object archive. It updates `data/global` and, for
   host-specific paths such as `config-overlays/<host-key>/...`,
@@ -473,14 +475,16 @@ upgrade with `--sync-package-objects-before-action`.
 whether that profile has source repository paths. It writes each profile's
 host-specific object archive under `data/hosts/<host-profile>`. Profile-local
 folders and entries declared in `hostConfigurationFiles`, `configOverlayFiles`,
-`widgetFiles`, and `widgetDataFiles` are copied there. If a profile also has
-usable configured source repositories, the action first runs the normal shared
-object sync for that profile and then calls any repository
-`scripts/omp/build-host-profile-objects.ps1` hooks so repositories can generate
-module-owned host-specific objects from the selected profile. This is intended
-for private developer installer packages that can export universal packages for
-machines other than the one currently running the installer. Profiles are
-skipped only when their config cannot be read or parsed.
+`widgetFiles`, and `widgetDataFiles` are copied there. If the installer running
+on the current machine has usable local source roots, the action also calls any
+repository `scripts/omp/build-host-profile-objects.ps1` hooks for each profile
+so repositories can generate module-owned host-specific objects from the
+selected profile. It never runs the normal shared object sync; run `Refresh
+object archive` separately when global module definitions or artifact packages
+need to be refreshed. This is intended for private developer installer packages
+that can export universal packages for machines other than the one currently
+running the installer. Profiles are skipped only when their config cannot be
+read or parsed.
 
 `Import universal package` is the inverse staging operation for installers that
 do not have source repository access. It reads a universal package zip and copies
