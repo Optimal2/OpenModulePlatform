@@ -12,4 +12,5 @@ public sealed record PortalTopBarNotification(
     string? CallerKey,
     string? CallerDisplayName,
     string? CallerIcon,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool IsUnread);

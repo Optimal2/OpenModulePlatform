@@ -642,6 +642,87 @@
         }
     }
 
+    function markNotificationRowRead(form) {
+        if (!form) {
+            return;
+        }
+
+        form.classList.remove('is-unread');
+        form.classList.add('is-read');
+        var button = form.querySelector('.portal-topbar__notification-row');
+        if (button) {
+            button.classList.add('portal-topbar__notification-row--read');
+        }
+    }
+
+    function notificationCallerText(item) {
+        var source = item && (item.callerDisplayName || item.callerKey);
+        return source ? String(source).trim().charAt(0).toUpperCase() : '!';
+    }
+
+    function notificationLevelClass(level) {
+        var normalized = String(level || 'info').toLowerCase();
+        return ['info', 'success', 'warning', 'error'].indexOf(normalized) >= 0 ? normalized : 'info';
+    }
+
+    function createNotificationForm(list, item) {
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = list.dataset.markReadUrl || '/notifications/mark-read';
+        form.className = 'portal-topbar__notification-form ' + (item.isUnread ? 'is-unread' : 'is-read');
+        form.setAttribute('data-portal-topbar-notification-form', '');
+        form.setAttribute('data-enhance', 'false');
+        form.dataset.notificationId = String(item.notificationId || '');
+        form.dataset.notificationCreatedAt = item.createdAt || '';
+
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'notificationId';
+        input.value = String(item.notificationId || '');
+        form.appendChild(input);
+
+        var button = document.createElement('button');
+        button.type = 'submit';
+        button.className = 'portal-topbar__notification-row portal-topbar__notification-row--' + notificationLevelClass(item.level);
+        button.dataset.destinationUrl = item.destinationUrl || '';
+        if (!item.isUnread) {
+            button.classList.add('portal-topbar__notification-row--read');
+        }
+
+        var icon = document.createElement('span');
+        icon.className = 'portal-topbar__notification-caller-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        if (item.callerIcon) {
+            var img = document.createElement('img');
+            img.src = item.callerIcon;
+            img.alt = '';
+            icon.appendChild(img);
+        } else {
+            var fallback = document.createElement('span');
+            fallback.textContent = notificationCallerText(item);
+            icon.appendChild(fallback);
+        }
+        button.appendChild(icon);
+
+        var copy = document.createElement('span');
+        copy.className = 'portal-topbar__notification-copy';
+
+        var title = document.createElement('span');
+        title.className = 'portal-topbar__notification-title';
+        title.textContent = item.title || '';
+        copy.appendChild(title);
+
+        var content = document.createElement('span');
+        content.className = 'portal-topbar__notification-content';
+        content.textContent = item.content || '';
+        copy.appendChild(content);
+
+        button.appendChild(copy);
+        form.appendChild(button);
+        initNotificationForm(form);
+        return form;
+    }
+
     function reportNotificationSessionWarning(kind) {
         window.dispatchEvent(new CustomEvent(SESSION_STATUS_WARNING_EVENT, {
             detail: { kind: kind || 'auth' }
@@ -685,7 +766,7 @@
                     return response.json();
                 })
                 .then(function (payload) {
-                    form.remove();
+                    markNotificationRowRead(form);
                     updateNotificationBadge(root, payload.unreadCount);
                     updateNotificationEmptyState(root);
 
@@ -696,60 +777,6 @@
                 .catch(function (error) {
                     if (window.console && typeof window.console.warn === 'function') {
                         window.console.warn('OMP topbar notification action failed.', error);
-                    }
-                })
-                .finally(function () {
-                    if (button) {
-                        button.disabled = false;
-                    }
-                });
-        });
-    }
-
-    function initNotificationBannerForm(form) {
-        if (!form || form.dataset.portalTopbarNotificationBannerFormInitialized === 'true') {
-            return;
-        }
-
-        form.dataset.portalTopbarNotificationBannerFormInitialized = 'true';
-        form.addEventListener('submit', function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            var root = form.closest('[data-portal-topbar-root]');
-            var button = form.querySelector('button[type="submit"]');
-            if (button) {
-                button.disabled = true;
-            }
-
-            fetch(form.action, {
-                method: 'POST',
-                body: new FormData(form),
-                credentials: 'same-origin',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-                .then(function (response) {
-                    if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
-                        reportNotificationSessionWarning('auth');
-                        throw new Error('Notification action requires sign-in.');
-                    }
-
-                    if (!response.ok) {
-                        throw new Error('Notification banner dismiss failed with status ' + response.status + '.');
-                    }
-
-                    return response.json();
-                })
-                .then(function (payload) {
-                    form.remove();
-                    updateNotificationBadge(root, payload.unreadCount);
-                    updateNotificationEmptyState(root);
-                })
-                .catch(function (error) {
-                    if (window.console && typeof window.console.warn === 'function') {
-                        window.console.warn('OMP topbar notification banner action failed.', error);
                     }
                 })
                 .finally(function () {
@@ -800,7 +827,7 @@
                     var list = root ? root.querySelector('[data-portal-topbar-notifications-list]') : null;
                     if (list) {
                         list.querySelectorAll('[data-portal-topbar-notification-form]').forEach(function (row) {
-                            row.remove();
+                            markNotificationRowRead(row);
                         });
                     }
 
@@ -817,6 +844,110 @@
                         button.disabled = false;
                     }
                 });
+        });
+    }
+
+    function getNotificationCursor(list) {
+        var rows = list ? list.querySelectorAll('[data-portal-topbar-notification-form]') : [];
+        if (!rows.length) {
+            return null;
+        }
+
+        var last = rows[rows.length - 1];
+        return {
+            beforeCreatedAt: last.dataset.notificationCreatedAt || '',
+            beforeNotificationId: last.dataset.notificationId || ''
+        };
+    }
+
+    function setNotificationLazyState(root, loading, ended) {
+        var loadingEl = root ? root.querySelector('[data-portal-topbar-notifications-loading]') : null;
+        var endEl = root ? root.querySelector('[data-portal-topbar-notifications-end]') : null;
+        if (loadingEl) {
+            loadingEl.hidden = !loading;
+        }
+
+        if (endEl) {
+            endEl.hidden = !ended;
+        }
+    }
+
+    function loadMoreNotifications(list) {
+        if (!list || list.dataset.notificationLoading === 'true' || list.dataset.notificationEnd === 'true') {
+            return;
+        }
+
+        var root = list.closest('[data-portal-topbar-root]');
+        var loadUrl = list.dataset.loadUrl;
+        if (!loadUrl) {
+            return;
+        }
+
+        var cursor = getNotificationCursor(list);
+        list.dataset.notificationLoading = 'true';
+        setNotificationLazyState(root, true, false);
+
+        var url = new URL(loadUrl, window.location.origin);
+        url.searchParams.set('limit', list.dataset.pageSize || '10');
+        if (cursor && cursor.beforeCreatedAt && cursor.beforeNotificationId) {
+            url.searchParams.set('beforeCreatedAt', cursor.beforeCreatedAt);
+            url.searchParams.set('beforeNotificationId', cursor.beforeNotificationId);
+        }
+
+        fetch(url.toString(), {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(function (response) {
+                if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                    reportNotificationSessionWarning('auth');
+                    throw new Error('Notification list requires sign-in.');
+                }
+
+                if (!response.ok) {
+                    throw new Error('Notification list failed with status ' + response.status + '.');
+                }
+
+                return response.json();
+            })
+            .then(function (payload) {
+                var items = Array.isArray(payload.items) ? payload.items : [];
+                items.forEach(function (item) {
+                    list.appendChild(createNotificationForm(list, item));
+                });
+
+                if (!payload.hasMore || items.length === 0) {
+                    list.dataset.notificationEnd = 'true';
+                }
+
+                updateNotificationEmptyState(root);
+                setNotificationLazyState(root, false, list.dataset.notificationEnd === 'true' && !!list.querySelector('[data-portal-topbar-notification-form]'));
+            })
+            .catch(function (error) {
+                if (window.console && typeof window.console.warn === 'function') {
+                    window.console.warn('OMP topbar notification list failed.', error);
+                }
+                setNotificationLazyState(root, false, false);
+            })
+            .finally(function () {
+                list.dataset.notificationLoading = 'false';
+            });
+    }
+
+    function initNotificationLazyList(list) {
+        if (!list || list.dataset.portalTopbarNotificationLazyInitialized === 'true') {
+            return;
+        }
+
+        list.dataset.portalTopbarNotificationLazyInitialized = 'true';
+        var scroller = list.closest('.portal-topbar__notifications-menu') || list;
+        scroller.addEventListener('scroll', function () {
+            if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 48) {
+                loadMoreNotifications(list);
+            }
         });
     }
 
@@ -1369,8 +1500,8 @@
         topbar.querySelectorAll('[data-portal-topbar-entry-group-toggle]').forEach(initEntryGroupToggle);
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-form]').forEach(initNotificationForm);
-        topbar.querySelectorAll('[data-portal-topbar-notification-banner-form]').forEach(initNotificationBannerForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-mark-all-form]').forEach(initNotificationMarkAllForm);
+        topbar.querySelectorAll('[data-portal-topbar-notifications-list]').forEach(initNotificationLazyList);
         updateNotificationEmptyState(topbar);
         initSessionStatusCheck(topbar);
     }

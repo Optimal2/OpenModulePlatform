@@ -2247,4 +2247,33 @@
   <data name="Save current layout as default" xml:space="preserve"><value>Spara nuvarande layout som standard</value></data>
   <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Skapa en universal-zip med valfri mix av moduldefinitioner, artefaktpaket, host-konfigurationer, config overlays, widgets och widget-runtime-data.</value></data>
   <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Inkludera runtime-data för valda widgets</value></data>
+  <data name="Banners" xml:space="preserve"><value>Banners</value></data>
+  <data name="Create system-controlled banners for all users or selected roles. Users cannot dismiss banners." xml:space="preserve"><value>Skapa systemstyrda banners för alla användare eller valda roller. Användare kan inte stänga banners.</value></data>
+  <data name="Edit banner" xml:space="preserve"><value>Redigera banner</value></data>
+  <data name="Create banner" xml:space="preserve"><value>Skapa banner</value></data>
+  <data name="Announcement" xml:space="preserve"><value>Meddelande</value></data>
+  <data name="Critical" xml:space="preserve"><value>Kritisk</value></data>
+  <data name="Global" xml:space="preserve"><value>Alla användare</value></data>
+  <data name="Specific roles" xml:space="preserve"><value>Specifika roller</value></data>
+  <data name="Banner targets" xml:space="preserve"><value>Bannermål</value></data>
+  <data name="Targets" xml:space="preserve"><value>Mål</value></data>
+  <data name="Window" xml:space="preserve"><value>Tidsfönster</value></data>
+  <data name="No targets" xml:space="preserve"><value>Inga mål</value></data>
+  <data name="Disable this banner?" xml:space="preserve"><value>Inaktivera denna banner?</value></data>
+  <data name="Disable" xml:space="preserve"><value>Inaktivera</value></data>
+  <data name="Select a valid banner level." xml:space="preserve"><value>Välj en giltig bannernivå.</value></data>
+  <data name="Select a valid status." xml:space="preserve"><value>Välj en giltig status.</value></data>
+  <data name="Select a valid target." xml:space="preserve"><value>Välj ett giltigt mål.</value></data>
+  <data name="Select at least one role." xml:space="preserve"><value>Välj minst en roll.</value></data>
+  <data name="Expires at must be after starts at." xml:space="preserve"><value>Sluttiden måste vara efter starttiden.</value></data>
+  <data name="Banner created." xml:space="preserve"><value>Banner skapad.</value></data>
+  <data name="Banner updated." xml:space="preserve"><value>Banner uppdaterad.</value></data>
+  <data name="Banner disabled." xml:space="preserve"><value>Banner inaktiverad.</value></data>
+  <data name="Banner was not found." xml:space="preserve"><value>Banner hittades inte.</value></data>
+  <data name="Starts" xml:space="preserve"><value>Startar</value></data>
+  <data name="Expires" xml:space="preserve"><value>Går ut</value></data>
+  <data name="Notifications marked as read." xml:space="preserve"><value>Notifikationer markerade som lästa.</value></data>
+  <data name="Review recent personal notifications for your OMP user." xml:space="preserve"><value>Granska senaste personliga notifikationer för din OMP-användare.</value></data>
+  <data name="No notifications" xml:space="preserve"><value>Inga notifikationer</value></data>
+  <data name="Notifications require an OMP user" xml:space="preserve"><value>Notifikationer kräver en OMP-användare</value></data>
 </root>

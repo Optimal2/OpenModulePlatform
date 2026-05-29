@@ -35,12 +35,17 @@
   <data name="Module definition editor" xml:space="preserve"><value>Moduldefinitionseditor</value></data>
   <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap-konfigurationseditor</value></data>
   <data name="Navigation" xml:space="preserve"><value>Navigering</value></data>
+  <data name="Banners" xml:space="preserve"><value>Banners</value></data>
   <data name="Your session appears to have expired. Sign in again before continuing." xml:space="preserve"><value>Din session verkar ha gått ut. Logga in igen innan du fortsätter.</value></data>
   <data name="The server could not be reached. Check the connection." xml:space="preserve"><value>Servern kunde inte nås. Kontrollera anslutningen.</value></data>
   <data name="Sign in again" xml:space="preserve"><value>Logga in igen</value></data>
   <data name="Reload" xml:space="preserve"><value>Ladda om</value></data>
   <data name="Notifications" xml:space="preserve"><value>Notifikationer</value></data>
   <data name="No new notifications" xml:space="preserve"><value>Inga nya notifikationer</value></data>
+  <data name="No notifications" xml:space="preserve"><value>Inga notifikationer</value></data>
   <data name="Mark all as read" xml:space="preserve"><value>Markera alla som lästa</value></data>
+  <data name="View all notifications" xml:space="preserve"><value>Visa alla notifikationer</value></data>
+  <data name="Loading" xml:space="preserve"><value>Laddar</value></data>
+  <data name="No more notifications" xml:space="preserve"><value>Inga fler notifikationer</value></data>
   <data name="Dismiss notification" xml:space="preserve"><value>Stäng notifikation</value></data>
 </root>

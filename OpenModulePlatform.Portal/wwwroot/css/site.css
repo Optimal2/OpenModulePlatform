@@ -17,6 +17,119 @@
     --portal-page-chrome-width: 100%;
 }
 
+.portal-notifications-page {
+    display: grid;
+    gap: 8px;
+}
+
+.portal-notifications-page__item {
+    margin: 0;
+}
+
+.portal-notifications-page__button {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    width: 100%;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 10px;
+    background: #fff;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.portal-notifications-page__item.is-unread .portal-notifications-page__button {
+    border-color: rgba(2, 132, 199, 0.26);
+    background: #f0f9ff;
+}
+
+.portal-notifications-page__item.is-read .portal-notifications-page__button {
+    opacity: 0.78;
+}
+
+.portal-notifications-page__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-weight: 800;
+}
+
+.portal-notifications-page__icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.portal-notifications-page__copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.portal-notifications-page__title {
+    font-weight: 800;
+}
+
+.portal-notifications-page__content,
+.portal-notifications-page__meta {
+    color: var(--text-muted);
+}
+
+.portal-notifications-page__meta {
+    font-size: 0.78rem;
+}
+
+.segmented-control {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.segmented-control label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.checkbox-list {
+    display: grid;
+    gap: 6px;
+    max-height: 220px;
+    overflow: auto;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-muted);
+}
+
+.actions-cell {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.actions-cell form {
+    margin: 0;
+}
+
 * {
     box-sizing: border-box;
 }

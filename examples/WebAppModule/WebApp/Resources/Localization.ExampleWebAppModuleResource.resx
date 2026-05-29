@@ -66,4 +66,30 @@
     <value>This banner was sent from ExampleModule.</value>
   </data><data name="Banner sent" xml:space="preserve">
     <value>Banner sent</value>
+  </data><data name="Send level 1 banner" xml:space="preserve">
+    <value>Send level 1 banner</value>
+  </data><data name="Send level 2 banner" xml:space="preserve">
+    <value>Send level 2 banner</value>
+  </data><data name="Send level 3 banner" xml:space="preserve">
+    <value>Send level 3 banner</value>
+  </data><data name="Send admin banner" xml:space="preserve">
+    <value>Send admin banner</value>
+  </data><data name="Test announcement banner" xml:space="preserve">
+    <value>Test announcement banner</value>
+  </data><data name="Test warning banner" xml:space="preserve">
+    <value>Test warning banner</value>
+  </data><data name="Test critical banner" xml:space="preserve">
+    <value>Test critical banner</value>
+  </data><data name="Test admin banner" xml:space="preserve">
+    <value>Test admin banner</value>
+  </data><data name="This level 1 banner was sent from ExampleModule." xml:space="preserve">
+    <value>This level 1 banner was sent from ExampleModule.</value>
+  </data><data name="This level 2 banner was sent from ExampleModule." xml:space="preserve">
+    <value>This level 2 banner was sent from ExampleModule.</value>
+  </data><data name="This level 3 banner was sent from ExampleModule." xml:space="preserve">
+    <value>This level 3 banner was sent from ExampleModule.</value>
+  </data><data name="This banner was sent from ExampleModule to portal admins." xml:space="preserve">
+    <value>This banner was sent from ExampleModule to portal admins.</value>
+  </data><data name="No admin role was found." xml:space="preserve">
+    <value>No admin role was found.</value>
   </data></root>

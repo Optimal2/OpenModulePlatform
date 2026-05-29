@@ -568,11 +568,19 @@ span.portal-topbar__nav-group-link {
     font-weight: 700;
 }
 
+.portal-topbar__notifications-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
 .portal-topbar__notifications-mark-all-form {
     margin: 0;
 }
 
-.portal-topbar__notifications-mark-all {
+.portal-topbar__notifications-mark-all,
+.portal-topbar__notifications-link {
     display: inline-flex;
     align-items: center;
     min-height: 28px;
@@ -586,10 +594,13 @@ span.portal-topbar__nav-group-link {
     font-size: 0.74rem;
     font-weight: 700;
     white-space: nowrap;
+    text-decoration: none;
 }
 
 .portal-topbar__notifications-mark-all:hover,
-.portal-topbar__notifications-mark-all:focus-visible {
+.portal-topbar__notifications-mark-all:focus-visible,
+.portal-topbar__notifications-link:hover,
+.portal-topbar__notifications-link:focus-visible {
     background: var(--portal-topbar-surface-muted);
     color: var(--portal-topbar-text);
     outline: none;
@@ -603,6 +614,26 @@ span.portal-topbar__nav-group-link {
 
 .portal-topbar__notification-form {
     margin: 0;
+}
+
+.portal-topbar__notification-form.is-unread .portal-topbar__notification-row {
+    background: rgba(224, 242, 254, 0.72);
+}
+
+.portal-topbar__notification-form.is-unread .portal-topbar__notification-title::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 6px;
+    border-radius: 999px;
+    background: #0284c7;
+    vertical-align: 0.05em;
+}
+
+.portal-topbar__notification-form.is-read .portal-topbar__notification-row,
+.portal-topbar__notification-row--read {
+    opacity: 0.76;
 }
 
 .portal-topbar__notification-row {
@@ -689,6 +720,19 @@ span.portal-topbar__nav-group-link {
     font-size: 0.86rem;
 }
 
+.portal-topbar__notifications-loading,
+.portal-topbar__notifications-end {
+    padding: 8px 10px 4px;
+    color: var(--portal-topbar-text-muted);
+    font-size: 0.76rem;
+    text-align: center;
+}
+
+.portal-topbar__notifications-loading[hidden],
+.portal-topbar__notifications-end[hidden] {
+    display: none;
+}
+
 .portal-topbar__notification-banners {
     display: grid;
     flex: 0 0 100%;
@@ -696,13 +740,9 @@ span.portal-topbar__nav-group-link {
     width: 100%;
 }
 
-.portal-topbar__notification-banner-form {
-    margin: 0;
-}
-
 .portal-topbar__notification-banner {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr);
     align-items: center;
     gap: 10px;
     width: 100%;
@@ -712,6 +752,21 @@ span.portal-topbar__nav-group-link {
     border-radius: 8px;
     background: rgba(224, 242, 254, 0.72);
     color: var(--portal-topbar-text);
+}
+
+.portal-topbar__notification-banner--announcement {
+    border-color: rgba(2, 132, 199, 0.28);
+    background: rgba(224, 242, 254, 0.78);
+}
+
+.portal-topbar__notification-banner--warning {
+    border-color: rgba(217, 119, 6, 0.32);
+    background: rgba(254, 243, 199, 0.88);
+}
+
+.portal-topbar__notification-banner--critical {
+    border-color: rgba(220, 38, 38, 0.34);
+    background: rgba(254, 226, 226, 0.9);
 }
 
 .portal-topbar__notification-banner-icon {
@@ -726,6 +781,16 @@ span.portal-topbar__nav-group-link {
     color: #0369a1;
     font-size: 0.7rem;
     font-weight: 800;
+}
+
+.portal-topbar__notification-banner--warning .portal-topbar__notification-banner-icon {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.portal-topbar__notification-banner--critical .portal-topbar__notification-banner-icon {
+    background: #fee2e2;
+    color: #991b1b;
 }
 
 .portal-topbar__notification-banner-icon img {
@@ -757,29 +822,6 @@ span.portal-topbar__nav-group-link {
     font-size: 0.76rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.portal-topbar__notification-banner-dismiss {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--portal-topbar-text-muted);
-    cursor: pointer;
-    font: inherit;
-    font-size: 1rem;
-    line-height: 1;
-}
-
-.portal-topbar__notification-banner-dismiss:hover,
-.portal-topbar__notification-banner-dismiss:focus-visible {
-    background: rgba(15, 23, 42, 0.08);
-    color: var(--portal-topbar-text);
-    outline: none;
 }
 
 .portal-topbar__admin-submenu {

@@ -13,6 +13,7 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
 {
     private readonly ExampleWebAppModuleAdminRepository _repo;
     private readonly NotificationService _notifications;
+    private readonly BannerService _banners;
     private readonly ILogger<IndexModel> _logger;
 
     public IndexModel(
@@ -20,11 +21,13 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
         RbacService rbac,
         ExampleWebAppModuleAdminRepository repo,
         NotificationService notifications,
+        BannerService banners,
         ILogger<IndexModel> logger)
         : base(options, rbac)
     {
         _repo = repo;
         _notifications = notifications;
+        _banners = banners;
         _logger = logger;
     }
 
@@ -85,31 +88,75 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
         return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostSendTestBanner(CancellationToken ct)
+    public Task<IActionResult> OnPostSendLevel1Banner(CancellationToken ct)
+        => CreateBannerAsync(
+            BannerService.LevelAnnouncement,
+            T("Test announcement banner"),
+            T("This level 1 banner was sent from ExampleModule."),
+            [new BannerTargetRequest(BannerService.TargetGlobal, null)],
+            ct);
+
+    public Task<IActionResult> OnPostSendLevel2Banner(CancellationToken ct)
+        => CreateBannerAsync(
+            BannerService.LevelWarning,
+            T("Test warning banner"),
+            T("This level 2 banner was sent from ExampleModule."),
+            [new BannerTargetRequest(BannerService.TargetGlobal, null)],
+            ct);
+
+    public Task<IActionResult> OnPostSendLevel3Banner(CancellationToken ct)
+        => CreateBannerAsync(
+            BannerService.LevelCritical,
+            T("Test critical banner"),
+            T("This level 3 banner was sent from ExampleModule."),
+            [new BannerTargetRequest(BannerService.TargetGlobal, null)],
+            ct);
+
+    public async Task<IActionResult> OnPostSendAdminBanner(CancellationToken ct)
     {
-        var guard = await RequireViewAsync(ct);
+        var guard = await RequireAdminAsync(ct);
         if (guard is not null)
         {
             return guard;
         }
 
-        var userId = NotificationService.TryGetOmpUserId(User);
-        if (userId is null)
+        var roleIds = await _banners.GetRoleIdsWithPermissionAsync("OMP.Portal.Admin", ct);
+        if (roleIds.Count == 0)
         {
-            ErrorMessage = T("Notifications require an OMP user");
+            ErrorMessage = T("No admin role was found.");
             return RedirectToPage();
         }
 
-        await _notifications.CreateForUserAsync(
-            userId.Value,
-            new NotificationCreateRequest(
-                Title: T("Test banner"),
-                Content: T("This banner was sent from ExampleModule."),
-                DestinationUrl: BuildCurrentRelativeUrl(),
-                Level: "banner",
-                CallerKey: "ExampleModule",
-                CallerDisplayName: "ExampleModule",
-                CallerIcon: "/_content/OpenModulePlatform.Web.Shared/icons/notifications.svg"),
+        return await CreateBannerAsync(
+            BannerService.LevelWarning,
+            T("Test admin banner"),
+            T("This banner was sent from ExampleModule to portal admins."),
+            roleIds.Select(roleId => new BannerTargetRequest(BannerService.TargetRole, roleId)).ToArray(),
+            ct);
+    }
+
+    private async Task<IActionResult> CreateBannerAsync(
+        int level,
+        string title,
+        string content,
+        IReadOnlyCollection<BannerTargetRequest> targets,
+        CancellationToken ct)
+    {
+        var guard = await RequireAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        await _banners.CreateAsync(
+            new BannerCreateRequest(
+                Title: title,
+                Content: content,
+                Status: BannerService.StatusActive,
+                Level: level,
+                StartsAtUtc: null,
+                ExpiresAtUtc: DateTimeOffset.UtcNow.AddHours(2)),
+            targets,
             ct);
 
         StatusMessage = T("Banner sent");

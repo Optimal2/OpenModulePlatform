@@ -14,14 +14,14 @@ public sealed class NotificationService
 {
     public const string MarkReadPath = "/notifications/mark-read";
     public const string MarkAllReadPath = "/notifications/mark-all-read";
+    public const string RecentPath = "/notifications/recent";
 
     private static readonly HashSet<string> AllowedLevels = new(StringComparer.OrdinalIgnoreCase)
     {
         "info",
         "success",
         "warning",
-        "error",
-        "banner"
+        "error"
     };
 
     private readonly SqlConnectionFactory _db;
@@ -118,9 +118,11 @@ VALUES
         return Convert.ToInt64(result, CultureInfo.InvariantCulture);
     }
 
-    public async Task<IReadOnlyList<PortalTopBarNotification>> GetUnreadForUserAsync(
+    public async Task<IReadOnlyList<PortalTopBarNotification>> GetRecentForUserAsync(
         int userId,
         int limit,
+        DateTime? beforeCreatedAtUtc,
+        long? beforeNotificationId,
         CancellationToken ct)
     {
         if (userId <= 0 || limit <= 0)
@@ -146,19 +148,30 @@ SELECT TOP (@limit)
        caller_key,
        caller_display_name,
        caller_icon,
-       created_at
+       created_at,
+       CASE WHEN status = N'unread' AND read_at IS NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS is_unread
 FROM omp.notifications
 WHERE user_id = @user_id
-  AND status = N'unread'
-  AND read_at IS NULL
   AND level <> N'banner'
   AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME())
+  AND
+  (
+      @before_created_at IS NULL
+      OR created_at < @before_created_at
+      OR (created_at = @before_created_at AND notification_id < @before_notification_id)
+  )
 ORDER BY created_at DESC,
          notification_id DESC;";
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@limit", SqlDbType.Int).Value = limit;
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@before_created_at", SqlDbType.DateTime2).Value = beforeCreatedAtUtc.HasValue
+            ? beforeCreatedAtUtc.Value
+            : DBNull.Value;
+        cmd.Parameters.Add("@before_notification_id", SqlDbType.BigInt).Value = beforeNotificationId.HasValue
+            ? beforeNotificationId.Value
+            : 0L;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         var rows = new List<PortalTopBarNotification>();
@@ -173,72 +186,18 @@ ORDER BY created_at DESC,
                 rdr.IsDBNull(5) ? null : rdr.GetString(5),
                 rdr.IsDBNull(6) ? null : rdr.GetString(6),
                 rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                rdr.GetDateTime(8)));
+                rdr.GetDateTime(8),
+                rdr.GetBoolean(9)));
         }
 
         return rows;
     }
 
-    public async Task<IReadOnlyList<PortalTopBarNotification>> GetUnreadBannersForUserAsync(
+    public Task<IReadOnlyList<PortalTopBarNotification>> GetRecentForUserAsync(
         int userId,
         int limit,
         CancellationToken ct)
-    {
-        if (userId <= 0 || limit <= 0)
-        {
-            return Array.Empty<PortalTopBarNotification>();
-        }
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-
-        if (!await NotificationsTableExistsAsync(conn, ct))
-        {
-            return Array.Empty<PortalTopBarNotification>();
-        }
-
-        const string sql = @"
-SELECT TOP (@limit)
-       notification_id,
-       title,
-       content,
-       level,
-       destination_url,
-       caller_key,
-       caller_display_name,
-       caller_icon,
-       created_at
-FROM omp.notifications
-WHERE user_id = @user_id
-  AND status = N'unread'
-  AND read_at IS NULL
-  AND level = N'banner'
-  AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME())
-ORDER BY created_at DESC,
-         notification_id DESC;";
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@limit", SqlDbType.Int).Value = limit;
-        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        var rows = new List<PortalTopBarNotification>();
-        while (await rdr.ReadAsync(ct))
-        {
-            rows.Add(new PortalTopBarNotification(
-                rdr.GetInt64(0),
-                rdr.GetString(1),
-                rdr.GetString(2),
-                rdr.GetString(3),
-                rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                rdr.GetDateTime(8)));
-        }
-
-        return rows;
-    }
+        => GetRecentForUserAsync(userId, limit, beforeCreatedAtUtc: null, beforeNotificationId: null, ct);
 
     public async Task<int> GetUnreadCountAsync(int userId, CancellationToken ct)
     {
@@ -294,8 +253,7 @@ SELECT destination_url
 FROM omp.notifications
 WHERE notification_id = @notification_id
   AND user_id = @user_id
-  AND status = N'unread'
-  AND read_at IS NULL
+  AND level <> N'banner'
   AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
 
         await using (var selectCmd = new SqlCommand(selectSql, conn))

@@ -52,8 +52,17 @@
             <form method="post" asp-page-handler="SendTestNotification" data-enhance="false">
                 <button type="submit" class="action-link">@L["Send test notification"]</button>
             </form>
-            <form method="post" asp-page-handler="SendTestBanner" data-enhance="false">
-                <button type="submit" class="action-link">@L["Send test banner"]</button>
+            <form method="post" asp-page-handler="SendLevel1Banner" data-enhance="false">
+                <button type="submit" class="action-link">@L["Send level 1 banner"]</button>
+            </form>
+            <form method="post" asp-page-handler="SendLevel2Banner" data-enhance="false">
+                <button type="submit" class="action-link">@L["Send level 2 banner"]</button>
+            </form>
+            <form method="post" asp-page-handler="SendLevel3Banner" data-enhance="false">
+                <button type="submit" class="action-link">@L["Send level 3 banner"]</button>
+            </form>
+            <form method="post" asp-page-handler="SendAdminBanner" data-enhance="false">
+                <button type="submit" class="action-link">@L["Send admin banner"]</button>
             </form>
         </div>
     </section>
