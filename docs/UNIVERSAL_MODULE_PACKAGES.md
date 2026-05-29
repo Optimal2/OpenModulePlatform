@@ -147,9 +147,11 @@ every readable profile, even when a target profile has no source repository
 links. Host-specific output is written to
 `data/hosts/<host-profile>/host-configs`, `config-overlays`, `widgets`, and
 `widget-data`, using profile-local folders and profile-declared object files.
-If a profile has usable source repository paths, the same action also refreshes
-shared objects and runs repository-owned host-profile hooks when present.
-Profiles are skipped only when their config cannot be read or parsed. Then use
+If local source roots are available on the machine running the installer, the
+same action also runs repository-owned host-profile hooks when present. It does
+not refresh shared objects; run `Refresh object archive` separately for global
+module definitions and artifact packages. Profiles are skipped only when their
+config cannot be read or parsed. Then use
 `Create universal package` to choose:
 
 - the target host profile, or a global-only package
