@@ -43,6 +43,7 @@ public sealed class UniversalModulePackageReader
     public const string ManifestEntryName = "omp-universal-package.json";
 
     private const int MaxManifestBytes = 1024 * 1024;
+    private const int MaxArchiveEntryCount = 10000;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -68,6 +69,7 @@ public sealed class UniversalModulePackageReader
     {
         Directory.CreateDirectory(extractionRoot);
         using var archive = ZipFile.OpenRead(zipPath);
+        ValidateArchiveEntryCount(archive);
         var manifestEntry = FindEntry(archive, ManifestEntryName)
             ?? throw new InvalidOperationException(
                 $"Universal module packages must contain {ManifestEntryName}.");
@@ -266,6 +268,15 @@ public sealed class UniversalModulePackageReader
         return archive.Entries.FirstOrDefault(candidate =>
             !string.IsNullOrEmpty(candidate.Name)
             && string.Equals(NormalizePackagePath(candidate.FullName), normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void ValidateArchiveEntryCount(ZipArchive archive)
+    {
+        if (archive.Entries.Count > MaxArchiveEntryCount)
+        {
+            throw new InvalidOperationException(
+                $"Universal module package contains {archive.Entries.Count} entries, which exceeds the limit of {MaxArchiveEntryCount}.");
+        }
     }
 
     private static string NormalizePackagePath(string value)

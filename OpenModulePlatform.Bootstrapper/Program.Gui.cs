@@ -548,6 +548,7 @@ internal static partial class Program
             }
 
             Text = "OpenModulePlatform Installer";
+            AutoScroll = true;
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(960, 740);
             Size = new Size(1080, 820);
@@ -834,10 +835,14 @@ internal static partial class Program
             string description,
             IReadOnlyList<(Button Button, string Description)> actions)
         {
-            var page = new TabPage(title) { Padding = new Padding(12) };
+            var page = new TabPage(title)
+            {
+                AutoScroll = true,
+                Padding = new Padding(12)
+            };
             var panel = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Top,
                 AutoSize = true,
                 ColumnCount = 1
             };
@@ -946,7 +951,11 @@ internal static partial class Program
                 ("developerSource.packageOutputRoot", "Temporary package output root")
             ]));
 
-            var optionsPage = new TabPage("Options") { Padding = new Padding(12) };
+            var optionsPage = new TabPage("Options")
+            {
+                AutoScroll = true,
+                Padding = new Padding(12)
+            };
             var options = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -973,7 +982,11 @@ internal static partial class Program
 
         private TabPage CreateTab(string title, IReadOnlyList<(string Key, string Label)> fields)
         {
-            var page = new TabPage(title) { Padding = new Padding(12) };
+            var page = new TabPage(title)
+            {
+                AutoScroll = true,
+                Padding = new Padding(12)
+            };
             var grid = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -4101,6 +4114,7 @@ ORDER BY ar.ArtifactId DESC;
             _hostChoices = BuildHostChoices(configProfiles);
 
             Text = "Create universal module package";
+            AutoScroll = true;
             StartPosition = FormStartPosition.CenterParent;
             MinimumSize = new Size(900, 620);
             Size = new Size(980, 700);
