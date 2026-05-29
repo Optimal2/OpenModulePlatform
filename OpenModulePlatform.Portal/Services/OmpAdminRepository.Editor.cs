@@ -913,8 +913,7 @@ BEGIN
       AND HostKey = @HostKey;
 
     UPDATE assignment
-    SET IsActive = 0,
-        UpdatedUtc = SYSUTCDATETIME()
+    SET IsActive = 0
     FROM omp.HostDeploymentAssignments assignment
     INNER JOIN omp.Hosts host ON host.HostId = assignment.HostId
     WHERE host.InstanceId = @InstanceId
