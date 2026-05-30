@@ -30,22 +30,22 @@
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.10",
+      "definitionVersion": "0.3.11",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp_blazor",
-      "definitionVersion": "0.3.9",
+      "definitionVersion": "0.3.11",
       "path": "examples/WebAppBlazorModule/example_webapp_blazor.module-definition.json"
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.12",
+      "definitionVersion": "0.3.13",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.11",
+      "definitionVersion": "0.3.12",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
@@ -57,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.129",
+      "version": "0.3.130",
       "minModuleDefinitionVersion": "0.3.84",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",

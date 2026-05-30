@@ -154,15 +154,16 @@ WHEN NOT MATCHED THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
--- Repair runs seed the packaged baseline artifact row but should never
--- downgrade desired state after a newer compatible example artifact has been
--- imported. Use the latest registered artifact for app/template state.
+-- Repair runs seed the packaged baseline artifact row but should never pick
+-- metadata-only artifact rows that were not completed by an artifact package
+-- import. Use the latest completed artifact for app/template state.
 SELECT TOP (1) @WebArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WebAppId
   AND PackageType = N'web-app'
   AND TargetName = N'example-webapp'
   AND IsEnabled = 1
+  AND NULLIF(LTRIM(RTRIM(Sha256)), N'') IS NOT NULL
 ORDER BY
     COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
     COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,

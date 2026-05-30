@@ -210,15 +210,16 @@ BEGIN
     WHERE ArtifactId = @WorkerArtifactId;
 END
 
--- Repair runs seed the packaged baseline artifact rows but should never
--- downgrade desired state after newer compatible example artifacts have been
--- imported. Use the latest registered artifacts for app/template state.
+-- Repair runs seed the packaged baseline artifact rows but should never pick
+-- metadata-only artifact rows that were not completed by an artifact package
+-- import. Use the latest completed artifacts for app/template state.
 SELECT TOP (1) @WorkerArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @WorkerAppId
   AND PackageType = N'worker'
   AND TargetName = N'example-workerapp'
   AND IsEnabled = 1
+  AND NULLIF(LTRIM(RTRIM(Sha256)), N'') IS NOT NULL
 ORDER BY
     COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
     COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
@@ -255,6 +256,7 @@ WHERE AppId = @WorkerWebAppId
   AND PackageType = N'web-app'
   AND TargetName = N'example-workerapp-web'
   AND IsEnabled = 1
+  AND NULLIF(LTRIM(RTRIM(Sha256)), N'') IS NOT NULL
 ORDER BY
     COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
     COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
