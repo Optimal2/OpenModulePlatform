@@ -378,7 +378,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
         => ex.Number == 547
-            ? "This artifact is still referenced by desired app, worker, HostAgent, package library, or configuration rows. Update those references first, or disable the artifact instead of deleting it."
+            ? "This artifact is still referenced by desired app, worker, HostAgent, or host artifact requirement rows. Update those references first, or disable the artifact instead of deleting it."
             : fallback;
 
     public sealed class InputModel
