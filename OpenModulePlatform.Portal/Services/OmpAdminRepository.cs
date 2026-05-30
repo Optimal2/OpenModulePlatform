@@ -1055,6 +1055,7 @@ INNER JOIN omp.Artifacts candidate
    AND candidate.PackageType = currentArtifact.PackageType
    AND ISNULL(candidate.TargetName, N'') = ISNULL(currentArtifact.TargetName, N'')
    AND candidate.IsEnabled = 1
+   AND NULLIF(LTRIM(RTRIM(candidate.Sha256)), N'') IS NOT NULL
 INNER JOIN AppliedDefinitions d
     ON d.ModuleKey = m.ModuleKey
    AND d.rn = 1
