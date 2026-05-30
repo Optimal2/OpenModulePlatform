@@ -1718,8 +1718,41 @@ WHERE ArtifactId = @ArtifactId;";
         return input.ArtifactId;
     }
 
-    public Task DeleteArtifactAsync(int artifactId, CancellationToken ct)
-        => DeleteAsync("DELETE FROM omp.Artifacts WHERE ArtifactId = @Id;", artifactId, ct);
+    public async Task DeleteArtifactAsync(int artifactId, CancellationToken ct)
+    {
+        const string sql = @"
+DELETE FROM omp.HostAppDeploymentStates
+WHERE ArtifactId = @ArtifactId;
+
+DELETE FROM omp.HostAgentRuntimeStates
+WHERE ArtifactId = @ArtifactId;
+
+DELETE FROM omp.HostArtifactStates
+WHERE ArtifactId = @ArtifactId;
+
+DELETE FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @ArtifactId;
+
+DELETE FROM omp.Artifacts
+WHERE ArtifactId = @ArtifactId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        try
+        {
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            Add(cmd, "@ArtifactId", artifactId);
+            await cmd.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Module definition document editing
