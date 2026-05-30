@@ -2408,7 +2408,6 @@ WHERE ModuleKey = @ModuleKey;";
         }
 
         var requiredObjects = ReadRequiredDatabaseObjects(definition.DefinitionJson);
-        var isInstallerManagedDefinition = IsInstallerManagedModuleDefinitionSql(definition.DefinitionJson);
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -2478,16 +2477,6 @@ WHERE ModuleKey = @ModuleKey;";
                 status = "Blocked";
                 message = safety!;
             }
-            else if (isInstallerManagedDefinition && missing.Count > 0)
-            {
-                status = "Installer repair required";
-                message = "Core platform SQL is owned by the bootstrap installer. Run the installer repair if core objects are missing.";
-            }
-            else if (isInstallerManagedDefinition)
-            {
-                status = "Managed by installer";
-                message = "Core platform SQL is validated from declared objects and is not executed from Portal.";
-            }
             else if (validationCanDriveRepair)
             {
                 status = "Needs repair";
@@ -2524,7 +2513,8 @@ WHERE ModuleKey = @ModuleKey;";
             }
 
             // Reaching a branch that sets needsExecution means the script has already passed the inline SQL,
-            // hash, idempotency, and safety gates above.
+            // hash, idempotency, and safety gates above. That also applies to platform-core definitions:
+            // the bootstrapper owns first install, while Portal can apply embedded idempotent repair SQL.
             var canExecute = needsExecution;
 
             rows.Add(new ModuleDefinitionSqlCheckRow
@@ -4348,8 +4338,7 @@ VALUES
         => string.Equals(status, "Invalid content hash", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "Blocked", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "Not executable", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "Installer repair required", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(status, "Not executable", StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<ModuleDefinitionDependencyCheckRow> GetModuleDefinitionDependencyChecks(
         ModuleDefinitionDocumentRow definition,
@@ -4856,13 +4845,6 @@ VALUES
                 item.Required,
                 item.Reason))
             .ToArray();
-    }
-
-    private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
-    {
-        var root = JsonNode.Parse(definitionJson) as JsonObject;
-        return root is not null
-            && string.Equals(GetJsonString(root, "definitionType"), "platform-core", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)

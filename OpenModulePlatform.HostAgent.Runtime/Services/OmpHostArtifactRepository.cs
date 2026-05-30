@@ -921,7 +921,7 @@ WHERE ModuleKey = @ModuleKey;";
         CancellationToken ct)
     {
         var definitionJson = await GetModuleDefinitionJsonAsync(moduleDefinitionDocumentId, ct);
-        if (string.IsNullOrWhiteSpace(definitionJson) || IsInstallerManagedModuleDefinitionSql(definitionJson))
+        if (string.IsNullOrWhiteSpace(definitionJson))
         {
             return 0;
         }
@@ -935,6 +935,8 @@ WHERE ModuleKey = @ModuleKey;";
             return 0;
         }
 
+        // HostAgent may receive platform-core repairs through universal-package imports.
+        // Keep the same embedded SQL, hash, idempotency, and safety checks for those scripts.
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
@@ -2876,13 +2878,6 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
         Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
         var value = await cmd.ExecuteScalarAsync(ct);
         return value is null || value == DBNull.Value ? null : Convert.ToString(value);
-    }
-
-    private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
-    {
-        var root = JsonNode.Parse(definitionJson) as JsonObject;
-        return root is not null
-            && string.Equals(GetJsonString(root, "definitionType"), "platform-core", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<PortableModuleDefinitionSqlScript> ReadPortableSqlScripts(string definitionJson)
