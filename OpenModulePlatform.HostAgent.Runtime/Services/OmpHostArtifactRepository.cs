@@ -1202,6 +1202,29 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
+    public async Task UpdateImportedArtifactMetadataAsync(
+        int artifactId,
+        string relativePath,
+        string sha256,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.Artifacts
+SET RelativePath = @relativePath,
+    Sha256 = @sha256,
+    IsEnabled = 1,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ArtifactId = @artifactId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@relativePath", relativePath);
+        cmd.Parameters.AddWithValue("@sha256", sha256);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<int> CopyConfigurationFilesFromLatestPreviousArtifactAsync(
         int artifactId,
         int appId,

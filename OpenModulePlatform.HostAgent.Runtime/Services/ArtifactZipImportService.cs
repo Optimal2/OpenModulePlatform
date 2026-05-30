@@ -875,12 +875,13 @@ public sealed class ArtifactZipImportService
                 cancellationToken);
             if (existingIdentity is not null)
             {
-                var existingContentMatches = string.Equals(
+                var existingMetadataHashMatches = string.Equals(
                     existingIdentity.Sha256,
                     contentHash,
                     StringComparison.OrdinalIgnoreCase);
-                if ((allowExistingIdentical || package.ConfigurationFiles.Count > 0)
-                    && existingContentMatches)
+                var existingMetadataHashMissing = string.IsNullOrWhiteSpace(existingIdentity.Sha256);
+                if ((allowExistingIdentical || package.ConfigurationFiles.Count > 0 || existingMetadataHashMissing)
+                    && (existingMetadataHashMatches || existingMetadataHashMissing))
                 {
                     var existingRelativePath = existingIdentity.RelativePath ?? relativePath;
                     var existingFinalPath = ResolveUnderRoot(storeRoot, existingRelativePath);
@@ -898,8 +899,11 @@ public sealed class ArtifactZipImportService
                             cancellationToken);
                         if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
                         {
+                            var mismatchMessage = existingMetadataHashMissing
+                                ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content: {existingRelativePath}."
+                                : $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}.";
                             throw new InvalidOperationException(
-                                $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}.");
+                                mismatchMessage);
                         }
                     }
                     else
@@ -908,6 +912,17 @@ public sealed class ArtifactZipImportService
                         finalPath = existingFinalPath;
                         movedToFinal = true;
                         restoredMissingContent = true;
+                    }
+
+                    var completedMissingMetadata = false;
+                    if (existingMetadataHashMissing)
+                    {
+                        await _repository.UpdateImportedArtifactMetadataAsync(
+                            existingIdentity.ArtifactId,
+                            existingRelativePath,
+                            contentHash,
+                            cancellationToken);
+                        completedMissingMetadata = true;
                     }
 
                     var updatedConfigurationFiles = 0;
@@ -936,12 +951,14 @@ public sealed class ArtifactZipImportService
                             cancellationToken);
                     }
 
-                    var status = updatedConfigurationFiles > 0 || restoredMissingContent
+                    var status = updatedConfigurationFiles > 0 || restoredMissingContent || completedMissingMetadata
                         ? "Updated"
                         : "Skipped";
                     var message = updatedConfigurationFiles > 0
                         ? $"The same artifact identity and content already exists. Updated {updatedConfigurationFiles} configuration file row(s)."
-                        : "The same artifact identity and content already exists.";
+                        : completedMissingMetadata
+                            ? "The artifact identity already existed without a stored content hash. Completed its metadata from this package."
+                            : "The same artifact identity and content already exists.";
                     if (restoredMissingContent)
                     {
                         message = $"{message} Restored missing artifact files below the artifact store path: {existingRelativePath}.";
