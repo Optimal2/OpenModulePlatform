@@ -145,15 +145,18 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
             return guard;
         }
 
+        var artifactId = Input.ArtifactId;
+        ModelState.Clear();
+
         try
         {
-            await _repo.DeleteArtifactAsync(Input.ArtifactId, ct);
+            await _repo.DeleteArtifactAsync(artifactId, ct);
             StatusMessage = T("Artifact deleted.");
             return RedirectToPage("/Admin/Artifacts");
         }
         catch (SqlException ex)
         {
-            await LoadAsync(ct);
+            await LoadArtifactForEditAsync(artifactId, ct);
             SetTitles("Edit artifact");
             ModelState.AddModelError(
                 string.Empty,
@@ -241,6 +244,31 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         {
             ConfigurationFiles = await _repo.GetArtifactConfigurationFilesAsync(Input.ArtifactId, ct);
         }
+    }
+
+    private async Task LoadArtifactForEditAsync(int artifactId, CancellationToken ct)
+    {
+        await LoadAsync(ct);
+
+        var row = await _repo.GetArtifactAsync(artifactId, ct);
+        if (row is null)
+        {
+            Input.ArtifactId = artifactId;
+            return;
+        }
+
+        Input = new InputModel
+        {
+            ArtifactId = row.ArtifactId,
+            AppId = row.AppId,
+            Version = row.Version,
+            PackageType = row.PackageType,
+            TargetName = row.TargetName,
+            RelativePath = row.RelativePath,
+            Sha256 = row.Sha256,
+            IsEnabled = row.IsEnabled
+        };
+        ConfigurationFiles = await _repo.GetArtifactConfigurationFilesAsync(row.ArtifactId, ct);
     }
 
     private void ValidateInput()
@@ -350,7 +378,7 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
         => ex.Number == 547
-            ? "Delete or update dependent rows first."
+            ? "This artifact is still referenced by desired app, worker, HostAgent, package library, or configuration rows. Update those references first, or disable the artifact instead of deleting it."
             : fallback;
 
     public sealed class InputModel
