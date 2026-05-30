@@ -46,7 +46,7 @@ DECLARE @ServiceAdminPermissionId int;
 DECLARE @InitialServiceConfigId int;
 DECLARE @ServiceArtifactId int;
 DECLARE @BaselineWebArtifactVersion nvarchar(50) = N'0.3.5';
-DECLARE @BaselineServiceArtifactVersion nvarchar(50) = N'0.3.4';
+DECLARE @BaselineServiceArtifactVersion nvarchar(50) = N'0.3.5';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances

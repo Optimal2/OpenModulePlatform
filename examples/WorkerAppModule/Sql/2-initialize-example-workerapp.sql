@@ -41,7 +41,7 @@ DECLARE @WorkerAdminPermissionId int;
 DECLARE @InitialWorkerConfigId int;
 DECLARE @WorkerArtifactId int;
 DECLARE @BaselineWebArtifactVersion nvarchar(50) = N'0.3.5';
-DECLARE @BaselineWorkerArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineWorkerArtifactVersion nvarchar(50) = N'0.3.4';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
