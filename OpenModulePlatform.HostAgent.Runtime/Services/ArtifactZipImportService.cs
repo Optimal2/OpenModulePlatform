@@ -63,6 +63,13 @@ public sealed class ArtifactZipImportService
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .Take(importSettings.MaxFilesPerCycle)
             .ToList();
+        if (importPaths.Count > 0)
+        {
+            _logger.LogInformation(
+                "Found pending HostAgent import file(s). ImportPath={ImportPath}, Count={Count}",
+                importPath,
+                importPaths.Count);
+        }
 
         foreach (var path in importPaths)
         {
@@ -312,12 +319,12 @@ public sealed class ArtifactZipImportService
         }
         catch (IOException ex)
         {
-            _logger.LogDebug(ex, "HostAgent import file is not ready. File={ImportPath}", importPath);
+            _logger.LogInformation(ex, "HostAgent import file is not ready and will be retried. File={ImportPath}", importPath);
             return false;
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogDebug(ex, "HostAgent import file is not accessible. File={ImportPath}", importPath);
+            _logger.LogWarning(ex, "HostAgent import file is not accessible and will be retried. File={ImportPath}", importPath);
             return false;
         }
     }
