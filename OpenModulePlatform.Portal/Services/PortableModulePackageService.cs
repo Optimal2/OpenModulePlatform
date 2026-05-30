@@ -1190,96 +1190,156 @@ public sealed class PortableModulePackageService
                 identity.TargetName,
                 ct);
 
-            if (existingIdentity is not null
-                && string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+            if (existingIdentity is not null)
             {
-                var existingRelativePathSource = existingIdentity.RelativePath
-                    ?? BuildRelativePath(compatibility, identity.TargetName, identity.PackageType, identity.Version);
-                var existingRelativePath = NormalizeRelativePath(existingRelativePathSource)
-                    ?? throw new InvalidOperationException("The existing artifact relative path is invalid.");
-                finalPath = ResolveUnderRoot(storeRoot, existingRelativePath);
-
-                var restoredMissingContent = false;
-                if (File.Exists(finalPath))
+                var existingMetadataHashMatches = string.Equals(
+                    existingIdentity.Sha256,
+                    contentHash,
+                    StringComparison.OrdinalIgnoreCase);
+                var existingMetadataHashMissing = string.IsNullOrWhiteSpace(existingIdentity.Sha256);
+                if (!existingMetadataHashMatches && !existingMetadataHashMissing)
                 {
-                    return new PortableModulePackageArtifactImportResult(
-                        identity.FileName,
-                        "Failed",
-                        $"The existing artifact path is a file, not a directory: {existingRelativePath}",
-                        existingIdentity.ArtifactId);
-                }
-
-                if (Directory.Exists(finalPath))
-                {
-                    var existingContentHash = await ComputeDirectorySha256Async(finalPath, ct);
-                    if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                    if (!options.ReplaceExistingArtifacts)
                     {
                         return new PortableModulePackageArtifactImportResult(
                             identity.FileName,
                             "Failed",
-                            $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}",
+                            "An artifact with the same identity already exists with different content.",
                             existingIdentity.ArtifactId);
                     }
                 }
                 else
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-                    MoveFileOrDirectory(package.ArtifactContentPath, finalPath);
-                    movedArtifactToFinal = true;
-                    restoredMissingContent = true;
-                }
+                    var existingRelativePathSource = existingIdentity.RelativePath
+                        ?? BuildRelativePath(compatibility, identity.TargetName, identity.PackageType, identity.Version);
+                    var existingRelativePath = NormalizeRelativePath(existingRelativePathSource)
+                        ?? throw new InvalidOperationException("The existing artifact relative path is invalid.");
+                    finalPath = ResolveUnderRoot(storeRoot, existingRelativePath);
 
-                var existingWarning = string.Empty;
-                var configurationFileCount = 0;
-                if (package.ConfigurationFiles.Count > 0)
-                {
-                    try
+                    var restoredMissingContent = false;
+                    if (File.Exists(finalPath))
                     {
-                        configurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
-                            existingIdentity.ArtifactId,
-                            package.ConfigurationFiles,
-                            ct);
+                        return new PortableModulePackageArtifactImportResult(
+                            identity.FileName,
+                            "Failed",
+                            $"The existing artifact path is a file, not a directory: {existingRelativePath}",
+                            existingIdentity.ArtifactId);
                     }
-                    catch (SqlException ex)
-                    {
-                        existingWarning = AppendWarning(
-                            existingWarning,
-                            $"The existing artifact content matched, but configuration files from the package could not be saved: {ex.Message}");
-                    }
-                }
 
-                if (options.UseArtifactsImmediately)
-                {
-                    try
+                    if (Directory.Exists(finalPath))
                     {
-                        await _repo.ApplyArtifactToMatchingApplicationsAsync(existingIdentity.ArtifactId, ct);
+                        var existingContentHash = await ComputeDirectorySha256Async(finalPath, ct);
+                        if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var mismatchMessage = existingMetadataHashMissing
+                                ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content: {existingRelativePath}"
+                                : $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}";
+                            return new PortableModulePackageArtifactImportResult(
+                                identity.FileName,
+                                "Failed",
+                                mismatchMessage,
+                                existingIdentity.ArtifactId);
+                        }
                     }
-                    catch (SqlException ex)
+                    else
                     {
-                        existingWarning = AppendWarning(
-                            existingWarning,
-                            $"The existing artifact was found, but it could not be selected as desired version automatically: {ex.Message}");
+                        Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                        MoveFileOrDirectory(package.ArtifactContentPath, finalPath);
+                        movedArtifactToFinal = true;
+                        restoredMissingContent = true;
                     }
-                }
 
-                var status = configurationFileCount > 0 || restoredMissingContent ? "Updated" : "Skipped";
-                var message = configurationFileCount > 0
-                    ? $"The same artifact identity and content already exists. Updated {configurationFileCount} configuration file row(s)."
-                    : "The same artifact identity and content already exists.";
-                if (restoredMissingContent)
-                {
-                    message = AppendWarning(
-                        message,
-                        $"Restored missing artifact files below the artifact store path: {existingRelativePath}");
-                }
+                    var completedMissingMetadata = false;
+                    if (existingMetadataHashMissing)
+                    {
+                        try
+                        {
+                            await _repo.SaveArtifactAsync(
+                                new ArtifactEditData
+                                {
+                                    ArtifactId = existingIdentity.ArtifactId,
+                                    AppId = app.AppId,
+                                    Version = identity.Version,
+                                    PackageType = identity.PackageType,
+                                    TargetName = identity.TargetName,
+                                    RelativePath = existingRelativePath,
+                                    Sha256 = contentHash,
+                                    IsEnabled = true
+                                },
+                                ct);
+                            completedMissingMetadata = true;
+                        }
+                        catch (SqlException ex)
+                        {
+                            if (movedArtifactToFinal)
+                            {
+                                TryDelete(finalPath);
+                            }
 
-                return new PortableModulePackageArtifactImportResult(
-                    identity.FileName,
-                    status,
-                    AppendWarning(
-                        message,
-                        existingWarning),
-                    existingIdentity.ArtifactId);
+                            return new PortableModulePackageArtifactImportResult(
+                                identity.FileName,
+                                "Failed",
+                                $"The existing artifact metadata row could not be completed: {ex.Message}",
+                                existingIdentity.ArtifactId);
+                        }
+                    }
+
+                    var existingWarning = string.Empty;
+                    var configurationFileCount = 0;
+                    if (package.ConfigurationFiles.Count > 0)
+                    {
+                        try
+                        {
+                            configurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
+                                existingIdentity.ArtifactId,
+                                package.ConfigurationFiles,
+                                ct);
+                        }
+                        catch (SqlException ex)
+                        {
+                            existingWarning = AppendWarning(
+                                existingWarning,
+                                $"The existing artifact content matched, but configuration files from the package could not be saved: {ex.Message}");
+                        }
+                    }
+
+                    if (options.UseArtifactsImmediately)
+                    {
+                        try
+                        {
+                            await _repo.ApplyArtifactToMatchingApplicationsAsync(existingIdentity.ArtifactId, ct);
+                        }
+                        catch (SqlException ex)
+                        {
+                            existingWarning = AppendWarning(
+                                existingWarning,
+                                $"The existing artifact was found, but it could not be selected as desired version automatically: {ex.Message}");
+                        }
+                    }
+
+                    var status = configurationFileCount > 0 || restoredMissingContent || completedMissingMetadata
+                        ? "Updated"
+                        : "Skipped";
+                    var message = configurationFileCount > 0
+                        ? $"The same artifact identity and content already exists. Updated {configurationFileCount} configuration file row(s)."
+                        : completedMissingMetadata
+                            ? "The artifact identity already existed without a stored content hash. Completed its metadata from this package."
+                            : "The same artifact identity and content already exists.";
+                    if (restoredMissingContent)
+                    {
+                        message = AppendWarning(
+                            message,
+                            $"Restored missing artifact files below the artifact store path: {existingRelativePath}");
+                    }
+
+                    return new PortableModulePackageArtifactImportResult(
+                        identity.FileName,
+                        status,
+                        AppendWarning(
+                            message,
+                            existingWarning),
+                        existingIdentity.ArtifactId);
+                }
             }
 
             if (existingIdentity is not null && !options.ReplaceExistingArtifacts)
