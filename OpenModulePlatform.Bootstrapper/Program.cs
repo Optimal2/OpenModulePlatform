@@ -260,7 +260,8 @@ internal static partial class Program
                 if (ServiceExists(identity.ServiceName))
                 {
                     EnsureRuntimeFilesystemAccess(config);
-                    Console.WriteLine("> HostAgent service already exists; leaving runtime installation unchanged.");
+                    await RefreshExistingHostAgentRuntimeSettingsAsync(config, identity);
+                    Console.WriteLine("> HostAgent service already exists; refreshed runtime settings and credential store.");
                 }
                 else if (HostAgentServiceWithPrefixExists(identity.ServiceNamePrefix))
                 {
@@ -3921,6 +3922,27 @@ VALUES
         {
             await transaction.RollbackAsync();
             throw;
+        }
+    }
+
+    private static async Task RefreshExistingHostAgentRuntimeSettingsAsync(
+        BootstrapConfig config,
+        HostAgentBootstrapServiceIdentity serviceIdentity)
+    {
+        if (!Directory.Exists(serviceIdentity.InstallPath))
+        {
+            Console.WriteLine(
+                $"> HostAgent service exists, but install path was not found; runtime settings were not refreshed. Path={serviceIdentity.InstallPath}");
+            return;
+        }
+
+        Console.WriteLine("> Refresh HostAgent runtime settings and credential store");
+        await WriteHostAgentSettingsAsync(config, serviceIdentity.InstallPath, serviceIdentity);
+
+        if (config.HostAgent.StartService)
+        {
+            StopService(serviceIdentity.ServiceName);
+            StartService(serviceIdentity.ServiceName);
         }
     }
 
