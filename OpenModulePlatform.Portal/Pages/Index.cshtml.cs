@@ -22,6 +22,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 {
     private readonly PortalDashboardService _dashboard;
     private readonly PortalEntryService _portalEntries;
+    private readonly PortalModuleDashboardService _moduleDashboard;
     private readonly PortalBlankWidgetService _blankWidget;
     private readonly PortalMusicPlayerService _musicPlayer;
     private readonly SharedRbacService _rbac;
@@ -31,6 +32,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         IOptions<WebAppOptions> options,
         PortalDashboardService dashboard,
         PortalEntryService portalEntries,
+        PortalModuleDashboardService moduleDashboard,
         PortalBlankWidgetService blankWidget,
         PortalMusicPlayerService musicPlayer,
         SharedRbacService rbac,
@@ -39,6 +41,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     {
         _dashboard = dashboard;
         _portalEntries = portalEntries;
+        _moduleDashboard = moduleDashboard;
         _blankWidget = blankWidget;
         _musicPlayer = musicPlayer;
         _rbac = rbac;
@@ -70,6 +73,10 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     public IReadOnlyList<DashboardNavbarSection> DashboardNavbarSections { get; private set; } = [];
 
     public IReadOnlyList<DashboardContentPageLink> ContentPages { get; private set; } = [];
+
+    public DashboardLogSearchWidget LogSearchWidget { get; private set; } = new("/logsearch", []);
+
+    public DashboardEArkivCheckerWidget EArkivCheckerWidget { get; private set; } = new("/earkivchecker", 0, 0, null, []);
 
     public async Task OnGet(bool manage = false, bool fullList = false, CancellationToken ct = default)
     {
@@ -384,6 +391,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId.Value, permissions, includeHidden: false, ct);
             FavoritePortalEntries = await _portalEntries.GetNavigationFavoriteEntriesAsync(Request, userId.Value, permissions, ct);
             ContentPages = await _dashboard.GetReadableContentPagesAsync(Request, roleIds, permissions, ct);
+            LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
+            EArkivCheckerWidget = await _moduleDashboard.GetEArkivCheckerWidgetAsync(Request, permissions, ct);
         }
         else
         {
@@ -393,6 +402,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             FavoritePortalEntries = [];
             DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
             ContentPages = [];
+            LogSearchWidget = new DashboardLogSearchWidget("/logsearch", []);
+            EArkivCheckerWidget = new DashboardEArkivCheckerWidget("/earkivchecker", 0, 0, null, []);
         }
     }
 
