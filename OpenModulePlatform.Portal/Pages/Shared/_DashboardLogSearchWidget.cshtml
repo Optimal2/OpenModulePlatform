@@ -1,0 +1,66 @@
+@model DashboardLogSearchWidget
+@using System.Globalization
+
+<div class="dashboard-module-widget dashboard-module-widget--log-search">
+    <div class="dashboard-module-widget__summary">
+        <div>
+            <span>@L["Recent jobs"]</span>
+            <strong>@Model.Jobs.Count.ToString(CultureInfo.CurrentCulture)</strong>
+        </div>
+        <a class="dashboard-module-widget__action" href="@Model.ModuleHref">@L["New search"]</a>
+    </div>
+
+    @if (Model.Jobs.Count == 0)
+    {
+        <div class="dashboard-module-widget__empty">@L["No recent LogSearch jobs."]</div>
+    }
+    else
+    {
+        <div class="dashboard-module-widget__list">
+            @foreach (var job in Model.Jobs)
+            {
+                var jobHref = $"{Model.ModuleHref.TrimEnd('/')}/JobDetails/{job.SearchJobId.ToString(CultureInfo.InvariantCulture)}";
+                <a class="dashboard-module-widget__item" href="@jobHref">
+                    <span class="dashboard-module-widget__item-main">
+                        <strong>@ModeLabel(job.SearchMode)</strong>
+                        <span>@job.PersonIdentifier</span>
+                    </span>
+                    <span class="dashboard-module-widget__item-meta">
+                        <span class="dashboard-module-widget__pill dashboard-module-widget__pill--@StatusCss(job.Status)">@StatusLabel(job.Status)</span>
+                        <span>@job.HitCount.ToString(CultureInfo.CurrentCulture) @L["hits"]</span>
+                        @if (job.ErrorCount > 0)
+                        {
+                            <span>@job.ErrorCount.ToString(CultureInfo.CurrentCulture) @L["errors"]</span>
+                        }
+                    </span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@functions {
+    private string ModeLabel(byte mode) => mode switch
+    {
+        2 => L["Employee HSAID"].Value,
+        _ => L["Patient identifier"].Value
+    };
+
+    private string StatusLabel(byte status) => status switch
+    {
+        1 => L["Running"].Value,
+        2 => L["Completed"].Value,
+        3 => L["Failed"].Value,
+        4 => L["Canceled"].Value,
+        _ => L["Queued"].Value
+    };
+
+    private static string StatusCss(byte status) => status switch
+    {
+        1 => "running",
+        2 => "ok",
+        3 => "error",
+        4 => "muted",
+        _ => "queued"
+    };
+}

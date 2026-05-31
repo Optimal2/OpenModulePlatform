@@ -28,6 +28,7 @@ builder.Services.AddScoped<OmpUserAdminRepository>();
 builder.Services.AddScoped<PortalUserSettingsAdminRepository>();
 builder.Services.AddScoped<PortalEntryService>();
 builder.Services.AddScoped<PortalDashboardService>();
+builder.Services.AddScoped<PortalModuleDashboardService>();
 builder.Services.AddScoped<PortalBlankWidgetService>();
 builder.Services.AddScoped<PortalMusicPlayerService>();
 builder.Services.AddScoped<PortalDashboardWidgetPackageService>();

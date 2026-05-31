@@ -2281,4 +2281,22 @@
   <data name="Module key is required." xml:space="preserve"><value>Modulnyckel krävs.</value></data>
   <data name="Exported module {0} {1} to the package library. Definition file: {2}. Artifacts exported: {3}. Skipped: {4}." xml:space="preserve"><value>Exporterade modul {0} {1} till paketbiblioteket. Definitionsfil: {2}. Artefakter exporterade: {3}. Hoppades över: {4}.</value></data>
   <data name="Export details:" xml:space="preserve"><value>Exportdetaljer:</value></data>
+  <data name="LogSearch recent jobs" xml:space="preserve"><value>Loggsök senaste jobb</value></data>
+  <data name="EArkivChecker alerts" xml:space="preserve"><value>EArkivChecker-larm</value></data>
+  <data name="Recent jobs" xml:space="preserve"><value>Senaste jobb</value></data>
+  <data name="New search" xml:space="preserve"><value>Ny sökning</value></data>
+  <data name="No recent LogSearch jobs." xml:space="preserve"><value>Inga senaste Loggsök-jobb.</value></data>
+  <data name="hits" xml:space="preserve"><value>träffar</value></data>
+  <data name="errors" xml:space="preserve"><value>fel</value></data>
+  <data name="Employee HSAID" xml:space="preserve"><value>Anställds HSAID</value></data>
+  <data name="Patient identifier" xml:space="preserve"><value>Patient-id</value></data>
+  <data name="Completed" xml:space="preserve"><value>Slutförd</value></data>
+  <data name="Canceled" xml:space="preserve"><value>Avbruten</value></data>
+  <data name="Queued" xml:space="preserve"><value>Köad</value></data>
+  <data name="Attention" xml:space="preserve"><value>Åtgärd</value></data>
+  <data name="Latest check" xml:space="preserve"><value>Senaste kontroll</value></data>
+  <data name="Open status" xml:space="preserve"><value>Öppna status</value></data>
+  <data name="No active EArkivChecker alarms." xml:space="preserve"><value>Inga aktiva EArkivChecker-larm.</value></data>
+  <data name="Access denied" xml:space="preserve"><value>Åtkomst nekad</value></data>
+  <data name="Over limit" xml:space="preserve"><value>Över gräns</value></data>
 </root>

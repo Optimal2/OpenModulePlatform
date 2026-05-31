@@ -180,6 +180,14 @@
                         {
                             <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
                         }
+                        else if (widget.Payload == "log-search-recent-jobs")
+                        {
+                            <partial name="_DashboardLogSearchWidget" model="Model.LogSearchWidget" />
+                        }
+                        else if (widget.Payload == "earkiv-checker-alerts")
+                        {
+                            <partial name="_DashboardEArkivCheckerWidget" model="Model.EArkivCheckerWidget" />
+                        }
                         else if (widget.Payload == "weekday-date")
                         {
                             <partial name="_DashboardDateWidget" model="widget.IntData == 1" />
@@ -444,6 +452,14 @@
 
         <template data-dashboard-widget-template="content-pages">
             <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
+        </template>
+
+        <template data-dashboard-widget-template="log-search-recent-jobs">
+            <partial name="_DashboardLogSearchWidget" model="Model.LogSearchWidget" />
+        </template>
+
+        <template data-dashboard-widget-template="earkiv-checker-alerts">
+            <partial name="_DashboardEArkivCheckerWidget" model="Model.EArkivCheckerWidget" />
         </template>
 
         <template data-dashboard-widget-template="weekday-date">
