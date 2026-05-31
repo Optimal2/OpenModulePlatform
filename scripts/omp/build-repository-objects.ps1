@@ -438,6 +438,45 @@ elseif (-not $AllComponents) {
     $selectedComponents = @()
 }
 
+if ($AllComponents -or $ComponentKey.Count -gt 0) {
+    foreach ($entry in @((Get-JsonPropertyValue -Object $manifest -Name 'widgetFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        if ($entry -is [string]) {
+            if (-not [string]::IsNullOrWhiteSpace($entry)) {
+                $WidgetFile += $entry
+            }
+
+            continue
+        }
+
+        $entryModuleKey = [string](Get-JsonPropertyValue -Object $entry -Name 'moduleKey')
+        $hasScopedModuleKey = -not [string]::IsNullOrWhiteSpace($entryModuleKey)
+        if ($null -ne $selectedModuleKeys -and $hasScopedModuleKey -and -not $selectedModuleKeys.Contains($entryModuleKey.Trim())) {
+            continue
+        }
+
+        $sourcePath = [string](Get-JsonPropertyValue -Object $entry -Name 'sourcePath')
+        if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+            $sourcePath = [string](Get-JsonPropertyValue -Object $entry -Name 'path')
+        }
+
+        if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+            throw 'Manifest widgetFiles entries must provide sourcePath or path.'
+        }
+
+        $destinationName = [string](Get-JsonPropertyValue -Object $entry -Name 'destinationName')
+        if ([string]::IsNullOrWhiteSpace($destinationName)) {
+            $WidgetFile += $sourcePath
+        }
+        else {
+            $WidgetFile += "$($destinationName.Trim())=$($sourcePath.Trim())"
+        }
+    }
+}
+
 foreach ($definition in @($manifest.moduleDefinitions)) {
     if ($null -eq $definition) {
         continue

@@ -1,0 +1,76 @@
+@model DashboardEArkivCheckerWidget
+@using System.Globalization
+
+<div class="dashboard-module-widget dashboard-module-widget--earkiv-checker">
+    <div class="dashboard-module-widget__kpis">
+        <div>
+            <span>@L["Targets"]</span>
+            <strong>@Model.TargetCount.ToString(CultureInfo.CurrentCulture)</strong>
+        </div>
+        <div class="@(Model.ProblemCount > 0 ? "is-attention" : string.Empty)">
+            <span>@L["Attention"]</span>
+            <strong>@Model.ProblemCount.ToString(CultureInfo.CurrentCulture)</strong>
+        </div>
+    </div>
+
+    <div class="dashboard-module-widget__summary dashboard-module-widget__summary--compact">
+        <span>@L["Latest check"]: @FormatUtc(Model.LastCheckedUtc)</span>
+        <a class="dashboard-module-widget__action" href="@Model.ModuleHref">@L["Open status"]</a>
+    </div>
+
+    @if (Model.Problems.Count == 0)
+    {
+        <div class="dashboard-module-widget__empty dashboard-module-widget__empty--ok">@L["No active EArkivChecker alarms."]</div>
+    }
+    else
+    {
+        <div class="dashboard-module-widget__list">
+            @foreach (var problem in Model.Problems)
+            {
+                var targetHref = $"{Model.ModuleHref.TrimEnd('/')}#target-{problem.TargetId.ToString(CultureInfo.InvariantCulture)}";
+                <a class="dashboard-module-widget__item" href="@targetHref">
+                    <span class="dashboard-module-widget__item-main">
+                        <strong>@problem.DisplayName</strong>
+                        <span>@problem.GroupDisplayName</span>
+                    </span>
+                    <span class="dashboard-module-widget__item-meta">
+                        <span class="dashboard-module-widget__pill dashboard-module-widget__pill--@StatusCss(problem.Status)">@StatusLabel(problem.Status)</span>
+                        @if (problem.IsOverLimit)
+                        {
+                            <span>@L["Over limit"]</span>
+                        }
+                    </span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@functions {
+    private static string FormatUtc(DateTime? value) =>
+        value is null
+            ? "-"
+            : DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+                .ToLocalTime()
+                .ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+
+    private string StatusLabel(byte status) => status switch
+    {
+        1 => L["OK"].Value,
+        2 => L["Warning"].Value,
+        3 => L["Missing"].Value,
+        4 => L["Access denied"].Value,
+        5 => L["Error"].Value,
+        _ => L["Unknown"].Value
+    };
+
+    private static string StatusCss(byte status) => status switch
+    {
+        1 => "ok",
+        2 => "warning",
+        3 => "error",
+        4 => "error",
+        5 => "error",
+        _ => "queued"
+    };
+}
