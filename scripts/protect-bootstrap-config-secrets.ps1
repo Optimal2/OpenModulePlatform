@@ -161,7 +161,7 @@ function Protect-ConfigFile {
             Remove-PropertyIfPresent -Object $hostAgentSettings -Name 'ServiceAppPassword'
             Ensure-Property -Object $hostAgentSettings -Name 'ServiceAppPasswordCredentialKey' -Value ''
 
-            if ($null -ne $hostAgentSettings.IisAppPoolOverrides) {
+            if ($null -ne $hostAgentSettings.PSObject.Properties['IisAppPoolOverrides'] -and $null -ne $hostAgentSettings.IisAppPoolOverrides) {
                 foreach ($property in $hostAgentSettings.IisAppPoolOverrides.PSObject.Properties) {
                     if ($null -ne $property.Value) {
                         Remove-PropertyIfPresent -Object $property.Value -Name 'Password'
@@ -171,7 +171,7 @@ function Protect-ConfigFile {
                 }
             }
 
-            if ($null -ne $hostAgentSettings.ServiceAppIdentityOverrides) {
+            if ($null -ne $hostAgentSettings.PSObject.Properties['ServiceAppIdentityOverrides'] -and $null -ne $hostAgentSettings.ServiceAppIdentityOverrides) {
                 foreach ($property in $hostAgentSettings.ServiceAppIdentityOverrides.PSObject.Properties) {
                     if ($null -ne $property.Value) {
                         Remove-PropertyIfPresent -Object $property.Value -Name 'Password'
