@@ -3656,6 +3656,10 @@ a.dashboard-role-list__item:focus-visible {
     text-decoration: none;
 }
 
+.portal-entry-add-button.admin-icon-button {
+    display: inline-flex;
+}
+
 .portal-entry-create-panel > summary {
     cursor: pointer;
     font-weight: 700;
@@ -3697,17 +3701,43 @@ a.dashboard-role-list__item:focus-visible {
     transition: border-color 120ms ease, background-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
 }
 
-.portal-entry-layout-row.is-child-entry::before {
-    content: "";
+.portal-entry-layout-row__tree-line {
+    display: none;
     position: absolute;
     left: -20px;
-    top: -9px;
+    top: 0;
+    bottom: 0;
     width: 18px;
-    height: calc(50% + 9px);
-    border-left: 1px solid var(--border-strong);
-    border-bottom: 1px solid var(--border-strong);
-    border-bottom-left-radius: 8px;
     pointer-events: none;
+}
+
+.portal-entry-layout-row.is-child-entry .portal-entry-layout-row__tree-line {
+    display: block;
+}
+
+.portal-entry-layout-row__tree-line::before,
+.portal-entry-layout-row__tree-line::after {
+    content: "";
+    position: absolute;
+    border-color: var(--link);
+}
+
+.portal-entry-layout-row__tree-line::before {
+    left: 0;
+    top: -8px;
+    bottom: 50%;
+    border-left: 2px solid var(--link);
+}
+
+.portal-entry-layout-row.is-tree-continuation .portal-entry-layout-row__tree-line::before {
+    bottom: -8px;
+}
+
+.portal-entry-layout-row__tree-line::after {
+    left: 0;
+    top: 50%;
+    width: 18px;
+    border-top: 2px solid var(--link);
 }
 
 .portal-entry-layout-row.is-disabled {
@@ -4018,12 +4048,31 @@ a.dashboard-role-list__item:focus-visible {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/delete.svg");
 }
 
+.admin-icon-button--add {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/add.svg");
+}
+
+.admin-icon-button--arrow-up {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/arrow-up.svg");
+}
+
+.admin-icon-button--subdir-arrow {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/subdir-arrow.svg");
+}
+
 .admin-icon-button--visible {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/visible.svg");
 }
 
 .admin-icon-button--visible-off {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/visible_off.svg");
+}
+
+.admin-icon-button:disabled,
+.admin-icon-button[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.42;
+    pointer-events: none;
 }
 
 .btn-link-danger.admin-icon-button {
