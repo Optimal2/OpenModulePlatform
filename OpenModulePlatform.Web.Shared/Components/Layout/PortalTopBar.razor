@@ -328,6 +328,23 @@
                 </details>
             }
 
+            @if (_portalTopBar.CanUseMessages)
+            {
+                <a class="portal-topbar__messages-link"
+                   href="@_portalTopBar.MessagesUrl"
+                   title="@L[_portalTopBar.MessagesToggleTextKey]"
+                   aria-label="@L[_portalTopBar.MessagesToggleTextKey]"
+                   data-enhance-nav="false">
+                    <span class="portal-topbar__summary-icon">
+                        <span class="portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
+                        <span class="portal-topbar__message-badge" hidden="@(_portalTopBar.UnreadMessageCount == 0)">
+                            @NotificationBadgeText(_portalTopBar.UnreadMessageCount)
+                        </span>
+                    </span>
+                    <span class="visually-hidden">@L[_portalTopBar.MessagesToggleTextKey]</span>
+                </a>
+            }
+
             @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
             {
                 <details class="portal-topbar__profile" data-portal-topbar-overlay data-portal-topbar-hover-menu>

@@ -29,6 +29,7 @@ public sealed class PortalTopBarModel
         NavigationFilterPlaceholderTextKey = "Search modules",
         NoFavoritesTextKey = "No favorites",
         NotificationsToggleTextKey = "Notifications",
+        MessagesToggleTextKey = "Messages",
         NoNotificationsTextKey = "No notifications",
         MarkAllNotificationsReadTextKey = "Mark all as read",
         ViewAllNotificationsTextKey = "View all notifications",
@@ -86,6 +87,12 @@ public sealed class PortalTopBarModel
 
     public string NotificationsUrl { get; init; } = "/notifications";
 
+    public bool CanUseMessages { get; init; }
+
+    public int UnreadMessageCount { get; init; }
+
+    public string MessagesUrl { get; init; } = "/messages";
+
     public bool IsPortalAdmin { get; init; }
 
     public IReadOnlyList<PortalTopBarLink> PortalAdminLinks { get; init; } = Array.Empty<PortalTopBarLink>();
@@ -125,6 +132,8 @@ public sealed class PortalTopBarModel
     public string NoFavoritesTextKey { get; init; } = "No favorites";
 
     public string NotificationsToggleTextKey { get; init; } = "Notifications";
+
+    public string MessagesToggleTextKey { get; init; } = "Messages";
 
     public string NoNotificationsTextKey { get; init; } = "No notifications";
 

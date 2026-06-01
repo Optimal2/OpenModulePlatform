@@ -1,0 +1,82 @@
+@page "/messages/new"
+@model OpenModulePlatform.Portal.Pages.Messages.NewModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Messages"]</div>
+        <h2>@L["New conversation"]</h2>
+        <p class="lede">@L["Start a direct chat or create a group chat with OMP users."]</p>
+    </div>
+    <div class="toolbar">
+        <a class="action-link" asp-page="/Messages/Index">@L["Messages"]</a>
+    </div>
+</section>
+
+@if (!Model.CanUseMessages)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["Messages require an OMP user"]</div>
+    </section>
+}
+else
+{
+    <section class="card top-gap portal-message-new">
+        <form method="get" class="portal-message-new__search">
+            <label>
+                <span>@L["Search users"]</span>
+                <input asp-for="Query" type="search" />
+            </label>
+            <button type="submit" class="btn">@L["Search"]</button>
+        </form>
+
+        <div class="portal-message-new__columns">
+            <form method="post" asp-page-handler="Direct" class="portal-message-new__panel" data-enhance="false">
+                <h3>@L["Start direct chat"]</h3>
+                <span asp-validation-for="DirectUserId" class="field-validation-error"></span>
+                @if (Model.Users.Count == 0)
+                {
+                    <div class="empty-state">@L["No users found."]</div>
+                }
+                else
+                {
+                    <div class="checkbox-list portal-message-new__users">
+                        @foreach (var user in Model.Users)
+                        {
+                            <label>
+                                <input type="radio" asp-for="DirectUserId" value="@user.UserId" />
+                                <span>@user.DisplayName <span class="muted">(id: @user.UserId)</span></span>
+                            </label>
+                        }
+                    </div>
+                    <button type="submit" class="btn btn-primary">@L["Start"]</button>
+                }
+            </form>
+
+            <form method="post" asp-page-handler="Group" class="portal-message-new__panel" data-enhance="false">
+                <h3>@L["New group chat"]</h3>
+                <label>
+                    <span>@L["Title"]</span>
+                    <input asp-for="GroupTitle" />
+                </label>
+                <span asp-validation-for="GroupUserIds" class="field-validation-error"></span>
+                @if (Model.Users.Count == 0)
+                {
+                    <div class="empty-state">@L["No users found."]</div>
+                }
+                else
+                {
+                    <div class="checkbox-list portal-message-new__users">
+                        @foreach (var user in Model.Users)
+                        {
+                            <label>
+                                <input type="checkbox" name="GroupUserIds" value="@user.UserId" />
+                                <span>@user.DisplayName <span class="muted">(id: @user.UserId)</span></span>
+                            </label>
+                        }
+                    </div>
+                    <button type="submit" class="btn btn-primary">@L["Create group"]</button>
+                }
+            </form>
+        </div>
+    </section>
+}

@@ -1,0 +1,104 @@
+@page "/messages/{conversationId:long}"
+@model OpenModulePlatform.Portal.Pages.Messages.ThreadModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Messages"]</div>
+        <h2>@(Model.Conversation?.DisplayTitle ?? L["Conversation"].Value)</h2>
+        @if (!string.IsNullOrWhiteSpace(Model.Conversation?.ParticipantNames))
+        {
+            <p class="lede">@Model.Conversation.ParticipantNames</p>
+        }
+    </div>
+    <div class="toolbar">
+        <a class="action-link" asp-page="/Messages/Index">@L["Messages"]</a>
+        @if (Model.CanUseMessages)
+        {
+            <a class="action-link" asp-page="/Messages/New">@L["New conversation"]</a>
+        }
+    </div>
+</section>
+
+@if (!Model.CanUseMessages)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["Messages require an OMP user"]</div>
+    </section>
+}
+else if (Model.Conversation is null)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["This conversation was not found."]</div>
+    </section>
+}
+else
+{
+    <section class="card top-gap portal-message-thread">
+        @if (Model.HasMoreMessages && Model.Rows.Count > 0)
+        {
+            <a class="portal-message-thread__older"
+               asp-page="/Messages/Thread"
+               asp-route-conversationId="@Model.Conversation.ConversationId"
+               asp-route-beforeMessageId="@Model.Rows[0].MessageId">@L["Load older messages"]</a>
+        }
+
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="empty-state">@L["No messages"]</div>
+        }
+        else
+        {
+            <div class="portal-message-thread__messages">
+                @foreach (var message in Model.Rows)
+                {
+                    <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)">
+                        <div class="portal-message-thread__bubble">
+                            <div class="portal-message-thread__meta">
+                                <strong>@message.SenderDisplayName</strong>
+                                <span>@message.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(message.Content))
+                            {
+                                <p>@message.Content</p>
+                            }
+                            @if (message.Attachments.Count > 0)
+                            {
+                                <div class="portal-message-thread__attachments">
+                                    @foreach (var attachment in message.Attachments)
+                                    {
+                                        <a class="portal-message-thread__attachment" href="@attachment.DownloadUrl" data-enhance-nav="false">
+                                            @if (attachment.IsImage)
+                                            {
+                                                <img src="@attachment.DownloadUrl" alt="@attachment.FileName" loading="lazy" />
+                                            }
+                                            <span>@attachment.FileName</span>
+                                        </a>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        <form method="post"
+              enctype="multipart/form-data"
+              asp-page-handler="Send"
+              asp-route-conversationId="@Model.Conversation.ConversationId"
+              class="portal-message-thread__composer"
+              data-enhance="false">
+            <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+            <label>
+                <span>@L["Message"]</span>
+                <textarea asp-for="MessageContent" rows="3" placeholder="@L["Type a message"]"></textarea>
+                <span asp-validation-for="MessageContent" class="field-validation-error"></span>
+            </label>
+            <label>
+                <span>@L["Attach file"]</span>
+                <input asp-for="Attachments" type="file" multiple />
+            </label>
+            <button type="submit" class="btn btn-primary">@L["Send"]</button>
+        </form>
+    </section>
+}

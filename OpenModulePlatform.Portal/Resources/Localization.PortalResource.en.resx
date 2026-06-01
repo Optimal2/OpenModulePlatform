@@ -643,4 +643,38 @@
   <data name="Module key is required." xml:space="preserve"><value>Module key is required.</value></data>
   <data name="Exported module {0} {1} to the package library. Definition file: {2}. Artifacts exported: {3}. Skipped: {4}." xml:space="preserve"><value>Exported module {0} {1} to the package library. Definition file: {2}. Artifacts exported: {3}. Skipped: {4}.</value></data>
   <data name="Export details:" xml:space="preserve"><value>Export details:</value></data>
+  <data name="Messages" xml:space="preserve"><value>Messages</value></data>
+  <data name="Internal conversations between OMP users." xml:space="preserve"><value>Internal conversations between OMP users.</value></data>
+  <data name="New conversation" xml:space="preserve"><value>New conversation</value></data>
+  <data name="New message" xml:space="preserve"><value>New message</value></data>
+  <data name="Start direct chat" xml:space="preserve"><value>Start direct chat</value></data>
+  <data name="New group chat" xml:space="preserve"><value>New group chat</value></data>
+  <data name="Add participant" xml:space="preserve"><value>Add participant</value></data>
+  <data name="Send" xml:space="preserve"><value>Send</value></data>
+  <data name="Attach file" xml:space="preserve"><value>Attach file</value></data>
+  <data name="No conversations" xml:space="preserve"><value>No conversations</value></data>
+  <data name="No messages" xml:space="preserve"><value>No messages</value></data>
+  <data name="Messages require an OMP user" xml:space="preserve"><value>Messages require an OMP user</value></data>
+  <data name="Conversation" xml:space="preserve"><value>Conversation</value></data>
+  <data name="Participants" xml:space="preserve"><value>Participants</value></data>
+  <data name="Direct messages" xml:space="preserve"><value>Direct messages</value></data>
+  <data name="Group chat" xml:space="preserve"><value>Group chat</value></data>
+  <data name="Message" xml:space="preserve"><value>Message</value></data>
+  <data name="Attachments" xml:space="preserve"><value>Attachments</value></data>
+  <data name="Open conversation" xml:space="preserve"><value>Open conversation</value></data>
+  <data name="Select users" xml:space="preserve"><value>Select users</value></data>
+  <data name="Title" xml:space="preserve"><value>Title</value></data>
+  <data name="Start" xml:space="preserve"><value>Start</value></data>
+  <data name="Create group" xml:space="preserve"><value>Create group</value></data>
+  <data name="This conversation was not found." xml:space="preserve"><value>This conversation was not found.</value></data>
+  <data name="You cannot access this conversation." xml:space="preserve"><value>You cannot access this conversation.</value></data>
+  <data name="Type a message" xml:space="preserve"><value>Type a message</value></data>
+  <data name="Files" xml:space="preserve"><value>Files</value></data>
+  <data name="Download attachment" xml:space="preserve"><value>Download attachment</value></data>
+  <data name="Image attachment" xml:space="preserve"><value>Image attachment</value></data>
+  <data name="Start a direct chat or create a group chat with OMP users." xml:space="preserve"><value>Start a direct chat or create a group chat with OMP users.</value></data>
+  <data name="Search users" xml:space="preserve"><value>Search users</value></data>
+  <data name="Select a user." xml:space="preserve"><value>Select a user.</value></data>
+  <data name="No users found." xml:space="preserve"><value>No users found.</value></data>
+  <data name="Load older messages" xml:space="preserve"><value>Load older messages</value></data>
 </root>

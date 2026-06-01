@@ -1,0 +1,58 @@
+@page "/messages"
+@model OpenModulePlatform.Portal.Pages.Messages.IndexModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Portal"]</div>
+        <h2>@L["Messages"]</h2>
+        <p class="lede">@L["Internal conversations between OMP users."]</p>
+    </div>
+    @if (Model.CanUseMessages)
+    {
+        <div class="toolbar">
+            <a class="action-link" asp-page="/Messages/New">@L["New conversation"]</a>
+        </div>
+    }
+</section>
+
+@if (!Model.CanUseMessages)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["Messages require an OMP user"]</div>
+    </section>
+}
+else if (Model.Rows.Count == 0)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["No conversations"]</div>
+    </section>
+}
+else
+{
+    <section class="card top-gap portal-messages-list">
+        @foreach (var row in Model.Rows)
+        {
+            <a class="portal-messages-list__row@(row.UnreadCount > 0 ? " is-unread" : string.Empty)"
+               asp-page="/Messages/Thread"
+               asp-route-conversationId="@row.ConversationId">
+                <span class="portal-messages-list__avatar" aria-hidden="true">
+                    @(string.IsNullOrWhiteSpace(row.DisplayTitle) ? "M" : row.DisplayTitle.Trim()[0].ToString().ToUpperInvariant())
+                </span>
+                <span class="portal-messages-list__copy">
+                    <span class="portal-messages-list__title">
+                        @row.DisplayTitle
+                        @if (row.UnreadCount > 0)
+                        {
+                            <span class="portal-messages-list__badge">@row.UnreadCount</span>
+                        }
+                    </span>
+                    <span class="portal-messages-list__preview">@(row.LastMessagePreview ?? L["No messages"].Value)</span>
+                    @if (row.LastMessageAt.HasValue)
+                    {
+                        <span class="portal-messages-list__meta">@row.LastMessageAt.Value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
+                    }
+                </span>
+            </a>
+        }
+    </section>
+}
