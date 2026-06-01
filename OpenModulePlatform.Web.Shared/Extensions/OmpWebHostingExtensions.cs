@@ -134,6 +134,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<OmpBrandingService>();
         builder.Services.AddScoped<RbacService>();
         builder.Services.AddScoped<NotificationService>();
+        builder.Services.AddScoped<MessageService>();
         builder.Services.AddScoped<BannerService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
 

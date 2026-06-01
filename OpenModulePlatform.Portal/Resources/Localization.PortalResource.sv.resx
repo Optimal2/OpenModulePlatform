@@ -2311,4 +2311,36 @@
   <data name="No active EArkivChecker alarms." xml:space="preserve"><value>Inga aktiva EArkivChecker-larm.</value></data>
   <data name="Access denied" xml:space="preserve"><value>Åtkomst nekad</value></data>
   <data name="Over limit" xml:space="preserve"><value>Över gräns</value></data>
+  <data name="Messages" xml:space="preserve"><value>Meddelanden</value></data>
+  <data name="Internal conversations between OMP users." xml:space="preserve"><value>Interna konversationer mellan OMP-användare.</value></data>
+  <data name="New conversation" xml:space="preserve"><value>Ny konversation</value></data>
+  <data name="New message" xml:space="preserve"><value>Nytt meddelande</value></data>
+  <data name="Start direct chat" xml:space="preserve"><value>Starta direktchatt</value></data>
+  <data name="New group chat" xml:space="preserve"><value>Ny gruppchatt</value></data>
+  <data name="Add participant" xml:space="preserve"><value>Lägg till deltagare</value></data>
+  <data name="Send" xml:space="preserve"><value>Skicka</value></data>
+  <data name="Attach file" xml:space="preserve"><value>Bifoga fil</value></data>
+  <data name="No conversations" xml:space="preserve"><value>Inga konversationer</value></data>
+  <data name="No messages" xml:space="preserve"><value>Inga meddelanden</value></data>
+  <data name="Messages require an OMP user" xml:space="preserve"><value>Meddelanden kräver en OMP-användare</value></data>
+  <data name="Conversation" xml:space="preserve"><value>Konversation</value></data>
+  <data name="Participants" xml:space="preserve"><value>Deltagare</value></data>
+  <data name="Direct messages" xml:space="preserve"><value>Direktmeddelanden</value></data>
+  <data name="Group chat" xml:space="preserve"><value>Gruppchatt</value></data>
+  <data name="Attachments" xml:space="preserve"><value>Bilagor</value></data>
+  <data name="Open conversation" xml:space="preserve"><value>Öppna konversation</value></data>
+  <data name="Select users" xml:space="preserve"><value>Välj användare</value></data>
+  <data name="Title" xml:space="preserve"><value>Titel</value></data>
+  <data name="Start" xml:space="preserve"><value>Starta</value></data>
+  <data name="Create group" xml:space="preserve"><value>Skapa grupp</value></data>
+  <data name="This conversation was not found." xml:space="preserve"><value>Konversationen hittades inte.</value></data>
+  <data name="You cannot access this conversation." xml:space="preserve"><value>Du har inte åtkomst till konversationen.</value></data>
+  <data name="Type a message" xml:space="preserve"><value>Skriv ett meddelande</value></data>
+  <data name="Files" xml:space="preserve"><value>Filer</value></data>
+  <data name="Download attachment" xml:space="preserve"><value>Ladda ner bilaga</value></data>
+  <data name="Image attachment" xml:space="preserve"><value>Bildbilaga</value></data>
+  <data name="Start a direct chat or create a group chat with OMP users." xml:space="preserve"><value>Starta en direktchatt eller skapa en gruppchatt med OMP-användare.</value></data>
+  <data name="Search users" xml:space="preserve"><value>Sök användare</value></data>
+  <data name="No users found." xml:space="preserve"><value>Inga användare hittades.</value></data>
+  <data name="Load older messages" xml:space="preserve"><value>Ladda äldre meddelanden</value></data>
 </root>
