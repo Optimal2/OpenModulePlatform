@@ -2203,6 +2203,163 @@ END
 GO
 
 -------------------------------------------------------------------------------
+-- Messages
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.conversations', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.conversations
+    (
+        conversation_id bigint IDENTITY(1,1) NOT NULL,
+        conversation_type nvarchar(40) NOT NULL,
+        title nvarchar(200) NULL,
+        created_by_user_id int NOT NULL,
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_conversations_created_at DEFAULT SYSUTCDATETIME(),
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_conversations_updated_at DEFAULT SYSUTCDATETIME(),
+        last_message_at datetime2(3) NULL,
+
+        CONSTRAINT PK_omp_conversations PRIMARY KEY(conversation_id),
+        CONSTRAINT FK_omp_conversations_created_by_user FOREIGN KEY(created_by_user_id) REFERENCES omp.users(user_id),
+        CONSTRAINT CK_omp_conversations_type CHECK(conversation_type IN (N'direct', N'group'))
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.messages', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.messages
+    (
+        message_id bigint IDENTITY(1,1) NOT NULL,
+        conversation_id bigint NOT NULL,
+        sender_user_id int NOT NULL,
+        content nvarchar(max) NULL,
+        message_type nvarchar(40) NOT NULL CONSTRAINT DF_omp_messages_message_type DEFAULT(N'text'),
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_messages_created_at DEFAULT SYSUTCDATETIME(),
+        edited_at datetime2(3) NULL,
+        deleted_at datetime2(3) NULL,
+
+        CONSTRAINT PK_omp_messages PRIMARY KEY(message_id),
+        CONSTRAINT FK_omp_messages_conversation FOREIGN KEY(conversation_id) REFERENCES omp.conversations(conversation_id) ON DELETE CASCADE,
+        CONSTRAINT FK_omp_messages_sender_user FOREIGN KEY(sender_user_id) REFERENCES omp.users(user_id),
+        CONSTRAINT CK_omp_messages_type CHECK(message_type IN (N'text', N'system'))
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.conversation_participants', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.conversation_participants
+    (
+        conversation_id bigint NOT NULL,
+        user_id int NOT NULL,
+        joined_at datetime2(3) NOT NULL CONSTRAINT DF_omp_conversation_participants_joined_at DEFAULT SYSUTCDATETIME(),
+        left_at datetime2(3) NULL,
+        last_read_message_id bigint NULL,
+
+        CONSTRAINT PK_omp_conversation_participants PRIMARY KEY(conversation_id, user_id),
+        CONSTRAINT FK_omp_conversation_participants_conversation FOREIGN KEY(conversation_id) REFERENCES omp.conversations(conversation_id) ON DELETE CASCADE,
+        CONSTRAINT FK_omp_conversation_participants_user FOREIGN KEY(user_id) REFERENCES omp.users(user_id)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.message_attachments', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.message_attachments
+    (
+        attachment_id bigint IDENTITY(1,1) NOT NULL,
+        message_id bigint NOT NULL,
+        file_name nvarchar(260) NOT NULL,
+        content_type nvarchar(128) NOT NULL,
+        file_size bigint NOT NULL,
+        storage_key nvarchar(120) NOT NULL,
+        data_value varbinary(max) NOT NULL,
+        uploaded_by_user_id int NOT NULL,
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_message_attachments_created_at DEFAULT SYSUTCDATETIME(),
+
+        CONSTRAINT PK_omp_message_attachments PRIMARY KEY(attachment_id),
+        CONSTRAINT FK_omp_message_attachments_message FOREIGN KEY(message_id) REFERENCES omp.messages(message_id) ON DELETE CASCADE,
+        CONSTRAINT FK_omp_message_attachments_uploaded_by_user FOREIGN KEY(uploaded_by_user_id) REFERENCES omp.users(user_id),
+        CONSTRAINT UQ_omp_message_attachments_storage_key UNIQUE(storage_key),
+        CONSTRAINT CK_omp_message_attachments_file_size CHECK(file_size >= 0)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.direct_conversations', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.direct_conversations
+    (
+        user_low_id int NOT NULL,
+        user_high_id int NOT NULL,
+        conversation_id bigint NOT NULL,
+
+        CONSTRAINT PK_omp_direct_conversations PRIMARY KEY(user_low_id, user_high_id),
+        CONSTRAINT FK_omp_direct_conversations_low_user FOREIGN KEY(user_low_id) REFERENCES omp.users(user_id),
+        CONSTRAINT FK_omp_direct_conversations_high_user FOREIGN KEY(user_high_id) REFERENCES omp.users(user_id),
+        CONSTRAINT FK_omp_direct_conversations_conversation FOREIGN KEY(conversation_id) REFERENCES omp.conversations(conversation_id) ON DELETE CASCADE,
+        CONSTRAINT UQ_omp_direct_conversations_conversation UNIQUE(conversation_id),
+        CONSTRAINT CK_omp_direct_conversations_order CHECK(user_low_id < user_high_id)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_conversation_participants_user'
+      AND object_id = OBJECT_ID(N'omp.conversation_participants')
+)
+BEGIN
+    CREATE INDEX IX_omp_conversation_participants_user
+        ON omp.conversation_participants(user_id, left_at, conversation_id)
+        INCLUDE(last_read_message_id);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_messages_conversation_message'
+      AND object_id = OBJECT_ID(N'omp.messages')
+)
+BEGIN
+    CREATE INDEX IX_omp_messages_conversation_message
+        ON omp.messages(conversation_id, message_id DESC)
+        INCLUDE(sender_user_id, message_type, created_at, deleted_at);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_conversations_last_message'
+      AND object_id = OBJECT_ID(N'omp.conversations')
+)
+BEGIN
+    CREATE INDEX IX_omp_conversations_last_message
+        ON omp.conversations(last_message_at DESC, updated_at DESC)
+        INCLUDE(conversation_type, title);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_message_attachments_message'
+      AND object_id = OBJECT_ID(N'omp.message_attachments')
+)
+BEGIN
+    CREATE INDEX IX_omp_message_attachments_message
+        ON omp.message_attachments(message_id)
+        INCLUDE(file_name, content_type, file_size, storage_key, uploaded_by_user_id, created_at);
+END
+GO
+
+-------------------------------------------------------------------------------
 -- Authentication providers
 -------------------------------------------------------------------------------
 IF OBJECT_ID(N'omp.auth_providers', N'U') IS NULL

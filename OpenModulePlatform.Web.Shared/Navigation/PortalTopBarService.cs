@@ -33,6 +33,7 @@ public sealed class PortalTopBarService
     private readonly IOptions<OmpAuthOptions> _authOptions;
     private readonly OmpBrandingService _brandingService;
     private readonly NotificationService _notifications;
+    private readonly MessageService _messages;
     private readonly BannerService _banners;
     private readonly ILogger<PortalTopBarService> _log;
 
@@ -43,6 +44,7 @@ public sealed class PortalTopBarService
         IOptions<OmpAuthOptions> authOptions,
         OmpBrandingService brandingService,
         NotificationService notifications,
+        MessageService messages,
         BannerService banners,
         ILogger<PortalTopBarService> log)
     {
@@ -52,6 +54,7 @@ public sealed class PortalTopBarService
         _authOptions = authOptions;
         _brandingService = brandingService;
         _notifications = notifications;
+        _messages = messages;
         _banners = banners;
         _log = log;
     }
@@ -102,6 +105,7 @@ public sealed class PortalTopBarService
             IReadOnlyList<PortalTopBarNotification> notifications = [];
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
+            var unreadMessageCount = 0;
             if (user.Identity?.IsAuthenticated == true)
             {
                 banners = await _banners.GetActiveForRolesAsync(GetBannerRoleIds(roleContext), 3, ct);
@@ -113,6 +117,7 @@ public sealed class PortalTopBarService
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
+                unreadMessageCount = await _messages.GetUnreadConversationCountAsync(resolvedUserId, ct);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -138,6 +143,9 @@ public sealed class PortalTopBarService
                 notificationMarkAllReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkAllReadPath),
                 notificationRecentUrl: BuildRequestEndpointHref(request, NotificationService.RecentPath),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
+                canUseMessages: userId.HasValue,
+                unreadMessageCount,
+                messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
                 dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl(),
@@ -300,6 +308,7 @@ public sealed class PortalTopBarService
             IReadOnlyList<PortalTopBarNotification> notifications = [];
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
+            var unreadMessageCount = 0;
             if (user.Identity?.IsAuthenticated == true)
             {
                 banners = await _banners.GetActiveForRolesAsync(GetBannerRoleIds(roleContext), 3, ct);
@@ -311,6 +320,7 @@ public sealed class PortalTopBarService
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
+                unreadMessageCount = await _messages.GetUnreadConversationCountAsync(resolvedUserId, ct);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -336,6 +346,9 @@ public sealed class PortalTopBarService
                 notificationMarkAllReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkAllReadPath),
                 notificationRecentUrl: BuildUriEndpointHref(currentUri, NotificationService.RecentPath),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
+                canUseMessages: userId.HasValue,
+                unreadMessageCount,
+                messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
                 dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl(),
@@ -388,6 +401,9 @@ public sealed class PortalTopBarService
             notificationMarkAllReadUrl: NotificationService.MarkAllReadPath,
             notificationRecentUrl: NotificationService.RecentPath,
             notificationsUrl: "/notifications",
+            canUseMessages: false,
+            unreadMessageCount: 0,
+            messagesUrl: "/messages",
             dropdownsOpenOnHover: true,
             options,
             logoutUrl,
@@ -420,6 +436,9 @@ public sealed class PortalTopBarService
         string notificationMarkAllReadUrl,
         string notificationRecentUrl,
         string notificationsUrl,
+        bool canUseMessages,
+        int unreadMessageCount,
+        string messagesUrl,
         bool dropdownsOpenOnHover,
         WebAppOptions options,
         string logoutUrl,
@@ -446,6 +465,9 @@ public sealed class PortalTopBarService
             NotificationMarkAllReadUrl = notificationMarkAllReadUrl,
             NotificationRecentUrl = notificationRecentUrl,
             NotificationsUrl = notificationsUrl,
+            CanUseMessages = canUseMessages,
+            UnreadMessageCount = unreadMessageCount,
+            MessagesUrl = messagesUrl,
             Links = [portalLink, .. moduleLinks],
             IsPortalAdmin = isPortalAdmin,
             PortalAdminSections = portalAdminSections,
@@ -468,6 +490,7 @@ public sealed class PortalTopBarService
             NavigationFilterPlaceholderTextKey = "Search modules",
             NoFavoritesTextKey = "No favorites",
             NotificationsToggleTextKey = "Notifications",
+            MessagesToggleTextKey = "Messages",
             NoNotificationsTextKey = "No notifications",
             MarkAllNotificationsReadTextKey = "Mark all as read",
             ViewAllNotificationsTextKey = "View all notifications",
