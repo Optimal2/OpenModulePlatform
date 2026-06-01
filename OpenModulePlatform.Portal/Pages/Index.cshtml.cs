@@ -5,6 +5,7 @@ using OpenModulePlatform.Portal.Security;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -27,6 +28,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     private readonly PortalMusicPlayerService _musicPlayer;
     private readonly SharedRbacService _rbac;
     private readonly OmpAdminRepository _repo;
+    private readonly NotificationService _notifications;
 
     public IndexModel(
         IOptions<WebAppOptions> options,
@@ -36,7 +38,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         PortalBlankWidgetService blankWidget,
         PortalMusicPlayerService musicPlayer,
         SharedRbacService rbac,
-        OmpAdminRepository repo)
+        OmpAdminRepository repo,
+        NotificationService notifications)
         : base(options)
     {
         _dashboard = dashboard;
@@ -46,6 +49,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         _musicPlayer = musicPlayer;
         _rbac = rbac;
         _repo = repo;
+        _notifications = notifications;
     }
 
     public IReadOnlyList<DashboardActiveWidget> ActiveWidgets { get; private set; } = [];
@@ -73,6 +77,12 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     public IReadOnlyList<DashboardNavbarSection> DashboardNavbarSections { get; private set; } = [];
 
     public IReadOnlyList<DashboardContentPageLink> ContentPages { get; private set; } = [];
+
+    public IReadOnlyList<PortalTopBarNotification> DashboardNotifications { get; private set; } = [];
+
+    public string NotificationRecentUrl { get; private set; } = NotificationService.RecentPath;
+
+    public string NotificationMarkReadUrl { get; private set; } = NotificationService.MarkReadPath;
 
     public DashboardLogSearchWidget LogSearchWidget { get; private set; } = new("/logsearch", []);
 
@@ -391,6 +401,9 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId.Value, permissions, includeHidden: false, ct);
             FavoritePortalEntries = await _portalEntries.GetNavigationFavoriteEntriesAsync(Request, userId.Value, permissions, ct);
             ContentPages = await _dashboard.GetReadableContentPagesAsync(Request, roleIds, permissions, ct);
+            DashboardNotifications = await _notifications.GetRecentForUserAsync(userId.Value, 20, ct);
+            NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
+            NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
             LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
             EArkivCheckerWidget = await _moduleDashboard.GetEArkivCheckerWidgetAsync(Request, permissions, ct);
         }
@@ -402,6 +415,9 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             FavoritePortalEntries = [];
             DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
             ContentPages = [];
+            DashboardNotifications = [];
+            NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
+            NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
             LogSearchWidget = new DashboardLogSearchWidget("/logsearch", []);
             EArkivCheckerWidget = new DashboardEArkivCheckerWidget("/earkivchecker", 0, 0, null, []);
         }

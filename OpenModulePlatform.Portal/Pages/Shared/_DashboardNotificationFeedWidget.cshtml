@@ -1,0 +1,74 @@
+@using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Models
+@using OpenModulePlatform.Web.Shared.Navigation
+@model DashboardNotificationFeedWidget
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+<div class="dashboard-notification-feed"
+     data-dashboard-notification-feed
+     data-load-url="@Model.RecentUrl"
+     data-mark-read-url="@Model.MarkReadUrl"
+     data-page-size="20"
+     data-can-use-notifications="@Model.CanUseNotifications.ToString().ToLowerInvariant()">
+    @if (!Model.CanUseNotifications)
+    {
+        <div class="dashboard-notification-feed__empty" data-dashboard-notification-empty>
+            @L["Notifications require an OMP user"]
+        </div>
+    }
+    else
+    {
+        <div class="dashboard-notification-feed__list" data-dashboard-notification-list>
+            @foreach (var notification in Model.Notifications)
+            {
+                <form method="post"
+                      action="@Model.MarkReadUrl"
+                      class="dashboard-notification-feed__form@(notification.IsUnread ? " is-unread" : " is-read")"
+                      data-dashboard-notification-form
+                      data-notification-id="@notification.NotificationId"
+                      data-notification-created-at="@notification.CreatedAt.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture)">
+                    <input type="hidden" name="notificationId" value="@notification.NotificationId" />
+                    <button type="submit"
+                            class="dashboard-notification-feed__row dashboard-notification-feed__row--@notification.Level"
+                            data-destination-url="@(notification.DestinationUrl ?? string.Empty)">
+                        <span class="dashboard-notification-feed__icon" aria-hidden="true">
+                            @if (!string.IsNullOrWhiteSpace(notification.CallerIcon))
+                            {
+                                <img src="@notification.CallerIcon" alt="" />
+                            }
+                            else
+                            {
+                                <span>@NotificationCallerText(notification)</span>
+                            }
+                        </span>
+                        <span class="dashboard-notification-feed__copy">
+                            <span class="dashboard-notification-feed__title">@notification.Title</span>
+                            <span class="dashboard-notification-feed__content">@notification.Content</span>
+                            <span class="dashboard-notification-feed__meta">
+                                @notification.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
+                            </span>
+                        </span>
+                    </button>
+                </form>
+            }
+        </div>
+        <div class="dashboard-notification-feed__empty" data-dashboard-notification-empty hidden="@(Model.Notifications.Count > 0)">
+            @L["No notifications"]
+        </div>
+        <div class="dashboard-notification-feed__status" data-dashboard-notification-loading hidden>@L["Loading"]</div>
+        <div class="dashboard-notification-feed__status" data-dashboard-notification-end hidden>@L["No more notifications"]</div>
+    }
+</div>
+
+@functions {
+    private static string NotificationCallerText(PortalTopBarNotification notification)
+    {
+        var source = string.IsNullOrWhiteSpace(notification.CallerDisplayName)
+            ? notification.CallerKey
+            : notification.CallerDisplayName;
+        var trimmed = source?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed)
+            ? "!"
+            : trimmed[..1].ToUpperInvariant();
+    }
+}
