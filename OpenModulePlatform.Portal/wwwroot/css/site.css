@@ -3672,7 +3672,7 @@ a.dashboard-role-list__item:focus-visible {
 
 .portal-entry-layout-list {
     display: grid;
-    gap: 6px;
+    gap: 8px;
 }
 
 .portal-entry-create-row {
@@ -3683,16 +3683,36 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .portal-entry-layout-row {
+    position: relative;
     display: grid;
-    grid-template-columns: 28px minmax(84px, auto) minmax(180px, 1fr) minmax(160px, 0.8fr) auto;
+    grid-template-columns: 28px minmax(180px, 1fr) minmax(160px, 0.8fr) auto;
     align-items: center;
     gap: 10px;
     min-height: 54px;
-    padding: 8px 10px 8px calc(10px + (var(--portal-entry-depth, 0) * 28px));
+    margin-left: calc(var(--portal-entry-depth, 0) * 34px);
+    padding: 8px 10px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
-    transition: border-color 120ms ease, background-color 120ms ease, opacity 120ms ease;
+    transition: border-color 120ms ease, background-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+}
+
+.portal-entry-layout-row.is-child-entry::before {
+    content: "";
+    position: absolute;
+    left: -20px;
+    top: -9px;
+    width: 18px;
+    height: calc(50% + 9px);
+    border-left: 1px solid var(--border-strong);
+    border-bottom: 1px solid var(--border-strong);
+    border-bottom-left-radius: 8px;
+    pointer-events: none;
+}
+
+.portal-entry-layout-row.is-disabled {
+    opacity: 0.54;
+    background: var(--surface-muted);
 }
 
 .portal-entry-layout-row.is-dragging {
@@ -3702,6 +3722,27 @@ a.dashboard-role-list__item:focus-visible {
 .portal-entry-layout-row.is-drop-target {
     border-color: var(--link);
     background: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link) 18%, transparent);
+}
+
+.portal-entry-layout-row.is-drop-before::after,
+.portal-entry-layout-row.is-drop-after::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--link);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--link) 14%, transparent);
+}
+
+.portal-entry-layout-row.is-drop-before::after {
+    top: -6px;
+}
+
+.portal-entry-layout-row.is-drop-after::after {
+    bottom: -6px;
 }
 
 .portal-entry-layout-row__handle {
@@ -3710,14 +3751,6 @@ a.dashboard-role-list__item:focus-visible {
     font-weight: 700;
     letter-spacing: 0;
     user-select: none;
-}
-
-.portal-entry-layout-row__visible {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    white-space: nowrap;
 }
 
 .portal-entry-layout-row__main,
@@ -3732,6 +3765,7 @@ a.dashboard-role-list__item:focus-visible {
 
 .portal-entry-layout-row__actions {
     display: inline-flex;
+    align-items: center;
     justify-content: flex-end;
     gap: 6px;
     min-width: 0;
@@ -3749,6 +3783,32 @@ a.dashboard-role-list__item:focus-visible {
     padding: 6px 9px;
     border-radius: 9px;
     white-space: nowrap;
+}
+
+.portal-entry-layout-row__visibility-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.portal-entry-layout-row__visibility-toggle:hover,
+.portal-entry-layout-row__visibility-toggle:focus-within {
+    border-color: var(--link);
+    color: var(--link);
+}
+
+.portal-entry-layout-row__visibility-toggle input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
 }
 
 .portal-entry-inline-editor {
@@ -3780,13 +3840,13 @@ a.dashboard-role-list__item:focus-visible {
 
 @media (max-width: 980px) {
     .portal-entry-layout-row {
-        grid-template-columns: 28px minmax(84px, auto) minmax(180px, 1fr);
+        grid-template-columns: 28px minmax(180px, 1fr);
     }
 
     .portal-entry-layout-row__target,
     .portal-entry-layout-row__actions,
     .portal-entry-inline-editor {
-        grid-column: 3;
+        grid-column: 2;
     }
 
     .portal-entry-layout-row__actions {
@@ -3956,6 +4016,14 @@ a.dashboard-role-list__item:focus-visible {
 
 .admin-icon-button--delete {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/delete.svg");
+}
+
+.admin-icon-button--visible {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/visible.svg");
+}
+
+.admin-icon-button--visible-off {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/visible_off.svg");
 }
 
 .btn-link-danger.admin-icon-button {
