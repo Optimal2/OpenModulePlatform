@@ -267,10 +267,7 @@
 }
 
 .portal-topbar__icon--messages {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/chat.svg");
-    width: 15px;
-    height: 15px;
-    transform: translateY(-1px);
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/inbox.svg");
 }
 
 .portal-topbar__admin-menu,
