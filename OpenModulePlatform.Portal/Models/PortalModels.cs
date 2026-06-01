@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Portal/Models/PortalModels.cs
+using OpenModulePlatform.Web.Shared.Navigation;
+
 namespace OpenModulePlatform.Portal.Models;
 
 /// <summary>
@@ -117,6 +119,15 @@ public sealed record DashboardNavbarLink(string TextKey, string Href);
 /// Content pages rendered inside a dashboard widget.
 /// </summary>
 public sealed record DashboardContentPageWidgetList(IReadOnlyList<DashboardContentPageLink> Pages);
+
+/// <summary>
+/// Personal notifications rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardNotificationFeedWidget(
+    IReadOnlyList<PortalTopBarNotification> Notifications,
+    string RecentUrl,
+    string MarkReadUrl,
+    bool CanUseNotifications);
 
 /// <summary>
 /// One readable Content page destination for the dashboard.

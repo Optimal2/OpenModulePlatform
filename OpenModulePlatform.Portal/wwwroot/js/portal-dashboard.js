@@ -14,6 +14,7 @@
     const dashboardDraftTtlMs = 24 * 60 * 60 * 1000;
     const dashboardDraftWriteDelayMs = 600;
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
+    const notificationChangedEvent = 'omp:notification-state-changed';
     const sessionStatusWarningEvent = 'omp:session-status-warning';
     const musicObjectUrls = new Set();
     const blankImageObjectUrls = new Set();
@@ -39,6 +40,7 @@
             }
             bindDashboardMusicPlayers(root);
             bindEntryListFilters(root);
+            bindDashboardNotifications(root);
             return;
         }
 
@@ -193,6 +195,7 @@
                 bindEntryFavoriteToggles(root, element, token);
                 bindEntryListFilters(element);
                 bindDashboardMusicPlayers(element);
+                bindDashboardNotifications(element);
                 updateEmptyState(canvas);
                 updateCanvasHeight(root, canvas, state);
                 updateDirtyState();
@@ -219,6 +222,7 @@
         bindEntryFavoriteToggles(root, root, token);
         bindEntryListFilters(root);
         bindDashboardMusicPlayers(root);
+        bindDashboardNotifications(root);
         state.savedSnapshot = captureDashboardSnapshot(canvas, state);
         state.savedSignature = getDashboardSignature(canvas, state);
         updateDirtyState();
@@ -1047,6 +1051,275 @@
             row.dataset.entryKey,
             row.textContent
         ].join(' '));
+    }
+
+    function bindDashboardNotifications(scope) {
+        const feeds = [];
+        if (scope?.matches?.('[data-dashboard-notification-feed]')) {
+            feeds.push(scope);
+        }
+
+        scope?.querySelectorAll?.('[data-dashboard-notification-feed]').forEach((feed) => {
+            feeds.push(feed);
+        });
+
+        feeds.forEach(initDashboardNotificationFeed);
+    }
+
+    function initDashboardNotificationFeed(feed) {
+        if (!feed || feed.dataset.dashboardNotificationFeedBound === 'true') {
+            return;
+        }
+
+        feed.dataset.dashboardNotificationFeedBound = 'true';
+        bindDashboardNotificationForms(feed);
+        updateDashboardNotificationEmptyState(feed);
+
+        if (feed.dataset.canUseNotifications !== 'true') {
+            return;
+        }
+
+        feed.addEventListener('scroll', () => {
+            if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 80) {
+                loadMoreDashboardNotifications(feed);
+            }
+        });
+
+        const list = feed.querySelector('[data-dashboard-notification-list]');
+        if (list && !list.querySelector('[data-dashboard-notification-form]')) {
+            loadMoreDashboardNotifications(feed);
+        }
+    }
+
+    function bindDashboardNotificationForms(scope) {
+        scope.querySelectorAll('[data-dashboard-notification-form]').forEach((form) => {
+            if (form.dataset.dashboardNotificationFormBound === 'true') {
+                return;
+            }
+
+            form.dataset.dashboardNotificationFormBound = 'true';
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const root = form.closest('[data-dashboard-root]');
+                const token = root?.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
+                const notificationId = form.dataset.notificationId || form.querySelector('input[name="notificationId"]')?.value || '';
+                if (!root || !notificationId) {
+                    return;
+                }
+
+                try {
+                    const payload = await postForm(form.action, token, { notificationId });
+                    markDashboardNotificationRead(root, notificationId, payload?.unreadCount);
+                    const destinationUrl = payload?.destinationUrl || form.querySelector('[data-destination-url]')?.dataset.destinationUrl || '';
+                    if (destinationUrl) {
+                        window.location.href = destinationUrl;
+                    }
+                } catch (error) {
+                    handleDashboardSaveError(root, error);
+                }
+            });
+        });
+    }
+
+    function markDashboardNotificationRead(root, notificationId, unreadCount) {
+        setDashboardNotificationRowsRead(root, notificationId, false);
+
+        window.dispatchEvent(new CustomEvent(notificationChangedEvent, {
+            detail: {
+                source: 'dashboard',
+                notificationId: String(notificationId),
+                unreadCount: Number.isFinite(Number(unreadCount)) ? Number(unreadCount) : null
+            }
+        }));
+    }
+
+    function setDashboardNotificationRowsRead(root, notificationId, allRead) {
+        root.querySelectorAll('[data-dashboard-notification-form]').forEach((form) => {
+            if (!allRead && form.dataset.notificationId !== String(notificationId)) {
+                return;
+            }
+
+            form.classList.remove('is-unread');
+            form.classList.add('is-read');
+        });
+    }
+
+    function handleExternalNotificationChanged(event) {
+        const detail = event.detail || {};
+        const notificationId = String(detail.notificationId || '');
+        document.querySelectorAll('[data-dashboard-root]').forEach((root) => {
+            if (detail.allRead) {
+                setDashboardNotificationRowsRead(root, '', true);
+                return;
+            }
+
+            if (notificationId) {
+                setDashboardNotificationRowsRead(root, notificationId, false);
+            }
+        });
+    }
+
+    function getDashboardNotificationCursor(feed) {
+        const rows = feed.querySelectorAll('[data-dashboard-notification-form]');
+        if (rows.length === 0) {
+            return null;
+        }
+
+        const last = rows[rows.length - 1];
+        return {
+            beforeCreatedAt: last.dataset.notificationCreatedAt || '',
+            beforeNotificationId: last.dataset.notificationId || ''
+        };
+    }
+
+    async function loadMoreDashboardNotifications(feed) {
+        const list = feed.querySelector('[data-dashboard-notification-list]');
+        const loadUrl = feed.dataset.loadUrl || '';
+        if (!list || !loadUrl || feed.dataset.notificationLoading === 'true' || feed.dataset.notificationEnd === 'true') {
+            return;
+        }
+
+        const url = new URL(loadUrl, window.location.href);
+        url.searchParams.set('limit', feed.dataset.pageSize || '20');
+        const cursor = getDashboardNotificationCursor(feed);
+        if (cursor && cursor.beforeCreatedAt && cursor.beforeNotificationId) {
+            url.searchParams.set('beforeCreatedAt', cursor.beforeCreatedAt);
+            url.searchParams.set('beforeNotificationId', cursor.beforeNotificationId);
+        }
+
+        feed.dataset.notificationLoading = 'true';
+        setDashboardNotificationLazyState(feed, true, false);
+        try {
+            const response = await fetch(url.toString(), {
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (response.status === 401 || response.status === 403 || isDashboardLoginRedirect(response)) {
+                throw createDashboardRequestError('auth', `Notification list failed with status ${response.status}.`, response.status);
+            }
+
+            if (!response.ok) {
+                throw createDashboardRequestError('server', `Notification list failed with status ${response.status}.`, response.status);
+            }
+
+            const payload = await response.json();
+            const items = Array.isArray(payload?.items) ? payload.items : [];
+            items.forEach((item) => {
+                list.appendChild(createDashboardNotificationForm(feed, item));
+            });
+            bindDashboardNotificationForms(feed);
+            if (!payload?.hasMore || items.length === 0) {
+                feed.dataset.notificationEnd = 'true';
+            }
+            updateDashboardNotificationEmptyState(feed);
+            setDashboardNotificationLazyState(feed, false, feed.dataset.notificationEnd === 'true' && !!list.querySelector('[data-dashboard-notification-form]'));
+        } catch (error) {
+            const root = feed.closest('[data-dashboard-root]');
+            if (root) {
+                handleDashboardSaveError(root, error);
+            }
+            setDashboardNotificationLazyState(feed, false, false);
+        } finally {
+            feed.dataset.notificationLoading = 'false';
+        }
+    }
+
+    function createDashboardNotificationForm(feed, item) {
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = feed.dataset.markReadUrl || '/notifications/mark-read';
+        form.className = `dashboard-notification-feed__form ${item?.isUnread ? 'is-unread' : 'is-read'}`;
+        form.dataset.dashboardNotificationForm = '';
+        form.dataset.notificationId = String(item?.notificationId || '');
+        form.dataset.notificationCreatedAt = item?.createdAt || '';
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'notificationId';
+        input.value = String(item?.notificationId || '');
+        form.appendChild(input);
+
+        const button = document.createElement('button');
+        button.type = 'submit';
+        button.className = `dashboard-notification-feed__row dashboard-notification-feed__row--${notificationLevelClass(item?.level)}`;
+        button.dataset.destinationUrl = item?.destinationUrl || '';
+
+        const icon = document.createElement('span');
+        icon.className = 'dashboard-notification-feed__icon';
+        icon.setAttribute('aria-hidden', 'true');
+        if (item?.callerIcon) {
+            const image = document.createElement('img');
+            image.src = item.callerIcon;
+            image.alt = '';
+            icon.appendChild(image);
+        } else {
+            const fallback = document.createElement('span');
+            fallback.textContent = notificationCallerText(item);
+            icon.appendChild(fallback);
+        }
+
+        const copy = document.createElement('span');
+        copy.className = 'dashboard-notification-feed__copy';
+        const title = document.createElement('span');
+        title.className = 'dashboard-notification-feed__title';
+        title.textContent = item?.title || '';
+        const content = document.createElement('span');
+        content.className = 'dashboard-notification-feed__content';
+        content.textContent = item?.content || '';
+        const meta = document.createElement('span');
+        meta.className = 'dashboard-notification-feed__meta';
+        meta.textContent = formatNotificationTime(item?.createdAt);
+        copy.append(title, content, meta);
+        button.append(icon, copy);
+        form.appendChild(button);
+        return form;
+    }
+
+    function notificationCallerText(item) {
+        const source = String(item?.callerDisplayName || item?.callerKey || '').trim();
+        return source ? source[0].toUpperCase() : '!';
+    }
+
+    function notificationLevelClass(level) {
+        const normalized = String(level || 'info').toLowerCase();
+        return /^(info|success|warning|error)$/.test(normalized) ? normalized : 'info';
+    }
+
+    function formatNotificationTime(value) {
+        if (!value) {
+            return '';
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+
+        return date.toLocaleString();
+    }
+
+    function setDashboardNotificationLazyState(feed, loading, ended) {
+        const loadingEl = feed.querySelector('[data-dashboard-notification-loading]');
+        const endEl = feed.querySelector('[data-dashboard-notification-end]');
+        if (loadingEl) {
+            loadingEl.hidden = !loading;
+        }
+
+        if (endEl) {
+            endEl.hidden = !ended;
+        }
+    }
+
+    function updateDashboardNotificationEmptyState(feed) {
+        const empty = feed.querySelector('[data-dashboard-notification-empty]');
+        const list = feed.querySelector('[data-dashboard-notification-list]');
+        if (empty && list) {
+            empty.hidden = !!list.querySelector('[data-dashboard-notification-form]');
+        }
     }
 
     function bindDashboardMusicPlayers(scope) {
@@ -2872,6 +3145,7 @@
             bindEntryFavoriteToggles(root, widget, token);
             bindEntryListFilters(widget);
             bindDashboardMusicPlayers(widget);
+            bindDashboardNotifications(widget);
         });
 
         state.nextTemporaryWidgetId = nextTemporaryId;
@@ -3710,6 +3984,7 @@
     }
 
     window.addEventListener(favoriteChangedEvent, handleExternalFavoriteChanged);
+    window.addEventListener(notificationChangedEvent, handleExternalNotificationChanged);
     window.addEventListener('beforeunload', () => {
         musicObjectUrls.forEach((url) => URL.revokeObjectURL(url));
         musicObjectUrls.clear();

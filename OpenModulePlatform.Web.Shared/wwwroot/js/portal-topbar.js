@@ -9,6 +9,7 @@
     var globalHandlersRegistered = false;
     var rebalanceFrameRequested = false;
     var FAVORITE_CHANGED_EVENT = 'omp:navigation-favorite-changed';
+    var NOTIFICATION_CHANGED_EVENT = 'omp:notification-state-changed';
     var SESSION_STATUS_WARNING_EVENT = 'omp:session-status-warning';
     var sessionStatusState = {
         root: null,
@@ -655,6 +656,17 @@
         }
     }
 
+    function emitNotificationChanged(notificationId, unreadCount, allRead) {
+        window.dispatchEvent(new CustomEvent(NOTIFICATION_CHANGED_EVENT, {
+            detail: {
+                source: 'topbar',
+                notificationId: notificationId ? String(notificationId) : '',
+                unreadCount: Number.isFinite(Number(unreadCount)) ? Number(unreadCount) : null,
+                allRead: !!allRead
+            }
+        }));
+    }
+
     function notificationCallerText(item) {
         var source = item && (item.callerDisplayName || item.callerKey);
         return source ? String(source).trim().charAt(0).toUpperCase() : '!';
@@ -769,6 +781,7 @@
                     markNotificationRowRead(form);
                     updateNotificationBadge(root, payload.unreadCount);
                     updateNotificationEmptyState(root);
+                    emitNotificationChanged(form.dataset.notificationId, payload.unreadCount, false);
 
                     if (payload.destinationUrl) {
                         window.location.href = payload.destinationUrl;
@@ -833,6 +846,7 @@
 
                     updateNotificationBadge(root, payload.unreadCount);
                     updateNotificationEmptyState(root);
+                    emitNotificationChanged('', payload.unreadCount, true);
                 })
                 .catch(function (error) {
                     if (window.console && typeof window.console.warn === 'function') {
@@ -948,6 +962,28 @@
             if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 48) {
                 loadMoreNotifications(list);
             }
+        });
+    }
+
+    function handleExternalNotificationChanged(event) {
+        var detail = event.detail || {};
+        var notificationId = String(detail.notificationId || '');
+        initializedTopbars.forEach(function (root) {
+            if (detail.allRead) {
+                root.querySelectorAll('[data-portal-topbar-notification-form]').forEach(markNotificationRowRead);
+            } else if (notificationId) {
+                root.querySelectorAll('[data-portal-topbar-notification-form]').forEach(function (form) {
+                    if (form.dataset.notificationId === notificationId) {
+                        markNotificationRowRead(form);
+                    }
+                });
+            }
+
+            if (Number.isFinite(Number(detail.unreadCount))) {
+                updateNotificationBadge(root, Number(detail.unreadCount));
+            }
+
+            updateNotificationEmptyState(root);
         });
     }
 
@@ -1491,6 +1527,7 @@
         window.addEventListener('resize', rebalanceAll);
         window.addEventListener('load', rebalanceAll);
         window.addEventListener(FAVORITE_CHANGED_EVENT, handleExternalFavoriteChanged);
+        window.addEventListener(NOTIFICATION_CHANGED_EVENT, handleExternalNotificationChanged);
     }
 
     function initTopbarComponents(topbar) {

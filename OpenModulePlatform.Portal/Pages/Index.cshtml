@@ -180,6 +180,10 @@
                         {
                             <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
                         }
+                        else if (widget.Payload == "notification-feed")
+                        {
+                            <partial name="_DashboardNotificationFeedWidget" model="new DashboardNotificationFeedWidget(Model.DashboardNotifications, Model.NotificationRecentUrl, Model.NotificationMarkReadUrl, Model.CanEditDashboard)" />
+                        }
                         else if (widget.Payload == "log-search-recent-jobs")
                         {
                             <partial name="_DashboardLogSearchWidget" model="Model.LogSearchWidget" />
@@ -452,6 +456,10 @@
 
         <template data-dashboard-widget-template="content-pages">
             <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
+        </template>
+
+        <template data-dashboard-widget-template="notification-feed">
+            <partial name="_DashboardNotificationFeedWidget" model="new DashboardNotificationFeedWidget(Model.DashboardNotifications, Model.NotificationRecentUrl, Model.NotificationMarkReadUrl, Model.CanEditDashboard)" />
         </template>
 
         <template data-dashboard-widget-template="log-search-recent-jobs">

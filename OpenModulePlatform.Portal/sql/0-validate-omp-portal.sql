@@ -124,6 +124,7 @@ BEGIN
          AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'portal-navbar-links')
          AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'user-roles')
          AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'content-pages')
+         AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'notification-feed')
          AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'weekday-date')
          AND EXISTS (SELECT 1 FROM omp_portal.widgets WHERE widget_key = N'music-player')
         THEN 0 ELSE 1 END;

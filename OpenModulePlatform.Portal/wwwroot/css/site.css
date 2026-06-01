@@ -1555,7 +1555,8 @@ button {
 }
 
 .portal-dashboard:not(.is-editing) .dashboard-widget.is-titlebar-hidden .dashboard-widget__titlebar {
-    display: none;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .dashboard-widget__body {
@@ -1569,6 +1570,8 @@ button {
 .dashboard-entry-list::-webkit-scrollbar,
 .dashboard-entry-combo-list::-webkit-scrollbar,
 .dashboard-content-list::-webkit-scrollbar,
+.dashboard-notification-feed::-webkit-scrollbar,
+.dashboard-notification-feed__list::-webkit-scrollbar,
 .dashboard-widget__admin-overview::-webkit-scrollbar,
 .dashboard-navbar-list::-webkit-scrollbar,
 .dashboard-role-list::-webkit-scrollbar {
@@ -2139,6 +2142,120 @@ a.dashboard-role-list__item:focus-visible {
     padding: 12px;
     color: var(--text-muted);
     text-align: center;
+}
+
+.dashboard-notification-feed {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    padding: 4px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.dashboard-notification-feed__list {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-height: 0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.dashboard-notification-feed__form {
+    margin: 0;
+}
+
+.dashboard-notification-feed__row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    align-items: start;
+    width: 100%;
+    gap: 10px;
+    min-height: 68px;
+    padding: 9px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 10px;
+    background: var(--surface);
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.dashboard-notification-feed__form.is-unread .dashboard-notification-feed__row {
+    border-color: rgba(11, 87, 208, 0.28);
+    background: var(--accent);
+}
+
+.dashboard-notification-feed__form.is-read .dashboard-notification-feed__row {
+    opacity: 0.78;
+}
+
+.dashboard-notification-feed__row:hover,
+.dashboard-notification-feed__row:focus-visible {
+    border-color: var(--link);
+    outline: none;
+}
+
+.dashboard-notification-feed__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    overflow: hidden;
+    border-radius: 10px;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+
+.dashboard-notification-feed__icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.dashboard-notification-feed__copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.dashboard-notification-feed__title {
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.dashboard-notification-feed__content,
+.dashboard-notification-feed__meta {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.25;
+}
+
+.dashboard-notification-feed__content {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.dashboard-notification-feed__status,
+.dashboard-notification-feed__empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.dashboard-notification-feed__status[hidden],
+.dashboard-notification-feed__empty[hidden] {
+    display: none;
 }
 
 .dashboard-module-widget {
@@ -3776,11 +3893,23 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .portal-entry-layout-row__handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 34px;
     color: var(--text-muted);
     cursor: grab;
-    font-weight: 700;
-    letter-spacing: 0;
     user-select: none;
+}
+
+.portal-entry-layout-row__handle::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/drag.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/drag.svg") center / contain no-repeat;
 }
 
 .portal-entry-layout-row__main,
@@ -4058,6 +4187,10 @@ a.dashboard-role-list__item:focus-visible {
 
 .admin-icon-button--subdir-arrow {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/subdir-arrow.svg");
+}
+
+.admin-icon-button--drag {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/drag.svg");
 }
 
 .admin-icon-button--visible {
