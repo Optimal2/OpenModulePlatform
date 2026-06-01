@@ -115,7 +115,7 @@
 .portal-topbar__nav-dropdown,
 .portal-topbar__language,
 .portal-topbar__notifications,
-.portal-topbar__messages-link,
+.portal-topbar__messages,
 .portal-topbar__profile,
 .portal-topbar__overflow,
 .portal-topbar__collapsed {
@@ -127,7 +127,7 @@
 .portal-topbar__nav-dropdown,
 .portal-topbar__language,
 .portal-topbar__notifications,
-.portal-topbar__messages-link,
+.portal-topbar__messages,
 .portal-topbar__profile {
     padding-right: 6px;
     padding-bottom: 16px;
@@ -135,6 +135,11 @@
     margin-right: -6px;
     margin-bottom: -16px;
     margin-left: -6px;
+}
+
+.portal-topbar__messages {
+    display: inline-flex;
+    align-items: flex-start;
 }
 
 .portal-topbar__admin > summary,

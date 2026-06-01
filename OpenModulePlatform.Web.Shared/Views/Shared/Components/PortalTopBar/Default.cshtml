@@ -361,19 +361,21 @@
 
             @if (Model.CanUseMessages)
             {
-                <a class="portal-topbar__messages-link"
-                   href="@Model.MessagesUrl"
-                   title="@L[Model.MessagesToggleTextKey]"
-                   aria-label="@L[Model.MessagesToggleTextKey]"
-                   data-enhance-nav="false">
-                    <span class="portal-topbar__summary-icon">
-                        <span class="portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
-                        <span class="portal-topbar__message-badge" hidden="@(Model.UnreadMessageCount == 0)">
-                            @NotificationBadgeText(Model.UnreadMessageCount)
+                <span class="portal-topbar__messages">
+                    <a class="portal-topbar__messages-link"
+                       href="@Model.MessagesUrl"
+                       title="@L[Model.MessagesToggleTextKey]"
+                       aria-label="@L[Model.MessagesToggleTextKey]"
+                       data-enhance-nav="false">
+                        <span class="portal-topbar__summary-icon">
+                            <span class="portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
+                            <span class="portal-topbar__message-badge" hidden="@(Model.UnreadMessageCount == 0)">
+                                @NotificationBadgeText(Model.UnreadMessageCount)
+                            </span>
                         </span>
-                    </span>
-                    <span class="visually-hidden">@L[Model.MessagesToggleTextKey]</span>
-                </a>
+                        <span class="visually-hidden">@L[Model.MessagesToggleTextKey]</span>
+                    </a>
+                </span>
             }
 
             @if (!string.IsNullOrWhiteSpace(Model.CurrentUserName))
