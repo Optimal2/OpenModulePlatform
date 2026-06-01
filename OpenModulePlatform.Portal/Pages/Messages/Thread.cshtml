@@ -89,16 +89,18 @@ else
               class="portal-message-thread__composer"
               data-enhance="false">
             <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
-            <label>
-                <span>@L["Message"]</span>
-                <textarea asp-for="MessageContent" rows="3" placeholder="@L["Type a message"]"></textarea>
-                <span asp-validation-for="MessageContent" class="field-validation-error"></span>
-            </label>
+            <div class="portal-message-thread__composer-row">
+                <label>
+                    <span>@L["Message"]</span>
+                    <textarea asp-for="MessageContent" rows="1" placeholder="@L["Type a message"]"></textarea>
+                    <span asp-validation-for="MessageContent" class="field-validation-error"></span>
+                </label>
+                <button type="submit" class="btn btn-primary">@L["Send"]</button>
+            </div>
             <label>
                 <span>@L["Attach file"]</span>
                 <input asp-for="Attachments" type="file" multiple />
             </label>
-            <button type="submit" class="btn btn-primary">@L["Send"]</button>
         </form>
     </section>
 }
