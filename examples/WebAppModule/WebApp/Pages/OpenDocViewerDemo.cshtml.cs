@@ -22,9 +22,13 @@ public sealed class OpenDocViewerDemoModel : ExampleWebAppModulePageModel
 
     public string BundleJson { get; private set; } = "{}";
 
+    public string OpenDocViewerBaseUrl { get; private set; } = "/opendocviewer/";
+
     public string OpenDocViewerFrameUrl { get; private set; } = "/opendocviewer/";
 
     public string OpenDocViewerNewTabUrl { get; private set; } = "/opendocviewer/";
+
+    public string UserId { get; private set; } = "anonymous";
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -35,12 +39,14 @@ public sealed class OpenDocViewerDemoModel : ExampleWebAppModulePageModel
         }
 
         SetTitles("OpenDocViewer integration");
+        UserId = string.IsNullOrWhiteSpace(User.Identity?.Name) ? "anonymous" : User.Identity.Name!;
+        OpenDocViewerBaseUrl = NormalizeViewerBaseUrl(_openDocViewerOptions.BaseUrl);
 
         var bundle = OpenDocViewerExampleBundleFactory.BuildSampleBundle(
             Request,
             _openDocViewerOptions,
             "OpenModulePlatform.Web.ExampleWebAppModule",
-            User.Identity?.Name);
+            UserId);
 
         BundleJson = JsonSerializer.Serialize(bundle, OpenDocViewerExampleBundleFactory.JsonOptions);
 
@@ -54,5 +60,16 @@ public sealed class OpenDocViewerDemoModel : ExampleWebAppModulePageModel
         OpenDocViewerNewTabUrl = OpenDocViewerFrameUrl;
 
         return Page();
+    }
+
+    private static string NormalizeViewerBaseUrl(string? baseUrl)
+    {
+        var value = string.IsNullOrWhiteSpace(baseUrl)
+            ? "/opendocviewer/"
+            : baseUrl.Trim();
+
+        return value.Contains('?', StringComparison.Ordinal) || value.EndsWith("/", StringComparison.Ordinal)
+            ? value
+            : value + "/";
     }
 }
