@@ -134,21 +134,17 @@
                 var hasChildren = Model.Rows.Any(entry => entry.ParentEntryId == row.PortalEntryId);
                 var parentValue = parentEntryId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
                 var editorId = $"portal-entry-editor-{row.PortalEntryId}";
-                <div class="portal-entry-layout-row"
+                <div class="portal-entry-layout-row @(isEnabled ? string.Empty : "is-disabled") @(depth > 0 ? "is-child-entry" : string.Empty)"
                      style="--portal-entry-depth: @depth"
                      data-portal-entry-layout-row
                      data-entry-id="@row.PortalEntryId"
                      data-parent-id="@parentValue"
-                     data-has-children="@hasChildren.ToString().ToLowerInvariant()">
+                     data-has-children="@hasChildren.ToString().ToLowerInvariant()"
+                     data-depth="@depth">
                     <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].PortalEntryId" value="@row.PortalEntryId" />
                     <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].ParentEntryId" value="@parentValue" data-portal-entry-parent-input />
                     <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].SortOrder" value="@sortOrder" data-portal-entry-sort-input />
                     <span class="portal-entry-layout-row__handle" draggable="true" data-portal-entry-drag-handle aria-hidden="true">⋮⋮</span>
-                    <label class="portal-entry-layout-row__visible">
-                        <input form="portalEntryLayoutForm" type="checkbox" name="LayoutEntries[@layoutIndex].IsEnabled" value="true" checked="@isEnabled" />
-                        <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].IsEnabled" value="false" />
-                        <span>@L["Visible"]</span>
-                    </label>
                     <div class="portal-entry-layout-row__main">
                         <strong>@row.DisplayName</strong>
                         <div class="muted small-text">
@@ -177,6 +173,18 @@
                         }
                     </div>
                     <div class="portal-entry-layout-row__actions">
+                        <label class="portal-entry-layout-row__visibility-toggle admin-icon-button @(isEnabled ? "admin-icon-button--visible" : "admin-icon-button--visible-off")"
+                               title="@L["Visible"]"
+                               aria-label="@L["Visible"]">
+                            <input form="portalEntryLayoutForm"
+                                   type="checkbox"
+                                   name="LayoutEntries[@layoutIndex].IsEnabled"
+                                   value="true"
+                                   checked="@isEnabled"
+                                   data-portal-entry-visible-checkbox />
+                            <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].IsEnabled" value="false" />
+                            <span class="visually-hidden">@L["Visible"]</span>
+                        </label>
                         <button type="button" class="button secondary" data-portal-entry-clear-parent>@L["Make top-level"]</button>
                         <button type="button"
                                 class="action-link admin-icon-button admin-icon-button--edit"
@@ -331,21 +339,173 @@
             let draggedRow = null;
 
             const rows = () => Array.from(list.querySelectorAll("[data-portal-entry-layout-row]"));
+            const rowId = row => row?.dataset.entryId ?? "";
+            const parentId = row => row?.querySelector("[data-portal-entry-parent-input]")?.value ?? "";
+            const findRow = id => rows().find(row => rowId(row) === id) ?? null;
+            const isChecked = row => row?.querySelector("[data-portal-entry-visible-checkbox]")?.checked ?? false;
+
+            const isDescendantOf = (row, ancestorRow) => {
+                const ancestorId = rowId(ancestorRow);
+                let currentParentId = parentId(row);
+                const visited = new Set([rowId(row)]);
+
+                while (currentParentId) {
+                    if (currentParentId === ancestorId) {
+                        return true;
+                    }
+
+                    if (visited.has(currentParentId)) {
+                        return false;
+                    }
+
+                    visited.add(currentParentId);
+                    currentParentId = parentId(findRow(currentParentId));
+                }
+
+                return false;
+            };
+
+            const subtreeRows = row => rows().filter(candidate => candidate === row || isDescendantOf(candidate, row));
+            const lastSubtreeRow = row => {
+                const group = subtreeRows(row);
+                return group[group.length - 1] ?? row;
+            };
+
+            const depthFor = row => {
+                let depth = 0;
+                let currentParentId = parentId(row);
+                const visited = new Set([rowId(row)]);
+
+                while (currentParentId) {
+                    if (visited.has(currentParentId)) {
+                        break;
+                    }
+
+                    visited.add(currentParentId);
+                    const parentRow = findRow(currentParentId);
+                    if (!parentRow) {
+                        break;
+                    }
+
+                    depth++;
+                    currentParentId = parentId(parentRow);
+                }
+
+                return Math.min(depth, 3);
+            };
+
+            const applyVisibilityFromAncestors = () => {
+                rows().forEach(row => {
+                    const checkbox = row.querySelector("[data-portal-entry-visible-checkbox]");
+                    if (!checkbox) {
+                        return;
+                    }
+
+                    let currentParentId = parentId(row);
+                    const visited = new Set([rowId(row)]);
+                    while (currentParentId) {
+                        if (visited.has(currentParentId)) {
+                            break;
+                        }
+
+                        visited.add(currentParentId);
+                        const parentRow = findRow(currentParentId);
+                        if (!parentRow) {
+                            break;
+                        }
+
+                        if (!isChecked(parentRow)) {
+                            checkbox.checked = false;
+                            break;
+                        }
+
+                        currentParentId = parentId(parentRow);
+                    }
+                });
+            };
+
             const syncRows = () => {
-                rows().forEach((row, index) => {
-                    const parentInput = row.querySelector("[data-portal-entry-parent-input]");
+                applyVisibilityFromAncestors();
+
+                const siblingIndexes = new Map();
+                rows().forEach(row => {
+                    const parent = parentId(row);
                     const sortInput = row.querySelector("[data-portal-entry-sort-input]");
-                    const parentId = parentInput?.value ?? "";
-                    row.dataset.parentId = parentId;
-                    row.style.setProperty("--portal-entry-depth", parentId ? "1" : "0");
+                    const depth = depthFor(row);
+                    const checkbox = row.querySelector("[data-portal-entry-visible-checkbox]");
+                    const visibilityToggle = row.querySelector(".portal-entry-layout-row__visibility-toggle");
+
+                    row.dataset.parentId = parent;
+                    row.dataset.depth = String(depth);
+                    row.dataset.hasChildren = rows().some(candidate => parentId(candidate) === rowId(row)) ? "true" : "false";
+                    row.style.setProperty("--portal-entry-depth", String(depth));
+                    row.classList.toggle("is-child-entry", depth > 0);
+                    row.classList.toggle("is-disabled", checkbox ? !checkbox.checked : false);
+                    visibilityToggle?.classList.toggle("admin-icon-button--visible", checkbox?.checked ?? false);
+                    visibilityToggle?.classList.toggle("admin-icon-button--visible-off", !(checkbox?.checked ?? false));
+
                     if (sortInput) {
-                        sortInput.value = String((index + 1) * 10);
+                        const nextIndex = (siblingIndexes.get(parent) ?? 0) + 1;
+                        siblingIndexes.set(parent, nextIndex);
+                        sortInput.value = String(nextIndex * 10);
                     }
                 });
             };
 
             const clearDropState = () => {
-                rows().forEach(row => row.classList.remove("is-drop-target", "is-dragging"));
+                rows().forEach(row => row.classList.remove("is-drop-target", "is-drop-before", "is-drop-after", "is-dragging"));
+            };
+
+            const dropMode = (event, targetRow) => {
+                const rect = targetRow.getBoundingClientRect();
+                const edgeZone = Math.min(18, Math.max(10, rect.height * 0.28));
+
+                if (event.clientY < rect.top + edgeZone) {
+                    return "before";
+                }
+
+                if (event.clientY > rect.bottom - edgeZone) {
+                    return "after";
+                }
+
+                return "child";
+            };
+
+            const canDrop = (targetRow, mode) => {
+                if (!draggedRow || !targetRow || targetRow === draggedRow) {
+                    return false;
+                }
+
+                if (subtreeRows(draggedRow).includes(targetRow)) {
+                    return false;
+                }
+
+                if (mode === "child") {
+                    return !parentId(targetRow) && !subtreeRows(draggedRow).some(row => row !== draggedRow);
+                }
+
+                return !parentId(targetRow) || !subtreeRows(draggedRow).some(row => row !== draggedRow);
+            };
+
+            const moveDraggedRows = (targetRow, mode) => {
+                const parentInput = draggedRow.querySelector("[data-portal-entry-parent-input]");
+                const newParentId = mode === "child"
+                    ? rowId(targetRow)
+                    : parentId(targetRow);
+
+                if (parentInput) {
+                    parentInput.value = newParentId;
+                }
+
+                const fragment = document.createDocumentFragment();
+                subtreeRows(draggedRow).forEach(row => fragment.appendChild(row));
+
+                if (mode === "before") {
+                    list.insertBefore(fragment, targetRow);
+                    return;
+                }
+
+                lastSubtreeRow(targetRow).after(fragment);
             };
 
             list.addEventListener("dragstart", event => {
@@ -366,40 +526,38 @@
 
             list.addEventListener("dragover", event => {
                 const targetRow = event.target.closest("[data-portal-entry-layout-row]");
-                if (!draggedRow || !targetRow || targetRow === draggedRow) {
+                if (!draggedRow || !targetRow) {
                     return;
                 }
 
-                if (targetRow.dataset.parentId || draggedRow.dataset.hasChildren === "true") {
+                const mode = dropMode(event, targetRow);
+                clearDropState();
+
+                if (!canDrop(targetRow, mode)) {
                     event.dataTransfer.dropEffect = "none";
                     return;
                 }
 
                 event.preventDefault();
-                clearDropState();
-                targetRow.classList.add("is-drop-target");
+                targetRow.classList.add(mode === "child" ? "is-drop-target" : `is-drop-${mode}`);
                 event.dataTransfer.dropEffect = "move";
             });
 
             list.addEventListener("drop", event => {
                 const targetRow = event.target.closest("[data-portal-entry-layout-row]");
-                if (!draggedRow || !targetRow || targetRow === draggedRow) {
+                if (!draggedRow || !targetRow) {
                     return;
                 }
 
-                if (targetRow.dataset.parentId || draggedRow.dataset.hasChildren === "true") {
+                const mode = dropMode(event, targetRow);
+                if (!canDrop(targetRow, mode)) {
                     clearDropState();
                     draggedRow = null;
                     return;
                 }
 
                 event.preventDefault();
-                const parentInput = draggedRow.querySelector("[data-portal-entry-parent-input]");
-                if (parentInput) {
-                    parentInput.value = targetRow.dataset.entryId ?? "";
-                }
-
-                targetRow.after(draggedRow);
+                moveDraggedRows(targetRow, mode);
                 syncRows();
                 clearDropState();
                 draggedRow = null;
@@ -449,6 +607,14 @@
                     parentInput.value = "";
                     syncRows();
                 }
+            });
+
+            list.addEventListener("change", event => {
+                if (!event.target.matches("[data-portal-entry-visible-checkbox]")) {
+                    return;
+                }
+
+                syncRows();
             });
 
             syncRows();
