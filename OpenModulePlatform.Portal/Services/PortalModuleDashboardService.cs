@@ -89,7 +89,7 @@ END;
 
 SELECT TOP (@count)
        SearchJobId,
-       SearchMode,
+       CAST(0 AS tinyint) AS SearchMode,
        PersonIdentifier,
        Status,
        RequestedUtc,
