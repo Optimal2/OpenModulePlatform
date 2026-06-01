@@ -1530,6 +1530,7 @@
   <data name="Child of" xml:space="preserve"><value>Child of</value></data>
   <data name="Top-level entry" xml:space="preserve"><value>Top-level entry</value></data>
   <data name="Make top-level" xml:space="preserve"><value>Make top-level</value></data>
+  <data name="Make child entry" xml:space="preserve"><value>Make child entry</value></data>
   <data name="Remove this Portal Entry?" xml:space="preserve"><value>Remove this Portal Entry?</value></data>
   <data name="Save topbar layout" xml:space="preserve"><value>Save topbar layout</value></data>
   <data name="Topbar layout saved." xml:space="preserve"><value>Topbar layout saved.</value></data>

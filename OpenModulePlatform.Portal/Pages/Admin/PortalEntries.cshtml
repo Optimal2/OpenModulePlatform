@@ -25,13 +25,13 @@
             <h3>@L["All modules"]</h3>
         </div>
         <button type="button"
-                class="portal-entry-add-button"
+                class="portal-entry-add-button admin-icon-button admin-icon-button--add"
                 data-portal-entry-create-toggle
                 aria-controls="portal-entry-create-row"
                 aria-expanded="@Model.OpenCreatePanel.ToString().ToLowerInvariant()"
                 title="@L["Add navigation entry"]"
                 aria-label="@L["Add navigation entry"]">
-            <span aria-hidden="true">+</span>
+            <span class="visually-hidden">@L["Add navigation entry"]</span>
         </button>
     </div>
 
@@ -144,6 +144,7 @@
                     <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].PortalEntryId" value="@row.PortalEntryId" />
                     <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].ParentEntryId" value="@parentValue" data-portal-entry-parent-input />
                     <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].SortOrder" value="@sortOrder" data-portal-entry-sort-input />
+                    <span class="portal-entry-layout-row__tree-line" aria-hidden="true"></span>
                     <span class="portal-entry-layout-row__handle" draggable="true" data-portal-entry-drag-handle aria-hidden="true">⋮⋮</span>
                     <div class="portal-entry-layout-row__main">
                         <strong>@row.DisplayName</strong>
@@ -185,7 +186,22 @@
                             <input form="portalEntryLayoutForm" type="hidden" name="LayoutEntries[@layoutIndex].IsEnabled" value="false" />
                             <span class="visually-hidden">@L["Visible"]</span>
                         </label>
-                        <button type="button" class="button secondary" data-portal-entry-clear-parent>@L["Make top-level"]</button>
+                        <button type="button"
+                                class="action-link admin-icon-button admin-icon-button--arrow-up"
+                                data-portal-entry-clear-parent
+                                disabled="@(!parentEntryId.HasValue)"
+                                title="@L["Make top-level"]"
+                                aria-label="@L["Make top-level"]">
+                            <span class="visually-hidden">@L["Make top-level"]</span>
+                        </button>
+                        <button type="button"
+                                class="action-link admin-icon-button admin-icon-button--subdir-arrow"
+                                data-portal-entry-make-child
+                                disabled="@parentEntryId.HasValue"
+                                title="@L["Make child entry"]"
+                                aria-label="@L["Make child entry"]">
+                            <span class="visually-hidden">@L["Make child entry"]</span>
+                        </button>
                         <button type="button"
                                 class="action-link admin-icon-button admin-icon-button--edit"
                                 data-portal-entry-editor-toggle
@@ -371,6 +387,18 @@
                 return group[group.length - 1] ?? row;
             };
 
+            const nearestPreviousTopRow = (row, currentRows = rows()) => {
+                const rowIndex = currentRows.indexOf(row);
+                for (let index = rowIndex - 1; index >= 0; index--) {
+                    const candidate = currentRows[index];
+                    if (!parentId(candidate)) {
+                        return candidate;
+                    }
+                }
+
+                return null;
+            };
+
             const depthFor = row => {
                 let depth = 0;
                 let currentParentId = parentId(row);
@@ -428,21 +456,38 @@
                 applyVisibilityFromAncestors();
 
                 const siblingIndexes = new Map();
-                rows().forEach(row => {
+                const currentRows = rows();
+                currentRows.forEach(row => {
                     const parent = parentId(row);
                     const sortInput = row.querySelector("[data-portal-entry-sort-input]");
                     const depth = depthFor(row);
                     const checkbox = row.querySelector("[data-portal-entry-visible-checkbox]");
                     const visibilityToggle = row.querySelector(".portal-entry-layout-row__visibility-toggle");
+                    const makeTopButton = row.querySelector("[data-portal-entry-clear-parent]");
+                    const makeChildButton = row.querySelector("[data-portal-entry-make-child]");
+                    const hasChildren = currentRows.some(candidate => parentId(candidate) === rowId(row));
+                    const siblings = parent
+                        ? currentRows.filter(candidate => parentId(candidate) === parent)
+                        : [];
+                    const hasNextSibling = parent && siblings[siblings.length - 1] !== row;
 
                     row.dataset.parentId = parent;
                     row.dataset.depth = String(depth);
-                    row.dataset.hasChildren = rows().some(candidate => parentId(candidate) === rowId(row)) ? "true" : "false";
+                    row.dataset.hasChildren = hasChildren ? "true" : "false";
                     row.style.setProperty("--portal-entry-depth", String(depth));
                     row.classList.toggle("is-child-entry", depth > 0);
+                    row.classList.toggle("is-tree-continuation", Boolean(hasNextSibling));
                     row.classList.toggle("is-disabled", checkbox ? !checkbox.checked : false);
                     visibilityToggle?.classList.toggle("admin-icon-button--visible", checkbox?.checked ?? false);
                     visibilityToggle?.classList.toggle("admin-icon-button--visible-off", !(checkbox?.checked ?? false));
+
+                    if (makeTopButton) {
+                        makeTopButton.disabled = !parent;
+                    }
+
+                    if (makeChildButton) {
+                        makeChildButton.disabled = Boolean(parent) || hasChildren || !nearestPreviousTopRow(row, currentRows);
+                    }
 
                     if (sortInput) {
                         const nextIndex = (siblingIndexes.get(parent) ?? 0) + 1;
@@ -597,15 +642,32 @@
                 }
 
                 const clearButton = event.target.closest("[data-portal-entry-clear-parent]");
-                if (!clearButton) {
+                if (clearButton) {
+                    const row = clearButton.closest("[data-portal-entry-layout-row]");
+                    const parentInput = row?.querySelector("[data-portal-entry-parent-input]");
+                    if (row && parentInput) {
+                        const parentRow = findRow(row.dataset.parentId);
+                        parentInput.value = "";
+                        if (parentRow) {
+                            lastSubtreeRow(parentRow).after(row);
+                        }
+
+                        syncRows();
+                    }
+
                     return;
                 }
 
-                const row = clearButton.closest("[data-portal-entry-layout-row]");
-                const parentInput = row?.querySelector("[data-portal-entry-parent-input]");
-                if (parentInput) {
-                    parentInput.value = "";
-                    syncRows();
+                const childButton = event.target.closest("[data-portal-entry-make-child]");
+                if (childButton) {
+                    const row = childButton.closest("[data-portal-entry-layout-row]");
+                    const parentInput = row?.querySelector("[data-portal-entry-parent-input]");
+                    const parentRow = row ? nearestPreviousTopRow(row) : null;
+                    if (row && parentInput && parentRow) {
+                        parentInput.value = parentRow.dataset.entryId ?? "";
+                        lastSubtreeRow(parentRow).after(row);
+                        syncRows();
+                    }
                 }
             });
 
