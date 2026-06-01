@@ -57,6 +57,24 @@
     color: var(--link-hover, #0842a1);
 }
 
+.odv-demo-file-input {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.odv-demo-local-file-summary {
+    padding: 10px 12px;
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 10px;
+    background: var(--surface-muted, #f8fafc);
+    color: var(--text-muted, #5b667a);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
 .odv-demo-frame-shell {
     border: 1px solid var(--border, #d7deea);
     border-radius: 16px;

@@ -1,5 +1,6 @@
 @page "/opendocviewer-demo"
 @model OpenModulePlatform.Web.ExampleWebAppModule.Pages.OpenDocViewerDemoModel
+@using System.Text.Json
 
 <div class="page-header">
     <div>
@@ -16,13 +17,29 @@
         <a class="action-link" href="@Model.OpenDocViewerNewTabUrl" target="_blank" rel="noopener">
             @L["Open ODV in new tab"]
         </a>
+        <button class="action-link" type="button" id="odv-local-file-button">
+            @L["Browse local files"]
+        </button>
+        <input
+            class="odv-demo-file-input"
+            id="odv-local-file-input"
+            type="file"
+            multiple
+            accept=".pdf,.tif,.tiff,.png,.jpg,.jpeg,.gif,.bmp,.webp,application/pdf,image/bmp,image/gif,image/jpeg,image/png,image/tiff,image/webp" />
         <span class="muted small-text">@L["The sample document is OpenDocViewer public/sample.pdf."]</span>
     </div>
+    <div class="odv-demo-local-file-summary" id="odv-local-file-summary" hidden></div>
     <script>
         window.ODV_BOOTSTRAP = @Html.Raw(Model.BundleJson);
+        window.ODV_DEMO_OPTIONS = {
+            viewerBaseUrl: @Html.Raw(JsonSerializer.Serialize(Model.OpenDocViewerBaseUrl)),
+            userId: @Html.Raw(JsonSerializer.Serialize(Model.UserId)),
+            unsupportedMessage: @Html.Raw(JsonSerializer.Serialize(L["No supported files were selected."].Value))
+        };
     </script>
     <div class="odv-demo-frame-shell">
         <iframe
+            id="odv-demo-frame"
             class="odv-demo-frame"
             src="@Model.OpenDocViewerFrameUrl"
             title="@L["OpenDocViewer sample document"]"
@@ -31,3 +48,161 @@
         </iframe>
     </div>
 </section>
+
+<script>
+    (function () {
+        const input = document.getElementById('odv-local-file-input');
+        const button = document.getElementById('odv-local-file-button');
+        const summary = document.getElementById('odv-local-file-summary');
+        const frame = document.getElementById('odv-demo-frame');
+        const options = window.ODV_DEMO_OPTIONS || {};
+        const supportedExtensions = new Set(['bmp', 'gif', 'jpg', 'pdf', 'png', 'tiff', 'webp']);
+        let objectUrls = [];
+
+        function cleanupObjectUrls() {
+            objectUrls.forEach((url) => URL.revokeObjectURL(url));
+            objectUrls = [];
+        }
+
+        function normalizeExtension(file) {
+            const name = String(file && file.name ? file.name : '');
+            const match = name.toLowerCase().match(/\.([a-z0-9]+)$/);
+            let ext = match ? match[1] : '';
+            if (!ext && file && file.type) {
+                const type = file.type.toLowerCase();
+                if (type.includes('pdf')) ext = 'pdf';
+                else if (type.includes('tif')) ext = 'tiff';
+                else if (type.includes('png')) ext = 'png';
+                else if (type.includes('jpeg') || type.includes('jpg')) ext = 'jpg';
+                else if (type.includes('gif')) ext = 'gif';
+                else if (type.includes('bmp')) ext = 'bmp';
+                else if (type.includes('webp')) ext = 'webp';
+            }
+
+            if (ext === 'jpeg') return 'jpg';
+            if (ext === 'tif') return 'tiff';
+            return ext;
+        }
+
+        function contentTypeFor(file, ext) {
+            if (file && file.type) return file.type;
+            switch (ext) {
+                case 'pdf': return 'application/pdf';
+                case 'jpg': return 'image/jpeg';
+                case 'png': return 'image/png';
+                case 'gif': return 'image/gif';
+                case 'bmp': return 'image/bmp';
+                case 'tiff': return 'image/tiff';
+                case 'webp': return 'image/webp';
+                default: return 'application/octet-stream';
+            }
+        }
+
+        function formatBytes(value) {
+            const bytes = Number(value) || 0;
+            if (bytes < 1024) return `${bytes} B`;
+            const units = ['KB', 'MB', 'GB'];
+            let size = bytes / 1024;
+            let unitIndex = 0;
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex += 1;
+            }
+
+            return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+        }
+
+        function safeIdPart(value) {
+            return String(value || 'file')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .substring(0, 48) || 'file';
+        }
+
+        function buildLocalBundle(files) {
+            const issuedAt = new Date().toISOString();
+            const sessionId = `omp-local-files:${Date.now()}`;
+
+            return {
+                session: {
+                    id: sessionId,
+                    userId: options.userId || 'anonymous',
+                    issuedAt
+                },
+                documents: files.map((file, index) => {
+                    const ext = normalizeExtension(file);
+                    const displayName = file.name || `local-file-${index + 1}.${ext || 'bin'}`;
+                    const url = URL.createObjectURL(file);
+                    objectUrls.push(url);
+
+                    return {
+                        documentId: `local-${index + 1}-${safeIdPart(displayName)}`,
+                        documentVersion: `${displayName}|${file.size || 0}|${file.lastModified || 0}`,
+                        files: [
+                            {
+                                id: `local-file-${index + 1}`,
+                                url,
+                                ext,
+                                displayName,
+                                contentType: contentTypeFor(file, ext),
+                                fileNumber: 1
+                            }
+                        ],
+                        meta: [
+                            { key: 'source', value: 'Local browser file', label: 'Source' },
+                            { key: 'fileName', value: displayName, label: 'File name' },
+                            { key: 'fileSize', value: String(file.size || 0), label: 'File size' }
+                        ],
+                        metadata: {
+                            source: 'Local browser file',
+                            fileName: displayName,
+                            fileSize: String(file.size || 0)
+                        }
+                    };
+                }),
+                integration: {
+                    source: 'OpenModulePlatform.Web.ExampleWebAppModule',
+                    mode: 'parent-local-files',
+                    sample: false
+                }
+            };
+        }
+
+        function buildViewerUrl() {
+            const baseUrl = new URL(options.viewerBaseUrl || '/opendocviewer/', window.location.href);
+            baseUrl.searchParams.set('localfiles', Date.now().toString());
+            return baseUrl.toString();
+        }
+
+        function showSummary(files) {
+            if (!summary) return;
+            summary.hidden = false;
+            summary.textContent = files
+                .map((file) => `${file.name || 'unnamed file'} (${formatBytes(file.size)})`)
+                .join(', ');
+        }
+
+        function openLocalFiles(fileList) {
+            const files = Array.from(fileList || []);
+            const supportedFiles = files.filter((file) => supportedExtensions.has(normalizeExtension(file)));
+            cleanupObjectUrls();
+
+            if (supportedFiles.length === 0) {
+                if (summary) {
+                    summary.hidden = false;
+                    summary.textContent = options.unsupportedMessage || 'No supported files were selected.';
+                }
+                return;
+            }
+
+            window.ODV_BOOTSTRAP = buildLocalBundle(supportedFiles);
+            showSummary(supportedFiles);
+            frame.src = buildViewerUrl();
+        }
+
+        button?.addEventListener('click', () => input?.click());
+        input?.addEventListener('change', () => openLocalFiles(input.files));
+        window.addEventListener('beforeunload', cleanupObjectUrls);
+    })();
+</script>

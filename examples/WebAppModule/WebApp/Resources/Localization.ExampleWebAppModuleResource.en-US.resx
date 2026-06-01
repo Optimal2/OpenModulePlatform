@@ -92,4 +92,20 @@
     <value>This banner was sent from ExampleModule to portal admins.</value>
   </data><data name="No admin role was found." xml:space="preserve">
     <value>No admin role was found.</value>
+  </data><data name="Example integration" xml:space="preserve">
+    <value>Example integration</value>
+  </data><data name="OpenDocViewer integration" xml:space="preserve">
+    <value>OpenDocViewer integration</value>
+  </data><data name="This page embeds OpenDocViewer by passing a session URL to a Portable Document Bundle endpoint in the hosting web application." xml:space="preserve">
+    <value>This page embeds OpenDocViewer by passing a session URL to a Portable Document Bundle endpoint in the hosting web application.</value>
+  </data><data name="Open ODV in new tab" xml:space="preserve">
+    <value>Open ODV in new tab</value>
+  </data><data name="Browse local files" xml:space="preserve">
+    <value>Browse local files</value>
+  </data><data name="The sample document is OpenDocViewer public/sample.pdf." xml:space="preserve">
+    <value>The sample document is OpenDocViewer public/sample.pdf.</value>
+  </data><data name="OpenDocViewer sample document" xml:space="preserve">
+    <value>OpenDocViewer sample document</value>
+  </data><data name="No supported files were selected." xml:space="preserve">
+    <value>No supported files were selected.</value>
   </data></root>

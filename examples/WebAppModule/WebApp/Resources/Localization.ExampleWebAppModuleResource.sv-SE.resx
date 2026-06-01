@@ -92,4 +92,20 @@
     <value>Den här bannern skickades från ExampleModule till portaladmins.</value>
   </data><data name="No admin role was found." xml:space="preserve">
     <value>Ingen admin-roll hittades.</value>
+  </data><data name="Example integration" xml:space="preserve">
+    <value>Exempelintegration</value>
+  </data><data name="OpenDocViewer integration" xml:space="preserve">
+    <value>OpenDocViewer-integration</value>
+  </data><data name="This page embeds OpenDocViewer by passing a session URL to a Portable Document Bundle endpoint in the hosting web application." xml:space="preserve">
+    <value>Den här sidan bäddar in OpenDocViewer genom att skicka en sessions-URL till en Portable Document Bundle-endpoint i webbappen.</value>
+  </data><data name="Open ODV in new tab" xml:space="preserve">
+    <value>Öppna ODV i ny flik</value>
+  </data><data name="Browse local files" xml:space="preserve">
+    <value>Bläddra efter lokala filer</value>
+  </data><data name="The sample document is OpenDocViewer public/sample.pdf." xml:space="preserve">
+    <value>Exempeldokumentet är OpenDocViewer public/sample.pdf.</value>
+  </data><data name="OpenDocViewer sample document" xml:space="preserve">
+    <value>OpenDocViewer exempeldokument</value>
+  </data><data name="No supported files were selected." xml:space="preserve">
+    <value>Inga filer med stöd i ODV valdes.</value>
   </data></root>
