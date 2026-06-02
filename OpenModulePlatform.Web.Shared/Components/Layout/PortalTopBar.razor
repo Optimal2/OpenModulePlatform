@@ -330,12 +330,8 @@
 
             @if (_portalTopBar.CanUseMessages)
             {
-                <span class="portal-topbar__messages">
-                    <a class="portal-topbar__messages-link"
-                       href="@_portalTopBar.MessagesUrl"
-                       title="@L[_portalTopBar.MessagesToggleTextKey]"
-                       aria-label="@L[_portalTopBar.MessagesToggleTextKey]"
-                       data-enhance-nav="false">
+                <details class="portal-topbar__messages" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                    <summary title="@L[_portalTopBar.MessagesToggleTextKey]" aria-label="@L[_portalTopBar.MessagesToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
                             <span class="portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
                             <span class="portal-topbar__message-badge" hidden="@(_portalTopBar.UnreadMessageCount == 0)">
@@ -343,8 +339,55 @@
                             </span>
                         </span>
                         <span class="visually-hidden">@L[_portalTopBar.MessagesToggleTextKey]</span>
-                    </a>
-                </span>
+                    </summary>
+                    <div class="portal-topbar__messages-menu">
+                        <div class="portal-topbar__messages-header">
+                            <span>@L[_portalTopBar.MessagesToggleTextKey]</span>
+                            <span class="portal-topbar__messages-header-actions">
+                                <a class="portal-topbar__messages-action" href="@_portalTopBar.MessagesUrl" data-enhance-nav="false">
+                                    @L[_portalTopBar.ViewAllMessagesTextKey]
+                                </a>
+                                <form method="post"
+                                      action="@_portalTopBar.MessageMarkAllReadUrl"
+                                      class="portal-topbar__messages-mark-all-form"
+                                      data-enhance="false"
+                                      hidden="@(_portalTopBar.UnreadMessageCount == 0)">
+                                    <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
+                                    <button type="submit" class="portal-topbar__messages-action">
+                                        @L[_portalTopBar.MarkAllMessagesReadTextKey]
+                                    </button>
+                                </form>
+                            </span>
+                        </div>
+                        <div class="portal-topbar__messages-list">
+                            @foreach (var conversation in _portalTopBar.MessageConversations)
+                            {
+                                <a class="portal-topbar__message-row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
+                                   href="@conversation.Href"
+                                   data-enhance-nav="false">
+                                    <span class="portal-topbar__message-copy">
+                                        <span class="portal-topbar__message-title">@conversation.DisplayTitle</span>
+                                        <span class="portal-topbar__message-preview">@(conversation.LastMessagePreview ?? L["No messages"].Value)</span>
+                                        @if (conversation.LastMessageAt is not null)
+                                        {
+                                            <span class="portal-topbar__message-meta">@MessageTimeText(conversation.LastMessageAt)</span>
+                                        }
+                                    </span>
+                                    <span class="portal-topbar__message-row-badge" hidden="@(conversation.UnreadCount == 0)">
+                                        @NotificationBadgeText(conversation.UnreadCount)
+                                    </span>
+                                </a>
+                            }
+                        </div>
+                        @if (_portalTopBar.MessageConversations.Count == 0)
+                        {
+                            <div class="portal-topbar__messages-empty">@L[_portalTopBar.NoMessagesTextKey]</div>
+                        }
+                        <a class="portal-topbar__messages-footer-link" href="@_portalTopBar.MessagesUrl" data-enhance-nav="false">
+                            @L[_portalTopBar.ViewAllMessagesTextKey]
+                        </a>
+                    </div>
+                </details>
             }
 
             @if (!string.IsNullOrWhiteSpace(_portalTopBar.CurrentUserName))
@@ -548,6 +591,21 @@
 
     private static string NotificationBadgeText(int count)
         => count > 99 ? "99+" : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private string CurrentReturnUrl()
+    {
+        if (Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
+        {
+            return $"{currentUri.AbsolutePath}{currentUri.Query}";
+        }
+
+        return "/";
+    }
+
+    private static string MessageTimeText(DateTime? value)
+        => value is null
+            ? string.Empty
+            : value.Value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
 
     private static string NotificationCallerText(PortalTopBarNotification notification)
     {

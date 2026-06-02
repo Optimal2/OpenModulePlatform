@@ -19,6 +19,10 @@
         => $"{group.SearchText} {group.Title} {group.Href.Trim('/')}";
     string NotificationBadgeText(int count)
         => count > 99 ? "99+" : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    string MessageTimeText(DateTime? value)
+        => value is null
+            ? string.Empty
+            : value.Value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
     string NotificationCallerText(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarNotification notification)
     {
         var source = string.IsNullOrWhiteSpace(notification.CallerDisplayName)
@@ -361,12 +365,8 @@
 
             @if (Model.CanUseMessages)
             {
-                <span class="portal-topbar__messages">
-                    <a class="portal-topbar__messages-link"
-                       href="@Model.MessagesUrl"
-                       title="@L[Model.MessagesToggleTextKey]"
-                       aria-label="@L[Model.MessagesToggleTextKey]"
-                       data-enhance-nav="false">
+                <details class="portal-topbar__messages" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                    <summary title="@L[Model.MessagesToggleTextKey]" aria-label="@L[Model.MessagesToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
                             <span class="portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
                             <span class="portal-topbar__message-badge" hidden="@(Model.UnreadMessageCount == 0)">
@@ -374,8 +374,55 @@
                             </span>
                         </span>
                         <span class="visually-hidden">@L[Model.MessagesToggleTextKey]</span>
-                    </a>
-                </span>
+                    </summary>
+                    <div class="portal-topbar__messages-menu">
+                        <div class="portal-topbar__messages-header">
+                            <span>@L[Model.MessagesToggleTextKey]</span>
+                            <span class="portal-topbar__messages-header-actions">
+                                <a class="portal-topbar__messages-action" href="@Model.MessagesUrl" data-enhance-nav="false">
+                                    @L[Model.ViewAllMessagesTextKey]
+                                </a>
+                                <form method="post"
+                                      action="@Model.MessageMarkAllReadUrl"
+                                      class="portal-topbar__messages-mark-all-form"
+                                      data-enhance="false"
+                                      hidden="@(Model.UnreadMessageCount == 0)">
+                                    <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                    <button type="submit" class="portal-topbar__messages-action">
+                                        @L[Model.MarkAllMessagesReadTextKey]
+                                    </button>
+                                </form>
+                            </span>
+                        </div>
+                        <div class="portal-topbar__messages-list">
+                            @foreach (var conversation in Model.MessageConversations)
+                            {
+                                <a class="portal-topbar__message-row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
+                                   href="@conversation.Href"
+                                   data-enhance-nav="false">
+                                    <span class="portal-topbar__message-copy">
+                                        <span class="portal-topbar__message-title">@conversation.DisplayTitle</span>
+                                        <span class="portal-topbar__message-preview">@(conversation.LastMessagePreview ?? L["No messages"].Value)</span>
+                                        @if (conversation.LastMessageAt is not null)
+                                        {
+                                            <span class="portal-topbar__message-meta">@MessageTimeText(conversation.LastMessageAt)</span>
+                                        }
+                                    </span>
+                                    <span class="portal-topbar__message-row-badge" hidden="@(conversation.UnreadCount == 0)">
+                                        @NotificationBadgeText(conversation.UnreadCount)
+                                    </span>
+                                </a>
+                            }
+                        </div>
+                        @if (Model.MessageConversations.Count == 0)
+                        {
+                            <div class="portal-topbar__messages-empty">@L[Model.NoMessagesTextKey]</div>
+                        }
+                        <a class="portal-topbar__messages-footer-link" href="@Model.MessagesUrl" data-enhance-nav="false">
+                            @L[Model.ViewAllMessagesTextKey]
+                        </a>
+                    </div>
+                </details>
             }
 
             @if (!string.IsNullOrWhiteSpace(Model.CurrentUserName))
