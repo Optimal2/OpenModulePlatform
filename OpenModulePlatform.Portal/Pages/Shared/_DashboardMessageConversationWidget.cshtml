@@ -1,0 +1,50 @@
+@using OpenModulePlatform.Portal.Localization
+@using OpenModulePlatform.Portal.Models
+@model DashboardMessageConversationWidget
+@inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
+
+<div class="dashboard-chat-list">
+    @if (Model.Conversations.Count == 0)
+    {
+        <div class="dashboard-chat-list__empty">
+            @L["No conversations"]
+        </div>
+    }
+    else
+    {
+        @foreach (var conversation in Model.Conversations)
+        {
+            <a class="dashboard-chat-list__row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
+               href="@conversation.Href"
+               data-enhance-nav="false">
+                <span class="dashboard-chat-list__avatar" aria-hidden="true">@ConversationInitial(conversation.DisplayTitle)</span>
+                <span class="dashboard-chat-list__copy">
+                    <span class="dashboard-chat-list__title">@conversation.DisplayTitle</span>
+                    <span class="dashboard-chat-list__preview">@(conversation.LastMessagePreview ?? L["No messages"].Value)</span>
+                    @if (conversation.LastMessageAt is DateTime lastMessageAt)
+                    {
+                        <span class="dashboard-chat-list__meta">
+                            @lastMessageAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
+                        </span>
+                    }
+                </span>
+                @if (conversation.UnreadCount > 0)
+                {
+                    <span class="dashboard-chat-list__badge" aria-label="@L["Unread messages"]">
+                        @(conversation.UnreadCount > 99 ? "99+" : conversation.UnreadCount.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    </span>
+                }
+            </a>
+        }
+    }
+</div>
+
+@functions {
+    private static string ConversationInitial(string title)
+    {
+        var trimmed = title.Trim();
+        return string.IsNullOrWhiteSpace(trimmed)
+            ? "?"
+            : trimmed[..1].ToUpperInvariant();
+    }
+}

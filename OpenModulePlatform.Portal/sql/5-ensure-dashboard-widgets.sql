@@ -574,6 +574,13 @@ USING
            N'omp_portal' AS module_key,
            N'OpenModulePlatform' AS author
     UNION ALL
+    SELECT N'message-conversations' AS widget_key,
+           N'Latest chats' AS title,
+           N'portal' AS widget_type,
+           N'message-conversations' AS payload,
+           N'omp_portal' AS module_key,
+           N'OpenModulePlatform' AS author
+    UNION ALL
     SELECT N'weekday-date' AS widget_key,
            N'Weekday and date' AS title,
            N'portal' AS widget_type,
@@ -599,6 +606,46 @@ WHEN MATCHED THEN
 WHEN NOT MATCHED THEN
     INSERT(widget_key, title, widget_type, payload, module_key, author, modified_at)
     VALUES(source.widget_key, source.title, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
+GO
+
+IF OBJECT_ID(N'omp.config_setting_definitions', N'U') IS NOT NULL
+   AND OBJECT_ID(N'omp.config_settings', N'U') IS NOT NULL
+BEGIN
+    MERGE omp.config_setting_definitions AS target
+    USING
+    (
+        VALUES
+            (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1))
+    ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+    ON target.ConfigCategory = source.ConfigCategory
+       AND target.ConfigSetting = source.ConfigSetting
+    WHEN MATCHED THEN
+        UPDATE SET Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+        VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.SortOrder, source.IsEnabled);
+
+    MERGE omp.config_settings AS target
+    USING
+    (
+        SELECT def.ConfigSettingId,
+               N'5242880' AS ConfigValue,
+               0 AS ConfigPriority
+        FROM omp.config_setting_definitions def
+        WHERE def.ConfigCategory = N'messages'
+          AND def.ConfigSetting = N'attachmentMaxBytes'
+    ) AS source(ConfigSettingId, ConfigValue, ConfigPriority)
+    ON target.ConfigSettingId = source.ConfigSettingId
+       AND target.ConfigUsr IS NULL
+       AND target.ConfigPermission IS NULL
+       AND target.ConfigRole IS NULL
+    WHEN NOT MATCHED THEN
+        INSERT(ConfigSettingId, ConfigValue, ConfigPriority)
+        VALUES(source.ConfigSettingId, source.ConfigValue, source.ConfigPriority);
+END
 GO
 
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.Admin')

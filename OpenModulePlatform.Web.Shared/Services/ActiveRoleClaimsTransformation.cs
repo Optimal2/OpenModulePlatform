@@ -32,19 +32,22 @@ public sealed class ActiveRoleClaimsTransformation : IClaimsTransformation
             return Task.FromResult(principal);
         }
 
-        var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
-        if (string.IsNullOrWhiteSpace(cookieValue))
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext is null)
         {
             return Task.FromResult(principal);
         }
 
-        if (!int.TryParse(cookieValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var roleId))
+        var cookieValue = httpContext.Request.Cookies[ActiveRoleCookie.CookieName];
+        if (string.IsNullOrWhiteSpace(cookieValue)
+            || !int.TryParse(cookieValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var roleId))
         {
-            return Task.FromResult(principal);
+            return Task.FromResult(RemoveActiveRoleClaims(principal));
         }
 
-        var existingClaim = principal.FindFirst(ActiveRoleCookie.ClaimType);
-        if (existingClaim is not null && string.Equals(existingClaim.Value, cookieValue, StringComparison.Ordinal))
+        var normalizedRoleId = roleId.ToString(CultureInfo.InvariantCulture);
+        var existingClaims = principal.FindAll(ActiveRoleCookie.ClaimType).ToArray();
+        if (existingClaims.Length == 1 && string.Equals(existingClaims[0].Value, normalizedRoleId, StringComparison.Ordinal))
         {
             return Task.FromResult(principal);
         }
@@ -57,9 +60,28 @@ public sealed class ActiveRoleClaimsTransformation : IClaimsTransformation
                 identity.RemoveClaim(claim);
             }
 
-            identity.AddClaim(new Claim(ActiveRoleCookie.ClaimType, roleId.ToString(CultureInfo.InvariantCulture)));
+            identity.AddClaim(new Claim(ActiveRoleCookie.ClaimType, normalizedRoleId));
         }
 
         return Task.FromResult(clone);
+    }
+
+    private static ClaimsPrincipal RemoveActiveRoleClaims(ClaimsPrincipal principal)
+    {
+        if (!principal.HasClaim(claim => claim.Type == ActiveRoleCookie.ClaimType))
+        {
+            return principal;
+        }
+
+        var clone = principal.Clone();
+        if (clone.Identity is ClaimsIdentity identity)
+        {
+            foreach (var claim in identity.FindAll(ActiveRoleCookie.ClaimType).ToArray())
+            {
+                identity.RemoveClaim(claim);
+            }
+        }
+
+        return clone;
     }
 }

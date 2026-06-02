@@ -130,6 +130,22 @@ public sealed record DashboardNotificationFeedWidget(
     bool CanUseNotifications);
 
 /// <summary>
+/// Recent personal message conversations rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardMessageConversationWidget(IReadOnlyList<DashboardMessageConversationLink> Conversations);
+
+/// <summary>
+/// One message conversation destination rendered inside a dashboard widget.
+/// </summary>
+public sealed record DashboardMessageConversationLink(
+    long ConversationId,
+    string DisplayTitle,
+    string? LastMessagePreview,
+    DateTime? LastMessageAt,
+    int UnreadCount,
+    string Href);
+
+/// <summary>
 /// One readable Content page destination for the dashboard.
 /// </summary>
 public sealed record DashboardContentPageLink(

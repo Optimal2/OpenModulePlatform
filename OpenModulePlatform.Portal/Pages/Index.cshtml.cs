@@ -29,6 +29,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     private readonly SharedRbacService _rbac;
     private readonly OmpAdminRepository _repo;
     private readonly NotificationService _notifications;
+    private readonly MessageService _messages;
 
     public IndexModel(
         IOptions<WebAppOptions> options,
@@ -39,7 +40,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         PortalMusicPlayerService musicPlayer,
         SharedRbacService rbac,
         OmpAdminRepository repo,
-        NotificationService notifications)
+        NotificationService notifications,
+        MessageService messages)
         : base(options)
     {
         _dashboard = dashboard;
@@ -50,6 +52,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         _rbac = rbac;
         _repo = repo;
         _notifications = notifications;
+        _messages = messages;
     }
 
     public IReadOnlyList<DashboardActiveWidget> ActiveWidgets { get; private set; } = [];
@@ -79,6 +82,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     public IReadOnlyList<DashboardContentPageLink> ContentPages { get; private set; } = [];
 
     public IReadOnlyList<PortalTopBarNotification> DashboardNotifications { get; private set; } = [];
+
+    public IReadOnlyList<DashboardMessageConversationLink> DashboardMessageConversations { get; private set; } = [];
 
     public string NotificationRecentUrl { get; private set; } = NotificationService.RecentPath;
 
@@ -402,6 +407,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             FavoritePortalEntries = await _portalEntries.GetNavigationFavoriteEntriesAsync(Request, userId.Value, permissions, ct);
             ContentPages = await _dashboard.GetReadableContentPagesAsync(Request, roleIds, permissions, ct);
             DashboardNotifications = await _notifications.GetRecentForUserAsync(userId.Value, 20, ct);
+            DashboardMessageConversations = await GetDashboardMessageConversationsAsync(userId.Value, ct);
             NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
             NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
             LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
@@ -416,11 +422,29 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
             ContentPages = [];
             DashboardNotifications = [];
+            DashboardMessageConversations = [];
             NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
             NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
             LogSearchWidget = new DashboardLogSearchWidget("/logsearch", []);
             EArkivCheckerWidget = new DashboardEArkivCheckerWidget("/earkivchecker", 0, 0, null, []);
         }
+    }
+
+    private async Task<IReadOnlyList<DashboardMessageConversationLink>> GetDashboardMessageConversationsAsync(
+        int userId,
+        CancellationToken ct)
+    {
+        var rows = await _messages.GetConversationsForUserAsync(userId, ct, limit: 20);
+        return rows
+            .Select(row => new DashboardMessageConversationLink(
+                row.ConversationId,
+                row.DisplayTitle,
+                row.LastMessagePreview,
+                row.LastMessageAt,
+                row.UnreadCount,
+                Url.Page("/Messages/Thread", new { conversationId = row.ConversationId })
+                    ?? $"/messages/{row.ConversationId.ToString(System.Globalization.CultureInfo.InvariantCulture)}"))
+            .ToArray();
     }
 
     private IReadOnlyList<DashboardNavbarSection> BuildDashboardNavbarSections(bool isPortalAdmin)

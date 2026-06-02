@@ -185,19 +185,20 @@ public sealed class RbacService
 
     private UserRoleOption? ResolveActiveRole(ClaimsPrincipal user, IReadOnlyList<UserRoleOption> roles)
     {
-        var claimValue = user.FindFirstValue(ActiveRoleCookie.ClaimType);
-        if (int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var claimRoleId) && roles.Any(x => x.RoleId == claimRoleId))
+        var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
+        if (int.TryParse(cookieValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cookieRoleId)
+            && roles.Any(x => x.RoleId == cookieRoleId))
         {
-            return roles.First(x => x.RoleId == claimRoleId);
+            return roles.First(x => x.RoleId == cookieRoleId);
         }
 
-        var cookieValue = _httpContextAccessor.HttpContext?.Request.Cookies[ActiveRoleCookie.CookieName];
-        if (!int.TryParse(cookieValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cookieRoleId))
+        var claimValue = user.FindFirstValue(ActiveRoleCookie.ClaimType);
+        if (!int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var claimRoleId))
         {
             return null;
         }
 
-        return roles.FirstOrDefault(x => x.RoleId == cookieRoleId);
+        return roles.FirstOrDefault(x => x.RoleId == claimRoleId);
     }
 
     private static UserRoleOption? ResolveAmbientDisplayRole(IReadOnlyList<UserRoleOption> ambientRoles)
