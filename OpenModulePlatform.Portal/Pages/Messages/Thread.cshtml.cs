@@ -39,6 +39,9 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
     [BindProperty]
     public List<IFormFile> Attachments { get; set; } = [];
 
+    [BindProperty]
+    public int? RestoreScrollTop { get; set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -74,7 +77,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         try
         {
             await _messages.SendMessageAsync(userId, conversationId, MessageContent, Attachments, ct);
-            return RedirectToPage("/Messages/Thread", new { conversationId });
+            return RedirectToPage("/Messages/Thread", new { conversationId, restoreScrollTop = RestoreScrollTop });
         }
         catch (UnauthorizedAccessException)
         {

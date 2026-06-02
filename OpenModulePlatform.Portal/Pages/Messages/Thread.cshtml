@@ -23,6 +23,8 @@
         var color = palette[Math.Abs(message.SenderUserId) % palette.Length];
         return $"--portal-message-sender-bg: {color.Background}; --portal-message-sender-border: {color.Border};";
     }
+
+    var restoreScrollTop = ViewContext.HttpContext.Request.Query["restoreScrollTop"].ToString();
 }
 
 @if (!Model.CanUseMessages)
@@ -65,7 +67,9 @@ else
         </aside>
 
         <section class="card portal-message-thread">
-            <div class="portal-message-thread__scroll">
+            <div class="portal-message-thread__scroll"
+                 data-message-thread-scroll
+                 data-restore-scroll-top="@restoreScrollTop">
                 <div asp-validation-summary="All" class="portal-message-thread__error-banner"></div>
 
                 @if (Model.HasMoreMessages && Model.Rows.Count > 0)
@@ -122,7 +126,9 @@ else
                   asp-page-handler="Send"
                   asp-route-conversationId="@Model.Conversation.ConversationId"
                   class="portal-message-thread__composer"
+                  data-message-thread-composer
                   data-enhance="false">
+                <input asp-for="RestoreScrollTop" type="hidden" data-message-thread-scroll-input />
                 <div class="portal-message-thread__composer-row">
                     <label class="portal-message-thread__message-field">
                         <span class="visually-hidden">@L["Message"]</span>
@@ -153,4 +159,34 @@ else
             </div>
         </aside>
     </section>
+}
+
+@section Scripts {
+    <script>
+        (() => {
+            const scrollContainer = document.querySelector('[data-message-thread-scroll]');
+            const form = document.querySelector('[data-message-thread-composer]');
+            const scrollInput = document.querySelector('[data-message-thread-scroll-input]');
+
+            if (!scrollContainer) {
+                return;
+            }
+
+            const restoreValue = Number.parseInt(scrollContainer.dataset.restoreScrollTop || '', 10);
+            if (Number.isFinite(restoreValue) && restoreValue >= 0) {
+                scrollContainer.scrollTop = restoreValue;
+            } else {
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            }
+
+            form?.addEventListener('submit', () => {
+                if (scrollInput) {
+                    const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.clientHeight - scrollContainer.scrollTop;
+                    scrollInput.value = distanceFromBottom <= 24
+                        ? ''
+                        : Math.round(scrollContainer.scrollTop).toString();
+                }
+            });
+        })();
+    </script>
 }
