@@ -648,6 +648,8 @@
   <data name="Attach file" xml:space="preserve"><value>Attach file</value></data>
   <data name="No conversations" xml:space="preserve"><value>No conversations</value></data>
   <data name="No messages" xml:space="preserve"><value>No messages</value></data>
+  <data name="Latest chats" xml:space="preserve"><value>Latest chats</value></data>
+  <data name="Unread messages" xml:space="preserve"><value>Unread messages</value></data>
   <data name="Messages require an OMP user" xml:space="preserve"><value>Messages require an OMP user</value></data>
   <data name="Conversation" xml:space="preserve"><value>Conversation</value></data>
   <data name="Participants" xml:space="preserve"><value>Participants</value></data>

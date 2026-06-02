@@ -14,7 +14,11 @@ public sealed class MessageService
 {
     private const int ActiveAccountStatus = 1;
     private const int MaxAttachmentCount = 5;
-    private const long MaxAttachmentBytes = 5 * 1024 * 1024;
+    private const long DefaultMaxAttachmentBytes = 5 * 1024 * 1024;
+    private const long MinConfiguredAttachmentBytes = 1024;
+    private const long MaxConfiguredAttachmentBytes = 100 * 1024 * 1024;
+    public const string ConfigurationCategory = "messages";
+    public const string AttachmentMaxBytesSetting = "attachmentMaxBytes";
     public const string MarkAllReadPath = "/messages/mark-all-read";
 
     private static readonly HashSet<string> AllowedAttachmentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -25,9 +29,12 @@ public sealed class MessageService
     };
 
     private readonly SqlConnectionFactory _db;
-    public MessageService(SqlConnectionFactory db)
+    private readonly OmpConfigurationService _configuration;
+
+    public MessageService(SqlConnectionFactory db, OmpConfigurationService configuration)
     {
         _db = db;
+        _configuration = configuration;
     }
 
     public static int? TryGetOmpUserId(ClaimsPrincipal user)
@@ -507,9 +514,10 @@ ORDER BY m.message_id DESC;";
             throw new InvalidOperationException($"A message can include at most {MaxAttachmentCount} attachments.");
         }
 
+        var maxAttachmentBytes = await GetMaxAttachmentBytesAsync(ct);
         foreach (var file in normalizedAttachments)
         {
-            ValidateAttachment(file);
+            ValidateAttachment(file, maxAttachmentBytes);
         }
 
         await using var conn = _db.Create();
@@ -950,16 +958,32 @@ ORDER BY attachment_id;";
         return rows;
     }
 
-    private static void ValidateAttachment(IFormFile file)
+    private async Task<long> GetMaxAttachmentBytesAsync(CancellationToken ct)
+    {
+        var value = await _configuration.GetGlobalStringAsync(
+            ConfigurationCategory,
+            AttachmentMaxBytesSetting,
+            ct);
+
+        if (!long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var configuredBytes))
+        {
+            return DefaultMaxAttachmentBytes;
+        }
+
+        return Math.Clamp(configuredBytes, MinConfiguredAttachmentBytes, MaxConfiguredAttachmentBytes);
+    }
+
+    private static void ValidateAttachment(IFormFile file, long maxAttachmentBytes)
     {
         if (file.Length <= 0)
         {
             return;
         }
 
-        if (file.Length > MaxAttachmentBytes)
+        if (file.Length > maxAttachmentBytes)
         {
-            throw new InvalidOperationException("Attachment file is too large.");
+            throw new InvalidOperationException(
+                $"Attachment file is too large. The current limit is {FormatByteSize(maxAttachmentBytes)}.");
         }
 
         var contentType = CleanOptional(file.ContentType, 128) ?? "application/octet-stream";
@@ -967,6 +991,14 @@ ORDER BY attachment_id;";
         {
             throw new InvalidOperationException("Attachment content type is not allowed.");
         }
+    }
+
+    private static string FormatByteSize(long bytes)
+    {
+        var megabytes = bytes / 1024d / 1024d;
+        return megabytes >= 1
+            ? $"{megabytes.ToString("0.#", CultureInfo.InvariantCulture)} MB"
+            : $"{Math.Max(1, bytes / 1024).ToString(CultureInfo.InvariantCulture)} KB";
     }
 
     private static string BuildConversationTitle(
