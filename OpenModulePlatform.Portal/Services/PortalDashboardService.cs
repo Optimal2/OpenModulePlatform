@@ -808,7 +808,7 @@ ORDER BY w.title,
         => definition.Payload switch
         {
             "admin-overview" => 768,
-            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" or "notification-feed" => 416,
+            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" or "notification-feed" or "message-conversations" => 416,
             "content-pages" => 416,
             "log-search-recent-jobs" or "earkiv-checker-alerts" => 416,
             "user-roles" => 384,
@@ -821,7 +821,7 @@ ORDER BY w.title,
         => definition.Payload switch
         {
             "admin-overview" => 384,
-            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" or "notification-feed" => 384,
+            "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" or "notification-feed" or "message-conversations" => 384,
             "content-pages" => 384,
             "log-search-recent-jobs" or "earkiv-checker-alerts" => 320,
             "user-roles" => 320,

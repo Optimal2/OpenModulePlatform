@@ -184,6 +184,10 @@
                         {
                             <partial name="_DashboardNotificationFeedWidget" model="new DashboardNotificationFeedWidget(Model.DashboardNotifications, Model.NotificationRecentUrl, Model.NotificationMarkReadUrl, Model.CanEditDashboard)" />
                         }
+                        else if (widget.Payload == "message-conversations")
+                        {
+                            <partial name="_DashboardMessageConversationWidget" model="new DashboardMessageConversationWidget(Model.DashboardMessageConversations)" />
+                        }
                         else if (widget.Payload == "log-search-recent-jobs")
                         {
                             <partial name="_DashboardLogSearchWidget" model="Model.LogSearchWidget" />
@@ -460,6 +464,10 @@
 
         <template data-dashboard-widget-template="notification-feed">
             <partial name="_DashboardNotificationFeedWidget" model="new DashboardNotificationFeedWidget(Model.DashboardNotifications, Model.NotificationRecentUrl, Model.NotificationMarkReadUrl, Model.CanEditDashboard)" />
+        </template>
+
+        <template data-dashboard-widget-template="message-conversations">
+            <partial name="_DashboardMessageConversationWidget" model="new DashboardMessageConversationWidget(Model.DashboardMessageConversations)" />
         </template>
 
         <template data-dashboard-widget-template="log-search-recent-jobs">
