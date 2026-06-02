@@ -372,6 +372,33 @@ public static class OmpWebHostingExtensions
             });
         }).RequireAuthorization();
 
+        app.MapPost(MessageService.MarkAllReadPath, async (
+            HttpContext context,
+            MessageService messageService,
+            CancellationToken ct) =>
+        {
+            var userId = MessageService.TryGetOmpUserId(context.User);
+            if (userId is null)
+            {
+                return Results.Forbid();
+            }
+
+            var returnUrl = "/";
+            if (context.Request.HasFormContentType)
+            {
+                var form = await context.Request.ReadFormAsync(ct);
+                var candidateReturnUrl = form["returnUrl"].ToString();
+                if (!string.IsNullOrWhiteSpace(candidateReturnUrl)
+                    && Uri.IsWellFormedUriString(candidateReturnUrl, UriKind.Relative))
+                {
+                    returnUrl = candidateReturnUrl;
+                }
+            }
+
+            await messageService.MarkAllConversationsReadAsync(userId.Value, ct);
+            return Results.Redirect(returnUrl);
+        }).RequireAuthorization();
+
         app.MapGet(NotificationService.RecentPath, async (
             HttpContext context,
             NotificationService notificationService,

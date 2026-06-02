@@ -18,6 +18,7 @@ public sealed class PortalTopBarModel
         NavigationGroups = Array.Empty<PortalTopBarNavigationGroup>(),
         FavoriteEntries = Array.Empty<PortalTopBarNavigationEntry>(),
         Notifications = Array.Empty<PortalTopBarNotification>(),
+        MessageConversations = Array.Empty<PortalTopBarMessageConversation>(),
         Banners = Array.Empty<PortalTopBarBanner>(),
         PortalAdminLinks = Array.Empty<PortalTopBarLink>(),
         PortalAdminSections = Array.Empty<PortalAdminMenuSection>(),
@@ -31,8 +32,11 @@ public sealed class PortalTopBarModel
         NotificationsToggleTextKey = "Notifications",
         MessagesToggleTextKey = "Messages",
         NoNotificationsTextKey = "No notifications",
+        NoMessagesTextKey = "No conversations",
         MarkAllNotificationsReadTextKey = "Mark all as read",
+        MarkAllMessagesReadTextKey = "Mark all as read",
         ViewAllNotificationsTextKey = "View all notifications",
+        ViewAllMessagesTextKey = "View all messages",
         AddFavoriteTextKey = "Add favorite",
         RemoveFavoriteTextKey = "Remove favorite",
         PortalAdminToggleTextKey = "Admin",
@@ -89,7 +93,11 @@ public sealed class PortalTopBarModel
 
     public bool CanUseMessages { get; init; }
 
+    public IReadOnlyList<PortalTopBarMessageConversation> MessageConversations { get; init; } = Array.Empty<PortalTopBarMessageConversation>();
+
     public int UnreadMessageCount { get; init; }
+
+    public string MessageMarkAllReadUrl { get; init; } = "/messages/mark-all-read";
 
     public string MessagesUrl { get; init; } = "/messages";
 
@@ -137,9 +145,15 @@ public sealed class PortalTopBarModel
 
     public string NoNotificationsTextKey { get; init; } = "No notifications";
 
+    public string NoMessagesTextKey { get; init; } = "No conversations";
+
     public string MarkAllNotificationsReadTextKey { get; init; } = "Mark all as read";
 
+    public string MarkAllMessagesReadTextKey { get; init; } = "Mark all as read";
+
     public string ViewAllNotificationsTextKey { get; init; } = "View all notifications";
+
+    public string ViewAllMessagesTextKey { get; init; } = "View all messages";
 
     public string AddFavoriteTextKey { get; init; } = "Add favorite";
 

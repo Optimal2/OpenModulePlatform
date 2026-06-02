@@ -103,6 +103,7 @@ public sealed class PortalTopBarService
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
+            IReadOnlyList<PortalTopBarMessageConversation> messageConversations = [];
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
             var unreadMessageCount = 0;
@@ -117,7 +118,10 @@ public sealed class PortalTopBarService
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
-                unreadMessageCount = await _messages.GetUnreadConversationCountAsync(resolvedUserId, ct);
+                unreadMessageCount = await _messages.GetUnreadMessageCountAsync(resolvedUserId, ct);
+                messageConversations = BuildMessageConversations(
+                    await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
+                    topBarOptions.PortalBaseUrl);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -144,7 +148,9 @@ public sealed class PortalTopBarService
                 notificationRecentUrl: BuildRequestEndpointHref(request, NotificationService.RecentPath),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
                 canUseMessages: userId.HasValue,
+                messageConversations,
                 unreadMessageCount,
+                messageMarkAllReadUrl: BuildRequestEndpointHref(request, MessageService.MarkAllReadPath),
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
                 dropdownsOpenOnHover,
                 options,
@@ -306,6 +312,7 @@ public sealed class PortalTopBarService
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
+            IReadOnlyList<PortalTopBarMessageConversation> messageConversations = [];
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
             var unreadMessageCount = 0;
@@ -320,7 +327,10 @@ public sealed class PortalTopBarService
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
-                unreadMessageCount = await _messages.GetUnreadConversationCountAsync(resolvedUserId, ct);
+                unreadMessageCount = await _messages.GetUnreadMessageCountAsync(resolvedUserId, ct);
+                messageConversations = BuildMessageConversations(
+                    await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
+                    topBarOptions.PortalBaseUrl);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -347,7 +357,9 @@ public sealed class PortalTopBarService
                 notificationRecentUrl: BuildUriEndpointHref(currentUri, NotificationService.RecentPath),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
                 canUseMessages: userId.HasValue,
+                messageConversations,
                 unreadMessageCount,
+                messageMarkAllReadUrl: BuildUriEndpointHref(currentUri, MessageService.MarkAllReadPath),
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
                 dropdownsOpenOnHover,
                 options,
@@ -402,7 +414,9 @@ public sealed class PortalTopBarService
             notificationRecentUrl: NotificationService.RecentPath,
             notificationsUrl: "/notifications",
             canUseMessages: false,
+            messageConversations: Array.Empty<PortalTopBarMessageConversation>(),
             unreadMessageCount: 0,
+            messageMarkAllReadUrl: MessageService.MarkAllReadPath,
             messagesUrl: "/messages",
             dropdownsOpenOnHover: true,
             options,
@@ -414,6 +428,21 @@ public sealed class PortalTopBarService
             .Select(role => role.RoleId)
             .Concat(roleContext.EffectiveRoleIds)
             .Distinct()
+            .ToArray();
+
+    private static IReadOnlyList<PortalTopBarMessageConversation> BuildMessageConversations(
+        IReadOnlyList<MessageConversationSummary> conversations,
+        string portalBaseUrl)
+        => conversations
+            .Select(row => new PortalTopBarMessageConversation(
+                row.ConversationId,
+                row.DisplayTitle,
+                row.LastMessagePreview,
+                row.LastMessageAt,
+                row.UnreadCount,
+                PortalTopBarModelFactory.CombinePortalHref(
+                    portalBaseUrl,
+                    $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}")))
             .ToArray();
 
     private static PortalTopBarModel CreateModel(
@@ -437,7 +466,9 @@ public sealed class PortalTopBarService
         string notificationRecentUrl,
         string notificationsUrl,
         bool canUseMessages,
+        IReadOnlyList<PortalTopBarMessageConversation> messageConversations,
         int unreadMessageCount,
+        string messageMarkAllReadUrl,
         string messagesUrl,
         bool dropdownsOpenOnHover,
         WebAppOptions options,
@@ -466,7 +497,9 @@ public sealed class PortalTopBarService
             NotificationRecentUrl = notificationRecentUrl,
             NotificationsUrl = notificationsUrl,
             CanUseMessages = canUseMessages,
+            MessageConversations = messageConversations,
             UnreadMessageCount = unreadMessageCount,
+            MessageMarkAllReadUrl = messageMarkAllReadUrl,
             MessagesUrl = messagesUrl,
             Links = [portalLink, .. moduleLinks],
             IsPortalAdmin = isPortalAdmin,
@@ -492,8 +525,11 @@ public sealed class PortalTopBarService
             NotificationsToggleTextKey = "Notifications",
             MessagesToggleTextKey = "Messages",
             NoNotificationsTextKey = "No notifications",
+            NoMessagesTextKey = "No conversations",
             MarkAllNotificationsReadTextKey = "Mark all as read",
+            MarkAllMessagesReadTextKey = "Mark all as read",
             ViewAllNotificationsTextKey = "View all notifications",
+            ViewAllMessagesTextKey = "View all messages",
             AddFavoriteTextKey = "Add favorite",
             RemoveFavoriteTextKey = "Remove favorite",
             PortalAdminToggleTextKey = "Admin",
