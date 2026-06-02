@@ -49,4 +49,7 @@
   <data name="No more notifications" xml:space="preserve"><value>Inga fler notifikationer</value></data>
   <data name="Dismiss notification" xml:space="preserve"><value>Stäng notifikation</value></data>
   <data name="Messages" xml:space="preserve"><value>Meddelanden</value></data>
+  <data name="No conversations" xml:space="preserve"><value>Inga konversationer</value></data>
+  <data name="No messages" xml:space="preserve"><value>Inga meddelanden</value></data>
+  <data name="View all messages" xml:space="preserve"><value>Visa alla meddelanden</value></data>
 </root>

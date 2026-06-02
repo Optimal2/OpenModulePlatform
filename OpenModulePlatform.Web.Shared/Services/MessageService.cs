@@ -15,7 +15,7 @@ public sealed class MessageService
     private const int ActiveAccountStatus = 1;
     private const int MaxAttachmentCount = 5;
     private const long MaxAttachmentBytes = 5 * 1024 * 1024;
-    private const string MessagesCallerIcon = "/_content/OpenModulePlatform.Web.Shared/icons/chat.svg";
+    public const string MarkAllReadPath = "/messages/mark-all-read";
 
     private static readonly HashSet<string> AllowedAttachmentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -25,12 +25,9 @@ public sealed class MessageService
     };
 
     private readonly SqlConnectionFactory _db;
-    private readonly NotificationService _notifications;
-
-    public MessageService(SqlConnectionFactory db, NotificationService notifications)
+    public MessageService(SqlConnectionFactory db)
     {
         _db = db;
-        _notifications = notifications;
     }
 
     public static int? TryGetOmpUserId(ClaimsPrincipal user)
@@ -44,6 +41,9 @@ public sealed class MessageService
     }
 
     public async Task<int> GetUnreadConversationCountAsync(int userId, CancellationToken ct)
+        => await GetUnreadMessageCountAsync(userId, ct);
+
+    public async Task<int> GetUnreadMessageCountAsync(int userId, CancellationToken ct)
     {
         if (userId <= 0)
         {
@@ -61,17 +61,12 @@ public sealed class MessageService
         const string sql = @"
 SELECT COUNT_BIG(1)
 FROM omp.conversation_participants cp
+INNER JOIN omp.messages m ON m.conversation_id = cp.conversation_id
 WHERE cp.user_id = @user_id
   AND cp.left_at IS NULL
-  AND EXISTS
-  (
-      SELECT 1
-      FROM omp.messages m
-      WHERE m.conversation_id = cp.conversation_id
-        AND m.deleted_at IS NULL
-        AND m.sender_user_id <> @user_id
-        AND m.message_id > ISNULL(cp.last_read_message_id, 0)
-  );";
+  AND m.deleted_at IS NULL
+  AND m.sender_user_id <> @user_id
+  AND m.message_id > ISNULL(cp.last_read_message_id, 0);";
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
@@ -80,7 +75,8 @@ WHERE cp.user_id = @user_id
 
     public async Task<IReadOnlyList<MessageConversationSummary>> GetConversationsForUserAsync(
         int userId,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? limit = null)
     {
         if (userId <= 0)
         {
@@ -96,7 +92,8 @@ WHERE cp.user_id = @user_id
         }
 
         const string sql = @"
-SELECT c.conversation_id,
+SELECT TOP (@limit)
+       c.conversation_id,
        c.conversation_type,
        c.title,
        c.last_message_at,
@@ -155,6 +152,9 @@ ORDER BY COALESCE(c.last_message_at, c.updated_at, c.created_at) DESC,
          c.conversation_id DESC;";
 
         await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@limit", SqlDbType.Int).Value = limit.HasValue
+            ? Math.Clamp(limit.Value, 1, 100)
+            : int.MaxValue;
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
 
         var rows = new List<MessageConversationSummary>();
@@ -571,15 +571,6 @@ WHERE conversation_id = @conversation_id;";
             tx.Dispose();
         }
 
-        try
-        {
-            await CreateMessageNotificationsAsync(conn, userId, conversationId, cleanedContent, ct);
-        }
-        catch (InvalidOperationException)
-        {
-            // Messages are authoritative here; notifications are a best-effort platform affordance.
-        }
-
         return messageId;
     }
 
@@ -616,6 +607,45 @@ WHERE cp.conversation_id = @conversation_id
         cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<int> MarkAllConversationsReadAsync(int userId, CancellationToken ct)
+    {
+        if (userId <= 0)
+        {
+            return 0;
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            return 0;
+        }
+
+        var unreadCount = await GetUnreadMessageCountAsync(userId, ct);
+
+        const string sql = @"
+UPDATE cp
+SET last_read_message_id = latest.latest_message_id
+FROM omp.conversation_participants cp
+OUTER APPLY
+(
+    SELECT MAX(m.message_id) AS latest_message_id
+    FROM omp.messages m
+    WHERE m.conversation_id = cp.conversation_id
+      AND m.deleted_at IS NULL
+) latest
+WHERE cp.user_id = @user_id
+  AND cp.left_at IS NULL
+  AND latest.latest_message_id IS NOT NULL
+  AND ISNULL(cp.last_read_message_id, 0) < latest.latest_message_id;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        await cmd.ExecuteNonQueryAsync(ct);
+        return unreadCount;
     }
 
     public async Task<IReadOnlyList<MessageUserOption>> SearchUsersAsync(
@@ -713,59 +743,6 @@ WHERE a.attachment_id = @attachment_id
             rdr.GetString(0),
             rdr.GetString(1),
             (byte[])rdr.GetValue(2));
-    }
-
-    private async Task CreateMessageNotificationsAsync(
-        SqlConnection conn,
-        int senderUserId,
-        long conversationId,
-        string? content,
-        CancellationToken ct)
-    {
-        const string sql = @"
-SELECT cp.user_id,
-       sender.display_name
-FROM omp.conversation_participants cp
-CROSS JOIN omp.users sender
-WHERE cp.conversation_id = @conversation_id
-  AND cp.left_at IS NULL
-  AND cp.user_id <> @sender_user_id
-  AND sender.user_id = @sender_user_id;";
-
-        var targets = new List<(int UserId, string SenderName)>();
-        await using (var cmd = new SqlCommand(sql, conn))
-        {
-            cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
-            cmd.Parameters.Add("@sender_user_id", SqlDbType.Int).Value = senderUserId;
-            await using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
-            {
-                targets.Add((rdr.GetInt32(0), rdr.GetString(1)));
-            }
-        }
-
-        var snippet = string.IsNullOrWhiteSpace(content)
-            ? "Sent an attachment."
-            : content.Trim();
-        if (snippet.Length > 180)
-        {
-            snippet = snippet[..180];
-        }
-
-        foreach (var target in targets)
-        {
-            await _notifications.CreateForUserAsync(
-                target.UserId,
-                new NotificationCreateRequest(
-                    Title: "New message",
-                    Content: $"{target.SenderName}: {snippet}",
-                    DestinationUrl: $"/messages/{conversationId.ToString(CultureInfo.InvariantCulture)}",
-                    Level: "info",
-                    CallerKey: "messages",
-                    CallerDisplayName: "Messages",
-                    CallerIcon: MessagesCallerIcon),
-                ct);
-        }
     }
 
     private static async Task<bool> MessagesTablesExistAsync(SqlConnection conn, CancellationToken ct)
