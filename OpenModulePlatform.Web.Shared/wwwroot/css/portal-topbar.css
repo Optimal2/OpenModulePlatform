@@ -339,10 +339,17 @@
 .portal-topbar__messages-menu {
     right: 0;
     left: auto;
-    width: min(calc(100vw - 16px), 380px);
     max-height: min(70vh, 520px);
     overflow: auto;
     overscroll-behavior: contain;
+}
+
+.portal-topbar__notifications-menu {
+    width: min(calc(100vw - 16px), 380px);
+}
+
+.portal-topbar__messages-menu {
+    width: min(calc(100vw - 16px), 460px);
 }
 
 .portal-topbar__profile-menu {

@@ -1,106 +1,156 @@
 @page "/messages/{conversationId:long}"
 @model OpenModulePlatform.Portal.Pages.Messages.ThreadModel
+@{
+    bool IsGroupConversation()
+        => string.Equals(Model.Conversation?.ConversationType, "group", StringComparison.OrdinalIgnoreCase);
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Messages"]</div>
-        <h2>@(Model.Conversation?.DisplayTitle ?? L["Conversation"].Value)</h2>
-        @if (!string.IsNullOrWhiteSpace(Model.Conversation?.ParticipantNames))
+    string SenderBubbleStyle(OpenModulePlatform.Web.Shared.Services.MessageRow message)
+    {
+        if (message.IsOwnMessage || !IsGroupConversation())
         {
-            <p class="lede">@Model.Conversation.ParticipantNames</p>
+            return string.Empty;
         }
-    </div>
-    <div class="toolbar">
-        <a class="action-link" asp-page="/Messages/Index">@L["Messages"]</a>
-        @if (Model.CanUseMessages)
+
+        var palette = new (string Background, string Border)[]
         {
-            <a class="action-link" asp-page="/Messages/New">@L["New conversation"]</a>
-        }
-    </div>
-</section>
+            ("#fef3c7", "#f59e0b"),
+            ("#ede9fe", "#8b5cf6"),
+            ("#dcfce7", "#22c55e"),
+            ("#fee2e2", "#ef4444"),
+            ("#cffafe", "#06b6d4"),
+            ("#fce7f3", "#ec4899")
+        };
+        var color = palette[Math.Abs(message.SenderUserId) % palette.Length];
+        return $"--portal-message-sender-bg: {color.Background}; --portal-message-sender-border: {color.Border};";
+    }
+}
 
 @if (!Model.CanUseMessages)
 {
+    <section class="page-header">
+        <div>
+            <div class="eyebrow">@L["Messages"]</div>
+            <h2>@L["Conversation"]</h2>
+        </div>
+    </section>
     <section class="card top-gap">
         <div class="empty-state">@L["Messages require an OMP user"]</div>
     </section>
 }
 else if (Model.Conversation is null)
 {
+    <section class="page-header">
+        <div>
+            <div class="eyebrow">@L["Messages"]</div>
+            <h2>@L["Conversation"]</h2>
+        </div>
+        <div class="toolbar">
+            <a class="action-link" asp-page="/Messages/Index">@L["Messages"]</a>
+        </div>
+    </section>
     <section class="card top-gap">
         <div class="empty-state">@L["This conversation was not found."]</div>
     </section>
 }
 else
 {
-    <section class="card top-gap portal-message-thread">
-        @if (Model.HasMoreMessages && Model.Rows.Count > 0)
-        {
-            <a class="portal-message-thread__older"
-               asp-page="/Messages/Thread"
-               asp-route-conversationId="@Model.Conversation.ConversationId"
-               asp-route-beforeMessageId="@Model.Rows[0].MessageId">@L["Load older messages"]</a>
-        }
+    <section class="portal-message-thread-layout top-gap">
+        <aside class="portal-message-thread__side portal-message-thread__side--identity">
+            <div class="eyebrow">@L["Messages"]</div>
+            <h2>@Model.Conversation.DisplayTitle</h2>
+            @if (!string.IsNullOrWhiteSpace(Model.Conversation.ParticipantNames))
+            {
+                <p>@Model.Conversation.ParticipantNames</p>
+            }
+        </aside>
 
-        @if (Model.Rows.Count == 0)
-        {
-            <div class="empty-state">@L["No messages"]</div>
-        }
-        else
-        {
-            <div class="portal-message-thread__messages">
-                @foreach (var message in Model.Rows)
+        <section class="card portal-message-thread">
+            <div class="portal-message-thread__scroll">
+                <div asp-validation-summary="All" class="portal-message-thread__error-banner"></div>
+
+                @if (Model.HasMoreMessages && Model.Rows.Count > 0)
                 {
-                    <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)">
-                        <div class="portal-message-thread__bubble">
-                            <div class="portal-message-thread__meta">
-                                <strong>@message.SenderDisplayName</strong>
-                                <span>@message.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
-                            </div>
-                            @if (!string.IsNullOrWhiteSpace(message.Content))
-                            {
-                                <p>@message.Content</p>
-                            }
-                            @if (message.Attachments.Count > 0)
-                            {
-                                <div class="portal-message-thread__attachments">
-                                    @foreach (var attachment in message.Attachments)
+                    <a class="portal-message-thread__older"
+                       asp-page="/Messages/Thread"
+                       asp-route-conversationId="@Model.Conversation.ConversationId"
+                       asp-route-beforeMessageId="@Model.Rows[0].MessageId">@L["Load older messages"]</a>
+                }
+
+                @if (Model.Rows.Count == 0)
+                {
+                    <div class="empty-state">@L["No messages"]</div>
+                }
+                else
+                {
+                    <div class="portal-message-thread__messages">
+                        @foreach (var message in Model.Rows)
+                        {
+                            <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)" style="@SenderBubbleStyle(message)">
+                                <div class="portal-message-thread__bubble">
+                                    <div class="portal-message-thread__meta">
+                                        <strong>@message.SenderDisplayName</strong>
+                                        <span>@message.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(message.Content))
                                     {
-                                        <a class="portal-message-thread__attachment" href="@attachment.DownloadUrl" data-enhance-nav="false">
-                                            @if (attachment.IsImage)
+                                        <p>@message.Content</p>
+                                    }
+                                    @if (message.Attachments.Count > 0)
+                                    {
+                                        <div class="portal-message-thread__attachments">
+                                            @foreach (var attachment in message.Attachments)
                                             {
-                                                <img src="@attachment.DownloadUrl" alt="@attachment.FileName" loading="lazy" />
+                                                <a class="portal-message-thread__attachment" href="@attachment.DownloadUrl" data-enhance-nav="false">
+                                                    @if (attachment.IsImage)
+                                                    {
+                                                        <img src="@attachment.DownloadUrl" alt="@attachment.FileName" loading="lazy" />
+                                                    }
+                                                    <span>@attachment.FileName</span>
+                                                </a>
                                             }
-                                            <span>@attachment.FileName</span>
-                                        </a>
+                                        </div>
                                     }
                                 </div>
-                            }
-                        </div>
-                    </article>
+                            </article>
+                        }
+                    </div>
                 }
             </div>
-        }
 
-        <form method="post"
-              enctype="multipart/form-data"
-              asp-page-handler="Send"
-              asp-route-conversationId="@Model.Conversation.ConversationId"
-              class="portal-message-thread__composer"
-              data-enhance="false">
-            <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
-            <div class="portal-message-thread__composer-row">
-                <label>
-                    <span>@L["Message"]</span>
-                    <textarea asp-for="MessageContent" rows="1" placeholder="@L["Type a message"]"></textarea>
-                    <span asp-validation-for="MessageContent" class="field-validation-error"></span>
-                </label>
-                <button type="submit" class="btn btn-primary">@L["Send"]</button>
+            <form method="post"
+                  enctype="multipart/form-data"
+                  asp-page-handler="Send"
+                  asp-route-conversationId="@Model.Conversation.ConversationId"
+                  class="portal-message-thread__composer"
+                  data-enhance="false">
+                <div class="portal-message-thread__composer-row">
+                    <label class="portal-message-thread__message-field">
+                        <span class="visually-hidden">@L["Message"]</span>
+                        <input asp-for="MessageContent" type="text" placeholder="@L["Type a message"]" autocomplete="off" />
+                    </label>
+                    <label class="portal-message-thread__composer-button portal-message-thread__composer-button--attach"
+                           title="@L["Attach file"]"
+                           aria-label="@L["Attach file"]">
+                        <input asp-for="Attachments" type="file" multiple />
+                        <span class="portal-message-thread__composer-icon portal-message-thread__composer-icon--attach" aria-hidden="true"></span>
+                        <span class="visually-hidden">@L["Attach file"]</span>
+                    </label>
+                    <button type="submit"
+                            class="portal-message-thread__composer-button portal-message-thread__composer-button--send"
+                            title="@L["Send"]"
+                            aria-label="@L["Send"]">
+                        <span class="portal-message-thread__composer-icon portal-message-thread__composer-icon--send" aria-hidden="true"></span>
+                        <span class="visually-hidden">@L["Send"]</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <aside class="portal-message-thread__side portal-message-thread__side--actions">
+            <div class="toolbar">
+                <a class="action-link" asp-page="/Messages/Index">@L["Messages"]</a>
+                <a class="action-link" asp-page="/Messages/New">@L["New conversation"]</a>
             </div>
-            <label>
-                <span>@L["Attach file"]</span>
-                <input asp-for="Attachments" type="file" multiple />
-            </label>
-        </form>
+        </aside>
     </section>
 }
