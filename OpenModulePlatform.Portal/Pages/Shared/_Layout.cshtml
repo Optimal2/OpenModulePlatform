@@ -10,11 +10,17 @@
     var isDashboardPage = string.IsNullOrEmpty(requestPath)
         || string.Equals(requestPath, "/", System.StringComparison.OrdinalIgnoreCase)
         || string.Equals(requestPath.TrimEnd('/'), "/Index", System.StringComparison.OrdinalIgnoreCase);
+    var isMessagesPage = string.Equals(requestPath.TrimEnd('/'), "/messages", System.StringComparison.OrdinalIgnoreCase)
+        || requestPath.StartsWith("/messages/", System.StringComparison.OrdinalIgnoreCase);
     var userIdClaim = User.FindFirst(OpenModulePlatform.Web.Shared.Security.OmpAuthDefaults.UserIdClaimType)?.Value;
     if (isDashboardPage
         && int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var portalLayoutUserId))
     {
         showPortalNavbar = (await PortalUserSettingsService.GetForUserAsync(portalLayoutUserId, Context.RequestAborted)).ShowPortalNavbar;
+    }
+    else if (isMessagesPage)
+    {
+        showPortalNavbar = false;
     }
 
     if (string.IsNullOrWhiteSpace(documentTitle))
