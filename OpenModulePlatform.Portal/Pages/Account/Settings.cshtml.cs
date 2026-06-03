@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Localization;
@@ -23,17 +24,20 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     private readonly PortalUserSettingsService _settings;
     private readonly PortalDashboardService _dashboard;
     private readonly RbacService _rbac;
+    private readonly UserProfileImageService _profileImages;
 
     public SettingsModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
         PortalUserSettingsService settings,
-        PortalDashboardService dashboard)
+        PortalDashboardService dashboard,
+        UserProfileImageService profileImages)
         : base(options, rbac)
     {
         _settings = settings;
         _dashboard = dashboard;
         _rbac = rbac;
+        _profileImages = profileImages;
     }
 
     [BindProperty]
@@ -41,6 +45,9 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     [BindProperty]
     public PortalInputModel PortalInput { get; set; } = new();
+
+    [BindProperty]
+    public IFormFile? ProfileImageUpload { get; set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -52,6 +59,12 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     public bool HasOmpUser { get; private set; }
 
     public bool CanCreateOmpUser { get; private set; }
+
+    public string? ProfileImageUrl { get; private set; }
+
+    public string? ProfileImageFileName { get; private set; }
+
+    public string ProfileImageInitials { get; private set; } = "?";
 
     public async Task<IActionResult> OnGet(string? tab, CancellationToken ct)
     {
@@ -112,6 +125,60 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
         await RefreshDisplayNameClaimAsync(UserInput.DisplayName);
         StatusMessage = T("Settings saved.");
+        return RedirectToSettings(UserTab);
+    }
+
+    public async Task<IActionResult> OnPostProfileImage(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        var guard = await LoadAsync(userId, UserTab, loadUserInput: true, loadPortalInput: true, ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var result = await _profileImages.SaveProfileImageAsync(userId, ProfileImageUpload, ct);
+        switch (result)
+        {
+            case ProfileImageSaveResult.Saved:
+                StatusMessage = T("Profile image saved.");
+                return RedirectToSettings(UserTab);
+
+            case ProfileImageSaveResult.TooLarge:
+                ModelState.AddModelError(nameof(ProfileImageUpload), T("Image is too large."));
+                return Page();
+
+            case ProfileImageSaveResult.InvalidType:
+                ModelState.AddModelError(nameof(ProfileImageUpload), T("Invalid image type."));
+                return Page();
+
+            case ProfileImageSaveResult.MissingFile:
+                ModelState.AddModelError(nameof(ProfileImageUpload), T("Select a profile image file."));
+                return Page();
+
+            default:
+                return Forbid();
+        }
+    }
+
+    public async Task<IActionResult> OnPostRemoveProfileImage(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        var removed = await _profileImages.RemoveProfileImageAsync(userId, ct);
+        if (!removed)
+        {
+            return Forbid();
+        }
+
+        StatusMessage = T("Profile image removed.");
         return RedirectToSettings(UserTab);
     }
 
@@ -281,6 +348,10 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             UserInput.DisplayName = settings.DisplayName;
         }
 
+        ProfileImageFileName = settings.ProfileImageFileName;
+        ProfileImageUrl = OmpAvatarHelper.BuildUserAvatarPath(userId, settings.ProfileImageStorageKey);
+        ProfileImageInitials = OmpAvatarHelper.GetInitials(settings.DisplayName);
+
         if (loadPortalInput)
         {
             PortalInput.TopbarDropdownsOpenOnHover = settings.TopbarDropdownsOpenOnHover;
@@ -305,6 +376,9 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         HasOmpUser = false;
         CanCreateOmpUser = true;
         IsPortalAdmin = false;
+        ProfileImageUrl = null;
+        ProfileImageFileName = null;
+        ProfileImageInitials = OmpAvatarHelper.GetInitials(SuggestedDisplayName());
         ViewData["IsPortalAdmin"] = false;
     }
 

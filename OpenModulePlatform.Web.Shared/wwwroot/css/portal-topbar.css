@@ -898,7 +898,7 @@ span.portal-topbar__nav-group-link {
 
 .portal-topbar__message-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
     align-items: center;
     width: 100%;
     min-height: 54px;
@@ -917,6 +917,27 @@ span.portal-topbar__nav-group-link {
 
 .portal-topbar__message-row.is-unread {
     background: rgba(224, 242, 254, 0.72);
+}
+
+.portal-topbar__message-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-size: 0.72rem;
+    font-weight: 800;
+    overflow: hidden;
+}
+
+.portal-topbar__message-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .portal-topbar__message-copy {
@@ -1345,6 +1366,14 @@ span.portal-topbar__nav-group-link {
     font-size: 0.72rem;
     font-weight: 900;
     letter-spacing: 0.02em;
+    overflow: hidden;
+}
+
+.portal-topbar__profile-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .portal-topbar__profile-current-user,

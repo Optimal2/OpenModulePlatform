@@ -9,4 +9,5 @@ public sealed record PortalTopBarMessageConversation(
     string? LastMessagePreview,
     DateTime? LastMessageAt,
     int UnreadCount,
+    string? AvatarUrl,
     string Href);

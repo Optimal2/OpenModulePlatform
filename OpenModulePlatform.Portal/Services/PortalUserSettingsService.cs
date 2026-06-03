@@ -28,6 +28,8 @@ public sealed class PortalUserSettingsService
     {
         const string sql = @"
 SELECT u.display_name,
+       u.profile_image_file_name,
+       u.profile_image_storage_key,
        CAST(COALESCE(admin_v.setting_value, admin_d.default_int_value, 0) AS bit),
        CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit),
        CAST(COALESCE(navbar_v.setting_value, navbar_d.default_int_value, 1) AS bit)
@@ -73,9 +75,11 @@ WHERE u.user_id = @user_id
 
         return new PortalAccountSettings(
             rdr.GetString(0),
-            rdr.GetBoolean(1),
-            rdr.GetBoolean(2),
-            rdr.GetBoolean(3));
+            rdr.IsDBNull(1) ? null : rdr.GetString(1),
+            rdr.IsDBNull(2) ? null : rdr.GetString(2),
+            rdr.GetBoolean(3),
+            rdr.GetBoolean(4),
+            rdr.GetBoolean(5));
     }
 
     public async Task<PortalUserSettings> GetForUserAsync(int userId, CancellationToken ct)
@@ -504,6 +508,8 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), SYSUTCDATET
 
 public sealed record PortalAccountSettings(
     string DisplayName,
+    string? ProfileImageFileName,
+    string? ProfileImageStorageKey,
     bool AdminMetricsCollapsed,
     bool TopbarDropdownsOpenOnHover,
     bool ShowPortalNavbar);

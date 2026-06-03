@@ -108,6 +108,7 @@ SELECT TOP (@limit)
        last_sender.display_name,
        other_user.user_id,
        other_user.display_name,
+       other_user.profile_image_storage_key,
        participants.participant_names,
        unread.unread_count
 FROM omp.conversation_participants cp
@@ -127,7 +128,8 @@ OUTER APPLY
 (
     SELECT TOP (1)
            u.user_id,
-           u.display_name
+           u.display_name,
+           u.profile_image_storage_key
     FROM omp.conversation_participants cp2
     INNER JOIN omp.users u ON u.user_id = cp2.user_id
     WHERE cp2.conversation_id = c.conversation_id
@@ -172,7 +174,8 @@ ORDER BY COALESCE(c.last_message_at, c.updated_at, c.created_at) DESC,
             var title = rdr.IsDBNull(2) ? null : rdr.GetString(2);
             var otherUserId = rdr.IsDBNull(6) ? (int?)null : rdr.GetInt32(6);
             var otherDisplayName = rdr.IsDBNull(7) ? null : rdr.GetString(7);
-            var participantNames = rdr.IsDBNull(8) ? null : rdr.GetString(8);
+            var otherProfileImageStorageKey = rdr.IsDBNull(8) ? null : rdr.GetString(8);
+            var participantNames = rdr.IsDBNull(9) ? null : rdr.GetString(9);
             var displayTitle = BuildConversationTitle(conversationType, title, otherDisplayName, participantNames);
             var senderDisplayName = rdr.IsDBNull(5) ? null : rdr.GetString(5);
             var content = rdr.IsDBNull(4) ? null : rdr.GetString(4);
@@ -183,10 +186,11 @@ ORDER BY COALESCE(c.last_message_at, c.updated_at, c.created_at) DESC,
                 title,
                 otherUserId,
                 otherDisplayName,
+                otherProfileImageStorageKey,
                 displayTitle,
                 BuildLastMessagePreview(senderDisplayName, content),
                 rdr.IsDBNull(3) ? null : rdr.GetDateTime(3),
-                Convert.ToInt32(rdr.GetInt64(9), CultureInfo.InvariantCulture)));
+                Convert.ToInt32(rdr.GetInt64(10), CultureInfo.InvariantCulture)));
         }
 
         return rows;
@@ -217,13 +221,15 @@ SELECT c.conversation_id,
        c.title,
        other_user.user_id,
        other_user.display_name,
+       other_user.profile_image_storage_key,
        participants.participant_names
 FROM omp.conversations c
 OUTER APPLY
 (
     SELECT TOP (1)
            u.user_id,
-           u.display_name
+           u.display_name,
+           u.profile_image_storage_key
     FROM omp.conversation_participants cp2
     INNER JOIN omp.users u ON u.user_id = cp2.user_id
     WHERE cp2.conversation_id = c.conversation_id
@@ -256,7 +262,8 @@ WHERE c.conversation_id = @conversation_id;";
         var title = rdr.IsDBNull(2) ? null : rdr.GetString(2);
         var otherUserId = rdr.IsDBNull(3) ? (int?)null : rdr.GetInt32(3);
         var otherDisplayName = rdr.IsDBNull(4) ? null : rdr.GetString(4);
-        var participantNames = rdr.IsDBNull(5) ? null : rdr.GetString(5);
+        var otherProfileImageStorageKey = rdr.IsDBNull(5) ? null : rdr.GetString(5);
+        var participantNames = rdr.IsDBNull(6) ? null : rdr.GetString(6);
 
         return new MessageConversationDetail(
             rdr.GetInt64(0),
@@ -264,6 +271,7 @@ WHERE c.conversation_id = @conversation_id;";
             title,
             otherUserId,
             otherDisplayName,
+            otherProfileImageStorageKey,
             BuildConversationTitle(conversationType, title, otherDisplayName, participantNames),
             participantNames);
     }
@@ -439,6 +447,7 @@ SELECT TOP (@limit)
        m.message_id,
        m.sender_user_id,
        u.display_name,
+       u.profile_image_storage_key,
        m.content,
        m.message_type,
        m.created_at
@@ -467,8 +476,9 @@ ORDER BY m.message_id DESC;";
                     rdr.GetInt32(1),
                     rdr.GetString(2),
                     rdr.IsDBNull(3) ? null : rdr.GetString(3),
-                    rdr.GetString(4),
-                    rdr.GetDateTime(5),
+                    rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                    rdr.GetString(5),
+                    rdr.GetDateTime(6),
                     rdr.GetInt32(1) == userId,
                     []));
             }
@@ -1078,6 +1088,7 @@ public sealed record MessageConversationSummary(
     string? Title,
     int? OtherUserId,
     string? OtherDisplayName,
+    string? OtherProfileImageStorageKey,
     string DisplayTitle,
     string? LastMessagePreview,
     DateTime? LastMessageAt,
@@ -1089,6 +1100,7 @@ public sealed record MessageConversationDetail(
     string? Title,
     int? OtherUserId,
     string? OtherDisplayName,
+    string? OtherProfileImageStorageKey,
     string DisplayTitle,
     string? ParticipantNames);
 
@@ -1097,6 +1109,7 @@ public sealed record MessageRow(
     long ConversationId,
     int SenderUserId,
     string SenderDisplayName,
+    string? SenderProfileImageStorageKey,
     string? Content,
     string MessageType,
     DateTime CreatedAt,
