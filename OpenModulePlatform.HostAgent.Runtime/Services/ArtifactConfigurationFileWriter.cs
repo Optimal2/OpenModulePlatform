@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
@@ -18,16 +19,27 @@ internal static class ArtifactConfigurationFileWriter
         string ompConnectionString,
         HostAgentSettings settings)
     {
-        if (HasAppSettingsJson(files))
+        var builtInFile = CreateBuiltInWebAppConfigurationFile(deployment, ompConnectionString, settings);
+        if (!HasAppSettingsJson(files))
         {
-            return files;
+            return
+            [
+                builtInFile,
+                .. files
+            ];
         }
 
-        return
-        [
-            CreateBuiltInWebAppConfigurationFile(deployment, ompConnectionString, settings),
-            .. files
-        ];
+        return files
+            .Select(file => IsAppSettingsJson(file)
+                ? new ArtifactConfigurationFileDescriptor
+                {
+                    ArtifactConfigurationFileId = file.ArtifactConfigurationFileId,
+                    ArtifactId = file.ArtifactId,
+                    RelativePath = file.RelativePath,
+                    FileContent = MergeJsonConfiguration(builtInFile.FileContent, file.FileContent, file.RelativePath)
+                }
+                : file)
+            .ToArray();
     }
 
     public static IReadOnlyList<ArtifactConfigurationFileDescriptor> WithBuiltInServiceAppConfiguration(
@@ -389,7 +401,7 @@ internal static class ArtifactConfigurationFileWriter
             ["Omp.HostAgent.WebAppsRoot"] = settings.WebAppsRoot,
             ["Omp.HostAgent.PortalPhysicalPath"] = settings.PortalPhysicalPath,
             ["Omp.HostAgent.ServicesRoot"] = settings.ServicesRoot,
-            ["Omp.HostAgent.WebAppDataProtectionKeyPath"] = settings.WebAppDataProtectionKeyPath
+            ["Omp.HostAgent.WebAppDataProtectionKeyPath"] = ResolveWebAppDataProtectionKeyPath(settings)
         };
 
         foreach (var item in variables.ToArray())
@@ -433,10 +445,65 @@ internal static class ArtifactConfigurationFileWriter
     }
 
     private static bool HasAppSettingsJson(IReadOnlyList<ArtifactConfigurationFileDescriptor> files)
-        => files.Any(file => string.Equals(
+        => files.Any(IsAppSettingsJson);
+
+    private static bool IsAppSettingsJson(ArtifactConfigurationFileDescriptor file)
+        => string.Equals(
             file.RelativePath.Trim().Replace('\\', '/'),
             AppSettingsRelativePath,
-            StringComparison.OrdinalIgnoreCase));
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string MergeJsonConfiguration(
+        string baseContent,
+        string overrideContent,
+        string relativePath)
+    {
+        try
+        {
+            var baseObject = ParseJsonObject(baseContent, "built-in web app configuration");
+            var overrideObject = ParseJsonObject(overrideContent, relativePath);
+            var merged = MergeJsonObjects(baseObject, overrideObject);
+
+            return merged.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"Web app configuration file '{relativePath}' must contain a valid JSON object.",
+                ex);
+        }
+    }
+
+    private static JsonObject ParseJsonObject(string content, string sourceName)
+    {
+        var node = JsonNode.Parse(content);
+        return node as JsonObject
+            ?? throw new JsonException($"Configuration source '{sourceName}' is not a JSON object.");
+    }
+
+    private static JsonObject MergeJsonObjects(JsonObject baseObject, JsonObject overrideObject)
+    {
+        var result = new JsonObject();
+
+        foreach (var item in baseObject)
+        {
+            result[item.Key] = item.Value?.DeepClone();
+        }
+
+        foreach (var item in overrideObject)
+        {
+            if (item.Value is JsonObject overrideChild
+                && result[item.Key] is JsonObject baseChild)
+            {
+                result[item.Key] = MergeJsonObjects(baseChild, overrideChild);
+                continue;
+            }
+
+            result[item.Key] = item.Value?.DeepClone();
+        }
+
+        return result;
+    }
 
     private static bool IsWorkerManagerDeployment(ServiceAppDeploymentDescriptor deployment)
         => string.Equals(deployment.AppInstanceKey, "omp_workermanager", StringComparison.OrdinalIgnoreCase)

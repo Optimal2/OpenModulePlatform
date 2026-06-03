@@ -67,7 +67,10 @@ public static class OmpWebHostingExtensions
                     factory.Create(typeof(TAppResource));
             });
 
-        ConfigureOmpAuthentication(builder.Services, builder.Configuration);
+        ConfigureOmpAuthentication(
+            builder.Services,
+            builder.Configuration,
+            builder.Environment.ContentRootPath);
 
         var webAppOptions = builder.Configuration
             .GetSection(optionsSectionName)
@@ -553,7 +556,8 @@ public static class OmpWebHostingExtensions
 
     private static void ConfigureOmpAuthentication(
         IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        string? contentRootPath = null)
     {
         var authOptions = configuration
             .GetSection(OmpAuthOptions.SectionName)
@@ -568,9 +572,12 @@ public static class OmpWebHostingExtensions
                 ? "OpenModulePlatform"
                 : authOptions.ApplicationName);
 
-        if (!string.IsNullOrWhiteSpace(authOptions.DataProtectionKeyPath))
+        var dataProtectionKeyPath = ResolveDataProtectionKeyPath(
+            authOptions.DataProtectionKeyPath,
+            contentRootPath);
+        if (!string.IsNullOrWhiteSpace(dataProtectionKeyPath))
         {
-            dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(authOptions.DataProtectionKeyPath));
+            dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyPath));
         }
 
         services.AddAuthentication(OmpAuthDefaults.AuthenticationScheme)
@@ -606,6 +613,47 @@ public static class OmpWebHostingExtensions
                     }
                 };
             });
+    }
+
+    private static string ResolveDataProtectionKeyPath(
+        string? configuredPath,
+        string? contentRootPath)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return configuredPath.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(contentRootPath))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var contentRoot = new DirectoryInfo(Path.GetFullPath(contentRootPath.Trim()));
+            var webAppsRoot = contentRoot.Parent;
+            var runtimeRoot = webAppsRoot?.Parent;
+            if (webAppsRoot is not null
+                && runtimeRoot is not null
+                && string.Equals(webAppsRoot.Name, "WebApps", StringComparison.OrdinalIgnoreCase))
+            {
+                // Host Agent writes shared web-app keys beside the WebApps
+                // root. This fallback keeps older module configs that lack
+                // OmpAuth from silently using an app-local ephemeral key ring.
+                return Path.Join(runtimeRoot.FullName, "DataProtectionKeys");
+            }
+        }
+        catch (ArgumentException)
+        {
+            return string.Empty;
+        }
+        catch (NotSupportedException)
+        {
+            return string.Empty;
+        }
+
+        return string.Empty;
     }
 
     private static string BuildLoginRedirectUrl(string? configuredLoginPath, string returnUrl)
