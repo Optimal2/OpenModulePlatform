@@ -1225,14 +1225,6 @@ span.portal-topbar__nav-group-link {
     cursor: default;
 }
 
-.portal-topbar__profile-active-role {
-    background: color-mix(in srgb, var(--portal-topbar-surface-muted) 72%, transparent);
-}
-
-.portal-topbar__profile-active-role .portal-topbar__profile-row-icon {
-    color: #2563eb;
-}
-
 .portal-topbar__profile-separator {
     height: 1px;
     margin: 6px 4px;
@@ -1288,17 +1280,6 @@ span.portal-topbar__nav-group-link {
 
 .portal-topbar__profile-switch > summary::-webkit-details-marker {
     display: none;
-}
-
-.portal-topbar__profile-switch > summary::after {
-    content: "▸";
-    justify-self: end;
-    color: var(--portal-topbar-text-muted);
-    font-size: 0.78rem;
-}
-
-.portal-topbar__profile-switch[open] > summary::after {
-    content: "▾";
 }
 
 .portal-topbar__profile-switch-menu {
