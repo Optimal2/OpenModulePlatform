@@ -296,8 +296,11 @@ function Convert-DataTableRows {
         $item = [ordered]@{}
         foreach ($column in $Table.Columns) {
             $value = $row[$column.ColumnName]
-            if ($value -eq [DBNull]::Value) {
+            if ([object]::ReferenceEquals($value, [DBNull]::Value)) {
                 $value = $null
+            }
+            elseif ($value -is [bool]) {
+                $value = [int]$value
             }
             $item[$column.ColumnName] = $value
         }
