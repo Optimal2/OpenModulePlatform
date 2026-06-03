@@ -107,6 +107,7 @@ public sealed class PortalTopBarService
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
             var unreadMessageCount = 0;
+            string? currentUserProfileImageUrl = null;
             if (user.Identity?.IsAuthenticated == true)
             {
                 banners = await _banners.GetActiveForRolesAsync(GetBannerRoleIds(roleContext), 3, ct);
@@ -122,6 +123,10 @@ public sealed class PortalTopBarService
                 messageConversations = BuildMessageConversations(
                     await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
                     topBarOptions.PortalBaseUrl);
+                currentUserProfileImageUrl = await GetUserProfileImageUrlAsync(
+                    resolvedUserId,
+                    topBarOptions.PortalBaseUrl,
+                    ct);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -132,6 +137,7 @@ public sealed class PortalTopBarService
                 portalLink,
                 cultureSelection,
                 currentUserName,
+                currentUserProfileImageUrl,
                 roleContext,
                 isPortalAdmin,
                 moduleLinks: Array.Empty<PortalTopBarLink>(),
@@ -316,6 +322,7 @@ public sealed class PortalTopBarService
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
             var unreadMessageCount = 0;
+            string? currentUserProfileImageUrl = null;
             if (user.Identity?.IsAuthenticated == true)
             {
                 banners = await _banners.GetActiveForRolesAsync(GetBannerRoleIds(roleContext), 3, ct);
@@ -331,6 +338,10 @@ public sealed class PortalTopBarService
                 messageConversations = BuildMessageConversations(
                     await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
                     topBarOptions.PortalBaseUrl);
+                currentUserProfileImageUrl = await GetUserProfileImageUrlAsync(
+                    resolvedUserId,
+                    topBarOptions.PortalBaseUrl,
+                    ct);
             }
 
             ApplyFavorites(navigationGroups, favorites);
@@ -341,6 +352,7 @@ public sealed class PortalTopBarService
                 portalLink,
                 cultureSelection,
                 currentUserName,
+                currentUserProfileImageUrl,
                 roleContext,
                 isPortalAdmin,
                 moduleLinks: Array.Empty<PortalTopBarLink>(),
@@ -398,6 +410,7 @@ public sealed class PortalTopBarService
             portalLink,
             cultureSelection,
             user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null,
+            null,
             UserRoleContext.Empty,
             isPortalAdmin: false,
             moduleLinks: Array.Empty<PortalTopBarLink>(),
@@ -440,16 +453,26 @@ public sealed class PortalTopBarService
                 row.LastMessagePreview,
                 row.LastMessageAt,
                 row.UnreadCount,
+                BuildPortalAvatarUrl(portalBaseUrl, row.OtherUserId, row.OtherProfileImageStorageKey),
                 PortalTopBarModelFactory.CombinePortalHref(
                     portalBaseUrl,
                     $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}")))
             .ToArray();
+
+    private static string? BuildPortalAvatarUrl(string portalBaseUrl, int? userId, string? storageKey)
+    {
+        var avatarPath = OmpAvatarHelper.BuildUserAvatarPath(userId, storageKey);
+        return string.IsNullOrWhiteSpace(avatarPath)
+            ? null
+            : PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, avatarPath);
+    }
 
     private static PortalTopBarModel CreateModel(
         PortalTopBarOptions topBarOptions,
         PortalTopBarLink portalLink,
         CultureSelectionResult cultureSelection,
         string? currentUserName,
+        string? currentUserProfileImageUrl,
         UserRoleContext roleContext,
         bool isPortalAdmin,
         IReadOnlyList<PortalTopBarLink> moduleLinks,
@@ -514,6 +537,7 @@ public sealed class PortalTopBarService
             EffectiveCultureDisplayText = cultureSelection.EffectiveCultureDisplayText,
             IsCultureFallback = cultureSelection.IsFallback,
             CurrentUserName = currentUserName,
+            CurrentUserProfileImageUrl = currentUserProfileImageUrl,
             AvailableRoles = roleContext.AvailableRoles,
             ActiveRoleId = roleContext.ActiveRoleId,
             ActiveRoleName = roleContext.ActiveRoleName,
@@ -836,6 +860,29 @@ WHERE d.setting_category = @setting_category
         }
 
         return true;
+    }
+
+    private async Task<string?> GetUserProfileImageUrlAsync(
+        int userId,
+        string portalBaseUrl,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT profile_image_storage_key
+FROM omp.users
+WHERE user_id = @user_id
+  AND account_status = 1;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+
+        var storageKey = await cmd.ExecuteScalarAsync(ct) as string;
+        var avatarPath = OmpAvatarHelper.BuildUserAvatarPath(userId, storageKey);
+        return string.IsNullOrWhiteSpace(avatarPath)
+            ? null
+            : PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, avatarPath);
     }
 
     private string GetLogoutUrl()

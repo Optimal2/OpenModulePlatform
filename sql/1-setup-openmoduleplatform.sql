@@ -2022,6 +2022,12 @@ BEGIN
         -- distinguished from each other.
         display_name nvarchar(200) NOT NULL,
 
+        -- Optional user-managed profile image metadata. The physical file is
+        -- kept in controlled server storage and is served through an
+        -- authenticated endpoint.
+        profile_image_file_name nvarchar(260) NULL,
+        profile_image_storage_key nvarchar(260) NULL,
+
         -- Integer status instead of physical deletion. Suggested initial values:
         -- 1 = active, 2 = disabled, 3 = deleted/reserved. The application owns
         -- the final enum mapping.
@@ -2036,6 +2042,22 @@ BEGIN
 
         CONSTRAINT PK_omp_users PRIMARY KEY(user_id)
     );
+END
+GO
+
+IF OBJECT_ID(N'omp.users', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.users', N'profile_image_file_name') IS NULL
+BEGIN
+    ALTER TABLE omp.users
+    ADD profile_image_file_name nvarchar(260) NULL;
+END
+GO
+
+IF OBJECT_ID(N'omp.users', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.users', N'profile_image_storage_key') IS NULL
+BEGIN
+    ALTER TABLE omp.users
+    ADD profile_image_storage_key nvarchar(260) NULL;
 END
 GO
 

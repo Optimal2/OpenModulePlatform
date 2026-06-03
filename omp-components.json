@@ -5,7 +5,7 @@
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.67",
+      "definitionVersion": "0.3.68",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.86",
+      "definitionVersion": "0.3.87",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -57,8 +57,8 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.154",
-      "minModuleDefinitionVersion": "0.3.86",
+      "version": "0.3.155",
+      "minModuleDefinitionVersion": "0.3.87",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip"
@@ -155,7 +155,7 @@
       "appKey": "example_webapp_blazor_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp-blazor",
-      "version": "0.3.12",
+      "version": "0.3.13",
       "projectPath": "examples/WebAppBlazorModule/WebApp",
       "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip"

@@ -1,5 +1,6 @@
 @page "/messages/{conversationId:long}"
 @model OpenModulePlatform.Portal.Pages.Messages.ThreadModel
+@using OpenModulePlatform.Web.Shared.Web
 @{
     bool IsGroupConversation()
         => string.Equals(Model.Conversation?.ConversationType, "group", StringComparison.OrdinalIgnoreCase);
@@ -89,7 +90,22 @@ else
                     <div class="portal-message-thread__messages">
                         @foreach (var message in Model.Rows)
                         {
+                            var avatarUrl = OmpAvatarHelper.BuildUserAvatarPath(message.SenderUserId, message.SenderProfileImageStorageKey);
+                            var avatarInitials = OmpAvatarHelper.GetInitials(message.SenderDisplayName);
                             <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)" style="@SenderBubbleStyle(message)">
+                                @if (!message.IsOwnMessage)
+                                {
+                                    <span class="portal-message-thread__avatar" aria-hidden="true">
+                                        @if (!string.IsNullOrWhiteSpace(avatarUrl))
+                                        {
+                                            <img src="@avatarUrl" alt="" />
+                                        }
+                                        else
+                                        {
+                                            @avatarInitials
+                                        }
+                                    </span>
+                                }
                                 <div class="portal-message-thread__bubble">
                                     <div class="portal-message-thread__meta">
                                         <strong>@message.SenderDisplayName</strong>
@@ -115,6 +131,19 @@ else
                                         </div>
                                     }
                                 </div>
+                                @if (message.IsOwnMessage)
+                                {
+                                    <span class="portal-message-thread__avatar" aria-hidden="true">
+                                        @if (!string.IsNullOrWhiteSpace(avatarUrl))
+                                        {
+                                            <img src="@avatarUrl" alt="" />
+                                        }
+                                        else
+                                        {
+                                            @avatarInitials
+                                        }
+                                    </span>
+                                }
                             </article>
                         }
                     </div>
