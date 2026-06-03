@@ -273,6 +273,30 @@ function Protect-ConnectionString {
     }
 }
 
+function Normalize-SqlConnectionString {
+    param([string]$ConnectionString)
+
+    if ([string]::IsNullOrWhiteSpace($ConnectionString)) {
+        return ''
+    }
+
+    try {
+        $builder = New-Object System.Data.Common.DbConnectionStringBuilder
+        $builder.ConnectionString = $ConnectionString
+        if ($builder.ContainsKey('Trust Server Certificate')) {
+            $value = $builder['Trust Server Certificate']
+            [void]$builder.Remove('Trust Server Certificate')
+            if (-not $builder.ContainsKey('TrustServerCertificate')) {
+                $builder['TrustServerCertificate'] = $value
+            }
+        }
+        return $builder.ConnectionString
+    }
+    catch {
+        return ($ConnectionString -replace '(?i)Trust\s+Server\s+Certificate\s*=', 'TrustServerCertificate=')
+    }
+}
+
 function Convert-DataTableRows {
     param([System.Data.DataTable]$Table)
 
@@ -299,7 +323,8 @@ function Invoke-SqlRows {
     )
 
     Add-Type -AssemblyName System.Data
-    $connection = New-Object System.Data.SqlClient.SqlConnection $ConnectionString
+    $effectiveConnectionString = Normalize-SqlConnectionString $ConnectionString
+    $connection = New-Object System.Data.SqlClient.SqlConnection $effectiveConnectionString
     try {
         $connection.Open()
         $command = $connection.CreateCommand()
@@ -330,13 +355,22 @@ function Get-DirectorySummary {
         return [ordered]@{ Path = ''; Exists = $false; CanList = $false; Error = 'Path is not configured.' }
     }
 
+    $exists = $false
+    $errorMessage = ''
+    try {
+        $exists = Test-Path -LiteralPath $Path -ErrorAction Stop
+    }
+    catch {
+        $errorMessage = $_.Exception.Message
+    }
+
     $summary = [ordered]@{
         Path = $Path
-        Exists = Test-Path -LiteralPath $Path
+        Exists = $exists
         CanList = $false
         FileCount = 0
         DirectoryCount = 0
-        Error = ''
+        Error = $errorMessage
     }
 
     if (-not $summary.Exists) {
@@ -374,7 +408,7 @@ function Test-DirectoryReadWrite {
     }
     catch {
         $summary.WriteError = $_.Exception.Message
-        if (Test-Path -LiteralPath $testFile) {
+        if (Test-Path -LiteralPath $testFile -ErrorAction SilentlyContinue) {
             Remove-Item -LiteralPath $testFile -Force -ErrorAction SilentlyContinue
         }
     }
@@ -576,16 +610,23 @@ foreach ($pathItem in @(
     Add-Check 'Filesystem' $pathItem.Name $status $pathItem.Path $access
 }
 
-if ($importEnabled -and -not [string]::IsNullOrWhiteSpace($importPath) -and (Test-Path -LiteralPath $importPath)) {
-    try {
-        $pending = @(Get-ChildItem -LiteralPath $importPath -File -ErrorAction Stop |
-            Sort-Object Name |
-            Select-Object Name, Length, LastWriteTimeUtc)
-        $status = if ($pending.Count -gt 0) { 'Warn' } else { 'OK' }
-        Add-Check 'Import folder' 'Pending import files' $status "Found $($pending.Count) top-level file(s)." $pending
+if ($importEnabled -and -not [string]::IsNullOrWhiteSpace($importPath)) {
+    $importDirectory = Get-DirectorySummary -Path $importPath
+    if ($importDirectory.Exists) {
+        try {
+            $pending = @(Get-ChildItem -LiteralPath $importPath -File -ErrorAction Stop |
+                Sort-Object Name |
+                Select-Object Name, Length, LastWriteTimeUtc)
+            $status = if ($pending.Count -gt 0) { 'Warn' } else { 'OK' }
+            Add-Check 'Import folder' 'Pending import files' $status "Found $($pending.Count) top-level file(s)." $pending
+        }
+        catch {
+            Add-Check 'Import folder' 'Pending import files' 'Fail' $_.Exception.Message
+        }
     }
-    catch {
-        Add-Check 'Import folder' 'Pending import files' 'Fail' $_.Exception.Message
+    else {
+        $detail = if ([string]::IsNullOrWhiteSpace($importDirectory.Error)) { 'Import path is not accessible or does not exist.' } else { $importDirectory.Error }
+        Add-Check 'Import folder' 'Pending import files' 'Fail' $detail $importDirectory
     }
 }
 

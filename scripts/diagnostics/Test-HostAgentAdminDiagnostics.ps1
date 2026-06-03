@@ -275,6 +275,30 @@ function Protect-ConnectionString {
     }
 }
 
+function Normalize-SqlConnectionString {
+    param([string]$ConnectionString)
+
+    if ([string]::IsNullOrWhiteSpace($ConnectionString)) {
+        return ''
+    }
+
+    try {
+        $builder = New-Object System.Data.Common.DbConnectionStringBuilder
+        $builder.ConnectionString = $ConnectionString
+        if ($builder.ContainsKey('Trust Server Certificate')) {
+            $value = $builder['Trust Server Certificate']
+            [void]$builder.Remove('Trust Server Certificate')
+            if (-not $builder.ContainsKey('TrustServerCertificate')) {
+                $builder['TrustServerCertificate'] = $value
+            }
+        }
+        return $builder.ConnectionString
+    }
+    catch {
+        return ($ConnectionString -replace '(?i)Trust\s+Server\s+Certificate\s*=', 'TrustServerCertificate=')
+    }
+}
+
 function Convert-DataTableRows {
     param([System.Data.DataTable]$Table)
 
@@ -301,7 +325,8 @@ function Invoke-SqlRows {
     )
 
     Add-Type -AssemblyName System.Data
-    $connection = New-Object System.Data.SqlClient.SqlConnection $ConnectionString
+    $effectiveConnectionString = Normalize-SqlConnectionString $ConnectionString
+    $connection = New-Object System.Data.SqlClient.SqlConnection $effectiveConnectionString
     try {
         $connection.Open()
         $command = $connection.CreateCommand()
@@ -332,12 +357,21 @@ function Get-DirectorySummary {
         return [ordered]@{ Path = ''; Exists = $false; FileCount = 0; DirectoryCount = 0; Error = 'Path is not configured.' }
     }
 
+    $exists = $false
+    $errorMessage = ''
+    try {
+        $exists = Test-Path -LiteralPath $Path -ErrorAction Stop
+    }
+    catch {
+        $errorMessage = $_.Exception.Message
+    }
+
     $summary = [ordered]@{
         Path = $Path
-        Exists = Test-Path -LiteralPath $Path
+        Exists = $exists
         FileCount = 0
         DirectoryCount = 0
-        Error = ''
+        Error = $errorMessage
     }
 
     if (-not $summary.Exists) {
@@ -406,7 +440,15 @@ function Get-EventLogSignals {
                         $_.ProviderName -like '*Windows Error Reporting*' -or
                         $_.ProviderName -like '*NLog*'))
                 } |
-                Select-Object -First 60 TimeCreated, LogName, ProviderName, Id, LevelDisplayName, Message
+                Select-Object -First 60 TimeCreated, LogName, ProviderName, Id, LevelDisplayName, @{ Name = 'Message'; Expression = {
+                    $message = [string]$_.Message
+                    if ($message.Length -gt 4000) {
+                        $message.Substring(0, 4000) + '...'
+                    }
+                    else {
+                        $message
+                    }
+                } }
             $signals += $events
         }
         catch {
@@ -507,6 +549,20 @@ $hostAgentSettings = [ordered]@{
 Add-Check 'Runtime configuration' 'HostAgent settings' 'Info' "Effective host key: $hostKey" $hostAgentSettings
 Add-Check 'Runtime configuration' 'OmpDb connection string' ($(if ([string]::IsNullOrWhiteSpace($connectionString)) { 'Fail' } else { 'OK' })) (Protect-ConnectionString $connectionString)
 
+$importEnabled = [bool](Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport:IsEnabled' -Default $false)
+$importPath = [string](Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport:ImportPath' -Default '')
+$processedPath = [string](Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport:ProcessedPath' -Default '')
+$failedPath = [string](Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport:FailedPath' -Default '')
+if (-not [string]::IsNullOrWhiteSpace($importPath)) {
+    if ([string]::IsNullOrWhiteSpace($processedPath)) {
+        $processedPath = Join-Path $importPath 'processed'
+    }
+    if ([string]::IsNullOrWhiteSpace($failedPath)) {
+        $failedPath = Join-Path $importPath 'failed'
+    }
+}
+Add-Check 'Import folder' 'ArtifactZipImport enabled' ($(if ($importEnabled) { 'OK' } else { 'Warn' })) "IsEnabled=$importEnabled" (Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport' -Default $null)
+
 if (-not [string]::IsNullOrWhiteSpace($resolvedAppPath)) {
     $logDirectorySetting = [string](Get-ConfigValue -Config $config -Path 'NLog:variables:logDirectory' -Default '${basedir}/logs')
     $logDirectory = Resolve-ConfiguredPath -Path $logDirectorySetting -BaseDirectory $resolvedAppPath
@@ -518,9 +574,9 @@ if (-not [string]::IsNullOrWhiteSpace($resolvedAppPath)) {
 foreach ($pathItem in @(
     @{ Name = 'CentralArtifactRoot'; Path = [string]$hostAgentSettings.CentralArtifactRoot },
     @{ Name = 'LocalArtifactCacheRoot'; Path = [string]$hostAgentSettings.LocalArtifactCacheRoot },
-    @{ Name = 'ArtifactZipImport.ImportPath'; Path = [string](Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport:ImportPath' -Default '') },
-    @{ Name = 'ArtifactZipImport.ProcessedPath'; Path = [string](Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport:ProcessedPath' -Default '') },
-    @{ Name = 'ArtifactZipImport.FailedPath'; Path = [string](Get-ConfigValue -Config $config -Path 'HostAgent:ArtifactZipImport:FailedPath' -Default '') },
+    @{ Name = 'ArtifactZipImport.ImportPath'; Path = $importPath },
+    @{ Name = 'ArtifactZipImport.ProcessedPath'; Path = $processedPath },
+    @{ Name = 'ArtifactZipImport.FailedPath'; Path = $failedPath },
     @{ Name = 'WebAppsRoot'; Path = [string]$hostAgentSettings.WebAppsRoot },
     @{ Name = 'PortalPhysicalPath'; Path = [string]$hostAgentSettings.PortalPhysicalPath },
     @{ Name = 'ServicesRoot'; Path = [string]$hostAgentSettings.ServicesRoot }
@@ -533,6 +589,26 @@ foreach ($pathItem in @(
     $summary = Get-DirectorySummary -Path $pathItem.Path
     $status = if ($summary.Exists) { 'OK' } else { 'Warn' }
     Add-Check 'Filesystem' $pathItem.Name $status $pathItem.Path $summary
+}
+
+if ($importEnabled -and -not [string]::IsNullOrWhiteSpace($importPath)) {
+    $importDirectory = Get-DirectorySummary -Path $importPath
+    if ($importDirectory.Exists) {
+        try {
+            $pending = @(Get-ChildItem -LiteralPath $importPath -File -ErrorAction Stop |
+                Sort-Object Name |
+                Select-Object Name, Length, LastWriteTimeUtc)
+            $status = if ($pending.Count -gt 0) { 'Warn' } else { 'OK' }
+            Add-Check 'Import folder' 'Pending import files' $status "Found $($pending.Count) top-level file(s)." $pending
+        }
+        catch {
+            Add-Check 'Import folder' 'Pending import files' 'Warn' $_.Exception.Message
+        }
+    }
+    else {
+        $detail = if ([string]::IsNullOrWhiteSpace($importDirectory.Error)) { 'Import path is not accessible or does not exist.' } else { $importDirectory.Error }
+        Add-Check 'Import folder' 'Pending import files' 'Warn' $detail $importDirectory
+    }
 }
 
 try {
@@ -556,14 +632,37 @@ try {
             Add-Check 'IIS' 'Configured IIS site' 'Warn' "IIS site '$siteName' was not found."
         }
         else {
-            Add-Check 'IIS' 'Configured IIS site' 'OK' "IIS site '$siteName' was found." ($site | Select-Object Name, State, PhysicalPath, Bindings)
+            $bindings = @()
+            foreach ($binding in @($site.Bindings.Collection)) {
+                $bindings += [ordered]@{
+                    Protocol = [string]$binding.protocol
+                    BindingInformation = [string]$binding.bindingInformation
+                    SslFlags = [string]$binding.sslFlags
+                    CertificateHash = [string]$binding.certificateHash
+                    CertificateStoreName = [string]$binding.certificateStoreName
+                }
+            }
+
+            Add-Check 'IIS' 'Configured IIS site' 'OK' "IIS site '$siteName' was found." ([ordered]@{
+                Name = [string]$site.Name
+                State = [string]$site.State
+                PhysicalPath = [string]$site.PhysicalPath
+                Bindings = $bindings
+            })
         }
     }
 
     $poolPrefix = [string](Get-ConfigValue -Config $config -Path 'HostAgent:IisAppPoolNamePrefix' -Default 'OMP_')
     $pools = @(Get-ChildItem IIS:\AppPools -ErrorAction Stop |
         Where-Object { $_.Name -like "$poolPrefix*" } |
-        Select-Object Name, State, @{ Name = 'IdentityType'; Expression = { $_.processModel.identityType } }, @{ Name = 'UserName'; Expression = { $_.processModel.userName } })
+        ForEach-Object {
+            [ordered]@{
+                Name = [string]$_.Name
+                State = [string]$_.State
+                IdentityType = [string]$_.processModel.identityType
+                UserName = [string]$_.processModel.userName
+            }
+        })
     Add-Check 'IIS' 'Managed app pools' 'Info' "Found $($pools.Count) app pool(s) using prefix '$poolPrefix'." $pools
 }
 catch {
