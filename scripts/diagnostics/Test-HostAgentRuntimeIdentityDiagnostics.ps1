@@ -294,14 +294,34 @@ function Convert-DataTableRows {
         $item = [ordered]@{}
         foreach ($column in $Table.Columns) {
             $value = $row[$column.ColumnName]
-            if ($value -eq [DBNull]::Value) {
+            if ([object]::ReferenceEquals($value, [DBNull]::Value)) {
                 $value = $null
+            }
+            elseif ($value -is [bool]) {
+                $value = [int]$value
             }
             $item[$column.ColumnName] = $value
         }
         $rows += $item
     }
     return $rows
+}
+
+function Resolve-AccountSid {
+    param([string]$AccountName)
+
+    if ([string]::IsNullOrWhiteSpace($AccountName)) {
+        return ''
+    }
+
+    try {
+        return (New-Object System.Security.Principal.NTAccount($AccountName)).
+            Translate([System.Security.Principal.SecurityIdentifier]).
+            Value
+    }
+    catch {
+        return ''
+    }
 }
 
 function Invoke-SqlRows {
@@ -476,7 +496,9 @@ function Invoke-HostAgentRunOnce {
     }
 }
 
-$currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$currentWindowsIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$currentIdentity = $currentWindowsIdentity.Name
+$currentIdentitySid = if ($null -ne $currentWindowsIdentity.User) { $currentWindowsIdentity.User.Value } else { '' }
 Add-Check 'Runtime identity' 'Current Windows identity' 'OK' $currentIdentity
 
 $service = $null
@@ -485,14 +507,21 @@ try {
     $service = Get-CimInstance Win32_Service -Filter "Name = '$escapedServiceName'" -ErrorAction Stop
     if ($null -ne $service) {
         $sameIdentity = $false
+        $serviceIdentitySid = Resolve-AccountSid -AccountName $service.StartName
         if (-not [string]::IsNullOrWhiteSpace($service.StartName)) {
-            $sameIdentity = $currentIdentity.Equals($service.StartName, [StringComparison]::OrdinalIgnoreCase)
+            $sameIdentity =
+                ((-not [string]::IsNullOrWhiteSpace($currentIdentitySid)) -and
+                    (-not [string]::IsNullOrWhiteSpace($serviceIdentitySid)) -and
+                    $currentIdentitySid.Equals($serviceIdentitySid, [StringComparison]::OrdinalIgnoreCase)) -or
+                $currentIdentity.Equals($service.StartName, [StringComparison]::OrdinalIgnoreCase)
         }
         Add-Check 'Windows service' 'Configured service identity' ($(if ($sameIdentity) { 'OK' } else { 'Warn' })) "Service runs as '$($service.StartName)'." ([ordered]@{
             Name = $service.Name
             State = $service.State
             StartName = $service.StartName
             CurrentIdentity = $currentIdentity
+            StartSid = $serviceIdentitySid
+            CurrentSid = $currentIdentitySid
             PathName = $service.PathName
         })
     }
