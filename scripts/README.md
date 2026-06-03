@@ -11,6 +11,9 @@ still part of the current OMP object/installer model.
 - `deployment/` contains HostAgent-first packaging and installer-runner tools.
 - `dev/` contains developer-only helpers for module-definition SQL embedding
   and local Content smoke-test data.
+- `diagnostics/` contains read-only operational diagnostics, including
+  administrator and runtime-identity HostAgent checks for service startup,
+  logging, filesystem, IIS, and OMP database access.
 - `omp/` contains repository-object builders that turn `omp-components.json`
   entries into portable module, artifact, host config, config overlay, widget,
   and universal-package objects.
