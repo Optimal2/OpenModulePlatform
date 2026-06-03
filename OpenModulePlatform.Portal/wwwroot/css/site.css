@@ -1939,6 +1939,12 @@ button {
     outline-offset: -4px;
 }
 
+.portal-dashboard.is-editing .dashboard-widget.is-titlebar-hidden {
+    gap: 6px;
+    padding: 6px;
+    background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
+}
+
 .portal-dashboard.is-editing .dashboard-widget.is-selected {
     outline: 2px solid var(--link);
     outline-offset: -3px;
@@ -1967,6 +1973,17 @@ button {
 .portal-dashboard:not(.is-editing) .dashboard-widget.is-titlebar-hidden .dashboard-widget__titlebar {
     visibility: hidden;
     pointer-events: none;
+}
+
+.portal-dashboard.is-editing .dashboard-widget.is-titlebar-hidden .dashboard-widget__titlebar {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.portal-dashboard.is-editing .dashboard-widget.is-titlebar-hidden .dashboard-widget__body {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
 }
 
 .dashboard-widget__body {
