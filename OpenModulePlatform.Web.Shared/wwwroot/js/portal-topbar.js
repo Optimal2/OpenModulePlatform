@@ -171,63 +171,6 @@
         initializedTopbars.forEach(scheduleRebalance);
     }
 
-    function copyTextToClipboard(text) {
-        if (!text) {
-            return Promise.resolve();
-        }
-
-        if (navigator.clipboard && window.isSecureContext) {
-            return navigator.clipboard.writeText(text);
-        }
-
-        return new Promise(function (resolve, reject) {
-            function reportFallbackFailure(error) {
-                if (window.console && typeof window.console.warn === 'function') {
-                    window.console.warn('Clipboard fallback copy failed.', error);
-                }
-            }
-
-            try {
-                var textArea = document.createElement('textarea');
-                textArea.value = text;
-                textArea.setAttribute('readonly', 'readonly');
-                textArea.style.position = 'fixed';
-                textArea.style.top = '-9999px';
-                textArea.style.left = '-9999px';
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-
-                if (document.execCommand('copy')) {
-                    document.body.removeChild(textArea);
-                    resolve();
-                    return;
-                }
-
-                document.body.removeChild(textArea);
-                var failure = new Error('Copy command failed.');
-                reportFallbackFailure(failure);
-                reject(failure);
-            } catch (error) {
-                reportFallbackFailure(error);
-                reject(error);
-            }
-        });
-    }
-
-    function tryCopyFromButton(target) {
-        var button = target.closest('[data-copy-to-clipboard]');
-        if (!button) {
-            return false;
-        }
-
-        var text = button.getAttribute('data-copy-text') || '';
-        copyTextToClipboard(text).catch(function () {
-            return null;
-        });
-        return true;
-    }
-
     function setEntryGroupExpanded(group, expanded, temporary) {
         if (!group) {
             return;
@@ -1501,10 +1444,6 @@
 
         globalHandlersRegistered = true;
         document.addEventListener('click', function (event) {
-            if (tryCopyFromButton(event.target)) {
-                return;
-            }
-
             closeOverlaysOnOutsideClick(event);
         });
         document.addEventListener('keydown', function (event) {
