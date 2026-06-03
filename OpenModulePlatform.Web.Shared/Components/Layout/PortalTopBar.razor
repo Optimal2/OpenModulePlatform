@@ -234,6 +234,21 @@
                         }
                     </summary>
                     <div class="portal-topbar__language-menu">
+                        @{
+                            var currentLanguage = _portalTopBar.LanguageOptions.FirstOrDefault(language => language.IsCurrent);
+                        }
+                        <div class="portal-topbar__language-heading">
+                            <span class="portal-topbar__language-row-icon portal-topbar__icon portal-topbar__icon--language" aria-hidden="true"></span>
+                            <span>@L[_portalTopBar.LanguageToggleTextKey]</span>
+                        </div>
+                        <div class="portal-topbar__language-separator" role="separator" aria-hidden="true"></div>
+                        @if (currentLanguage is not null)
+                        {
+                            <div class="portal-topbar__language-row portal-topbar__language-current" aria-current="true" title="@currentLanguage.Culture">
+                                <span class="portal-topbar__language-badge" aria-hidden="true">@LanguageBadgeText(currentLanguage.Culture)</span>
+                                <span>@CultureText(currentLanguage.DisplayText)</span>
+                            </div>
+                        }
                         @if (_portalTopBar.IsCultureFallback)
                         {
                             <div class="portal-topbar__language-note">
@@ -241,9 +256,13 @@
                                 <div class="portal-topbar__language-note-body">@FallbackNotice</div>
                             </div>
                         }
-                        @foreach (var language in _portalTopBar.LanguageOptions)
+                        <div class="portal-topbar__language-separator" role="separator" aria-hidden="true"></div>
+                        @foreach (var language in _portalTopBar.LanguageOptions.Where(language => !language.IsCurrent))
                         {
-                            <a class="portal-topbar__language-link@(language.IsCurrent ? " is-current" : string.Empty)" href="@BuildLanguageHref(language.Culture)" data-enhance-nav="false">@CultureText(language.DisplayText)</a>
+                            <a class="portal-topbar__language-row portal-topbar__language-link" href="@BuildLanguageHref(language.Culture)" title="@language.Culture" data-enhance-nav="false">
+                                <span class="portal-topbar__language-badge" aria-hidden="true">@LanguageBadgeText(language.Culture)</span>
+                                <span>@CultureText(language.DisplayText)</span>
+                            </a>
                         }
                     </div>
                 </details>
@@ -607,6 +626,21 @@
         return string.IsNullOrWhiteSpace(source)
             ? "!"
             : source.Trim()[0].ToString().ToUpperInvariant();
+    }
+
+    private static string LanguageBadgeText(string? culture)
+    {
+        if (string.IsNullOrWhiteSpace(culture))
+        {
+            return "?";
+        }
+
+        var trimmed = culture.Trim();
+        var separatorIndex = trimmed.IndexOfAny(new[] { '-', '_' });
+        var language = separatorIndex > 0 ? trimmed[..separatorIndex] : trimmed;
+        return language.Length <= 3
+            ? language.ToUpperInvariant()
+            : trimmed.ToUpperInvariant();
     }
 
     private static string DisplayUserName(string? value)
