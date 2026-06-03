@@ -1277,6 +1277,7 @@ span.portal-topbar__nav-group-link {
 }
 
 .portal-topbar__language-current {
+    grid-template-columns: 24px minmax(0, 1fr) 18px;
     background: color-mix(in srgb, var(--portal-topbar-text) 12%, var(--portal-topbar-surface-muted));
     cursor: default;
     font-weight: 700;
@@ -1285,6 +1286,16 @@ span.portal-topbar__nav-group-link {
 .portal-topbar__language-current .portal-topbar__language-badge {
     background: color-mix(in srgb, var(--portal-topbar-text) 10%, var(--portal-topbar-surface));
     color: var(--portal-topbar-text);
+}
+
+.portal-topbar__language-check {
+    display: inline-block;
+    justify-self: center;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg") center / contain no-repeat;
 }
 
 .portal-topbar__language-link {
