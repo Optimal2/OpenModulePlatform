@@ -21,6 +21,7 @@ param(
     [string]$RoutePath = '',
     [string]$AppInstanceKey = '',
     [string]$Url = '',
+    [string]$ZebraClient = '',
     [int]$RecentHours = 24,
     [int]$HttpTimeoutSeconds = 20,
     [string]$OutputPath = ''
@@ -486,6 +487,231 @@ function Get-ConfigFileSummaries {
     }
 
     return $result
+}
+
+function Read-AppConfig {
+    param(
+        [string]$Path,
+        [string]$Environment
+    )
+
+    $loadedFiles = @()
+    $config = [ordered]@{}
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+        return [ordered]@{ Files = $loadedFiles; Config = $config }
+    }
+
+    $baseFile = Join-Path $Path 'appsettings.json'
+    $baseConfig = Read-JsonConfigFile -Path $baseFile
+    if ($null -ne $baseConfig) {
+        $config = Merge-Config -Base $config -Overlay $baseConfig
+        $loadedFiles += $baseFile
+    }
+
+    $envName = if ([string]::IsNullOrWhiteSpace($Environment)) { 'Production' } else { $Environment.Trim() }
+    $envFile = Join-Path $Path ("appsettings.$envName.json")
+    $envConfig = Read-JsonConfigFile -Path $envFile
+    if ($null -ne $envConfig) {
+        $config = Merge-Config -Base $config -Overlay $envConfig
+        $loadedFiles += $envFile
+    }
+
+    return [ordered]@{ Files = $loadedFiles; Config = $config }
+}
+
+function Resolve-AppPath {
+    param(
+        [string]$BasePath,
+        [string]$ConfiguredPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ConfiguredPath)) {
+        return ''
+    }
+
+    if ([System.IO.Path]::IsPathRooted($ConfiguredPath)) {
+        return [System.IO.Path]::GetFullPath($ConfiguredPath)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BasePath $ConfiguredPath))
+}
+
+function Add-SharedWebConfigChecks {
+    param(
+        [string]$Path,
+        [System.Collections.IDictionary]$Config
+    )
+
+    $ompDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:OmpDb' -Default '')
+    $cookieName = [string](Get-ConfigValue -Config $Config -Path 'OmpAuth:CookieName' -Default '')
+    $applicationName = [string](Get-ConfigValue -Config $Config -Path 'OmpAuth:ApplicationName' -Default '')
+    $dataProtectionPath = [string](Get-ConfigValue -Config $Config -Path 'OmpAuth:DataProtectionKeyPath' -Default '')
+
+    if ([string]::IsNullOrWhiteSpace($dataProtectionPath) -and -not [string]::IsNullOrWhiteSpace($Path)) {
+        $webAppsRoot = Split-Path -Parent $Path
+        $runtimeRoot = if ([string]::IsNullOrWhiteSpace($webAppsRoot)) { '' } else { Split-Path -Parent $webAppsRoot }
+        if (-not [string]::IsNullOrWhiteSpace($runtimeRoot) -and
+            [string]::Equals((Split-Path -Leaf $webAppsRoot), 'WebApps', [StringComparison]::OrdinalIgnoreCase)) {
+            $dataProtectionPath = Join-Path $runtimeRoot 'DataProtectionKeys'
+        }
+    }
+
+    $dataProtectionSummary = if ([string]::IsNullOrWhiteSpace($dataProtectionPath)) {
+        [ordered]@{ Path = ''; Exists = $false; Error = 'No configured or inferred DataProtection key path.' }
+    }
+    else {
+        Get-DirectorySummary -Path $dataProtectionPath -RecentHours 24
+    }
+
+    $data = [ordered]@{
+        HasOmpDbConnectionString = -not [string]::IsNullOrWhiteSpace($ompDb)
+        OmpDbConnectionString = Protect-ConnectionString $ompDb
+        OmpAuthCookieName = $cookieName
+        OmpAuthApplicationName = $applicationName
+        DataProtectionKeyPath = $dataProtectionPath
+        DataProtectionKeyPathExists = $dataProtectionSummary.Exists
+        DataProtectionKeyPathError = $dataProtectionSummary.Error
+    }
+
+    $status = if ([string]::IsNullOrWhiteSpace($ompDb)) {
+        'Fail'
+    }
+    elseif (-not $dataProtectionSummary.Exists) {
+        'Warn'
+    }
+    else {
+        'OK'
+    }
+
+    Add-Check 'Runtime configuration' 'OMP web prerequisites' $status 'Checks OmpDb and shared auth/DataProtection settings used by the shared topbar.' $data
+}
+
+function Add-DocumentLibraryConfigChecks {
+    param(
+        [System.Collections.IDictionary]$Config
+    )
+
+    $hasDocumentLibrarySection = $Config.Contains('DokumentBibliotek')
+    if (-not $hasDocumentLibrarySection) {
+        return
+    }
+
+    $useLegacy = [bool](Get-ConfigValue -Config $Config -Path 'DokumentBibliotek:UseLegacyDataStore' -Default $false)
+    $dataSchema = [string](Get-ConfigValue -Config $Config -Path 'DokumentBibliotek:DataSchema' -Default '')
+    if ([string]::IsNullOrWhiteSpace($dataSchema)) {
+        $dataSchema = if ($useLegacy) { 'dbo' } else { 'omp_earkiv_dokumentbibliotek' }
+    }
+
+    $ompDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:OmpDb' -Default '')
+    $legacyDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:DokumentBibliotekDb' -Default '')
+
+    Add-Check 'Dokumentbibliotek' 'Data-store configuration' ($(if ($useLegacy -and [string]::IsNullOrWhiteSpace($legacyDb)) { 'Fail' } else { 'OK' })) "UseLegacyDataStore=$useLegacy; DataSchema=$dataSchema" ([ordered]@{
+        UseLegacyDataStore = $useLegacy
+        DataSchema = $dataSchema
+        HasOmpDbConnectionString = -not [string]::IsNullOrWhiteSpace($ompDb)
+        HasLegacyConnectionString = -not [string]::IsNullOrWhiteSpace($legacyDb)
+        OmpDbConnectionString = Protect-ConnectionString $ompDb
+        LegacyConnectionString = Protect-ConnectionString $legacyDb
+    })
+
+    $connectionToCheck = if ($useLegacy) { $legacyDb } else { $ompDb }
+    if ([string]::IsNullOrWhiteSpace($connectionToCheck)) {
+        return
+    }
+
+    try {
+        $rows = Invoke-SqlRows -ConnectionString $connectionToCheck -Query @'
+DECLARE @schema sysname = @schemaName;
+
+WITH RequiredObjects AS
+(
+    SELECT N'Settings' AS TableName UNION ALL
+    SELECT N'Dokument' UNION ALL
+    SELECT N'Bilder' UNION ALL
+    SELECT N'Blankett' UNION ALL
+    SELECT N'Forvaltning' UNION ALL
+    SELECT N'DokumentForvaltning' UNION ALL
+    SELECT N'Arkiv' UNION ALL
+    SELECT N'DokumentArkiv' UNION ALL
+    SELECT N'DokumentScope' UNION ALL
+    SELECT N'UserSettings'
+)
+SELECT
+    RequiredObjects.TableName,
+    CASE WHEN OBJECT_ID(QUOTENAME(@schema) + N'.' + QUOTENAME(RequiredObjects.TableName), N'U') IS NULL THEN 0 ELSE 1 END AS ExistsInDatabase
+FROM RequiredObjects
+ORDER BY RequiredObjects.TableName;
+'@ -Parameters @{ '@schemaName' = $dataSchema }
+        $missing = @($rows | Where-Object { $_.ExistsInDatabase -ne 1 })
+        Add-Check 'Dokumentbibliotek' 'Required data tables' ($(if ($missing.Count -gt 0) { 'Warn' } else { 'OK' })) "Checked schema $dataSchema; missing $($missing.Count)." $rows
+    }
+    catch {
+        Add-Check 'Dokumentbibliotek' 'Required data tables' 'Fail' $_.Exception.Message
+    }
+}
+
+function Add-VajSkrivareConfigChecks {
+    param(
+        [string]$Path,
+        [System.Collections.IDictionary]$Config,
+        [string]$Client
+    )
+
+    $hasPrinterConfig = $Config.Contains('PrinterDatabases') -or $Config.Contains('ZebraConfig')
+    if (-not $hasPrinterConfig) {
+        return
+    }
+
+    $zebraEnabled = [bool](Get-ConfigValue -Config $Config -Path 'ZebraConfig:Enabled' -Default $false)
+    $zebraPath = [string](Get-ConfigValue -Config $Config -Path 'ZebraConfig:FilePath' -Default '')
+    $resolvedZebraPath = Resolve-AppPath -BasePath $Path -ConfiguredPath $zebraPath
+    $printerItems = @(Get-ConfigValue -Config $Config -Path 'PrinterDatabases:Items' -Default @())
+
+    Add-Check 'VajSkrivare' 'Printer/Zebra configuration' ($(if ($zebraEnabled -and [string]::IsNullOrWhiteSpace($resolvedZebraPath)) { 'Fail' } else { 'OK' })) "Printer database count=$(@($printerItems).Count); ZebraEnabled=$zebraEnabled" ([ordered]@{
+        PrinterDatabaseCount = @($printerItems).Count
+        ZebraEnabled = $zebraEnabled
+        ZebraFilePath = $zebraPath
+        ResolvedZebraFilePath = $resolvedZebraPath
+    })
+
+    if ([string]::IsNullOrWhiteSpace($resolvedZebraPath)) {
+        return
+    }
+
+    $fileSummary = Get-FileSummary -Path $resolvedZebraPath
+    if (-not $fileSummary.Exists) {
+        Add-Check 'VajSkrivare' 'Zebra JSON file' ($(if ($zebraEnabled) { 'Fail' } else { 'Warn' })) $resolvedZebraPath $fileSummary
+        return
+    }
+
+    try {
+        $document = Get-Content -LiteralPath $resolvedZebraPath -Raw | ConvertFrom-Json
+        $connections = @($document.Connections)
+        $configs = @()
+        if ($null -ne $document.Configs) {
+            $configs = @($document.Configs.PSObject.Properties)
+        }
+
+        $clientMatches = @()
+        if (-not [string]::IsNullOrWhiteSpace($Client)) {
+            $clientMatches = @($connections | Where-Object {
+                [string]::Equals([string]$_.Client, $Client.Trim(), [StringComparison]::OrdinalIgnoreCase)
+            })
+        }
+
+        Add-Check 'VajSkrivare' 'Zebra JSON content' ($(if (-not [string]::IsNullOrWhiteSpace($Client) -and $clientMatches.Count -eq 0) { 'Warn' } else { 'OK' })) "Connections=$($connections.Count); Configs=$($configs.Count); ClientMatches=$($clientMatches.Count)" ([ordered]@{
+            Path = $resolvedZebraPath
+            Length = $fileSummary.Length
+            LastWriteTimeUtc = $fileSummary.LastWriteTimeUtc
+            ConnectionCount = $connections.Count
+            ConfigCount = $configs.Count
+            CheckedClient = $Client
+            ClientMatches = @($clientMatches | Select-Object -First 5 Client, Printer, Config)
+        })
+    }
+    catch {
+        Add-Check 'VajSkrivare' 'Zebra JSON content' 'Fail' $_.Exception.Message ([ordered]@{ Path = $resolvedZebraPath })
+    }
 }
 
 function Get-RecentLogFiles {
@@ -964,6 +1190,19 @@ SELECT
 
 if (-not [string]::IsNullOrWhiteSpace($targetPath)) {
     Add-DeploymentFileChecks -Path $targetPath -SourceName 'OMP deployment state' -RecentHours $RecentHours
+    try {
+        $appConfigInfo = Read-AppConfig -Path $targetPath -Environment $EnvironmentName
+        Add-Check 'Runtime configuration' 'Effective deployed appsettings' ($(if (@($appConfigInfo.Files).Count -gt 0) { 'OK' } else { 'Warn' })) "Loaded $(@($appConfigInfo.Files).Count) appsettings file(s)." ([ordered]@{
+            Files = $appConfigInfo.Files
+            RedactedConfig = Redact-ConfigValue -Key 'appsettings' -Value $appConfigInfo.Config
+        })
+        Add-SharedWebConfigChecks -Path $targetPath -Config $appConfigInfo.Config
+        Add-DocumentLibraryConfigChecks -Config $appConfigInfo.Config
+        Add-VajSkrivareConfigChecks -Path $targetPath -Config $appConfigInfo.Config -Client $ZebraClient
+    }
+    catch {
+        Add-Check 'Runtime configuration' 'Effective deployed appsettings' 'Fail' $_.Exception.Message
+    }
 }
 else {
     Add-Check 'Filesystem' 'Deployment target path' 'Warn' 'TargetPath was not found in OMP deployment state.'
