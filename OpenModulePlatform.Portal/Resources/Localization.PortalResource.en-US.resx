@@ -673,4 +673,13 @@
   <data name="Select a user." xml:space="preserve"><value>Select a user.</value></data>
   <data name="No users found." xml:space="preserve"><value>No users found.</value></data>
   <data name="Load older messages" xml:space="preserve"><value>Load older messages</value></data>
+  <data name="Profile image" xml:space="preserve"><value>Profile image</value></data>
+  <data name="Upload profile image" xml:space="preserve"><value>Upload profile image</value></data>
+  <data name="Remove profile image" xml:space="preserve"><value>Remove profile image</value></data>
+  <data name="Invalid image type." xml:space="preserve"><value>Invalid image type.</value></data>
+  <data name="Image is too large." xml:space="preserve"><value>Image is too large.</value></data>
+  <data name="Select a profile image file." xml:space="preserve"><value>Select a profile image file.</value></data>
+  <data name="Profile image saved." xml:space="preserve"><value>Profile image saved.</value></data>
+  <data name="Profile image removed." xml:space="preserve"><value>Profile image removed.</value></data>
+  <data name="Use a PNG, JPEG, or WebP image up to 2 MB." xml:space="preserve"><value>Use a PNG, JPEG, or WebP image up to 2 MB.</value></data>
 </root>

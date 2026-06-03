@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_portal",
-  "definitionVersion": "0.3.86",
+  "definitionVersion": "0.3.87",
   "module": {
     "displayName": "OpenModulePlatform Portal",
     "moduleType": "Portal",
@@ -23,7 +23,7 @@
   "moduleDependencies": [
     {
       "moduleKey": "omp_core",
-      "minDefinitionVersion": "0.3.34",
+      "minDefinitionVersion": "0.3.68",
       "maxDefinitionVersion": null,
       "required": true,
       "reason": "Portal administration pages rely on the core OMP schema, module definition tables, RBAC model, artifacts, and host deployment tables."

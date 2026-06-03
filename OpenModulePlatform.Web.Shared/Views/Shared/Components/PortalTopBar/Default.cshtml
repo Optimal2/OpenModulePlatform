@@ -442,6 +442,16 @@
                                     <a class="portal-topbar__message-row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
                                        href="@conversation.Href"
                                        data-enhance-nav="false">
+                                        <span class="portal-topbar__message-avatar" aria-hidden="true">
+                                            @if (!string.IsNullOrWhiteSpace(conversation.AvatarUrl))
+                                            {
+                                                <img src="@conversation.AvatarUrl" alt="" />
+                                            }
+                                            else
+                                            {
+                                                @UserInitials(conversation.DisplayTitle)
+                                            }
+                                        </span>
                                         <span class="portal-topbar__message-copy">
                                             <span class="portal-topbar__message-title">@conversation.DisplayTitle</span>
                                             <span class="portal-topbar__message-preview">@(conversation.LastMessagePreview ?? L["No messages"].Value)</span>
@@ -497,7 +507,16 @@
                         <div class="portal-topbar__profile-separator" role="separator" aria-hidden="true"></div>
 
                         <div class="portal-topbar__profile-row portal-topbar__profile-status-row">
-                            <span class="portal-topbar__profile-avatar" aria-hidden="true">@currentUserInitials</span>
+                            <span class="portal-topbar__profile-avatar" aria-hidden="true">
+                                @if (!string.IsNullOrWhiteSpace(Model.CurrentUserProfileImageUrl))
+                                {
+                                    <img src="@Model.CurrentUserProfileImageUrl" alt="" />
+                                }
+                                else
+                                {
+                                    @currentUserInitials
+                                }
+                            </span>
                             <span class="portal-topbar__profile-current-user" title="@Model.CurrentUserName">@currentUserDisplayName</span>
                         </div>
                         <div class="portal-topbar__profile-row portal-topbar__profile-status-row portal-topbar__profile-active-role" aria-label="@L["Active role"]">

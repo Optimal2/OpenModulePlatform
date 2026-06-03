@@ -121,6 +121,8 @@ public sealed class PortalTopBarModel
 
     public string? CurrentUserName { get; init; }
 
+    public string? CurrentUserProfileImageUrl { get; init; }
+
     public IReadOnlyList<OpenModulePlatform.Web.Shared.Services.UserRoleOption> AvailableRoles { get; init; } = Array.Empty<OpenModulePlatform.Web.Shared.Services.UserRoleOption>();
 
     public int? ActiveRoleId { get; init; }

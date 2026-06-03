@@ -73,6 +73,46 @@
                 <button type="submit">@L["Save"]</button>
             </div>
         </form>
+
+        <section class="card form-grid settings-panel settings-profile-image">
+            <h3>@L["Profile image"]</h3>
+            <div class="settings-profile-image__preview">
+                @if (!string.IsNullOrWhiteSpace(Model.ProfileImageUrl))
+                {
+                    <img src="@Model.ProfileImageUrl" alt="" />
+                }
+                else
+                {
+                    <span aria-hidden="true">@Model.ProfileImageInitials</span>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.ProfileImageFileName))
+            {
+                <p class="muted">@Model.ProfileImageFileName</p>
+            }
+            <p class="muted">@L["Use a PNG, JPEG, or WebP image up to 2 MB."]</p>
+
+            <form method="post" asp-page-handler="ProfileImage" enctype="multipart/form-data" class="settings-profile-image__form">
+                <input type="hidden" asp-for="UserInput.DisplayName" />
+                <div class="form-field">
+                    <label asp-for="ProfileImageUpload">@L["Upload profile image"]</label>
+                    <input asp-for="ProfileImageUpload" type="file" accept="image/png,image/jpeg,image/webp" />
+                    <span asp-validation-for="ProfileImageUpload" class="field-validation-error"></span>
+                </div>
+                <div class="toolbar">
+                    <button type="submit">@L["Save"]</button>
+                </div>
+            </form>
+
+            @if (!string.IsNullOrWhiteSpace(Model.ProfileImageUrl))
+            {
+                <form method="post" asp-page-handler="RemoveProfileImage">
+                    <div class="toolbar">
+                        <button type="submit" class="btn btn-danger">@L["Remove profile image"]</button>
+                    </div>
+                </form>
+            }
+        </section>
     }
 }
 else if (Model.IsActiveTab(SettingsModel.PortalTab))

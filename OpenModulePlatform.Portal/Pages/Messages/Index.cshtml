@@ -1,5 +1,6 @@
 @page "/messages"
 @model OpenModulePlatform.Portal.Pages.Messages.IndexModel
+@using OpenModulePlatform.Web.Shared.Web
 
 <section class="page-header">
     <div>
@@ -32,11 +33,19 @@ else
     <section class="card top-gap portal-messages-list">
         @foreach (var row in Model.Rows)
         {
+            var avatarUrl = OmpAvatarHelper.BuildUserAvatarPath(row.OtherUserId, row.OtherProfileImageStorageKey);
             <a class="portal-messages-list__row@(row.UnreadCount > 0 ? " is-unread" : string.Empty)"
                asp-page="/Messages/Thread"
                asp-route-conversationId="@row.ConversationId">
                 <span class="portal-messages-list__avatar" aria-hidden="true">
-                    @(string.IsNullOrWhiteSpace(row.DisplayTitle) ? "M" : row.DisplayTitle.Trim()[0].ToString().ToUpperInvariant())
+                    @if (!string.IsNullOrWhiteSpace(avatarUrl))
+                    {
+                        <img src="@avatarUrl" alt="" />
+                    }
+                    else
+                    {
+                        @OmpAvatarHelper.GetInitials(row.DisplayTitle)
+                    }
                 </span>
                 <span class="portal-messages-list__copy">
                     <span class="portal-messages-list__title">
