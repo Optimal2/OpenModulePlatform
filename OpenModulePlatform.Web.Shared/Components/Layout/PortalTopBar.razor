@@ -10,7 +10,7 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> L
 @inject IHttpContextAccessor HttpContextAccessor
-@inject OpenModulePlatform.Web.Shared.Services.RbacService RbacService
+@inject PersistentComponentState ApplicationState
 @implements IDisposable
 
 @if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
@@ -511,8 +511,11 @@
 }
 
 @code {
+    private const string PersistedModelKey = "OpenModulePlatform.Web.Shared.Components.Layout.PortalTopBar.Model";
+
     private PortalTopBarModel _portalTopBar = PortalTopBarModel.Hidden;
     private OpenModulePlatform.Web.Shared.Services.UserRoleContext _roleContext = OpenModulePlatform.Web.Shared.Services.UserRoleContext.Empty;
+    private PersistingComponentStateSubscription? _persistingSubscription;
 
     private string FallbackNotice => string.Format(
         L["LanguageFallbackNotice"],
@@ -522,34 +525,44 @@
     protected override async Task OnInitializedAsync()
     {
         NavigationManager.LocationChanged += HandleLocationChanged;
+        _persistingSubscription = ApplicationState.RegisterOnPersisting(PersistTopBarModel);
+
+        // Blazor Server modules prerender with HttpContext and then hydrate inside
+        // a circuit where IHttpContextAccessor may no longer expose the request.
+        // Reusing the server-built model keeps the module top bar aligned with the
+        // Razor Pages Portal top bar for admin, notification, and message menus.
+        if (ApplicationState.TryTakeFromJson<PortalTopBarModel>(PersistedModelKey, out var persistedModel)
+            && persistedModel is not null)
+        {
+            ApplyTopBarModel(persistedModel);
+            return;
+        }
 
         var httpContext = HttpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
-            _portalTopBar = await PortalTopBarService.CreateAsync(
+            ApplyTopBarModel(await PortalTopBarService.CreateAsync(
                 WebAppOptionsAccessor.Value,
                 httpContext.Request,
                 httpContext.User,
-                httpContext.RequestAborted);
-            _roleContext = await RbacService.GetUserRoleContextAsync(httpContext.User, httpContext.RequestAborted);
+                httpContext.RequestAborted));
             return;
         }
 
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authenticationState.User;
-        _roleContext = await RbacService.GetUserRoleContextAsync(user, CancellationToken.None);
 
         if (Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var currentUri))
         {
-            _portalTopBar = await PortalTopBarService.CreateAsync(
+            ApplyTopBarModel(await PortalTopBarService.CreateAsync(
                 WebAppOptionsAccessor.Value,
                 currentUri,
                 user,
-                CancellationToken.None);
+                CancellationToken.None));
             return;
         }
 
-        _portalTopBar = PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value);
+        ApplyTopBarModel(PortalTopBarModelFactory.Create(WebAppOptionsAccessor.Value));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -597,7 +610,27 @@
         => _ = InvokeAsync(StateHasChanged);
 
     public void Dispose()
-        => NavigationManager.LocationChanged -= HandleLocationChanged;
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+        _persistingSubscription?.Dispose();
+    }
+
+    private Task PersistTopBarModel()
+    {
+        ApplicationState.PersistAsJson(PersistedModelKey, _portalTopBar);
+        return Task.CompletedTask;
+    }
+
+    private void ApplyTopBarModel(PortalTopBarModel model)
+    {
+        _portalTopBar = model;
+        _roleContext = new OpenModulePlatform.Web.Shared.Services.UserRoleContext
+        {
+            AvailableRoles = model.AvailableRoles,
+            ActiveRoleId = model.ActiveRoleId,
+            ActiveRoleName = model.ActiveRoleName
+        };
+    }
 
     private string CultureText(string? text)
         => string.IsNullOrWhiteSpace(text) ? string.Empty : L[text];
