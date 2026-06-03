@@ -398,62 +398,54 @@
                         <span class="visually-hidden">@L["User"]</span>
                     </summary>
                     <div class="portal-topbar__profile-menu">
-                        <div class="portal-topbar__profile-identity">
-                            <span class="portal-topbar__profile-roles-heading">@L["User"]</span>
-                            <div class="portal-topbar__profile-user-row">
-                                @if (_portalTopBar.IsPortalAdmin)
-                                {
-                                    <button type="button"
-                                            class="portal-topbar__profile-copy-name"
-                                            title="@L["Copy full user name"]"
-                                            aria-label="@L["Copy full user name"]"
-                                            data-copy-to-clipboard="true"
-                                            data-copy-text="@_portalTopBar.CurrentUserName">
-                                        <span class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@DisplayUserName(_portalTopBar.CurrentUserName)</span>
-                                        <span class="portal-topbar__profile-copy-inline-icon portal-topbar__icon--copy" aria-hidden="true"></span>
-                                    </button>
-                                }
-                                else
-                                {
-                                    <span class="portal-topbar__profile-name">
-                                        <span class="portal-topbar__profile-current-user">@DisplayUserName(_portalTopBar.CurrentUserName)</span>
-                                    </span>
-                                }
-                                <form method="post" action="@_portalTopBar.LogoutUrl" class="portal-topbar__logout-form" data-enhance="false">
-                                    <button type="submit"
-                                            class="portal-topbar__profile-action-button"
-                                            title="@L["Log out"]"
-                                            aria-label="@L["Log out"]">
-                                        <span class="portal-topbar__icon portal-topbar__icon--logout" aria-hidden="true"></span>
-                                    </button>
-                                </form>
-                            </div>
-                            <a class="portal-topbar__profile-settings-link" href="@_portalTopBar.SettingsUrl" data-enhance-nav="false">
-                                <span>@L["Settings"]</span>
-                                <span class="portal-topbar__icon portal-topbar__icon--settings" aria-hidden="true"></span>
-                            </a>
+                        <div class="portal-topbar__profile-heading">
+                            <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--user" aria-hidden="true"></span>
+                            <span>@L["User"]</span>
                         </div>
-                        <div class="portal-topbar__profile-section">
-                            <span class="portal-topbar__profile-roles-heading">@L["Roles"]</span>
-                            <div class="portal-topbar__profile-role-row">
-                                <div class="portal-topbar__profile-current-role" title="@(_roleContext.ActiveRoleName ?? L["No roles assigned."])">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</div>
-                                @if (_roleContext.AvailableRoles.Count > 1)
-                                {
-                                    <details class="portal-topbar__profile-switch" data-portal-topbar-overlay>
-                                        <summary class="portal-topbar__profile-switch-button" title="@L["SwitchRole"]" aria-label="@L["SwitchRole"]">
-                                            <span class="portal-topbar__icon portal-topbar__icon--switch" aria-hidden="true"></span>
-                                            <span class="visually-hidden">@L["SwitchRole"]</span>
-                                        </summary>
-                                        <div class="portal-topbar__profile-switch-menu">
-                                            @foreach (var role in _roleContext.AvailableRoles.Where(role => role.RoleId != _roleContext.ActiveRoleId))
-                                            {
-                                                <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
-                                            }
-                                        </div>
-                                    </details>
-                                }
-                            </div>
+
+                        <div class="portal-topbar__profile-separator" role="separator" aria-hidden="true"></div>
+
+                        <div class="portal-topbar__profile-row portal-topbar__profile-status-row">
+                            <span class="portal-topbar__profile-avatar" aria-hidden="true">@UserInitials(_portalTopBar.CurrentUserName)</span>
+                            <span class="portal-topbar__profile-current-user" title="@_portalTopBar.CurrentUserName">@DisplayUserName(_portalTopBar.CurrentUserName)</span>
                         </div>
+                        <div class="portal-topbar__profile-row portal-topbar__profile-status-row portal-topbar__profile-active-role" aria-label="@L["Active role"]">
+                            <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--badge" aria-hidden="true"></span>
+                            <span class="portal-topbar__profile-current-role" title="@(_roleContext.ActiveRoleName ?? L["No roles assigned."])">@(_roleContext.ActiveRoleName ?? L["No roles assigned."])</span>
+                        </div>
+
+                        <div class="portal-topbar__profile-separator" role="separator" aria-hidden="true"></div>
+
+                        @if (_roleContext.AvailableRoles.Count > 1)
+                        {
+                            <details class="portal-topbar__profile-switch" data-portal-topbar-overlay>
+                                <summary class="portal-topbar__profile-row portal-topbar__profile-action-row">
+                                    <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--switch" aria-hidden="true"></span>
+                                    <span>@L["SwitchRole"]</span>
+                                </summary>
+                                <div class="portal-topbar__profile-switch-menu">
+                                    @foreach (var role in _roleContext.AvailableRoles.Where(role => role.RoleId != _roleContext.ActiveRoleId))
+                                    {
+                                        <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
+                                    }
+                                </div>
+                            </details>
+                        }
+
+                        <a class="portal-topbar__profile-row portal-topbar__profile-action-row" href="@_portalTopBar.SettingsUrl" data-enhance-nav="false">
+                            <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--settings" aria-hidden="true"></span>
+                            <span>@L["Settings"]</span>
+                        </a>
+
+                        <div class="portal-topbar__profile-separator portal-topbar__profile-separator--logout" role="separator" aria-hidden="true"></div>
+
+                        <form method="post" action="@_portalTopBar.LogoutUrl" class="portal-topbar__logout-form" data-enhance="false">
+                            <button type="submit"
+                                    class="portal-topbar__profile-row portal-topbar__profile-action-row portal-topbar__profile-logout-row">
+                                <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--logout" aria-hidden="true"></span>
+                                <span>@L["Log out"]</span>
+                            </button>
+                        </form>
                     </div>
                 </details>
             }
@@ -628,5 +620,23 @@
         return separatorIndex >= 0 && separatorIndex < value.Length - 1
             ? value[(separatorIndex + 1)..]
             : value;
+    }
+
+    private static string UserInitials(string? value)
+    {
+        var displayName = DisplayUserName(value);
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            return "?";
+        }
+
+        var parts = displayName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2)
+        {
+            return string.Concat(parts[0][0], parts[^1][0]).ToUpperInvariant();
+        }
+
+        return displayName[..Math.Min(displayName.Length, 2)].ToUpperInvariant();
     }
 }

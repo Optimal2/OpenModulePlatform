@@ -228,12 +228,12 @@
 .portal-topbar__icon--admin-gears,
 .portal-topbar__icon--language,
 .portal-topbar__icon--user,
-.portal-topbar__icon--copy,
 .portal-topbar__icon--logout,
 .portal-topbar__icon--switch,
 .portal-topbar__icon--notifications,
 .portal-topbar__icon--messages,
-.portal-topbar__icon--settings {
+.portal-topbar__icon--settings,
+.portal-topbar__icon--badge {
     background: currentColor;
     -webkit-mask: var(--portal-topbar-icon) center / contain no-repeat;
     mask: var(--portal-topbar-icon) center / contain no-repeat;
@@ -251,10 +251,6 @@
     --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/person.svg");
 }
 
-.portal-topbar__icon--copy {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg");
-}
-
 .portal-topbar__icon--logout {
     --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/logout.svg");
 }
@@ -265,6 +261,10 @@
 
 .portal-topbar__icon--settings {
     --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg");
+}
+
+.portal-topbar__icon--badge {
+    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/badge.svg");
 }
 
 .portal-topbar__icon--notifications {
@@ -354,8 +354,8 @@
 
 .portal-topbar__profile-menu {
     right: 0;
-    min-width: 200px;
-    max-width: min(calc(100vw - 16px), 320px);
+    width: min(calc(100vw - 16px), 292px);
+    min-width: 240px;
 }
 
 .portal-topbar__menu {
@@ -1160,259 +1160,150 @@ span.portal-topbar__nav-group-link {
     line-height: 1.35;
 }
 
-.portal-topbar__profile-identity {
-    display: block;
-}
-
-.portal-topbar__profile-user-row {
+.portal-topbar__profile-heading,
+.portal-topbar__profile-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
-}
-
-.portal-topbar__profile-role-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-}
-
-.portal-topbar__profile-copy-name {
-    display: inline-flex;
-    align-items: center;
-    min-width: 0;
+    gap: 10px;
     width: 100%;
-    gap: 8px;
-    padding: 0;
-    border: 0;
+    min-height: 38px;
+    padding: 8px 10px;
     border-radius: 10px;
-    background: transparent;
     color: var(--portal-topbar-text);
-    cursor: pointer;
-    font: inherit;
     text-align: left;
 }
 
-.portal-topbar__profile-name {
+.portal-topbar__profile-heading {
+    min-height: 32px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    color: var(--portal-topbar-text-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.portal-topbar__profile-row-icon {
+    justify-self: center;
+    color: currentColor;
+}
+
+.portal-topbar__profile-avatar {
     display: inline-flex;
     align-items: center;
-    min-width: 0;
-    width: 100%;
+    justify-content: center;
+    justify-self: center;
+    width: 28px;
+    height: 28px;
+    margin-left: -2px;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
 }
 
-.portal-topbar__profile-copy-name:hover,
-.portal-topbar__profile-copy-name:focus-visible {
-    background: var(--portal-topbar-surface-muted);
-    outline: none;
-}
-
-.portal-topbar__profile-current-user {
-    display: block;
+.portal-topbar__profile-current-user,
+.portal-topbar__profile-current-role {
     min-width: 0;
-    flex: 1 1 auto;
-    padding: 8px 10px;
-    border-radius: 10px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-align: left;
-    color: var(--portal-topbar-text);
-    font-size: 0.92rem;
-    font-weight: 600;
-}
-
-.portal-topbar__profile-copy-inline-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
-    margin-right: 10px;
-    color: var(--text-muted, #5f6b7a);
-    opacity: 0;
-    transform: translateX(-2px);
-    transition: opacity 120ms ease, transform 120ms ease, color 120ms ease;
-}
-
-.portal-topbar__profile-copy-inline-icon.portal-topbar__icon--copy {
-    background: currentColor;
-    -webkit-mask: var(--portal-topbar-icon) center / contain no-repeat;
-    mask: var(--portal-topbar-icon) center / contain no-repeat;
-}
-
-.portal-topbar__profile-copy-inline-icon svg {
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.portal-topbar__profile-copy-name:hover .portal-topbar__profile-copy-inline-icon,
-.portal-topbar__profile-copy-name:focus-visible .portal-topbar__profile-copy-inline-icon {
-    opacity: 1;
-    transform: translateX(0);
-    color: var(--portal-topbar-text);
-}
-
-.portal-topbar__profile-action-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border: 0;
-    border-radius: 10px;
-    background: transparent;
-    color: var(--text-muted, #5f6b7a);
-    cursor: pointer;
-    flex: 0 0 auto;
-    font: inherit;
-    line-height: 1;
-    user-select: none;
-}
-
-.portal-topbar__profile-action-button:hover,
-.portal-topbar__profile-action-button:focus-visible {
-    color: var(--portal-topbar-text);
-    background: var(--portal-topbar-surface-muted);
-    outline: none;
-}
-
-.portal-topbar__profile-settings-link {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    width: 100%;
-    min-height: 34px;
-    margin-top: 8px;
-    padding: 8px 10px;
-    border-radius: 10px;
     color: var(--portal-topbar-text);
     font-size: 0.88rem;
-    text-decoration: none;
+    font-weight: 700;
+    line-height: 1.25;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.portal-topbar__profile-settings-link:hover,
-.portal-topbar__profile-settings-link:focus-visible {
+.portal-topbar__profile-current-role {
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.portal-topbar__profile-status-row {
+    cursor: default;
+}
+
+.portal-topbar__profile-active-role {
+    background: color-mix(in srgb, var(--portal-topbar-surface-muted) 72%, transparent);
+}
+
+.portal-topbar__profile-active-role .portal-topbar__profile-row-icon {
+    color: #2563eb;
+}
+
+.portal-topbar__profile-separator {
+    height: 1px;
+    margin: 6px 4px;
+    background: var(--portal-topbar-border);
+}
+
+.portal-topbar__profile-separator--logout {
+    margin-top: 10px;
+}
+
+.portal-topbar__profile-action-row {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.portal-topbar__profile-action-row:hover,
+.portal-topbar__profile-action-row:focus-visible,
+.portal-topbar__profile-switch[open] > .portal-topbar__profile-action-row {
     background: var(--portal-topbar-surface-muted);
     color: var(--portal-topbar-text);
     outline: none;
 }
 
 .portal-topbar__logout-form {
-    display: inline-flex;
+    display: block;
     margin: 0;
 }
 
-.portal-topbar__profile-current-role {
-    display: block;
-    min-width: 0;
-    padding: 8px 10px;
-    border-radius: 10px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-align: left;
-    color: var(--portal-topbar-text);
-    font-size: 0.92rem;
-    font-weight: 600;
-}
-
-.portal-topbar__profile-section {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--portal-topbar-border);
-}
-
-.portal-topbar__profile-label {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-muted, #5f6b7a);
-}
-
-.portal-topbar__profile-value,
-.portal-topbar__profile-muted {
-    display: block;
-    padding: 8px 10px;
-    border-radius: 10px;
+.portal-topbar__profile-logout-row {
     color: var(--portal-topbar-text);
 }
 
-.portal-topbar__profile-muted {
-    color: var(--text-muted, #5f6b7a);
-}
-
-.portal-topbar__role-form {
-    margin: 0;
-}
-
-.portal-topbar__role-select {
-    width: 100%;
-    padding: 8px 10px;
-    border: 1px solid var(--portal-topbar-border);
-    border-radius: 10px;
-    background: var(--portal-topbar-surface);
-    color: var(--portal-topbar-text);
-}
-
-
-.portal-topbar__profile-roles-heading {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: var(--text-muted, #5f6b7a);
+.portal-topbar__profile-logout-row:hover,
+.portal-topbar__profile-logout-row:focus-visible {
+    background: #fee2e2;
+    color: #b91c1c;
 }
 
 .portal-topbar__profile-switch {
     position: relative;
-    display: inline-block;
-    flex: 0 0 auto;
+    display: block;
 }
 
-.portal-topbar__profile-switch-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border-radius: 10px;
-    color: var(--text-muted, #5f6b7a);
-    cursor: pointer;
+.portal-topbar__profile-switch > summary {
     list-style: none;
     user-select: none;
 }
 
-.portal-topbar__profile-switch-button::-webkit-details-marker {
+.portal-topbar__profile-switch > summary::-webkit-details-marker {
     display: none;
 }
 
-.portal-topbar__profile-switch-button:hover,
-.portal-topbar__profile-switch[open] .portal-topbar__profile-switch-button {
-    color: var(--portal-topbar-text);
-    background: var(--portal-topbar-surface-muted);
+.portal-topbar__profile-switch > summary::after {
+    content: "▸";
+    justify-self: end;
+    color: var(--portal-topbar-text-muted);
+    font-size: 0.78rem;
 }
 
-.portal-topbar__profile-switch-button span[aria-hidden="true"] {
-    font-size: 1rem;
-    line-height: 1;
+.portal-topbar__profile-switch[open] > summary::after {
+    content: "▾";
 }
 
 .portal-topbar__profile-switch-menu {
     position: absolute;
-    top: calc(100% + 1px);
+    top: calc(100% + 4px);
     right: 0;
     z-index: 1200;
     min-width: 220px;
@@ -1432,8 +1323,10 @@ span.portal-topbar__nav-group-link {
     text-decoration: none;
 }
 
-.portal-topbar__profile-role-link:hover {
+.portal-topbar__profile-role-link:hover,
+.portal-topbar__profile-role-link:focus-visible {
     background: var(--portal-topbar-surface-muted);
+    outline: none;
 }
 
 .portal-topbar__profile-role-link.is-current {
