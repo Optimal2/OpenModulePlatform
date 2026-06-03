@@ -3,6 +3,7 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
@@ -57,6 +58,17 @@ public sealed class PortalTopBarService
         _messages = messages;
         _banners = banners;
         _log = log;
+    }
+
+    public async Task<PortalTopBarModel> CreateAsync(
+        WebAppOptions options,
+        HttpContext context,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var user = await ResolveRequestUserAsync(context);
+        return await CreateAsync(options, context.Request, user, ct);
     }
 
     public async Task<PortalTopBarModel> CreateAsync(
@@ -389,6 +401,34 @@ public sealed class PortalTopBarService
             return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
         }
     }
+
+    private static async Task<ClaimsPrincipal> ResolveRequestUserAsync(HttpContext context)
+    {
+        var currentUser = context.User;
+        if (HasOmpAuthContext(currentUser))
+        {
+            return currentUser;
+        }
+
+        var authenticationResult = await context.AuthenticateAsync(OmpAuthDefaults.AuthenticationScheme);
+        if (authenticationResult.Succeeded
+            && authenticationResult.Principal is { Identity.IsAuthenticated: true } authenticatedUser
+            && (HasOmpAuthContext(authenticatedUser) || currentUser.Identity?.IsAuthenticated != true))
+        {
+            // Razor Pages and Blazor hosts can run with another ambient principal
+            // during rendering. The OMP cookie principal is authoritative for
+            // favorites, notifications, messages, and Portal RBAC menus.
+            return authenticatedUser;
+        }
+
+        return currentUser;
+    }
+
+    private static bool HasOmpAuthContext(ClaimsPrincipal? user)
+        => user?.Identity?.IsAuthenticated == true
+           && (user.HasClaim(claim => claim.Type == OmpAuthDefaults.UserIdClaimType)
+               || user.HasClaim(claim => claim.Type == OmpAuthDefaults.ProviderClaimType)
+               || user.HasClaim(claim => claim.Type == OmpAuthDefaults.PrincipalClaimType));
 
     /// <summary>
     /// Builds the fail-safe portal-only model used when dynamic app discovery cannot be completed.

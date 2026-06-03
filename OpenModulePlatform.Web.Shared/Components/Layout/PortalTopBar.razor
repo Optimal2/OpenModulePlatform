@@ -517,6 +517,9 @@
     private OpenModulePlatform.Web.Shared.Services.UserRoleContext _roleContext = OpenModulePlatform.Web.Shared.Services.UserRoleContext.Empty;
     private PersistingComponentStateSubscription? _persistingSubscription;
 
+    [CascadingParameter]
+    private HttpContext? CascadedHttpContext { get; set; }
+
     private string FallbackNotice => string.Format(
         L["LanguageFallbackNotice"],
         CultureText(_portalTopBar.PreferredCultureDisplayText),
@@ -538,13 +541,12 @@
             return;
         }
 
-        var httpContext = HttpContextAccessor.HttpContext;
+        var httpContext = CascadedHttpContext ?? HttpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
             ApplyTopBarModel(await PortalTopBarService.CreateAsync(
                 WebAppOptionsAccessor.Value,
-                httpContext.Request,
-                httpContext.User,
+                httpContext,
                 httpContext.RequestAborted));
             return;
         }
