@@ -1049,7 +1049,7 @@ ORDER BY
         $status = if (@($appRows).Count -gt 0) { 'OK' } else { 'Fail' }
         Add-Check 'SQL' 'Target app instance' $status "Matched $(@($appRows).Count) app instance row(s)." $appRows
         if (@($appRows).Count -gt 0) {
-            $selectedApp = $appRows[0]
+            $selectedApp = @($appRows)[0]
             $targetPath = [string]$selectedApp.TargetPath
             $sourcePath = [string]$selectedApp.SourceLocalPath
             $runtimeName = [string]$selectedApp.RuntimeName
@@ -1178,7 +1178,8 @@ SELECT
         WHERE t.schema_id = SCHEMA_ID(@schemaName)
     ) AS TableCount;
 '@ -Parameters @{ '@schemaName' = $schemaName }
-                $schemaStatus = if ($schemaRows[0].SchemaId -ne $null) { 'OK' } else { 'Fail' }
+                $firstSchemaRow = @($schemaRows)[0]
+                $schemaStatus = if ($firstSchemaRow.SchemaId -ne $null) { 'OK' } else { 'Fail' }
                 Add-Check 'SQL' 'Module schema' $schemaStatus "Schema=$schemaName" $schemaRows
             }
             catch {
