@@ -1277,12 +1277,13 @@ span.portal-topbar__nav-group-link {
 }
 
 .portal-topbar__language-current {
-    background: color-mix(in srgb, var(--portal-topbar-surface-muted) 72%, transparent);
+    background: color-mix(in srgb, var(--portal-topbar-text) 12%, var(--portal-topbar-surface-muted));
     cursor: default;
     font-weight: 700;
 }
 
 .portal-topbar__language-current .portal-topbar__language-badge {
+    background: color-mix(in srgb, var(--portal-topbar-text) 10%, var(--portal-topbar-surface));
     color: var(--portal-topbar-text);
 }
 
@@ -1352,6 +1353,22 @@ span.portal-topbar__nav-group-link {
     color: currentColor;
 }
 
+.portal-topbar__profile-info {
+    display: grid;
+    gap: 2px;
+    margin: 0 2px;
+    padding: 6px;
+    border: 1px solid var(--portal-topbar-border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--portal-topbar-text) 6%, var(--portal-topbar-surface-muted));
+}
+
+.portal-topbar__profile-info .portal-topbar__profile-row {
+    min-height: 30px;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
 .portal-topbar__profile-avatar {
     display: inline-flex;
     align-items: center;
@@ -1376,6 +1393,12 @@ span.portal-topbar__nav-group-link {
     object-fit: cover;
 }
 
+.portal-topbar__profile-info .portal-topbar__profile-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 0.66rem;
+}
+
 .portal-topbar__profile-current-user,
 .portal-topbar__profile-current-role {
     min-width: 0;
@@ -1389,12 +1412,17 @@ span.portal-topbar__nav-group-link {
 }
 
 .portal-topbar__profile-current-role {
-    font-size: 0.82rem;
-    font-weight: 700;
+    color: var(--portal-topbar-text-muted);
+    font-size: 0.78rem;
+    font-weight: 650;
 }
 
 .portal-topbar__profile-status-row {
     cursor: default;
+}
+
+.portal-topbar__profile-active-role .portal-topbar__profile-row-icon {
+    color: var(--portal-topbar-text-muted);
 }
 
 .portal-topbar__profile-separator {
