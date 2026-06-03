@@ -282,21 +282,10 @@ function Normalize-SqlConnectionString {
         return ''
     }
 
-    try {
-        $builder = New-Object System.Data.Common.DbConnectionStringBuilder
-        $builder.ConnectionString = $ConnectionString
-        if ($builder.ContainsKey('Trust Server Certificate')) {
-            $value = $builder['Trust Server Certificate']
-            [void]$builder.Remove('Trust Server Certificate')
-            if (-not $builder.ContainsKey('TrustServerCertificate')) {
-                $builder['TrustServerCertificate'] = $value
-            }
-        }
-        return $builder.ConnectionString
-    }
-    catch {
-        return ($ConnectionString -replace '(?i)Trust\s+Server\s+Certificate\s*=', 'TrustServerCertificate=')
-    }
+    # The application can use Microsoft.Data.SqlClient-style keys, while these
+    # diagnostics intentionally use in-box System.Data.SqlClient for portability.
+    # Normalize the one known spelling difference before opening the connection.
+    return ($ConnectionString -replace '(?i)(^|;)\s*Trust\s+Server\s+Certificate\s*=', '$1TrustServerCertificate=')
 }
 
 function Convert-DataTableRows {
