@@ -900,7 +900,7 @@
         }
 
         list.dataset.portalTopbarNotificationLazyInitialized = 'true';
-        var scroller = list.closest('.portal-topbar__notifications-menu') || list;
+        var scroller = list.closest('.portal-topbar__tray-body') || list.closest('.portal-topbar__notifications-menu') || list;
         scroller.addEventListener('scroll', function () {
             if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 48) {
                 loadMoreNotifications(list);
