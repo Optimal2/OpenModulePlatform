@@ -511,6 +511,41 @@ function Get-RecentLogFiles {
         Select-Object -First 40 FullName, Length, LastWriteTimeUtc)
 }
 
+function Add-DeploymentFileChecks {
+    param(
+        [string]$Path,
+        [string]$SourceName,
+        [int]$RecentHours
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        Add-Check 'Filesystem' "Deployment target path ($SourceName)" 'Warn' 'Target path was not supplied.'
+        return
+    }
+
+    $targetSummary = Get-DirectorySummary -Path $Path -RecentHours $RecentHours
+    Add-Check 'Filesystem' "Deployment target path ($SourceName)" ($(if ($targetSummary.Exists) { 'OK' } else { 'Fail' })) $Path $targetSummary
+
+    $webConfigPath = Join-Path $Path 'web.config'
+    $webConfigSummary = Get-FileSummary -Path $webConfigPath
+    Add-Check 'Filesystem' "web.config ($SourceName)" ($(if ($webConfigSummary.Exists) { 'OK' } else { 'Warn' })) $webConfigPath $webConfigSummary
+    Add-Check 'Filesystem' "appsettings files ($SourceName)" 'Info' $Path (Get-ConfigFileSummaries -Path $Path)
+
+    foreach ($logPath in @(
+        (Join-Path $Path 'logs'),
+        (Join-Path $Path 'Logs'),
+        (Join-Path $Path 'App_Data\logs')
+    )) {
+        $logSummary = Get-DirectorySummary -Path $logPath -RecentHours $RecentHours
+        if ($logSummary.Exists -or -not [string]::IsNullOrWhiteSpace($logSummary.Error)) {
+            Add-Check 'Logging' "Log folder ($SourceName): $logPath" ($(if ($logSummary.Exists) { 'Info' } else { 'Warn' })) $logPath $logSummary
+        }
+    }
+
+    $recentLogs = Get-RecentLogFiles -Path $Path -RecentHours $RecentHours
+    Add-Check 'Logging' "Recent deployed-app log files ($SourceName)" ($(if (@($recentLogs).Count -gt 0) { 'Info' } else { 'Warn' })) "Found $(@($recentLogs).Count) recent log/text file(s)." $recentLogs
+}
+
 function Get-EventLogSignals {
     param(
         [string[]]$Needles,
@@ -525,12 +560,16 @@ function Get-EventLogSignals {
                 Where-Object {
                     $message = [string]$_.Message
                     $provider = [string]$_.ProviderName
-                    ($provider -like '*IIS*' -or
+                    $matchesNeedle = @($Needles | Where-Object {
+                        -not [string]::IsNullOrWhiteSpace($_) -and
+                        ($message -like "*$_*" -or $provider -like "*$_*")
+                    }).Count -gt 0
+                    $isErrorSignal = $_.LevelDisplayName -in @('Error', 'Critical') -and (
                         $provider -like '*ASP.NET Core*' -or
                         $provider -like '*.NET Runtime*' -or
                         $provider -like '*Application Error*' -or
-                        $provider -like '*Windows Error Reporting*' -or
-                        ($Needles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $message -like "*$_*" }))
+                        $provider -like '*Windows Error Reporting*')
+                    $matchesNeedle -or $isErrorSignal
                 } |
                 Select-Object -First 80 TimeCreated, LogName, ProviderName, Id, LevelDisplayName, @{ Name = 'Message'; Expression = {
                     $message = [string]$_.Message
@@ -710,7 +749,7 @@ SELECT
         $appRows = Invoke-SqlRows -ConnectionString $connectionString -Query @'
 DECLARE @route nvarchar(256) = NULLIF(LTRIM(RTRIM(@routePath)), N'');
 DECLARE @appKey nvarchar(100) = NULLIF(LTRIM(RTRIM(@appInstanceKey)), N'');
-DECLARE @hostKey nvarchar(128) = NULLIF(LTRIM(RTRIM(@hostKey)), N'');
+DECLARE @effectiveHostKey nvarchar(128) = NULLIF(LTRIM(RTRIM(@hostKey)), N'');
 
 IF @route IS NOT NULL
 BEGIN
@@ -722,7 +761,7 @@ DECLARE @hostId uniqueidentifier =
 (
     SELECT TOP (1) HostId
     FROM omp.Hosts
-    WHERE @hostKey IS NOT NULL AND HostKey = @hostKey
+    WHERE @effectiveHostKey IS NOT NULL AND HostKey = @effectiveHostKey
     ORDER BY UpdatedUtc DESC
 );
 
@@ -924,24 +963,7 @@ SELECT
 }
 
 if (-not [string]::IsNullOrWhiteSpace($targetPath)) {
-    $targetSummary = Get-DirectorySummary -Path $targetPath -RecentHours $RecentHours
-    Add-Check 'Filesystem' 'Deployment target path' ($(if ($targetSummary.Exists) { 'OK' } else { 'Fail' })) $targetPath $targetSummary
-    Add-Check 'Filesystem' 'web.config' ($(if ((Get-FileSummary -Path (Join-Path $targetPath 'web.config')).Exists) { 'OK' } else { 'Warn' })) (Join-Path $targetPath 'web.config') (Get-FileSummary -Path (Join-Path $targetPath 'web.config'))
-    Add-Check 'Filesystem' 'appsettings files' 'Info' $targetPath (Get-ConfigFileSummaries -Path $targetPath)
-
-    foreach ($logPath in @(
-        (Join-Path $targetPath 'logs'),
-        (Join-Path $targetPath 'Logs'),
-        (Join-Path $targetPath 'App_Data\logs')
-    )) {
-        $logSummary = Get-DirectorySummary -Path $logPath -RecentHours $RecentHours
-        if ($logSummary.Exists -or -not [string]::IsNullOrWhiteSpace($logSummary.Error)) {
-            Add-Check 'Logging' "Log folder: $logPath" ($(if ($logSummary.Exists) { 'Info' } else { 'Warn' })) $logPath $logSummary
-        }
-    }
-
-    $recentLogs = Get-RecentLogFiles -Path $targetPath -RecentHours $RecentHours
-    Add-Check 'Logging' 'Recent deployed-app log files' ($(if (@($recentLogs).Count -gt 0) { 'Info' } else { 'Warn' })) "Found $(@($recentLogs).Count) recent log/text file(s)." $recentLogs
+    Add-DeploymentFileChecks -Path $targetPath -SourceName 'OMP deployment state' -RecentHours $RecentHours
 }
 else {
     Add-Check 'Filesystem' 'Deployment target path' 'Warn' 'TargetPath was not found in OMP deployment state.'
@@ -1018,9 +1040,13 @@ catch {
     Add-Check 'IIS' 'IIS inspection' 'Warn' $_.Exception.Message
 }
 
+if ([string]::IsNullOrWhiteSpace($targetPath) -and $null -ne $iisApplication -and -not [string]::IsNullOrWhiteSpace([string]$iisApplication.PhysicalPath)) {
+    Add-DeploymentFileChecks -Path ([string]$iisApplication.PhysicalPath) -SourceName 'IIS application physical path' -RecentHours $RecentHours
+}
+
 if (-not [string]::IsNullOrWhiteSpace($Url)) {
     $probe = Invoke-HttpProbe -ProbeUrl $Url -TimeoutSeconds $HttpTimeoutSeconds
-    $probeStatus = if ($probe.StatusCode -ge 200 -and $probe.StatusCode -lt 400) { 'OK' } elseif ($probe.StatusCode -ge 500) { 'Fail' } else { 'Warn' }
+    $probeStatus = if ([string]$probe.FinalUrl -like '*/auth/login*') { 'Warn' } elseif ($probe.StatusCode -ge 200 -and $probe.StatusCode -lt 400) { 'OK' } elseif ($probe.StatusCode -ge 500) { 'Fail' } else { 'Warn' }
     Add-Check 'HTTP' 'Endpoint probe' $probeStatus $Url $probe
 }
 else {
