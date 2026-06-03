@@ -24,7 +24,7 @@ public sealed class PortalTopBarViewComponent : ViewComponent
 
     public async Task<IViewComponentResult> InvokeAsync()
     {
-        var httpContext = _httpContextAccessor.HttpContext;
+        var httpContext = HttpContext ?? _httpContextAccessor.HttpContext;
         if (httpContext is null)
         {
             return View(PortalTopBarModel.Hidden);
@@ -32,8 +32,7 @@ public sealed class PortalTopBarViewComponent : ViewComponent
 
         var model = await _portalTopBarService.CreateAsync(
             _webAppOptions.Value,
-            httpContext.Request,
-            httpContext.User,
+            httpContext,
             httpContext.RequestAborted);
 
         return View(model);
