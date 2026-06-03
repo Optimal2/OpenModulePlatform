@@ -345,69 +345,74 @@
                         </span>
                         <span class="visually-hidden">@L[Model.NotificationsToggleTextKey]</span>
                     </summary>
-                    <div class="portal-topbar__notifications-menu">
-                        <div class="portal-topbar__notifications-header">
+                    <div class="portal-topbar__notifications-menu portal-topbar__tray portal-topbar__tray--notifications">
+                        <div class="portal-topbar__tray-header">
+                            <span class="portal-topbar__tray-icon portal-topbar__icon portal-topbar__icon--notifications" aria-hidden="true"></span>
                             <span>@L[Model.NotificationsToggleTextKey]</span>
-                            <span class="portal-topbar__notifications-header-actions">
-                                <a class="portal-topbar__notifications-link" href="@Model.NotificationsUrl" data-enhance-nav="false">
-                                    @L[Model.ViewAllNotificationsTextKey]
-                                </a>
-                                <form method="post"
-                                      action="@Model.NotificationMarkAllReadUrl"
-                                      class="portal-topbar__notifications-mark-all-form"
-                                      data-portal-topbar-notification-mark-all-form
-                                      data-enhance="false"
-                                      hidden="@(Model.Notifications.Count == 0)">
-                                    <button type="submit" class="portal-topbar__notifications-mark-all">
-                                        @L[Model.MarkAllNotificationsReadTextKey]
-                                    </button>
-                                </form>
-                            </span>
                         </div>
-                        <div class="portal-topbar__notifications-list"
-                             data-portal-topbar-notifications-list
-                             data-load-url="@Model.NotificationRecentUrl"
-                             data-mark-read-url="@Model.NotificationMarkReadUrl"
-                             data-page-size="10"
-                             data-no-notifications-text="@L[Model.NoNotificationsTextKey]"
-                             data-loading-text="@L["Loading"]"
-                             data-end-text="@L["No more notifications"]">
-                            @foreach (var notification in Model.Notifications)
-                            {
-                                <form method="post"
-                                      action="@Model.NotificationMarkReadUrl"
-                                      class="portal-topbar__notification-form@(notification.IsUnread ? " is-unread" : " is-read")"
-                                      data-portal-topbar-notification-form
-                                      data-notification-id="@notification.NotificationId"
-                                      data-notification-created-at="@notification.CreatedAt.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
-                                      data-enhance="false">
-                                    <input type="hidden" name="notificationId" value="@notification.NotificationId" />
-                                    <button type="submit"
-                                            class="portal-topbar__notification-row portal-topbar__notification-row--@notification.Level"
-                                            data-destination-url="@(notification.DestinationUrl ?? string.Empty)">
-                                        <span class="portal-topbar__notification-caller-icon" aria-hidden="true">
-                                            @if (!string.IsNullOrWhiteSpace(notification.CallerIcon))
-                                            {
-                                                <img src="@notification.CallerIcon" alt="" />
-                                            }
-                                            else
-                                            {
-                                                <span>@NotificationCallerText(notification)</span>
-                                            }
-                                        </span>
-                                        <span class="portal-topbar__notification-copy">
-                                            <span class="portal-topbar__notification-title">@notification.Title</span>
-                                            <span class="portal-topbar__notification-content">@notification.Content</span>
-                                        </span>
-                                    </button>
-                                </form>
-                            }
+                        <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
+                        <div class="portal-topbar__tray-body">
+                            <div class="portal-topbar__notifications-list"
+                                 data-portal-topbar-notifications-list
+                                 data-load-url="@Model.NotificationRecentUrl"
+                                 data-mark-read-url="@Model.NotificationMarkReadUrl"
+                                 data-page-size="10"
+                                 data-no-notifications-text="@L[Model.NoNotificationsTextKey]"
+                                 data-loading-text="@L["Loading"]"
+                                 data-end-text="@L["No more notifications"]">
+                                @foreach (var notification in Model.Notifications)
+                                {
+                                    <form method="post"
+                                          action="@Model.NotificationMarkReadUrl"
+                                          class="portal-topbar__notification-form@(notification.IsUnread ? " is-unread" : " is-read")"
+                                          data-portal-topbar-notification-form
+                                          data-notification-id="@notification.NotificationId"
+                                          data-notification-created-at="@notification.CreatedAt.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
+                                          data-enhance="false">
+                                        <input type="hidden" name="notificationId" value="@notification.NotificationId" />
+                                        <button type="submit"
+                                                class="portal-topbar__notification-row portal-topbar__notification-row--@notification.Level"
+                                                data-destination-url="@(notification.DestinationUrl ?? string.Empty)">
+                                            <span class="portal-topbar__notification-caller-icon" aria-hidden="true">
+                                                @if (!string.IsNullOrWhiteSpace(notification.CallerIcon))
+                                                {
+                                                    <img src="@notification.CallerIcon" alt="" />
+                                                }
+                                                else
+                                                {
+                                                    <span>@NotificationCallerText(notification)</span>
+                                                }
+                                            </span>
+                                            <span class="portal-topbar__notification-copy">
+                                                <span class="portal-topbar__notification-title">@notification.Title</span>
+                                                <span class="portal-topbar__notification-content">@notification.Content</span>
+                                            </span>
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+                            <div class="portal-topbar__notifications-empty" data-portal-topbar-notifications-empty hidden="@(Model.Notifications.Count > 0)">
+                                @L[Model.NoNotificationsTextKey]
+                            </div>
+                            <div class="portal-topbar__notifications-loading" data-portal-topbar-notifications-loading hidden>@L["Loading"]</div>
+                            <div class="portal-topbar__notifications-end" data-portal-topbar-notifications-end hidden>@L["No more notifications"]</div>
                         </div>
-                        <div class="portal-topbar__notifications-empty" data-portal-topbar-notifications-empty hidden="@(Model.Notifications.Count > 0)">
-                            @L[Model.NoNotificationsTextKey]
+                        <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
+                        <div class="portal-topbar__tray-footer">
+                            <form method="post"
+                                  action="@Model.NotificationMarkAllReadUrl"
+                                  class="portal-topbar__notifications-mark-all-form"
+                                  data-portal-topbar-notification-mark-all-form
+                                  data-enhance="false"
+                                  hidden="@(Model.Notifications.Count == 0)">
+                                <button type="submit" class="portal-topbar__tray-action portal-topbar__notifications-mark-all">
+                                    @L[Model.MarkAllNotificationsReadTextKey]
+                                </button>
+                            </form>
+                            <a class="portal-topbar__tray-action portal-topbar__notifications-link" href="@Model.NotificationsUrl" data-enhance-nav="false">
+                                @L[Model.ViewAllNotificationsTextKey]
+                            </a>
                         </div>
-                        <div class="portal-topbar__notifications-loading" data-portal-topbar-notifications-loading hidden>@L["Loading"]</div>
-                        <div class="portal-topbar__notifications-end" data-portal-topbar-notifications-end hidden>@L["No more notifications"]</div>
                     </div>
                 </details>
             }
@@ -424,52 +429,54 @@
                         </span>
                         <span class="visually-hidden">@L[Model.MessagesToggleTextKey]</span>
                     </summary>
-                    <div class="portal-topbar__messages-menu">
-                        <div class="portal-topbar__messages-header">
+                    <div class="portal-topbar__messages-menu portal-topbar__tray portal-topbar__tray--messages">
+                        <div class="portal-topbar__tray-header">
+                            <span class="portal-topbar__tray-icon portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
                             <span>@L[Model.MessagesToggleTextKey]</span>
-                            <span class="portal-topbar__messages-header-actions">
-                                <a class="portal-topbar__messages-action" href="@Model.MessagesUrl" data-enhance-nav="false">
-                                    @L[Model.ViewAllMessagesTextKey]
-                                </a>
-                                <form method="post"
-                                      action="@Model.MessageMarkAllReadUrl"
-                                      class="portal-topbar__messages-mark-all-form"
-                                      data-enhance="false"
-                                      hidden="@(Model.UnreadMessageCount == 0)">
-                                    <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                    <button type="submit" class="portal-topbar__messages-action">
-                                        @L[Model.MarkAllMessagesReadTextKey]
-                                    </button>
-                                </form>
-                            </span>
                         </div>
-                        <div class="portal-topbar__messages-list">
-                            @foreach (var conversation in Model.MessageConversations)
+                        <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
+                        <div class="portal-topbar__tray-body">
+                            <div class="portal-topbar__messages-list">
+                                @foreach (var conversation in Model.MessageConversations)
+                                {
+                                    <a class="portal-topbar__message-row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
+                                       href="@conversation.Href"
+                                       data-enhance-nav="false">
+                                        <span class="portal-topbar__message-copy">
+                                            <span class="portal-topbar__message-title">@conversation.DisplayTitle</span>
+                                            <span class="portal-topbar__message-preview">@(conversation.LastMessagePreview ?? L["No messages"].Value)</span>
+                                            @if (conversation.LastMessageAt is not null)
+                                            {
+                                                <span class="portal-topbar__message-meta">@MessageTimeText(conversation.LastMessageAt)</span>
+                                            }
+                                        </span>
+                                        <span class="portal-topbar__message-row-badge" hidden="@(conversation.UnreadCount == 0)">
+                                            @NotificationBadgeText(conversation.UnreadCount)
+                                        </span>
+                                    </a>
+                                }
+                            </div>
+                            @if (Model.MessageConversations.Count == 0)
                             {
-                                <a class="portal-topbar__message-row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
-                                   href="@conversation.Href"
-                                   data-enhance-nav="false">
-                                    <span class="portal-topbar__message-copy">
-                                        <span class="portal-topbar__message-title">@conversation.DisplayTitle</span>
-                                        <span class="portal-topbar__message-preview">@(conversation.LastMessagePreview ?? L["No messages"].Value)</span>
-                                        @if (conversation.LastMessageAt is not null)
-                                        {
-                                            <span class="portal-topbar__message-meta">@MessageTimeText(conversation.LastMessageAt)</span>
-                                        }
-                                    </span>
-                                    <span class="portal-topbar__message-row-badge" hidden="@(conversation.UnreadCount == 0)">
-                                        @NotificationBadgeText(conversation.UnreadCount)
-                                    </span>
-                                </a>
+                                <div class="portal-topbar__messages-empty">@L[Model.NoMessagesTextKey]</div>
                             }
                         </div>
-                        @if (Model.MessageConversations.Count == 0)
-                        {
-                            <div class="portal-topbar__messages-empty">@L[Model.NoMessagesTextKey]</div>
-                        }
-                        <a class="portal-topbar__messages-footer-link" href="@Model.MessagesUrl" data-enhance-nav="false">
-                            @L[Model.ViewAllMessagesTextKey]
-                        </a>
+                        <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
+                        <div class="portal-topbar__tray-footer">
+                            <form method="post"
+                                  action="@Model.MessageMarkAllReadUrl"
+                                  class="portal-topbar__messages-mark-all-form"
+                                  data-enhance="false"
+                                  hidden="@(Model.UnreadMessageCount == 0)">
+                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                <button type="submit" class="portal-topbar__tray-action portal-topbar__messages-action">
+                                    @L[Model.MarkAllMessagesReadTextKey]
+                                </button>
+                            </form>
+                            <a class="portal-topbar__tray-action portal-topbar__messages-footer-link" href="@Model.MessagesUrl" data-enhance-nav="false">
+                                @L[Model.ViewAllMessagesTextKey]
+                            </a>
+                        </div>
                     </div>
                 </details>
             }
