@@ -27,3 +27,19 @@ same Windows account that runs the HostAgent service:
 The runtime script does not execute a HostAgent cycle by default. Add `-RunOnce`
 only when you intentionally want to run one cycle and potentially process files
 already waiting in the configured import folder.
+
+## OMP Web App
+
+Run web-app diagnostics from an elevated PowerShell session on the target host.
+The script is read-only and collects IIS, deployed-file, OMP database, log,
+event-log, and optional HTTP probe data for one web application:
+
+```powershell
+.\Test-OmpWebAppDiagnostics.ps1 `
+  -ServiceName 'OMP.HostAgent' `
+  -HostAgentPath 'D:\OMP\Services\HostAgent' `
+  -RoutePath 'dokumentbibliotek' `
+  -AppInstanceKey 'earkiv_dokumentbibliotek_web' `
+  -Url 'https://example.invalid/dokumentbibliotek' `
+  -OutputPath '.\omp-webapp-dokumentbibliotek.json'
+```
