@@ -3,11 +3,14 @@
 @using OpenModulePlatform.Web.Shared.Localization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Http
+@using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
 @inject Microsoft.Extensions.Options.IOptions<WebAppOptions> WebAppOptionsAccessor
 @inject PortalTopBarService PortalTopBarService
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject Microsoft.Extensions.Logging.ILogger<PortalTopBar> Logger
 @inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> L
 @inject IHttpContextAccessor HttpContextAccessor
 @inject PersistentComponentState ApplicationState
@@ -571,7 +574,22 @@
     {
         if (_portalTopBar.IsVisible)
         {
-            await JS.InvokeAsync<object>("ompPortalTopBar.initAll", Array.Empty<object>());
+            try
+            {
+                await JS.InvokeVoidAsync("ompPortalTopBar.initAll");
+            }
+            catch (Microsoft.JSInterop.JSException ex)
+            {
+                Logger.LogDebug(ex, "Could not initialize the portal top bar JavaScript.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Logger.LogDebug(ex, "Portal top bar JavaScript initialization was skipped.");
+            }
+            catch (OperationCanceledException ex)
+            {
+                Logger.LogDebug(ex, "Portal top bar JavaScript initialization was canceled.");
+            }
         }
     }
 
