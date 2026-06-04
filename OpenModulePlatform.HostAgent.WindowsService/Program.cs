@@ -42,6 +42,7 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddSingleton<ServiceAppDeploymentService>();
         services.AddSingleton<HostAgentSelfUpgradeService>();
         services.AddSingleton<HostAgentFileMirrorService>();
+        services.AddSingleton<HostAgentJobProcessor>();
         services.AddSingleton<HostAgentCredentialStoreService>();
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();

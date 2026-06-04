@@ -823,6 +823,48 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostAgentJobs
+    (
+        HostAgentJobId bigint IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_HostAgentJobs PRIMARY KEY,
+        HostId uniqueidentifier NOT NULL,
+        JobType nvarchar(100) NOT NULL,
+        PayloadJson nvarchar(max) NULL,
+        Status tinyint NOT NULL CONSTRAINT DF_omp_HostAgentJobs_Status DEFAULT(0),
+        RequestedBy nvarchar(256) NULL,
+        RequestedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentJobs_RequestedUtc DEFAULT SYSUTCDATETIME(),
+        ClaimedByServiceName nvarchar(200) NULL,
+        ClaimedUtc datetime2(3) NULL,
+        LeaseUntilUtc datetime2(3) NULL,
+        StartedUtc datetime2(3) NULL,
+        CompletedUtc datetime2(3) NULL,
+        AttemptCount int NOT NULL CONSTRAINT DF_omp_HostAgentJobs_AttemptCount DEFAULT(0),
+        MaxAttempts int NOT NULL CONSTRAINT DF_omp_HostAgentJobs_MaxAttempts DEFAULT(3),
+        ResultJson nvarchar(max) NULL,
+        LastError nvarchar(max) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentJobs_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAgentJobs_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_HostAgentJobs_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT CK_omp_HostAgentJobs_Status CHECK(Status IN (0, 1, 2, 3, 4, 5))
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostAgentJobs')
+      AND name = N'IX_omp_HostAgentJobs_Host_Status'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostAgentJobs_Host_Status
+        ON omp.HostAgentJobs(HostId, Status, RequestedUtc, HostAgentJobId);
+END
+GO
+
 IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.WorkerInstances

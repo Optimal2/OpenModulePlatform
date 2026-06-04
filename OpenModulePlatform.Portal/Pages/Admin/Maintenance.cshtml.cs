@@ -36,6 +36,8 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     public ArtifactRetentionCleanupResult? CleanupResult { get; private set; }
 
+    public IReadOnlyList<HostAgentJobRow> RecentHostAgentJobs { get; private set; } = [];
+
     public string? ArtifactStoreRoot { get; private set; }
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
@@ -47,7 +49,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         }
 
         SetTitles("Maintenance");
-        await LoadPreviewAsync(ct);
+        await LoadPageDataAsync(ct);
         return Page();
     }
 
@@ -60,7 +62,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         }
 
         SetTitles("Maintenance");
-        await LoadPreviewAsync(ct);
+        await LoadPageDataAsync(ct);
         return Page();
     }
 
@@ -77,12 +79,14 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
         if (!ModelState.IsValid)
         {
+            await LoadRecentHostAgentJobsAsync(ct);
             return Page();
         }
 
         if (Preview.DeletableCandidateCount == 0)
         {
             ModelState.AddModelError(string.Empty, T("There are no unreferenced old artifact versions to delete."));
+            await LoadRecentHostAgentJobsAsync(ct);
             return Page();
         }
 
@@ -93,10 +97,15 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             ModelState.AddModelError(
                 string.Empty,
                 T("ArtifactUpload:ArtifactStoreRoot must point to an existing artifact store before artifact payloads can be cleaned up."));
+            await LoadRecentHostAgentJobsAsync(ct);
             return Page();
         }
 
-        var deleted = await _repo.DeleteOldArtifactVersionsAsync(Input.MaxVersionsToKeep, ct);
+        var deletion = await _repo.DeleteOldArtifactVersionsAsync(
+            Input.MaxVersionsToKeep,
+            User.Identity?.Name,
+            ct);
+        var deleted = deletion.DeletedArtifacts;
         var payloadSummary = root is null
             ? new PayloadCleanupSummary()
             : DeletePayloads(root, deleted);
@@ -106,17 +115,21 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             DeletedArtifactCount = deleted.Count,
             RemovedPayloadCount = payloadSummary.RemovedCount,
             MissingPayloadCount = payloadSummary.MissingCount,
+            HostCacheEntryCount = deletion.HostCacheEntryCount,
+            CreatedHostAgentJobCount = deletion.CreatedHostAgentJobCount,
             PayloadErrors = payloadSummary.Errors,
             DeletedArtifacts = deleted
         };
 
         Preview = await LoadPreviewCoreAsync(ct);
+        await LoadRecentHostAgentJobsAsync(ct);
         return Page();
     }
 
-    private async Task LoadPreviewAsync(CancellationToken ct)
+    private async Task LoadPageDataAsync(CancellationToken ct)
     {
         Preview = await LoadPreviewCoreAsync(ct);
+        await LoadRecentHostAgentJobsAsync(ct);
     }
 
     private async Task<ArtifactRetentionPreview> LoadPreviewCoreAsync(CancellationToken ct)
@@ -135,6 +148,23 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
         return await _repo.GetArtifactRetentionPreviewAsync(Input.MaxVersionsToKeep, ct);
     }
+
+    private async Task LoadRecentHostAgentJobsAsync(CancellationToken ct)
+    {
+        RecentHostAgentJobs = await _repo.GetRecentHostAgentJobsAsync(25, ct);
+    }
+
+    public static string FormatHostAgentJobStatus(byte status)
+        => status switch
+        {
+            0 => "Pending",
+            1 => "Running",
+            2 => "Succeeded",
+            3 => "Failed",
+            4 => "Warning",
+            5 => "Cancelled",
+            _ => "Unknown"
+        };
 
     private string? ResolveArtifactStoreRoot()
     {

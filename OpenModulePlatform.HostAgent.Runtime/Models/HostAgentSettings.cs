@@ -28,6 +28,10 @@ public sealed class HostAgentSettings
 
     public bool ProvisionExplicitRequirements { get; set; } = true;
 
+    public bool ProcessHostAgentJobs { get; set; } = true;
+
+    public int MaxHostAgentJobsPerCycle { get; set; } = 5;
+
     public bool DeployWebApps { get; set; }
 
     public string IisSiteName { get; set; } = string.Empty;
@@ -166,6 +170,11 @@ public sealed class HostAgentSettings
         if (MaxArtifactsPerCycle < 1)
         {
             throw new InvalidOperationException("HostAgent:MaxArtifactsPerCycle must be at least 1.");
+        }
+
+        if (MaxHostAgentJobsPerCycle < 1)
+        {
+            throw new InvalidOperationException("HostAgent:MaxHostAgentJobsPerCycle must be at least 1.");
         }
 
         if (DeployWebApps)

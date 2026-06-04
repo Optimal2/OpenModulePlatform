@@ -1626,6 +1626,18 @@ BEGIN
     RETURN;
 END;
 
+UPDATE omp.HostAgentJobs
+SET Status = @failedStatus,
+    CompletedUtc = @nowUtc,
+    LeaseUntilUtc = NULL,
+    LastError = COALESCE(NULLIF(LastError, N''), N'HostAgent job lease expired after the maximum number of attempts.'),
+    UpdatedUtc = @nowUtc
+WHERE HostId = @hostId
+  AND Status = @runningStatus
+  AND LeaseUntilUtc IS NOT NULL
+  AND LeaseUntilUtc < @nowUtc
+  AND AttemptCount >= MaxAttempts;
+
 DECLARE @claimed TABLE
 (
     HostDeploymentId bigint NOT NULL,
@@ -1708,6 +1720,202 @@ WHERE HostDeploymentId = @hostDeploymentId
         cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
         cmd.Parameters.AddWithValue("@outcomeMessage", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<HostAgentJobWorkItem?> TryClaimNextHostAgentJobAsync(
+        string hostKey,
+        string serviceName,
+        int leaseSeconds,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+DECLARE @hostId uniqueidentifier;
+
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS bigint) AS HostAgentJobId,
+        CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS nvarchar(100)) AS JobType,
+        CAST(NULL AS nvarchar(max)) AS PayloadJson,
+        CAST(NULL AS int) AS AttemptCount;
+    RETURN;
+END;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS bigint) AS HostAgentJobId,
+        CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS nvarchar(100)) AS JobType,
+        CAST(NULL AS nvarchar(max)) AS PayloadJson,
+        CAST(NULL AS int) AS AttemptCount;
+    RETURN;
+END;
+
+DECLARE @claimed TABLE
+(
+    HostAgentJobId bigint NOT NULL,
+    HostId uniqueidentifier NOT NULL,
+    JobType nvarchar(100) NOT NULL,
+    PayloadJson nvarchar(max) NULL,
+    AttemptCount int NOT NULL
+);
+
+;WITH NextJob AS
+(
+    SELECT TOP (1) HostAgentJobId
+    FROM omp.HostAgentJobs WITH (UPDLOCK, READPAST, ROWLOCK)
+    WHERE HostId = @hostId
+      AND AttemptCount < MaxAttempts
+      AND
+      (
+          Status = @pendingStatus
+          OR
+          (
+              Status = @runningStatus
+              AND LeaseUntilUtc IS NOT NULL
+              AND LeaseUntilUtc < @nowUtc
+          )
+      )
+    ORDER BY RequestedUtc, HostAgentJobId
+)
+UPDATE job
+SET Status = @runningStatus,
+    ClaimedByServiceName = @serviceName,
+    ClaimedUtc = @nowUtc,
+    LeaseUntilUtc = DATEADD(second, @leaseSeconds, @nowUtc),
+    StartedUtc = COALESCE(job.StartedUtc, @nowUtc),
+    CompletedUtc = NULL,
+    AttemptCount = job.AttemptCount + 1,
+    LastError = NULL,
+    UpdatedUtc = @nowUtc
+OUTPUT inserted.HostAgentJobId,
+       inserted.HostId,
+       inserted.JobType,
+       inserted.PayloadJson,
+       inserted.AttemptCount
+INTO @claimed(HostAgentJobId, HostId, JobType, PayloadJson, AttemptCount)
+FROM omp.HostAgentJobs job
+INNER JOIN NextJob nextJob ON nextJob.HostAgentJobId = job.HostAgentJobId;
+
+SELECT HostAgentJobId,
+       HostId,
+       JobType,
+       PayloadJson,
+       AttemptCount
+FROM @claimed;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(30, leaseSeconds));
+        cmd.Parameters.AddWithValue("@pendingStatus", HostAgentJobStatuses.Pending);
+        cmd.Parameters.AddWithValue("@runningStatus", HostAgentJobStatuses.Running);
+        cmd.Parameters.AddWithValue("@failedStatus", HostAgentJobStatuses.Failed);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new HostAgentJobWorkItem(
+            rdr.GetInt64(0),
+            rdr.GetGuid(1),
+            rdr.GetString(2),
+            rdr.IsDBNull(3) ? null : rdr.GetString(3),
+            rdr.GetInt32(4));
+    }
+
+    public async Task CompleteHostAgentJobAsync(
+        long hostAgentJobId,
+        byte status,
+        string? resultJson,
+        string? lastError,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.HostAgentJobs
+SET Status = @status,
+    CompletedUtc = SYSUTCDATETIME(),
+    LeaseUntilUtc = NULL,
+    ResultJson = @resultJson,
+    LastError = @lastError,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostAgentJobId = @hostAgentJobId
+  AND Status = @runningStatus;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostAgentJobId", hostAgentJobId);
+        cmd.Parameters.AddWithValue("@status", status);
+        cmd.Parameters.AddWithValue("@runningStatus", HostAgentJobStatuses.Running);
+        cmd.Parameters.AddWithValue("@resultJson", string.IsNullOrWhiteSpace(resultJson) ? DBNull.Value : resultJson);
+        cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(lastError) ? DBNull.Value : Truncate(lastError, 4000));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<bool> IsHostArtifactCachePathInUseAsync(
+        Guid hostId,
+        int artifactId,
+        string localPath,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CASE
+    WHEN EXISTS
+    (
+        SELECT 1
+        FROM omp.HostArtifactStates
+        WHERE HostId = @hostId
+          AND LocalPath = @localPath
+    )
+    OR EXISTS
+    (
+        SELECT 1
+        FROM omp.HostAppDeploymentStates
+        WHERE HostId = @hostId
+          AND
+          (
+              ArtifactId = @artifactId
+              OR SourceLocalPath = @localPath
+          )
+    )
+    OR EXISTS
+    (
+        SELECT 1
+        FROM omp.HostAgentRuntimeStates
+        WHERE HostId = @hostId
+          AND
+          (
+              ArtifactId = @artifactId
+              OR InstallPath = @localPath
+          )
+          AND IsActive = 1
+    )
+    THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@localPath", localPath);
+
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is bool isInUse && isInUse;
     }
 
     public async Task<ArtifactDescriptor?> GetArtifactByIdAsync(
