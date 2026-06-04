@@ -2259,19 +2259,24 @@
   <data name="Maintenance" xml:space="preserve"><value>Maintenance</value></data>
   <data name="Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration." xml:space="preserve"><value>Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration.</value></data>
   <data name="Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing. Queued {3} HostAgent cleanup jobs for {4} host cache entries." xml:space="preserve"><value>Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing. Queued {3} HostAgent cleanup jobs for {4} host cache entries.</value></data>
+  <data name="Deleted {0} artifact versions. Queued {1} HostAgent cleanup jobs for {2} artifact store entries and {3} host cache entries." xml:space="preserve"><value>Deleted {0} artifact versions. Queued {1} HostAgent cleanup jobs for {2} artifact store entries and {3} host cache entries.</value></data>
   <data name="Artifact retention" xml:space="preserve"><value>Artifact retention</value></data>
   <data name="The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected." xml:space="preserve"><value>The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, host requirement, current app deployment, or active HostAgent runtime rows are protected.</value></data>
   <data name="Versions to keep" xml:space="preserve"><value>Versions to keep</value></data>
   <data name="For example, 5 keeps the five newest registered versions for each artifact identity." xml:space="preserve"><value>For example, 5 keeps the five newest registered versions for each artifact identity.</value></data>
   <data name="Artifact store root" xml:space="preserve"><value>Artifact store root</value></data>
+  <data name="Artifact store cleanup" xml:space="preserve"><value>Artifact store cleanup</value></data>
   <data name="Not configured" xml:space="preserve"><value>Not configured</value></data>
+  <data name="Queued for HostAgent" xml:space="preserve"><value>Queued for HostAgent</value></data>
   <data name="Payload folders are deleted under ArtifactUpload:ArtifactStoreRoot after the database rows have been removed." xml:space="preserve"><value>Payload folders are deleted under ArtifactUpload:ArtifactStoreRoot after the database rows have been removed.</value></data>
+  <data name="Central artifact store payloads are deleted by the first HostAgent that claims the global cleanup job. Portal does not need write access to ArtifactStore." xml:space="preserve"><value>Central artifact store payloads are deleted by the first HostAgent that claims the global cleanup job. Portal does not need write access to ArtifactStore.</value></data>
   <data name="Preview cleanup" xml:space="preserve"><value>Preview cleanup</value></data>
   <data name="Delete all unreferenced old artifact versions shown in the preview?" xml:space="preserve"><value>Delete all unreferenced old artifact versions shown in the preview?</value></data>
   <data name="Delete old artifact versions" xml:space="preserve"><value>Delete old artifact versions</value></data>
   <data name="HostAgent job queue" xml:space="preserve"><value>HostAgent job queue</value></data>
-  <data name="HostAgent jobs are queued in the database and picked up by the matching host during its next cycle." xml:space="preserve"><value>HostAgent jobs are queued in the database and picked up by the matching host during its next cycle.</value></data>
+  <data name="HostAgent jobs are queued in the database and picked up by the matching host during its next cycle." xml:space="preserve"><value>HostAgent jobs are queued in the database and picked up by the matching host during its next cycle. Global jobs can be claimed by any HostAgent.</value></data>
   <data name="No HostAgent jobs have been queued yet." xml:space="preserve"><value>No HostAgent jobs have been queued yet.</value></data>
+  <data name="Any HostAgent" xml:space="preserve"><value>Any HostAgent</value></data>
   <data name="Job" xml:space="preserve"><value>Job</value></data>
   <data name="Attempts" xml:space="preserve"><value>Attempts</value></data>
   <data name="Claimed by" xml:space="preserve"><value>Claimed by</value></data>

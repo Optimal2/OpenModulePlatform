@@ -718,15 +718,11 @@ public sealed class ArtifactRetentionCleanupResult
 {
     public int DeletedArtifactCount { get; init; }
 
-    public int RemovedPayloadCount { get; init; }
-
-    public int MissingPayloadCount { get; init; }
+    public int ArtifactStoreEntryCount { get; init; }
 
     public int HostCacheEntryCount { get; init; }
 
     public int CreatedHostAgentJobCount { get; init; }
-
-    public IReadOnlyList<string> PayloadErrors { get; init; } = [];
 
     public IReadOnlyList<ArtifactRetentionCandidateRow> DeletedArtifacts { get; init; } = [];
 }
@@ -734,6 +730,8 @@ public sealed class ArtifactRetentionCleanupResult
 public sealed class ArtifactRetentionDeletionResult
 {
     public IReadOnlyList<ArtifactRetentionCandidateRow> DeletedArtifacts { get; init; } = [];
+
+    public int ArtifactStoreEntryCount { get; init; }
 
     public int HostCacheEntryCount { get; init; }
 
@@ -744,9 +742,9 @@ public sealed class HostAgentJobRow
 {
     public long HostAgentJobId { get; set; }
 
-    public Guid HostId { get; set; }
+    public Guid? HostId { get; set; }
 
-    public string HostKey { get; set; } = string.Empty;
+    public string? HostKey { get; set; }
 
     public string? HostDisplayName { get; set; }
 
