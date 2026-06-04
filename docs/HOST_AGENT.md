@@ -29,7 +29,8 @@ OMP metadata; it does not infer the latest version from file or folder names.
   `host-agent` artifacts registered in `omp.HostAgentDesiredStates`
 - Web app deployment state in `omp.HostAppDeploymentStates`
 - Database-backed HostAgent job queue in `omp.HostAgentJobs`, currently used
-  for host-local artifact cache cleanup requested from Portal maintenance
+  for central artifact store and host-local artifact cache cleanup requested
+  from Portal maintenance
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
   - operation: `quiesce`
@@ -52,20 +53,33 @@ OMP metadata; it does not infer the latest version from file or folder names.
 
 ## HostAgent job queue
 
-Portal and other trusted platform components can enqueue host-specific work in
-`omp.HostAgentJobs`. HostAgent claims pending jobs for its own `HostId`, records
-a lease while it runs them, and marks the final state as succeeded, warning, or
-failed. Expired running jobs may be claimed again until `MaxAttempts` is
-reached; after that they are marked failed.
+Portal and other trusted platform components can enqueue host-specific or
+global work in `omp.HostAgentJobs`. Host-specific jobs have `HostId` set and are
+claimed only by that host. Global jobs have `HostId = NULL` and can be claimed
+by the first enabled HostAgent that sees the job. HostAgent records a lease
+while it runs a job and marks the final state as succeeded, warning, or failed.
+Expired running jobs may be claimed again until `MaxAttempts` is reached; after
+that they are marked failed.
 
-The first job type is `ArtifactCacheCleanup`. Portal maintenance creates these
-jobs after deleting old central artifact versions, one payload per host cache
-that may contain now-orphaned local artifact folders. HostAgent only deletes
-paths inside `HostAgent:LocalArtifactCacheRoot`, refuses to delete the cache root
-or `.staging`, and skips paths that are still referenced by current host state.
-Portal also protects artifact versions that are still referenced by desired
-state, current app deployment state, or active HostAgent runtime state before it
-deletes the central artifact rows.
+The cleanup job types are:
+
+- `ArtifactStoreCleanup` - global job created by Portal maintenance after old
+  artifact rows have been deleted. The first HostAgent that claims it deletes
+  the corresponding payload folders below `HostAgent:CentralArtifactRoot`.
+  HostAgent refuses to delete the artifact store root, `_available`, `.staging`,
+  rooted paths, or paths that escape the configured root. It also skips a path if
+  any remaining `omp.Artifacts` row still references the same relative path.
+- `ArtifactCacheCleanup` - host-specific job created by Portal maintenance, one
+  payload per host cache that may contain now-orphaned local artifact folders.
+  HostAgent only deletes paths inside `HostAgent:LocalArtifactCacheRoot`, refuses
+  to delete the cache root or `.staging`, and skips paths that are still
+  referenced by current host state.
+
+Portal protects artifact versions that are still referenced by desired state,
+current app deployment state, or active HostAgent runtime state before it
+deletes the central artifact rows. Portal does not need write access to the
+central `ArtifactStore` for the maintenance cleanup; physical deletion is done
+through HostAgent jobs.
 
 The job loop is enabled by default:
 

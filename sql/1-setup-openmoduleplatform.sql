@@ -829,7 +829,7 @@ BEGIN
     (
         HostAgentJobId bigint IDENTITY(1,1) NOT NULL
             CONSTRAINT PK_omp_HostAgentJobs PRIMARY KEY,
-        HostId uniqueidentifier NOT NULL,
+        HostId uniqueidentifier NULL,
         JobType nvarchar(100) NOT NULL,
         PayloadJson nvarchar(max) NULL,
         Status tinyint NOT NULL CONSTRAINT DF_omp_HostAgentJobs_Status DEFAULT(0),
@@ -849,6 +849,56 @@ BEGIN
         CONSTRAINT FK_omp_HostAgentJobs_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
         CONSTRAINT CK_omp_HostAgentJobs_Status CHECK(Status IN (0, 1, 2, 3, 4, 5))
     );
+END
+GO
+
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NOT NULL
+   AND EXISTS
+   (
+       SELECT 1
+       FROM sys.columns
+       WHERE object_id = OBJECT_ID(N'omp.HostAgentJobs')
+         AND name = N'HostId'
+         AND is_nullable = 0
+   )
+BEGIN
+    IF EXISTS
+    (
+        SELECT 1
+        FROM sys.indexes
+        WHERE object_id = OBJECT_ID(N'omp.HostAgentJobs')
+          AND name = N'IX_omp_HostAgentJobs_Host_Status'
+    )
+    BEGIN
+        DROP INDEX IX_omp_HostAgentJobs_Host_Status ON omp.HostAgentJobs;
+    END;
+
+    IF EXISTS
+    (
+        SELECT 1
+        FROM sys.foreign_keys
+        WHERE parent_object_id = OBJECT_ID(N'omp.HostAgentJobs')
+          AND name = N'FK_omp_HostAgentJobs_Host'
+    )
+    BEGIN
+        ALTER TABLE omp.HostAgentJobs DROP CONSTRAINT FK_omp_HostAgentJobs_Host;
+    END;
+
+    ALTER TABLE omp.HostAgentJobs ALTER COLUMN HostId uniqueidentifier NULL;
+END
+GO
+
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM sys.foreign_keys
+       WHERE parent_object_id = OBJECT_ID(N'omp.HostAgentJobs')
+         AND name = N'FK_omp_HostAgentJobs_Host'
+   )
+BEGIN
+    ALTER TABLE omp.HostAgentJobs WITH CHECK
+    ADD CONSTRAINT FK_omp_HostAgentJobs_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId);
 END
 GO
 

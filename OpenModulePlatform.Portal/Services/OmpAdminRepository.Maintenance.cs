@@ -147,6 +147,15 @@ DECLARE @CacheEntries TABLE
     ContentSha256 nvarchar(128) NULL
 );
 
+DECLARE @StoreEntries TABLE
+(
+    ArtifactId int NOT NULL,
+    Version nvarchar(50) NOT NULL,
+    PackageType nvarchar(50) NOT NULL,
+    TargetName nvarchar(100) NULL,
+    RelativePath nvarchar(400) NOT NULL
+);
+
 DECLARE @CreatedJobs TABLE
 (
     HostAgentJobId bigint NOT NULL
@@ -275,6 +284,23 @@ INNER JOIN @DeleteArtifacts d ON d.ArtifactId = has.ArtifactId
 WHERE has.LocalPath IS NOT NULL
   AND LTRIM(RTRIM(has.LocalPath)) <> N'';
 
+INSERT INTO @StoreEntries
+(
+    ArtifactId,
+    Version,
+    PackageType,
+    TargetName,
+    RelativePath
+)
+SELECT ArtifactId,
+       Version,
+       PackageType,
+       TargetName,
+       LTRIM(RTRIM(RelativePath))
+FROM @DeleteArtifacts
+WHERE RelativePath IS NOT NULL
+  AND LTRIM(RTRIM(RelativePath)) <> N'';
+
 DELETE s
 FROM omp.HostAppDeploymentStates s
 INNER JOIN @DeleteArtifacts d ON d.ArtifactId = s.ArtifactId;
@@ -294,6 +320,47 @@ INNER JOIN @DeleteArtifacts d ON d.ArtifactId = c.ArtifactId;
 DELETE ar
 FROM omp.Artifacts ar
 INNER JOIN @DeleteArtifacts d ON d.ArtifactId = ar.ArtifactId;
+
+INSERT INTO omp.HostAgentJobs
+(
+    HostId,
+    JobType,
+    PayloadJson,
+    Status,
+    RequestedBy,
+    MaxAttempts
+)
+OUTPUT inserted.HostAgentJobId INTO @CreatedJobs(HostAgentJobId)
+SELECT CAST(NULL AS uniqueidentifier),
+       N'ArtifactStoreCleanup',
+       (
+           SELECT 1 AS schemaVersion,
+                  JSON_QUERY
+                  (
+                      (
+                          SELECT entry.ArtifactId AS artifactId,
+                                 entry.Version AS version,
+                                 entry.PackageType AS packageType,
+                                 entry.TargetName AS targetName,
+                                 entry.RelativePath AS relativePath
+                          FROM @StoreEntries entry
+                          ORDER BY entry.PackageType,
+                                   entry.TargetName,
+                                   entry.Version,
+                                   entry.ArtifactId
+                          FOR JSON PATH
+                      )
+                  ) AS artifactStoreEntries
+           FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+       ),
+       CAST(0 AS tinyint),
+       @RequestedBy,
+       3
+WHERE EXISTS
+(
+    SELECT 1
+    FROM @StoreEntries
+);
 
 INSERT INTO omp.HostAgentJobs
 (
@@ -361,6 +428,9 @@ ORDER BY ModuleKey,
 
 SELECT COUNT(1) AS HostCacheEntryCount
 FROM @CacheEntries;
+
+SELECT COUNT(1) AS ArtifactStoreEntryCount
+FROM @StoreEntries;
 
 SELECT COUNT(1) AS CreatedHostAgentJobCount
 FROM @CreatedJobs;";
@@ -437,7 +507,7 @@ SELECT TOP (@Limit)
        job.ResultJson,
        job.LastError
 FROM omp.HostAgentJobs job
-INNER JOIN omp.Hosts host ON host.HostId = job.HostId
+LEFT JOIN omp.Hosts host ON host.HostId = job.HostId
 ORDER BY job.RequestedUtc DESC,
          job.HostAgentJobId DESC;";
 
@@ -453,8 +523,8 @@ ORDER BY job.RequestedUtc DESC,
             rows.Add(new HostAgentJobRow
             {
                 HostAgentJobId = rdr.GetInt64(0),
-                HostId = rdr.GetGuid(1),
-                HostKey = rdr.GetString(2),
+                HostId = rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
+                HostKey = rdr.IsDBNull(2) ? null : rdr.GetString(2),
                 HostDisplayName = rdr.IsDBNull(3) ? null : rdr.GetString(3),
                 JobType = rdr.GetString(4),
                 Status = rdr.GetByte(5),
@@ -490,6 +560,7 @@ ORDER BY job.RequestedUtc DESC,
 
         var deletedArtifacts = new List<ArtifactRetentionCandidateRow>();
         var hostCacheEntryCount = 0;
+        var artifactStoreEntryCount = 0;
         var createdHostAgentJobCount = 0;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
@@ -505,12 +576,18 @@ ORDER BY job.RequestedUtc DESC,
 
         if (await rdr.NextResultAsync(ct) && await rdr.ReadAsync(ct))
         {
+            artifactStoreEntryCount = rdr.GetInt32(0);
+        }
+
+        if (await rdr.NextResultAsync(ct) && await rdr.ReadAsync(ct))
+        {
             createdHostAgentJobCount = rdr.GetInt32(0);
         }
 
         return new ArtifactRetentionDeletionResult
         {
             DeletedArtifacts = deletedArtifacts,
+            ArtifactStoreEntryCount = artifactStoreEntryCount,
             HostCacheEntryCount = hostCacheEntryCount,
             CreatedHostAgentJobCount = createdHostAgentJobCount
         };
