@@ -136,7 +136,7 @@
                                 <div class="portal-topbar__nav-group-entries" data-portal-topbar-entry-group-entries hidden>
                                 @foreach (var entry in group.Entries)
                                 {
-                                    var favoriteLabel = L[entry.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];
+                                    var favoriteToggleLabel = L[entry.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];
                                     var entryText = EntryText(entry);
                                     var entryFavoriteLabel = EntryFavoriteLabel(entry);
                                     <div class="portal-topbar__nav-entry-row"
@@ -156,8 +156,8 @@
                                                 <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
                                                 <button type="submit"
                                                         class="portal-topbar__favorite-toggle@(entry.IsFavorite ? " is-favorite" : string.Empty)"
-                                                        title="@favoriteLabel"
-                                                        aria-label="@favoriteLabel"
+                                                        title="@favoriteToggleLabel"
+                                                        aria-label="@favoriteToggleLabel"
                                                         data-portal-topbar-favorite-button>
                                                     <span aria-hidden="true">@(entry.IsFavorite ? "★" : "☆")</span>
                                                 </button>
@@ -208,7 +208,7 @@
                                     </div>
                                 }
                             </div>
-                            <div class="portal-topbar__favorites-empty" data-portal-topbar-favorites-empty hidden="@(_portalTopBar.FavoriteEntries.Count > 0)">
+                            <div class="portal-topbar__favorites-empty" data-portal-topbar-favorites-empty @attributes="HiddenWhen(_portalTopBar.FavoriteEntries.Count > 0)">
                                 @L[_portalTopBar.NoFavoritesTextKey]
                             </div>
                         </div>
@@ -269,7 +269,7 @@
                     <summary title="@L[_portalTopBar.NotificationsToggleTextKey]" aria-label="@L[_portalTopBar.NotificationsToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
                             <span class="portal-topbar__icon portal-topbar__icon--notifications" aria-hidden="true"></span>
-                            <span class="portal-topbar__notification-badge" data-portal-topbar-notification-badge hidden="@(_portalTopBar.UnreadNotificationCount == 0)">
+                            <span class="portal-topbar__notification-badge" data-portal-topbar-notification-badge @attributes="HiddenWhen(_portalTopBar.UnreadNotificationCount == 0)">
                                 @NotificationBadgeText(_portalTopBar.UnreadNotificationCount)
                             </span>
                         </span>
@@ -321,7 +321,7 @@
                                     </form>
                                 }
                             </div>
-                            <div class="portal-topbar__notifications-empty" data-portal-topbar-notifications-empty hidden="@(_portalTopBar.Notifications.Count > 0)">
+                            <div class="portal-topbar__notifications-empty" data-portal-topbar-notifications-empty @attributes="HiddenWhen(_portalTopBar.Notifications.Count > 0)">
                                 @L[_portalTopBar.NoNotificationsTextKey]
                             </div>
                             <div class="portal-topbar__notifications-loading" data-portal-topbar-notifications-loading hidden>@L["Loading"]</div>
@@ -334,7 +334,7 @@
                                   class="portal-topbar__notifications-mark-all-form"
                                   data-portal-topbar-notification-mark-all-form
                                   data-enhance="false"
-                                  hidden="@(_portalTopBar.Notifications.Count == 0)">
+                                  @attributes="HiddenWhen(_portalTopBar.Notifications.Count == 0)">
                                 <button type="submit" class="portal-topbar__tray-action portal-topbar__notifications-mark-all">
                                     @L[_portalTopBar.MarkAllNotificationsReadTextKey]
                                 </button>
@@ -353,7 +353,7 @@
                     <summary title="@L[_portalTopBar.MessagesToggleTextKey]" aria-label="@L[_portalTopBar.MessagesToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
                             <span class="portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
-                            <span class="portal-topbar__message-badge" hidden="@(_portalTopBar.UnreadMessageCount == 0)">
+                            <span class="portal-topbar__message-badge" @attributes="HiddenWhen(_portalTopBar.UnreadMessageCount == 0)">
                                 @NotificationBadgeText(_portalTopBar.UnreadMessageCount)
                             </span>
                         </span>
@@ -390,7 +390,7 @@
                                                 <span class="portal-topbar__message-meta">@MessageTimeText(conversation.LastMessageAt)</span>
                                             }
                                         </span>
-                                        <span class="portal-topbar__message-row-badge" hidden="@(conversation.UnreadCount == 0)">
+                                        <span class="portal-topbar__message-row-badge" @attributes="HiddenWhen(conversation.UnreadCount == 0)">
                                             @NotificationBadgeText(conversation.UnreadCount)
                                         </span>
                                     </a>
@@ -407,7 +407,7 @@
                                   action="@_portalTopBar.MessageMarkAllReadUrl"
                                   class="portal-topbar__messages-mark-all-form"
                                   data-enhance="false"
-                                  hidden="@(_portalTopBar.UnreadMessageCount == 0)">
+                                  @attributes="HiddenWhen(_portalTopBar.UnreadMessageCount == 0)">
                                 <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
                                 <button type="submit" class="portal-topbar__tray-action portal-topbar__messages-action">
                                     @L[_portalTopBar.MarkAllMessagesReadTextKey]
@@ -523,6 +523,15 @@
         L["LanguageFallbackNotice"],
         CultureText(_portalTopBar.PreferredCultureDisplayText),
         CultureText(_portalTopBar.EffectiveCultureDisplayText));
+
+    private static readonly IReadOnlyDictionary<string, object> HiddenAttribute =
+        new Dictionary<string, object>
+        {
+            ["hidden"] = "hidden"
+        };
+
+    private static IReadOnlyDictionary<string, object>? HiddenWhen(bool condition)
+        => condition ? HiddenAttribute : null;
 
     protected override async Task OnInitializedAsync()
     {

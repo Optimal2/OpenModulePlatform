@@ -425,7 +425,7 @@ function Test-DirectoryReadWrite {
     return $summary
 }
 
-function Quote-Argument {
+function Format-Argument {
     param([string]$Argument)
 
     if ($Argument -match '[\s"]') {
@@ -460,7 +460,7 @@ function Invoke-HostAgentRunOnce {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $fileName
-    $psi.Arguments = ($arguments | ForEach-Object { Quote-Argument $_ }) -join ' '
+    $psi.Arguments = ($arguments | ForEach-Object { Format-Argument $_ }) -join ' '
     $psi.WorkingDirectory = $BasePath
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
@@ -488,6 +488,7 @@ function Invoke-HostAgentRunOnce {
         }
     }
 
+    $process.WaitForExit()
     return [ordered]@{
         TimedOut = $false
         ExitCode = $process.ExitCode
@@ -589,7 +590,7 @@ if (-not [string]::IsNullOrWhiteSpace($resolvedAppPath)) {
     $logDirectorySetting = [string](Get-ConfigValue -Config $config -Path 'NLog:variables:logDirectory' -Default '${basedir}/logs')
     $logDirectory = Resolve-ConfiguredPath -Path $logDirectorySetting -BaseDirectory $resolvedAppPath
     $logAccess = Test-DirectoryReadWrite -Path $logDirectory
-    $logStatus = if ($logAccess.Exists -and $logAccess.CanWrite) { 'OK' } elseif ($logAccess.Exists) { 'Fail' } else { 'Fail' }
+    $logStatus = if ($logAccess.Exists -and $logAccess.CanWrite) { 'OK' } else { 'Fail' }
     Add-Check 'Filesystem' 'Log directory read/write' $logStatus $logDirectory $logAccess
 }
 

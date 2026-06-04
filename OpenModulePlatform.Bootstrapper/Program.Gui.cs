@@ -3203,26 +3203,22 @@ internal static partial class Program
             if (document.RootElement.TryGetProperty("moduleDefinitions", out var definitions)
                 && definitions.ValueKind == JsonValueKind.Array)
             {
-                foreach (var definition in definitions.EnumerateArray())
+                foreach (var moduleKey in definitions.EnumerateArray()
+                    .Select(static definition => TryGetStringProperty(definition, "moduleKey"))
+                    .Where(static moduleKey => !string.IsNullOrWhiteSpace(moduleKey)))
                 {
-                    var moduleKey = TryGetStringProperty(definition, "moduleKey");
-                    if (!string.IsNullOrWhiteSpace(moduleKey))
-                    {
-                        keys.Add(moduleKey.Trim());
-                    }
+                    keys.Add(moduleKey!.Trim());
                 }
             }
 
             if (document.RootElement.TryGetProperty("components", out var components)
                 && components.ValueKind == JsonValueKind.Array)
             {
-                foreach (var component in components.EnumerateArray())
+                foreach (var moduleKey in components.EnumerateArray()
+                    .Select(static component => TryGetStringProperty(component, "moduleKey"))
+                    .Where(static moduleKey => !string.IsNullOrWhiteSpace(moduleKey)))
                 {
-                    var moduleKey = TryGetStringProperty(component, "moduleKey");
-                    if (!string.IsNullOrWhiteSpace(moduleKey))
-                    {
-                        keys.Add(moduleKey.Trim());
-                    }
+                    keys.Add(moduleKey!.Trim());
                 }
             }
 

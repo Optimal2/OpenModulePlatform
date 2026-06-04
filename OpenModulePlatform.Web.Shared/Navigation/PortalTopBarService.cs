@@ -1567,6 +1567,8 @@ ORDER BY ai.SortOrder,
             }
             else
             {
+                // Permission joins can return multiple rows for the same app instance; keep the strictest
+                // RequireAll value so a later permissive row cannot weaken an all-required permission set.
                 entry.RequireAll = entry.RequireAll || (!rdr.IsDBNull(10) && rdr.GetBoolean(10));
             }
 

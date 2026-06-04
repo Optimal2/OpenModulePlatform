@@ -300,9 +300,11 @@ public sealed class ArtifactPackageExtractor
         }
         catch (IOException)
         {
+            return;
         }
         catch (UnauthorizedAccessException)
         {
+            return;
         }
     }
 
