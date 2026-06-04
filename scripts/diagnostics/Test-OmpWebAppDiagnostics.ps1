@@ -310,11 +310,11 @@ function Redact-ConfigValue {
     }
 
     if (($Value -is [System.Collections.IEnumerable]) -and -not ($Value -is [string])) {
-        $items = @()
+        $items = [System.Collections.Generic.List[object]]::new()
         foreach ($item in $Value) {
-            $items += ,(Redact-ConfigValue -Key $Key -Value $item)
+            $items.Add((Redact-ConfigValue -Key $Key -Value $item)) | Out-Null
         }
-        return $items
+        return $items.ToArray()
     }
 
     return $Value
@@ -726,13 +726,14 @@ function Get-RecentLogFiles {
 
     $threshold = (Get-Date).AddHours(-1 * [Math]::Max(1, $RecentHours))
     $patterns = @('*.log', '*.txt')
-    $files = @()
+    $files = [System.Collections.Generic.List[object]]::new()
     foreach ($pattern in $patterns) {
-        $files += @(Get-ChildItem -LiteralPath $Path -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
-            Where-Object { $_.LastWriteTimeUtc -ge $threshold })
+        Get-ChildItem -LiteralPath $Path -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTimeUtc -ge $threshold } |
+            ForEach-Object { $files.Add($_) | Out-Null }
     }
 
-    return @($files |
+    return @($files.ToArray() |
         Sort-Object LastWriteTimeUtc -Descending -Unique |
         Select-Object -First 40 FullName, Length, LastWriteTimeUtc)
 }
@@ -1179,7 +1180,7 @@ SELECT
     ) AS TableCount;
 '@ -Parameters @{ '@schemaName' = $schemaName }
                 $firstSchemaRow = @($schemaRows)[0]
-                $schemaStatus = if ($firstSchemaRow.SchemaId -ne $null) { 'OK' } else { 'Fail' }
+                $schemaStatus = if ($null -ne $firstSchemaRow.SchemaId) { 'OK' } else { 'Fail' }
                 Add-Check 'SQL' 'Module schema' $schemaStatus "Schema=$schemaName" $schemaRows
             }
             catch {
@@ -1286,7 +1287,22 @@ if ([string]::IsNullOrWhiteSpace($targetPath) -and $null -ne $iisApplication -an
 
 if (-not [string]::IsNullOrWhiteSpace($Url)) {
     $probe = Invoke-HttpProbe -ProbeUrl $Url -TimeoutSeconds $HttpTimeoutSeconds
-    $probeStatus = if ([string]$probe.FinalUrl -like '*/auth/login*') { 'Warn' } elseif ($probe.StatusCode -ge 200 -and $probe.StatusCode -lt 400) { 'OK' } elseif ($probe.StatusCode -ge 500) { 'Fail' } else { 'Warn' }
+    $probeStatus = if ($null -eq $probe.StatusCode -and -not [string]::IsNullOrWhiteSpace([string]$probe.Error)) {
+        'Fail'
+    }
+    elseif ([string]$probe.FinalUrl -like '*/auth/login*') {
+        'Warn'
+    }
+    elseif ($probe.StatusCode -ge 200 -and $probe.StatusCode -lt 400) {
+        'OK'
+    }
+    elseif ($probe.StatusCode -ge 500) {
+        'Fail'
+    }
+    else {
+        'Warn'
+    }
+
     Add-Check 'HTTP' 'Endpoint probe' $probeStatus $Url $probe
 }
 else {
