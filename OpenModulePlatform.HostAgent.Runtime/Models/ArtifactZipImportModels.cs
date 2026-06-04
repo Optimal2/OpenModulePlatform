@@ -66,24 +66,3 @@ public sealed record ModuleDefinitionImportResult(
     int ModuleDefinitionDocumentId,
     bool Applied,
     int SqlRepairCount);
-
-public sealed record ModulePackageImportResult(
-    string ModuleKey,
-    string DefinitionVersion,
-    int ModuleDefinitionDocumentId,
-    bool Applied,
-    int SqlRepairCount,
-    IReadOnlyList<ModulePackageArtifactImportResult> Artifacts)
-{
-    public int ImportedArtifactCount => Artifacts.Count(static item => item.Status is "Imported" or "Replaced" or "Updated");
-
-    public int FailedArtifactCount => Artifacts.Count(static item => item.Status == "Failed");
-
-    public int SkippedArtifactCount => Artifacts.Count(static item => item.Status == "Skipped");
-}
-
-public sealed record ModulePackageArtifactImportResult(
-    string FileName,
-    string Status,
-    string? Message,
-    ArtifactZipImportResult? Artifact);

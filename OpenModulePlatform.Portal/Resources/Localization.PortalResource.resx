@@ -2254,4 +2254,10 @@
   <data name="Profile image saved." xml:space="preserve"><value>Profile image saved.</value></data>
   <data name="Profile image removed." xml:space="preserve"><value>Profile image removed.</value></data>
   <data name="Use a PNG, JPEG, or WebP image up to 2 MB." xml:space="preserve"><value>Use a PNG, JPEG, or WebP image up to 2 MB.</value></data>
+  <data name="Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow." xml:space="preserve"><value>Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow.</value></data>
+  <data name="Create universal package" xml:space="preserve"><value>Create universal package</value></data>
+  <data name="Universal package builder" xml:space="preserve"><value>Universal package builder</value></data>
+  <data name="Use this standalone-compatible tool to create a universal OMP package zip from any mix of portable objects." xml:space="preserve"><value>Use this standalone-compatible tool to create a universal OMP package zip from any mix of portable objects.</value></data>
+  <data name="Back to import/export" xml:space="preserve"><value>Back to import/export</value></data>
+  <data name="Only universal module packages are supported for import and export. Use the Universal package workflow." xml:space="preserve"><value>Only universal module packages are supported for import and export. Use the Universal package workflow.</value></data>
 </root>

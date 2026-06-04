@@ -196,7 +196,8 @@ for JSON string content but do not include the surrounding quotes.
 HostAgent can poll a folder for portable deployment objects. The feature is off
 unless `HostAgent:ArtifactZipImport:IsEnabled` is set to `true`. The setting
 name still contains `ArtifactZipImport` for backward compatibility with older
-runtime configuration files.
+runtime configuration files, but the accepted object format is now universal
+module package zip only.
 
 ```json
 {
@@ -213,15 +214,11 @@ runtime configuration files.
 }
 ```
 
-The import folder recognizes these top-level file types:
-
-- A standard artifact package zip named
-  `moduleKey__appKey__packageType__targetName__version.zip`. Both legacy
-  root-payload zips and manifest-based packages with
-  `omp-artifact-package.json` are accepted.
-- A module definition JSON document with `moduleKey` and `definitionVersion`.
-- A module package zip that contains exactly one module definition JSON document
-  plus one or more standard artifact package zips for the same module.
+The import folder recognizes only top-level `.zip` files that contain
+`omp-universal-package.json`. Put module definitions, artifact packages, host
+configuration objects, config overlays, widgets, and widget runtime data inside
+that universal package instead of dropping individual object files into the
+folder.
 
 HostAgent performs only the unattended choices that are safe to automate. It
 applies imported module definitions, runs embedded idempotent repair SQL for
@@ -230,7 +227,7 @@ configuration files or copies configuration file rows from the latest previous
 matching artifact when enabled, and selects imported artifacts for matching
 desired app rows.
 
-For complete module package zips, HostAgent treats each inner artifact package
+For universal package zips, HostAgent treats each inner artifact package
 independently. Identical already-registered artifacts are skipped, incompatible
 historical artifact versions are skipped, and compatible missing artifacts are
 imported. If the package carries an older module definition than the one already
@@ -239,16 +236,15 @@ compatible versions for the same app/package/target slot are present, only the
 highest compatible version is selected as desired state so an exported package
 with history cannot accidentally downgrade a running installation.
 
-The folder import is intentionally stricter than Portal. Duplicate module
-definitions with the same version but different JSON, duplicate artifact
-versions with different content, invalid package filenames, unknown
-module/app/package combinations, unsafe repair SQL, and malformed JSON or zip
-files fail without prompting. A standalone artifact zip with an incompatible
-version fails; an incompatible inner artifact in a complete module package is
-skipped as historical package content. Successful files move to `processed`;
-failed files move to `failed` with an adjacent `.error.txt`. Files with other
-extensions are treated as unsupported and moved to `failed` once HostAgent can
-open them exclusively.
+The folder import is intentionally strict. Duplicate module definitions with the
+same version but different JSON, duplicate artifact versions with different
+content, invalid package filenames, unknown module/app/package combinations,
+unsafe repair SQL, and malformed JSON or zip files fail without prompting. An
+incompatible inner artifact in a universal package is skipped as historical
+package content. Successful files move to `processed`; failed files move to
+`failed` with an adjacent `.error.txt`. Files that are not universal package
+zips are treated as unsupported and moved to `failed` once HostAgent can open
+them exclusively.
 
 ## Runtime file mirrors
 
