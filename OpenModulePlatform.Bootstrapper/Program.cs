@@ -847,7 +847,7 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
             }
 
             int documentId;
-            using var transaction = connection.BeginTransaction();
+            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
             try
             {
@@ -878,11 +878,11 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
                     documentId,
                     config.Sql.CommandTimeoutSeconds);
 
-                transaction.Commit();
+                await transaction.CommitAsync();
             }
             catch
             {
-                transaction.Rollback();
+                await transaction.RollbackAsync();
                 throw;
             }
 
@@ -2095,28 +2095,28 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
 
     private static string? ValidateSafeModuleDefinitionSql(string sqlText)
     {
-        if (Regex.IsMatch(sqlText, @"(?im)^\s*USE\s+(?:\[[^\]]+\]|[A-Za-z0-9_]+)\s*;?\s*$"))
+        if (ModuleDefinitionUseDatabaseDirectiveRegex().IsMatch(sqlText))
         {
             return "Module definition SQL must not contain USE database directives.";
         }
 
-        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b"))
+        if (ModuleDefinitionDropObjectRegex().IsMatch(sqlText))
         {
             return "The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE.";
         }
 
-        if (Regex.IsMatch(sqlText, @"(?is)\bTRUNCATE\s+TABLE\b"))
+        if (ModuleDefinitionTruncateTableRegex().IsMatch(sqlText))
         {
             return "The script contains TRUNCATE TABLE.";
         }
 
-        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")
+        var unsafeDeleteStatement = ModuleDefinitionDeleteStatementRegex().Matches(sqlText)
             .Cast<Match>()
             .Select(static match => match.Groups["statement"].Value)
-            .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
+            .FirstOrDefault(static statement => !ModuleDefinitionWhereClauseRegex().IsMatch(statement));
         if (unsafeDeleteStatement is not null)
         {
-            return "The script contains DELETE FROM without a WHERE clause.";
+            return "The script contains DELETE without a WHERE clause.";
         }
 
         return null;
@@ -2130,9 +2130,7 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
             return safety;
         }
 
-        return Regex.IsMatch(
-            sqlText,
-            @"(?is)\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE|DENY)\b")
+        return ModuleDefinitionReadOnlyBlockedCommandRegex().IsMatch(sqlText)
             ? "Validation SQL must be read-only and return an IsHealthy result."
             : null;
     }
@@ -5671,6 +5669,24 @@ VALUES
 
     [GeneratedRegex(@"DECLARE\s+@BootstrapPortalAdminPrincipalType\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';")]
     private static partial Regex BootstrapPrincipalTypeDeclarationRegex();
+
+    [GeneratedRegex(@"(?im)^\s*USE\s+(?:\[[^\]]+\]|[A-Za-z0-9_]+)\s*;?\s*$")]
+    private static partial Regex ModuleDefinitionUseDatabaseDirectiveRegex();
+
+    [GeneratedRegex(@"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b")]
+    private static partial Regex ModuleDefinitionDropObjectRegex();
+
+    [GeneratedRegex(@"(?is)\bTRUNCATE\s+TABLE\b")]
+    private static partial Regex ModuleDefinitionTruncateTableRegex();
+
+    [GeneratedRegex(@"(?is)\bDELETE(?:\s+(?!FROM\b|WHERE\b)[\[\]\w.]+)?(?:\s+FROM\b)?(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")]
+    private static partial Regex ModuleDefinitionDeleteStatementRegex();
+
+    [GeneratedRegex(@"(?is)\bWHERE\b")]
+    private static partial Regex ModuleDefinitionWhereClauseRegex();
+
+    [GeneratedRegex(@"(?is)\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE|DENY)\b")]
+    private static partial Regex ModuleDefinitionReadOnlyBlockedCommandRegex();
 
 }
 

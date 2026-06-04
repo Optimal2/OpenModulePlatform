@@ -303,7 +303,7 @@ WHERE c.conversation_id = @conversation_id;";
             return existingId;
         }
 
-        var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
             existing = await GetDirectConversationIdAsync(conn, tx, low, high, ct);
@@ -349,10 +349,6 @@ VALUES(@low, @high, @conversation_id);";
             await tx.RollbackAsync(ct);
             throw;
         }
-        finally
-        {
-            tx.Dispose();
-        }
     }
 
     public async Task<long> CreateGroupConversationAsync(
@@ -386,7 +382,7 @@ VALUES(@low, @high, @conversation_id);";
             throw new InvalidOperationException("OMP messages tables are not installed.");
         }
 
-        var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
             foreach (var participantUserId in participants)
@@ -414,10 +410,6 @@ VALUES(@low, @high, @conversation_id);";
         {
             await tx.RollbackAsync(ct);
             throw;
-        }
-        finally
-        {
-            tx.Dispose();
         }
     }
 
@@ -538,7 +530,7 @@ ORDER BY m.message_id DESC;";
             throw new InvalidOperationException("OMP messages tables are not installed.");
         }
 
-        var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         long messageId;
         try
         {
@@ -583,10 +575,6 @@ WHERE conversation_id = @conversation_id;";
         {
             await tx.RollbackAsync(ct);
             throw;
-        }
-        finally
-        {
-            tx.Dispose();
         }
 
         return messageId;

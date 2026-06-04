@@ -276,25 +276,27 @@ SELECT @old_storage_key;";
     {
         var root = GetStorageRoot();
         Directory.CreateDirectory(root);
-        return Path.Combine(root, storageKey);
+        return Path.Join(root, Path.GetFileName(storageKey));
     }
 
     private bool TryResolveStoragePath(string? storageKey, out string path)
     {
         path = string.Empty;
+        var fileName = Path.GetFileName(storageKey);
         if (string.IsNullOrWhiteSpace(storageKey)
-            || !string.Equals(Path.GetFileName(storageKey), storageKey, StringComparison.Ordinal)
-            || !ContentTypesByExtension.ContainsKey(Path.GetExtension(storageKey)))
+            || string.IsNullOrWhiteSpace(fileName)
+            || !string.Equals(fileName, storageKey, StringComparison.Ordinal)
+            || !ContentTypesByExtension.ContainsKey(Path.GetExtension(fileName)))
         {
             return false;
         }
 
-        path = Path.Combine(GetStorageRoot(), storageKey);
+        path = Path.Join(GetStorageRoot(), fileName);
         return true;
     }
 
     private string GetStorageRoot()
-        => Path.Combine(_environment.ContentRootPath, "App_Data", "ProfileImages");
+        => Path.Join(_environment.ContentRootPath, "App_Data", "ProfileImages");
 
     private void DeleteStorageKeyBestEffort(string? storageKey)
     {

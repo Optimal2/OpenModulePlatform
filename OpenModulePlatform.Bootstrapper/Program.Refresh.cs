@@ -771,6 +771,8 @@ internal static partial class Program
         bool throwOnFailure)
     {
         progress?.Invoke("Waiting for source repository update lock...");
+        // Ownership is transferred to MutexReleaseHandle after a successful wait; a using declaration here
+        // would dispose the mutex before the caller has finished the protected repository update.
         var mutex = new Mutex(initiallyOwned: false, DeveloperSourcePullMutexName);
         try
         {
