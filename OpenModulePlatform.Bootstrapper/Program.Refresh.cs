@@ -805,12 +805,14 @@ internal static partial class Program
 
     private sealed class MutexReleaseHandle(Mutex mutex) : IDisposable
     {
+        private Mutex? _mutex = mutex;
         private bool _disposed;
         private bool _ownsMutex;
 
         public bool WaitOne(TimeSpan timeout)
         {
-            _ownsMutex = mutex.WaitOne(timeout);
+            var mutexToWait = _mutex ?? throw new ObjectDisposedException(nameof(MutexReleaseHandle));
+            _ownsMutex = mutexToWait.WaitOne(timeout);
             return _ownsMutex;
         }
 
@@ -825,16 +827,19 @@ internal static partial class Program
             }
 
             _disposed = true;
-            try
+            var mutexToDispose = _mutex;
+            _mutex = null;
+            if (mutexToDispose is null)
+            {
+                return;
+            }
+
+            using (mutexToDispose)
             {
                 if (_ownsMutex)
                 {
-                    mutex.ReleaseMutex();
+                    mutexToDispose.ReleaseMutex();
                 }
-            }
-            finally
-            {
-                mutex.Dispose();
             }
         }
     }
