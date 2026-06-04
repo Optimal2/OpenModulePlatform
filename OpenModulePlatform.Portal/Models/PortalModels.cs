@@ -722,9 +722,59 @@ public sealed class ArtifactRetentionCleanupResult
 
     public int MissingPayloadCount { get; init; }
 
+    public int HostCacheEntryCount { get; init; }
+
+    public int CreatedHostAgentJobCount { get; init; }
+
     public IReadOnlyList<string> PayloadErrors { get; init; } = [];
 
     public IReadOnlyList<ArtifactRetentionCandidateRow> DeletedArtifacts { get; init; } = [];
+}
+
+public sealed class ArtifactRetentionDeletionResult
+{
+    public IReadOnlyList<ArtifactRetentionCandidateRow> DeletedArtifacts { get; init; } = [];
+
+    public int HostCacheEntryCount { get; init; }
+
+    public int CreatedHostAgentJobCount { get; init; }
+}
+
+public sealed class HostAgentJobRow
+{
+    public long HostAgentJobId { get; set; }
+
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string? HostDisplayName { get; set; }
+
+    public string JobType { get; set; } = string.Empty;
+
+    public byte Status { get; set; }
+
+    public string? RequestedBy { get; set; }
+
+    public DateTime RequestedUtc { get; set; }
+
+    public string? ClaimedByServiceName { get; set; }
+
+    public DateTime? ClaimedUtc { get; set; }
+
+    public DateTime? LeaseUntilUtc { get; set; }
+
+    public DateTime? StartedUtc { get; set; }
+
+    public DateTime? CompletedUtc { get; set; }
+
+    public int AttemptCount { get; set; }
+
+    public int MaxAttempts { get; set; }
+
+    public string? ResultJson { get; set; }
+
+    public string? LastError { get; set; }
 }
 
 /// <summary>

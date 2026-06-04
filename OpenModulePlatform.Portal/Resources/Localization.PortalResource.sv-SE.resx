@@ -2349,6 +2349,38 @@
   <data name="Use a PNG, JPEG, or WebP image up to 2 MB." xml:space="preserve"><value>Använd en PNG-, JPEG- eller WebP-bild på högst 2 MB.</value></data>
   <data name="Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow." xml:space="preserve"><value>Importera och exportera OMP-installationsobjekt med det universella modulpaketsformatet. Äldre enskilda paketformat hålls avsiktligt utanför det här flödet.</value></data>
   <data name="Create universal package" xml:space="preserve"><value>Skapa universalpaket</value></data>
+  <data name="Maintenance" xml:space="preserve"><value>Underhåll</value></data>
+  <data name="Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration." xml:space="preserve"><value>Använd underhållsåtgärder för att ta bort gammal plattformsdata som avsiktligt sparas i flera versioner. Artefaktrensning behåller de senaste registrerade versionerna per artefaktidentitet och tar bara bort äldre versioner som inte refereras av önskad runtime-konfiguration.</value></data>
+  <data name="Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing. Queued {3} HostAgent cleanup jobs for {4} host cache entries." xml:space="preserve"><value>Tog bort {0} artefaktversioner. Tog bort {1} payloads; {2} payloads saknades redan. Köade {3} HostAgent-rensningsjobb för {4} cacheposter på hostar.</value></data>
+  <data name="Artifact retention" xml:space="preserve"><value>Artefaktbevarande</value></data>
+  <data name="The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected." xml:space="preserve"><value>Rensningen grupperar artefakter per app, pakettyp och mål. Om en grupp innehåller fler versioner än gränsen blir de äldsta registrerade versionerna kandidater. Kandidater som fortfarande refereras av önskade app-, worker-, HostAgent-, mall- eller värdkravsrader, aktuella appdeployment-rader eller aktiva HostAgent-runtime-rader skyddas.</value></data>
+  <data name="Versions to keep" xml:space="preserve"><value>Versioner att behålla</value></data>
+  <data name="For example, 5 keeps the five newest registered versions for each artifact identity." xml:space="preserve"><value>Till exempel behåller 5 de fem senaste registrerade versionerna för varje artefaktidentitet.</value></data>
+  <data name="Artifact store root" xml:space="preserve"><value>Rot för artefaktlager</value></data>
+  <data name="Not configured" xml:space="preserve"><value>Inte konfigurerad</value></data>
+  <data name="Payload folders are deleted under ArtifactUpload:ArtifactStoreRoot after the database rows have been removed." xml:space="preserve"><value>Payload-mappar tas bort under ArtifactUpload:ArtifactStoreRoot efter att databasraderna har tagits bort.</value></data>
+  <data name="Preview cleanup" xml:space="preserve"><value>Förhandsgranska rensning</value></data>
+  <data name="Delete all unreferenced old artifact versions shown in the preview?" xml:space="preserve"><value>Ta bort alla orefererade gamla artefaktversioner som visas i förhandsgranskningen?</value></data>
+  <data name="Delete old artifact versions" xml:space="preserve"><value>Ta bort gamla artefaktversioner</value></data>
+  <data name="HostAgent job queue" xml:space="preserve"><value>HostAgent-jobbkö</value></data>
+  <data name="HostAgent jobs are queued in the database and picked up by the matching host during its next cycle." xml:space="preserve"><value>HostAgent-jobb köas i databasen och plockas upp av matchande host under nästa cykel.</value></data>
+  <data name="No HostAgent jobs have been queued yet." xml:space="preserve"><value>Inga HostAgent-jobb har köats ännu.</value></data>
+  <data name="Job" xml:space="preserve"><value>Jobb</value></data>
+  <data name="Attempts" xml:space="preserve"><value>Försök</value></data>
+  <data name="Claimed by" xml:space="preserve"><value>Plockat av</value></data>
+  <data name="Cancelled" xml:space="preserve"><value>Avbrutet</value></data>
+  <data name="Artifact cleanup preview" xml:space="preserve"><value>Förhandsgranskning av artefaktrensning</value></data>
+  <data name="Affected artifact identities" xml:space="preserve"><value>Berörda artefaktidentiteter</value></data>
+  <data name="Old version candidates" xml:space="preserve"><value>Gamla versionskandidater</value></data>
+  <data name="Can be deleted" xml:space="preserve"><value>Kan tas bort</value></data>
+  <data name="Protected by references" xml:space="preserve"><value>Skyddade av referenser</value></data>
+  <data name="No artifact cleanup candidates found." xml:space="preserve"><value>Inga kandidater för artefaktrensning hittades.</value></data>
+  <data name="Artifact identity" xml:space="preserve"><value>Artefaktidentitet</value></data>
+  <data name="Registered" xml:space="preserve"><value>Registrerad</value></data>
+  <data name="Rank" xml:space="preserve"><value>Rang</value></data>
+  <data name="Protected" xml:space="preserve"><value>Skyddad</value></data>
+  <data name="There are no unreferenced old artifact versions to delete." xml:space="preserve"><value>Det finns inga orefererade gamla artefaktversioner att ta bort.</value></data>
+  <data name="ArtifactUpload:ArtifactStoreRoot must point to an existing artifact store before artifact payloads can be cleaned up." xml:space="preserve"><value>ArtifactUpload:ArtifactStoreRoot måste peka på ett befintligt artefaktlager innan artifact-payloads kan rensas.</value></data>
   <data name="Universal package builder" xml:space="preserve"><value>Universalpaketsbyggare</value></data>
   <data name="Use this standalone-compatible tool to create a universal OMP package zip from any mix of portable objects." xml:space="preserve"><value>Använd detta fristående kompatibla verktyg för att skapa ett universellt OMP-paket från valfri blandning av portabla objekt.</value></data>
   <data name="Back to import/export" xml:space="preserve"><value>Tillbaka till import/export</value></data>
