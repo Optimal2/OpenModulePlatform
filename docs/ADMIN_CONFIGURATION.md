@@ -345,15 +345,14 @@ HostAgent then provisions and deploys the version on its next cycle.
 
 HostAgent can optionally import portable deployment objects from a local or
 shared folder without a Portal upload. Configure this under
-`HostAgent:ArtifactZipImport`; it is disabled by default. The import folder
-accepts module definition JSON files, standard artifact package zips, and
-module package zips that contain one module definition JSON plus one or more
-artifact package zips for that module. Successful imports are moved to
-`processed`, failed imports are moved to `failed` with an adjacent `.error.txt`
-file, previous artifact configuration file rows are copied when available,
-packaged configuration files are registered when the zip contains
-`omp-artifact-package.json`, and matching apps are always set to use the
-imported artifact.
+`HostAgent:ArtifactZipImport`; it is disabled by default and the setting name is
+kept for backward compatibility. The import folder now accepts only universal
+module package zips that contain `omp-universal-package.json`. Successful
+imports are moved to `processed`; failed imports are moved to `failed` with an
+adjacent `.error.txt` file. Put module definitions, artifact packages, host
+configuration objects, config overlays, widgets, and widget runtime data inside
+one universal package instead of dropping those object files into the folder
+individually.
 
 Artifact-owned configuration files are managed from the artifact edit page.
 These rows belong in `omp.ArtifactConfigurationFiles` and are optional. Use them

@@ -52,4 +52,5 @@
   <data name="No conversations" xml:space="preserve"><value>Inga konversationer</value></data>
   <data name="No messages" xml:space="preserve"><value>Inga meddelanden</value></data>
   <data name="View all messages" xml:space="preserve"><value>Visa alla meddelanden</value></data>
+  <data name="Universal package builder" xml:space="preserve"><value>Universalpaketsbyggare</value></data>
 </root>

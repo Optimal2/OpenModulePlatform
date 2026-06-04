@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -101,12 +100,8 @@ public sealed class ArtifactZipImportService
             }
 
             var extension = Path.GetExtension(importPath);
-            if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                await ImportJsonObjectAsync(tempImportPath, Path.GetFileName(importPath), importPath, cancellationToken);
-            }
-            else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
-                     && UniversalModulePackageReader.IsUniversalPackage(tempImportPath))
+            if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
+                && UniversalModulePackageReader.IsUniversalPackage(tempImportPath))
             {
                 var result = await ImportUniversalModulePackageZipAsync(
                     settings,
@@ -123,101 +118,10 @@ public sealed class ArtifactZipImportService
                     result.SkippedCount,
                     result.FailedCount);
             }
-            else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
-                     && TryParseFilenameMetadata(Path.GetFileName(importPath)) is { } metadata)
-            {
-                var result = await ImportArtifactPackageAsync(
-                    settings,
-                    importSettings,
-                    metadata,
-                    tempImportPath,
-                    Path.Join(stagingPath, "artifact"),
-                    cancellationToken);
-                _logger.LogInformation(
-                    "Imported artifact zip. Zip={ImportPath}, Status={Status}, ArtifactId={ArtifactId}, Version={Version}, RelativePath={RelativePath}, AdoptedExistingContent={AdoptedExistingContent}, CopiedConfigurationFiles={CopiedConfigurationFiles}, TemplateRows={TemplateRows}, AppInstanceRows={AppInstanceRows}, WorkerInstanceRows={WorkerInstanceRows}, HostAgentDesiredRows={HostAgentDesiredRows}, Message={Message}",
-                    importPath,
-                    result.Status,
-                    result.ArtifactId,
-                    result.Version,
-                    result.RelativePath,
-                    result.AdoptedExistingContent,
-                    result.CopiedConfigurationFileCount,
-                    result.TemplateAppRowsUpdated,
-                    result.AppInstanceRowsUpdated,
-                    result.WorkerInstanceRowsUpdated,
-                    result.HostAgentDesiredRowsUpdated,
-                    result.Message);
-            }
-            else if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                var packageKind = ConfigOverlayPackageReader.DetectFileKind(tempImportPath);
-                if (packageKind is PortableConfigObjectKind.HostConfigurationPackage)
-                {
-                    var reader = new ConfigOverlayPackageReader();
-                    var hostConfiguration = await reader.ReadHostConfigurationAsync(
-                        tempImportPath,
-                        Path.GetFileName(importPath),
-                        cancellationToken);
-                    var saveResult = await _repository.SaveImportedHostConfigurationAsync(
-                        hostConfiguration,
-                        replaceExisting: false,
-                        cancellationToken);
-                    _logger.LogInformation(
-                        "Imported host configuration package from HostAgent import folder. File={ImportPath}, Host={HostKey}, Version={ConfigurationVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}",
-                        importPath,
-                        hostConfiguration.HostKey,
-                        hostConfiguration.ConfigurationVersion,
-                        saveResult.DocumentId,
-                        saveResult.Created,
-                        saveResult.WasIdentical);
-                }
-                else if (packageKind is PortableConfigObjectKind.ConfigOverlayPackage)
-                {
-                    var reader = new ConfigOverlayPackageReader();
-                    var overlay = await reader.ReadConfigOverlayAsync(
-                        tempImportPath,
-                        Path.GetFileName(importPath),
-                        cancellationToken);
-                    var saveResult = await _repository.SaveImportedConfigOverlayAsync(
-                        overlay,
-                        replaceExisting: false,
-                        cancellationToken);
-                    _logger.LogInformation(
-                        "Imported config overlay package from HostAgent import folder. File={ImportPath}, Overlay={OverlayKey}, Host={HostKey}, Version={OverlayVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}, ConfigurationFiles={ConfigurationFileCount}",
-                        importPath,
-                        overlay.OverlayKey,
-                        overlay.HostKey,
-                        overlay.OverlayVersion,
-                        saveResult.DocumentId,
-                        saveResult.Created,
-                        saveResult.WasIdentical,
-                        overlay.ConfigurationFiles.Count);
-                }
-                else
-                {
-                    var result = await ImportModulePackageZipAsync(
-                        settings,
-                        importSettings,
-                        tempImportPath,
-                        Path.Join(stagingPath, "module-package"),
-                        cancellationToken);
-                    _logger.LogInformation(
-                        "Imported module package from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}, ImportedArtifacts={ImportedArtifacts}, SkippedArtifacts={SkippedArtifacts}, FailedArtifacts={FailedArtifacts}",
-                        importPath,
-                        result.ModuleKey,
-                        result.DefinitionVersion,
-                        result.ModuleDefinitionDocumentId,
-                        result.Applied,
-                        result.SqlRepairCount,
-                        result.ImportedArtifactCount,
-                        result.SkippedArtifactCount,
-                        result.FailedArtifactCount);
-                }
-            }
             else
             {
                 throw new InvalidOperationException(
-                    "Unsupported HostAgent import file. Expected .json module definition, .json host configuration, .json config overlay, standard artifact .zip, config overlay .zip, or module package .zip.");
+                    "Unsupported HostAgent import file. HostAgent import now accepts only universal module package .zip files containing omp-universal-package.json.");
             }
 
             MoveImportFile(importPath, processedPath, null);
@@ -232,77 +136,6 @@ public sealed class ArtifactZipImportService
             TryDelete(tempImportPath);
             TryDelete(stagingPath);
         }
-    }
-
-    private async Task ImportJsonObjectAsync(
-        string tempImportPath,
-        string sourceName,
-        string originalImportPath,
-        CancellationToken cancellationToken)
-    {
-        var kind = ConfigOverlayPackageReader.DetectFileKind(tempImportPath);
-        if (kind is PortableConfigObjectKind.ModuleDefinition)
-        {
-            var definition = await ReadModuleDefinitionAsync(tempImportPath, sourceName, cancellationToken);
-            var result = await ImportModuleDefinitionAsync(definition, cancellationToken);
-            _logger.LogInformation(
-                "Imported module definition from HostAgent import folder. File={ImportPath}, Module={ModuleKey}, Version={DefinitionVersion}, DocumentId={DocumentId}, Applied={Applied}, SqlRepairCount={SqlRepairCount}",
-                originalImportPath,
-                result.ModuleKey,
-                result.DefinitionVersion,
-                result.ModuleDefinitionDocumentId,
-                result.Applied,
-                result.SqlRepairCount);
-            return;
-        }
-
-        var reader = new ConfigOverlayPackageReader();
-        if (kind is PortableConfigObjectKind.HostConfiguration)
-        {
-            var hostConfiguration = await reader.ReadHostConfigurationAsync(
-                tempImportPath,
-                sourceName,
-                cancellationToken);
-            var saveResult = await _repository.SaveImportedHostConfigurationAsync(
-                hostConfiguration,
-                replaceExisting: false,
-                cancellationToken);
-            _logger.LogInformation(
-                "Imported host configuration from HostAgent import folder. File={ImportPath}, Host={HostKey}, Version={ConfigurationVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}",
-                originalImportPath,
-                hostConfiguration.HostKey,
-                hostConfiguration.ConfigurationVersion,
-                saveResult.DocumentId,
-                saveResult.Created,
-                saveResult.WasIdentical);
-            return;
-        }
-
-        if (kind is PortableConfigObjectKind.ConfigOverlay)
-        {
-            var overlay = await reader.ReadConfigOverlayAsync(
-                tempImportPath,
-                sourceName,
-                cancellationToken);
-            var saveResult = await _repository.SaveImportedConfigOverlayAsync(
-                overlay,
-                replaceExisting: false,
-                cancellationToken);
-            _logger.LogInformation(
-                "Imported config overlay from HostAgent import folder. File={ImportPath}, Overlay={OverlayKey}, Host={HostKey}, Version={OverlayVersion}, DocumentId={DocumentId}, Created={Created}, WasIdentical={WasIdentical}, ConfigurationFiles={ConfigurationFileCount}",
-                originalImportPath,
-                overlay.OverlayKey,
-                overlay.HostKey,
-                overlay.OverlayVersion,
-                saveResult.DocumentId,
-                saveResult.Created,
-                saveResult.WasIdentical,
-                overlay.ConfigurationFiles.Count);
-            return;
-        }
-
-        throw new InvalidOperationException(
-            "Unsupported JSON object. Expected a module definition, host configuration, or config overlay JSON document.");
     }
 
     private async Task<bool> TryCopyReadyFileAsync(
@@ -327,133 +160,6 @@ public sealed class ArtifactZipImportService
             _logger.LogWarning(ex, "HostAgent import file is not accessible and will be retried. File={ImportPath}", importPath);
             return false;
         }
-    }
-
-    private async Task<ModulePackageImportResult> ImportModulePackageZipAsync(
-        HostAgentSettings settings,
-        HostAgentArtifactZipImportSettings importSettings,
-        string packageZipPath,
-        string extractionRoot,
-        CancellationToken cancellationToken)
-    {
-        ExtractZipToDirectory(packageZipPath, extractionRoot);
-        var definitionPath = FindSingleModuleDefinitionFile(extractionRoot);
-        var definition = await ReadModuleDefinitionAsync(
-            definitionPath,
-            Path.GetFileName(definitionPath),
-            cancellationToken,
-            extractionRoot);
-
-        var definitionResult = await ImportModuleDefinitionAsync(definition, cancellationToken);
-        var artifactPaths = Directory.EnumerateFiles(extractionRoot, "*.zip", SearchOption.AllDirectories)
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var artifactPlans = CreateModulePackageArtifactPlans(definition, artifactPaths);
-        var activationKeys = SelectLatestActivationKeys(artifactPlans);
-        var artifactResults = new List<ModulePackageArtifactImportResult>();
-
-        foreach (var plan in artifactPlans)
-        {
-            if (!string.IsNullOrWhiteSpace(plan.FailureMessage))
-            {
-                artifactResults.Add(new ModulePackageArtifactImportResult(
-                    Path.GetFileName(plan.Path),
-                    "Failed",
-                    plan.FailureMessage,
-                    null));
-                _logger.LogWarning(
-                    "Rejected artifact from HostAgent module package import. File={ArtifactFile}, Reason={Reason}",
-                    Path.GetFileName(plan.Path),
-                    plan.FailureMessage);
-                continue;
-            }
-
-            if (plan.Metadata is null || !string.IsNullOrWhiteSpace(plan.SkipMessage))
-            {
-                artifactResults.Add(new ModulePackageArtifactImportResult(
-                    Path.GetFileName(plan.Path),
-                    "Skipped",
-                    plan.SkipMessage ?? "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
-                    null));
-                _logger.LogInformation(
-                    "Skipped artifact from HostAgent module package import. File={ArtifactFile}, Reason={Reason}",
-                    Path.GetFileName(plan.Path),
-                    plan.SkipMessage);
-                continue;
-            }
-
-            var activateArtifact = activationKeys.Contains(BuildArtifactActivationKey(plan.Metadata));
-            try
-            {
-                var artifact = await ImportArtifactPackageAsync(
-                    settings,
-                    importSettings,
-                    plan.Metadata,
-                    plan.Path,
-                    Path.Join(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
-                    cancellationToken,
-                    allowExistingIdentical: true,
-                    applyToMatchingApplications: activateArtifact);
-
-                var status = artifact.Status;
-                var message = artifact.Message;
-                if (!activateArtifact && status is "Imported" or "Replaced" or "Skipped")
-                {
-                    message = AppendWarning(
-                        message ?? string.Empty,
-                        "The artifact was kept as a historical package and was not selected because a newer compatible artifact for the same app slot exists in this module package.");
-                }
-
-                artifactResults.Add(new ModulePackageArtifactImportResult(
-                    Path.GetFileName(plan.Path),
-                    status,
-                    message,
-                    artifact));
-            }
-            catch (Exception ex) when (IsExpectedImportFailure(ex))
-            {
-                var status = IsArtifactCompatibilityFailure(ex) ? "Skipped" : "Failed";
-                artifactResults.Add(new ModulePackageArtifactImportResult(
-                    Path.GetFileName(plan.Path),
-                    status,
-                    ex.Message,
-                    null));
-                if (status == "Skipped")
-                {
-                    _logger.LogInformation(
-                        "Skipped artifact from HostAgent module package import. File={ArtifactFile}, Reason={Reason}",
-                        Path.GetFileName(plan.Path),
-                        ex.Message);
-                }
-                else
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to import artifact from HostAgent module package import. File={ArtifactFile}",
-                        Path.GetFileName(plan.Path));
-                }
-            }
-        }
-
-        var failedArtifacts = artifactResults
-            .Where(static result => result.Status == "Failed")
-            .ToList();
-        if (failedArtifacts.Count > 0)
-        {
-            throw new InvalidOperationException(
-                "Module package import completed with failed artifact package(s): " +
-                string.Join(
-                    " | ",
-                    failedArtifacts.Select(static result => $"{result.FileName}: {result.Message}")));
-        }
-
-        return new ModulePackageImportResult(
-            definitionResult.ModuleKey,
-            definitionResult.DefinitionVersion,
-            definitionResult.ModuleDefinitionDocumentId,
-            definitionResult.Applied,
-            definitionResult.SqlRepairCount,
-            artifactResults);
     }
 
     private async Task<UniversalHostAgentImportResult> ImportUniversalModulePackageZipAsync(
@@ -1321,42 +1027,6 @@ public sealed class ArtifactZipImportService
         return Version.TryParse(text, out version!);
     }
 
-    private static string FindSingleModuleDefinitionFile(string root)
-    {
-        var candidates = Directory.EnumerateFiles(root, "*.json", SearchOption.AllDirectories)
-            .Where(static path => TryReadDefinitionSummary(path) is not null)
-            .ToList();
-
-        return candidates.Count switch
-        {
-            1 => candidates[0],
-            0 => throw new InvalidOperationException("The module package zip contains no module definition JSON file."),
-            _ => throw new InvalidOperationException("The module package zip contains multiple module definition JSON files.")
-        };
-    }
-
-    private static (string ModuleKey, string DefinitionVersion)? TryReadDefinitionSummary(string path)
-    {
-        try
-        {
-            var root = JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8));
-            if (root is null)
-            {
-                return null;
-            }
-
-            var moduleKey = GetJsonStringProperty(root, "moduleKey");
-            var definitionVersion = GetJsonStringProperty(root, "definitionVersion");
-            return string.IsNullOrWhiteSpace(moduleKey) || string.IsNullOrWhiteSpace(definitionVersion)
-                ? null
-                : (moduleKey, definitionVersion);
-        }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
     private static FilenameMetadata? TryParseFilenameMetadata(string fileName)
     {
         var name = Path.GetFileNameWithoutExtension(fileName);
@@ -1521,47 +1191,6 @@ public sealed class ArtifactZipImportService
         => !string.IsNullOrWhiteSpace(message)
             && (message.Contains("not compatible with module definition", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("does not allow artifacts", StringComparison.OrdinalIgnoreCase));
-
-    private static void ExtractZipToDirectory(string zipPath, string destinationRoot)
-    {
-        Directory.CreateDirectory(destinationRoot);
-        using var archive = ZipFile.OpenRead(zipPath);
-        foreach (var entry in archive.Entries)
-        {
-            var entryName = NormalizeZipEntryName(entry.FullName);
-            var destinationPath = ResolveUnderRoot(destinationRoot, entryName);
-            if (string.IsNullOrEmpty(entry.Name))
-            {
-                Directory.CreateDirectory(destinationPath);
-                continue;
-            }
-
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            entry.ExtractToFile(destinationPath, overwrite: false);
-        }
-    }
-
-    private static string NormalizeZipEntryName(string fullName)
-    {
-        var normalized = fullName.Replace('\\', '/').Trim();
-        if (normalized.Length == 0 || normalized.StartsWith("/", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("The zip package contains an invalid entry path.");
-        }
-
-        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var invalidFileNameChars = Path.GetInvalidFileNameChars();
-        if (segments.Length == 0
-            || segments.Any(segment => segment is "." or "..")
-            || segments.Any(segment => segment.IndexOfAny(invalidFileNameChars) >= 0)
-            || normalized.Contains(':', StringComparison.Ordinal)
-            || normalized.IndexOf('\0') >= 0)
-        {
-            throw new InvalidOperationException("The zip package contains a path that escapes the package root.");
-        }
-
-        return string.Join('/', segments);
-    }
 
     private static void MoveDirectory(string source, string destination)
     {

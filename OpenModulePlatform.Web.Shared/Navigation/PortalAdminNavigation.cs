@@ -29,6 +29,7 @@ public static class PortalAdminNavigation
             new(
                 "Tools",
                 [
+                    new PortalAdminMenuItem("Universal package builder", hrefFactory("/admin/universalpackagebuilder")),
                     new PortalAdminMenuItem("Module definition editor", hrefFactory("/admin/moduledefinitioneditor")),
                     new PortalAdminMenuItem("Artifact package editor", hrefFactory("/admin/artifactpackageeditor")),
                     new PortalAdminMenuItem("Config overlay editor", hrefFactory("/admin/configoverlayeditor")),

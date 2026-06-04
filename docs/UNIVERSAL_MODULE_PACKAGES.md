@@ -172,18 +172,19 @@ operation only: it does not apply module definitions, copy artifacts to a target
 ArtifactStore, or change an installed OMP database. It lets an offline installer
 receive objects from another installer and later use them for upgrade or export.
 
-Portal also supports universal package import and export. Universal imports can
-be run in two modes: import all supported items immediately, or preview the zip
-and select individual manifest paths before importing. Universal export lets an
-administrator choose module definitions, artifacts, host configurations, config
-overlays, widgets, and optionally the shared runtime data for selected widgets
-from the current OMP installation. Widget runtime data is exported under
+Portal import/export is intentionally universal-package-only. Universal imports
+can be run in two modes: import all supported items immediately, or preview the
+zip and select individual manifest paths before importing. Universal export lets
+an administrator choose module definitions, artifacts, host configurations,
+config overlays, widgets, and optionally the shared runtime data for selected
+widgets from the current OMP installation. Widget runtime data is exported under
 `widget-data/` as a zip whose inner manifest remaps source `binaryDataId` values
 to the target installation during import.
 
 The standalone tool at `tools/universal-package-builder/index.html` creates the
-same zip format entirely in the browser. It is available in Portal through the
-Universal package builder admin page and can also be opened directly from disk.
+same zip format entirely in the browser. It is available in Portal from the
+Tools menu through the Universal package builder admin page and can also be
+opened directly from disk.
 
 ## Repository Export Standard
 
