@@ -2047,8 +2047,8 @@ button {
 .dashboard-widget__body {
     min-height: 0;
     overflow: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-widget__body::-webkit-scrollbar,
@@ -2060,10 +2060,64 @@ button {
 .dashboard-chat-list::-webkit-scrollbar,
 .dashboard-widget__admin-overview::-webkit-scrollbar,
 .dashboard-navbar-list::-webkit-scrollbar,
-.dashboard-role-list::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-    display: none;
+.dashboard-role-list::-webkit-scrollbar,
+.dashboard-module-widget__list::-webkit-scrollbar,
+.dashboard-music-player__admin::-webkit-scrollbar,
+.dashboard-widget__blank-admin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.dashboard-widget__body::-webkit-scrollbar-track,
+.dashboard-entry-list::-webkit-scrollbar-track,
+.dashboard-entry-combo-list::-webkit-scrollbar-track,
+.dashboard-content-list::-webkit-scrollbar-track,
+.dashboard-notification-feed::-webkit-scrollbar-track,
+.dashboard-notification-feed__list::-webkit-scrollbar-track,
+.dashboard-chat-list::-webkit-scrollbar-track,
+.dashboard-widget__admin-overview::-webkit-scrollbar-track,
+.dashboard-navbar-list::-webkit-scrollbar-track,
+.dashboard-role-list::-webkit-scrollbar-track,
+.dashboard-module-widget__list::-webkit-scrollbar-track,
+.dashboard-music-player__admin::-webkit-scrollbar-track,
+.dashboard-widget__blank-admin::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.dashboard-widget__body::-webkit-scrollbar-thumb,
+.dashboard-entry-list::-webkit-scrollbar-thumb,
+.dashboard-entry-combo-list::-webkit-scrollbar-thumb,
+.dashboard-content-list::-webkit-scrollbar-thumb,
+.dashboard-notification-feed::-webkit-scrollbar-thumb,
+.dashboard-notification-feed__list::-webkit-scrollbar-thumb,
+.dashboard-chat-list::-webkit-scrollbar-thumb,
+.dashboard-widget__admin-overview::-webkit-scrollbar-thumb,
+.dashboard-navbar-list::-webkit-scrollbar-thumb,
+.dashboard-role-list::-webkit-scrollbar-thumb,
+.dashboard-module-widget__list::-webkit-scrollbar-thumb,
+.dashboard-music-player__admin::-webkit-scrollbar-thumb,
+.dashboard-widget__blank-admin::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.42);
+    background-clip: padding-box;
+}
+
+.dashboard-widget__body::-webkit-scrollbar-thumb:hover,
+.dashboard-entry-list::-webkit-scrollbar-thumb:hover,
+.dashboard-entry-combo-list::-webkit-scrollbar-thumb:hover,
+.dashboard-content-list::-webkit-scrollbar-thumb:hover,
+.dashboard-notification-feed::-webkit-scrollbar-thumb:hover,
+.dashboard-notification-feed__list::-webkit-scrollbar-thumb:hover,
+.dashboard-chat-list::-webkit-scrollbar-thumb:hover,
+.dashboard-widget__admin-overview::-webkit-scrollbar-thumb:hover,
+.dashboard-navbar-list::-webkit-scrollbar-thumb:hover,
+.dashboard-role-list::-webkit-scrollbar-thumb:hover,
+.dashboard-module-widget__list::-webkit-scrollbar-thumb:hover,
+.dashboard-music-player__admin::-webkit-scrollbar-thumb:hover,
+.dashboard-widget__blank-admin::-webkit-scrollbar-thumb:hover {
+    background: rgba(71, 85, 105, 0.62);
+    background-clip: padding-box;
 }
 
 .dashboard-widget__content {
@@ -2257,8 +2311,8 @@ button {
 .dashboard-widget__admin-overview {
     height: 100%;
     overflow: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-widget__admin-overview .portal-admin-metrics {
@@ -2283,8 +2337,8 @@ button {
     min-height: 0;
     overflow: auto;
     padding: 4px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-entry-combo-list {
@@ -2295,8 +2349,8 @@ button {
     min-height: 0;
     overflow: auto;
     padding: 4px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-entry-combo-list .dashboard-entry-list {
@@ -2502,6 +2556,8 @@ button {
     min-height: 0;
     overflow: auto;
     padding: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-role-list__row {
@@ -2573,8 +2629,8 @@ a.dashboard-role-list__item:focus-visible {
     min-height: 0;
     overflow: auto;
     padding: 4px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-content-list__item {
@@ -2638,8 +2694,8 @@ a.dashboard-role-list__item:focus-visible {
     min-height: 0;
     overflow: auto;
     padding: 4px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-notification-feed__list {
@@ -2647,8 +2703,8 @@ a.dashboard-role-list__item:focus-visible {
     align-content: start;
     gap: 8px;
     min-height: 0;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-notification-feed__form {
@@ -2752,8 +2808,8 @@ a.dashboard-role-list__item:focus-visible {
     min-height: 0;
     overflow: auto;
     padding: 4px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-chat-list__row {
@@ -2934,12 +2990,8 @@ a.dashboard-role-list__item:focus-visible {
     align-content: start;
     min-height: 0;
     overflow: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.dashboard-module-widget__list::-webkit-scrollbar {
-    display: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-module-widget__item {
@@ -3054,6 +3106,8 @@ a.dashboard-role-list__item:focus-visible {
     min-height: 0;
     overflow: auto;
     padding: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-navbar-boxes {
@@ -3438,6 +3492,8 @@ a.dashboard-role-list__item:focus-visible {
     background: color-mix(in srgb, var(--surface) 96%, white);
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
     overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-music-player__admin[hidden] {
@@ -3839,6 +3895,8 @@ a.dashboard-role-list__item:focus-visible {
     background: color-mix(in srgb, var(--surface) 96%, white);
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
     overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
 .dashboard-widget__blank-admin[hidden] {
