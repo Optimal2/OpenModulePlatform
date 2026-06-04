@@ -3561,7 +3561,11 @@
         const content = document.createElement('div');
         content.className = 'dashboard-widget__content';
         content.dataset.widgetContent = '';
-        content.appendChild(createWidgetBodyContent(root, widget.payload));
+        const scaleTarget = document.createElement('div');
+        scaleTarget.className = 'dashboard-widget__content-scale-target';
+        scaleTarget.dataset.widgetContentScaleTarget = '';
+        scaleTarget.appendChild(createWidgetBodyContent(root, widget.payload));
+        content.appendChild(scaleTarget);
         body.appendChild(content);
         element.appendChild(body);
 
