@@ -2256,6 +2256,38 @@
   <data name="Use a PNG, JPEG, or WebP image up to 2 MB." xml:space="preserve"><value>Use a PNG, JPEG, or WebP image up to 2 MB.</value></data>
   <data name="Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow." xml:space="preserve"><value>Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow.</value></data>
   <data name="Create universal package" xml:space="preserve"><value>Create universal package</value></data>
+  <data name="Maintenance" xml:space="preserve"><value>Maintenance</value></data>
+  <data name="Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration." xml:space="preserve"><value>Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration.</value></data>
+  <data name="Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing. Queued {3} HostAgent cleanup jobs for {4} host cache entries." xml:space="preserve"><value>Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing. Queued {3} HostAgent cleanup jobs for {4} host cache entries.</value></data>
+  <data name="Artifact retention" xml:space="preserve"><value>Artifact retention</value></data>
+  <data name="The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected." xml:space="preserve"><value>The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, host requirement, current app deployment, or active HostAgent runtime rows are protected.</value></data>
+  <data name="Versions to keep" xml:space="preserve"><value>Versions to keep</value></data>
+  <data name="For example, 5 keeps the five newest registered versions for each artifact identity." xml:space="preserve"><value>For example, 5 keeps the five newest registered versions for each artifact identity.</value></data>
+  <data name="Artifact store root" xml:space="preserve"><value>Artifact store root</value></data>
+  <data name="Not configured" xml:space="preserve"><value>Not configured</value></data>
+  <data name="Payload folders are deleted under ArtifactUpload:ArtifactStoreRoot after the database rows have been removed." xml:space="preserve"><value>Payload folders are deleted under ArtifactUpload:ArtifactStoreRoot after the database rows have been removed.</value></data>
+  <data name="Preview cleanup" xml:space="preserve"><value>Preview cleanup</value></data>
+  <data name="Delete all unreferenced old artifact versions shown in the preview?" xml:space="preserve"><value>Delete all unreferenced old artifact versions shown in the preview?</value></data>
+  <data name="Delete old artifact versions" xml:space="preserve"><value>Delete old artifact versions</value></data>
+  <data name="HostAgent job queue" xml:space="preserve"><value>HostAgent job queue</value></data>
+  <data name="HostAgent jobs are queued in the database and picked up by the matching host during its next cycle." xml:space="preserve"><value>HostAgent jobs are queued in the database and picked up by the matching host during its next cycle.</value></data>
+  <data name="No HostAgent jobs have been queued yet." xml:space="preserve"><value>No HostAgent jobs have been queued yet.</value></data>
+  <data name="Job" xml:space="preserve"><value>Job</value></data>
+  <data name="Attempts" xml:space="preserve"><value>Attempts</value></data>
+  <data name="Claimed by" xml:space="preserve"><value>Claimed by</value></data>
+  <data name="Cancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="Artifact cleanup preview" xml:space="preserve"><value>Artifact cleanup preview</value></data>
+  <data name="Affected artifact identities" xml:space="preserve"><value>Affected artifact identities</value></data>
+  <data name="Old version candidates" xml:space="preserve"><value>Old version candidates</value></data>
+  <data name="Can be deleted" xml:space="preserve"><value>Can be deleted</value></data>
+  <data name="Protected by references" xml:space="preserve"><value>Protected by references</value></data>
+  <data name="No artifact cleanup candidates found." xml:space="preserve"><value>No artifact cleanup candidates found.</value></data>
+  <data name="Artifact identity" xml:space="preserve"><value>Artifact identity</value></data>
+  <data name="Registered" xml:space="preserve"><value>Registered</value></data>
+  <data name="Rank" xml:space="preserve"><value>Rank</value></data>
+  <data name="Protected" xml:space="preserve"><value>Protected</value></data>
+  <data name="There are no unreferenced old artifact versions to delete." xml:space="preserve"><value>There are no unreferenced old artifact versions to delete.</value></data>
+  <data name="ArtifactUpload:ArtifactStoreRoot must point to an existing artifact store before artifact payloads can be cleaned up." xml:space="preserve"><value>ArtifactUpload:ArtifactStoreRoot must point to an existing artifact store before artifact payloads can be cleaned up.</value></data>
   <data name="Universal package builder" xml:space="preserve"><value>Universal package builder</value></data>
   <data name="Use this standalone-compatible tool to create a universal OMP package zip from any mix of portable objects." xml:space="preserve"><value>Use this standalone-compatible tool to create a universal OMP package zip from any mix of portable objects.</value></data>
   <data name="Back to import/export" xml:space="preserve"><value>Back to import/export</value></data>

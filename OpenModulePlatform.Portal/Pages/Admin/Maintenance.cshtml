@@ -21,10 +21,12 @@
 @if (Model.CleanupResult is not null)
 {
     <div class="card status-banner">
-        @L["Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing.",
+        @L["Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing. Queued {3} HostAgent cleanup jobs for {4} host cache entries.",
             Model.CleanupResult.DeletedArtifactCount,
             Model.CleanupResult.RemovedPayloadCount,
-            Model.CleanupResult.MissingPayloadCount]
+            Model.CleanupResult.MissingPayloadCount,
+            Model.CleanupResult.CreatedHostAgentJobCount,
+            Model.CleanupResult.HostCacheEntryCount]
         @if (Model.CleanupResult.PayloadErrors.Count > 0)
         {
             <ul>
@@ -70,6 +72,78 @@
             </button>
         </div>
     </form>
+</section>
+
+<section class="card top-gap">
+    <h3>@L["HostAgent job queue"]</h3>
+    <p class="muted">@L["HostAgent jobs are queued in the database and picked up by the matching host during its next cycle."]</p>
+
+    @if (Model.RecentHostAgentJobs.Count == 0)
+    {
+        <div class="empty-state">@L["No HostAgent jobs have been queued yet."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Job"]</th>
+                        <th>@L["Host"]</th>
+                        <th>@L["Status"]</th>
+                        <th>@L["Requested UTC"]</th>
+                        <th>@L["Attempts"]</th>
+                        <th>@L["Claimed by"]</th>
+                        <th>@L["Completed UTC"]</th>
+                        <th>@L["Message"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.RecentHostAgentJobs)
+                {
+                    <tr>
+                        <td>
+                            <code>@row.HostAgentJobId</code>
+                            <div class="muted">@row.JobType</div>
+                        </td>
+                        <td>
+                            <code>@row.HostKey</code>
+                            @if (!string.IsNullOrWhiteSpace(row.HostDisplayName))
+                            {
+                                <div class="muted">@row.HostDisplayName</div>
+                            }
+                        </td>
+                        <td><span class="pill">@L[MaintenanceModel.FormatHostAgentJobStatus(row.Status)]</span></td>
+                        <td>
+                            <div>@row.RequestedUtc.ToString("u")</div>
+                            @if (!string.IsNullOrWhiteSpace(row.RequestedBy))
+                            {
+                                <div class="muted">@row.RequestedBy</div>
+                            }
+                        </td>
+                        <td>@row.AttemptCount / @row.MaxAttempts</td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.ClaimedByServiceName))
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                            else
+                            {
+                                <code>@row.ClaimedByServiceName</code>
+                                @if (row.ClaimedUtc.HasValue)
+                                {
+                                    <div class="muted">@row.ClaimedUtc.Value.ToString("u")</div>
+                                }
+                            }
+                        </td>
+                        <td>@(row.CompletedUtc.HasValue ? row.CompletedUtc.Value.ToString("u") : L["None"].Value)</td>
+                        <td>@(string.IsNullOrWhiteSpace(row.LastError) ? L["None"].Value : row.LastError)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
 </section>
 
 <section class="portal-admin-metrics top-gap" aria-label="@L["Artifact cleanup preview"]">

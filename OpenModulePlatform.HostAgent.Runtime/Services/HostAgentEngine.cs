@@ -15,6 +15,7 @@ public sealed class HostAgentEngine
     private readonly ServiceAppDeploymentService _serviceAppDeploymentService;
     private readonly HostAgentSelfUpgradeService _selfUpgradeService;
     private readonly HostAgentFileMirrorService _fileMirrorService;
+    private readonly HostAgentJobProcessor _jobProcessor;
     private readonly HostAgentProcessContext _process;
     private readonly ILogger<HostAgentEngine> _logger;
 
@@ -27,6 +28,7 @@ public sealed class HostAgentEngine
         ServiceAppDeploymentService serviceAppDeploymentService,
         HostAgentSelfUpgradeService selfUpgradeService,
         HostAgentFileMirrorService fileMirrorService,
+        HostAgentJobProcessor jobProcessor,
         HostAgentProcessContext process,
         ILogger<HostAgentEngine> logger)
     {
@@ -38,6 +40,7 @@ public sealed class HostAgentEngine
         _serviceAppDeploymentService = serviceAppDeploymentService;
         _selfUpgradeService = selfUpgradeService;
         _fileMirrorService = fileMirrorService;
+        _jobProcessor = jobProcessor;
         _process = process;
         _logger = logger;
     }
@@ -149,6 +152,15 @@ public sealed class HostAgentEngine
         await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(hostKey, cancellationToken);
         await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, cancellationToken);
         await _fileMirrorService.MirrorConfiguredFilesAsync(cancellationToken);
+
+        if (settings.ProcessHostAgentJobs)
+        {
+            await _jobProcessor.ProcessPendingJobsAsync(
+                hostKey,
+                _process.ServiceName,
+                settings.MaxHostAgentJobsPerCycle,
+                cancellationToken);
+        }
     }
 
     public async Task<ArtifactProvisioningResult> EnsureArtifactByIdAsync(

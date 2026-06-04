@@ -28,6 +28,8 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - HostAgent self-upgrade preparation and takeover for desired
   `host-agent` artifacts registered in `omp.HostAgentDesiredStates`
 - Web app deployment state in `omp.HostAppDeploymentStates`
+- Database-backed HostAgent job queue in `omp.HostAgentJobs`, currently used
+  for host-local artifact cache cleanup requested from Portal maintenance
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
   - operation: `quiesce`
@@ -42,10 +44,39 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - `omp.HostAgentDesiredStates`
 - `omp.HostAgentRuntimeStates`
 - `omp.HostAgentLeases`
+- `omp.HostAgentJobs`
 - `omp.WorkerInstances`
 - `omp.WorkerInstanceRuntimeStates`
 
 `omp.WorkerInstances` introduces process-level desired state below an `omp.AppInstances` row. This supports modules where one app instance needs multiple isolated worker processes, for example one process per channel.
+
+## HostAgent job queue
+
+Portal and other trusted platform components can enqueue host-specific work in
+`omp.HostAgentJobs`. HostAgent claims pending jobs for its own `HostId`, records
+a lease while it runs them, and marks the final state as succeeded, warning, or
+failed. Expired running jobs may be claimed again until `MaxAttempts` is
+reached; after that they are marked failed.
+
+The first job type is `ArtifactCacheCleanup`. Portal maintenance creates these
+jobs after deleting old central artifact versions, one payload per host cache
+that may contain now-orphaned local artifact folders. HostAgent only deletes
+paths inside `HostAgent:LocalArtifactCacheRoot`, refuses to delete the cache root
+or `.staging`, and skips paths that are still referenced by current host state.
+Portal also protects artifact versions that are still referenced by desired
+state, current app deployment state, or active HostAgent runtime state before it
+deletes the central artifact rows.
+
+The job loop is enabled by default:
+
+```json
+{
+  "HostAgent": {
+    "ProcessHostAgentJobs": true,
+    "MaxHostAgentJobsPerCycle": 5
+  }
+}
+```
 
 ## Worker Manager integration
 
