@@ -446,7 +446,7 @@ public static class OmpWebHostingExtensions
                     destinationUrl = row.DestinationUrl ?? string.Empty,
                     callerKey = row.CallerKey ?? string.Empty,
                     callerDisplayName = row.CallerDisplayName ?? string.Empty,
-                    callerIcon = row.CallerIcon ?? string.Empty,
+                    callerIcon = SharedAssetUrl(context.Request, row.CallerIcon),
                     createdAt = row.CreatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
                     isUnread = row.IsUnread
                 }),
@@ -465,6 +465,19 @@ public static class OmpWebHostingExtensions
         }
 
         return app;
+    }
+
+    private static string SharedAssetUrl(HttpRequest request, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.StartsWith("/_content/OpenModulePlatform.Web.Shared/", StringComparison.OrdinalIgnoreCase)
+            ? $"{request.PathBase}{trimmed}"
+            : trimmed;
     }
 
     public static IApplicationBuilder UseOmpSecurityHeaders(this IApplicationBuilder app)

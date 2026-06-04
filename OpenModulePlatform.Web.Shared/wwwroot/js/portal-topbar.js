@@ -620,6 +620,27 @@
         return ['info', 'success', 'warning', 'error'].indexOf(normalized) >= 0 ? normalized : 'info';
     }
 
+    function resolveSharedAssetUrl(value) {
+        if (!value || value.indexOf('/_content/OpenModulePlatform.Web.Shared/') !== 0) {
+            return value || '';
+        }
+
+        var stylesheet = document.querySelector('link[href*="_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css"]');
+        if (!stylesheet) {
+            return value;
+        }
+
+        var href = stylesheet.getAttribute('href') || '';
+        var absoluteHref = new URL(href, document.baseURI).href;
+        var marker = '_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css';
+        var markerIndex = absoluteHref.indexOf(marker);
+        if (markerIndex < 0) {
+            return value;
+        }
+
+        return absoluteHref.substring(0, markerIndex) + value.substring(1);
+    }
+
     function createNotificationForm(list, item) {
         var form = document.createElement('form');
         form.method = 'post';
@@ -649,7 +670,7 @@
         icon.setAttribute('aria-hidden', 'true');
         if (item.callerIcon) {
             var img = document.createElement('img');
-            img.src = item.callerIcon;
+            img.src = resolveSharedAssetUrl(item.callerIcon);
             img.alt = '';
             icon.appendChild(img);
         } else {
