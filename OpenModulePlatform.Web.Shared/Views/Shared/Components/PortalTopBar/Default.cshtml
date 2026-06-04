@@ -32,6 +32,18 @@
             ? "!"
             : source.Trim()[0].ToString().ToUpperInvariant();
     }
+    string SharedAssetUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.StartsWith("/_content/OpenModulePlatform.Web.Shared/", StringComparison.OrdinalIgnoreCase)
+            ? Url.Content("~" + trimmed)
+            : trimmed;
+    }
     string LanguageBadgeText(string? culture)
     {
         if (string.IsNullOrWhiteSpace(culture))
@@ -375,7 +387,7 @@
                                             <span class="portal-topbar__notification-caller-icon" aria-hidden="true">
                                                 @if (!string.IsNullOrWhiteSpace(notification.CallerIcon))
                                                 {
-                                                    <img src="@notification.CallerIcon" alt="" />
+                                                    <img src="@SharedAssetUrl(notification.CallerIcon)" alt="" />
                                                 }
                                                 else
                                                 {
@@ -568,7 +580,7 @@
                 {
                     <div class="portal-topbar__notification-banner portal-topbar__notification-banner--@banner.LevelName" role="status">
                         <span class="portal-topbar__notification-banner-icon" aria-hidden="true">
-                            <img src="@banner.IconUrl" alt="" />
+                            <img src="@SharedAssetUrl(banner.IconUrl)" alt="" />
                         </span>
                         <span class="portal-topbar__notification-banner-copy">
                             <span class="portal-topbar__notification-banner-title">@banner.Title</span>
