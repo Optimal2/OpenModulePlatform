@@ -1626,18 +1626,6 @@ BEGIN
     RETURN;
 END;
 
-UPDATE omp.HostAgentJobs
-SET Status = @failedStatus,
-    CompletedUtc = @nowUtc,
-    LeaseUntilUtc = NULL,
-    LastError = COALESCE(NULLIF(LastError, N''), N'HostAgent job lease expired after the maximum number of attempts.'),
-    UpdatedUtc = @nowUtc
-WHERE HostId = @hostId
-  AND Status = @runningStatus
-  AND LeaseUntilUtc IS NOT NULL
-  AND LeaseUntilUtc < @nowUtc
-  AND AttemptCount >= MaxAttempts;
-
 DECLARE @claimed TABLE
 (
     HostDeploymentId bigint NOT NULL,
@@ -1759,10 +1747,22 @@ BEGIN
     RETURN;
 END;
 
+UPDATE omp.HostAgentJobs
+SET Status = @failedStatus,
+    CompletedUtc = @nowUtc,
+    LeaseUntilUtc = NULL,
+    LastError = COALESCE(NULLIF(LastError, N''), N'HostAgent job lease expired after the maximum number of attempts.'),
+    UpdatedUtc = @nowUtc
+WHERE (HostId = @hostId OR HostId IS NULL)
+  AND Status = @runningStatus
+  AND LeaseUntilUtc IS NOT NULL
+  AND LeaseUntilUtc < @nowUtc
+  AND AttemptCount >= MaxAttempts;
+
 DECLARE @claimed TABLE
 (
     HostAgentJobId bigint NOT NULL,
-    HostId uniqueidentifier NOT NULL,
+    HostId uniqueidentifier NULL,
     JobType nvarchar(100) NOT NULL,
     PayloadJson nvarchar(max) NULL,
     AttemptCount int NOT NULL
@@ -1772,7 +1772,7 @@ DECLARE @claimed TABLE
 (
     SELECT TOP (1) HostAgentJobId
     FROM omp.HostAgentJobs WITH (UPDLOCK, READPAST, ROWLOCK)
-    WHERE HostId = @hostId
+    WHERE (HostId = @hostId OR HostId IS NULL)
       AND AttemptCount < MaxAttempts
       AND
       (
@@ -1784,7 +1784,9 @@ DECLARE @claimed TABLE
               AND LeaseUntilUtc < @nowUtc
           )
       )
-    ORDER BY RequestedUtc, HostAgentJobId
+    ORDER BY CASE WHEN HostId = @hostId THEN 0 ELSE 1 END,
+             RequestedUtc,
+             HostAgentJobId
 )
 UPDATE job
 SET Status = @runningStatus,
@@ -1830,7 +1832,7 @@ FROM @claimed;";
 
         return new HostAgentJobWorkItem(
             rdr.GetInt64(0),
-            rdr.GetGuid(1),
+            rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
             rdr.GetString(2),
             rdr.IsDBNull(3) ? null : rdr.GetString(3),
             rdr.GetInt32(4));
@@ -1916,6 +1918,32 @@ END;";
 
         var value = await cmd.ExecuteScalarAsync(ct);
         return value is bool isInUse && isInUse;
+    }
+
+    public async Task<bool> IsArtifactStoreRelativePathReferencedAsync(
+        string relativePath,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CASE
+    WHEN EXISTS
+    (
+        SELECT 1
+        FROM omp.Artifacts
+        WHERE RelativePath = @relativePath
+           OR REPLACE(RelativePath, N'\', N'/') = @relativePath
+    )
+    THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@relativePath", relativePath.Trim().Replace('\\', '/').Trim('/'));
+
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is bool isReferenced && isReferenced;
     }
 
     public async Task<ArtifactDescriptor?> GetArtifactByIdAsync(

@@ -3,6 +3,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Models;
 public static class HostAgentJobTypes
 {
     public const string ArtifactCacheCleanup = "ArtifactCacheCleanup";
+
+    public const string ArtifactStoreCleanup = "ArtifactStoreCleanup";
 }
 
 public static class HostAgentJobStatuses
@@ -17,7 +19,7 @@ public static class HostAgentJobStatuses
 
 public sealed record HostAgentJobWorkItem(
     long HostAgentJobId,
-    Guid HostId,
+    Guid? HostId,
     string JobType,
     string? PayloadJson,
     int AttemptCount);
@@ -64,6 +66,52 @@ public sealed class ArtifactCacheCleanupEntryResult
     public int ArtifactId { get; set; }
 
     public string? LocalPath { get; set; }
+
+    public string Outcome { get; set; } = string.Empty;
+
+    public string? Message { get; set; }
+}
+
+public sealed class ArtifactStoreCleanupJobPayload
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public List<ArtifactStoreCleanupJobEntry> ArtifactStoreEntries { get; set; } = [];
+}
+
+public sealed class ArtifactStoreCleanupJobEntry
+{
+    public int ArtifactId { get; set; }
+
+    public string Version { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public string? RelativePath { get; set; }
+}
+
+public sealed class ArtifactStoreCleanupJobResult
+{
+    public int DeletedCount { get; set; }
+
+    public int MissingCount { get; set; }
+
+    public int SkippedCount { get; set; }
+
+    public int ErrorCount { get; set; }
+
+    public List<ArtifactStoreCleanupEntryResult> Entries { get; set; } = [];
+}
+
+public sealed class ArtifactStoreCleanupEntryResult
+{
+    public int ArtifactId { get; set; }
+
+    public string? RelativePath { get; set; }
+
+    public string? StorePath { get; set; }
 
     public string Outcome { get; set; } = string.Empty;
 

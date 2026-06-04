@@ -65,6 +65,10 @@ public sealed class HostAgentJobProcessor
                     await ProcessArtifactCacheCleanupJobAsync(job, cancellationToken);
                     break;
 
+                case HostAgentJobTypes.ArtifactStoreCleanup:
+                    await ProcessArtifactStoreCleanupJobAsync(job, cancellationToken);
+                    break;
+
                 default:
                     await CompleteFailedAsync(
                         job,
@@ -89,6 +93,15 @@ public sealed class HostAgentJobProcessor
         HostAgentJobWorkItem job,
         CancellationToken cancellationToken)
     {
+        if (!job.HostId.HasValue)
+        {
+            await CompleteFailedAsync(
+                job,
+                "Artifact cache cleanup jobs must target a specific host.",
+                cancellationToken);
+            return;
+        }
+
         var payload = string.IsNullOrWhiteSpace(job.PayloadJson)
             ? new ArtifactCacheCleanupJobPayload()
             : JsonSerializer.Deserialize<ArtifactCacheCleanupJobPayload>(job.PayloadJson, JsonOptions)
@@ -98,7 +111,7 @@ public sealed class HostAgentJobProcessor
         foreach (var entry in payload.ArtifactCacheEntries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ProcessArtifactCacheCleanupEntryAsync(job.HostId, entry, result, cancellationToken);
+            await ProcessArtifactCacheCleanupEntryAsync(job.HostId.Value, entry, result, cancellationToken);
         }
 
         var status = result.ErrorCount > 0
@@ -111,6 +124,36 @@ public sealed class HostAgentJobProcessor
             status,
             resultJson,
             result.ErrorCount > 0 ? "One or more artifact cache entries could not be deleted." : null,
+            cancellationToken);
+    }
+
+    private async Task ProcessArtifactStoreCleanupJobAsync(
+        HostAgentJobWorkItem job,
+        CancellationToken cancellationToken)
+    {
+        var payload = string.IsNullOrWhiteSpace(job.PayloadJson)
+            ? new ArtifactStoreCleanupJobPayload()
+            : JsonSerializer.Deserialize<ArtifactStoreCleanupJobPayload>(job.PayloadJson, JsonOptions)
+                ?? new ArtifactStoreCleanupJobPayload();
+
+        var result = new ArtifactStoreCleanupJobResult();
+        var seenPaths = new HashSet<string>(GetPathComparer());
+        foreach (var entry in payload.ArtifactStoreEntries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await ProcessArtifactStoreCleanupEntryAsync(entry, result, seenPaths, cancellationToken);
+        }
+
+        var status = result.ErrorCount > 0
+            ? HostAgentJobStatuses.Warning
+            : HostAgentJobStatuses.Succeeded;
+        var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+
+        await _repository.CompleteHostAgentJobAsync(
+            job.HostAgentJobId,
+            status,
+            resultJson,
+            result.ErrorCount > 0 ? "One or more artifact store entries could not be deleted." : null,
             cancellationToken);
     }
 
@@ -152,6 +195,53 @@ public sealed class HostAgentJobProcessor
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             AddEntryResult(result, entry, localPath, "Error", ex.Message);
+        }
+    }
+
+    private async Task ProcessArtifactStoreCleanupEntryAsync(
+        ArtifactStoreCleanupJobEntry entry,
+        ArtifactStoreCleanupJobResult result,
+        HashSet<string> seenPaths,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveArtifactStorePath(entry, out var storePath, out var normalizedRelativePath, out var validationError))
+        {
+            AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Error", validationError);
+            return;
+        }
+
+        if (!seenPaths.Add(storePath))
+        {
+            AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Skipped", "Duplicate artifact store path in cleanup payload.");
+            return;
+        }
+
+        if (await _repository.IsArtifactStoreRelativePathReferencedAsync(normalizedRelativePath, cancellationToken))
+        {
+            AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Skipped", "The artifact store path is still referenced by a registered artifact.");
+            return;
+        }
+
+        try
+        {
+            if (Directory.Exists(storePath))
+            {
+                Directory.Delete(storePath, recursive: true);
+                AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Deleted", null);
+            }
+            else if (File.Exists(storePath))
+            {
+                File.Delete(storePath);
+                AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Deleted", null);
+            }
+            else
+            {
+                AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Missing", null);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Error", ex.Message);
         }
     }
 
@@ -223,6 +313,129 @@ public sealed class HostAgentJobProcessor
         return true;
     }
 
+    private bool TryResolveArtifactStorePath(
+        ArtifactStoreCleanupJobEntry entry,
+        out string storePath,
+        out string normalizedRelativePath,
+        out string? error)
+    {
+        storePath = string.Empty;
+        normalizedRelativePath = string.Empty;
+        error = null;
+
+        var settings = _settings.CurrentValue;
+        if (string.IsNullOrWhiteSpace(settings.CentralArtifactRoot))
+        {
+            error = "HostAgent:CentralArtifactRoot is not configured.";
+            return false;
+        }
+
+        string storeRoot;
+        try
+        {
+            storeRoot = Path.GetFullPath(settings.CentralArtifactRoot.Trim());
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            error = $"HostAgent:CentralArtifactRoot is not a valid path: {ex.Message}";
+            return false;
+        }
+
+        if (!Directory.Exists(storeRoot))
+        {
+            error = $"Central artifact store root does not exist: {storeRoot}.";
+            return false;
+        }
+
+        if (!TryNormalizeRelativePath(entry.RelativePath, out normalizedRelativePath, out error))
+        {
+            return false;
+        }
+
+        string candidatePath;
+        try
+        {
+            candidatePath = Path.GetFullPath(Path.Join(storeRoot, normalizedRelativePath));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            error = $"Artifact store path is not valid: {ex.Message}";
+            return false;
+        }
+
+        if (!IsSameOrChildPath(storeRoot, candidatePath))
+        {
+            error = $"Artifact store path escapes the configured artifact store root: {candidatePath}.";
+            return false;
+        }
+
+        if (string.Equals(storeRoot, candidatePath, GetPathComparison()))
+        {
+            error = "Refusing to delete the central artifact store root.";
+            return false;
+        }
+
+        var availableRoot = Path.GetFullPath(Path.Join(storeRoot, "_available"));
+        if (IsSameOrChildPath(availableRoot, candidatePath))
+        {
+            error = "Refusing to delete package-library files from an artifact retention cleanup job.";
+            return false;
+        }
+
+        var stagingRoot = Path.GetFullPath(Path.Join(storeRoot, ".staging"));
+        if (IsSameOrChildPath(stagingRoot, candidatePath))
+        {
+            error = "Refusing to delete HostAgent staging files from an artifact retention cleanup job.";
+            return false;
+        }
+
+        storePath = candidatePath;
+        return true;
+    }
+
+    private static bool TryNormalizeRelativePath(
+        string? relativePath,
+        out string normalizedRelativePath,
+        out string? error)
+    {
+        normalizedRelativePath = string.Empty;
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            error = "Artifact store relative path is empty.";
+            return false;
+        }
+
+        var trimmed = relativePath.Trim();
+        if (Path.IsPathRooted(trimmed))
+        {
+            error = $"Artifact store relative path is invalid: {relativePath}.";
+            return false;
+        }
+
+        normalizedRelativePath = trimmed.Replace('\\', '/').Trim('/');
+        if (normalizedRelativePath.Length == 0
+            || normalizedRelativePath.Contains(':', StringComparison.Ordinal)
+            || normalizedRelativePath.IndexOf('\0') >= 0)
+        {
+            error = $"Artifact store relative path is invalid: {relativePath}.";
+            return false;
+        }
+
+        var segments = normalizedRelativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var invalidFileNameChars = Path.GetInvalidFileNameChars();
+        if (segments.Length == 0
+            || segments.Any(static segment => segment is "." or "..")
+            || segments.Any(segment => segment.IndexOfAny(invalidFileNameChars) >= 0))
+        {
+            error = $"Artifact store relative path is invalid: {relativePath}.";
+            return false;
+        }
+
+        return true;
+    }
+
     private static string ResolveRelativeCachePath(string cacheRoot, ArtifactCacheCleanupJobEntry entry)
     {
         var relativePath = !string.IsNullOrWhiteSpace(entry.CacheRelativePath)
@@ -266,6 +479,11 @@ public sealed class HostAgentJobProcessor
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
+    private static StringComparer GetPathComparer()
+        => OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
     private static void AddEntryResult(
         ArtifactCacheCleanupJobResult result,
         ArtifactCacheCleanupJobEntry entry,
@@ -277,6 +495,40 @@ public sealed class HostAgentJobProcessor
         {
             ArtifactId = entry.ArtifactId,
             LocalPath = string.IsNullOrWhiteSpace(localPath) ? entry.LocalPath : localPath,
+            Outcome = outcome,
+            Message = message
+        });
+
+        switch (outcome)
+        {
+            case "Deleted":
+                result.DeletedCount++;
+                break;
+            case "Missing":
+                result.MissingCount++;
+                break;
+            case "Skipped":
+                result.SkippedCount++;
+                break;
+            default:
+                result.ErrorCount++;
+                break;
+        }
+    }
+
+    private static void AddStoreEntryResult(
+        ArtifactStoreCleanupJobResult result,
+        ArtifactStoreCleanupJobEntry entry,
+        string? normalizedRelativePath,
+        string? storePath,
+        string outcome,
+        string? message)
+    {
+        result.Entries.Add(new ArtifactStoreCleanupEntryResult
+        {
+            ArtifactId = entry.ArtifactId,
+            RelativePath = string.IsNullOrWhiteSpace(normalizedRelativePath) ? entry.RelativePath : normalizedRelativePath,
+            StorePath = storePath,
             Outcome = outcome,
             Message = message
         });

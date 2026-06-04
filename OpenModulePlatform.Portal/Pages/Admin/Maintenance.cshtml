@@ -21,21 +21,11 @@
 @if (Model.CleanupResult is not null)
 {
     <div class="card status-banner">
-        @L["Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing. Queued {3} HostAgent cleanup jobs for {4} host cache entries.",
+        @L["Deleted {0} artifact versions. Queued {1} HostAgent cleanup jobs for {2} artifact store entries and {3} host cache entries.",
             Model.CleanupResult.DeletedArtifactCount,
-            Model.CleanupResult.RemovedPayloadCount,
-            Model.CleanupResult.MissingPayloadCount,
             Model.CleanupResult.CreatedHostAgentJobCount,
+            Model.CleanupResult.ArtifactStoreEntryCount,
             Model.CleanupResult.HostCacheEntryCount]
-        @if (Model.CleanupResult.PayloadErrors.Count > 0)
-        {
-            <ul>
-                @foreach (var error in Model.CleanupResult.PayloadErrors)
-                {
-                    <li>@error</li>
-                }
-            </ul>
-        }
     </div>
 }
 
@@ -57,9 +47,9 @@
         </div>
 
         <div class="form-field">
-            <label>@L["Artifact store root"]</label>
-            <input value="@(Model.ArtifactStoreRoot ?? L["Not configured"].Value)" readonly />
-            <div class="field-help">@L["Payload folders are deleted under ArtifactUpload:ArtifactStoreRoot after the database rows have been removed."]</div>
+            <label>@L["Artifact store cleanup"]</label>
+            <input value="@L["Queued for HostAgent"]" readonly />
+            <div class="field-help">@L["Central artifact store payloads are deleted by the first HostAgent that claims the global cleanup job. Portal does not need write access to ArtifactStore."]</div>
         </div>
 
         <div class="toolbar">
@@ -107,7 +97,7 @@
                             <div class="muted">@row.JobType</div>
                         </td>
                         <td>
-                            <code>@row.HostKey</code>
+                            <code>@(string.IsNullOrWhiteSpace(row.HostKey) ? L["Any HostAgent"].Value : row.HostKey)</code>
                             @if (!string.IsNullOrWhiteSpace(row.HostDisplayName))
                             {
                                 <div class="muted">@row.HostDisplayName</div>
