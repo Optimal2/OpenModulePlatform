@@ -45,4 +45,5 @@
   <data name="No conversations" xml:space="preserve"><value>No conversations</value></data>
   <data name="No messages" xml:space="preserve"><value>No messages</value></data>
   <data name="View all messages" xml:space="preserve"><value>View all messages</value></data>
+  <data name="Universal package builder" xml:space="preserve"><value>Universal package builder</value></data>
 </root>
