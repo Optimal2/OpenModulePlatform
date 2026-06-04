@@ -4115,6 +4115,7 @@ a.dashboard-role-list__item:focus-visible {
     position: absolute;
     right: 0;
     bottom: 0;
+    z-index: 5;
     display: none;
     width: 18px;
     height: 18px;
