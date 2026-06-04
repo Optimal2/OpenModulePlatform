@@ -2086,7 +2086,7 @@ button {
     inset: 0;
     z-index: 1;
     border-radius: inherit;
-    background: rgba(15, 23, 42, 0.07);
+    background: rgba(15, 23, 42, 0.11);
     pointer-events: auto;
 }
 
@@ -2368,24 +2368,49 @@ button {
 }
 
 .dashboard-widget__admin-overview {
+    --dashboard-admin-overview-card-min: 118px;
+    --dashboard-admin-overview-gap: 8px;
+    --dashboard-admin-overview-card-padding: 10px;
+    --dashboard-admin-overview-card-radius: 10px;
+    --dashboard-admin-overview-label-size: 0.86rem;
+    --dashboard-admin-overview-metric-size: 1.35rem;
     height: 100%;
     overflow: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
+.dashboard-widget[data-widget-payload="admin-overview"][data-widget-int-data="1"] .dashboard-widget__admin-overview {
+    --dashboard-admin-overview-card-min: 96px;
+    --dashboard-admin-overview-gap: 6px;
+    --dashboard-admin-overview-card-padding: 7px;
+    --dashboard-admin-overview-card-radius: 8px;
+    --dashboard-admin-overview-label-size: 0.76rem;
+    --dashboard-admin-overview-metric-size: 1.08rem;
+}
+
+.dashboard-widget[data-widget-payload="admin-overview"][data-widget-int-data="2"] .dashboard-widget__admin-overview {
+    --dashboard-admin-overview-card-min: 148px;
+    --dashboard-admin-overview-gap: 12px;
+    --dashboard-admin-overview-card-padding: 14px;
+    --dashboard-admin-overview-card-radius: 12px;
+    --dashboard-admin-overview-label-size: 0.96rem;
+    --dashboard-admin-overview-metric-size: 1.68rem;
+}
+
 .dashboard-widget__admin-overview .portal-admin-metrics {
-    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(var(--dashboard-admin-overview-card-min), 1fr));
+    gap: var(--dashboard-admin-overview-gap);
 }
 
 .dashboard-widget__admin-overview .metric-card {
-    padding: 10px;
-    border-radius: 10px;
+    padding: var(--dashboard-admin-overview-card-padding);
+    border-radius: var(--dashboard-admin-overview-card-radius);
+    font-size: var(--dashboard-admin-overview-label-size);
 }
 
 .dashboard-widget__admin-overview .metric-card .metric {
-    font-size: 1.35rem;
+    font-size: var(--dashboard-admin-overview-metric-size);
 }
 
 .dashboard-entry-list {

@@ -652,6 +652,15 @@
             return;
         }
 
+        if (widget.dataset.widgetPayload === 'admin-overview') {
+            const size = normalizeAdminOverviewSize(widget.dataset.widgetIntData);
+            widget.dataset.widgetIntData = String(size);
+            widget.querySelectorAll('[data-widget-int-data-control]').forEach((control) => {
+                control.value = String(size);
+            });
+            return;
+        }
+
         if (isColumnCountWidgetPayload(widget.dataset.widgetPayload)) {
             const columns = normalizeColumnCount(widget.dataset.widgetIntData);
             widget.dataset.widgetColumns = String(columns);
@@ -2708,6 +2717,11 @@
         return parsed && parsed >= 1 && parsed <= 5 ? parsed : 1;
     }
 
+    function normalizeAdminOverviewSize(value) {
+        const parsed = parseNullableInteger(value);
+        return parsed === 1 || parsed === 2 ? parsed : 0;
+    }
+
     function normalizeContentScale(value) {
         const parsed = parseNullableInteger(value);
         if (parsed === null) {
@@ -3635,7 +3649,19 @@
 
         const settingFields = [];
 
-        if (isColumnCountWidgetPayload(widget.payload)) {
+        if (widget.payload === 'admin-overview') {
+            settingFields.push(createSelectField(
+                root.dataset.widgetSizeLabel || 'Widget size',
+                [
+                    ['1', root.dataset.smallLabel || 'Small'],
+                    ['0', root.dataset.defaultLabel || 'Default'],
+                    ['2', root.dataset.largeLabel || 'Large']
+                ],
+                String(normalizeAdminOverviewSize(widget.intData)),
+                (select) => {
+                    select.dataset.widgetIntDataControl = '';
+                }));
+        } else if (isColumnCountWidgetPayload(widget.payload)) {
             settingFields.push(createSelectField(
                 root.dataset.columnCountLabel || 'Column count',
                 [
