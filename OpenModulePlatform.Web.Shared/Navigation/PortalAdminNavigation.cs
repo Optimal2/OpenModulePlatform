@@ -15,13 +15,14 @@ public static class PortalAdminNavigation
                     new PortalAdminMenuItem("Installation", hrefFactory("/admin/instancetemplateedit?id=1")),
                     new PortalAdminMenuItem("Import/export", hrefFactory("/admin/modulepackageimport")),
                     new PortalAdminMenuItem("Artifacts", hrefFactory("/admin/artifacts")),
-                    new PortalAdminMenuItem("Banners", hrefFactory("/admin/banners")),
+                    new PortalAdminMenuItem("Maintenance", hrefFactory("/admin/maintenance")),
                     new PortalAdminMenuItem("Operations", hrefFactory("/admin/hostdeployments"))
                 ]),
             new(
                 "Administration",
                 [
                     new PortalAdminMenuItem("Navigation", hrefFactory("/admin/portalentries")),
+                    new PortalAdminMenuItem("Banners", hrefFactory("/admin/banners")),
                     new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings")),
                     new PortalAdminMenuItem("Security", hrefFactory("/admin/security")),
                     new PortalAdminMenuItem("Users", hrefFactory("/admin/users"))

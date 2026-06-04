@@ -662,6 +662,71 @@ public sealed class ArtifactRow
     public DateTime CreatedUtc { get; set; }
 }
 
+public sealed class ArtifactRetentionCandidateRow
+{
+    public int ArtifactId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string Version { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public string? RelativePath { get; set; }
+
+    public DateTime CreatedUtc { get; set; }
+
+    public int RetentionRank { get; set; }
+
+    public int TotalVersions { get; set; }
+
+    public int ProtectedReferenceCount { get; set; }
+
+    public bool IsProtected => ProtectedReferenceCount > 0;
+
+    public string IdentityKey => string.Join(
+        "|",
+        ModuleKey,
+        AppKey,
+        PackageType,
+        TargetName ?? string.Empty);
+}
+
+public sealed class ArtifactRetentionPreview
+{
+    public int MaxVersionsToKeep { get; init; }
+
+    public IReadOnlyList<ArtifactRetentionCandidateRow> Candidates { get; init; } = [];
+
+    public int CandidateCount => Candidates.Count;
+
+    public int DeletableCandidateCount => Candidates.Count(static row => !row.IsProtected);
+
+    public int ProtectedCandidateCount => Candidates.Count(static row => row.IsProtected);
+
+    public int AffectedArtifactIdentityCount => Candidates
+        .Select(static row => row.IdentityKey)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Count();
+}
+
+public sealed class ArtifactRetentionCleanupResult
+{
+    public int DeletedArtifactCount { get; init; }
+
+    public int RemovedPayloadCount { get; init; }
+
+    public int MissingPayloadCount { get; init; }
+
+    public IReadOnlyList<string> PayloadErrors { get; init; } = [];
+
+    public IReadOnlyList<ArtifactRetentionCandidateRow> DeletedArtifacts { get; init; } = [];
+}
+
 /// <summary>
 /// Artifact row with enough identity information to export a portable artifact package.
 /// </summary>
