@@ -771,17 +771,17 @@ internal static partial class Program
         bool throwOnFailure)
     {
         progress?.Invoke("Waiting for source repository update lock...");
-        // Ownership is transferred to MutexReleaseHandle after a successful wait; a using declaration here
-        // would dispose the mutex before the caller has finished the protected repository update.
-        var mutex = new Mutex(initiallyOwned: false, DeveloperSourcePullMutexName);
+        // The returned handle owns and later disposes the mutex; a local using would release the lock
+        // before the protected repository update has completed.
+        var handle = new MutexReleaseHandle(new Mutex(initiallyOwned: false, DeveloperSourcePullMutexName));
         try
         {
-            if (mutex.WaitOne(TimeSpan.FromSeconds(DeveloperSourcePullLockTimeoutSeconds)))
+            if (handle.WaitOne(TimeSpan.FromSeconds(DeveloperSourcePullLockTimeoutSeconds)))
             {
-                return new MutexReleaseHandle(mutex);
+                return handle;
             }
 
-            mutex.Dispose();
+            handle.Dispose();
             var message = $"Another OpenModulePlatform installer source repository update is already running. Try again when that operation has completed. Waited {DeveloperSourcePullLockTimeoutSeconds} seconds.";
             if (throwOnFailure)
             {
@@ -793,11 +793,12 @@ internal static partial class Program
         }
         catch (AbandonedMutexException)
         {
-            return new MutexReleaseHandle(mutex);
+            handle.MarkAcquired();
+            return handle;
         }
         catch
         {
-            mutex.Dispose();
+            handle.Dispose();
             throw;
         }
     }
@@ -805,6 +806,16 @@ internal static partial class Program
     private sealed class MutexReleaseHandle(Mutex mutex) : IDisposable
     {
         private bool _disposed;
+        private bool _ownsMutex;
+
+        public bool WaitOne(TimeSpan timeout)
+        {
+            _ownsMutex = mutex.WaitOne(timeout);
+            return _ownsMutex;
+        }
+
+        public void MarkAcquired()
+            => _ownsMutex = true;
 
         public void Dispose()
         {
@@ -816,7 +827,10 @@ internal static partial class Program
             _disposed = true;
             try
             {
-                mutex.ReleaseMutex();
+                if (_ownsMutex)
+                {
+                    mutex.ReleaseMutex();
+                }
             }
             finally
             {
