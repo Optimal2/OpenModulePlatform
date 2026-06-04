@@ -150,135 +150,137 @@
                 }
                 <div class="dashboard-widget__body">
                     <div class="dashboard-widget__content" data-widget-content>
-                        @if (widget.Payload == "admin-overview")
-                        {
-                            <div class="dashboard-widget__admin-overview">
-                                <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
-                            </div>
-                        }
-                        else if (widget.Payload == "portal-entry-favorites")
-                        {
-                            <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.FavoritePortalEntries, true)" />
-                        }
-                        else if (widget.Payload == "portal-entry-list")
-                        {
-                            <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.AllPortalEntries, false, true)" />
-                        }
-                        else if (widget.Payload == "portal-entry-combolist")
-                        {
-                            <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
-                        }
-                        else if (widget.Payload == "portal-navbar-links")
-                        {
-                            <partial name="_DashboardNavbarWidgetList" model="new DashboardNavbarWidgetList(Model.DashboardNavbarSections)" />
-                        }
-                        else if (widget.Payload == "user-roles")
-                        {
-                            <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
-                        }
-                        else if (widget.Payload == "content-pages")
-                        {
-                            <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
-                        }
-                        else if (widget.Payload == "notification-feed")
-                        {
-                            <partial name="_DashboardNotificationFeedWidget" model="new DashboardNotificationFeedWidget(Model.DashboardNotifications, Model.NotificationRecentUrl, Model.NotificationMarkReadUrl, Model.CanEditDashboard)" />
-                        }
-                        else if (widget.Payload == "message-conversations")
-                        {
-                            <partial name="_DashboardMessageConversationWidget" model="new DashboardMessageConversationWidget(Model.DashboardMessageConversations)" />
-                        }
-                        else if (widget.Payload == "log-search-recent-jobs")
-                        {
-                            <partial name="_DashboardLogSearchWidget" model="Model.LogSearchWidget" />
-                        }
-                        else if (widget.Payload == "earkiv-checker-alerts")
-                        {
-                            <partial name="_DashboardEArkivCheckerWidget" model="Model.EArkivCheckerWidget" />
-                        }
-                        else if (widget.Payload == "weekday-date")
-                        {
-                            <partial name="_DashboardDateWidget" model="widget.IntData == 1" />
-                        }
-                        else if (widget.Payload == "music-player")
-                        {
-                            <partial name="_DashboardMusicPlayerWidget" />
-                        }
-                        else if (isBlankWidget)
-                        {
-                            <div class="dashboard-widget__blank@(string.IsNullOrWhiteSpace(blankWidgetImageSource) ? string.Empty : " dashboard-widget__blank--image")"
-                                 data-blank-widget
-                                 data-blank-widget-variant="@(blankWidgetVariant > 0 ? blankWidgetVariant.ToString(CultureInfo.InvariantCulture) : string.Empty)"
-                                 data-blank-widget-image-id="@(blankWidgetImageId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)">
-                                <div class="dashboard-widget__blank-media" data-blank-widget-media>
-                                    @if (!string.IsNullOrWhiteSpace(blankWidgetImageSource))
-                                    {
-                                        <img src="@blankWidgetImageSource" alt="" />
-                                    }
+                        <div class="dashboard-widget__content-scale-target" data-widget-content-scale-target>
+                            @if (widget.Payload == "admin-overview")
+                            {
+                                <div class="dashboard-widget__admin-overview">
+                                    <partial name="_AdminOverviewMetrics" model="Model.Metrics" />
                                 </div>
-                                @if (Model.CanEditDashboard)
-                                {
-                                    <div class="dashboard-widget__blank-controls" data-blank-widget-controls>
-                                        <button type="button" class="dashboard-widget__blank-button" data-blank-widget-previous aria-label="@L["Previous image"]" title="@L["Previous image"]">
-                                            <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--previous" aria-hidden="true"></span>
-                                        </button>
-                                        <button type="button" class="dashboard-widget__blank-button" data-blank-widget-next aria-label="@L["Next image"]" title="@L["Next image"]">
-                                            <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--next" aria-hidden="true"></span>
-                                        </button>
-                                        <label class="dashboard-widget__blank-button dashboard-widget__blank-local" aria-label="@L["Add local image"]" title="@L["Add local image"]">
-                                            <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-local-file />
-                                            <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--add" aria-hidden="true"></span>
-                                        </label>
-                                        @if (Model.IsPortalAdmin)
+                            }
+                            else if (widget.Payload == "portal-entry-favorites")
+                            {
+                                <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.FavoritePortalEntries, true)" />
+                            }
+                            else if (widget.Payload == "portal-entry-list")
+                            {
+                                <partial name="_PortalEntryWidgetList" model="new DashboardPortalEntryWidgetList(Model.AllPortalEntries, false, true)" />
+                            }
+                            else if (widget.Payload == "portal-entry-combolist")
+                            {
+                                <partial name="_PortalEntryComboWidgetList" model="new DashboardPortalEntryComboWidgetList(Model.FavoritePortalEntries, Model.AllPortalEntries)" />
+                            }
+                            else if (widget.Payload == "portal-navbar-links")
+                            {
+                                <partial name="_DashboardNavbarWidgetList" model="new DashboardNavbarWidgetList(Model.DashboardNavbarSections)" />
+                            }
+                            else if (widget.Payload == "user-roles")
+                            {
+                                <partial name="_DashboardRoleWidgetList" model="new DashboardRoleWidgetList(Model.DashboardRoles)" />
+                            }
+                            else if (widget.Payload == "content-pages")
+                            {
+                                <partial name="_DashboardContentPageWidgetList" model="new DashboardContentPageWidgetList(Model.ContentPages)" />
+                            }
+                            else if (widget.Payload == "notification-feed")
+                            {
+                                <partial name="_DashboardNotificationFeedWidget" model="new DashboardNotificationFeedWidget(Model.DashboardNotifications, Model.NotificationRecentUrl, Model.NotificationMarkReadUrl, Model.CanEditDashboard)" />
+                            }
+                            else if (widget.Payload == "message-conversations")
+                            {
+                                <partial name="_DashboardMessageConversationWidget" model="new DashboardMessageConversationWidget(Model.DashboardMessageConversations)" />
+                            }
+                            else if (widget.Payload == "log-search-recent-jobs")
+                            {
+                                <partial name="_DashboardLogSearchWidget" model="Model.LogSearchWidget" />
+                            }
+                            else if (widget.Payload == "earkiv-checker-alerts")
+                            {
+                                <partial name="_DashboardEArkivCheckerWidget" model="Model.EArkivCheckerWidget" />
+                            }
+                            else if (widget.Payload == "weekday-date")
+                            {
+                                <partial name="_DashboardDateWidget" model="widget.IntData == 1" />
+                            }
+                            else if (widget.Payload == "music-player")
+                            {
+                                <partial name="_DashboardMusicPlayerWidget" />
+                            }
+                            else if (isBlankWidget)
+                            {
+                                <div class="dashboard-widget__blank@(string.IsNullOrWhiteSpace(blankWidgetImageSource) ? string.Empty : " dashboard-widget__blank--image")"
+                                     data-blank-widget
+                                     data-blank-widget-variant="@(blankWidgetVariant > 0 ? blankWidgetVariant.ToString(CultureInfo.InvariantCulture) : string.Empty)"
+                                     data-blank-widget-image-id="@(blankWidgetImageId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)">
+                                    <div class="dashboard-widget__blank-media" data-blank-widget-media>
+                                        @if (!string.IsNullOrWhiteSpace(blankWidgetImageSource))
                                         {
-                                            <button type="button" class="dashboard-widget__blank-button" data-blank-widget-admin-open aria-label="@L["Manage image library"]" title="@L["Manage image library"]">
-                                                <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--library" aria-hidden="true"></span>
-                                            </button>
+                                            <img src="@blankWidgetImageSource" alt="" />
                                         }
                                     </div>
-                                    @if (Model.IsPortalAdmin)
+                                    @if (Model.CanEditDashboard)
                                     {
-                                        <div class="dashboard-widget__blank-admin" data-blank-widget-admin hidden>
-                                            <div class="dashboard-widget__blank-admin-header">
-                                                <strong>@L["Image library"]</strong>
-                                                <button type="button" class="dashboard-widget__blank-admin-close" data-blank-widget-admin-close aria-label="@L["Close"]"></button>
-                                            </div>
-                                            <div class="dashboard-widget__blank-admin-tabs" role="tablist" aria-label="@L["Image library"]">
-                                                <button type="button" class="is-active" data-blank-widget-admin-tab="image" role="tab" aria-selected="true">@L["Single image"]</button>
-                                                <button type="button" data-blank-widget-admin-tab="zip" role="tab" aria-selected="false">@L["ZIP package"]</button>
-                                            </div>
-                                            <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="image">
-                                                <label>
-                                                    <span>@L["Image or GIF file"]</span>
-                                                    <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-file />
-                                                </label>
-                                                <label>
-                                                    <span>@L["Display name"]</span>
-                                                    <input type="text" maxlength="200" data-blank-widget-display-name />
-                                                </label>
-                                                <div class="dashboard-widget__blank-admin-actions">
-                                                    <button type="button" class="btn btn-primary" data-blank-widget-upload>@L["Upload image"]</button>
-                                                </div>
-                                            </div>
-                                            <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="zip" hidden>
-                                                <label>
-                                                    <span>@L["ZIP package"]</span>
-                                                    <input type="file" accept=".zip,application/zip" data-blank-widget-zip />
-                                                </label>
-                                                <div class="dashboard-widget__blank-admin-actions">
-                                                    <button type="button" class="btn btn-primary" data-blank-widget-zip-upload>@L["Import ZIP"]</button>
-                                                </div>
-                                            </div>
-                                            <div class="dashboard-widget__blank-admin-status" data-blank-widget-status></div>
+                                        <div class="dashboard-widget__blank-controls" data-blank-widget-controls>
+                                            <button type="button" class="dashboard-widget__blank-button" data-blank-widget-previous aria-label="@L["Previous image"]" title="@L["Previous image"]">
+                                                <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--previous" aria-hidden="true"></span>
+                                            </button>
+                                            <button type="button" class="dashboard-widget__blank-button" data-blank-widget-next aria-label="@L["Next image"]" title="@L["Next image"]">
+                                                <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--next" aria-hidden="true"></span>
+                                            </button>
+                                            <label class="dashboard-widget__blank-button dashboard-widget__blank-local" aria-label="@L["Add local image"]" title="@L["Add local image"]">
+                                                <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-local-file />
+                                                <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--add" aria-hidden="true"></span>
+                                            </label>
+                                            @if (Model.IsPortalAdmin)
+                                            {
+                                                <button type="button" class="dashboard-widget__blank-button" data-blank-widget-admin-open aria-label="@L["Manage image library"]" title="@L["Manage image library"]">
+                                                    <span class="dashboard-widget__blank-icon dashboard-widget__blank-icon--library" aria-hidden="true"></span>
+                                                </button>
+                                            }
                                         </div>
+                                        @if (Model.IsPortalAdmin)
+                                        {
+                                            <div class="dashboard-widget__blank-admin" data-blank-widget-admin hidden>
+                                                <div class="dashboard-widget__blank-admin-header">
+                                                    <strong>@L["Image library"]</strong>
+                                                    <button type="button" class="dashboard-widget__blank-admin-close" data-blank-widget-admin-close aria-label="@L["Close"]"></button>
+                                                </div>
+                                                <div class="dashboard-widget__blank-admin-tabs" role="tablist" aria-label="@L["Image library"]">
+                                                    <button type="button" class="is-active" data-blank-widget-admin-tab="image" role="tab" aria-selected="true">@L["Single image"]</button>
+                                                    <button type="button" data-blank-widget-admin-tab="zip" role="tab" aria-selected="false">@L["ZIP package"]</button>
+                                                </div>
+                                                <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="image">
+                                                    <label>
+                                                        <span>@L["Image or GIF file"]</span>
+                                                        <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-file />
+                                                    </label>
+                                                    <label>
+                                                        <span>@L["Display name"]</span>
+                                                        <input type="text" maxlength="200" data-blank-widget-display-name />
+                                                    </label>
+                                                    <div class="dashboard-widget__blank-admin-actions">
+                                                        <button type="button" class="btn btn-primary" data-blank-widget-upload>@L["Upload image"]</button>
+                                                    </div>
+                                                </div>
+                                                <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="zip" hidden>
+                                                    <label>
+                                                        <span>@L["ZIP package"]</span>
+                                                        <input type="file" accept=".zip,application/zip" data-blank-widget-zip />
+                                                    </label>
+                                                    <div class="dashboard-widget__blank-admin-actions">
+                                                        <button type="button" class="btn btn-primary" data-blank-widget-zip-upload>@L["Import ZIP"]</button>
+                                                    </div>
+                                                </div>
+                                                <div class="dashboard-widget__blank-admin-status" data-blank-widget-status></div>
+                                            </div>
+                                        }
                                     }
-                                }
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="dashboard-widget__blank"></div>
-                        }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="dashboard-widget__blank"></div>
+                            }
+                        </div>
                     </div>
                 </div>
                 @if (Model.CanEditDashboard)
