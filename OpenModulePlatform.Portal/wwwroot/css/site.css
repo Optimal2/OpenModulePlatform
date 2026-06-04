@@ -1998,8 +1998,7 @@ button {
 }
 
 .portal-dashboard.is-editing .dashboard-widget.is-titlebar-hidden {
-    gap: 6px;
-    padding: 6px;
+    grid-template-rows: minmax(0, 1fr);
     background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
 }
 
@@ -2044,17 +2043,26 @@ button {
 }
 
 .portal-dashboard.is-editing .dashboard-widget.is-titlebar-hidden .dashboard-widget__titlebar {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    right: 142px;
+    z-index: 4;
+    min-height: 28px;
+    padding: 5px 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+    pointer-events: auto;
 }
 
 .portal-dashboard.is-editing .dashboard-widget.is-titlebar-hidden .dashboard-widget__body {
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    grid-row: 1;
     background: var(--surface);
 }
 
 .dashboard-widget__body {
+    position: relative;
     grid-row: 2;
     display: flex;
     align-items: center;
@@ -2065,6 +2073,20 @@ button {
     overflow: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+}
+
+.portal-dashboard.is-editing .dashboard-widget__body {
+    pointer-events: none;
+}
+
+.portal-dashboard.is-editing .dashboard-widget__body::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    background: rgba(15, 23, 42, 0.07);
+    pointer-events: auto;
 }
 
 .dashboard-widget__body::-webkit-scrollbar,
@@ -3667,6 +3689,7 @@ a.dashboard-role-list__item:focus-visible {
     position: absolute;
     top: 6px;
     right: 6px;
+    z-index: 5;
     display: none;
     width: 28px;
     height: 28px;
@@ -3707,6 +3730,7 @@ a.dashboard-role-list__item:focus-visible {
     position: absolute;
     top: 6px;
     right: 108px;
+    z-index: 5;
     display: none;
     width: 28px;
     height: 28px;
@@ -3747,6 +3771,7 @@ a.dashboard-role-list__item:focus-visible {
     position: absolute;
     top: 6px;
     right: 40px;
+    z-index: 5;
     display: none;
     width: 28px;
     height: 28px;
@@ -3792,6 +3817,7 @@ a.dashboard-role-list__item:focus-visible {
     position: absolute;
     top: 6px;
     right: 74px;
+    z-index: 5;
     display: none;
     width: 28px;
     height: 28px;
