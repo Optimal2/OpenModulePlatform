@@ -109,17 +109,16 @@
 
         @foreach (var widget in Model.ActiveWidgets)
         {
-            var widgetContentScale = Math.Clamp(widget.ContentScale, 25, 200);
-            var widgetContentScaleFactor = widgetContentScale / 100.0;
             var isAdminOverviewWidget = string.Equals(widget.Payload, "admin-overview", StringComparison.OrdinalIgnoreCase);
+            var widgetContentScale = Math.Clamp(widget.ContentScale, 25, 200);
+            var widgetContentScaleFactor = isAdminOverviewWidget ? 1.0 : widgetContentScale / 100.0;
             var isBlankWidget = string.Equals(widget.Payload, "blank-rectangle", StringComparison.OrdinalIgnoreCase);
             var hasColumnSettings = widget.Payload is "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "content-pages";
             var hasEntryFilterSettings = widget.Payload is "portal-entry-list" or "portal-entry-combolist";
             var widgetColumnCount = hasColumnSettings && widget.IntData is >= 1 and <= 5
                 ? widget.IntData.Value
                 : 1;
-            var hasWidgetSettings = isAdminOverviewWidget
-                || widget.Payload == "weekday-date"
+            var hasWidgetSettings = widget.Payload == "weekday-date"
                 || hasColumnSettings
                 || hasEntryFilterSettings
                 || isBlankWidget;
@@ -323,6 +322,16 @@
                     <div class="dashboard-widget__zoom-panel" data-widget-zoom-panel hidden>
                         <div class="dashboard-widget__settings-field">
                             <span>@L["Zoom"]</span>
+                            @if (isAdminOverviewWidget)
+                            {
+                            <select data-widget-int-data-control>
+                                <option value="1" selected="@(adminOverviewSize == 1)">@L["Small"]</option>
+                                <option value="0" selected="@(adminOverviewSize == 0)">@L["Default"]</option>
+                                <option value="2" selected="@(adminOverviewSize == 2)">@L["Large"]</option>
+                            </select>
+                            }
+                            else
+                            {
                             <div class="dashboard-widget__zoom-control" data-widget-content-scale-control>
                                 <input type="range"
                                        min="25"
@@ -341,6 +350,7 @@
                                 </div>
                                 <button type="button" class="btn-link" data-widget-content-scale-reset>@L["Reset zoom"]</button>
                             </div>
+                            }
                         </div>
                     </div>
                     @if (hasWidgetSettings)
@@ -354,18 +364,7 @@
                         <span class="dashboard-widget__settings-icon" aria-hidden="true"></span>
                     </button>
                     <div class="dashboard-widget__settings-panel" data-widget-settings-panel hidden>
-                        @if (isAdminOverviewWidget)
-                        {
-                            <label>
-                                <span>@L["Widget size"]</span>
-                                <select data-widget-int-data-control>
-                                    <option value="1" selected="@(adminOverviewSize == 1)">@L["Small"]</option>
-                                    <option value="0" selected="@(adminOverviewSize == 0)">@L["Default"]</option>
-                                    <option value="2" selected="@(adminOverviewSize == 2)">@L["Large"]</option>
-                                </select>
-                            </label>
-                        }
-                        else if (widget.Payload == "weekday-date")
+                        @if (widget.Payload == "weekday-date")
                         {
                             <label>
                                 <span>@L["Week number"]</span>
