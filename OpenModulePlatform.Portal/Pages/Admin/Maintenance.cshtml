@@ -1,0 +1,151 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.MaintenanceModel
+
+@{
+    var candidateGroups = Model.Preview.Candidates
+        .GroupBy(row => row.IdentityKey)
+        .OrderBy(group => group.First().ModuleKey)
+        .ThenBy(group => group.First().AppKey)
+        .ThenBy(group => group.First().PackageType)
+        .ThenBy(group => group.First().TargetName);
+}
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["System"]</div>
+        <h2>@L["Maintenance"]</h2>
+        <p class="lede">@L["Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration."]</p>
+    </div>
+</section>
+
+@if (Model.CleanupResult is not null)
+{
+    <div class="card status-banner">
+        @L["Deleted {0} artifact versions. Removed {1} payloads; {2} payloads were already missing.",
+            Model.CleanupResult.DeletedArtifactCount,
+            Model.CleanupResult.RemovedPayloadCount,
+            Model.CleanupResult.MissingPayloadCount]
+        @if (Model.CleanupResult.PayloadErrors.Count > 0)
+        {
+            <ul>
+                @foreach (var error in Model.CleanupResult.PayloadErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+<section class="card top-gap">
+    <h3>@L["Artifact retention"]</h3>
+    <p class="muted">@L["The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected."]</p>
+
+    <form method="post" class="form-grid top-gap">
+        <div class="form-field">
+            <label asp-for="Input.MaxVersionsToKeep">@L["Versions to keep"]</label>
+            <input asp-for="Input.MaxVersionsToKeep" type="number" min="1" max="100" />
+            <span asp-validation-for="Input.MaxVersionsToKeep"></span>
+            <div class="field-help">@L["For example, 5 keeps the five newest registered versions for each artifact identity."]</div>
+        </div>
+
+        <div class="form-field">
+            <label>@L["Artifact store root"]</label>
+            <input value="@(Model.ArtifactStoreRoot ?? L["Not configured"].Value)" readonly />
+            <div class="field-help">@L["Payload folders are deleted under ArtifactUpload:ArtifactStoreRoot after the database rows have been removed."]</div>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit" asp-page-handler="Preview">@L["Preview cleanup"]</button>
+            <button type="submit"
+                    asp-page-handler="CleanupArtifacts"
+                    class="btn btn-danger"
+                    onclick="return confirm('@L["Delete all unreferenced old artifact versions shown in the preview?"]');">
+                @L["Delete old artifact versions"]
+            </button>
+        </div>
+    </form>
+</section>
+
+<section class="portal-admin-metrics top-gap" aria-label="@L["Artifact cleanup preview"]">
+    <div class="metric-card">
+        <span class="metric">@Model.Preview.AffectedArtifactIdentityCount</span>
+        <span class="metric-card__label">@L["Affected artifact identities"]</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric">@Model.Preview.CandidateCount</span>
+        <span class="metric-card__label">@L["Old version candidates"]</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric">@Model.Preview.DeletableCandidateCount</span>
+        <span class="metric-card__label">@L["Can be deleted"]</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric">@Model.Preview.ProtectedCandidateCount</span>
+        <span class="metric-card__label">@L["Protected by references"]</span>
+    </div>
+</section>
+
+@if (Model.Preview.Candidates.Count == 0)
+{
+    <div class="empty-state top-gap">@L["No artifact cleanup candidates found."]</div>
+}
+else
+{
+    <div class="table-scroll top-gap">
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>@L["Artifact identity"]</th>
+                    <th>@L["Version"]</th>
+                    <th>@L["Registered"]</th>
+                    <th>@L["Rank"]</th>
+                    <th>@L["Status"]</th>
+                    <th>@L["Relative path"]</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var group in candidateGroups)
+            {
+                var first = group.First();
+                <tr>
+                    <td colspan="6">
+                        <strong>@first.ModuleKey / @first.AppKey</strong>
+                        <span class="muted">@first.PackageType</span>
+                        @if (!string.IsNullOrWhiteSpace(first.TargetName))
+                        {
+                            <code>@first.TargetName</code>
+                        }
+                    </td>
+                </tr>
+
+                @foreach (var row in group)
+                {
+                    <tr>
+                        <td><code>@row.ArtifactId</code></td>
+                        <td>@row.Version</td>
+                        <td>@row.CreatedUtc.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</td>
+                        <td>@row.RetentionRank / @row.TotalVersions</td>
+                        <td>
+                            @if (row.IsProtected)
+                            {
+                                <span class="pill">@L["Protected"] (@row.ProtectedReferenceCount)</span>
+                            }
+                            else
+                            {
+                                <span class="pill">@L["Can be deleted"]</span>
+                            }
+                        </td>
+                        <td><code>@row.RelativePath</code></td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+}
