@@ -240,39 +240,39 @@
 }
 
 .portal-topbar__icon--admin-gears {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/person-gears.svg");
+    --portal-topbar-icon: url("../icons/person-gears.svg");
 }
 
 .portal-topbar__icon--language {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/language.svg");
+    --portal-topbar-icon: url("../icons/language.svg");
 }
 
 .portal-topbar__icon--user {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/person.svg");
+    --portal-topbar-icon: url("../icons/person.svg");
 }
 
 .portal-topbar__icon--logout {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/logout.svg");
+    --portal-topbar-icon: url("../icons/logout.svg");
 }
 
 .portal-topbar__icon--switch {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/change.svg");
+    --portal-topbar-icon: url("../icons/change.svg");
 }
 
 .portal-topbar__icon--settings {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg");
+    --portal-topbar-icon: url("../icons/settings.svg");
 }
 
 .portal-topbar__icon--badge {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/badge.svg");
+    --portal-topbar-icon: url("../icons/badge.svg");
 }
 
 .portal-topbar__icon--notifications {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/notifications.svg");
+    --portal-topbar-icon: url("../icons/notifications.svg");
 }
 
 .portal-topbar__icon--messages {
-    --portal-topbar-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/conversation.svg");
+    --portal-topbar-icon: url("../icons/conversation.svg");
 }
 
 .portal-topbar__admin-menu,
@@ -1294,8 +1294,8 @@ span.portal-topbar__nav-group-link {
     width: 16px;
     height: 16px;
     background: currentColor;
-    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg") center / contain no-repeat;
-    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg") center / contain no-repeat;
+    -webkit-mask: url("../icons/check.svg") center / contain no-repeat;
+    mask: url("../icons/check.svg") center / contain no-repeat;
 }
 
 .portal-topbar__language-link {
