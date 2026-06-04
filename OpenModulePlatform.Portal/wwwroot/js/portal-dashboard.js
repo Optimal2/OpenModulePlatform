@@ -633,7 +633,8 @@
     function applyWidgetSettings(widget) {
         const contentScale = normalizeContentScale(widget.dataset.widgetContentScale);
         widget.dataset.widgetContentScale = String(contentScale);
-        widget.style.setProperty('--dashboard-widget-content-scale-factor', formatScaleFactor(contentScale));
+        const usesPresetZoom = widget.dataset.widgetPayload === 'admin-overview';
+        widget.style.setProperty('--dashboard-widget-content-scale-factor', formatScaleFactor(usesPresetZoom ? 100 : contentScale));
         syncWidgetContentScaleControls(widget, contentScale);
         const hideTitlebar = widget.dataset.widgetTitlebarHidden === 'true';
         widget.classList.toggle('is-titlebar-hidden', hideTitlebar);
@@ -3645,23 +3646,13 @@
         zoomPanel.className = 'dashboard-widget__zoom-panel';
         zoomPanel.dataset.widgetZoomPanel = '';
         zoomPanel.hidden = true;
-        zoomPanel.appendChild(createContentScaleField(root, widget.contentScale));
+        zoomPanel.appendChild(widget.payload === 'admin-overview'
+            ? createAdminOverviewZoomField(root, widget.intData)
+            : createContentScaleField(root, widget.contentScale));
 
         const settingFields = [];
 
-        if (widget.payload === 'admin-overview') {
-            settingFields.push(createSelectField(
-                root.dataset.widgetSizeLabel || 'Widget size',
-                [
-                    ['1', root.dataset.smallLabel || 'Small'],
-                    ['0', root.dataset.defaultLabel || 'Default'],
-                    ['2', root.dataset.largeLabel || 'Large']
-                ],
-                String(normalizeAdminOverviewSize(widget.intData)),
-                (select) => {
-                    select.dataset.widgetIntDataControl = '';
-                }));
-        } else if (isColumnCountWidgetPayload(widget.payload)) {
+        if (isColumnCountWidgetPayload(widget.payload)) {
             settingFields.push(createSelectField(
                 root.dataset.columnCountLabel || 'Column count',
                 [
@@ -3736,6 +3727,20 @@
         icon.setAttribute('aria-hidden', 'true');
         toggle.appendChild(icon);
         return toggle;
+    }
+
+    function createAdminOverviewZoomField(root, value) {
+        return createSelectField(
+            root.dataset.contentScaleLabel || 'Zoom',
+            [
+                ['1', root.dataset.smallLabel || 'Small'],
+                ['0', root.dataset.defaultLabel || 'Default'],
+                ['2', root.dataset.largeLabel || 'Large']
+            ],
+            String(normalizeAdminOverviewSize(value)),
+            (select) => {
+                select.dataset.widgetIntDataControl = '';
+            });
     }
 
     function createContentScaleField(root, value) {
