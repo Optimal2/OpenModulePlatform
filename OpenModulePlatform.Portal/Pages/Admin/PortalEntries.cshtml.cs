@@ -74,6 +74,7 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
         OpenCreatePanel = true;
         await LoadAsync(ct);
         SetTitles("Navigation");
+        await ApplyCreateIFrameStandaloneTargetAsync(ct);
         ValidateCreateInput();
 
         if (!ModelState.IsValid)
@@ -119,6 +120,7 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             return NotFound();
         }
 
+        await ApplyEditIFrameStandaloneTargetAsync(ct);
         ValidateEditInput(existing);
         if (await _portalEntries.WouldCreateCycleAsync(EditInput.PortalEntryId, EditInput.ParentEntryId, ct))
         {
@@ -220,6 +222,9 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
     public int GetDepth(PortalEntryAdminRow row)
         => RowDepths.TryGetValue(row.PortalEntryId, out var depth) ? depth : 0;
 
+    public PortalEntryIFrameStandaloneSelection? GetIFrameStandaloneSelection(string? targetUrl)
+        => PortalEntryIFrameStandaloneHelperService.ResolveSelection(IFrameStandaloneHelper, targetUrl);
+
     private static IReadOnlyDictionary<int, int> BuildDepthLookup(IReadOnlyList<PortalEntryAdminRow> rows)
     {
         var rowsById = rows.ToDictionary(item => item.PortalEntryId);
@@ -269,11 +274,91 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             .ToList();
     }
 
+    private async Task ApplyCreateIFrameStandaloneTargetAsync(CancellationToken ct)
+    {
+        if (!Input.CreateIFrameStandaloneEntry)
+        {
+            return;
+        }
+
+        if (!ValidateIFrameStandaloneSelection(
+            nameof(Input),
+            Input.IFrameStandaloneAppInstanceId,
+            Input.IFrameStandaloneUrlId))
+        {
+            return;
+        }
+
+        var targetUrl = await _iframeStandaloneHelper.BuildStandaloneTargetUrlAsync(
+            Input.IFrameStandaloneAppInstanceId!.Value,
+            Input.IFrameStandaloneUrlId!.Value,
+            ct);
+
+        if (targetUrl is null)
+        {
+            ModelState.AddModelError($"{nameof(Input)}.{nameof(Input.IFrameStandaloneUrlId)}", T("Select a valid iFrame app and URL."));
+            return;
+        }
+
+        Input.TargetUrl = targetUrl;
+        Input.TargetEntryKey = null;
+    }
+
+    private async Task ApplyEditIFrameStandaloneTargetAsync(CancellationToken ct)
+    {
+        if (!EditInput.CreateIFrameStandaloneEntry)
+        {
+            return;
+        }
+
+        if (!ValidateIFrameStandaloneSelection(
+            nameof(EditInput),
+            EditInput.IFrameStandaloneAppInstanceId,
+            EditInput.IFrameStandaloneUrlId))
+        {
+            return;
+        }
+
+        var targetUrl = await _iframeStandaloneHelper.BuildStandaloneTargetUrlAsync(
+            EditInput.IFrameStandaloneAppInstanceId!.Value,
+            EditInput.IFrameStandaloneUrlId!.Value,
+            ct);
+
+        if (targetUrl is null)
+        {
+            ModelState.AddModelError($"{nameof(EditInput)}.{nameof(EditInput.IFrameStandaloneUrlId)}", T("Select a valid iFrame app and URL."));
+            return;
+        }
+
+        EditInput.TargetUrl = targetUrl;
+        EditInput.TargetEntryKey = null;
+    }
+
+    private bool ValidateIFrameStandaloneSelection(string prefix, Guid? appInstanceId, int? urlId)
+    {
+        var isValid = true;
+        if (!appInstanceId.HasValue || !IFrameStandaloneHelper.Apps.Any(option => option.AppInstanceId == appInstanceId.Value))
+        {
+            ModelState.AddModelError($"{prefix}.IFrameStandaloneAppInstanceId", T("Select a valid iFrame app."));
+            isValid = false;
+        }
+
+        if (!urlId.HasValue || !IFrameStandaloneHelper.Urls.Any(option => option.UrlId == urlId.Value))
+        {
+            ModelState.AddModelError($"{prefix}.IFrameStandaloneUrlId", T("Select a valid iFrame URL."));
+            isValid = false;
+        }
+
+        return isValid;
+    }
+
     private void ValidateCreateInput()
     {
         Input.DisplayName = Input.DisplayName?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(Input.TargetUrl) && string.IsNullOrWhiteSpace(Input.TargetEntryKey))
+        if (!Input.CreateIFrameStandaloneEntry
+            && string.IsNullOrWhiteSpace(Input.TargetUrl)
+            && string.IsNullOrWhiteSpace(Input.TargetEntryKey))
         {
             ModelState.AddModelError($"{nameof(Input)}.{nameof(Input.TargetUrl)}", T("Enter a target URL or target entry key."));
         }
@@ -294,7 +379,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
     {
         EditInput.DisplayName = EditInput.DisplayName?.Trim() ?? string.Empty;
 
-        if (!existing.SourceAppInstanceId.HasValue
+        if (!EditInput.CreateIFrameStandaloneEntry
+            && !existing.SourceAppInstanceId.HasValue
             && string.IsNullOrWhiteSpace(EditInput.TargetUrl)
             && string.IsNullOrWhiteSpace(EditInput.TargetEntryKey))
         {
@@ -362,6 +448,15 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
         [Display(Name = "Target entry key")]
         public string? TargetEntryKey { get; set; }
 
+        [Display(Name = "Create iFrame standalone entry")]
+        public bool CreateIFrameStandaloneEntry { get; set; }
+
+        [Display(Name = "Select iFrame app")]
+        public Guid? IFrameStandaloneAppInstanceId { get; set; }
+
+        [Display(Name = "Select iFrame URL")]
+        public int? IFrameStandaloneUrlId { get; set; }
+
         [Display(Name = "Enabled")]
         public bool IsEnabled { get; set; } = true;
 
@@ -400,6 +495,15 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
         [StringLength(200)]
         [Display(Name = "Target entry key")]
         public string? TargetEntryKey { get; set; }
+
+        [Display(Name = "Create iFrame standalone entry")]
+        public bool CreateIFrameStandaloneEntry { get; set; }
+
+        [Display(Name = "Select iFrame app")]
+        public Guid? IFrameStandaloneAppInstanceId { get; set; }
+
+        [Display(Name = "Select iFrame URL")]
+        public int? IFrameStandaloneUrlId { get; set; }
 
         [Display(Name = "Enabled")]
         public bool IsEnabled { get; set; } = true;
