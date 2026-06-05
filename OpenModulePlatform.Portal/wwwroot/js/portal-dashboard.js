@@ -157,6 +157,10 @@
             closePicker(picker);
         });
 
+        picker?.addEventListener('close', () => {
+            document.body.classList.remove('dashboard-widget-picker-open');
+        });
+
         bindWidgetPickerFilter(picker);
         bindWidgetPickerCompactToggle(picker);
         window.addEventListener('resize', () => syncWidgetPickerCompactMode(picker));
@@ -4073,6 +4077,8 @@
         } else {
             picker.removeAttribute('open');
         }
+
+        document.body.classList.remove('dashboard-widget-picker-open');
     }
 
     function openWidgetPicker(picker) {
@@ -4086,6 +4092,7 @@
             picker.setAttribute('open', '');
         }
 
+        document.body.classList.add('dashboard-widget-picker-open');
         resetWidgetPickerFilter(picker);
         clearWidgetPickerSelection(picker);
         syncWidgetPickerCompactMode(picker);
@@ -4118,8 +4125,7 @@
             return;
         }
 
-        const autoCompact = window.matchMedia('(max-width: 860px)').matches
-            || (picker.open && picker.getBoundingClientRect().width > 0 && picker.getBoundingClientRect().width < 780);
+        const autoCompact = window.matchMedia('(max-width: 860px)').matches;
         const manualCompact = picker.dataset.manualCompact === 'true';
         const isCompact = autoCompact || manualCompact;
         const toggle = picker.querySelector('[data-widget-picker-compact-toggle]');

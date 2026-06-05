@@ -4422,9 +4422,13 @@ a.dashboard-role-list__item:focus-visible {
     --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
 }
 
+body.dashboard-widget-picker-open {
+    overflow: hidden;
+}
+
 .dashboard-widget-picker {
-    width: min(980px, calc(100vw - 32px));
-    max-height: min(760px, calc(100vh - 32px));
+    width: min(1180px, calc(100vw - 40px));
+    max-height: min(820px, calc(100vh - 32px));
     padding: 0;
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -4477,9 +4481,9 @@ a.dashboard-role-list__item:focus-visible {
 
 .dashboard-widget-picker__layout {
     display: grid;
-    grid-template-columns: minmax(280px, 34%) minmax(0, 1fr);
-    min-height: min(62vh, 560px);
-    max-height: min(68vh, 620px);
+    grid-template-columns: minmax(320px, 32%) minmax(0, 1fr);
+    min-height: min(68vh, 640px);
+    max-height: min(72vh, 700px);
 }
 
 .dashboard-widget-picker__sidebar {
@@ -4712,6 +4716,17 @@ a.dashboard-role-list__item:focus-visible {
     grid-template-rows: auto auto auto minmax(0, 1fr);
     max-height: min(65vh, 560px);
     border-right: 0;
+}
+
+.dashboard-widget-picker.is-compact .dashboard-widget-option {
+    grid-template-rows: auto auto;
+    align-content: center;
+    min-height: 64px;
+}
+
+.dashboard-widget-picker.is-compact .dashboard-widget-option__title,
+.dashboard-widget-picker.is-compact .dashboard-widget-option__meta {
+    align-self: center;
 }
 
 .dashboard-widget-picker.is-compact .dashboard-widget-picker__details {
