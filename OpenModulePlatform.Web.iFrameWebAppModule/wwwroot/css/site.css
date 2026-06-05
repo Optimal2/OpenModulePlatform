@@ -98,6 +98,26 @@ a:hover {
     padding: 16px 24px 24px;
 }
 
+.iframe-layout--standalone {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.iframe-layout--standalone .app-header {
+    flex: 0 0 auto;
+}
+
+.iframe-layout--standalone .content-shell {
+    display: flex;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+}
+
 .toolbar,
 .iframe-toolbar {
     display: flex;
@@ -169,9 +189,18 @@ a:hover {
     background: var(--surface-muted);
 }
 
-.iframe-layout--standalone .iframe-shell,
+.iframe-layout--standalone .iframe-shell {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
 .iframe-layout--standalone .iframe-shell__frame {
-    min-height: calc(100vh - 120px);
+    height: 100%;
+    min-height: 0;
 }
 
 .iframe-message {
