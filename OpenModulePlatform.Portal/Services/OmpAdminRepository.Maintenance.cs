@@ -115,251 +115,22 @@ ORDER BY ModuleKey,
         };
     }
 
-    public async Task<ArtifactRetentionDeletionResult> DeleteOldArtifactVersionsAsync(
+    public async Task<long> QueueArtifactRetentionCleanupAsync(
         int maxVersionsToKeep,
         string? requestedBy,
         CancellationToken ct)
     {
         const string sql = @"
-DECLARE @DeleteArtifacts TABLE
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NULL
+BEGIN
+    THROW 51000, 'HostAgent job queue is not available. Apply the core OMP schema before queueing maintenance jobs.', 1;
+END;
+
+DECLARE @PayloadJson nvarchar(max) =
 (
-    ArtifactId int NOT NULL PRIMARY KEY,
-    ModuleKey nvarchar(100) NOT NULL,
-    AppKey nvarchar(100) NOT NULL,
-    Version nvarchar(50) NOT NULL,
-    PackageType nvarchar(50) NOT NULL,
-    TargetName nvarchar(100) NULL,
-    RelativePath nvarchar(400) NULL,
-    CreatedUtc datetime2(3) NOT NULL,
-    RetentionRank int NOT NULL,
-    TotalVersions int NOT NULL,
-    ProtectedReferenceCount int NOT NULL
-);
-
-DECLARE @CacheEntries TABLE
-(
-    HostId uniqueidentifier NOT NULL,
-    ArtifactId int NOT NULL,
-    Version nvarchar(50) NOT NULL,
-    PackageType nvarchar(50) NOT NULL,
-    TargetName nvarchar(100) NULL,
-    LocalPath nvarchar(500) NULL,
-    ContentSha256 nvarchar(128) NULL
-);
-
-DECLARE @StoreEntries TABLE
-(
-    ArtifactId int NOT NULL,
-    Version nvarchar(50) NOT NULL,
-    PackageType nvarchar(50) NOT NULL,
-    TargetName nvarchar(100) NULL,
-    RelativePath nvarchar(400) NOT NULL
-);
-
-DECLARE @CreatedJobs TABLE
-(
-    HostAgentJobId bigint NOT NULL
-);
-
-WITH RankedArtifacts AS
-(
-    SELECT ar.ArtifactId,
-           m.ModuleKey,
-           a.AppKey,
-           ar.Version,
-           ar.PackageType,
-           ar.TargetName,
-           ar.RelativePath,
-           ar.CreatedUtc,
-           CAST(ROW_NUMBER() OVER
-           (
-               PARTITION BY ar.AppId, ar.PackageType, ISNULL(ar.TargetName, N'')
-               ORDER BY ar.CreatedUtc DESC, ar.ArtifactId DESC
-           ) AS int) AS RetentionRank,
-           CAST(COUNT(1) OVER
-           (
-               PARTITION BY ar.AppId, ar.PackageType, ISNULL(ar.TargetName, N'')
-           ) AS int) AS TotalVersions,
-           pr.ProtectedReferenceCount
-    FROM omp.Artifacts ar
-    INNER JOIN omp.Apps a ON a.AppId = ar.AppId
-    INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
-    OUTER APPLY
-    (
-        SELECT COUNT(1) AS ProtectedReferenceCount
-        FROM
-        (
-            SELECT 1 AS ReferenceRow
-            FROM omp.AppInstances ai
-            WHERE ai.ArtifactId = ar.ArtifactId
-
-            UNION ALL
-
-            SELECT 1
-            FROM omp.WorkerInstances wi
-            WHERE wi.ArtifactId = ar.ArtifactId
-
-            UNION ALL
-
-            SELECT 1
-            FROM omp.InstanceTemplateAppInstances tai
-            WHERE tai.DesiredArtifactId = ar.ArtifactId
-
-            UNION ALL
-
-            SELECT 1
-            FROM omp.HostArtifactRequirements har
-            WHERE har.ArtifactId = ar.ArtifactId
-
-            UNION ALL
-
-            SELECT 1
-            FROM omp.HostAgentDesiredStates hads
-            WHERE hads.ArtifactId = ar.ArtifactId
-
-            UNION ALL
-
-            SELECT 1
-            FROM omp.HostAppDeploymentStates hads
-            WHERE hads.ArtifactId = ar.ArtifactId
-
-            UNION ALL
-
-            SELECT 1
-            FROM omp.HostAgentRuntimeStates hars
-            WHERE hars.ArtifactId = ar.ArtifactId
-              AND hars.IsActive = 1
-        ) protectedRefs
-    ) pr
-)
-INSERT INTO @DeleteArtifacts
-(
-    ArtifactId,
-    ModuleKey,
-    AppKey,
-    Version,
-    PackageType,
-    TargetName,
-    RelativePath,
-    CreatedUtc,
-    RetentionRank,
-    TotalVersions,
-    ProtectedReferenceCount
-)
-SELECT ArtifactId,
-       ModuleKey,
-       AppKey,
-       Version,
-       PackageType,
-       TargetName,
-       RelativePath,
-       CreatedUtc,
-       RetentionRank,
-       TotalVersions,
-       ProtectedReferenceCount
-FROM RankedArtifacts
-WHERE TotalVersions > @MaxVersionsToKeep
-  AND RetentionRank > @MaxVersionsToKeep
-  AND ProtectedReferenceCount = 0;
-
-INSERT INTO @CacheEntries
-(
-    HostId,
-    ArtifactId,
-    Version,
-    PackageType,
-    TargetName,
-    LocalPath,
-    ContentSha256
-)
-SELECT has.HostId,
-       d.ArtifactId,
-       d.Version,
-       d.PackageType,
-       d.TargetName,
-       has.LocalPath,
-       has.ContentSha256
-FROM omp.HostArtifactStates has
-INNER JOIN @DeleteArtifacts d ON d.ArtifactId = has.ArtifactId
-WHERE has.LocalPath IS NOT NULL
-  AND LTRIM(RTRIM(has.LocalPath)) <> N'';
-
-INSERT INTO @StoreEntries
-(
-    ArtifactId,
-    Version,
-    PackageType,
-    TargetName,
-    RelativePath
-)
-SELECT ArtifactId,
-       Version,
-       PackageType,
-       TargetName,
-       LTRIM(RTRIM(RelativePath))
-FROM @DeleteArtifacts
-WHERE RelativePath IS NOT NULL
-  AND LTRIM(RTRIM(RelativePath)) <> N'';
-
-DELETE s
-FROM omp.HostAppDeploymentStates s
-INNER JOIN @DeleteArtifacts d ON d.ArtifactId = s.ArtifactId;
-
-DELETE s
-FROM omp.HostAgentRuntimeStates s
-INNER JOIN @DeleteArtifacts d ON d.ArtifactId = s.ArtifactId;
-
-DELETE s
-FROM omp.HostArtifactStates s
-INNER JOIN @DeleteArtifacts d ON d.ArtifactId = s.ArtifactId;
-
-DELETE c
-FROM omp.ArtifactConfigurationFiles c
-INNER JOIN @DeleteArtifacts d ON d.ArtifactId = c.ArtifactId;
-
-DELETE ar
-FROM omp.Artifacts ar
-INNER JOIN @DeleteArtifacts d ON d.ArtifactId = ar.ArtifactId;
-
-INSERT INTO omp.HostAgentJobs
-(
-    HostId,
-    JobType,
-    PayloadJson,
-    Status,
-    RequestedBy,
-    MaxAttempts
-)
-OUTPUT inserted.HostAgentJobId INTO @CreatedJobs(HostAgentJobId)
-SELECT CAST(NULL AS uniqueidentifier),
-       N'ArtifactStoreCleanup',
-       (
-           SELECT 1 AS schemaVersion,
-                  JSON_QUERY
-                  (
-                      (
-                          SELECT entry.ArtifactId AS artifactId,
-                                 entry.Version AS version,
-                                 entry.PackageType AS packageType,
-                                 entry.TargetName AS targetName,
-                                 entry.RelativePath AS relativePath
-                          FROM @StoreEntries entry
-                          ORDER BY entry.PackageType,
-                                   entry.TargetName,
-                                   entry.Version,
-                                   entry.ArtifactId
-                          FOR JSON PATH
-                      )
-                  ) AS artifactStoreEntries
-           FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-       ),
-       CAST(0 AS tinyint),
-       @RequestedBy,
-       3
-WHERE EXISTS
-(
-    SELECT 1
-    FROM @StoreEntries
+    SELECT 1 AS schemaVersion,
+           @MaxVersionsToKeep AS maxVersionsToKeep
+    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
 );
 
 INSERT INTO omp.HostAgentJobs
@@ -371,93 +142,24 @@ INSERT INTO omp.HostAgentJobs
     RequestedBy,
     MaxAttempts
 )
-OUTPUT inserted.HostAgentJobId INTO @CreatedJobs(HostAgentJobId)
-SELECT hostEntries.HostId,
-       N'ArtifactCacheCleanup',
-       (
-           SELECT 1 AS schemaVersion,
-                  JSON_QUERY
-                  (
-                      (
-                          SELECT entry.ArtifactId AS artifactId,
-                                 entry.Version AS version,
-                                 entry.PackageType AS packageType,
-                                 entry.TargetName AS targetName,
-                                 entry.LocalPath AS localPath,
-                                 CAST(NULL AS nvarchar(500)) AS cacheRelativePath,
-                                 entry.ContentSha256 AS contentSha256
-                          FROM @CacheEntries entry
-                          WHERE entry.HostId = hostEntries.HostId
-                          ORDER BY entry.PackageType,
-                                   entry.TargetName,
-                                   entry.Version,
-                                   entry.ArtifactId
-                          FOR JSON PATH
-                      )
-                  ) AS artifactCacheEntries
-           FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-       ),
-       CAST(0 AS tinyint),
-       @RequestedBy,
-       3
-FROM
+OUTPUT inserted.HostAgentJobId
+VALUES
 (
-    SELECT DISTINCT HostId
-    FROM @CacheEntries
-) hostEntries;
-
-SELECT ArtifactId,
-       ModuleKey,
-       AppKey,
-       Version,
-       PackageType,
-       TargetName,
-       RelativePath,
-       CreatedUtc,
-       RetentionRank,
-       TotalVersions,
-       ProtectedReferenceCount
-FROM @DeleteArtifacts
-ORDER BY ModuleKey,
-         AppKey,
-         PackageType,
-         TargetName,
-         RetentionRank DESC,
-         CreatedUtc,
-         ArtifactId;
-
-SELECT COUNT(1) AS HostCacheEntryCount
-FROM @CacheEntries;
-
-SELECT COUNT(1) AS ArtifactStoreEntryCount
-FROM @StoreEntries;
-
-SELECT COUNT(1) AS CreatedHostAgentJobCount
-FROM @CreatedJobs;";
+    NULL,
+    N'ArtifactRetentionCleanup',
+    @PayloadJson,
+    CAST(0 AS tinyint),
+    @RequestedBy,
+    3
+);";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@MaxVersionsToKeep", Math.Clamp(maxVersionsToKeep, 1, 100));
+        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
 
-        try
-        {
-            var deleted = await ReadArtifactRetentionDeletionResultAsync(
-                sql,
-                maxVersionsToKeep,
-                requestedBy,
-                ct,
-                conn,
-                tx);
-
-            await tx.CommitAsync(ct);
-            return deleted;
-        }
-        catch (Exception)
-        {
-            // The broad catch is intentional here: any cleanup failure must roll back the transaction before the original error is rethrown.
-            await tx.RollbackAsync(ct);
-            throw;
-        }
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public async Task<IReadOnlyList<HostAgentJobRow>> GetRecentHostAgentJobsAsync(
@@ -543,54 +245,6 @@ ORDER BY job.RequestedUtc DESC,
         }
 
         return rows;
-    }
-
-    private async Task<ArtifactRetentionDeletionResult> ReadArtifactRetentionDeletionResultAsync(
-        string sql,
-        int maxVersionsToKeep,
-        string? requestedBy,
-        CancellationToken ct,
-        SqlConnection conn,
-        SqlTransaction tx)
-    {
-        await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.CommandTimeout = 3600;
-        Add(cmd, "@MaxVersionsToKeep", maxVersionsToKeep);
-        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : requestedBy.Trim());
-
-        var deletedArtifacts = new List<ArtifactRetentionCandidateRow>();
-        var hostCacheEntryCount = 0;
-        var artifactStoreEntryCount = 0;
-        var createdHostAgentJobCount = 0;
-
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        while (await rdr.ReadAsync(ct))
-        {
-            deletedArtifacts.Add(ReadArtifactRetentionCandidate(rdr));
-        }
-
-        if (await rdr.NextResultAsync(ct) && await rdr.ReadAsync(ct))
-        {
-            hostCacheEntryCount = rdr.GetInt32(0);
-        }
-
-        if (await rdr.NextResultAsync(ct) && await rdr.ReadAsync(ct))
-        {
-            artifactStoreEntryCount = rdr.GetInt32(0);
-        }
-
-        if (await rdr.NextResultAsync(ct) && await rdr.ReadAsync(ct))
-        {
-            createdHostAgentJobCount = rdr.GetInt32(0);
-        }
-
-        return new ArtifactRetentionDeletionResult
-        {
-            DeletedArtifacts = deletedArtifacts,
-            ArtifactStoreEntryCount = artifactStoreEntryCount,
-            HostCacheEntryCount = hostCacheEntryCount,
-            CreatedHostAgentJobCount = createdHostAgentJobCount
-        };
     }
 
     private async Task<IReadOnlyList<ArtifactRetentionCandidateRow>> ReadArtifactRetentionCandidatesAsync(

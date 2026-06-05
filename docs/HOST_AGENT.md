@@ -63,23 +63,31 @@ that they are marked failed.
 
 The cleanup job types are:
 
-- `ArtifactStoreCleanup` - global job created by Portal maintenance after old
-  artifact rows have been deleted. The first HostAgent that claims it deletes
-  the corresponding payload folders below `HostAgent:CentralArtifactRoot`.
+- `ArtifactRetentionCleanup` - global maintenance job created by Portal. The
+  first HostAgent that claims it recomputes retention candidates, deletes only
+  unreferenced old artifact rows in the database, deletes central
+  `ArtifactStore` payload folders, and queues follow-up store/cache cleanup jobs
+  in the same database transaction as a crash-safe fallback.
+  This keeps the database and filesystem cleanup under the HostAgent security
+  context, which normally has the broader database and filesystem permissions
+  required for maintenance.
+- `ArtifactStoreCleanup` - lower-level global cleanup job for deleting specific
+  central artifact store paths below `HostAgent:CentralArtifactRoot`.
   HostAgent refuses to delete the artifact store root, `_available`, `.staging`,
   rooted paths, or paths that escape the configured root. It also skips a path if
   any remaining `omp.Artifacts` row still references the same relative path.
-- `ArtifactCacheCleanup` - host-specific job created by Portal maintenance, one
-  payload per host cache that may contain now-orphaned local artifact folders.
+- `ArtifactCacheCleanup` - host-specific job created by artifact retention
+  cleanup, one payload per host cache that may contain now-orphaned local
+  artifact folders.
   HostAgent only deletes paths inside `HostAgent:LocalArtifactCacheRoot`, refuses
   to delete the cache root or `.staging`, and skips paths that are still
   referenced by current host state.
 
-Portal protects artifact versions that are still referenced by desired state,
-current app deployment state, or active HostAgent runtime state before it
-deletes the central artifact rows. Portal does not need write access to the
-central `ArtifactStore` for the maintenance cleanup; physical deletion is done
-through HostAgent jobs.
+Artifact retention cleanup protects artifact versions that are still referenced
+by desired state, current app deployment state, host requirements, templates, or
+active HostAgent runtime state. Portal only previews candidates and queues the
+global job; the HostAgent recomputes the candidate set at execution time before
+it changes the database or filesystem.
 
 The job loop is enabled by default:
 

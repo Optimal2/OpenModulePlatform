@@ -716,26 +716,13 @@ public sealed class ArtifactRetentionPreview
 
 public sealed class ArtifactRetentionCleanupResult
 {
-    public int DeletedArtifactCount { get; init; }
+    public long QueuedHostAgentJobId { get; init; }
 
-    public int ArtifactStoreEntryCount { get; init; }
+    public int MaxVersionsToKeep { get; init; }
 
-    public int HostCacheEntryCount { get; init; }
+    public int CandidateCount { get; init; }
 
-    public int CreatedHostAgentJobCount { get; init; }
-
-    public IReadOnlyList<ArtifactRetentionCandidateRow> DeletedArtifacts { get; init; } = [];
-}
-
-public sealed class ArtifactRetentionDeletionResult
-{
-    public IReadOnlyList<ArtifactRetentionCandidateRow> DeletedArtifacts { get; init; } = [];
-
-    public int ArtifactStoreEntryCount { get; init; }
-
-    public int HostCacheEntryCount { get; init; }
-
-    public int CreatedHostAgentJobCount { get; init; }
+    public int DeletableCandidateCount { get; init; }
 }
 
 public sealed class HostAgentJobRow

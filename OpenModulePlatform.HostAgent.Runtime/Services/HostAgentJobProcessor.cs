@@ -61,6 +61,10 @@ public sealed class HostAgentJobProcessor
         {
             switch (job.JobType)
             {
+                case HostAgentJobTypes.ArtifactRetentionCleanup:
+                    await ProcessArtifactRetentionCleanupJobAsync(job, cancellationToken);
+                    break;
+
                 case HostAgentJobTypes.ArtifactCacheCleanup:
                     await ProcessArtifactCacheCleanupJobAsync(job, cancellationToken);
                     break;
@@ -87,6 +91,64 @@ public sealed class HostAgentJobProcessor
 
             await CompleteFailedAsync(job, ex.Message, cancellationToken);
         }
+    }
+
+    private async Task ProcessArtifactRetentionCleanupJobAsync(
+        HostAgentJobWorkItem job,
+        CancellationToken cancellationToken)
+    {
+        if (job.HostId.HasValue)
+        {
+            await CompleteFailedAsync(
+                job,
+                "Artifact retention cleanup jobs must be global jobs without a specific host target.",
+                cancellationToken);
+            return;
+        }
+
+        var payload = string.IsNullOrWhiteSpace(job.PayloadJson)
+            ? new ArtifactRetentionCleanupJobPayload()
+            : JsonSerializer.Deserialize<ArtifactRetentionCleanupJobPayload>(job.PayloadJson, JsonOptions)
+                ?? new ArtifactRetentionCleanupJobPayload();
+        var maxVersionsToKeep = Math.Clamp(payload.MaxVersionsToKeep, 1, 100);
+
+        var execution = await _repository.ExecuteArtifactRetentionCleanupAsync(
+            maxVersionsToKeep,
+            job.RequestedBy,
+            cancellationToken);
+
+        var storeCleanup = new ArtifactStoreCleanupJobResult();
+        var seenPaths = new HashSet<string>(GetPathComparer());
+        foreach (var entry in execution.ArtifactStoreEntries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await ProcessArtifactStoreCleanupEntryAsync(entry, storeCleanup, seenPaths, cancellationToken);
+        }
+
+        var result = new ArtifactRetentionCleanupJobResult
+        {
+            DeletedArtifactCount = execution.DeletedArtifacts.Count,
+            ArtifactStoreEntryCount = execution.ArtifactStoreEntryCount,
+            HostCacheEntryCount = execution.HostCacheEntryCount,
+            CreatedHostAgentJobCount = execution.CreatedHostAgentJobCount,
+            ArtifactStoreCleanup = storeCleanup,
+            DeletedArtifacts = execution.DeletedArtifacts.ToList()
+        };
+
+        var status = storeCleanup.ErrorCount > 0
+            ? HostAgentJobStatuses.Warning
+            : HostAgentJobStatuses.Succeeded;
+        var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+        var message = storeCleanup.ErrorCount > 0
+            ? "Artifact retention cleanup completed, but one or more artifact store entries could not be deleted."
+            : null;
+
+        await _repository.CompleteHostAgentJobAsync(
+            job.HostAgentJobId,
+            status,
+            resultJson,
+            message,
+            cancellationToken);
     }
 
     private async Task ProcessArtifactCacheCleanupJobAsync(

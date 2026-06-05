@@ -23,46 +23,36 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
-<section class="import-export-wizard top-gap" data-import-export-wizard data-initial-panel="@Model.ActivePanel">
-    <div class="workflow-step">
-        <div class="workflow-step__label">@L["Step 1"]</div>
-        <div class="workflow-step__header">
-            <div>
-                <h3>@L["Choose direction"]</h3>
-                <p class="muted">@L["Start by choosing whether you want to import something into this OMP installation or export something from it."]</p>
-            </div>
-        </div>
-
-        <div class="workflow-choice-grid workflow-choice-grid--primary">
-            <button type="button" class="workflow-choice" data-workflow-kind="import" aria-pressed="false">
-                <span class="workflow-choice__icon" aria-hidden="true">↓</span>
-                <span class="workflow-choice__content">
-                    <span class="workflow-choice__title">@L["Import"]</span>
-                    <span class="workflow-choice__text">@L["Add or update portable objects in this installation."]</span>
-                </span>
-            </button>
-            <button type="button" class="workflow-choice" data-workflow-kind="export" aria-pressed="false">
-                <span class="workflow-choice__icon" aria-hidden="true">↑</span>
-                <span class="workflow-choice__content">
-                    <span class="workflow-choice__title">@L["Export"]</span>
-                    <span class="workflow-choice__text">@L["Download portable objects from this installation."]</span>
-                </span>
-            </button>
-        </div>
+<section class="import-export-tabs top-gap" data-import-export-tabs data-initial-panel="@Model.ActivePanel">
+    <div class="tab-list" role="tablist" aria-label="@L["Import/export"]">
+        <button type="button" class="tab-button" role="tab" data-package-tab="import-universal" aria-controls="import-universal-panel">
+            <span aria-hidden="true">↓</span>
+            <span>@L["Import"]</span>
+        </button>
+        <button type="button" class="tab-button" role="tab" data-package-tab="export-universal" aria-controls="export-universal-panel">
+            <span aria-hidden="true">↑</span>
+            <span>@L["Export"]</span>
+        </button>
     </div>
 
-    <div class="workflow-empty-state" data-workflow-empty>
-        @L["Choose import or export to continue."]
-    </div>
-
-    <section class="card workflow-panel" data-workflow-panel="import-universal" hidden>
+    <section class="card import-export-panel" id="import-universal-panel" role="tabpanel" data-package-panel="import-universal" hidden>
         <h3>@L["Import universal module package"]</h3>
         <p class="muted">@L["Use this for the new universal package format with omp-universal-package.json and standard object folders. Each object is imported independently so one failed item does not stop the rest."]</p>
 
         <form method="post" enctype="multipart/form-data" class="form-grid top-gap">
             <div class="form-field">
-                <label asp-for="UniversalUploadInput.PackageFile">@L["Universal module package zip"]</label>
-                <input asp-for="UniversalUploadInput.PackageFile" type="file" accept=".zip,application/zip" />
+                <label asp-for="UniversalUploadInput.PackageFiles">@L["Universal module package zip"]</label>
+                <div class="file-drop-area" data-file-drop-area tabindex="0" role="button" aria-label="@L["Drop universal package files here or click to browse."]">
+                    <input asp-for="UniversalUploadInput.PackageFiles" type="file" accept=".zip,application/zip" multiple data-file-input />
+                    <div class="file-drop-area__content">
+                        <div class="file-drop-area__icon" aria-hidden="true">↓</div>
+                        <div>
+                            <strong>@L["Drop universal package files here"]</strong>
+                            <div class="muted">@L["or click anywhere in this area to browse for one or more zip files."]</div>
+                        </div>
+                    </div>
+                    <ul class="file-drop-area__list" data-file-list hidden></ul>
+                </div>
                 <div class="field-help">@L["Preview lets you choose individual items. Import all applies every supported item immediately."]</div>
             </div>
 
@@ -171,7 +161,7 @@
         }
     </section>
 
-    <section class="card workflow-panel" data-workflow-panel="export-universal" hidden>
+    <section class="card import-export-panel" id="export-universal-panel" role="tabpanel" data-package-panel="export-universal" hidden>
         <h3>@L["Export universal module package"]</h3>
         <p class="muted">@L["Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data."]</p>
 
@@ -293,52 +283,104 @@
 
 <script>
 (() => {
-    const root = document.querySelector('[data-import-export-wizard]');
+    const root = document.querySelector('[data-import-export-tabs]');
     if (!root) {
         return;
     }
 
-    const kindButtons = Array.from(root.querySelectorAll('[data-workflow-kind]'));
-    const panels = Array.from(root.querySelectorAll('[data-workflow-panel]'));
-    const emptyState = root.querySelector('[data-workflow-empty]');
+    const tabs = Array.from(root.querySelectorAll('[data-package-tab]'));
+    const panels = Array.from(root.querySelectorAll('[data-package-panel]'));
+    const dropAreas = Array.from(root.querySelectorAll('[data-file-drop-area]'));
 
-    const setPressed = (buttons, activeButton) => {
-        buttons.forEach(button => {
-            button.setAttribute('aria-pressed', button === activeButton ? 'true' : 'false');
+    const setSelected = (activeTab) => {
+        tabs.forEach(button => {
+            const isActive = button === activeTab;
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            button.tabIndex = isActive ? 0 : -1;
         });
     };
 
     const showPanel = panelName => {
-        const panel = panels.find(candidate => candidate.dataset.workflowPanel === panelName);
+        const panel = panels.find(candidate => candidate.dataset.packagePanel === panelName)
+            || panels.find(candidate => candidate.dataset.packagePanel === 'import-universal');
         if (!panel) {
             return;
         }
 
-        const kind = panelName.startsWith('export-') ? 'export' : 'import';
-        const kindButton = kindButtons.find(button => button.dataset.workflowKind === kind);
-        if (kindButton) {
-            setPressed(kindButtons, kindButton);
+        const tab = tabs.find(button => button.dataset.packageTab === panel.dataset.packagePanel);
+        if (tab) {
+            setSelected(tab);
         }
 
         panels.forEach(candidate => {
             candidate.hidden = candidate !== panel;
         });
+    };
 
-        if (emptyState) {
-            emptyState.hidden = true;
+    tabs.forEach(button => {
+        button.addEventListener('click', () => showPanel(button.dataset.packageTab));
+    });
+
+    dropAreas.forEach(area => {
+        const input = area.querySelector('[data-file-input]');
+        const list = area.querySelector('[data-file-list]');
+        if (!input || !list) {
+            return;
         }
-    };
 
-    const showKind = kind => {
-        showPanel(kind === 'export' ? 'export-universal' : 'import-universal');
-    };
+        const renderFiles = () => {
+            list.replaceChildren();
+            const files = Array.from(input.files || []);
+            list.hidden = files.length === 0;
+            files.forEach(file => {
+                const item = document.createElement('li');
+                item.textContent = file.name;
+                list.appendChild(item);
+            });
+        };
 
-    kindButtons.forEach(button => {
-        button.addEventListener('click', () => showKind(button.dataset.workflowKind));
+        area.addEventListener('click', event => {
+            if (event.target === input) {
+                return;
+            }
+            input.click();
+        });
+
+        area.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                input.click();
+            }
+        });
+
+        area.addEventListener('dragover', event => {
+            event.preventDefault();
+            area.classList.add('is-drag-over');
+        });
+
+        area.addEventListener('dragleave', event => {
+            if (!area.contains(event.relatedTarget)) {
+                area.classList.remove('is-drag-over');
+            }
+        });
+
+        area.addEventListener('drop', event => {
+            event.preventDefault();
+            area.classList.remove('is-drag-over');
+            if (event.dataTransfer?.files?.length) {
+                input.files = event.dataTransfer.files;
+                renderFiles();
+            }
+        });
+
+        input.addEventListener('change', renderFiles);
+        renderFiles();
     });
 
     if (root.dataset.initialPanel) {
         showPanel(root.dataset.initialPanel);
+    } else {
+        showPanel('import-universal');
     }
 })();
 </script>

@@ -84,19 +84,17 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return Page();
         }
 
-        var deletion = await _repo.DeleteOldArtifactVersionsAsync(
+        var jobId = await _repo.QueueArtifactRetentionCleanupAsync(
             Input.MaxVersionsToKeep,
             User.Identity?.Name,
             ct);
-        var deleted = deletion.DeletedArtifacts;
 
         CleanupResult = new ArtifactRetentionCleanupResult
         {
-            DeletedArtifactCount = deleted.Count,
-            ArtifactStoreEntryCount = deletion.ArtifactStoreEntryCount,
-            HostCacheEntryCount = deletion.HostCacheEntryCount,
-            CreatedHostAgentJobCount = deletion.CreatedHostAgentJobCount,
-            DeletedArtifacts = deleted
+            QueuedHostAgentJobId = jobId,
+            MaxVersionsToKeep = Input.MaxVersionsToKeep,
+            CandidateCount = Preview.CandidateCount,
+            DeletableCandidateCount = Preview.DeletableCandidateCount
         };
 
         Preview = await LoadPreviewCoreAsync(ct);
