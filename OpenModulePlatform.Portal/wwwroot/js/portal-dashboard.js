@@ -4090,6 +4090,8 @@
 
         input.dataset.dashboardWidgetPickerFilterBound = 'true';
         input.addEventListener('input', () => applyWidgetPickerFilter(picker));
+        input.addEventListener('search', () => applyWidgetPickerFilter(picker));
+        input.addEventListener('keyup', () => applyWidgetPickerFilter(picker));
         applyWidgetPickerFilter(picker);
     }
 
@@ -4112,6 +4114,9 @@
         options.forEach((option) => {
             const isVisible = query.length === 0 || getWidgetPickerOptionSearchText(option).includes(query);
             option.hidden = !isVisible;
+            option.classList.toggle('is-filter-hidden', !isVisible);
+            option.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+            option.tabIndex = isVisible ? 0 : -1;
             if (isVisible) {
                 visibleCount += 1;
             }
