@@ -131,6 +131,27 @@ WHERE widget_id = @widget_id;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task UpdateWidgetDescriptionAsync(
+        int widgetId,
+        string? description,
+        CancellationToken ct)
+    {
+        var cleanedDescription = CleanOptionalText(description, "description", 1000);
+        const string sql = @"
+UPDATE omp_portal.widgets
+SET description = @description,
+    modified_at = SYSUTCDATETIME()
+WHERE widget_id = @widget_id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+        cmd.Parameters.Add("@description", SqlDbType.NVarChar, 1000).Value =
+            cleanedDescription is null ? DBNull.Value : cleanedDescription;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<(byte[] Content, string FileName)> ExportAsync(
         string? moduleKey,
         CancellationToken ct)
