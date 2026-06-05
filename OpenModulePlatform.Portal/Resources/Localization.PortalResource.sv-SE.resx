@@ -1893,6 +1893,7 @@
   <data name="Add widget" xml:space="preserve"><value>Lägg till widget</value></data>
   <data name="Remove widget" xml:space="preserve"><value>Ta bort widget</value></data>
   <data name="No widgets are available." xml:space="preserve"><value>Inga widgets är tillgängliga.</value></data>
+  <data name="No matching widgets." xml:space="preserve"><value>Inga matchande widgets.</value></data>
   <data name="Close" xml:space="preserve"><value>Stäng</value></data>
   <data name="Reset changes" xml:space="preserve"><value>Återställ ändringar</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Återställ layout</value></data>
