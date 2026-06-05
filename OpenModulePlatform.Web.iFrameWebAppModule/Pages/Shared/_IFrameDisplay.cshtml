@@ -1,0 +1,21 @@
+@model OpenModulePlatform.Web.iFrameWebAppModule.ViewModels.IFrameDisplayModel
+
+@if (!string.IsNullOrWhiteSpace(Model.SelectedUrl))
+{
+    <div class="iframe-shell">
+        <iframe
+            class="iframe-shell__frame"
+            src="@Model.SelectedUrl"
+            title="@Model.SelectedDisplayName"
+            loading="eager"
+            referrerpolicy="strict-origin-when-cross-origin">
+        </iframe>
+    </div>
+}
+else
+{
+    <section class="card iframe-message">
+        <h2>@L["iFrame unavailable"]</h2>
+        <p class="muted">@Model.SelectedError</p>
+    </section>
+}

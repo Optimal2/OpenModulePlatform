@@ -34,6 +34,7 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
     public string SelectedDisplayName { get; private set; } = string.Empty;
     public string? SelectedError { get; private set; }
     public IReadOnlyList<IFrameUrlButton> UrlButtons { get; private set; } = [];
+    public IFrameDisplayModel Display => new(SelectedUrl, SelectedDisplayName, SelectedError);
 
     public async Task<IActionResult> OnGet(string? setKey, int? urlId, CancellationToken ct)
     {
@@ -104,7 +105,7 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
         return Page();
     }
 
-    private static bool IsAllowedForRole(string? allowedRoles, string? activeRoleName)
+    internal static bool IsAllowedForRole(string? allowedRoles, string? activeRoleName)
     {
         if (string.IsNullOrWhiteSpace(allowedRoles))
         {

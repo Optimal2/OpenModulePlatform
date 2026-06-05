@@ -80,4 +80,47 @@ ORDER BY usu.[sort_order], u.[id];";
 
         return rows;
     }
+
+    public async Task<IFrameUrlRow?> GetStandaloneUrlAsync(int urlId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT u.[id],
+       u.[url],
+       u.[displayname],
+       u.[allowed_roles],
+       u.[enabled],
+       CAST(CASE WHEN EXISTS
+       (
+           SELECT 1
+           FROM omp_iframe.url_set_urls usu
+           INNER JOIN omp_iframe.url_sets us ON us.[id] = usu.[url_set_id]
+           WHERE usu.[url_id] = u.[id]
+             AND us.[enabled] = 1
+       )
+       THEN 1 ELSE 0 END AS bit) AS IsInEnabledUrlSet
+FROM omp_iframe.urls u
+WHERE u.[id] = @UrlId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@UrlId", urlId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new IFrameUrlRow
+        {
+            Id = rdr.GetInt32(0),
+            Url = rdr.GetString(1),
+            DisplayName = rdr.GetString(2),
+            AllowedRoles = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+            Enabled = rdr.GetBoolean(4),
+            IsInEnabledUrlSet = rdr.GetBoolean(5)
+        };
+    }
 }

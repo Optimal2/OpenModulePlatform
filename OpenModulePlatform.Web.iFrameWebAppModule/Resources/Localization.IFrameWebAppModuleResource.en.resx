@@ -13,4 +13,6 @@
   <data name="iFrame unavailable" xml:space="preserve"><value>iFrame unavailable</value></data>
   <data name="The selected URL set is not configured." xml:space="preserve"><value>The selected URL set is not configured.</value></data>
   <data name="The selected URL set has no configured URLs." xml:space="preserve"><value>The selected URL set has no configured URLs.</value></data>
+  <data name="Standalone view" xml:space="preserve"><value>Standalone view</value></data>
+  <data name="The selected URL is not linked to an enabled URL set." xml:space="preserve"><value>The selected URL is not linked to an enabled URL set.</value></data>
 </root>

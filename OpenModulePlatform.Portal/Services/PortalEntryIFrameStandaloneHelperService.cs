@@ -1,0 +1,155 @@
+using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Web.Shared.Services;
+using Microsoft.Data.SqlClient;
+
+namespace OpenModulePlatform.Portal.Services;
+
+public sealed class PortalEntryIFrameStandaloneHelperService
+{
+    private readonly SqlConnectionFactory _db;
+
+    public PortalEntryIFrameStandaloneHelperService(SqlConnectionFactory db)
+    {
+        _db = db;
+    }
+
+    public async Task<PortalEntryIFrameStandaloneHelperOptions> GetOptionsAsync(CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await HasIFrameTablesAsync(conn, ct))
+        {
+            return new PortalEntryIFrameStandaloneHelperOptions([], []);
+        }
+
+        var apps = await GetAppOptionsAsync(conn, ct);
+        var urls = await GetUrlOptionsAsync(conn, ct);
+
+        return new PortalEntryIFrameStandaloneHelperOptions(apps, urls);
+    }
+
+    private static async Task<bool> HasIFrameTablesAsync(SqlConnection conn, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CAST(CASE
+    WHEN OBJECT_ID(N'omp_iframe.urls', N'U') IS NOT NULL
+     AND OBJECT_ID(N'omp_iframe.url_sets', N'U') IS NOT NULL
+     AND OBJECT_ID(N'omp_iframe.url_set_urls', N'U') IS NOT NULL
+    THEN 1 ELSE 0 END AS bit);";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task<IReadOnlyList<PortalEntryIFrameStandaloneAppOption>> GetAppOptionsAsync(
+        SqlConnection conn,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ai.AppInstanceId,
+       ai.AppInstanceKey,
+       ai.DisplayName,
+       ai.RoutePath
+FROM omp.AppInstances ai
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE ai.IsEnabled = 1
+  AND ai.IsAllowed = 1
+  AND a.AppType = N'WebApp'
+  AND (
+      m.ModuleKey = N'iframe_webapp'
+      OR a.AppKey = N'iframe_webapp_webapp'
+      OR ai.AppInstanceKey = N'iframe_webapp_webapp'
+  )
+ORDER BY ai.SortOrder,
+         ai.DisplayName;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        var rows = new List<PortalEntryIFrameStandaloneAppOption>();
+        while (await rdr.ReadAsync(ct))
+        {
+            var routePath = rdr.IsDBNull(3) ? null : rdr.GetString(3);
+            var basePath = BuildInternalBasePath(routePath);
+            if (basePath is null)
+            {
+                continue;
+            }
+
+            rows.Add(new PortalEntryIFrameStandaloneAppOption(
+                rdr.GetGuid(0),
+                rdr.GetString(1),
+                rdr.GetString(2),
+                basePath));
+        }
+
+        return rows;
+    }
+
+    private static async Task<IReadOnlyList<PortalEntryIFrameStandaloneUrlOption>> GetUrlOptionsAsync(
+        SqlConnection conn,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT u.[id],
+       u.[displayname],
+       us.[displayname] AS UrlSetDisplayName
+FROM omp_iframe.urls u
+INNER JOIN omp_iframe.url_set_urls usu ON usu.[url_id] = u.[id]
+INNER JOIN omp_iframe.url_sets us ON us.[id] = usu.[url_set_id]
+WHERE u.[enabled] = 1
+  AND us.[enabled] = 1
+ORDER BY u.[displayname],
+         us.[displayname];";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        var rawRows = new List<(int UrlId, string DisplayName, string UrlSetDisplayName)>();
+        while (await rdr.ReadAsync(ct))
+        {
+            rawRows.Add((
+                rdr.GetInt32(0),
+                rdr.GetString(1),
+                rdr.GetString(2)));
+        }
+
+        return rawRows
+            .GroupBy(row => row.UrlId)
+            .Select(group =>
+            {
+                var first = group.First();
+                var setNames = string.Join(
+                    ", ",
+                    group
+                        .Select(row => row.UrlSetDisplayName)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(name => name));
+
+                return new PortalEntryIFrameStandaloneUrlOption(
+                    first.UrlId,
+                    first.DisplayName,
+                    setNames);
+            })
+            .OrderBy(option => option.DisplayName)
+            .ThenBy(option => option.UrlId)
+            .ToList();
+    }
+
+    private static string? BuildInternalBasePath(string? routePath)
+    {
+        var trimmed = routePath?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)
+            || Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        {
+            return null;
+        }
+
+        var normalized = trimmed.Trim('/');
+        return string.IsNullOrWhiteSpace(normalized)
+            ? null
+            : "/" + normalized;
+    }
+}
