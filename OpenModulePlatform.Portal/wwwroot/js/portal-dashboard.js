@@ -4251,35 +4251,55 @@
 
     function bindWidgetPickerFilter(picker) {
         const input = picker?.querySelector('[data-widget-picker-filter]');
-        if (!input || input.dataset.dashboardWidgetPickerFilterBound === 'true') {
+        const moduleSelect = picker?.querySelector('[data-widget-picker-module-filter]');
+        const authorSelect = picker?.querySelector('[data-widget-picker-author-filter]');
+        if (!picker || picker.dataset.dashboardWidgetPickerFilterBound === 'true' || (!input && !moduleSelect && !authorSelect)) {
             return;
         }
 
-        input.dataset.dashboardWidgetPickerFilterBound = 'true';
-        input.addEventListener('input', () => applyWidgetPickerFilter(picker));
-        input.addEventListener('search', () => applyWidgetPickerFilter(picker));
-        input.addEventListener('keyup', () => applyWidgetPickerFilter(picker));
+        picker.dataset.dashboardWidgetPickerFilterBound = 'true';
+        input?.addEventListener('input', () => applyWidgetPickerFilter(picker));
+        input?.addEventListener('search', () => applyWidgetPickerFilter(picker));
+        input?.addEventListener('keyup', () => applyWidgetPickerFilter(picker));
+        moduleSelect?.addEventListener('change', () => applyWidgetPickerFilter(picker));
+        authorSelect?.addEventListener('change', () => applyWidgetPickerFilter(picker));
         applyWidgetPickerFilter(picker);
     }
 
     function resetWidgetPickerFilter(picker) {
         const input = picker?.querySelector('[data-widget-picker-filter]');
-        if (!input) {
-            return;
+        const moduleSelect = picker?.querySelector('[data-widget-picker-module-filter]');
+        const authorSelect = picker?.querySelector('[data-widget-picker-author-filter]');
+        if (input) {
+            input.value = '';
         }
 
-        input.value = '';
+        if (moduleSelect) {
+            moduleSelect.value = '';
+        }
+
+        if (authorSelect) {
+            authorSelect.value = '';
+        }
+
         applyWidgetPickerFilter(picker);
     }
 
     function applyWidgetPickerFilter(picker) {
         const input = picker?.querySelector('[data-widget-picker-filter]');
+        const moduleSelect = picker?.querySelector('[data-widget-picker-module-filter]');
+        const authorSelect = picker?.querySelector('[data-widget-picker-author-filter]');
         const query = normalizeSearchText(input?.value || '');
+        const moduleFilter = normalizeSearchText(moduleSelect?.value || '');
+        const authorFilter = normalizeSearchText(authorSelect?.value || '');
         const options = Array.from(picker?.querySelectorAll('[data-widget-option]') || []);
         let visibleCount = 0;
 
         options.forEach((option) => {
-            const isVisible = query.length === 0 || getWidgetPickerOptionSearchText(option).includes(query);
+            const titleMatches = query.length === 0 || getWidgetPickerOptionSearchText(option).includes(query);
+            const moduleMatches = moduleFilter.length === 0 || normalizeSearchText(option?.dataset?.widgetModuleKey || '') === moduleFilter;
+            const authorMatches = authorFilter.length === 0 || normalizeSearchText(option?.dataset?.widgetAuthor || '') === authorFilter;
+            const isVisible = titleMatches && moduleMatches && authorMatches;
             option.hidden = !isVisible;
             option.classList.toggle('is-filter-hidden', !isVisible);
             option.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
@@ -4291,7 +4311,8 @@
 
         const empty = picker?.querySelector('[data-widget-picker-empty]');
         if (empty) {
-            empty.hidden = query.length === 0 || visibleCount > 0 || options.length === 0;
+            const hasActiveFilter = query.length > 0 || moduleFilter.length > 0 || authorFilter.length > 0;
+            empty.hidden = !hasActiveFilter || visibleCount > 0 || options.length === 0;
         }
 
         const selected = getSelectedWidgetPickerOption(picker);

@@ -544,6 +544,20 @@
             }
             else
             {
+                var widgetModuleFilters = Model.AvailableWidgets
+                    .Select(widget => widget.ModuleKey?.Trim())
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .GroupBy(value => value!, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.Key)
+                    .OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+                var widgetAuthorFilters = Model.AvailableWidgets
+                    .Select(widget => widget.Author?.Trim())
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .GroupBy(value => value!, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.Key)
+                    .OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
                 <div class="dashboard-widget-picker__layout">
                     <div class="dashboard-widget-picker__sidebar">
                         <div class="dashboard-widget-picker__search">
@@ -555,7 +569,28 @@
                                    aria-label="@L["Search widgets"]"
                                    autocomplete="off" />
                         </div>
-                        <div class="dashboard-widget-picker__filters" aria-hidden="true"></div>
+                        <div class="dashboard-widget-picker__filters">
+                            <label>
+                                <span class="visually-hidden">@L["All modules"]</span>
+                                <select data-widget-picker-module-filter aria-label="@L["All modules"]">
+                                    <option value="">@L["All modules"]</option>
+                                    @foreach (var moduleKey in widgetModuleFilters)
+                                    {
+                                        <option value="@moduleKey">@moduleKey</option>
+                                    }
+                                </select>
+                            </label>
+                            <label>
+                                <span class="visually-hidden">@L["All authors"]</span>
+                                <select data-widget-picker-author-filter aria-label="@L["All authors"]">
+                                    <option value="">@L["All authors"]</option>
+                                    @foreach (var author in widgetAuthorFilters)
+                                    {
+                                        <option value="@author">@author</option>
+                                    }
+                                </select>
+                            </label>
+                        </div>
                         <div class="empty-state dashboard-widget-picker__empty" data-widget-picker-empty hidden>@L["No widgets found"]</div>
                         <div class="dashboard-widget-picker__list" role="listbox" aria-label="@L["Add widget"]">
                             @foreach (var widget in Model.AvailableWidgets)

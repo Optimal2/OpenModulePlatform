@@ -4526,7 +4526,27 @@ body.dashboard-widget-picker-open {
 }
 
 .dashboard-widget-picker__filters {
-    min-height: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px 14px 0;
+}
+
+.dashboard-widget-picker__filters select {
+    width: 100%;
+    min-height: 36px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.dashboard-widget-picker__filters select:focus {
+    border-color: var(--link);
+    outline: 2px solid rgba(11, 87, 208, 0.18);
+    outline-offset: 1px;
 }
 
 .dashboard-widget-picker__empty {

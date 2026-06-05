@@ -1808,6 +1808,7 @@
   <data name="Select a widget for details and preview." xml:space="preserve"><value>Select a widget for details and preview.</value></data>
   <data name="No widgets found" xml:space="preserve"><value>No widgets found</value></data>
   <data name="Add selected widget" xml:space="preserve"><value>Add selected widget</value></data>
+  <data name="All authors" xml:space="preserve"><value>All authors</value></data>
   <data name="Close" xml:space="preserve"><value>Close</value></data>
   <data name="Reset changes" xml:space="preserve"><value>Reset changes</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Reset layout</value></data>
