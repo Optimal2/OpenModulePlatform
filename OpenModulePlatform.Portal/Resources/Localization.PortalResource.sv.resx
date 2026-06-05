@@ -1912,6 +1912,7 @@
   <data name="Select a widget for details and preview." xml:space="preserve"><value>Välj en widget för att se information och förhandsvisning.</value></data>
   <data name="No widgets found" xml:space="preserve"><value>Inga widgets hittades</value></data>
   <data name="Add selected widget" xml:space="preserve"><value>Lägg till vald widget</value></data>
+  <data name="All authors" xml:space="preserve"><value>Alla författare</value></data>
   <data name="Close" xml:space="preserve"><value>Stäng</value></data>
   <data name="Reset changes" xml:space="preserve"><value>Återställ ändringar</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Återställ layout</value></data>
