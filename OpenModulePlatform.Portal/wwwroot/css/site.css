@@ -4441,6 +4441,10 @@ body.dashboard-widget-picker-open {
     overflow: hidden;
 }
 
+.dashboard-widget-picker:not([open]) {
+    display: none;
+}
+
 .dashboard-widget-picker::backdrop {
     background: rgba(23, 32, 51, 0.38);
 }
