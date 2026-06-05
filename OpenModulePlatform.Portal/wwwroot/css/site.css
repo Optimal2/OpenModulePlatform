@@ -4517,6 +4517,10 @@ a.dashboard-role-list__item:focus-visible {
     text-align: left;
 }
 
+.dashboard-widget-option.is-filter-hidden {
+    display: none !important;
+}
+
 .dashboard-widget-option:hover,
 .dashboard-widget-option:focus-visible {
     border-color: var(--link);
