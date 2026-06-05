@@ -2380,7 +2380,7 @@ button {
     scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
 }
 
-.dashboard-widget[data-widget-payload="admin-overview"][data-widget-int-data="1"] .dashboard-widget__admin-overview {
+.dashboard-widget[data-widget-payload="admin-overview"][data-widget-preset-zoom="small"] .dashboard-widget__admin-overview {
     --dashboard-admin-overview-card-min: 96px;
     --dashboard-admin-overview-gap: 6px;
     --dashboard-admin-overview-card-padding: 7px;
@@ -2389,7 +2389,7 @@ button {
     --dashboard-admin-overview-metric-size: 1.08rem;
 }
 
-.dashboard-widget[data-widget-payload="admin-overview"][data-widget-int-data="2"] .dashboard-widget__admin-overview {
+.dashboard-widget[data-widget-payload="admin-overview"][data-widget-preset-zoom="large"] .dashboard-widget__admin-overview {
     --dashboard-admin-overview-card-min: 148px;
     --dashboard-admin-overview-gap: 12px;
     --dashboard-admin-overview-card-padding: 14px;
@@ -2633,8 +2633,15 @@ button {
 }
 
 .dashboard-role-list {
+    --dashboard-role-list-gap: 8px;
+    --dashboard-role-list-item-min-height: 64px;
+    --dashboard-role-list-item-padding-block: 10px;
+    --dashboard-role-list-item-padding-inline: 12px;
+    --dashboard-role-list-name-size: 1rem;
+    --dashboard-role-list-description-size: 0.82rem;
+    --dashboard-role-list-active-size: 0.78rem;
     display: grid;
-    gap: 8px;
+    gap: var(--dashboard-role-list-gap);
     align-content: start;
     height: 100%;
     min-height: 0;
@@ -2659,8 +2666,8 @@ button {
 .dashboard-role-list__item {
     display: grid;
     gap: 3px;
-    min-height: 64px;
-    padding: 10px 12px;
+    min-height: var(--dashboard-role-list-item-min-height);
+    padding: var(--dashboard-role-list-item-padding-block) var(--dashboard-role-list-item-padding-inline);
     color: var(--text);
     text-decoration: none;
 }
@@ -2681,19 +2688,40 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-role-list__name {
+    font-size: var(--dashboard-role-list-name-size);
     font-weight: 700;
 }
 
 .dashboard-role-list__description {
     color: var(--text-muted);
-    font-size: 0.82rem;
+    font-size: var(--dashboard-role-list-description-size);
 }
 
 .dashboard-role-list__active {
     color: #0b57d0;
-    font-size: 0.78rem;
+    font-size: var(--dashboard-role-list-active-size);
     font-weight: 700;
     text-transform: uppercase;
+}
+
+.dashboard-widget[data-widget-payload="user-roles"][data-widget-preset-zoom="small"] .dashboard-role-list {
+    --dashboard-role-list-gap: 6px;
+    --dashboard-role-list-item-min-height: 50px;
+    --dashboard-role-list-item-padding-block: 7px;
+    --dashboard-role-list-item-padding-inline: 9px;
+    --dashboard-role-list-name-size: 0.88rem;
+    --dashboard-role-list-description-size: 0.72rem;
+    --dashboard-role-list-active-size: 0.68rem;
+}
+
+.dashboard-widget[data-widget-payload="user-roles"][data-widget-preset-zoom="large"] .dashboard-role-list {
+    --dashboard-role-list-gap: 12px;
+    --dashboard-role-list-item-min-height: 82px;
+    --dashboard-role-list-item-padding-block: 14px;
+    --dashboard-role-list-item-padding-inline: 16px;
+    --dashboard-role-list-name-size: 1.16rem;
+    --dashboard-role-list-description-size: 0.94rem;
+    --dashboard-role-list-active-size: 0.88rem;
 }
 
 .dashboard-role-list__empty {
@@ -2706,8 +2734,15 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-content-list {
+    --dashboard-content-list-gap: 8px;
+    --dashboard-content-list-item-min-height: 62px;
+    --dashboard-content-list-item-padding-block: 10px;
+    --dashboard-content-list-item-padding-inline: 12px;
+    --dashboard-content-list-item-radius: 8px;
+    --dashboard-content-list-title-size: 1rem;
+    --dashboard-content-list-meta-size: 0.8rem;
     display: grid;
-    gap: 8px;
+    gap: var(--dashboard-content-list-gap);
     align-content: start;
     height: 100%;
     min-height: 0;
@@ -2719,10 +2754,10 @@ a.dashboard-role-list__item:focus-visible {
 
 .dashboard-content-list__item {
     display: grid;
-    min-height: 62px;
-    padding: 10px 12px;
+    min-height: var(--dashboard-content-list-item-min-height);
+    padding: var(--dashboard-content-list-item-padding-block) var(--dashboard-content-list-item-padding-inline);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--dashboard-content-list-item-radius);
     background: var(--surface);
     color: var(--text);
     text-decoration: none;
@@ -2751,13 +2786,34 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-content-list__title {
+    font-size: var(--dashboard-content-list-title-size);
     font-weight: 700;
 }
 
 .dashboard-content-list__context,
 .dashboard-content-list__slug {
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: var(--dashboard-content-list-meta-size);
+}
+
+.dashboard-widget[data-widget-payload="content-pages"][data-widget-preset-zoom="small"] .dashboard-content-list {
+    --dashboard-content-list-gap: 6px;
+    --dashboard-content-list-item-min-height: 48px;
+    --dashboard-content-list-item-padding-block: 7px;
+    --dashboard-content-list-item-padding-inline: 9px;
+    --dashboard-content-list-item-radius: 7px;
+    --dashboard-content-list-title-size: 0.88rem;
+    --dashboard-content-list-meta-size: 0.7rem;
+}
+
+.dashboard-widget[data-widget-payload="content-pages"][data-widget-preset-zoom="large"] .dashboard-content-list {
+    --dashboard-content-list-gap: 12px;
+    --dashboard-content-list-item-min-height: 80px;
+    --dashboard-content-list-item-padding-block: 14px;
+    --dashboard-content-list-item-padding-inline: 16px;
+    --dashboard-content-list-item-radius: 10px;
+    --dashboard-content-list-title-size: 1.14rem;
+    --dashboard-content-list-meta-size: 0.92rem;
 }
 
 .dashboard-content-list__empty {
@@ -3254,32 +3310,56 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-date-widget {
+    --dashboard-date-widget-padding: 8px;
+    --dashboard-date-widget-week-size: 0.92rem;
+    --dashboard-date-widget-weekday-size: 1.45rem;
+    --dashboard-date-widget-date-size: 0.98rem;
+    --dashboard-date-widget-weekday-margin: 4px;
+    --dashboard-date-widget-date-margin: 6px;
     display: grid;
     align-content: center;
     height: 100%;
     min-height: 0;
-    padding: 8px;
+    padding: var(--dashboard-date-widget-padding);
 }
 
 .dashboard-date-widget__week {
     color: #0b57d0;
-    font-size: 0.92rem;
+    font-size: var(--dashboard-date-widget-week-size);
     font-weight: 750;
     line-height: 1.2;
 }
 
 .dashboard-date-widget__weekday {
-    margin-top: 4px;
+    margin-top: var(--dashboard-date-widget-weekday-margin);
     color: var(--text);
-    font-size: 1.45rem;
+    font-size: var(--dashboard-date-widget-weekday-size);
     font-weight: 800;
     line-height: 1.1;
 }
 
 .dashboard-date-widget__date {
-    margin-top: 6px;
+    margin-top: var(--dashboard-date-widget-date-margin);
     color: var(--text-muted);
-    font-size: 0.98rem;
+    font-size: var(--dashboard-date-widget-date-size);
+}
+
+.dashboard-widget[data-widget-payload="weekday-date"][data-widget-preset-zoom="small"] .dashboard-date-widget {
+    --dashboard-date-widget-padding: 6px;
+    --dashboard-date-widget-week-size: 0.78rem;
+    --dashboard-date-widget-weekday-size: 1.08rem;
+    --dashboard-date-widget-date-size: 0.8rem;
+    --dashboard-date-widget-weekday-margin: 3px;
+    --dashboard-date-widget-date-margin: 4px;
+}
+
+.dashboard-widget[data-widget-payload="weekday-date"][data-widget-preset-zoom="large"] .dashboard-date-widget {
+    --dashboard-date-widget-padding: 12px;
+    --dashboard-date-widget-week-size: 1.08rem;
+    --dashboard-date-widget-weekday-size: 1.88rem;
+    --dashboard-date-widget-date-size: 1.18rem;
+    --dashboard-date-widget-weekday-margin: 6px;
+    --dashboard-date-widget-date-margin: 8px;
 }
 
 .dashboard-music-player {
