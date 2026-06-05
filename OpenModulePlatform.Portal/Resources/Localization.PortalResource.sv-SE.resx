@@ -2438,4 +2438,11 @@
   <data name="The HostAgent that claims the global retention job deletes database rows and central ArtifactStore payloads, then queues host-specific cache cleanup jobs. Portal only creates the job request." xml:space="preserve"><value>Den HostAgent som plockar det globala retention-jobbet tar bort databasrader och centrala ArtifactStore-payloads och köar sedan host-specifika cacherensningsjobb. Portal skapar bara jobbförfrågan.</value></data>
   <data name="Queue a HostAgent job to delete unreferenced old artifact versions?" xml:space="preserve"><value>Köa ett HostAgent-jobb för att ta bort orefererade gamla artefaktversioner?</value></data>
   <data name="Queue artifact cleanup" xml:space="preserve"><value>Köa artefaktrensning</value></data>
+  <data name="iFrame standalone entry" xml:space="preserve"><value>Fristående iFrame-post</value></data>
+  <data name="Select iFrame app" xml:space="preserve"><value>Välj iFrame-app</value></data>
+  <data name="Select iFrame URL" xml:space="preserve"><value>Välj iFrame-URL</value></data>
+  <data name="No iFrame URLs available" xml:space="preserve"><value>Inga iFrame-URL:er tillgängliga</value></data>
+  <data name="No iFrame app instances are available." xml:space="preserve"><value>Inga iFrame-appinstanser är tillgängliga.</value></data>
+  <data name="Use selected iFrame URL" xml:space="preserve"><value>Använd vald iFrame-URL</value></data>
+  <data name="Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually." xml:space="preserve"><value>Välj en iFrame-app och URL för att fylla target URL-fältet. Du kan fortfarande redigera target URL manuellt.</value></data>
 </root>
