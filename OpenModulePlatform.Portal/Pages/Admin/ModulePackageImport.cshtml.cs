@@ -56,7 +56,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     public UniversalPackagePreviewResult? UniversalPreview { get; private set; }
 
-    public string ActivePanel { get; private set; } = string.Empty;
+    public string ActivePanel { get; private set; } = "import-universal";
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -96,13 +96,24 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         SetTitles("Import/export");
         try
         {
-            var result = await _packages.ImportUniversalPackageUploadAsync(
-                UniversalUploadInput.PackageFile,
-                CreateOptions(UniversalUploadInput),
-                UniversalUploadInput.ReplaceExistingConfigObjects,
-                ct);
+            var files = GetSelectedPackageFiles();
+            if (files.Count == 0)
+            {
+                throw new InvalidOperationException(T("Select at least one universal module package zip."));
+            }
 
-            StatusMessage = BuildUniversalImportStatus(result);
+            var results = new List<UniversalPackageImportResult>(files.Count);
+            foreach (var file in files)
+            {
+                var result = await _packages.ImportUniversalPackageUploadAsync(
+                    file,
+                    CreateOptions(UniversalUploadInput),
+                    UniversalUploadInput.ReplaceExistingConfigObjects,
+                    ct);
+                results.Add(result);
+            }
+
+            StatusMessage = BuildUniversalImportStatus(results);
             return RedirectToPage("/Admin/ModulePackageImport");
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
@@ -125,8 +136,19 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         SetTitles("Import/export");
         try
         {
+            var files = GetSelectedPackageFiles();
+            if (files.Count == 0)
+            {
+                throw new InvalidOperationException(T("Select one universal module package zip to preview."));
+            }
+
+            if (files.Count > 1)
+            {
+                throw new InvalidOperationException(T("Preview supports one universal module package at a time. Use Import all to import multiple packages."));
+            }
+
             UniversalPreview = await _packages.StageUniversalPackageUploadForPreviewAsync(
-                UniversalUploadInput.PackageFile,
+                files[0],
                 ct);
             UniversalStagedInput = UniversalStagedImportInputModel.From(UniversalUploadInput, UniversalPreview.Token);
             ActivePanel = "import-universal";
@@ -409,6 +431,42 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         return message;
     }
 
+    private string BuildUniversalImportStatus(IReadOnlyList<UniversalPackageImportResult> results)
+    {
+        if (results.Count == 1)
+        {
+            return BuildUniversalImportStatus(results[0]);
+        }
+
+        var message = string.Format(
+            T("Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
+            results.Count,
+            results.Sum(static result => result.ImportedCount),
+            results.Sum(static result => result.SkippedCount),
+            results.Sum(static result => result.FailedCount));
+
+        var detailRows = results
+            .Select(result =>
+            {
+                var packageName = string.IsNullOrWhiteSpace(result.PackageKey)
+                    ? result.SourceName
+                    : $"{result.PackageKey} {result.PackageVersion}".Trim();
+                return $"{packageName}: {result.ImportedCount}/{result.SkippedCount}/{result.FailedCount}";
+            })
+            .ToArray();
+        if (detailRows.Length > 0)
+        {
+            message += " " + T("Package details:") + " " + string.Join(" | ", detailRows);
+        }
+
+        return message;
+    }
+
+    private IReadOnlyList<IFormFile> GetSelectedPackageFiles()
+        => UniversalUploadInput.PackageFiles
+            .Where(static file => file.Length > 0)
+            .ToArray();
+
     private static PortableModulePackageImportOptions CreateOptions(UniversalUploadInputModel input)
         => new(
             input.ApplyModuleDefinitions,
@@ -450,7 +508,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     public sealed class UniversalUploadInputModel
     {
-        public IFormFile? PackageFile { get; set; }
+        public List<IFormFile> PackageFiles { get; set; } = [];
 
         public bool ApplyModuleDefinitions { get; set; } = true;
 

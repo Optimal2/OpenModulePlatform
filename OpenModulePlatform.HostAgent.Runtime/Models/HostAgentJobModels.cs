@@ -2,6 +2,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Models;
 
 public static class HostAgentJobTypes
 {
+    public const string ArtifactRetentionCleanup = "ArtifactRetentionCleanup";
+
     public const string ArtifactCacheCleanup = "ArtifactCacheCleanup";
 
     public const string ArtifactStoreCleanup = "ArtifactStoreCleanup";
@@ -22,7 +24,66 @@ public sealed record HostAgentJobWorkItem(
     Guid? HostId,
     string JobType,
     string? PayloadJson,
+    string? RequestedBy,
     int AttemptCount);
+
+public sealed class ArtifactRetentionCleanupJobPayload
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public int MaxVersionsToKeep { get; set; } = 5;
+}
+
+public sealed class ArtifactRetentionCleanupExecutionResult
+{
+    public IReadOnlyList<ArtifactRetentionCleanupDeletedArtifact> DeletedArtifacts { get; init; } = [];
+
+    public IReadOnlyList<ArtifactStoreCleanupJobEntry> ArtifactStoreEntries { get; init; } = [];
+
+    public int ArtifactStoreEntryCount { get; init; }
+
+    public int HostCacheEntryCount { get; init; }
+
+    public int CreatedHostAgentJobCount { get; init; }
+}
+
+public sealed class ArtifactRetentionCleanupJobResult
+{
+    public int DeletedArtifactCount { get; set; }
+
+    public int ArtifactStoreEntryCount { get; set; }
+
+    public int HostCacheEntryCount { get; set; }
+
+    public int CreatedHostAgentJobCount { get; set; }
+
+    public ArtifactStoreCleanupJobResult ArtifactStoreCleanup { get; set; } = new();
+
+    public List<ArtifactRetentionCleanupDeletedArtifact> DeletedArtifacts { get; set; } = [];
+}
+
+public sealed class ArtifactRetentionCleanupDeletedArtifact
+{
+    public int ArtifactId { get; set; }
+
+    public string ModuleKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string Version { get; set; } = string.Empty;
+
+    public string PackageType { get; set; } = string.Empty;
+
+    public string? TargetName { get; set; }
+
+    public string? RelativePath { get; set; }
+
+    public DateTime CreatedUtc { get; set; }
+
+    public int RetentionRank { get; set; }
+
+    public int TotalVersions { get; set; }
+}
 
 public sealed class ArtifactCacheCleanupJobPayload
 {
