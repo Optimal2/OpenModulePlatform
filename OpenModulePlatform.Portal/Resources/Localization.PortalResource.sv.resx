@@ -1902,6 +1902,16 @@
   <data name="Remove widget" xml:space="preserve"><value>Ta bort widget</value></data>
   <data name="No widgets are available." xml:space="preserve"><value>Inga widgets är tillgängliga.</value></data>
   <data name="No matching widgets." xml:space="preserve"><value>Inga matchande widgets.</value></data>
+  <data name="Search widgets" xml:space="preserve"><value>Sök widget</value></data>
+  <data name="Compact view" xml:space="preserve"><value>Kompakt vy</value></data>
+  <data name="Detailed view" xml:space="preserve"><value>Detaljerad vy</value></data>
+  <data name="No description available" xml:space="preserve"><value>Ingen beskrivning tillgänglig</value></data>
+  <data name="Preview" xml:space="preserve"><value>Förhandsvisning</value></data>
+  <data name="Preview unavailable" xml:space="preserve"><value>Förhandsvisning är inte tillgänglig</value></data>
+  <data name="Select a widget" xml:space="preserve"><value>Välj en widget</value></data>
+  <data name="Select a widget for details and preview." xml:space="preserve"><value>Välj en widget för att se information och förhandsvisning.</value></data>
+  <data name="No widgets found" xml:space="preserve"><value>Inga widgets hittades</value></data>
+  <data name="Add selected widget" xml:space="preserve"><value>Lägg till vald widget</value></data>
   <data name="Close" xml:space="preserve"><value>Stäng</value></data>
   <data name="Reset changes" xml:space="preserve"><value>Återställ ändringar</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Återställ layout</value></data>
@@ -1932,6 +1942,18 @@
   <data name="Disable widget" xml:space="preserve"><value>Inaktivera widget</value></data>
   <data name="Dashboard widget enabled." xml:space="preserve"><value>Dashboard-widgeten har aktiverats.</value></data>
   <data name="Dashboard widget disabled." xml:space="preserve"><value>Dashboard-widgeten har inaktiverats.</value></data>
+  <data name="Empty adjustable widget for simple content or custom images." xml:space="preserve"><value>Tom justerbar widget för enkelt innehåll eller egna bilder.</value></data>
+  <data name="Shows portal administration metrics for users with admin access." xml:space="preserve"><value>Visar portalens administrationsmått för användare med adminåtkomst.</value></data>
+  <data name="Lists the signed-in user's favorite portal entries." xml:space="preserve"><value>Listar den inloggade användarens favoritmarkerade portal entries.</value></data>
+  <data name="Lists portal entries the signed-in user can access." xml:space="preserve"><value>Listar portal entries som den inloggade användaren har åtkomst till.</value></data>
+  <data name="Combines favorite portal entries and all accessible portal entries in one list." xml:space="preserve"><value>Kombinerar favoritmarkerade portal entries och alla åtkomliga portal entries i en lista.</value></data>
+  <data name="Shows portal navigation groups and links as dashboard content." xml:space="preserve"><value>Visar portalens navigationsgrupper och länkar som dashboardinnehåll.</value></data>
+  <data name="Shows the signed-in user's available roles and active role." xml:space="preserve"><value>Visar den inloggade användarens tillgängliga roller och aktiva roll.</value></data>
+  <data name="Lists content pages the signed-in user can access." xml:space="preserve"><value>Listar content-sidor som den inloggade användaren har åtkomst till.</value></data>
+  <data name="Shows recent personal OMP notifications." xml:space="preserve"><value>Visar senaste personliga OMP-notifikationer.</value></data>
+  <data name="Shows recent message conversations." xml:space="preserve"><value>Visar senaste meddelandekonversationer.</value></data>
+  <data name="Shows the current weekday, date, and week number." xml:space="preserve"><value>Visar aktuell veckodag, datum och veckonummer.</value></data>
+  <data name="Embeds the portal music player widget." xml:space="preserve"><value>Bäddar in portalens musikspelare.</value></data>
   <data name="Widget key" xml:space="preserve"><value>Widgetnyckel</value></data>
   <data name="Widget type" xml:space="preserve"><value>Widgettyp</value></data>
   <data name="Payload" xml:space="preserve"><value>Payload</value></data>

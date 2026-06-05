@@ -158,6 +158,8 @@
         });
 
         bindWidgetPickerFilter(picker);
+        bindWidgetPickerCompactToggle(picker);
+        window.addEventListener('resize', () => syncWidgetPickerCompactMode(picker));
 
         picker?.addEventListener('click', (event) => {
             if (event.target === picker) {
@@ -165,53 +167,61 @@
             }
         });
 
+        const addSelectedWidget = async () => {
+            const option = getSelectedWidgetPickerOption(picker);
+            if (!option) {
+                return;
+            }
+
+            const widgetId = parseInt(option.dataset.widgetId || '0', 10);
+            if (!widgetId) {
+                return;
+            }
+
+            const widget = await postForm(root.dataset.addUrl, token, { widgetId });
+            if (!widget) {
+                return;
+            }
+
+            widget.title = option.dataset.widgetTitle || widget.title || '';
+            const temporaryWidgetId = state.nextTemporaryWidgetId--;
+            widget.userActiveWidgetId = temporaryWidgetId;
+            widget.orderPriority = ++maxOrder;
+            const offset = getNextWidgetOffset(canvas, state);
+            widget.offsetTop = offset;
+            widget.offsetLeft = offset;
+
+            const element = createWidgetElement(root, widget);
+            canvas.appendChild(element);
+            snapWidgetToGrid(element, state);
+            state.addedWidgetIds.add(temporaryWidgetId);
+            bindWidget(root, canvas, element, token, () => ++maxOrder, state, updateDirtyState);
+            bindEntryFavoriteToggles(root, element, token);
+            bindEntryListFilters(element);
+            bindDashboardMusicPlayers(element);
+            bindDashboardNotifications(element);
+            updateEmptyState(canvas);
+            updateCanvasHeight(root, canvas, state);
+            updateDirtyState();
+            closePicker(picker);
+            if (!isEditing) {
+                setEditing(true);
+            }
+        };
+
+        picker?.querySelector('[data-widget-picker-add]')?.addEventListener('click', addSelectedWidget);
+
         picker?.querySelectorAll('[data-widget-option]').forEach((option) => {
-            const addSelectedWidget = async () => {
-                const widgetId = parseInt(option.dataset.widgetId || '0', 10);
-                if (!widgetId) {
-                    return;
-                }
-
-                const widget = await postForm(root.dataset.addUrl, token, { widgetId });
-                if (!widget) {
-                    return;
-                }
-
-                widget.title = option.dataset.widgetTitle || widget.title || '';
-                const temporaryWidgetId = state.nextTemporaryWidgetId--;
-                widget.userActiveWidgetId = temporaryWidgetId;
-                widget.orderPriority = ++maxOrder;
-                const offset = getNextWidgetOffset(canvas, state);
-                widget.offsetTop = offset;
-                widget.offsetLeft = offset;
-
-                const element = createWidgetElement(root, widget);
-                canvas.appendChild(element);
-                snapWidgetToGrid(element, state);
-                state.addedWidgetIds.add(temporaryWidgetId);
-                bindWidget(root, canvas, element, token, () => ++maxOrder, state, updateDirtyState);
-                bindEntryFavoriteToggles(root, element, token);
-                bindEntryListFilters(element);
-                bindDashboardMusicPlayers(element);
-                bindDashboardNotifications(element);
-                updateEmptyState(canvas);
-                updateCanvasHeight(root, canvas, state);
-                updateDirtyState();
-                closePicker(picker);
-                if (!isEditing) {
-                    setEditing(true);
-                }
-            };
-
-            option.addEventListener('click', addSelectedWidget);
             option.addEventListener('keydown', (event) => {
                 if (event.key !== 'Enter' && event.key !== ' ') {
                     return;
                 }
 
                 event.preventDefault();
-                addSelectedWidget();
+                selectWidgetPickerOption(root, picker, option);
             });
+            option.addEventListener('dblclick', addSelectedWidget);
+            option.addEventListener('click', () => selectWidgetPickerOption(root, picker, option));
         });
 
         canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => {
@@ -4077,9 +4087,160 @@
         }
 
         resetWidgetPickerFilter(picker);
+        clearWidgetPickerSelection(picker);
+        syncWidgetPickerCompactMode(picker);
         window.requestAnimationFrame(() => {
+            syncWidgetPickerCompactMode(picker);
             picker.querySelector('[data-widget-picker-filter]')?.focus();
         });
+    }
+
+    function bindWidgetPickerCompactToggle(picker) {
+        const toggle = picker?.querySelector('[data-widget-picker-compact-toggle]');
+        if (!toggle || toggle.dataset.dashboardWidgetPickerCompactBound === 'true') {
+            return;
+        }
+
+        toggle.dataset.dashboardWidgetPickerCompactBound = 'true';
+        toggle.addEventListener('click', () => {
+            if (picker.classList.contains('is-auto-compact')) {
+                return;
+            }
+
+            picker.dataset.manualCompact = picker.dataset.manualCompact === 'true' ? 'false' : 'true';
+            syncWidgetPickerCompactMode(picker);
+        });
+        syncWidgetPickerCompactMode(picker);
+    }
+
+    function syncWidgetPickerCompactMode(picker) {
+        if (!picker) {
+            return;
+        }
+
+        const autoCompact = window.matchMedia('(max-width: 860px)').matches
+            || (picker.open && picker.getBoundingClientRect().width > 0 && picker.getBoundingClientRect().width < 780);
+        const manualCompact = picker.dataset.manualCompact === 'true';
+        const isCompact = autoCompact || manualCompact;
+        const toggle = picker.querySelector('[data-widget-picker-compact-toggle]');
+
+        picker.classList.toggle('is-auto-compact', autoCompact);
+        picker.classList.toggle('is-compact', isCompact);
+
+        if (toggle) {
+            toggle.disabled = autoCompact;
+            toggle.setAttribute('aria-pressed', manualCompact ? 'true' : 'false');
+            toggle.textContent = isCompact
+                ? (toggle.dataset.detailedLabel || 'Detailed view')
+                : (toggle.dataset.compactLabel || 'Compact view');
+        }
+    }
+
+    function clearWidgetPickerSelection(picker) {
+        picker?.querySelectorAll('[data-widget-option]').forEach((option) => {
+            option.classList.remove('is-selected');
+            option.setAttribute('aria-selected', 'false');
+        });
+
+        const addButton = picker?.querySelector('[data-widget-picker-add]');
+        if (addButton) {
+            addButton.disabled = true;
+        }
+
+        const title = picker?.querySelector('[data-widget-picker-detail-title]');
+        if (title) {
+            title.textContent = title.closest('.dashboard-widget-picker__details')?.querySelector('.dashboard-widget-picker__eyebrow')?.textContent
+                || 'Select a widget';
+        }
+
+        const meta = picker?.querySelector('[data-widget-picker-detail-meta]');
+        if (meta) {
+            meta.textContent = '';
+            meta.hidden = true;
+        }
+
+        const description = picker?.querySelector('[data-widget-picker-detail-description]');
+        const preview = picker?.querySelector('[data-widget-picker-preview]');
+        const emptyLabel = preview?.dataset.emptyLabel || 'Select a widget for details and preview.';
+        if (description) {
+            description.textContent = emptyLabel;
+        }
+
+        if (preview) {
+            preview.replaceChildren(createWidgetPickerEmptyPreview(emptyLabel));
+        }
+    }
+
+    function getSelectedWidgetPickerOption(picker) {
+        const selected = picker?.querySelector('[data-widget-option].is-selected:not([hidden])');
+        return selected instanceof HTMLElement ? selected : null;
+    }
+
+    function selectWidgetPickerOption(root, picker, option) {
+        if (!picker || !option || option.hidden) {
+            return;
+        }
+
+        picker.querySelectorAll('[data-widget-option]').forEach((item) => {
+            const isSelected = item === option;
+            item.classList.toggle('is-selected', isSelected);
+            item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+        });
+
+        const addButton = picker.querySelector('[data-widget-picker-add]');
+        if (addButton) {
+            addButton.disabled = false;
+        }
+
+        const title = picker.querySelector('[data-widget-picker-detail-title]');
+        if (title) {
+            title.textContent = option.dataset.widgetTitle || '';
+        }
+
+        const metaParts = [
+            option.dataset.widgetModuleKey,
+            option.dataset.widgetAuthor
+        ].filter((value) => String(value || '').trim().length > 0);
+        const meta = picker.querySelector('[data-widget-picker-detail-meta]');
+        if (meta) {
+            meta.textContent = metaParts.join(' / ');
+            meta.hidden = metaParts.length === 0;
+        }
+
+        const description = picker.querySelector('[data-widget-picker-detail-description]');
+        if (description) {
+            description.textContent = option.dataset.widgetDescription
+                || picker.dataset.noDescriptionLabel
+                || 'No description available.';
+        }
+
+        renderWidgetPickerPreview(root, picker, option);
+    }
+
+    function renderWidgetPickerPreview(root, picker, option) {
+        const preview = picker?.querySelector('[data-widget-picker-preview]');
+        if (!preview) {
+            return;
+        }
+
+        preview.replaceChildren();
+        try {
+            const content = createWidgetBodyContent(root, option?.dataset?.widgetPayload || '');
+            const scaleTarget = document.createElement('div');
+            scaleTarget.className = 'dashboard-widget-picker__preview-scale-target dashboard-widget__content-scale-target';
+            scaleTarget.dataset.widgetContentScaleTarget = '';
+            scaleTarget.appendChild(content);
+            preview.appendChild(scaleTarget);
+        } catch {
+            preview.replaceChildren(createWidgetPickerEmptyPreview(preview.dataset.unavailableLabel || 'Preview unavailable'));
+        }
+    }
+
+    function createWidgetPickerEmptyPreview(text) {
+        const empty = document.createElement('div');
+        empty.className = 'dashboard-widget-picker__preview-empty';
+        empty.textContent = text;
+        return empty;
     }
 
     function bindWidgetPickerFilter(picker) {
@@ -4126,17 +4287,17 @@
         if (empty) {
             empty.hidden = query.length === 0 || visibleCount > 0 || options.length === 0;
         }
+
+        const selected = getSelectedWidgetPickerOption(picker);
+        if (selected && selected.hidden) {
+            clearWidgetPickerSelection(picker);
+        }
     }
 
     function getWidgetPickerOptionSearchText(option) {
         return normalizeSearchText([
             option?.dataset?.widgetSearchText,
-            option?.dataset?.widgetTitle,
-            option?.dataset?.widgetKey,
-            option?.dataset?.widgetType,
-            option?.dataset?.widgetModuleKey,
-            option?.dataset?.widgetAuthor,
-            option?.dataset?.widgetPayload
+            option?.dataset?.widgetTitle
         ].filter(Boolean).join(' '));
     }
 
