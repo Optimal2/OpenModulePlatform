@@ -421,6 +421,7 @@ BEGIN
         widget_id int IDENTITY(1,1) NOT NULL,
         widget_key nvarchar(200) NULL,
         title nvarchar(200) NOT NULL,
+        description nvarchar(1000) NULL,
         widget_type nvarchar(50) NOT NULL,
         payload nvarchar(max) NULL,
         module_key nvarchar(100) NULL,
@@ -437,6 +438,13 @@ IF COL_LENGTH(N'omp_portal.widgets', N'widget_key') IS NULL
 BEGIN
     ALTER TABLE omp_portal.widgets
         ADD widget_key nvarchar(200) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp_portal.widgets', N'description') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.widgets
+        ADD description nvarchar(1000) NULL;
 END
 GO
 
@@ -900,6 +908,7 @@ USING
 (
     SELECT N'blank-rectangle' AS widget_key,
            N'Blank widget' AS title,
+           N'Empty adjustable widget for simple content or custom images.' AS description,
            N'portal' AS widget_type,
            N'blank-rectangle' AS payload,
            N'omp_portal' AS module_key,
@@ -907,6 +916,7 @@ USING
     UNION ALL
     SELECT N'admin-overview' AS widget_key,
            N'Admin overview' AS title,
+           N'Shows portal administration metrics for users with admin access.' AS description,
            N'portal' AS widget_type,
            N'admin-overview' AS payload,
            N'omp_portal' AS module_key,
@@ -914,6 +924,7 @@ USING
     UNION ALL
     SELECT N'portal-entry-favorites' AS widget_key,
            N'Favorite portal entries' AS title,
+           N'Lists the signed-in user''s favorite portal entries.' AS description,
            N'portal' AS widget_type,
            N'portal-entry-favorites' AS payload,
            N'omp_portal' AS module_key,
@@ -921,6 +932,7 @@ USING
     UNION ALL
     SELECT N'portal-entry-list' AS widget_key,
            N'All portal entries' AS title,
+           N'Lists portal entries the signed-in user can access.' AS description,
            N'portal' AS widget_type,
            N'portal-entry-list' AS payload,
            N'omp_portal' AS module_key,
@@ -928,6 +940,7 @@ USING
     UNION ALL
     SELECT N'portal-entry-combolist' AS widget_key,
            N'Combolist' AS title,
+           N'Combines favorite portal entries and all accessible portal entries in one list.' AS description,
            N'portal' AS widget_type,
            N'portal-entry-combolist' AS payload,
            N'omp_portal' AS module_key,
@@ -935,6 +948,7 @@ USING
     UNION ALL
     SELECT N'portal-navbar-links' AS widget_key,
            N'Portal navigation' AS title,
+           N'Shows portal navigation groups and links as dashboard content.' AS description,
            N'portal' AS widget_type,
            N'portal-navbar-links' AS payload,
            N'omp_portal' AS module_key,
@@ -942,6 +956,7 @@ USING
     UNION ALL
     SELECT N'user-roles' AS widget_key,
            N'User roles' AS title,
+           N'Shows the signed-in user''s available roles and active role.' AS description,
            N'portal' AS widget_type,
            N'user-roles' AS payload,
            N'omp_portal' AS module_key,
@@ -949,6 +964,7 @@ USING
     UNION ALL
     SELECT N'content-pages' AS widget_key,
            N'Content pages' AS title,
+           N'Lists content pages the signed-in user can access.' AS description,
            N'portal' AS widget_type,
            N'content-pages' AS payload,
            N'omp_portal' AS module_key,
@@ -956,6 +972,7 @@ USING
     UNION ALL
     SELECT N'notification-feed' AS widget_key,
            N'Notification feed' AS title,
+           N'Shows recent personal OMP notifications.' AS description,
            N'portal' AS widget_type,
            N'notification-feed' AS payload,
            N'omp_portal' AS module_key,
@@ -963,6 +980,7 @@ USING
     UNION ALL
     SELECT N'message-conversations' AS widget_key,
            N'Latest chats' AS title,
+           N'Shows recent message conversations.' AS description,
            N'portal' AS widget_type,
            N'message-conversations' AS payload,
            N'omp_portal' AS module_key,
@@ -970,6 +988,7 @@ USING
     UNION ALL
     SELECT N'weekday-date' AS widget_key,
            N'Weekday and date' AS title,
+           N'Shows the current weekday, date, and week number.' AS description,
            N'portal' AS widget_type,
            N'weekday-date' AS payload,
            N'omp_portal' AS module_key,
@@ -978,14 +997,15 @@ USING
 ON target.widget_key = source.widget_key
 WHEN MATCHED THEN
     UPDATE SET title = source.title,
+               description = source.description,
                widget_type = source.widget_type,
                payload = source.payload,
                module_key = source.module_key,
                author = source.author,
                modified_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(widget_key, title, widget_type, payload, module_key, author, modified_at)
-    VALUES(source.widget_key, source.title, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
+    INSERT(widget_key, title, description, widget_type, payload, module_key, author, modified_at)
+    VALUES(source.widget_key, source.title, source.description, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
 GO
 
 IF OBJECT_ID(N'omp.config_setting_definitions', N'U') IS NOT NULL

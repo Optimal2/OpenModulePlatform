@@ -278,6 +278,8 @@ public sealed class DashboardWidgetDefinition
 
     public string Title { get; set; } = string.Empty;
 
+    public string? Description { get; set; }
+
     public string WidgetType { get; set; } = string.Empty;
 
     public string? Payload { get; set; }
@@ -377,6 +379,8 @@ public sealed class DashboardWidgetAdminRow
     public string WidgetKey { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
 
     public string WidgetType { get; set; } = string.Empty;
 

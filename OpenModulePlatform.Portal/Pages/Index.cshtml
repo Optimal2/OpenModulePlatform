@@ -517,10 +517,26 @@
             <partial name="_DashboardMusicPlayerWidget" />
         </template>
 
-        <dialog class="dashboard-widget-picker" data-widget-picker aria-labelledby="dashboard-widget-picker-title">
+        <dialog class="dashboard-widget-picker"
+                data-widget-picker
+                data-no-description-label="@L["No description available"]"
+                aria-labelledby="dashboard-widget-picker-title">
             <div class="dashboard-widget-picker__header">
                 <h3 id="dashboard-widget-picker-title">@L["Add widget"]</h3>
-                <button type="button" class="icon-button dashboard-widget-picker__close" data-widget-picker-close aria-label="@L["Close"]"></button>
+                <div class="dashboard-widget-picker__header-actions">
+                    @if (Model.AvailableWidgets.Count > 0)
+                    {
+                        <button type="button"
+                                class="btn btn-small dashboard-widget-picker__compact-toggle"
+                                data-widget-picker-compact-toggle
+                                data-compact-label="@L["Compact view"]"
+                                data-detailed-label="@L["Detailed view"]"
+                                aria-pressed="false">
+                            @L["Compact view"]
+                        </button>
+                    }
+                    <button type="button" class="icon-button dashboard-widget-picker__close" data-widget-picker-close aria-label="@L["Close"]"></button>
+                </div>
             </div>
             @if (Model.AvailableWidgets.Count == 0)
             {
@@ -528,37 +544,77 @@
             }
             else
             {
-                <div class="dashboard-widget-picker__search">
-                    <label class="visually-hidden" for="dashboard-widget-picker-search">@L["Search"]</label>
-                    <input id="dashboard-widget-picker-search"
-                           type="search"
-                           data-widget-picker-filter
-                           placeholder="@L["Search..."]"
-                           aria-label="@L["Search"]"
-                           autocomplete="off" />
-                </div>
-                <div class="empty-state dashboard-widget-picker__empty" data-widget-picker-empty hidden>@L["No matching widgets."]</div>
-                <div class="dashboard-widget-picker__list">
-                    @foreach (var widget in Model.AvailableWidgets)
-                    {
-                        var localizedWidgetTitle = L[widget.Title].Value;
-                        var widgetSearchText = $"{localizedWidgetTitle} {widget.Title} {widget.WidgetKey} {widget.WidgetType} {widget.ModuleKey} {widget.Author} {widget.Payload}";
-                        <div role="button"
-                             tabindex="0"
-                             class="dashboard-widget-option"
-                             data-widget-option
-                             data-widget-id="@widget.WidgetId"
-                             data-widget-title="@L[widget.Title]"
-                             data-widget-key="@widget.WidgetKey"
-                             data-widget-type="@widget.WidgetType"
-                             data-widget-payload="@widget.Payload"
-                             data-widget-module-key="@widget.ModuleKey"
-                             data-widget-author="@widget.Author"
-                             data-widget-search-text="@widgetSearchText">
-                            <span class="dashboard-widget-option__title">@L[widget.Title]</span>
-                            <span class="dashboard-widget-option__meta">@L["Portal widget"]</span>
+                <div class="dashboard-widget-picker__layout">
+                    <div class="dashboard-widget-picker__sidebar">
+                        <div class="dashboard-widget-picker__search">
+                            <label class="visually-hidden" for="dashboard-widget-picker-search">@L["Search widgets"]</label>
+                            <input id="dashboard-widget-picker-search"
+                                   type="search"
+                                   data-widget-picker-filter
+                                   placeholder="@L["Search widgets"]"
+                                   aria-label="@L["Search widgets"]"
+                                   autocomplete="off" />
                         </div>
-                    }
+                        <div class="dashboard-widget-picker__filters" aria-hidden="true"></div>
+                        <div class="empty-state dashboard-widget-picker__empty" data-widget-picker-empty hidden>@L["No widgets found"]</div>
+                        <div class="dashboard-widget-picker__list" role="listbox" aria-label="@L["Add widget"]">
+                            @foreach (var widget in Model.AvailableWidgets)
+                            {
+                                var localizedWidgetTitle = L[widget.Title].Value;
+                                var widgetSearchText = $"{localizedWidgetTitle} {widget.Title}";
+                                var widgetMeta = !string.IsNullOrWhiteSpace(widget.ModuleKey)
+                                    ? widget.ModuleKey
+                                    : !string.IsNullOrWhiteSpace(widget.Author)
+                                        ? widget.Author
+                                        : L["Portal widget"].Value;
+                                <div role="option"
+                                     aria-selected="false"
+                                     tabindex="0"
+                                     class="dashboard-widget-option"
+                                     data-widget-option
+                                     data-widget-id="@widget.WidgetId"
+                                     data-widget-title="@L[widget.Title]"
+                                     data-widget-key="@widget.WidgetKey"
+                                     data-widget-type="@widget.WidgetType"
+                                     data-widget-payload="@widget.Payload"
+                                     data-widget-module-key="@widget.ModuleKey"
+                                     data-widget-author="@widget.Author"
+                                     data-widget-description="@(string.IsNullOrWhiteSpace(widget.Description) ? string.Empty : L[widget.Description].Value)"
+                                     data-widget-search-text="@widgetSearchText">
+                                    <span class="dashboard-widget-option__title">@L[widget.Title]</span>
+                                    <span class="dashboard-widget-option__meta">@widgetMeta</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <section class="dashboard-widget-picker__details" aria-live="polite">
+                        <div class="dashboard-widget-picker__info">
+                            <p class="dashboard-widget-picker__eyebrow">@L["Select a widget"]</p>
+                            <h4 data-widget-picker-detail-title>@L["Select a widget"]</h4>
+                            <div class="dashboard-widget-picker__meta" data-widget-picker-detail-meta hidden></div>
+                            <div class="dashboard-widget-picker__description">
+                                <strong>@L["Description"]</strong>
+                                <p data-widget-picker-detail-description>@L["Select a widget for details and preview."]</p>
+                            </div>
+                        </div>
+                        <div class="dashboard-widget-picker__preview-panel">
+                            <strong>@L["Preview"]</strong>
+                            <div class="dashboard-widget-picker__preview"
+                                 data-widget-picker-preview
+                                 data-empty-label="@L["Select a widget for details and preview."]"
+                                 data-unavailable-label="@L["Preview unavailable"]">
+                                <div class="dashboard-widget-picker__preview-empty">@L["Select a widget for details and preview."]</div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <div class="dashboard-widget-picker__footer">
+                    <button type="button"
+                            class="btn btn-primary"
+                            data-widget-picker-add
+                            disabled>
+                        @L["Add selected widget"]
+                    </button>
                 </div>
             }
         </dialog>

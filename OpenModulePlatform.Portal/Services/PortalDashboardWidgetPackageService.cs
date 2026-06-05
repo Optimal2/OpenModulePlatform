@@ -43,6 +43,7 @@ public sealed class PortalDashboardWidgetPackageService
 SELECT w.widget_id,
        w.widget_key,
        w.title,
+       w.description,
        w.widget_type,
        w.payload,
        w.module_key,
@@ -82,12 +83,13 @@ ORDER BY w.module_key,
                     WidgetId = widgetId,
                     WidgetKey = rdr.IsDBNull(1) ? string.Empty : rdr.GetString(1),
                     Title = rdr.GetString(2),
-                    WidgetType = rdr.GetString(3),
-                    Payload = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                    ModuleKey = rdr.IsDBNull(5) ? string.Empty : rdr.GetString(5),
-                    Author = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                    IsEnabled = rdr.GetBoolean(7),
-                    ModifiedUtc = rdr.GetDateTime(8)
+                    Description = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                    WidgetType = rdr.GetString(4),
+                    Payload = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                    ModuleKey = rdr.IsDBNull(6) ? string.Empty : rdr.GetString(6),
+                    Author = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                    IsEnabled = rdr.GetBoolean(8),
+                    ModifiedUtc = rdr.GetDateTime(9)
                 };
 
                 row.WidgetKey = string.IsNullOrWhiteSpace(row.WidgetKey)
@@ -96,14 +98,14 @@ ORDER BY w.module_key,
                 rows.Add(widgetId, row);
             }
 
-            if (!rdr.IsDBNull(9))
-            {
-                AddDistinct(row.PermissionNames, rdr.GetString(9));
-            }
-
             if (!rdr.IsDBNull(10))
             {
-                AddDistinct(row.RoleNames, rdr.GetString(10));
+                AddDistinct(row.PermissionNames, rdr.GetString(10));
+            }
+
+            if (!rdr.IsDBNull(11))
+            {
+                AddDistinct(row.RoleNames, rdr.GetString(11));
             }
         }
 
@@ -188,6 +190,7 @@ WHERE widget_id = @widget_id;";
                 {
                     WidgetKey = row.WidgetKey,
                     Title = row.Title,
+                    Description = row.Description,
                     WidgetType = row.WidgetType,
                     Payload = row.Payload,
                     ModuleKey = GetExportItemModuleKey(row.ModuleKey, documentModuleKey),
@@ -314,6 +317,7 @@ WHERE widget_id = @widget_id;";
     {
         var widgetKey = CleanRequiredKey(item.WidgetKey, "widgetKey", 200);
         var title = CleanRequiredText(item.Title, "title", 200);
+        var description = CleanOptionalText(item.Description, "description", 1000);
         var widgetType = CleanRequiredKey(item.WidgetType, "widgetType", 50);
         var moduleKey = CleanOptionalKey(item.ModuleKey ?? document.ModuleKey, "moduleKey", 100);
         var payload = CleanOptionalText(item.Payload, "payload", MaxPayloadLength);
@@ -330,6 +334,7 @@ WHERE widget_id = @widget_id;";
         return new NormalizedDashboardWidget(
             widgetKey,
             title,
+            description,
             widgetType,
             payload,
             moduleKey,
@@ -379,9 +384,9 @@ ORDER BY match_priority,
         CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp_portal.widgets(widget_key, title, widget_type, payload, module_key, author, modified_at)
+INSERT INTO omp_portal.widgets(widget_key, title, description, widget_type, payload, module_key, author, modified_at)
 OUTPUT INSERTED.widget_id
-VALUES(@widget_key, @title, @widget_type, @payload, @module_key, @author, SYSUTCDATETIME());";
+VALUES(@widget_key, @title, @description, @widget_type, @payload, @module_key, @author, SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         AddWidgetParameters(cmd, widget);
@@ -400,6 +405,7 @@ VALUES(@widget_key, @title, @widget_type, @payload, @module_key, @author, SYSUTC
 UPDATE omp_portal.widgets
 SET widget_key = @widget_key,
     title = @title,
+    description = COALESCE(@description, description),
     widget_type = @widget_type,
     payload = @payload,
     module_key = @module_key,
@@ -514,6 +520,8 @@ VALUES(@widget_id, @permission_id, @role_id);";
             widget.ModuleKey is null ? DBNull.Value : widget.ModuleKey;
         cmd.Parameters.Add("@widget_key", SqlDbType.NVarChar, 200).Value = widget.WidgetKey;
         cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = widget.Title;
+        cmd.Parameters.Add("@description", SqlDbType.NVarChar, 1000).Value =
+            widget.Description is null ? DBNull.Value : widget.Description;
         cmd.Parameters.Add("@widget_type", SqlDbType.NVarChar, 50).Value = widget.WidgetType;
     }
 
@@ -670,6 +678,8 @@ VALUES(@widget_id, @permission_id, @role_id);";
 
         public string Title { get; set; } = string.Empty;
 
+        public string? Description { get; set; }
+
         public string WidgetType { get; set; } = "portal";
 
         public string? Payload { get; set; }
@@ -686,6 +696,7 @@ VALUES(@widget_id, @permission_id, @role_id);";
     private sealed record NormalizedDashboardWidget(
         string WidgetKey,
         string Title,
+        string? Description,
         string WidgetType,
         string? Payload,
         string? ModuleKey,
