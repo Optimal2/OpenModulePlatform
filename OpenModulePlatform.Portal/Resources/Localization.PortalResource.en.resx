@@ -306,6 +306,16 @@
   <data name="Remove widget" xml:space="preserve"><value>Remove widget</value></data>
   <data name="No widgets are available." xml:space="preserve"><value>No widgets are available.</value></data>
   <data name="No matching widgets." xml:space="preserve"><value>No matching widgets.</value></data>
+  <data name="Search widgets" xml:space="preserve"><value>Search widgets</value></data>
+  <data name="Compact view" xml:space="preserve"><value>Compact view</value></data>
+  <data name="Detailed view" xml:space="preserve"><value>Detailed view</value></data>
+  <data name="No description available" xml:space="preserve"><value>No description available</value></data>
+  <data name="Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="Preview unavailable" xml:space="preserve"><value>Preview unavailable</value></data>
+  <data name="Select a widget" xml:space="preserve"><value>Select a widget</value></data>
+  <data name="Select a widget for details and preview." xml:space="preserve"><value>Select a widget for details and preview.</value></data>
+  <data name="No widgets found" xml:space="preserve"><value>No widgets found</value></data>
+  <data name="Add selected widget" xml:space="preserve"><value>Add selected widget</value></data>
   <data name="Close" xml:space="preserve"><value>Close</value></data>
   <data name="Reset changes" xml:space="preserve"><value>Reset changes</value></data>
   <data name="Reset layout" xml:space="preserve"><value>Reset layout</value></data>
@@ -336,6 +346,18 @@
   <data name="Disable widget" xml:space="preserve"><value>Disable widget</value></data>
   <data name="Dashboard widget enabled." xml:space="preserve"><value>Dashboard widget enabled.</value></data>
   <data name="Dashboard widget disabled." xml:space="preserve"><value>Dashboard widget disabled.</value></data>
+  <data name="Empty adjustable widget for simple content or custom images." xml:space="preserve"><value>Empty adjustable widget for simple content or custom images.</value></data>
+  <data name="Shows portal administration metrics for users with admin access." xml:space="preserve"><value>Shows portal administration metrics for users with admin access.</value></data>
+  <data name="Lists the signed-in user's favorite portal entries." xml:space="preserve"><value>Lists the signed-in user's favorite portal entries.</value></data>
+  <data name="Lists portal entries the signed-in user can access." xml:space="preserve"><value>Lists portal entries the signed-in user can access.</value></data>
+  <data name="Combines favorite portal entries and all accessible portal entries in one list." xml:space="preserve"><value>Combines favorite portal entries and all accessible portal entries in one list.</value></data>
+  <data name="Shows portal navigation groups and links as dashboard content." xml:space="preserve"><value>Shows portal navigation groups and links as dashboard content.</value></data>
+  <data name="Shows the signed-in user's available roles and active role." xml:space="preserve"><value>Shows the signed-in user's available roles and active role.</value></data>
+  <data name="Lists content pages the signed-in user can access." xml:space="preserve"><value>Lists content pages the signed-in user can access.</value></data>
+  <data name="Shows recent personal OMP notifications." xml:space="preserve"><value>Shows recent personal OMP notifications.</value></data>
+  <data name="Shows recent message conversations." xml:space="preserve"><value>Shows recent message conversations.</value></data>
+  <data name="Shows the current weekday, date, and week number." xml:space="preserve"><value>Shows the current weekday, date, and week number.</value></data>
+  <data name="Embeds the portal music player widget." xml:space="preserve"><value>Embeds the portal music player widget.</value></data>
   <data name="Widget key" xml:space="preserve"><value>Widget key</value></data>
   <data name="Widget type" xml:space="preserve"><value>Widget type</value></data>
   <data name="Payload" xml:space="preserve"><value>Payload</value></data>
