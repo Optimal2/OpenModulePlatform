@@ -19,16 +19,6 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
-<section class="card top-gap">
-    <div class="section-heading-row">
-        <div>
-            <h3>@L["Export and import"]</h3>
-            <p class="muted">@L["Dashboard widget import and export is handled from the shared Export and import page."]</p>
-        </div>
-        <a class="action-link" href="~/admin/modulepackageimport">@L["Open Export and import"]</a>
-    </div>
-</section>
-
 @if (Model.EditDescriptionRow is not null)
 {
     <section class="card top-gap">
