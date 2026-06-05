@@ -169,6 +169,11 @@ a:hover {
     background: var(--surface-muted);
 }
 
+.iframe-layout--standalone .iframe-shell,
+.iframe-layout--standalone .iframe-shell__frame {
+    min-height: calc(100vh - 120px);
+}
+
 .iframe-message {
     max-width: 560px;
 }
