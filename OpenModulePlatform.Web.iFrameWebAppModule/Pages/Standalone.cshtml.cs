@@ -46,6 +46,7 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
             return guard;
         }
 
+        ViewData["HideModuleTopbar"] = true;
         SetTitles("Standalone view");
 
         var selectedRow = await _repo.GetStandaloneUrlAsync(urlId, ct);

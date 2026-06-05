@@ -1,3 +1,6 @@
+@{
+    var hideModuleTopbar = ViewData["HideModuleTopbar"] is true;
+}
 <!doctype html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
@@ -12,21 +15,24 @@
         <meta name="omp-prevent-back-cache" content="true" />
     }
 </head>
-<body>
+<body class="@(hideModuleTopbar ? "iframe-layout iframe-layout--standalone" : "iframe-layout")">
     <header class="app-header">
         @await Component.InvokeAsync("PortalTopBar")
-        <div class="topbar">
-            <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Overview"]">
-                <div class="brand">@ViewData["PortalTitle"]</div>
-                <div class="brand-subtitle">@L["iFrame Web App Module"]</div>
-            </a>
-            <nav class="topbar-nav" aria-label="@L["Select URL"]">
-                @if (IsSectionDefined("ModuleNav"))
-                {
-                    @RenderSection("ModuleNav", required: false)
-                }
-            </nav>
-        </div>
+        @if (!hideModuleTopbar)
+        {
+            <div class="topbar">
+                <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Overview"]">
+                    <div class="brand">@ViewData["PortalTitle"]</div>
+                    <div class="brand-subtitle">@L["iFrame Web App Module"]</div>
+                </a>
+                <nav class="topbar-nav" aria-label="@L["Select URL"]">
+                    @if (IsSectionDefined("ModuleNav"))
+                    {
+                        @RenderSection("ModuleNav", required: false)
+                    }
+                </nav>
+            </div>
+        }
     </header>
     <main class="content-shell">
         @RenderBody()
