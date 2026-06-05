@@ -1,5 +1,32 @@
 # OMP Object Builder
 
+## Convenience Wrappers
+
+`bump-version.ps1` updates the current repository's `omp-components.json`.
+It can bump repository, component, and module-definition versions. When module
+definitions are selected it also updates the referenced module-definition JSON
+files. Use the `.cmd` launcher for an interactive double-click flow.
+
+```powershell
+.\scripts\omp\bump-version.ps1 -ComponentKey omp-portal-web
+.\scripts\omp\bump-version.ps1 -AllComponents -Part minor
+.\scripts\omp\bump-version.ps1 -ModuleKey omp_portal -UpdateModuleMinimums
+```
+
+`build-universal-package.ps1` is a friendlier wrapper around
+`export-universal-package.ps1`. With no component selection it builds all
+components and writes a universal zip named from `repositoryKey` and
+`repositoryVersion`.
+
+```powershell
+.\scripts\omp\build-universal-package.ps1
+.\scripts\omp\build-universal-package.ps1 -OutputDirectory E:\Packages
+```
+
+The default output folder is `artifacts\universal-packages`. Set
+`OMP_UNIVERSAL_PACKAGE_OUTPUT_DIR` to use a shared package folder without
+hardcoding machine-specific paths in repositories.
+
 `build-repository-objects.ps1` reads a repository's `omp-components.json` and
 creates portable OMP objects:
 
