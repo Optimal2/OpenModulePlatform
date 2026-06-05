@@ -425,6 +425,7 @@ BEGIN
         payload nvarchar(max) NULL,
         module_key nvarchar(100) NULL,
         author nvarchar(200) NULL,
+        is_enabled bit NOT NULL CONSTRAINT DF_omp_portal_widgets_is_enabled DEFAULT(1),
         modified_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_widgets_modified_at DEFAULT(SYSUTCDATETIME()),
 
         CONSTRAINT PK_omp_portal_widgets PRIMARY KEY(widget_id)
@@ -436,6 +437,13 @@ IF COL_LENGTH(N'omp_portal.widgets', N'widget_key') IS NULL
 BEGIN
     ALTER TABLE omp_portal.widgets
         ADD widget_key nvarchar(200) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp_portal.widgets', N'is_enabled') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.widgets
+        ADD is_enabled bit NOT NULL CONSTRAINT DF_omp_portal_widgets_is_enabled DEFAULT(1);
 END
 GO
 
