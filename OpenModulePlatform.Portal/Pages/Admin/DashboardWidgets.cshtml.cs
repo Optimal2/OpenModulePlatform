@@ -106,6 +106,22 @@ public sealed class DashboardWidgetsModel : OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnPostSetEnabled(int widgetId, bool isEnabled, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        await _widgets.SetWidgetEnabledAsync(widgetId, isEnabled, ct);
+        StatusMessage = isEnabled
+            ? T("Dashboard widget enabled.")
+            : T("Dashboard widget disabled.");
+
+        return RedirectToPage("/Admin/DashboardWidgets");
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         Rows = await _widgets.GetWidgetsAsync(null, ct);

@@ -332,6 +332,10 @@
   <data name="Widget JSON uses a globally stable widgetKey so private module repositories can version widget definitions without depending on database IDs. moduleKey is optional ownership metadata for filtering and export. Use empty permissionNames and roleNames arrays when a widget should be available to every signed-in OMP user." xml:space="preserve"><value>Widget JSON uses a globally stable widgetKey so private module repositories can version widget definitions without depending on database IDs. moduleKey is optional ownership metadata for filtering and export. Use empty permissionNames and roleNames arrays when a widget should be available to every signed-in OMP user.</value></data>
   <data name="Existing widgets" xml:space="preserve"><value>Existing widgets</value></data>
   <data name="These widget definitions are currently registered in this OMP installation." xml:space="preserve"><value>These widget definitions are currently registered in this OMP installation.</value></data>
+  <data name="Enable widget" xml:space="preserve"><value>Enable widget</value></data>
+  <data name="Disable widget" xml:space="preserve"><value>Disable widget</value></data>
+  <data name="Dashboard widget enabled." xml:space="preserve"><value>Dashboard widget enabled.</value></data>
+  <data name="Dashboard widget disabled." xml:space="preserve"><value>Dashboard widget disabled.</value></data>
   <data name="Widget key" xml:space="preserve"><value>Widget key</value></data>
   <data name="Widget type" xml:space="preserve"><value>Widget type</value></data>
   <data name="Payload" xml:space="preserve"><value>Payload</value></data>

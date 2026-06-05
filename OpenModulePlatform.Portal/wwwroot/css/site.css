@@ -4528,6 +4528,10 @@ a.dashboard-role-list__item:focus-visible {
     outline: none;
 }
 
+.dashboard-widget-admin-row--disabled {
+    opacity: 0.58;
+}
+
 .dashboard-widget-option__title {
     align-self: end;
     font-weight: 700;

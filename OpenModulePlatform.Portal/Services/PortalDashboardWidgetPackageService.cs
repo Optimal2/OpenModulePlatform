@@ -47,6 +47,7 @@ SELECT w.widget_id,
        w.payload,
        w.module_key,
        w.author,
+       w.is_enabled,
        w.modified_at,
        p.Name AS permission_name,
        r.Name AS role_name
@@ -85,7 +86,8 @@ ORDER BY w.module_key,
                     Payload = rdr.IsDBNull(4) ? null : rdr.GetString(4),
                     ModuleKey = rdr.IsDBNull(5) ? string.Empty : rdr.GetString(5),
                     Author = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                    ModifiedUtc = rdr.GetDateTime(7)
+                    IsEnabled = rdr.GetBoolean(7),
+                    ModifiedUtc = rdr.GetDateTime(8)
                 };
 
                 row.WidgetKey = string.IsNullOrWhiteSpace(row.WidgetKey)
@@ -94,18 +96,37 @@ ORDER BY w.module_key,
                 rows.Add(widgetId, row);
             }
 
-            if (!rdr.IsDBNull(8))
-            {
-                AddDistinct(row.PermissionNames, rdr.GetString(8));
-            }
-
             if (!rdr.IsDBNull(9))
             {
-                AddDistinct(row.RoleNames, rdr.GetString(9));
+                AddDistinct(row.PermissionNames, rdr.GetString(9));
+            }
+
+            if (!rdr.IsDBNull(10))
+            {
+                AddDistinct(row.RoleNames, rdr.GetString(10));
             }
         }
 
         return rows.Values.ToArray();
+    }
+
+    public async Task SetWidgetEnabledAsync(
+        int widgetId,
+        bool isEnabled,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp_portal.widgets
+SET is_enabled = @is_enabled,
+    modified_at = SYSUTCDATETIME()
+WHERE widget_id = @widget_id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+        cmd.Parameters.Add("@is_enabled", SqlDbType.Bit).Value = isEnabled;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<(byte[] Content, string FileName)> ExportAsync(

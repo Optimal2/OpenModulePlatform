@@ -104,19 +104,24 @@
                         <th>@L["Title"]</th>
                         <th>@L["Widget type"]</th>
                         <th>@L["Payload"]</th>
+                        <th>@L["Status"]</th>
                         <th>@L["Access"]</th>
                         <th>@L["Modified"]</th>
+                        <th class="actions-col">@L["Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach (var row in Model.Rows)
                 {
-                    <tr>
+                    <tr class="@(row.IsEnabled ? string.Empty : "dashboard-widget-admin-row--disabled")">
                         <td><code>@row.ModuleKey</code></td>
                         <td><code>@row.WidgetKey</code></td>
                         <td>@row.Title</td>
                         <td>@row.WidgetType</td>
                         <td><code>@row.Payload</code></td>
+                        <td>
+                            <span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span>
+                        </td>
                         <td>
                             @if (row.PermissionNames.Count == 0 && row.RoleNames.Count == 0)
                             {
@@ -135,6 +140,18 @@
                             }
                         </td>
                         <td>@row.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="actions-col">
+                            <form method="post" asp-page-handler="SetEnabled" class="inline-form">
+                                <input type="hidden" name="widgetId" value="@row.WidgetId" />
+                                <input type="hidden" name="isEnabled" value="@(!row.IsEnabled)" />
+                                <button type="submit"
+                                        class="admin-icon-button @(row.IsEnabled ? "admin-icon-button--visible-off" : "admin-icon-button--visible")"
+                                        title="@(row.IsEnabled ? L["Disable widget"] : L["Enable widget"])"
+                                        aria-label="@(row.IsEnabled ? L["Disable widget"] : L["Enable widget"])">
+                                    <span class="visually-hidden">@(row.IsEnabled ? L["Disable widget"] : L["Enable widget"])</span>
+                                </button>
+                            </form>
+                        </td>
                     </tr>
                 }
                 </tbody>
