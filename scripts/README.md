@@ -5,7 +5,7 @@ still part of the current OMP object/installer model.
 
 ## Current Scripts
 
-- `bump-component-version.ps1` updates versions in `omp-components.json`.
+- `bump-component-version.ps1` updates component versions in `omp-components.json`.
 - `protect-bootstrap-config-secrets.ps1` encrypts portable bootstrap JSON
   secrets before they are stored in private installer profiles.
 - `deployment/` contains HostAgent-first packaging and installer-runner tools.
@@ -18,7 +18,9 @@ still part of the current OMP object/installer model.
   entries into portable module, artifact, host config, config overlay, widget,
   and universal-package objects.
   OMP-compatible module repositories should expose a root
-  `build-omp-objects.ps1` wrapper and `scripts/omp/export-universal-package.ps1`.
+  `build-omp-objects.ps1` wrapper plus the standard `scripts/omp/` wrappers:
+  `bump-version.ps1`, `bump-version.cmd`, `build-universal-package.ps1`,
+  `build-universal-package.cmd`, and `export-universal-package.ps1`.
   See `docs/OMP_COMPONENT_MANIFEST.md` for the conformance checklist and
   `scripts/omp/README.md` for the canonical object-builder behavior.
 
