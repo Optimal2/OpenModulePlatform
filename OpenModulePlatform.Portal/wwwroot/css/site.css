@@ -5193,6 +5193,121 @@ a.dashboard-role-list__item:focus-visible {
     line-height: 1.3;
 }
 
+.import-export-tabs {
+    display: grid;
+    gap: 12px;
+}
+
+.tab-list {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted);
+}
+
+.tab-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 7px 14px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.tab-button:hover,
+.tab-button:focus-visible,
+.tab-button[aria-selected="true"] {
+    border-color: var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+}
+
+.import-export-panel {
+    margin-top: 0;
+}
+
+.file-drop-area {
+    position: relative;
+    display: grid;
+    gap: 10px;
+    min-height: 138px;
+    padding: 18px;
+    border: 2px dashed var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface-muted);
+    cursor: pointer;
+}
+
+.file-drop-area:hover,
+.file-drop-area:focus-visible,
+.file-drop-area.is-drag-over {
+    border-color: var(--link);
+    background: var(--accent);
+    outline: none;
+}
+
+.file-drop-area input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.file-drop-area__content {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.file-drop-area__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--link);
+    font-weight: 900;
+}
+
+.file-drop-area__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.file-drop-area__list li {
+    max-width: min(100%, 320px);
+    overflow: hidden;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .workflow-panel {
     margin-top: 0;
     border-color: var(--border-strong);
@@ -5291,6 +5406,19 @@ a.dashboard-role-list__item:focus-visible {
 
     .workflow-choice-grid--dense {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+    }
+
+    .tab-list {
+        width: 100%;
+    }
+
+    .tab-button {
+        flex: 1 1 0;
+        justify-content: center;
+    }
+
+    .file-drop-area__content {
+        align-items: flex-start;
     }
 
     .table-tools {
