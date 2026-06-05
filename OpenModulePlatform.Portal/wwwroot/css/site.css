@@ -4461,6 +4461,31 @@ a.dashboard-role-list__item:focus-visible {
     mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
 }
 
+.dashboard-widget-picker__search {
+    padding: 12px 12px 0;
+}
+
+.dashboard-widget-picker__search input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 11px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.dashboard-widget-picker__search input:focus {
+    border-color: var(--link);
+    outline: 2px solid rgba(11, 87, 208, 0.18);
+    outline-offset: 1px;
+}
+
+.dashboard-widget-picker__empty {
+    margin: 12px;
+}
+
 .dashboard-widget-picker__list {
     display: grid;
     gap: 8px;

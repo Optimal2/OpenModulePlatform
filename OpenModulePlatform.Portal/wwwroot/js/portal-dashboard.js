@@ -122,11 +122,7 @@
                 return;
             }
 
-            if (typeof picker.showModal === 'function') {
-                picker.showModal();
-            } else {
-                picker.setAttribute('open', '');
-            }
+            openWidgetPicker(picker);
         });
 
         resetChangesButton?.addEventListener('click', async () => {
@@ -160,6 +156,8 @@
         picker?.querySelector('[data-widget-picker-close]')?.addEventListener('click', () => {
             closePicker(picker);
         });
+
+        bindWidgetPickerFilter(picker);
 
         picker?.addEventListener('click', (event) => {
             if (event.target === picker) {
@@ -4065,6 +4063,76 @@
         } else {
             picker.removeAttribute('open');
         }
+    }
+
+    function openWidgetPicker(picker) {
+        if (!picker) {
+            return;
+        }
+
+        if (typeof picker.showModal === 'function') {
+            picker.showModal();
+        } else {
+            picker.setAttribute('open', '');
+        }
+
+        resetWidgetPickerFilter(picker);
+        window.requestAnimationFrame(() => {
+            picker.querySelector('[data-widget-picker-filter]')?.focus();
+        });
+    }
+
+    function bindWidgetPickerFilter(picker) {
+        const input = picker?.querySelector('[data-widget-picker-filter]');
+        if (!input || input.dataset.dashboardWidgetPickerFilterBound === 'true') {
+            return;
+        }
+
+        input.dataset.dashboardWidgetPickerFilterBound = 'true';
+        input.addEventListener('input', () => applyWidgetPickerFilter(picker));
+        applyWidgetPickerFilter(picker);
+    }
+
+    function resetWidgetPickerFilter(picker) {
+        const input = picker?.querySelector('[data-widget-picker-filter]');
+        if (!input) {
+            return;
+        }
+
+        input.value = '';
+        applyWidgetPickerFilter(picker);
+    }
+
+    function applyWidgetPickerFilter(picker) {
+        const input = picker?.querySelector('[data-widget-picker-filter]');
+        const query = normalizeSearchText(input?.value || '');
+        const options = Array.from(picker?.querySelectorAll('[data-widget-option]') || []);
+        let visibleCount = 0;
+
+        options.forEach((option) => {
+            const isVisible = query.length === 0 || getWidgetPickerOptionSearchText(option).includes(query);
+            option.hidden = !isVisible;
+            if (isVisible) {
+                visibleCount += 1;
+            }
+        });
+
+        const empty = picker?.querySelector('[data-widget-picker-empty]');
+        if (empty) {
+            empty.hidden = query.length === 0 || visibleCount > 0 || options.length === 0;
+        }
+    }
+
+    function getWidgetPickerOptionSearchText(option) {
+        return normalizeSearchText([
+            option?.dataset?.widgetSearchText,
+            option?.dataset?.widgetTitle,
+            option?.dataset?.widgetKey,
+            option?.dataset?.widgetType,
+            option?.dataset?.widgetModuleKey,
+            option?.dataset?.widgetAuthor,
+            option?.dataset?.widgetPayload
+        ].filter(Boolean).join(' '));
     }
 
     function cssEscape(value) {

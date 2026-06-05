@@ -528,17 +528,33 @@
             }
             else
             {
+                <div class="dashboard-widget-picker__search">
+                    <label class="visually-hidden" for="dashboard-widget-picker-search">@L["Search"]</label>
+                    <input id="dashboard-widget-picker-search"
+                           type="search"
+                           data-widget-picker-filter
+                           placeholder="@L["Search..."]"
+                           aria-label="@L["Search"]"
+                           autocomplete="off" />
+                </div>
+                <div class="empty-state dashboard-widget-picker__empty" data-widget-picker-empty hidden>@L["No matching widgets."]</div>
                 <div class="dashboard-widget-picker__list">
                     @foreach (var widget in Model.AvailableWidgets)
                     {
+                        var localizedWidgetTitle = L[widget.Title].Value;
+                        var widgetSearchText = $"{localizedWidgetTitle} {widget.Title} {widget.WidgetKey} {widget.WidgetType} {widget.ModuleKey} {widget.Author} {widget.Payload}";
                         <div role="button"
                              tabindex="0"
                              class="dashboard-widget-option"
                              data-widget-option
                              data-widget-id="@widget.WidgetId"
                              data-widget-title="@L[widget.Title]"
+                             data-widget-key="@widget.WidgetKey"
                              data-widget-type="@widget.WidgetType"
-                             data-widget-payload="@widget.Payload">
+                             data-widget-payload="@widget.Payload"
+                             data-widget-module-key="@widget.ModuleKey"
+                             data-widget-author="@widget.Author"
+                             data-widget-search-text="@widgetSearchText">
                             <span class="dashboard-widget-option__title">@L[widget.Title]</span>
                             <span class="dashboard-widget-option__meta">@L["Portal widget"]</span>
                         </div>
