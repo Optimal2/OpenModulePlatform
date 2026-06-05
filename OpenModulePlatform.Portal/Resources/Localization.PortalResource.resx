@@ -2352,4 +2352,9 @@
   <data name="No iFrame app instances are available." xml:space="preserve"><value>No iFrame app instances are available.</value></data>
   <data name="Use selected iFrame URL" xml:space="preserve"><value>Use selected iFrame URL</value></data>
   <data name="Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually." xml:space="preserve"><value>Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually.</value></data>
+  <data name="Create iFrame standalone entry" xml:space="preserve"><value>Create iFrame standalone entry</value></data>
+  <data name="When checked, the target URL is generated from the selected iFrame URL when the entry is saved." xml:space="preserve"><value>When checked, the target URL is generated from the selected iFrame URL when the entry is saved.</value></data>
+  <data name="Select a valid iFrame app." xml:space="preserve"><value>Select a valid iFrame app.</value></data>
+  <data name="Select a valid iFrame URL." xml:space="preserve"><value>Select a valid iFrame URL.</value></data>
+  <data name="Select a valid iFrame app and URL." xml:space="preserve"><value>Select a valid iFrame app and URL.</value></data>
 </root>

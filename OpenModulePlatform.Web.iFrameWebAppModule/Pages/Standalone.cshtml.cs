@@ -63,13 +63,6 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
             return Page();
         }
 
-        if (!selectedRow.IsInEnabledUrlSet)
-        {
-            SelectedError = T("The selected URL is not linked to an enabled URL set.");
-            Response.StatusCode = StatusCodes.Status404NotFound;
-            return Page();
-        }
-
         var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
         if (!IndexModel.IsAllowedForRole(selectedRow.AllowedRoles, roleContext.ActiveRoleName))
         {
