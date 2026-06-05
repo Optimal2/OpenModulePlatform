@@ -1331,6 +1331,20 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    IF NOT
+    (
+        UPDATE(ModuleInstanceId)
+        OR UPDATE(AppId)
+        OR UPDATE(HostId)
+        OR UPDATE(TargetHostTemplateId)
+        OR UPDATE(IsEnabled)
+        OR UPDATE(IsAllowed)
+        OR UPDATE(DesiredState)
+    )
+    BEGIN
+        RETURN;
+    END;
+
     IF EXISTS
     (
         SELECT 1
