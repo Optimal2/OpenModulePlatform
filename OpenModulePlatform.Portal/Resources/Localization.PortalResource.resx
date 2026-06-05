@@ -1823,6 +1823,14 @@
   <data name="Favorites" xml:space="preserve"><value>Favorites</value></data>
   <data name="Portal widget" xml:space="preserve"><value>Portal widget</value></data>
   <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard widgets</value></data>
+  <data name="Manage registered Portal dashboard widget definitions and availability." xml:space="preserve"><value>Manage registered Portal dashboard widget definitions and availability.</value></data>
+  <data name="Export and import" xml:space="preserve"><value>Export and import</value></data>
+  <data name="Dashboard widget import and export is handled from the shared Export and import page." xml:space="preserve"><value>Dashboard widget import and export is handled from the shared Export and import page.</value></data>
+  <data name="Open Export and import" xml:space="preserve"><value>Open Export and import</value></data>
+  <data name="Edit description" xml:space="preserve"><value>Edit description</value></data>
+  <data name="Leave empty to clear the widget description." xml:space="preserve"><value>Leave empty to clear the widget description.</value></data>
+  <data name="Save description" xml:space="preserve"><value>Save description</value></data>
+  <data name="Dashboard widget description updated." xml:space="preserve"><value>Dashboard widget description updated.</value></data>
   <data name="Import and export portable Portal dashboard widget definitions as JSON files." xml:space="preserve"><value>Import and export portable Portal dashboard widget definitions as JSON files.</value></data>
   <data name="Import widgets" xml:space="preserve"><value>Import widgets</value></data>
   <data name="Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created." xml:space="preserve"><value>Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created.</value></data>

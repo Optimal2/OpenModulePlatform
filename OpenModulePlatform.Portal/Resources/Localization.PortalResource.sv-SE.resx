@@ -1919,6 +1919,14 @@
   <data name="Favorites" xml:space="preserve"><value>Favoriter</value></data>
   <data name="Portal widget" xml:space="preserve"><value>Portal-widget</value></data>
   <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard-widgets</value></data>
+  <data name="Manage registered Portal dashboard widget definitions and availability." xml:space="preserve"><value>Hantera registrerade dashboard-widgetdefinitioner och tillgänglighet.</value></data>
+  <data name="Export and import" xml:space="preserve"><value>Export och import</value></data>
+  <data name="Dashboard widget import and export is handled from the shared Export and import page." xml:space="preserve"><value>Import och export av dashboard-widgets hanteras från den gemensamma sidan Export och import.</value></data>
+  <data name="Open Export and import" xml:space="preserve"><value>Öppna Export och import</value></data>
+  <data name="Edit description" xml:space="preserve"><value>Redigera beskrivning</value></data>
+  <data name="Leave empty to clear the widget description." xml:space="preserve"><value>Lämna tomt för att rensa widgetens beskrivning.</value></data>
+  <data name="Save description" xml:space="preserve"><value>Spara beskrivning</value></data>
+  <data name="Dashboard widget description updated." xml:space="preserve"><value>Dashboard-widgetens beskrivning har uppdaterats.</value></data>
   <data name="Import and export portable Portal dashboard widget definitions as JSON files." xml:space="preserve"><value>Importera och exportera portabla widgetdefinitioner för portalens dashboard som JSON-filer.</value></data>
   <data name="Import widgets" xml:space="preserve"><value>Importera widgets</value></data>
   <data name="Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created." xml:space="preserve"><value>Ladda upp en JSON-fil med dashboard-widgets. Matchande widgets uppdateras via widgetKey; saknade widgets skapas.</value></data>
