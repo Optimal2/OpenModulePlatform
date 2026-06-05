@@ -88,16 +88,7 @@ SELECT u.[id],
        u.[url],
        u.[displayname],
        u.[allowed_roles],
-       u.[enabled],
-       CAST(CASE WHEN EXISTS
-       (
-           SELECT 1
-           FROM omp_iframe.url_set_urls usu
-           INNER JOIN omp_iframe.url_sets us ON us.[id] = usu.[url_set_id]
-           WHERE usu.[url_id] = u.[id]
-             AND us.[enabled] = 1
-       )
-       THEN 1 ELSE 0 END AS bit) AS IsInEnabledUrlSet
+       u.[enabled]
 FROM omp_iframe.urls u
 WHERE u.[id] = @UrlId;";
 
@@ -119,8 +110,7 @@ WHERE u.[id] = @UrlId;";
             Url = rdr.GetString(1),
             DisplayName = rdr.GetString(2),
             AllowedRoles = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-            Enabled = rdr.GetBoolean(4),
-            IsInEnabledUrlSet = rdr.GetBoolean(5)
+            Enabled = rdr.GetBoolean(4)
         };
     }
 }

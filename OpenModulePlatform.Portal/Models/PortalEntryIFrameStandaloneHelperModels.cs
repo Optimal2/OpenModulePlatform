@@ -19,5 +19,8 @@ public sealed record PortalEntryIFrameStandaloneAppOption(
 
 public sealed record PortalEntryIFrameStandaloneUrlOption(
     int UrlId,
-    string DisplayName,
-    string UrlSetNames);
+    string DisplayName);
+
+public sealed record PortalEntryIFrameStandaloneSelection(
+    Guid AppInstanceId,
+    int UrlId);

@@ -7,5 +7,4 @@ public sealed class IFrameUrlRow
     public string DisplayName { get; init; } = string.Empty;
     public string? AllowedRoles { get; init; }
     public bool Enabled { get; init; }
-    public bool IsInEnabledUrlSet { get; init; } = true;
 }

@@ -29,13 +29,54 @@ public sealed class PortalEntryIFrameStandaloneHelperService
         return new PortalEntryIFrameStandaloneHelperOptions(apps, urls);
     }
 
+    public async Task<string?> BuildStandaloneTargetUrlAsync(
+        Guid appInstanceId,
+        int urlId,
+        CancellationToken ct)
+    {
+        var options = await GetOptionsAsync(ct);
+        var app = options.Apps.FirstOrDefault(option => option.AppInstanceId == appInstanceId);
+        var url = options.Urls.FirstOrDefault(option => option.UrlId == urlId);
+
+        return app is null || url is null
+            ? null
+            : BuildStandaloneTargetUrl(app.BasePath, url.UrlId);
+    }
+
+    public static PortalEntryIFrameStandaloneSelection? ResolveSelection(
+        PortalEntryIFrameStandaloneHelperOptions options,
+        string? targetUrl)
+    {
+        var trimmed = targetUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return null;
+        }
+
+        foreach (var app in options.Apps)
+        {
+            var prefix = BuildStandaloneTargetUrlPrefix(app.BasePath);
+            if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var suffix = trimmed[prefix.Length..].Trim('/');
+            if (int.TryParse(suffix, out var urlId)
+                && options.Urls.Any(option => option.UrlId == urlId))
+            {
+                return new PortalEntryIFrameStandaloneSelection(app.AppInstanceId, urlId);
+            }
+        }
+
+        return null;
+    }
+
     private static async Task<bool> HasIFrameTablesAsync(SqlConnection conn, CancellationToken ct)
     {
         const string sql = @"
 SELECT CAST(CASE
     WHEN OBJECT_ID(N'omp_iframe.urls', N'U') IS NOT NULL
-     AND OBJECT_ID(N'omp_iframe.url_sets', N'U') IS NOT NULL
-     AND OBJECT_ID(N'omp_iframe.url_set_urls', N'U') IS NOT NULL
     THEN 1 ELSE 0 END AS bit);";
 
         await using var cmd = new SqlCommand(sql, conn);
@@ -94,48 +135,24 @@ ORDER BY ai.SortOrder,
     {
         const string sql = @"
 SELECT u.[id],
-       u.[displayname],
-       us.[displayname] AS UrlSetDisplayName
+       u.[displayname]
 FROM omp_iframe.urls u
-INNER JOIN omp_iframe.url_set_urls usu ON usu.[url_id] = u.[id]
-INNER JOIN omp_iframe.url_sets us ON us.[id] = usu.[url_set_id]
 WHERE u.[enabled] = 1
-  AND us.[enabled] = 1
 ORDER BY u.[displayname],
-         us.[displayname];";
+         u.[id];";
 
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
-        var rawRows = new List<(int UrlId, string DisplayName, string UrlSetDisplayName)>();
+        var rows = new List<PortalEntryIFrameStandaloneUrlOption>();
         while (await rdr.ReadAsync(ct))
         {
-            rawRows.Add((
+            rows.Add(new PortalEntryIFrameStandaloneUrlOption(
                 rdr.GetInt32(0),
-                rdr.GetString(1),
-                rdr.GetString(2)));
+                rdr.GetString(1)));
         }
 
-        return rawRows
-            .GroupBy(row => row.UrlId)
-            .Select(group =>
-            {
-                var first = group.First();
-                var setNames = string.Join(
-                    ", ",
-                    group
-                        .Select(row => row.UrlSetDisplayName)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(name => name));
-
-                return new PortalEntryIFrameStandaloneUrlOption(
-                    first.UrlId,
-                    first.DisplayName,
-                    setNames);
-            })
-            .OrderBy(option => option.DisplayName)
-            .ThenBy(option => option.UrlId)
-            .ToList();
+        return rows;
     }
 
     private static string? BuildInternalBasePath(string? routePath)
@@ -152,4 +169,10 @@ ORDER BY u.[displayname],
             ? null
             : "/" + normalized;
     }
+
+    private static string BuildStandaloneTargetUrl(string basePath, int urlId)
+        => $"{basePath.TrimEnd('/')}/standalone/{urlId}";
+
+    private static string BuildStandaloneTargetUrlPrefix(string basePath)
+        => $"{basePath.TrimEnd('/')}/standalone/";
 }

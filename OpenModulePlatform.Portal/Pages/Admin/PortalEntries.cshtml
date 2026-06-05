@@ -96,43 +96,47 @@
                 </div>
             </div>
 
-            <div class="portal-entry-target-helper" data-iframe-standalone-helper data-target-input-id="Input_TargetUrl">
-                <div>
-                    <strong>@L["iFrame standalone entry"]</strong>
-                    <p class="muted small-text">@L["Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually."]</p>
+            <div class="portal-entry-target-helper" data-iframe-standalone-helper>
+                <div class="form-field checkbox-row checkbox-row--boxed">
+                    <input asp-for="Input.CreateIFrameStandaloneEntry" type="checkbox" data-iframe-standalone-toggle />
+                    <label asp-for="Input.CreateIFrameStandaloneEntry"></label>
                 </div>
-                @if (Model.IFrameStandaloneHelper.HasOptions)
-                {
-                    <div class="field-grid field-grid--3">
+                <p class="muted small-text">@L["When checked, the target URL is generated from the selected iFrame URL when the entry is saved."]</p>
+                <div data-iframe-standalone-options hidden="@(!Model.Input.CreateIFrameStandaloneEntry)">
+                    @if (Model.IFrameStandaloneHelper.HasOptions)
+                    {
+                    <div class="field-grid field-grid--2">
                         <div class="form-field">
-                            <label>@L["Select iFrame app"]</label>
-                            <select data-iframe-standalone-app>
+                            <label asp-for="Input.IFrameStandaloneAppInstanceId"></label>
+                            <select asp-for="Input.IFrameStandaloneAppInstanceId" data-iframe-standalone-app>
+                                <option value="">@L["Select iFrame app"]</option>
                                 @foreach (var app in Model.IFrameStandaloneHelper.Apps)
                                 {
-                                    <option value="@app.AppInstanceId" data-base-path="@app.BasePath">@app.DisplayName (@app.AppInstanceKey)</option>
+                                    <option value="@app.AppInstanceId">@app.DisplayName (@app.AppInstanceKey)</option>
                                 }
                             </select>
+                            <span asp-validation-for="Input.IFrameStandaloneAppInstanceId" class="field-validation-error"></span>
                         </div>
                         <div class="form-field">
-                            <label>@L["Select iFrame URL"]</label>
-                            <select data-iframe-standalone-url>
+                            <label asp-for="Input.IFrameStandaloneUrlId"></label>
+                            <select asp-for="Input.IFrameStandaloneUrlId" data-iframe-standalone-url>
+                                <option value="">@L["Select iFrame URL"]</option>
                                 @foreach (var url in Model.IFrameStandaloneHelper.Urls)
                                 {
-                                    <option value="@url.UrlId">@url.DisplayName (@url.UrlSetNames)</option>
+                                    <option value="@url.UrlId">@url.DisplayName</option>
                                 }
                             </select>
-                        </div>
-                        <div class="form-field form-field--compact">
-                            <button type="button" class="btn" data-iframe-standalone-apply>@L["Use selected iFrame URL"]</button>
+                            <span asp-validation-for="Input.IFrameStandaloneUrlId" class="field-validation-error"></span>
                         </div>
                     </div>
-                }
-                else
-                {
+                    }
+                    else
+                    {
                     <p class="muted small-text">
                         @(Model.IFrameStandaloneHelper.HasAppOptions ? L["No iFrame URLs available"] : L["No iFrame app instances are available."])
                     </p>
-                }
+                    }
+                </div>
             </div>
 
             <div class="field-grid field-grid--2">
@@ -173,6 +177,11 @@
                 var hasChildren = Model.Rows.Any(entry => entry.ParentEntryId == row.PortalEntryId);
                 var parentValue = parentEntryId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
                 var editorId = $"portal-entry-editor-{row.PortalEntryId}";
+                var standaloneSelection = Model.GetIFrameStandaloneSelection(row.TargetUrl);
+                var isPostedEditor = Model.OpenEditorPortalEntryId == row.PortalEntryId;
+                var editUseStandalone = isPostedEditor ? Model.EditInput.CreateIFrameStandaloneEntry : standaloneSelection is not null;
+                var editStandaloneAppId = isPostedEditor ? Model.EditInput.IFrameStandaloneAppInstanceId : standaloneSelection?.AppInstanceId;
+                var editStandaloneUrlId = isPostedEditor ? Model.EditInput.IFrameStandaloneUrlId : standaloneSelection?.UrlId;
                 <div class="portal-entry-layout-row @(isEnabled ? string.Empty : "is-disabled") @(depth > 0 ? "is-child-entry" : string.Empty)"
                      style="--portal-entry-depth: @depth"
                      data-portal-entry-layout-row
@@ -332,43 +341,65 @@
                                 </div>
                             </div>
 
-                            <div class="portal-entry-target-helper" data-iframe-standalone-helper data-target-input-id="EditInput_TargetUrl_@row.PortalEntryId">
-                                <div>
-                                    <strong>@L["iFrame standalone entry"]</strong>
-                                    <p class="muted small-text">@L["Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually."]</p>
+                            <div class="portal-entry-target-helper" data-iframe-standalone-helper>
+                                <div class="form-field checkbox-row checkbox-row--boxed">
+                                    <input id="EditInput_CreateIFrameStandaloneEntry_@row.PortalEntryId"
+                                           name="EditInput.CreateIFrameStandaloneEntry"
+                                           type="checkbox"
+                                           value="true"
+                                           checked="@editUseStandalone"
+                                           data-iframe-standalone-toggle />
+                                    <input name="EditInput.CreateIFrameStandaloneEntry" type="hidden" value="false" />
+                                    <label for="EditInput_CreateIFrameStandaloneEntry_@row.PortalEntryId">@L["Create iFrame standalone entry"]</label>
                                 </div>
-                                @if (Model.IFrameStandaloneHelper.HasOptions)
-                                {
-                                    <div class="field-grid field-grid--3">
+                                <p class="muted small-text">@L["When checked, the target URL is generated from the selected iFrame URL when the entry is saved."]</p>
+                                <div data-iframe-standalone-options hidden="@(!editUseStandalone)">
+                                    @if (Model.IFrameStandaloneHelper.HasOptions)
+                                    {
+                                    <div class="field-grid field-grid--2">
                                         <div class="form-field">
-                                            <label>@L["Select iFrame app"]</label>
-                                            <select data-iframe-standalone-app>
+                                            <label for="EditInput_IFrameStandaloneAppInstanceId_@row.PortalEntryId">@L["Select iFrame app"]</label>
+                                            <select id="EditInput_IFrameStandaloneAppInstanceId_@row.PortalEntryId" name="EditInput.IFrameStandaloneAppInstanceId" data-iframe-standalone-app>
+                                                <option value="">@L["Select iFrame app"]</option>
                                                 @foreach (var app in Model.IFrameStandaloneHelper.Apps)
                                                 {
-                                                    <option value="@app.AppInstanceId" data-base-path="@app.BasePath">@app.DisplayName (@app.AppInstanceKey)</option>
+                                                    if (editStandaloneAppId == app.AppInstanceId)
+                                                    {
+                                                        <option value="@app.AppInstanceId" selected>@app.DisplayName (@app.AppInstanceKey)</option>
+                                                    }
+                                                    else
+                                                    {
+                                                        <option value="@app.AppInstanceId">@app.DisplayName (@app.AppInstanceKey)</option>
+                                                    }
                                                 }
                                             </select>
                                         </div>
                                         <div class="form-field">
-                                            <label>@L["Select iFrame URL"]</label>
-                                            <select data-iframe-standalone-url>
+                                            <label for="EditInput_IFrameStandaloneUrlId_@row.PortalEntryId">@L["Select iFrame URL"]</label>
+                                            <select id="EditInput_IFrameStandaloneUrlId_@row.PortalEntryId" name="EditInput.IFrameStandaloneUrlId" data-iframe-standalone-url>
+                                                <option value="">@L["Select iFrame URL"]</option>
                                                 @foreach (var url in Model.IFrameStandaloneHelper.Urls)
                                                 {
-                                                    <option value="@url.UrlId">@url.DisplayName (@url.UrlSetNames)</option>
+                                                    if (editStandaloneUrlId == url.UrlId)
+                                                    {
+                                                        <option value="@url.UrlId" selected>@url.DisplayName</option>
+                                                    }
+                                                    else
+                                                    {
+                                                        <option value="@url.UrlId">@url.DisplayName</option>
+                                                    }
                                                 }
                                             </select>
                                         </div>
-                                        <div class="form-field form-field--compact">
-                                            <button type="button" class="btn" data-iframe-standalone-apply>@L["Use selected iFrame URL"]</button>
-                                        </div>
                                     </div>
-                                }
-                                else
-                                {
+                                    }
+                                    else
+                                    {
                                     <p class="muted small-text">
                                         @(Model.IFrameStandaloneHelper.HasAppOptions ? L["No iFrame URLs available"] : L["No iFrame app instances are available."])
                                     </p>
-                                }
+                                    }
+                                </div>
                             </div>
 
                             <div class="field-grid field-grid--2">
@@ -427,23 +458,18 @@
             createClose?.addEventListener("click", () => setPanelOpen(createRow, createToggle, false));
 
             document.querySelectorAll("[data-iframe-standalone-helper]").forEach(helper => {
-                const targetInput = document.getElementById(helper.dataset.targetInputId ?? "");
-                const appSelect = helper.querySelector("[data-iframe-standalone-app]");
-                const urlSelect = helper.querySelector("[data-iframe-standalone-url]");
-                const applyButton = helper.querySelector("[data-iframe-standalone-apply]");
-
-                applyButton?.addEventListener("click", () => {
-                    const selectedApp = appSelect?.selectedOptions?.[0];
-                    const basePath = selectedApp?.dataset.basePath ?? "";
-                    const urlId = urlSelect?.value ?? "";
-                    if (!targetInput || !basePath || !urlId) {
-                        return;
+                const toggle = helper.querySelector("[data-iframe-standalone-toggle]");
+                const options = helper.querySelector("[data-iframe-standalone-options]");
+                const sync = () => {
+                    if (options) {
+                        options.hidden = !(toggle?.checked ?? false);
                     }
 
-                    targetInput.value = `${basePath.replace(/\/+$/, "")}/standalone/${encodeURIComponent(urlId)}`;
-                    targetInput.dispatchEvent(new Event("input", { bubbles: true }));
-                    targetInput.dispatchEvent(new Event("change", { bubbles: true }));
-                });
+                    helper.classList.toggle("is-active", toggle?.checked ?? false);
+                };
+
+                toggle?.addEventListener("change", sync);
+                sync();
             });
 
             if (!list) {

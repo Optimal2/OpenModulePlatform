@@ -2453,4 +2453,9 @@
   <data name="No iFrame app instances are available." xml:space="preserve"><value>Inga iFrame-appinstanser är tillgängliga.</value></data>
   <data name="Use selected iFrame URL" xml:space="preserve"><value>Använd vald iFrame-URL</value></data>
   <data name="Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually." xml:space="preserve"><value>Välj en iFrame-app och URL för att fylla target URL-fältet. Du kan fortfarande redigera target URL manuellt.</value></data>
+  <data name="Create iFrame standalone entry" xml:space="preserve"><value>Skapa fristående iFrame-post</value></data>
+  <data name="When checked, the target URL is generated from the selected iFrame URL when the entry is saved." xml:space="preserve"><value>När detta är ikryssat skapas target URL från vald iFrame-URL när posten sparas.</value></data>
+  <data name="Select a valid iFrame app." xml:space="preserve"><value>Välj en giltig iFrame-app.</value></data>
+  <data name="Select a valid iFrame URL." xml:space="preserve"><value>Välj en giltig iFrame-URL.</value></data>
+  <data name="Select a valid iFrame app and URL." xml:space="preserve"><value>Välj en giltig iFrame-app och URL.</value></data>
 </root>

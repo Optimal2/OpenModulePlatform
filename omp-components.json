@@ -57,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.181",
+      "version": "0.3.182",
       "minModuleDefinitionVersion": "0.3.89",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -132,7 +132,7 @@
       "appKey": "iframe_webapp_webapp",
       "packageType": "web-app",
       "targetName": "iframe-webapp",
-      "version": "0.3.14",
+      "version": "0.3.15",
       "projectPath": "OpenModulePlatform.Web.iFrameWebAppModule",
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.iFrameWebAppModule.zip"
