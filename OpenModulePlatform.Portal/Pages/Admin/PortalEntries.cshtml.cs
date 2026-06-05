@@ -13,14 +13,17 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 public sealed class PortalEntriesModel : OmpPortalPageModel
 {
     private readonly PortalEntryService _portalEntries;
+    private readonly PortalEntryIFrameStandaloneHelperService _iframeStandaloneHelper;
 
     public PortalEntriesModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        PortalEntryService portalEntries)
+        PortalEntryService portalEntries,
+        PortalEntryIFrameStandaloneHelperService iframeStandaloneHelper)
         : base(options, rbac)
     {
         _portalEntries = portalEntries;
+        _iframeStandaloneHelper = iframeStandaloneHelper;
     }
 
     public InputModel Input { get; set; } = new();
@@ -38,6 +41,8 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
     public IReadOnlyDictionary<int, int> RowDepths { get; private set; } = new Dictionary<int, int>();
 
     public IReadOnlyList<OptionItem> ParentOptions { get; private set; } = [];
+
+    public PortalEntryIFrameStandaloneHelperOptions IFrameStandaloneHelper { get; private set; } = new([], []);
 
     public bool OpenCreatePanel { get; private set; }
 
@@ -252,6 +257,7 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
         Rows = await _portalEntries.GetAdminRowsAsync(ct);
         RowDepths = BuildDepthLookup(Rows);
         ParentOptions = await _portalEntries.GetParentOptionsAsync(null, ct);
+        IFrameStandaloneHelper = await _iframeStandaloneHelper.GetOptionsAsync(ct);
         LayoutEntries = Rows
             .Select((row, index) => new LayoutEntryInput
             {

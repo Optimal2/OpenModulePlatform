@@ -2345,4 +2345,11 @@
   <data name="The HostAgent that claims the global retention job deletes database rows and central ArtifactStore payloads, then queues host-specific cache cleanup jobs. Portal only creates the job request." xml:space="preserve"><value>The HostAgent that claims the global retention job deletes database rows and central ArtifactStore payloads, then queues host-specific cache cleanup jobs. Portal only creates the job request.</value></data>
   <data name="Queue a HostAgent job to delete unreferenced old artifact versions?" xml:space="preserve"><value>Queue a HostAgent job to delete unreferenced old artifact versions?</value></data>
   <data name="Queue artifact cleanup" xml:space="preserve"><value>Queue artifact cleanup</value></data>
+  <data name="iFrame standalone entry" xml:space="preserve"><value>iFrame standalone entry</value></data>
+  <data name="Select iFrame app" xml:space="preserve"><value>Select iFrame app</value></data>
+  <data name="Select iFrame URL" xml:space="preserve"><value>Select iFrame URL</value></data>
+  <data name="No iFrame URLs available" xml:space="preserve"><value>No iFrame URLs available</value></data>
+  <data name="No iFrame app instances are available." xml:space="preserve"><value>No iFrame app instances are available.</value></data>
+  <data name="Use selected iFrame URL" xml:space="preserve"><value>Use selected iFrame URL</value></data>
+  <data name="Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually." xml:space="preserve"><value>Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually.</value></data>
 </root>

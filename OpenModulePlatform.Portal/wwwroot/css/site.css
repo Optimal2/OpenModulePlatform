@@ -4874,6 +4874,24 @@ body.dashboard-widget-picker-open {
     background: var(--surface-muted);
 }
 
+.portal-entry-target-helper {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface-muted) 82%, var(--surface));
+}
+
+.portal-entry-target-helper p {
+    margin: 3px 0 0;
+}
+
+.portal-entry-target-helper .btn {
+    width: 100%;
+    min-height: 38px;
+}
+
 .portal-entry-layout-row {
     position: relative;
     display: grid;

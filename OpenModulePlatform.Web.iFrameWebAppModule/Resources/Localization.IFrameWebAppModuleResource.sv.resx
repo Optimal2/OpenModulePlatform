@@ -13,4 +13,6 @@
   <data name="iFrame unavailable" xml:space="preserve"><value>iFrame inte tillgänglig</value></data>
   <data name="The selected URL set is not configured." xml:space="preserve"><value>Den valda URL-gruppen är inte konfigurerad.</value></data>
   <data name="The selected URL set has no configured URLs." xml:space="preserve"><value>Den valda URL-gruppen har inga konfigurerade URL:er.</value></data>
+  <data name="Standalone view" xml:space="preserve"><value>Fristående vy</value></data>
+  <data name="The selected URL is not linked to an enabled URL set." xml:space="preserve"><value>Den valda URL:en är inte kopplad till en aktiverad URL-grupp.</value></data>
 </root>

@@ -96,6 +96,45 @@
                 </div>
             </div>
 
+            <div class="portal-entry-target-helper" data-iframe-standalone-helper data-target-input-id="Input_TargetUrl">
+                <div>
+                    <strong>@L["iFrame standalone entry"]</strong>
+                    <p class="muted small-text">@L["Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually."]</p>
+                </div>
+                @if (Model.IFrameStandaloneHelper.HasOptions)
+                {
+                    <div class="field-grid field-grid--3">
+                        <div class="form-field">
+                            <label>@L["Select iFrame app"]</label>
+                            <select data-iframe-standalone-app>
+                                @foreach (var app in Model.IFrameStandaloneHelper.Apps)
+                                {
+                                    <option value="@app.AppInstanceId" data-base-path="@app.BasePath">@app.DisplayName (@app.AppInstanceKey)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>@L["Select iFrame URL"]</label>
+                            <select data-iframe-standalone-url>
+                                @foreach (var url in Model.IFrameStandaloneHelper.Urls)
+                                {
+                                    <option value="@url.UrlId">@url.DisplayName (@url.UrlSetNames)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-field form-field--compact">
+                            <button type="button" class="btn" data-iframe-standalone-apply>@L["Use selected iFrame URL"]</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <p class="muted small-text">
+                        @(Model.IFrameStandaloneHelper.HasAppOptions ? L["No iFrame URLs available"] : L["No iFrame app instances are available."])
+                    </p>
+                }
+            </div>
+
             <div class="field-grid field-grid--2">
                 <div class="form-field">
                     <label asp-for="Input.LogoUrl"></label>
@@ -293,6 +332,45 @@
                                 </div>
                             </div>
 
+                            <div class="portal-entry-target-helper" data-iframe-standalone-helper data-target-input-id="EditInput_TargetUrl_@row.PortalEntryId">
+                                <div>
+                                    <strong>@L["iFrame standalone entry"]</strong>
+                                    <p class="muted small-text">@L["Select an iFrame app and URL to fill the target URL field. You can still edit the target URL manually."]</p>
+                                </div>
+                                @if (Model.IFrameStandaloneHelper.HasOptions)
+                                {
+                                    <div class="field-grid field-grid--3">
+                                        <div class="form-field">
+                                            <label>@L["Select iFrame app"]</label>
+                                            <select data-iframe-standalone-app>
+                                                @foreach (var app in Model.IFrameStandaloneHelper.Apps)
+                                                {
+                                                    <option value="@app.AppInstanceId" data-base-path="@app.BasePath">@app.DisplayName (@app.AppInstanceKey)</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="form-field">
+                                            <label>@L["Select iFrame URL"]</label>
+                                            <select data-iframe-standalone-url>
+                                                @foreach (var url in Model.IFrameStandaloneHelper.Urls)
+                                                {
+                                                    <option value="@url.UrlId">@url.DisplayName (@url.UrlSetNames)</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="form-field form-field--compact">
+                                            <button type="button" class="btn" data-iframe-standalone-apply>@L["Use selected iFrame URL"]</button>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <p class="muted small-text">
+                                        @(Model.IFrameStandaloneHelper.HasAppOptions ? L["No iFrame URLs available"] : L["No iFrame app instances are available."])
+                                    </p>
+                                }
+                            </div>
+
                             <div class="field-grid field-grid--2">
                                 <div class="form-field">
                                     <label for="EditInput_LogoUrl_@row.PortalEntryId">@L["Logo URL"]</label>
@@ -347,6 +425,26 @@
             });
 
             createClose?.addEventListener("click", () => setPanelOpen(createRow, createToggle, false));
+
+            document.querySelectorAll("[data-iframe-standalone-helper]").forEach(helper => {
+                const targetInput = document.getElementById(helper.dataset.targetInputId ?? "");
+                const appSelect = helper.querySelector("[data-iframe-standalone-app]");
+                const urlSelect = helper.querySelector("[data-iframe-standalone-url]");
+                const applyButton = helper.querySelector("[data-iframe-standalone-apply]");
+
+                applyButton?.addEventListener("click", () => {
+                    const selectedApp = appSelect?.selectedOptions?.[0];
+                    const basePath = selectedApp?.dataset.basePath ?? "";
+                    const urlId = urlSelect?.value ?? "";
+                    if (!targetInput || !basePath || !urlId) {
+                        return;
+                    }
+
+                    targetInput.value = `${basePath.replace(/\/+$/, "")}/standalone/${encodeURIComponent(urlId)}`;
+                    targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+                    targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+            });
 
             if (!list) {
                 return;
