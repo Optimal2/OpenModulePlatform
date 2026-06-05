@@ -110,8 +110,20 @@
         @foreach (var widget in Model.ActiveWidgets)
         {
             var isAdminOverviewWidget = string.Equals(widget.Payload, "admin-overview", StringComparison.OrdinalIgnoreCase);
+            var usesPresetZoom = isAdminOverviewWidget
+                || widget.Payload is "weekday-date" or "user-roles" or "content-pages";
+            var presetZoom = widget.StringData?.Trim().ToLowerInvariant() switch
+            {
+                "small" => "small",
+                "large" => "large",
+                _ => "default"
+            };
+            if (isAdminOverviewWidget && presetZoom == "default" && widget.IntData is 1 or 2)
+            {
+                presetZoom = widget.IntData == 1 ? "small" : "large";
+            }
             var widgetContentScale = Math.Clamp(widget.ContentScale, 25, 200);
-            var widgetContentScaleFactor = isAdminOverviewWidget ? 1.0 : widgetContentScale / 100.0;
+            var widgetContentScaleFactor = usesPresetZoom ? 1.0 : widgetContentScale / 100.0;
             var isBlankWidget = string.Equals(widget.Payload, "blank-rectangle", StringComparison.OrdinalIgnoreCase);
             var hasColumnSettings = widget.Payload is "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "content-pages";
             var hasEntryFilterSettings = widget.Payload is "portal-entry-list" or "portal-entry-combolist";
@@ -122,9 +134,6 @@
                 || hasColumnSettings
                 || hasEntryFilterSettings
                 || isBlankWidget;
-            var adminOverviewSize = isAdminOverviewWidget && widget.IntData is 1 or 2
-                ? widget.IntData.Value
-                : 0;
             var entryFilterMode = hasEntryFilterSettings && string.Equals(widget.StringData, "main-only", StringComparison.OrdinalIgnoreCase)
                 ? "main-only"
                 : string.Empty;
@@ -150,6 +159,7 @@
                      data-widget-string-data="@widget.StringData"
                      data-widget-content-scale="@widgetContentScale.ToString(CultureInfo.InvariantCulture)"
                      data-widget-columns="@(hasColumnSettings ? widgetColumnCount.ToString(CultureInfo.InvariantCulture) : string.Empty)"
+                     data-widget-preset-zoom="@(usesPresetZoom ? presetZoom : string.Empty)"
                      data-widget-titlebar-hidden="@widget.HideTitlebarWhenViewing.ToString().ToLowerInvariant()"
                      style="top: @(widget.OffsetTop)px; left: @(widget.OffsetLeft)px; width: @(widget.Width)px; height: @(widget.Height)px; z-index: @(widget.OrderPriority); --dashboard-widget-content-scale-factor: @widgetContentScaleFactor.ToString("0.###", CultureInfo.InvariantCulture);">
                 @if (hasTitleBar)
@@ -322,12 +332,12 @@
                     <div class="dashboard-widget__zoom-panel" data-widget-zoom-panel hidden>
                         <div class="dashboard-widget__settings-field">
                             <span>@L["Zoom"]</span>
-                            @if (isAdminOverviewWidget)
+                            @if (usesPresetZoom)
                             {
-                            <select data-widget-int-data-control>
-                                <option value="1" selected="@(adminOverviewSize == 1)">@L["Small"]</option>
-                                <option value="0" selected="@(adminOverviewSize == 0)">@L["Default"]</option>
-                                <option value="2" selected="@(adminOverviewSize == 2)">@L["Large"]</option>
+                            <select data-widget-preset-zoom-control>
+                                <option value="small" selected="@(presetZoom == "small")">@L["Small"]</option>
+                                <option value="default" selected="@(presetZoom == "default")">@L["Default"]</option>
+                                <option value="large" selected="@(presetZoom == "large")">@L["Large"]</option>
                             </select>
                             }
                             else

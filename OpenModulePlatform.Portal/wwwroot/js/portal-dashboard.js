@@ -556,6 +556,20 @@
             });
         });
 
+        widget.querySelectorAll('[data-widget-preset-zoom-control]').forEach((control) => {
+            if (control.dataset.dashboardWidgetSettingsBound === 'true') {
+                return;
+            }
+
+            control.dataset.dashboardWidgetSettingsBound = 'true';
+            control.addEventListener('change', () => {
+                const preset = normalizePresetZoom(control.value);
+                widget.dataset.widgetStringData = preset === 'default' ? '' : preset;
+                applyWidgetSettings(widget);
+                onChange();
+            });
+        });
+
         widget.querySelectorAll('[data-blank-widget-style-control]').forEach((control) => {
             if (control.dataset.dashboardWidgetSettingsBound === 'true') {
                 return;
@@ -633,9 +647,22 @@
     function applyWidgetSettings(widget) {
         const contentScale = normalizeContentScale(widget.dataset.widgetContentScale);
         widget.dataset.widgetContentScale = String(contentScale);
-        const usesPresetZoom = widget.dataset.widgetPayload === 'admin-overview';
+        const usesPresetZoom = isPresetZoomWidgetPayload(widget.dataset.widgetPayload);
         widget.style.setProperty('--dashboard-widget-content-scale-factor', formatScaleFactor(usesPresetZoom ? 100 : contentScale));
         syncWidgetContentScaleControls(widget, contentScale);
+        if (usesPresetZoom) {
+            const presetZoom = getWidgetPresetZoom(widget);
+            widget.dataset.widgetPresetZoom = presetZoom;
+            widget.dataset.widgetStringData = presetZoom === 'default' ? '' : presetZoom;
+            if (widget.dataset.widgetPayload === 'admin-overview') {
+                widget.dataset.widgetIntData = '0';
+            }
+            widget.querySelectorAll('[data-widget-preset-zoom-control]').forEach((control) => {
+                control.value = presetZoom;
+            });
+        } else {
+            widget.dataset.widgetPresetZoom = '';
+        }
         const hideTitlebar = widget.dataset.widgetTitlebarHidden === 'true';
         widget.classList.toggle('is-titlebar-hidden', hideTitlebar);
         widget.querySelectorAll('[data-widget-titlebar-toggle]').forEach((button) => {
@@ -2723,6 +2750,31 @@
         return parsed === 1 || parsed === 2 ? parsed : 0;
     }
 
+    function normalizePresetZoom(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        return normalized === 'small' || normalized === 'large' ? normalized : 'default';
+    }
+
+    function getWidgetPresetZoom(widget) {
+        const preset = normalizePresetZoom(widget?.dataset?.widgetStringData);
+        if (preset !== 'default' || String(widget?.dataset?.widgetStringData || '').trim()) {
+            return preset;
+        }
+
+        if (widget?.dataset?.widgetPayload === 'admin-overview') {
+            const legacySize = normalizeAdminOverviewSize(widget.dataset.widgetIntData);
+            if (legacySize === 1) {
+                return 'small';
+            }
+
+            if (legacySize === 2) {
+                return 'large';
+            }
+        }
+
+        return 'default';
+    }
+
     function normalizeContentScale(value) {
         const parsed = parseNullableInteger(value);
         if (parsed === null) {
@@ -2769,6 +2821,13 @@
         return payload === 'portal-entry-favorites'
             || payload === 'portal-entry-list'
             || payload === 'portal-entry-combolist'
+            || payload === 'content-pages';
+    }
+
+    function isPresetZoomWidgetPayload(payload) {
+        return payload === 'admin-overview'
+            || payload === 'weekday-date'
+            || payload === 'user-roles'
             || payload === 'content-pages';
     }
 
@@ -3556,6 +3615,7 @@
         element.dataset.widgetColumns = isColumnCountWidgetPayload(element.dataset.widgetPayload)
             ? String(normalizeColumnCount(widget.intData))
             : '';
+        element.dataset.widgetPresetZoom = '';
         element.dataset.widgetTitlebarHidden = widget.hideTitlebarWhenViewing === true ? 'true' : 'false';
         element.style.top = `${widget.offsetTop || 0}px`;
         element.style.left = `${widget.offsetLeft || 0}px`;
@@ -3646,8 +3706,8 @@
         zoomPanel.className = 'dashboard-widget__zoom-panel';
         zoomPanel.dataset.widgetZoomPanel = '';
         zoomPanel.hidden = true;
-        zoomPanel.appendChild(widget.payload === 'admin-overview'
-            ? createAdminOverviewZoomField(root, widget.intData)
+        zoomPanel.appendChild(isPresetZoomWidgetPayload(widget.payload)
+            ? createPresetZoomField(root, widget)
             : createContentScaleField(root, widget.contentScale));
 
         const settingFields = [];
@@ -3729,17 +3789,24 @@
         return toggle;
     }
 
-    function createAdminOverviewZoomField(root, value) {
+    function createPresetZoomField(root, widget) {
+        const element = {
+            dataset: {
+                widgetPayload: widget?.payload || '',
+                widgetStringData: normalizeWidgetDataValue(widget?.stringData),
+                widgetIntData: normalizeWidgetDataValue(widget?.intData)
+            }
+        };
         return createSelectField(
             root.dataset.contentScaleLabel || 'Zoom',
             [
-                ['1', root.dataset.smallLabel || 'Small'],
-                ['0', root.dataset.defaultLabel || 'Default'],
-                ['2', root.dataset.largeLabel || 'Large']
+                ['small', root.dataset.smallLabel || 'Small'],
+                ['default', root.dataset.defaultLabel || 'Default'],
+                ['large', root.dataset.largeLabel || 'Large']
             ],
-            String(normalizeAdminOverviewSize(value)),
+            getWidgetPresetZoom(element),
             (select) => {
-                select.dataset.widgetIntDataControl = '';
+                select.dataset.widgetPresetZoomControl = '';
             });
     }
 
