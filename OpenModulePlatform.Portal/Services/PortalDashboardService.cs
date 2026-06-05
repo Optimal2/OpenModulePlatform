@@ -663,6 +663,7 @@ SELECT w.widget_id,
 FROM omp_portal.widgets w
 LEFT JOIN omp_portal.widget_permissions wp ON wp.widget_id = w.widget_id
 LEFT JOIN omp.Permissions p ON p.PermissionId = wp.permission_id
+WHERE w.is_enabled = 1
 ORDER BY w.title,
          w.widget_id;";
 

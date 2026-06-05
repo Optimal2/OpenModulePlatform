@@ -386,6 +386,8 @@ public sealed class DashboardWidgetAdminRow
 
     public string? Author { get; set; }
 
+    public bool IsEnabled { get; set; }
+
     public DateTime ModifiedUtc { get; set; }
 
     public List<string> PermissionNames { get; } = [];
