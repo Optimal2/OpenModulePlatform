@@ -52,8 +52,23 @@ Use `scripts/bump-component-version.ps1` to update manifest versions:
 .\scripts\bump-component-version.ps1 -All -Part minor
 ```
 
-The script updates `omp-components.json` only. The HostAgent-first package script
-consumes the manifest directly when it prepares ArtifactStore payloads and SQL
+OMP-compatible repositories also expose a friendlier repository-local wrapper:
+
+```powershell
+.\scripts\omp\bump-version.ps1 -ComponentKey content-webapp
+.\scripts\omp\bump-version.ps1 -AllComponents
+.\scripts\omp\bump-version.ps1 -ModuleKey content_webapp -UpdateModuleMinimums
+```
+
+For a double-click workflow, use `scripts/omp/bump-version.cmd`. It launches the
+same script in interactive mode so the operator can choose component keys and,
+when needed, module-definition keys.
+
+The older `scripts/bump-component-version.ps1` helper updates
+`omp-components.json` only. The repository-local `scripts/omp/bump-version.ps1`
+helper can also update referenced module-definition JSON files when module
+definitions are selected. The HostAgent-first package script consumes the
+manifest directly when it prepares ArtifactStore payloads and SQL
 artifact-version overrides. Older suite scripts still have separate package
 version fields, so keep those aligned if you use the legacy installer.
 
@@ -176,6 +191,17 @@ Global package:
 .\scripts\omp\export-universal-package.ps1 -AllComponents -BuildArtifacts
 ```
 
+For the standard full-repository package workflow, repositories also expose:
+
+```powershell
+.\scripts\omp\build-universal-package.ps1
+```
+
+This wrapper defaults to `-AllComponents -BuildArtifacts`, uses
+`repositoryVersion` as the package version, and writes to
+`artifacts\universal-packages` unless `OMP_UNIVERSAL_PACKAGE_OUTPUT_DIR` is set.
+For a double-click flow, use `scripts/omp/build-universal-package.cmd`.
+
 Host-specific package:
 
 ```powershell
@@ -242,6 +268,11 @@ A well-formed OMP-compatible module repository should normally provide:
 - `omp-components.json` for module definitions and artifact components owned by
   the repository.
 - `build-omp-objects.ps1` as the root portable-object build wrapper.
+- `scripts/omp/bump-version.ps1` and `scripts/omp/bump-version.cmd` as the
+  standard version bump helpers.
+- `scripts/omp/build-universal-package.ps1` and
+  `scripts/omp/build-universal-package.cmd` as the standard package build
+  helpers.
 - `scripts/omp/export-universal-package.ps1` as the universal package export
   wrapper.
 - `scripts/omp/README.md` or equivalent notes when repository-local OMP scripts
