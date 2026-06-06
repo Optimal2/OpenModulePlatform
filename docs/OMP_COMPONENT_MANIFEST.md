@@ -270,11 +270,14 @@ A well-formed OMP-compatible module repository should normally provide:
 - `build-omp-objects.ps1` as the root portable-object build wrapper.
 - `scripts/omp/bump-version.ps1` and `scripts/omp/bump-version.cmd` as the
   standard version bump helpers.
+- `scripts/omp/build-repository-objects.ps1` as the standard portable-object
+  object-root builder used by export and package scripts.
 - `scripts/omp/build-universal-package.ps1` and
   `scripts/omp/build-universal-package.cmd` as the standard package build
   helpers.
-- `scripts/omp/export-universal-package.ps1` as the universal package export
-  wrapper.
+- `scripts/omp/export-universal-package.ps1` and
+  `scripts/omp/export-universal-package.cmd` as the universal package export
+  wrappers.
 - `scripts/omp/README.md` or equivalent notes when repository-local OMP scripts
   exist.
 
