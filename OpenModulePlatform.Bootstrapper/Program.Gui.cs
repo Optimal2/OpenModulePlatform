@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
@@ -421,6 +422,8 @@ internal static partial class Program
 
     private sealed class InstallerForm : Form
     {
+        private const char SourceStateStampFieldSeparator = '\t';
+
         private readonly IReadOnlyList<BootstrapConfigProfile> _configProfiles;
         private BootstrapConfig _config;
         private readonly string _configPath;
@@ -3701,11 +3704,18 @@ internal static partial class Program
 
                 if (File.Exists(fullPath))
                 {
-                    lines.Add($"file\t{relativePath}\t{new FileInfo(fullPath).Length}\t{GetFileSha256Hex(fullPath)}");
+                    // Keep the tab-delimited line stable: this text is only hashed, not parsed,
+                    // and changing it would invalidate existing artifact source stamps.
+                    lines.Add(string.Join(
+                        SourceStateStampFieldSeparator,
+                        "file",
+                        relativePath,
+                        new FileInfo(fullPath).Length.ToString(CultureInfo.InvariantCulture),
+                        GetFileSha256Hex(fullPath)));
                 }
                 else
                 {
-                    lines.Add($"missing\t{relativePath}");
+                    lines.Add(string.Join(SourceStateStampFieldSeparator, "missing", relativePath));
                 }
             }
 
