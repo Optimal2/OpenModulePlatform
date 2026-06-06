@@ -5679,7 +5679,7 @@ VALUES
     [GeneratedRegex(@"(?is)\bTRUNCATE\s+TABLE\b")]
     private static partial Regex ModuleDefinitionTruncateTableRegex();
 
-    [GeneratedRegex(@"(?ims)(?:^|;)[^\S\r\n]*DELETE\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")]
+    [GeneratedRegex(@"(?is)(?:\A|(?<=\n)|;)[^\S\r\n]*DELETE\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|\z)")]
     private static partial Regex ModuleDefinitionDeleteStatementRegex();
 
     [GeneratedRegex(@"(?is)\bWHERE\b")]

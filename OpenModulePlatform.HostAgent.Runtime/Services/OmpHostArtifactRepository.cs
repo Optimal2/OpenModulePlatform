@@ -3892,7 +3892,7 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
             return "The script contains TRUNCATE TABLE.";
         }
 
-        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?ims)(?:^|;)[^\S\r\n]*DELETE\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")
+        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)(?:\A|(?<=\n)|;)[^\S\r\n]*DELETE\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|\z)")
             .Cast<Match>()
             .Select(static match => match.Groups["statement"].Value)
             .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
