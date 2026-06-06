@@ -85,10 +85,10 @@ public sealed class DashboardWidgetsModel : OmpPortalPageModel
 
     private async Task LoadAsync(CancellationToken ct, int? editWidgetId = null)
     {
-        Rows = await _widgets.GetWidgetsAsync(null, ct);
-        if (editWidgetId.HasValue)
+        Rows = await _widgets.GetWidgetsAsync(null, ct) ?? [];
+        if (editWidgetId is int selectedWidgetId)
         {
-            EditDescriptionRow = Rows.FirstOrDefault(row => row.WidgetId == editWidgetId.Value);
+            EditDescriptionRow = Rows.FirstOrDefault(row => row.WidgetId == selectedWidgetId);
         }
     }
 }

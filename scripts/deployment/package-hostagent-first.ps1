@@ -842,7 +842,11 @@ $developerSourceRoots = Get-DeveloperSourceRoots `
     -ConfigDirectory $configDirectory `
     -RepositoryRoot $RepositoryRoot `
     -OpenDocViewerRoot $OpenDocViewerRoot
-$runtimeRootForArtifactArchive = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue 'C:\OMP')
+
+# E:\OMP is the documented local HostAgent-first default. Real installer packages
+# should set RuntimeRoot in their private package configuration or bootstrap profile.
+$defaultRuntimeRoot = 'E:\OMP'
+$runtimeRootForArtifactArchive = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue $defaultRuntimeRoot)
 $runtimeRootForArtifactArchive = Resolve-DeploymentPath -Path $runtimeRootForArtifactArchive -BasePath $configDirectory
 $artifactArchiveRoots = Get-ArtifactArchiveRoots `
     -ConfiguredRoots @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AvailableArtifactArchiveRoots' -DefaultValue @())) `
@@ -861,7 +865,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = [string](Get-ConfigValue -Config $config -Name 'Version' -DefaultValue ([string]$componentManifest.repositoryVersion))
 }
 if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = '0.3.3'
+    $Version = '0.0.0-dev'
 }
 if ([string]::IsNullOrWhiteSpace($Configuration)) {
     $Configuration = [string](Get-ConfigValue -Config $config -Name 'Configuration' -DefaultValue 'Release')
@@ -1393,7 +1397,7 @@ Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'ex
 Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -VariableName 'WorkerArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-worker' } | Select-Object -First 1).version)
 Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform/3-initialize-opendocviewer.sql' -Version $openDocViewerVersion
 
-$runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue 'E:\OMP')
+$runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue $defaultRuntimeRoot)
 $webRoot = [string](Get-ConfigValue -Config $config -Name 'WebRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'Sites'))
 $webAppsRoot = [string](Get-ConfigValue -Config $config -Name 'WebAppsRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'WebApps'))
 $servicesRoot = [string](Get-ConfigValue -Config $config -Name 'ServicesRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'Services'))
