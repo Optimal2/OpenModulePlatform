@@ -68,6 +68,27 @@ function Get-SafeFileName {
     return $safe
 }
 
+function ConvertTo-CmdArgument {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    if ($Value.Contains('"')) {
+        throw "CMD wrapper arguments cannot contain double quotes: $Value"
+    }
+
+    $escaped = $Value.Replace('^', '^^').Replace('%', '%%')
+    if ($escaped -notmatch '[\s&|<>^%]') {
+        return $escaped
+    }
+
+    return '"' + $escaped + '"'
+}
+
+function Join-CmdCommandLine {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+
+    return ($Arguments | ForEach-Object { ConvertTo-CmdArgument -Value $_ }) -join ' '
+}
+
 $scriptDirectory = Get-ScriptDirectory
 $currentRepositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptDirectory '..\..'))
 
@@ -113,7 +134,13 @@ if (@($repositories).Count -eq 0) {
     throw "No OMP-compatible repositories found below $workspaceRootPath."
 }
 
-$timeoutMilliseconds = [int][Math]::Min([int]::MaxValue, [int64]$PerRepositoryTimeoutSeconds * 1000)
+$timeoutMilliseconds64 = ([int64]$PerRepositoryTimeoutSeconds) * 1000L
+$timeoutMilliseconds = if ($timeoutMilliseconds64 -gt [int]::MaxValue) {
+    [int]::MaxValue
+}
+else {
+    [int]$timeoutMilliseconds64
+}
 $results = [System.Collections.Generic.List[object]]::new()
 
 foreach ($repository in $repositories) {
@@ -136,7 +163,7 @@ foreach ($repository in $repositories) {
         throw "Manifest must contain repositoryKey and repositoryVersion: $manifestPath"
     }
 
-    $expectedPackagePath = Join-Path $outputRootPath "$packageKey-global-$packageVersion-universal.zip"
+    $expectedPackagePath = Join-Path $outputRootPath ('{0}__global__{1}.zip' -f $packageKey, $packageVersion)
     if (Test-Path -LiteralPath $expectedPackagePath -PathType Leaf) {
         Remove-Item -LiteralPath $expectedPackagePath -Force
     }
@@ -149,22 +176,23 @@ foreach ($repository in $repositories) {
 
     Write-Host "[$repoDisplayName] Running build-universal-package.cmd with a $PerRepositoryTimeoutSeconds second timeout..."
 
-    $cmdLine = 'call "' + $cmdPath + '" --no-pause -OutputDirectory "' + $outputRootPath + '" > "' + $stdoutPath + '" 2> "' + $stderrPath + '"'
-    $cmdArguments = '/d /s /c "' + $cmdLine + '"'
+    $cmdInvocation = 'call ' + (Join-CmdCommandLine -Arguments @($cmdPath, '--no-pause', '-OutputDirectory', $outputRootPath))
+    $cmdArguments = @('/d', '/c', $cmdInvocation)
     $process = Start-Process -FilePath $env:ComSpec `
         -ArgumentList $cmdArguments `
         -WorkingDirectory $repository.FullName `
+        -RedirectStandardOutput $stdoutPath `
+        -RedirectStandardError $stderrPath `
         -WindowStyle Hidden `
         -PassThru
 
     $timedOut = -not $process.WaitForExit($timeoutMilliseconds)
     if ($timedOut) {
         Write-Warning "[$repoDisplayName] Timeout reached. Terminating process tree for PID $($process.Id)."
-        & taskkill.exe /PID $process.Id /T /F | Out-Null
-    }
-    else {
-        $process.WaitForExit()
-        $process.Refresh()
+        $taskKillOutput = & taskkill.exe /PID $process.Id /T /F 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "[$repoDisplayName] taskkill failed with exit code $LASTEXITCODE. $($taskKillOutput -join ' ')"
+        }
     }
 
     $exitCode = if ($timedOut) { $null } else { $process.ExitCode }
@@ -192,7 +220,7 @@ foreach ($repository in $repositories) {
         StderrLog = $stderrPath
     })
 
-    Write-Host "[$repoDisplayName] $status (exitCode=$exitCode; packageExists=$packageExists; packageLength=$packageLength)"
+    Write-Host "[$repoDisplayName] $status"
 }
 
 $results | Format-Table Repository, Status, ExitCode, Package -AutoSize

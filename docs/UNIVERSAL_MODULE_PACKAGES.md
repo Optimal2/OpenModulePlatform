@@ -246,7 +246,7 @@ repository comparison helper when validating package generators:
 ```powershell
 .\scripts\omp\compare-universal-package-data.ps1 `
   -FirstPackage E:\Private\installer\data\global `
-  -SecondPackage .\artifacts\universal-packages\openmoduleplatform-global-0.3.6-universal.zip `
+  -SecondPackage .\artifacts\universal-packages\openmoduleplatform__global__0.3.6.zip `
   -CommonOnly
 ```
 
