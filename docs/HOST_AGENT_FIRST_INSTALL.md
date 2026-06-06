@@ -77,8 +77,6 @@ OpenModulePlatformHostAgentFirst-<version>/
   uninstall-hostagent-first.ps1
   manifest.json
   tools/
-    bootstrap-config-editor/
-      index.html
     OpenModulePlatform.Bootstrapper/
       OpenModulePlatform.Bootstrapper.exe
 ```
@@ -229,9 +227,8 @@ them later through Portal.
    `profile.machineNames`, `hostAgent.hostName`, or `hostAgent.hostKey` matches
    the local computer name. If no profile matches, or if more than one profile
    matches, the installer stops with instructions instead of falling back to a
-   potentially wrong configuration. Use
-   `tools\bootstrap-config-editor\index.html` to create or adjust a machine-
-   specific config file.
+   potentially wrong configuration. Create or adjust the machine-specific
+   config file in the private installer repository before running the installer.
 3. Set at least:
    - `sql.server`
    - `sql.database`
@@ -699,11 +696,10 @@ bootstrap JSON or generated HostAgent appsettings.
 
 The bootstrap JSON may contain portable encrypted values in fields such as
 `hostAgent.serviceAccountPassword`, `hostAgent.iisAppPoolPassword`, and
-`hostAgent.iisAppPoolOverrides.*.password`. Use
-`tools\bootstrap-config-editor\index.html` and its `Encrypt password fields`
-action to produce values in the `enc:aesgcm:v1:...` format. The portable key can
-be stored as `security.portableEncryptionKey` or supplied through
-`security.portableEncryptionKeyEnvironmentVariable`. This encryption is
+`hostAgent.iisAppPoolOverrides.*.password`. Produce values in the
+`enc:aesgcm:v1:...` format before packaging the private installer profile. The
+portable key can be stored as `security.portableEncryptionKey` or supplied
+through `security.portableEncryptionKeyEnvironmentVariable`. This encryption is
 package-portable by design so the installer can run on the target machine; keep
 the key with the same care as the installer package.
 

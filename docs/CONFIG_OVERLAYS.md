@@ -179,11 +179,9 @@ object formats directly.
 ## Tooling
 
 - Portal: `/admin/modulepackageimport` imports and exports host configurations
-  and config overlays.
-- Portal: `/admin/configoverlayeditor` hosts the browser editor for creating
-  host configuration and overlay JSON.
-- Standalone: `tools/config-overlay-editor/index.html` runs without IIS or
-  .NET and can be used from a package `tools` folder.
+  and config overlays through universal packages.
+- Standalone: `tools/universal-package-builder/index.html` can assemble
+  universal packages that include host configurations and config overlays.
 
 Repository build scripts should create global module definitions and artifact
 packages from neutral source data. Customer or host-specific values should live

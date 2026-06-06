@@ -160,7 +160,7 @@ internal static partial class Program
         if (profiles.Count == 0)
         {
             throw new FileNotFoundException(
-                "No bootstrap configuration file was found. Create a machine-specific profile in 'hosts\\<profile>\\bootstrap.json' or in the package 'configs' folder before starting the installer. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
+                "No bootstrap configuration file was found. Create a machine-specific profile in 'hosts\\<profile>\\bootstrap.json' or in the package 'configs' folder before starting the installer.");
         }
 
         var localMachineNames = GetLocalMachineNames();
@@ -184,7 +184,7 @@ internal static partial class Program
             "No bootstrap configuration matches this computer. The installer is locked to the config whose profile.machineNames, hostAgent.hostName, or hostAgent.hostKey matches the local computer name." + Environment.NewLine + Environment.NewLine
             + "Local computer names: " + string.Join(", ", localMachineNames.OrderBy(static item => item, StringComparer.OrdinalIgnoreCase)) + Environment.NewLine
             + "Profile folders: " + string.Join(Environment.NewLine + "  ", profiles.Select(static profile => Path.GetDirectoryName(profile.ConfigPath)).Distinct(StringComparer.OrdinalIgnoreCase)) + Environment.NewLine + Environment.NewLine
-            + "Create or update a matching host profile, then start the installer again. The standalone config editor is available at tools\\bootstrap-config-editor\\index.html when included in the package.");
+            + "Create or update a matching host profile, then start the installer again.");
     }
 
     private static IReadOnlyList<string> ResolveProfileMachineNames(BootstrapConfig config)
@@ -3472,7 +3472,8 @@ internal static partial class Program
                 new ArtifactPackageWriter().CreateFromPayloadDirectory(
                     publishRoot,
                     destination,
-                    []);
+                    [],
+                    component.MinModuleDefinitionVersion);
 
                 lines.Add($"  BUILD   {component.ComponentKey}: created {destination}.");
                 return destination;
@@ -3991,7 +3992,8 @@ ORDER BY ar.ArtifactId DESC;
                     GetJsonStringProperty(item, "version"),
                     GetJsonStringProperty(item, "relativePathTemplate"),
                     GetJsonStringProperty(item, "projectPath"),
-                    GetJsonStringProperty(item, "packageFileTemplate")))
+                    GetJsonStringProperty(item, "packageFileTemplate"),
+                    GetJsonStringProperty(item, "minModuleDefinitionVersion")))
                 .Where(static item => item.HasCompleteArtifactIdentity)
                 .ToArray();
         }
@@ -5172,7 +5174,8 @@ ORDER BY ar.ArtifactId DESC;
         string Version,
         string RelativePathTemplate,
         string ProjectPath,
-        string PackageFileTemplate)
+        string PackageFileTemplate,
+        string MinModuleDefinitionVersion)
     {
         public bool HasCompleteArtifactIdentity
             => !string.IsNullOrWhiteSpace(ComponentKey)
