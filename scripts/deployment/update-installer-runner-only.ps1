@@ -6,10 +6,13 @@ Updates only the runnable installer executable in an existing HostAgent-first pa
 .DESCRIPTION
 Developer/private installer packages can be kept intentionally minimal in Git:
 the root OpenModulePlatform.Bootstrapper.exe plus the machine-specific host
-profiles that live next to the package. This helper refreshes only that
-executable from source. It does not rebuild module definitions, artifact
-packages, SQL payloads, package manifests, tools, or any other generated package
-content.
+profiles that live next to the package. This helper refreshes the runnable
+installer executable from source. If the package still contains the older
+tools/OpenModulePlatform.Bootstrapper runner folder, that executable is refreshed
+too and stale framework-dependent bootstrapper entry files are removed so package
+refreshes cannot accidentally execute an older runner. It does not rebuild module
+definitions, artifact packages, SQL payloads, package manifests, or any other
+generated package content.
 
 Use the installer GUI package sync action afterwards when a developer machine
 needs to populate the ignored package object library before an install.
@@ -69,6 +72,52 @@ function Invoke-NativeChecked {
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         throw "Command failed with exit code ${exitCode}: $FilePath $($Arguments -join ' ')"
+    }
+}
+
+function Update-PackageToolRunner {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageRoot,
+        [Parameter(Mandatory = $true)][string]$SourceExe
+    )
+
+    $toolRoot = Join-Path $PackageRoot 'tools\OpenModulePlatform.Bootstrapper'
+    if (-not (Test-Path -LiteralPath $toolRoot -PathType Container)) {
+        return
+    }
+
+    $staleBootstrapperFiles = @(
+        'OpenModulePlatform.Bootstrapper.dll',
+        'OpenModulePlatform.Bootstrapper.deps.json',
+        'OpenModulePlatform.Bootstrapper.runtimeconfig.json',
+        'OpenModulePlatform.Bootstrapper.pdb'
+    )
+
+    foreach ($fileName in $staleBootstrapperFiles) {
+        $filePath = Join-Path $toolRoot $fileName
+        if (Test-Path -LiteralPath $filePath -PathType Leaf) {
+            Remove-Item -LiteralPath $filePath -Force
+        }
+    }
+
+    $targetExe = Join-Path $toolRoot 'OpenModulePlatform.Bootstrapper.exe'
+    Copy-Item -LiteralPath $SourceExe -Destination $targetExe -Force
+    Write-Host "Updated package tools runner: $targetExe"
+
+    $toolZip = Join-Path (Join-Path $PackageRoot 'tools') 'OpenModulePlatform.Bootstrapper.zip'
+    if (Test-Path -LiteralPath $toolZip -PathType Leaf) {
+        $zipStage = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-installer-tool-runner-' + [guid]::NewGuid().ToString('N'))
+        try {
+            New-Item -ItemType Directory -Path $zipStage | Out-Null
+            Copy-Item -LiteralPath $SourceExe -Destination (Join-Path $zipStage 'OpenModulePlatform.Bootstrapper.exe') -Force
+            Compress-Archive -Path (Join-Path $zipStage '*') -DestinationPath $toolZip -Force
+            Write-Host "Updated package tools runner archive: $toolZip"
+        }
+        finally {
+            if (Test-Path -LiteralPath $zipStage -PathType Container) {
+                Remove-Item -LiteralPath $zipStage -Recurse -Force
+            }
+        }
     }
 }
 
@@ -138,6 +187,7 @@ try {
 
     $targetExe = Join-Path $packageRootPath 'OpenModulePlatform.Bootstrapper.exe'
     Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
+    Update-PackageToolRunner -PackageRoot $packageRootPath -SourceExe $sourceExe
 
     Write-Host "Updated installer runner: $targetExe"
     Write-Host 'Package object libraries were not rebuilt.'
