@@ -3,10 +3,12 @@
 The supported deployment flow is the HostAgent-first installer:
 
 - `package-hostagent-first.ps1` builds the installer package.
-- `update-installer-runner-only.ps1` updates only the root
-  `OpenModulePlatform.Bootstrapper.exe` in an existing package. Use this for
-  private developer installer packages when installer code changed but the
-  package object library should stay generated/ignored.
+- `update-installer-runner-only.ps1` updates the package root
+  `OpenModulePlatform.Bootstrapper.exe` in an existing package, and refreshes the
+  legacy `tools/OpenModulePlatform.Bootstrapper` executable and archive when
+  they are still present. Use this for private developer installer packages when
+  installer code changed but the package object library should stay
+  generated/ignored.
 - `refresh-existing-hostagent-first-package.ps1` refreshes an existing package
   through a temporary runner so package-local legacy `configs` and host data are
   not deleted by a fresh one-profile package build.
@@ -70,9 +72,12 @@ folders (`data`, `payload`, `sql`, `tools`) can be ignored and regenerated from
 developer source roots by the installer's package sync action before
 install/upgrade. For that model, commit runner-only updates with
 `update-installer-runner-only.ps1`, then let each developer machine regenerate
-the ignored package contents locally. The sync action updates the running
-installer's in-memory artifact targets for the current install/upgrade action,
-but it does not rewrite tracked host config files.
+the ignored package contents locally. If an older package still has
+`tools/OpenModulePlatform.Bootstrapper`, the runner-only script refreshes that
+entry point and its archive too so helper scripts and the GUI use the same
+installer code. The sync action updates the running installer's in-memory
+artifact targets for the current install/upgrade action, but it does not rewrite
+tracked host config files.
 
 See `docs/HOST_AGENT_FIRST_INSTALL.md` and
 `docs/PORTABLE_DEPLOYMENT_OBJECTS.md` for the full model.

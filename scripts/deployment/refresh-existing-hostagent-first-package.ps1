@@ -137,15 +137,15 @@ function Copy-Runner {
         [Parameter(Mandatory = $true)][string]$RunnerRoot
     )
 
-    $toolRoot = Join-Path $Root 'tools\OpenModulePlatform.Bootstrapper'
-    if (Test-Path -LiteralPath $toolRoot -PathType Container) {
-        Copy-Item -Path (Join-Path $toolRoot '*') -Destination $RunnerRoot -Recurse -Force
-        return
-    }
-
     $singleExe = Join-Path $Root 'OpenModulePlatform.Bootstrapper.exe'
     if (Test-Path -LiteralPath $singleExe -PathType Leaf) {
         Copy-Item -LiteralPath $singleExe -Destination $RunnerRoot -Force
+        return
+    }
+
+    $toolRoot = Join-Path $Root 'tools\OpenModulePlatform.Bootstrapper'
+    if (Test-Path -LiteralPath $toolRoot -PathType Container) {
+        Copy-Item -Path (Join-Path $toolRoot '*') -Destination $RunnerRoot -Recurse -Force
         return
     }
 
