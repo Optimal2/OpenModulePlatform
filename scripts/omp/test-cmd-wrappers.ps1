@@ -149,13 +149,11 @@ foreach ($repository in $repositories) {
 
     Write-Host "[$repoDisplayName] Running build-universal-package.cmd with a $PerRepositoryTimeoutSeconds second timeout..."
 
-    $cmdLine = "`"$cmdPath`" --no-pause -OutputDirectory `"$outputRootPath`""
-    $cmdArguments = "/d /s /c `"$cmdLine`""
+    $cmdLine = 'call "' + $cmdPath + '" --no-pause -OutputDirectory "' + $outputRootPath + '" > "' + $stdoutPath + '" 2> "' + $stderrPath + '"'
+    $cmdArguments = '/d /s /c "' + $cmdLine + '"'
     $process = Start-Process -FilePath $env:ComSpec `
         -ArgumentList $cmdArguments `
         -WorkingDirectory $repository.FullName `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath `
         -WindowStyle Hidden `
         -PassThru
 
@@ -166,6 +164,7 @@ foreach ($repository in $repositories) {
     }
     else {
         $process.WaitForExit()
+        $process.Refresh()
     }
 
     $exitCode = if ($timedOut) { $null } else { $process.ExitCode }
@@ -193,7 +192,7 @@ foreach ($repository in $repositories) {
         StderrLog = $stderrPath
     })
 
-    Write-Host "[$repoDisplayName] $status"
+    Write-Host "[$repoDisplayName] $status (exitCode=$exitCode; packageExists=$packageExists; packageLength=$packageLength)"
 }
 
 $results | Format-Table Repository, Status, ExitCode, Package -AutoSize

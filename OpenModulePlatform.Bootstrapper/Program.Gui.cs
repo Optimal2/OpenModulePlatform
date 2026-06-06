@@ -2440,7 +2440,10 @@ internal static partial class Program
             var sourceComponents = manifests
                 .SelectMany(manifest => ReadManifestComponents(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
                 .ToArray();
-            Report($"Found {sourceDefinitions.Length} module definition(s) and {sourceComponents.Length} artifact component(s).");
+            var sourceWidgets = manifests
+                .SelectMany(manifest => ReadManifestWidgetFiles(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                .ToArray();
+            Report($"Found {sourceDefinitions.Length} module definition(s), {sourceComponents.Length} artifact component(s), and {sourceWidgets.Length} widget file(s).");
             var artifactSearchRoots = EnumerateArtifactPackageSearchRoots(sourceRoots).ToArray();
             var updated = 0;
             var unchanged = 0;
@@ -2476,6 +2479,39 @@ internal static partial class Program
                 else
                 {
                     lines.Add($"  OK      {definition.ModuleKey}: package file already matches source.");
+                    unchanged++;
+                }
+            }
+
+            lines.Add(string.Empty);
+            lines.Add("Dashboard widgets:");
+            foreach (var widget in sourceWidgets)
+            {
+                Report($"Syncing widget file {widget.DestinationName}...");
+                var sourcePath = ResolveSourceRelativePath(widget.SourceRoot, widget.SourcePath);
+                if (!File.Exists(sourcePath))
+                {
+                    lines.Add($"  WARN    {widget.RepositoryKey}: widget file was not found ({sourcePath}).");
+                    warnings++;
+                    continue;
+                }
+
+                if (!Path.GetExtension(widget.DestinationName).Equals(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    lines.Add($"  WARN    {widget.RepositoryKey}: widget destination must be a JSON file ({widget.DestinationName}).");
+                    warnings++;
+                    continue;
+                }
+
+                var packagePath = Path.Join(ResolvePackageWidgetsRoot(_payloadRoot), widget.DestinationName);
+                if (CopyFileIfDifferent(sourcePath, packagePath))
+                {
+                    lines.Add($"  UPDATED {widget.RepositoryKey}: copied widget file {widget.DestinationName}.");
+                    updated++;
+                }
+                else
+                {
+                    lines.Add($"  OK      {widget.RepositoryKey}: widget file {widget.DestinationName} already matches source.");
                     unchanged++;
                 }
             }
@@ -2533,7 +2569,9 @@ internal static partial class Program
                 Report($"Syncing artifact package {component.ComponentKey} {component.Version}...");
                 var packageName = GetArtifactPackageFileName(component);
                 var expectedTarget = component.RelativePathTemplate.Replace("{version}", component.Version, StringComparison.OrdinalIgnoreCase);
-                var sourcePackage = FindSourceArtifactPackage(packageName, artifactSearchRoots);
+                var sourcePackage = string.IsNullOrWhiteSpace(component.ProjectPath)
+                    ? FindSourceArtifactPackage(packageName, artifactSearchRoots)
+                    : null;
                 var current = FindConfiguredArtifact(component);
 
                 if (current is not null)
@@ -2575,8 +2613,25 @@ internal static partial class Program
 
                     if (File.Exists(payloadPath))
                     {
-                        // Existing same-target packages are treated as immutable. Refresh should add missing or newer
-                        // versions, not rewrite bytes for an already versioned artifact and create noisy binary diffs.
+                        sourcePackage ??= ResolveOrBuildSourceArtifactPackage(
+                            component,
+                            packageName,
+                            artifactSearchRoots,
+                            builtPackages,
+                            lines);
+
+                        var mirroredLibraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
+                        var refreshed = TryRefreshPackageLibraryArtifactFromSource(
+                            sourcePackage,
+                            payloadPath,
+                            mirroredLibraryPath,
+                            component.ComponentKey,
+                            lines);
+                        if (refreshed)
+                        {
+                            updated++;
+                        }
+
                         if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase))
                         {
                             current.Source = expectedSource;
@@ -2584,13 +2639,12 @@ internal static partial class Program
                             lines.Add($"  UPDATED {component.ComponentKey}: using package library artifact {expectedSource} for this run.");
                             updated++;
                         }
-                        else
+                        else if (!refreshed)
                         {
                             lines.Add($"  OK      {component.ComponentKey}: artifact package is present.");
                             unchanged++;
                         }
 
-                        var mirroredLibraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
                         if (!File.Exists(mirroredLibraryPath))
                         {
                             CopyFileIfDifferent(payloadPath, mirroredLibraryPath);
@@ -2602,8 +2656,16 @@ internal static partial class Program
                     var currentSourcePath = ResolvePackagePath(current.Source);
                     if (File.Exists(currentSourcePath))
                     {
-                        CopyFileIfDifferent(currentSourcePath, payloadPath);
-                        CopyFileIfDifferent(currentSourcePath, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
+                        sourcePackage ??= ResolveOrBuildSourceArtifactPackage(
+                            component,
+                            packageName,
+                            artifactSearchRoots,
+                            builtPackages,
+                            lines);
+
+                        var packageToCopy = sourcePackage ?? currentSourcePath;
+                        CopyFileIfDifferent(packageToCopy, payloadPath);
+                        CopyFileIfDifferent(packageToCopy, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
                         if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase))
                         {
                             current.Source = expectedSource;
@@ -2654,9 +2716,27 @@ internal static partial class Program
                 var libraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
                 if (File.Exists(libraryPath))
                 {
-                    // Package library entries follow the same immutable-version rule as configured artifact packages.
-                    lines.Add($"  OK      {component.ComponentKey}: package library artifact is present.");
-                    unchanged++;
+                    sourcePackage ??= ResolveOrBuildSourceArtifactPackage(
+                        component,
+                        packageName,
+                        artifactSearchRoots,
+                        builtPackages,
+                        lines);
+
+                    if (TryRefreshPackageLibraryArtifactFromSource(
+                            sourcePackage,
+                            libraryPath,
+                            null,
+                            component.ComponentKey,
+                            lines))
+                    {
+                        updated++;
+                    }
+                    else
+                    {
+                        lines.Add($"  OK      {component.ComponentKey}: package library artifact is present.");
+                        unchanged++;
+                    }
 
                     continue;
                 }
@@ -3065,6 +3145,11 @@ internal static partial class Program
                 ? Path.GetFullPath(path)
                 : Path.GetFullPath(Path.Join(profileDirectory, path.Replace('/', Path.DirectorySeparatorChar)));
 
+        private static string ResolveSourceRelativePath(string sourceRoot, string path)
+            => Path.IsPathRooted(path)
+                ? Path.GetFullPath(path)
+                : Path.GetFullPath(Path.Join(sourceRoot, path.Replace('/', Path.DirectorySeparatorChar)));
+
         private void CopyHostSpecificObjectFile(
             string sourcePath,
             string targetRoot,
@@ -3366,22 +3451,44 @@ internal static partial class Program
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(_config.ArtifactStoreRoot))
+            foreach (var sourceRoot in sourceRoots)
             {
-                var artifactStoreRoot = Path.GetFullPath(_config.ArtifactStoreRoot);
-                var runtimeRoot = Directory.GetParent(artifactStoreRoot)?.FullName;
-                AddIfDirectory(Path.Join(runtimeRoot ?? string.Empty, "ArtifactArchive"));
-                AddIfDirectory(Path.Join(artifactStoreRoot, "_available", "artifacts"));
+                AddIfDirectory(Path.Join(sourceRoot, "artifacts", "omp-objects", "artifacts"));
+                AddIfDirectory(Path.Join(sourceRoot, "artifacts"));
             }
-
-            foreach (var artifactPath in sourceRoots.Select(sourceRoot => Path.Join(sourceRoot, "artifacts")))
-            {
-                AddIfDirectory(artifactPath);
-            }
-
-            AddIfDirectory(ResolvePackageArtifactsRoot(_payloadRoot));
 
             return roots;
+        }
+
+        private static bool TryRefreshPackageLibraryArtifactFromSource(
+            string? sourcePackage,
+            string packageLibraryPath,
+            string? mirrorPath,
+            string componentKey,
+            List<string> lines)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePackage) || !File.Exists(sourcePackage))
+            {
+                return false;
+            }
+
+            var sourceFullPath = Path.GetFullPath(sourcePackage);
+            var libraryFullPath = Path.GetFullPath(packageLibraryPath);
+            if (sourceFullPath.Equals(libraryFullPath, StringComparison.OrdinalIgnoreCase)
+                || FilesHaveSameContent(sourceFullPath, libraryFullPath))
+            {
+                return false;
+            }
+
+            CopyFileIfDifferent(sourceFullPath, libraryFullPath);
+            if (!string.IsNullOrWhiteSpace(mirrorPath)
+                && !sourceFullPath.Equals(Path.GetFullPath(mirrorPath), StringComparison.OrdinalIgnoreCase))
+            {
+                CopyFileIfDifferent(sourceFullPath, mirrorPath);
+            }
+
+            lines.Add($"  UPDATED {componentKey}: refreshed package library artifact from source package.");
+            return true;
         }
 
         private static string? FindSourceArtifactPackage(
@@ -3400,20 +3507,22 @@ internal static partial class Program
             Dictionary<string, string?> builtPackages,
             List<string> lines)
         {
-            var sourcePackage = FindSourceArtifactPackage(packageName, artifactSearchRoots);
-            if (sourcePackage is not null)
+            if (!string.IsNullOrWhiteSpace(component.ProjectPath))
             {
-                return sourcePackage;
+                if (builtPackages.TryGetValue(packageName, out var builtPackage))
+                {
+                    return builtPackage;
+                }
+
+                builtPackage = TryBuildSourceArtifactPackage(component, packageName, lines);
+                builtPackages[packageName] = builtPackage;
+                if (builtPackage is not null)
+                {
+                    return builtPackage;
+                }
             }
 
-            if (builtPackages.TryGetValue(packageName, out var builtPackage))
-            {
-                return builtPackage;
-            }
-
-            builtPackage = TryBuildSourceArtifactPackage(component, packageName, lines);
-            builtPackages[packageName] = builtPackage;
-            return builtPackage;
+            return FindSourceArtifactPackage(packageName, artifactSearchRoots);
         }
 
         private string? TryBuildSourceArtifactPackage(
@@ -4021,6 +4130,60 @@ ORDER BY ar.ArtifactId DESC;
                     GetJsonStringProperty(item, "minModuleDefinitionVersion")))
                 .Where(static item => item.HasCompleteArtifactIdentity)
                 .ToArray();
+        }
+
+        private static IReadOnlyList<ManifestPortableObject> ReadManifestWidgetFiles(
+            JsonNode manifest,
+            string sourceRoot,
+            string repositoryKey)
+        {
+            if (GetJsonObjectProperty(manifest, "widgetFiles") is not JsonArray items)
+            {
+                return [];
+            }
+
+            var result = new List<ManifestPortableObject>();
+            foreach (var item in items)
+            {
+                var sourcePath = string.Empty;
+                var destinationName = string.Empty;
+
+                if (item is JsonValue value && value.TryGetValue<string>(out var stringValue))
+                {
+                    sourcePath = stringValue;
+                }
+                else if (item is JsonObject obj)
+                {
+                    sourcePath = GetJsonStringProperty(obj, "sourcePath");
+                    if (string.IsNullOrWhiteSpace(sourcePath))
+                    {
+                        sourcePath = GetJsonStringProperty(obj, "path");
+                    }
+
+                    destinationName = GetJsonStringProperty(obj, "destinationName");
+                }
+
+                if (string.IsNullOrWhiteSpace(sourcePath))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(destinationName))
+                {
+                    destinationName = Path.GetFileName(sourcePath);
+                }
+
+                if (!string.IsNullOrWhiteSpace(destinationName))
+                {
+                    result.Add(new ManifestPortableObject(
+                        sourceRoot,
+                        repositoryKey,
+                        sourcePath,
+                        destinationName));
+                }
+            }
+
+            return result;
         }
 
         private string? ResolveDeveloperSourceRoot(bool throwIfMissing)
@@ -5317,6 +5480,12 @@ ORDER BY ar.ArtifactId DESC;
                 && !string.IsNullOrWhiteSpace(Version)
                 && !string.IsNullOrWhiteSpace(RelativePathTemplate);
     }
+
+    private sealed record ManifestPortableObject(
+        string SourceRoot,
+        string RepositoryKey,
+        string SourcePath,
+        string DestinationName);
 
     private sealed record ArtifactPackageIdentity(
         string ModuleKey,
