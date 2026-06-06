@@ -40,7 +40,7 @@ scripts/omp/build-host-profile-objects.ps1 hook.
 #>
 [CmdletBinding()]
 param(
-    [string]$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [string]$RepositoryRoot = '',
     [string]$OutputPath = '',
     [string]$PackageKey = '',
     [string]$PackageVersion = '',
@@ -62,6 +62,23 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Get-ScriptDirectory {
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        return $PSScriptRoot
+    }
+
+    $scriptPath = $PSCommandPath
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        $scriptPath = $MyInvocation.MyCommand.Path
+    }
+
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        throw 'Could not resolve script directory. Pass -RepositoryRoot explicitly.'
+    }
+
+    return Split-Path -Parent $scriptPath
+}
 
 function Resolve-PathFromBase {
     param(
@@ -363,6 +380,23 @@ function Add-ZipEntryFromText {
     }
 }
 
+function Get-ArchiveRelativePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$BasePath,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $baseFullPath = [System.IO.Path]::GetFullPath($BasePath)
+    if (-not $baseFullPath.EndsWith([System.IO.Path]::DirectorySeparatorChar.ToString(), [StringComparison]::Ordinal)) {
+        $baseFullPath += [System.IO.Path]::DirectorySeparatorChar
+    }
+
+    $targetFullPath = [System.IO.Path]::GetFullPath($Path)
+    $baseUri = [Uri]::new($baseFullPath)
+    $targetUri = [Uri]::new($targetFullPath)
+    return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($targetUri).ToString()).Replace('\', '/')
+}
+
 function Get-UniversalPackageFiles {
     param([Parameter(Mandatory = $true)][string]$ObjectRoot)
 
@@ -385,7 +419,7 @@ function Get-UniversalPackageFiles {
         }
 
         foreach ($file in Get-ChildItem -LiteralPath $folderPath -Filter $folderInfo.Pattern -File -Recurse) {
-            $relativePath = [System.IO.Path]::GetRelativePath($ObjectRoot, $file.FullName).Replace('\', '/')
+            $relativePath = Get-ArchiveRelativePath -BasePath $ObjectRoot -Path $file.FullName
             $items.Add([pscustomobject]@{
                 Kind = $folderInfo.Kind
                 Path = $relativePath
@@ -395,6 +429,11 @@ function Get-UniversalPackageFiles {
     }
 
     return @($items | Sort-Object Kind, Path)
+}
+
+$scriptDirectory = Get-ScriptDirectory
+if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    $RepositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..\..')).Path
 }
 
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
@@ -444,7 +483,7 @@ $outputPath = [System.IO.Path]::GetFullPath($OutputPath)
 $outputDirectory = Split-Path -Parent $outputPath
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 
-$buildRepositoryObjectsScript = Join-Path $PSScriptRoot 'build-repository-objects.ps1'
+$buildRepositoryObjectsScript = Join-Path $scriptDirectory 'build-repository-objects.ps1'
 if (-not (Test-Path -LiteralPath $buildRepositoryObjectsScript -PathType Leaf)) {
     throw "Repository object builder was not found: $buildRepositoryObjectsScript"
 }

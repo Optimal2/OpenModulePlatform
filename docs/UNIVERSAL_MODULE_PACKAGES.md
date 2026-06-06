@@ -207,6 +207,36 @@ and artifact package manifest envelope. Do not add generator-specific metadata
 to artifact packages. `moduleDefinition.minVersion` is present only when the
 owning component declares `minModuleDefinitionVersion`.
 
+The outer universal zip can still differ at byte level because zip entry
+timestamps, compression method, package key/version, and `createdUtc` are
+transport metadata. Import correctness is based on the portable object paths,
+normalized JSON object data, and extracted artifact payload content. Use the
+repository comparison helper when validating package generators:
+
+```powershell
+.\scripts\omp\compare-universal-package-data.ps1 `
+  -FirstPackage E:\Private\installer\data\global `
+  -SecondPackage .\artifacts\universal-packages\openmoduleplatform-global-0.3.5-universal.zip `
+  -CommonOnly
+```
+
+`-FirstPackage` and `-SecondPackage` accept either a universal package zip or an
+already-unpacked object root such as `installer\data\global`. Omit `-CommonOnly`
+when both sides are expected to contain exactly the same object set.
+
+The standalone browser builder can be validated with a real browser through the
+Node/Playwright helper:
+
+```powershell
+npm exec --package playwright -- node .\scripts\omp\validate-universal-package-builder-html.cjs `
+  --module .\OpenModulePlatform.Portal\omp_portal.module-definition.json `
+  --artifact E:\Private\installer\data\global\artifacts\omp_portal__omp_portal__web-app__omp-portal__0.3.184.zip `
+  --output $env:TEMP\omp-html-builder-validation.zip
+```
+
+Compare the generated zip with the source object root using
+`compare-universal-package-data.ps1 -CommonOnly`.
+
 Use a global package when the repository only contributes generic module
 definitions and binary artifact packages:
 

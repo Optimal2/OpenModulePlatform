@@ -27,7 +27,7 @@ package library directly.
 #>
 [CmdletBinding()]
 param(
-    [string]$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [string]$RepositoryRoot = '',
     [string]$OutputRoot = '',
     [string]$OmpRepositoryRoot = '',
     [string[]]$ComponentKey = @(),
@@ -43,6 +43,23 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Get-ScriptDirectory {
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        return $PSScriptRoot
+    }
+
+    $scriptPath = $PSCommandPath
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        $scriptPath = $MyInvocation.MyCommand.Path
+    }
+
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        throw 'Could not resolve script directory. Pass -RepositoryRoot explicitly.'
+    }
+
+    return Split-Path -Parent $scriptPath
+}
 
 function Resolve-PathFromBase {
     param(
@@ -390,6 +407,11 @@ function Copy-WidgetDataFiles {
 
         Copy-Item -LiteralPath $resolvedSource -Destination (Join-Path $DestinationRoot $destinationName) -Force
     }
+}
+
+$scriptDirectory = Get-ScriptDirectory
+if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    $RepositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..\..')).Path
 }
 
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
