@@ -301,13 +301,10 @@ executed as repairs.
 Standalone JSON uploads can still use `inlineSql`, `content`, or the historical
 `contentEncoding: "base64-utf8"` form. Those forms remain supported for
 backward compatibility, but new source packages should prefer external `.sql`
-files. `path` remains as traceability back to the source package file. The
-standalone module definition editor in `tools/module-definition-editor/index.html`
-exposes the module app list and decodes SQL entries to clear text for editing.
-Portal exposes the same client-side editor for administrators from
-`/admin/moduledefinitioneditor`. Portal can also download the stored normalized
-JSON from each module-definition edit page so an applied definition can be moved
-from one OMP installation to another.
+files. `path` remains as traceability back to the source package file. New
+operator transport should use universal packages. Portal can download the stored
+normalized JSON from each module-definition edit page so an applied definition
+can be moved from one OMP installation to another.
 
 The older `scripts/dev/embed-module-definition-sql.ps1` helper is retained only
 for legacy JSON-only definitions. Portal executes repairs on the configured OMP

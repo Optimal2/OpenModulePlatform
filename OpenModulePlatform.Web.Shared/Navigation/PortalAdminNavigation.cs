@@ -27,15 +27,6 @@ public static class PortalAdminNavigation
                     new PortalAdminMenuItem("Config settings", hrefFactory("/admin/configsettings")),
                     new PortalAdminMenuItem("Security", hrefFactory("/admin/security")),
                     new PortalAdminMenuItem("Users", hrefFactory("/admin/users"))
-                ]),
-            new(
-                "Tools",
-                [
-                    new PortalAdminMenuItem("Universal package builder", hrefFactory("/admin/universalpackagebuilder")),
-                    new PortalAdminMenuItem("Module definition editor", hrefFactory("/admin/moduledefinitioneditor")),
-                    new PortalAdminMenuItem("Artifact package editor", hrefFactory("/admin/artifactpackageeditor")),
-                    new PortalAdminMenuItem("Config overlay editor", hrefFactory("/admin/configoverlayeditor")),
-                    new PortalAdminMenuItem("Bootstrap config editor", hrefFactory("/admin/bootstrapconfigeditor"))
                 ])
         ];
 }

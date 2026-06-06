@@ -12,20 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\tools\module-definition-editor\**\*.*"
-             Link="wwwroot\tools\module-definition-editor\%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\tools\artifact-package-editor\**\*.*"
-             Link="wwwroot\tools\artifact-package-editor\%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\tools\bootstrap-config-editor\**\*.*"
-             Link="wwwroot\tools\bootstrap-config-editor\%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\tools\config-overlay-editor\**\*.*"
-             Link="wwwroot\tools\config-overlay-editor\%(RecursiveDir)%(Filename)%(Extension)"
+    <Content Include="..\tools\universal-package-builder\**\*.*"
+             Link="wwwroot\tools\universal-package-builder\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

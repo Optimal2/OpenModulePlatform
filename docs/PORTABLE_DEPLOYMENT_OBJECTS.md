@@ -147,14 +147,11 @@ Portal:
 - `/admin/instancetemplateedit?id=1` is the normal installation-topology page.
   It owns desired module instances, desired app versions, concrete hosts, and
   host-role placement.
-- `/admin/modulepackageimport` is the package workflow page. It can upload one
-  complete module package zip, upload one module definition JSON together with
-  one or more artifact package zips, upload host configuration and config
-  overlay objects, import package-library files from `ArtifactStoreRoot\_available`,
-  and export installed portable objects. The package-library view only offers
-  artifact packages that match the selected module definition's declared
-  compatibility range and shows whether the current installation already has
-  the same, newer, older, or missing artifact versions.
+- `/admin/modulepackageimport` is the universal package workflow page. It can
+  import one or more universal package zips, preview one package before import,
+  export installed portable objects, and link to the browser-based universal
+  package builder. Legacy object-specific upload flows are intentionally kept
+  out of the operator workflow.
 - `/admin/hostdeployments` is the operations page. It shows HostAgent app
   deployments, artifact provisioning, runtime identity checks, and explicit
   installation materialization requests.
@@ -162,21 +159,14 @@ Portal:
   safe repairs. It remains the deeper module-integrity view linked from the
   package workflow.
 - `/admin/moduledefinitionedit` can download the stored JSON definition.
-- `/admin/moduledefinitioneditor` opens the browser-based module definition
-  editor.
-- `/admin/artifacts` and `/admin/artifactupload` import artifact packages.
+- `/admin/artifacts` and `/admin/artifactupload` remain low-level artifact
+  administration pages. Normal transport should use universal packages.
 - `/admin/artifactedit` can download an installed artifact as a standard package
   object, including registered configuration files.
-- `/admin/artifactpackageeditor` opens the browser-based artifact package editor.
-- `/admin/configoverlayeditor` opens the browser-based host configuration and
-  config overlay editor.
 
-Standalone browser tools:
+Standalone browser tool:
 
-- `tools/module-definition-editor/index.html`
-- `tools/artifact-package-editor/index.html`
-- `tools/config-overlay-editor/index.html`
-- `tools/bootstrap-config-editor/index.html`
+- `tools/universal-package-builder/index.html`
 
 Command-line helpers:
 

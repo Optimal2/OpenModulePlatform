@@ -182,9 +182,10 @@ widgets from the current OMP installation. Widget runtime data is exported under
 to the target installation during import.
 
 The standalone tool at `tools/universal-package-builder/index.html` creates the
-same zip format entirely in the browser. It is available in Portal from the
-Tools menu through the Universal package builder admin page and can also be
-opened directly from disk.
+same zip format entirely in the browser. Portal includes only this browser
+package tool, and the import/export page links to it through the Universal
+package builder admin page. The older object-specific browser editors are no
+longer shipped; universal packages are the single supported operator workflow.
 
 ## Repository Export Standard
 
@@ -198,6 +199,13 @@ The exporter is the command-line equivalent of the Portal and standalone
 builders for repository-owned objects. It reads `omp-components.json`, builds the
 current module definitions and artifact packages, optionally applies host
 profile inputs, and writes a universal package zip.
+
+All generators must produce the same object bytes for the same source inputs.
+Repository exporters, the HostAgent-first installer refresh, Portal export, and
+the standalone universal builder share the same universal package folder layout
+and artifact package manifest envelope. Do not add generator-specific metadata
+to artifact packages. `moduleDefinition.minVersion` is present only when the
+owning component declares `minModuleDefinitionVersion`.
 
 Use a global package when the repository only contributes generic module
 definitions and binary artifact packages:

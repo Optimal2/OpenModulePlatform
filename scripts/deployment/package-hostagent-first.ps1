@@ -499,7 +499,8 @@ function New-ArtifactPackage {
         [Parameter(Mandatory = $true)][string]$PayloadZip,
         [Parameter(Mandatory = $true)][string]$Destination,
         [Parameter(Mandatory = $true)][string]$BuildRoot,
-        [object[]]$ConfigurationFiles = @()
+        [object[]]$ConfigurationFiles = @(),
+        [string]$MinModuleDefinitionVersion = ''
     )
 
     $stagingRoot = Join-Path $BuildRoot ('artifact-package-' + [Guid]::NewGuid().ToString('N'))
@@ -533,6 +534,11 @@ function New-ArtifactPackage {
                 path = 'payload/artifact.zip'
             }
             configurationFiles = @($manifestConfigurationFiles)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($MinModuleDefinitionVersion)) {
+            $manifest.moduleDefinition = [ordered]@{
+                minVersion = $MinModuleDefinitionVersion.Trim()
+            }
         }
 
         $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stagingRoot 'omp-artifact-package.json') -Encoding UTF8
@@ -1059,7 +1065,13 @@ foreach ($component in $components) {
                 -BuildRoot $buildRoot
         }
 
-        New-ArtifactPackage -PayloadZip $artifactPayloadZip -Destination $destination -BuildRoot $buildRoot -ConfigurationFiles $configurationFiles
+        $minModuleDefinitionVersion = Get-ManifestPropertyValue -Object $component -Name 'minModuleDefinitionVersion'
+        New-ArtifactPackage `
+            -PayloadZip $artifactPayloadZip `
+            -Destination $destination `
+            -BuildRoot $buildRoot `
+            -ConfigurationFiles $configurationFiles `
+            -MinModuleDefinitionVersion $minModuleDefinitionVersion
         Copy-AvailableArtifactPackage -Source $destination -DestinationRoot $availableArtifactsRoot -CopiedFiles $availableArtifactPackageFiles
         $componentPayloadSources[$componentKey] = "data/global/artifacts/$artifactPackageName"
 
@@ -1312,14 +1324,6 @@ Set-Content -LiteralPath (Join-Path $sqlRoot 'bootstrap-local.sql') -Value $boot
 Write-Step 'Copying bootstrapper'
 Compress-FolderToZip -Source (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper.zip')
 Copy-Item -LiteralPath (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper') -Recurse -Force
-$bootstrapConfigEditorSource = Join-Path $RepositoryRoot 'tools\bootstrap-config-editor'
-if (Test-Path -LiteralPath $bootstrapConfigEditorSource -PathType Container) {
-    Copy-Item -LiteralPath $bootstrapConfigEditorSource -Destination (Join-Path $toolsRoot 'bootstrap-config-editor') -Recurse -Force
-}
-$configOverlayEditorSource = Join-Path $RepositoryRoot 'tools\config-overlay-editor'
-if (Test-Path -LiteralPath $configOverlayEditorSource -PathType Container) {
-    Copy-Item -LiteralPath $configOverlayEditorSource -Destination (Join-Path $toolsRoot 'config-overlay-editor') -Recurse -Force
-}
 
 $rootBootstrapperPublishRoot = Join-Path $buildRoot 'bootstrapper-root'
 Invoke-NativeChecked dotnet 'publish' (Join-Path $RepositoryRoot 'OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.csproj') `

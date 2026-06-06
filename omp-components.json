@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.4",
+  "repositoryVersion": "0.3.5",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -57,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.183",
+      "version": "0.3.184",
       "minModuleDefinitionVersion": "0.3.89",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -71,7 +71,7 @@
       "appKey": "omp_auth",
       "packageType": "web-app",
       "targetName": "omp-auth",
-      "version": "0.3.7",
+      "version": "0.3.8",
       "projectPath": "OpenModulePlatform.Auth",
       "relativePathTemplate": "omp-auth/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Auth.zip"
@@ -83,7 +83,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.73",
+      "version": "0.3.74",
       "minModuleDefinitionVersion": "0.3.70",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
@@ -120,7 +120,7 @@
       "appKey": "content_webapp_webapp",
       "packageType": "web-app",
       "targetName": "content-webapp",
-      "version": "0.3.24",
+      "version": "0.3.25",
       "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
       "relativePathTemplate": "content-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip"
@@ -132,7 +132,7 @@
       "appKey": "iframe_webapp_webapp",
       "packageType": "web-app",
       "targetName": "iframe-webapp",
-      "version": "0.3.17",
+      "version": "0.3.18",
       "projectPath": "OpenModulePlatform.Web.iFrameWebAppModule",
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.iFrameWebAppModule.zip"
@@ -144,7 +144,7 @@
       "appKey": "example_webapp_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp",
-      "version": "0.3.14",
+      "version": "0.3.15",
       "projectPath": "examples/WebAppModule/WebApp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppModule.zip"
@@ -156,7 +156,7 @@
       "appKey": "example_webapp_blazor_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp-blazor",
-      "version": "0.3.17",
+      "version": "0.3.18",
       "projectPath": "examples/WebAppBlazorModule/WebApp",
       "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip"
@@ -168,7 +168,7 @@
       "appKey": "example_serviceapp_webapp",
       "packageType": "web-app",
       "targetName": "example-serviceapp-web",
-      "version": "0.3.13",
+      "version": "0.3.14",
       "projectPath": "examples/ServiceAppModule/WebApp",
       "relativePathTemplate": "example-serviceapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleServiceAppModule.zip"
@@ -192,7 +192,7 @@
       "appKey": "example_workerapp_webapp",
       "packageType": "web-app",
       "targetName": "example-workerapp-web",
-      "version": "0.3.13",
+      "version": "0.3.14",
       "projectPath": "examples/WorkerAppModule/WebApp",
       "relativePathTemplate": "example-workerapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWorkerAppModule.zip"
