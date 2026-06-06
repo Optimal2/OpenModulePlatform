@@ -25,7 +25,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputRoot,
 
-    [string]$PackageFilter = '*-global-*-universal.zip'
+    [string]$PackageFilter = '*__global__*.zip'
 )
 
 $ErrorActionPreference = 'Stop'
