@@ -521,6 +521,7 @@ internal static partial class Program
         private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools", Enabled = false };
         private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data", Enabled = false };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _sourceStateStampCache = new(StringComparer.OrdinalIgnoreCase);
         private TabControl? _advancedActionTabs;
         private TabPage? _packageToolsTab;
         private bool _hasExistingInstallation;
@@ -2592,7 +2593,8 @@ internal static partial class Program
                                 packageName,
                                 artifactSearchRoots,
                                 builtPackages,
-                                lines);
+                                lines,
+                                existingPackagePath: File.Exists(payloadPath) ? payloadPath : null);
                             if (sourcePackage is null)
                             {
                                 lines.Add($"  WARN    {component.ComponentKey}: package target is {current.Target}, source expects {expectedTarget}, but {packageName} was not found and could not be selectively built.");
@@ -2601,12 +2603,23 @@ internal static partial class Program
                             }
                         }
 
-                        CopyFileIfDifferent(sourcePackage, payloadPath);
-                        CopyFileIfDifferent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
+                        var copiedPayload = CopyFileIfDifferent(sourcePackage, payloadPath);
+                        var copiedLibrary = CopyFileIfDifferent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
+                        CopyArtifactBuildStampIfPresent(sourcePackage, payloadPath);
+                        CopyArtifactBuildStampIfPresent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
                         current.Source = expectedSource;
                         current.Target = expectedTarget;
-                        lines.Add($"  UPDATED {component.ComponentKey}: copied {packageName} and updated artifact target to {expectedTarget}.");
-                        updated++;
+                        if (copiedPayload || copiedLibrary)
+                        {
+                            lines.Add($"  UPDATED {component.ComponentKey}: copied {packageName} and updated artifact target to {expectedTarget}.");
+                            updated++;
+                        }
+                        else
+                        {
+                            lines.Add($"  OK      {component.ComponentKey}: artifact package is present; target normalized to {expectedTarget} for this run.");
+                            unchanged++;
+                        }
+
                         configUpdated = true;
                         continue;
                     }
@@ -2618,7 +2631,8 @@ internal static partial class Program
                             packageName,
                             artifactSearchRoots,
                             builtPackages,
-                            lines);
+                            lines,
+                            existingPackagePath: payloadPath);
 
                         var mirroredLibraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
                         var refreshed = TryRefreshPackageLibraryArtifactFromSource(
@@ -2661,11 +2675,14 @@ internal static partial class Program
                             packageName,
                             artifactSearchRoots,
                             builtPackages,
-                            lines);
+                            lines,
+                            existingPackagePath: currentSourcePath);
 
                         var packageToCopy = sourcePackage ?? currentSourcePath;
                         CopyFileIfDifferent(packageToCopy, payloadPath);
                         CopyFileIfDifferent(packageToCopy, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
+                        CopyArtifactBuildStampIfPresent(packageToCopy, payloadPath);
+                        CopyArtifactBuildStampIfPresent(packageToCopy, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
                         if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase))
                         {
                             current.Source = expectedSource;
@@ -2689,7 +2706,8 @@ internal static partial class Program
                             packageName,
                             artifactSearchRoots,
                             builtPackages,
-                            lines);
+                            lines,
+                            existingPackagePath: null);
                         if (sourcePackage is null)
                         {
                             lines.Add($"  WARN    {component.ComponentKey}: configured artifact source is missing and {packageName} was not found and could not be selectively built.");
@@ -2700,6 +2718,8 @@ internal static partial class Program
 
                     CopyFileIfDifferent(sourcePackage, payloadPath);
                     CopyFileIfDifferent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
+                    CopyArtifactBuildStampIfPresent(sourcePackage, payloadPath);
+                    CopyArtifactBuildStampIfPresent(sourcePackage, Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName));
                     if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase)
                         || !string.Equals(current.Target, expectedTarget, StringComparison.OrdinalIgnoreCase))
                     {
@@ -2721,7 +2741,8 @@ internal static partial class Program
                         packageName,
                         artifactSearchRoots,
                         builtPackages,
-                        lines);
+                        lines,
+                        existingPackagePath: libraryPath);
 
                     if (TryRefreshPackageLibraryArtifactFromSource(
                             sourcePackage,
@@ -2748,7 +2769,8 @@ internal static partial class Program
                         packageName,
                         artifactSearchRoots,
                         builtPackages,
-                        lines);
+                        lines,
+                        existingPackagePath: null);
                     if (sourcePackage is null)
                     {
                         lines.Add($"  WARN    {component.ComponentKey}: {packageName} was not found and could not be selectively built. Build the artifact first or use Create updated installer package.");
@@ -2758,6 +2780,7 @@ internal static partial class Program
                 }
 
                 CopyFileIfDifferent(sourcePackage, libraryPath);
+                CopyArtifactBuildStampIfPresent(sourcePackage, libraryPath);
                 lines.Add($"  UPDATED {component.ComponentKey}: copied package library artifact {packageName}.");
                 updated++;
             }
@@ -3481,15 +3504,243 @@ internal static partial class Program
             }
 
             CopyFileIfDifferent(sourceFullPath, libraryFullPath);
+            CopyArtifactBuildStampIfPresent(sourceFullPath, libraryFullPath);
             if (!string.IsNullOrWhiteSpace(mirrorPath)
                 && !sourceFullPath.Equals(Path.GetFullPath(mirrorPath), StringComparison.OrdinalIgnoreCase))
             {
                 CopyFileIfDifferent(sourceFullPath, mirrorPath);
+                CopyArtifactBuildStampIfPresent(sourceFullPath, mirrorPath);
             }
 
             lines.Add($"  UPDATED {componentKey}: refreshed package library artifact from source package.");
             return true;
         }
+
+        private bool TryReuseStampedArtifactPackage(
+            ManifestComponent component,
+            string packageName,
+            string packagePath,
+            List<string> lines)
+        {
+            if (!File.Exists(packagePath))
+            {
+                return false;
+            }
+
+            var stampPath = GetArtifactBuildStampPath(packagePath);
+            if (!File.Exists(stampPath))
+            {
+                return false;
+            }
+
+            var expectedStamp = BuildArtifactSourceStamp(component, packageName);
+            if (string.IsNullOrWhiteSpace(expectedStamp))
+            {
+                return false;
+            }
+
+            try
+            {
+                var stampDocument = JsonNode.Parse(File.ReadAllText(stampPath, Encoding.UTF8));
+                var actualStamp = GetJsonStringProperty(stampDocument, "sourceStamp");
+                if (!string.Equals(actualStamp, expectedStamp, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                lines.Add($"  OK      {component.ComponentKey}: source stamp matches existing artifact package; build skipped.");
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                return false;
+            }
+        }
+
+        private void WriteArtifactBuildStamp(
+            ManifestComponent component,
+            string packageName,
+            string packagePath)
+        {
+            var sourceStamp = BuildArtifactSourceStamp(component, packageName);
+            if (string.IsNullOrWhiteSpace(sourceStamp))
+            {
+                return;
+            }
+
+            var stampPath = GetArtifactBuildStampPath(packagePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(stampPath)!);
+            var stampDocument = new JsonObject
+            {
+                ["formatVersion"] = 1,
+                ["componentKey"] = component.ComponentKey,
+                ["repositoryKey"] = component.RepositoryKey,
+                ["packageName"] = packageName,
+                ["artifactVersion"] = component.Version,
+                ["sourceStamp"] = sourceStamp,
+                ["createdUtc"] = DateTimeOffset.UtcNow.ToString("O")
+            };
+            File.WriteAllText(stampPath, stampDocument.ToJsonString(JsonOptions), new UTF8Encoding(false));
+        }
+
+        private string? BuildArtifactSourceStamp(ManifestComponent component, string packageName)
+        {
+            try
+            {
+                var sourceStateStamp = GetSourceStateStamp(component.SourceRoot);
+                var stampText = string.Join('\n',
+                    "artifact-source-stamp-v1",
+                    Path.GetFullPath(component.SourceRoot),
+                    component.RepositoryKey,
+                    component.ComponentKey,
+                    component.ModuleKey,
+                    component.AppKey,
+                    component.PackageType,
+                    component.TargetName,
+                    component.Version,
+                    component.RelativePathTemplate,
+                    component.ProjectPath,
+                    component.MinModuleDefinitionVersion,
+                    packageName,
+                    sourceStateStamp);
+                return GetTextSha256Hex(stampText);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)
+            {
+                return null;
+            }
+        }
+
+        private string GetSourceStateStamp(string sourceRoot)
+        {
+            var fullSourceRoot = Path.GetFullPath(sourceRoot);
+            if (_sourceStateStampCache.TryGetValue(fullSourceRoot, out var cached))
+            {
+                return cached;
+            }
+
+            var stamp = TryGetGitSourceStateStamp(fullSourceRoot)
+                ?? GetFallbackSourceStateStamp(fullSourceRoot);
+            _sourceStateStampCache[fullSourceRoot] = stamp;
+            return stamp;
+        }
+
+        private static string? TryGetGitSourceStateStamp(string sourceRoot)
+        {
+            var topLevelResult = RunProcess(
+                "git",
+                ["-C", sourceRoot, "rev-parse", "--show-toplevel"],
+                throwOnFailure: false,
+                timeout: TimeSpan.FromSeconds(15));
+            if (topLevelResult.ExitCode != 0)
+            {
+                return null;
+            }
+
+            var gitRoot = topLevelResult.StdOut
+                .Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(gitRoot) || !Directory.Exists(gitRoot))
+            {
+                return null;
+            }
+
+            var headResult = RunProcess(
+                "git",
+                ["-C", gitRoot, "rev-parse", "HEAD"],
+                throwOnFailure: false,
+                timeout: TimeSpan.FromSeconds(15));
+            if (headResult.ExitCode != 0)
+            {
+                return null;
+            }
+
+            var changedResult = RunProcess(
+                "git",
+                ["-C", gitRoot, "diff", "--name-only", "-z", "HEAD", "--", "."],
+                throwOnFailure: false,
+                timeout: TimeSpan.FromSeconds(30));
+            if (changedResult.ExitCode != 0)
+            {
+                return null;
+            }
+
+            var untrackedResult = RunProcess(
+                "git",
+                ["-C", gitRoot, "ls-files", "--others", "--exclude-standard", "-z"],
+                throwOnFailure: false,
+                timeout: TimeSpan.FromSeconds(30));
+            if (untrackedResult.ExitCode != 0)
+            {
+                return null;
+            }
+
+            var lines = new List<string>
+            {
+                "git-source-state-v1",
+                Path.GetFullPath(gitRoot),
+                headResult.StdOut.Trim()
+            };
+
+            foreach (var relativePath in SplitNullSeparatedGitPaths(changedResult.StdOut)
+                         .Concat(SplitNullSeparatedGitPaths(untrackedResult.StdOut))
+                         .Distinct(StringComparer.OrdinalIgnoreCase)
+                         .Order(StringComparer.OrdinalIgnoreCase))
+            {
+                var fullPath = Path.GetFullPath(Path.Join(gitRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+                if (!IsSameOrChildPath(gitRoot, fullPath))
+                {
+                    continue;
+                }
+
+                if (File.Exists(fullPath))
+                {
+                    lines.Add($"file\t{relativePath}\t{new FileInfo(fullPath).Length}\t{GetFileSha256Hex(fullPath)}");
+                }
+                else
+                {
+                    lines.Add($"missing\t{relativePath}");
+                }
+            }
+
+            return GetTextSha256Hex(string.Join('\n', lines));
+        }
+
+        private static IEnumerable<string> SplitNullSeparatedGitPaths(string value)
+            => value
+                .Split('\0', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(static item => !string.IsNullOrWhiteSpace(item));
+
+        private static string GetFallbackSourceStateStamp(string sourceRoot)
+        {
+            var root = Path.GetFullPath(sourceRoot);
+            var rootInfo = new DirectoryInfo(root);
+            var text = string.Join('\n',
+                "fallback-source-state-v1",
+                root,
+                rootInfo.Exists ? rootInfo.LastWriteTimeUtc.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture) : "missing");
+            return GetTextSha256Hex(text);
+        }
+
+        private static void CopyArtifactBuildStampIfPresent(string sourcePackagePath, string targetPackagePath)
+        {
+            var sourceStampPath = GetArtifactBuildStampPath(sourcePackagePath);
+            if (!File.Exists(sourceStampPath))
+            {
+                return;
+            }
+
+            var targetStampPath = GetArtifactBuildStampPath(targetPackagePath);
+            if (Path.GetFullPath(sourceStampPath).Equals(Path.GetFullPath(targetStampPath), StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            CopyFileIfDifferent(sourceStampPath, targetStampPath);
+        }
+
+        private static string GetArtifactBuildStampPath(string packagePath)
+            => packagePath + ".source-stamp.json";
 
         private static string? FindSourceArtifactPackage(
             string packageName,
@@ -3505,10 +3756,17 @@ internal static partial class Program
             string packageName,
             IReadOnlyList<string> artifactSearchRoots,
             Dictionary<string, string?> builtPackages,
-            List<string> lines)
+            List<string> lines,
+            string? existingPackagePath)
         {
             if (!string.IsNullOrWhiteSpace(component.ProjectPath))
             {
+                if (!string.IsNullOrWhiteSpace(existingPackagePath)
+                    && TryReuseStampedArtifactPackage(component, packageName, existingPackagePath, lines))
+                {
+                    return existingPackagePath;
+                }
+
                 if (builtPackages.TryGetValue(packageName, out var builtPackage))
                 {
                     return builtPackage;
@@ -3573,6 +3831,7 @@ internal static partial class Program
                     destination,
                     [],
                     component.MinModuleDefinitionVersion);
+                WriteArtifactBuildStamp(component, packageName, destination);
 
                 lines.Add($"  BUILD   {component.ComponentKey}: created {destination}.");
                 return destination;
@@ -3874,6 +4133,15 @@ internal static partial class Program
             var secondHash = SHA256.HashData(secondStream);
             return firstHash.SequenceEqual(secondHash);
         }
+
+        private static string GetFileSha256Hex(string path)
+        {
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        }
+
+        private static string GetTextSha256Hex(string text)
+            => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
         private async Task<bool> AppendDatabaseStatusAsync(
             IReadOnlyList<ManifestModuleDefinition> sourceDefinitions,
