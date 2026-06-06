@@ -65,7 +65,7 @@ function Test-VersionText {
     param([Parameter(Mandatory = $true)][string]$Value)
 
     if ($Value -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
-        throw "Version must use SemVer-style text such as 1.2.3 or 1.2.3-beta.1."
+        throw "Version must use simplified SemVer-compatible text such as 1.2.3, 1.2.3-beta.1, or 1.2.3+build.5."
     }
 }
 
@@ -76,7 +76,7 @@ function Get-BumpedVersion {
     )
 
     if ($CurrentVersion -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
-        throw "Cannot bump '$CurrentVersion' automatically. Use -Version for prerelease/build versions or non-standard text."
+        throw "Cannot bump '$CurrentVersion' automatically. Automatic bumps only support plain major.minor.patch versions such as 1.2.3. Use -Version for prerelease/build metadata or other non-standard text."
     }
 
     $major = [int]$Matches[1]
@@ -245,7 +245,11 @@ function Convert-KeyInput {
         return @()
     }
 
-    return @($Value.Split(',', [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    return @(
+        $Value.Split(',', [StringSplitOptions]::RemoveEmptyEntries) |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrEmpty($_) }
+    )
 }
 
 $exitCode = 0

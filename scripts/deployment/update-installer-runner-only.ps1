@@ -14,6 +14,9 @@ refreshes cannot accidentally execute an older runner. It does not rebuild modul
 definitions, artifact packages, SQL payloads, package manifests, or any other
 generated package content.
 
+The runner is published as a framework-dependent win-x64 executable. Machines
+that run it must have the matching .NET runtime installed.
+
 Use the installer GUI package sync action afterwards when a developer machine
 needs to populate the ignored package object library before an install.
 #>
@@ -150,7 +153,7 @@ $profileRoots = @(
 )
 
 if (-not ($profileRoots | Where-Object { Test-HasBootstrapProfiles -Root $_ } | Select-Object -First 1)) {
-    throw "Minimal installer packages must be accompanied by bootstrap profiles in a package 'configs' folder or a sibling 'hosts\<profile>\bootstrap.json' tree."
+    throw "Minimal installer packages must be accompanied by bootstrap profiles in a package 'configs' folder or a 'hosts\<profile>\bootstrap.json' tree under PackageRoot, beside PackageRoot, or up to two parent levels above it."
 }
 
 $repositoryRootPath = Resolve-RepositoryRoot -ConfiguredRoot $RepositoryRoot
