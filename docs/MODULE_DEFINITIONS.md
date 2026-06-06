@@ -70,7 +70,9 @@ Current ownership:
    only runs embedded scripts marked as `idempotent`, records the result in
    `omp.ModuleDefinitionSqlExecutions`, and blocks scripts that contain broad
    destructive operations such as `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE`,
-   `TRUNCATE TABLE`, or `DELETE FROM` without a `WHERE` clause.
+   `TRUNCATE TABLE`, or executable `DELETE` statements without a `WHERE` clause.
+   Referential-action clauses such as `ON DELETE CASCADE` are schema metadata
+   and are not treated as executable `DELETE` statements by this guard.
 5. HostAgent consumes the resulting desired state and deploys artifacts.
 
 Each module definition file lives at the module root and is listed in that

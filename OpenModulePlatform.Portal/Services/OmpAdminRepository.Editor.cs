@@ -5330,13 +5330,13 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
             return "The script contains TRUNCATE TABLE, which is not allowed for Portal repair.";
         }
 
-        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)\bDELETE\s+FROM\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")
+        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?ims)(?:^|;)[^\S\r\n]*DELETE\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|$)")
             .Cast<Match>()
             .Select(static match => match.Groups["statement"].Value)
             .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
         if (unsafeDeleteStatement is not null)
         {
-            return "The script contains DELETE FROM without a WHERE clause, which is not allowed for Portal repair.";
+            return "The script contains DELETE without a WHERE clause, which is not allowed for Portal repair.";
         }
 
         return null;

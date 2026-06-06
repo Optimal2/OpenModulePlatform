@@ -1800,6 +1800,7 @@
   <data name="The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE, which is not allowed for Portal repair." xml:space="preserve"><value>Skriptet innehåller DROP DATABASE, DROP SCHEMA eller DROP TABLE, vilket inte tillåts vid Portal-rättning.</value></data>
   <data name="The script contains TRUNCATE TABLE, which is not allowed for Portal repair." xml:space="preserve"><value>Skriptet innehåller TRUNCATE TABLE, vilket inte tillåts vid Portal-rättning.</value></data>
   <data name="The script contains DELETE FROM without a WHERE clause, which is not allowed for Portal repair." xml:space="preserve"><value>Skriptet innehåller DELETE FROM utan WHERE-villkor, vilket inte tillåts vid Portal-rättning.</value></data>
+  <data name="The script contains DELETE without a WHERE clause, which is not allowed for Portal repair." xml:space="preserve"><value>Skriptet innehåller DELETE utan WHERE-villkor, vilket inte tillåts vid Portal-rättning.</value></data>
   <data name="One or more required database objects for this script are missing." xml:space="preserve"><value>Ett eller flera databasobjekt som krävs för skriptet saknas.</value></data>
   <data name="The last execution failed." xml:space="preserve"><value>Den senaste körningen misslyckades.</value></data>
   <data name="No successful execution has been recorded for this script content." xml:space="preserve"><value>Ingen lyckad körning har registrerats för det här skriptinnehållet.</value></data>
