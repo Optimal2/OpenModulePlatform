@@ -61,7 +61,7 @@ function Resolve-RepositoryRoot {
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
-        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
+        [string[]]$Arguments = @()
     )
 
     Write-Host "> $FilePath $($Arguments -join ' ')"
@@ -111,7 +111,7 @@ $publishRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-installer-runne
 try {
     New-Item -ItemType Directory -Path $publishRoot | Out-Null
 
-    Invoke-NativeChecked dotnet @(
+    Invoke-NativeChecked -FilePath dotnet -Arguments @(
         'publish',
         $projectPath,
         '-c',

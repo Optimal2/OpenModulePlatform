@@ -173,3 +173,46 @@ With no `-RepositoryName`, the validator scans the workspace for sibling
 repositories that contain both `omp-components.json` and
 `scripts\omp\build-universal-package.cmd`. The default output and log folders
 are below the current user's temp directory.
+
+## Comparing Package Generation Paths
+
+Universal package validation should compare the import-relevant portable object
+data, not the outer zip bytes. Zip timestamps, compression metadata, and the
+package manifest `createdUtc` value may differ without changing what Portal or
+HostAgent imports.
+
+Use these helpers when validating that repository scripts, the Bootstrapper
+developer-source refresh, and installer exports produce the same objects:
+
+```powershell
+.\scripts\omp\merge-universal-package-objects.ps1 `
+  -PackageRoot "$env:TEMP\omp-cmd-wrapper-validation\packages" `
+  -OutputRoot "$env:TEMP\omp-cmd-wrapper-validation\aggregate-objects"
+
+.\scripts\omp\compare-universal-package-data.ps1 `
+  -FirstPackage "$env:TEMP\omp-cmd-wrapper-validation\aggregate-objects" `
+  -SecondPackage "E:\DevInstaller\OpenModulePlatform\Universal\installer\data\global"
+
+.\scripts\omp\compare-universal-package-data.ps1 `
+  -FirstPackage "E:\DevInstaller\OpenModulePlatform\Universal\installer\exports\omp-universal__global__20260606.zip" `
+  -SecondPackage "E:\DevInstaller\OpenModulePlatform\Universal\installer\data\global"
+```
+
+`merge-universal-package-objects.ps1` extracts many repository-level universal
+packages into one object root and fails if two packages contain the same object
+path with different content. `compare-universal-package-data.ps1` normalizes
+universal object comparison and expands artifact packages before comparing
+their payloads. `compare-artifact-payload-files.ps1` is available for a focused
+artifact-to-artifact comparison when a single artifact identity is suspected.
+
+To create a universal package from an already validated object root, use:
+
+```powershell
+.\scripts\omp\export-universal-object-root.ps1 `
+  -ObjectRoot "E:\DevInstaller\OpenModulePlatform\Universal\installer\data\global" `
+  -OutputPath "E:\Packages\omp-universal__global__verified.zip"
+```
+
+That helper is intended for validation and developer packaging. Normal
+repository builds should still use `build-universal-package.cmd` or
+`export-universal-package.ps1`.
