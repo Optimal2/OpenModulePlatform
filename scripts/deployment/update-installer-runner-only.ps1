@@ -84,7 +84,7 @@ function Test-HasBootstrapProfiles {
         return $false
     }
 
-    if ((Get-ChildItem -LiteralPath $Root -Filter '*.json' -File -ErrorAction SilentlyContinue | Select-Object -First 1) -ne $null) {
+    if (Get-ChildItem -LiteralPath $Root -Filter '*.json' -File -ErrorAction SilentlyContinue | Select-Object -First 1) {
         return $true
     }
 

@@ -521,6 +521,8 @@ internal static partial class Program
         private readonly CheckBox _ensureIisSite = new() { Text = "Create/update IIS site and app pools", Enabled = false };
         private readonly CheckBox _includeExampleApps = new() { Text = "Install example apps and sample data", Enabled = false };
         private readonly Dictionary<string, TextBox> _fields = new(StringComparer.OrdinalIgnoreCase);
+        // Multiple manifest components often share one repository root; cache source stamps so package
+        // sync does not repeat the same Git and fallback source-state checks for every component.
         private readonly Dictionary<string, string> _sourceStateStampCache = new(StringComparer.OrdinalIgnoreCase);
         private TabControl? _advancedActionTabs;
         private TabPage? _packageToolsTab;
@@ -3637,8 +3639,7 @@ internal static partial class Program
                 return null;
             }
 
-            var gitRoot = topLevelResult.StdOut
-                .Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            var gitRoot = SplitTextLines(topLevelResult.StdOut)
                 .FirstOrDefault();
             if (string.IsNullOrWhiteSpace(gitRoot) || !Directory.Exists(gitRoot))
             {
@@ -3687,6 +3688,11 @@ internal static partial class Program
                          .Distinct(StringComparer.OrdinalIgnoreCase)
                          .Order(StringComparer.OrdinalIgnoreCase))
             {
+                if (!IsSafeGitRelativePath(relativePath))
+                {
+                    continue;
+                }
+
                 var fullPath = Path.GetFullPath(Path.Join(gitRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
                 if (!IsSameOrChildPath(gitRoot, fullPath))
                 {
@@ -3710,6 +3716,28 @@ internal static partial class Program
             => value
                 .Split('\0', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Where(static item => !string.IsNullOrWhiteSpace(item));
+
+        private static IEnumerable<string> SplitTextLines(string value)
+            => value
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace('\r', '\n')
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(static item => !string.IsNullOrWhiteSpace(item));
+
+        private static bool IsSafeGitRelativePath(string relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath)
+                || Path.IsPathRooted(relativePath)
+                || relativePath.Contains(':', StringComparison.Ordinal)
+                || relativePath.IndexOf('\0') >= 0)
+            {
+                return false;
+            }
+
+            return !relativePath
+                .Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries)
+                .Any(static segment => segment is "." or "..");
+        }
 
         private static string GetFallbackSourceStateStamp(string sourceRoot)
         {
@@ -3867,8 +3895,12 @@ internal static partial class Program
             string projectFile,
             string publishRoot)
         {
-            var sourceRoot = Path.GetFullPath(component.SourceRoot)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var sourceRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(component.SourceRoot));
+            if (string.IsNullOrWhiteSpace(sourceRoot))
+            {
+                throw new InvalidOperationException("Component source root could not be resolved for deterministic publish.");
+            }
+
             var pathMapRoot = "/_/" + SanitizeMsBuildPathMapSegment(component.RepositoryKey);
 
             return
@@ -5477,7 +5509,7 @@ ORDER BY ar.ArtifactId DESC;
                 identity.PackageType,
                 identity.TargetName);
             if (!latestByIdentity.TryGetValue(identityKey, out var current)
-                || CompareUniversalPackageVersionText(identity.Version, current.Version) > 0)
+                || CompareVersionText(identity.Version, current.Version) > 0)
             {
                 latestByIdentity[identityKey] = (candidate, identity.Version);
             }
@@ -5513,41 +5545,6 @@ ORDER BY ar.ArtifactId DESC;
 
         identity = new ArtifactPackageIdentity(parts[0], parts[1], parts[2], parts[3], parts[4]);
         return true;
-    }
-
-    private static int CompareUniversalPackageVersionText(string left, string right)
-    {
-        if (Version.TryParse(left, out var leftVersion) && Version.TryParse(right, out var rightVersion))
-        {
-            return leftVersion.CompareTo(rightVersion);
-        }
-
-        var leftParts = left.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
-        var rightParts = right.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
-        var count = Math.Max(leftParts.Length, rightParts.Length);
-        for (var index = 0; index < count; index++)
-        {
-            var leftPart = index < leftParts.Length ? leftParts[index] : "0";
-            var rightPart = index < rightParts.Length ? rightParts[index] : "0";
-            if (int.TryParse(leftPart, out var leftNumber) && int.TryParse(rightPart, out var rightNumber))
-            {
-                var numberComparison = leftNumber.CompareTo(rightNumber);
-                if (numberComparison != 0)
-                {
-                    return numberComparison;
-                }
-
-                continue;
-            }
-
-            var textComparison = string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
-            if (textComparison != 0)
-            {
-                return textComparison;
-            }
-        }
-
-        return 0;
     }
 
     private static void AddUniversalPackageCandidates(

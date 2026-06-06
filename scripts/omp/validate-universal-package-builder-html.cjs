@@ -37,7 +37,7 @@ function loadPlaywright() {
             }
         }
 
-        throw new Error("Could not load the 'playwright' package. Run through npm exec --package playwright or install Playwright locally.");
+        throw new Error("Could not load the 'playwright' package. Run through npx -p playwright or install Playwright locally.");
     }
 }
 
@@ -125,7 +125,8 @@ async function main() {
     let browser;
     try {
         browser = await chromium.launch({ channel: "msedge", headless: true });
-    } catch {
+    } catch (error) {
+        console.warn(`Could not launch Microsoft Edge for validation, falling back to bundled/default Chromium: ${error && error.message ? error.message : String(error)}`);
         browser = await chromium.launch({ headless: true });
     }
 

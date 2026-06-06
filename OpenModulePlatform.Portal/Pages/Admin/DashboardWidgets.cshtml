@@ -83,6 +83,7 @@
                         <td><code>@row.WidgetKey</code></td>
                         <td>@row.Title</td>
                         <td class="small-text">
+                            @* Packaged widgets may store either a localization key or plain text; IStringLocalizer falls back to the original text when no key exists. *@
                             @(string.IsNullOrWhiteSpace(row.Description) ? L["No description available"] : L[row.Description].Value)
                         </td>
                         <td>@row.WidgetType</td>
@@ -107,7 +108,7 @@
                                 }
                             }
                         </td>
-                        <td>@row.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@row.ModifiedUtc.ToLocalTime().ToString("g")</td>
                         <td class="actions-col">
                             <a class="action-link admin-icon-button admin-icon-button--edit"
                                asp-page="/Admin/DashboardWidgets"
