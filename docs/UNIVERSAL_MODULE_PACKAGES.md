@@ -159,6 +159,13 @@ config cannot be read or parsed. Then use
 - host-specific host configs, overlays, widgets, and widget data for the selected profile
 - the output zip path
 
+The installer package builder selects only the latest artifact package version
+for each module/app/package slot by default. Older artifact package versions can
+be included deliberately with `Include older artifact versions`, but that creates
+a history/library package rather than the standard current-state package. This
+matches repository exports and Portal exports, which produce current portable
+objects unless an operator explicitly asks for historical versions.
+
 The generated zip contains `omp-universal-package.json` and only the selected
 objects. This is the recommended way to create a customer or host-specific
 transport package from a developer machine and then import it through Portal, the
@@ -181,11 +188,13 @@ widgets from the current OMP installation. Widget runtime data is exported under
 `widget-data/` as a zip whose inner manifest remaps source `binaryDataId` values
 to the target installation during import.
 
-The standalone tool at `tools/universal-package-builder/index.html` creates the
-same zip format entirely in the browser. Portal includes only this browser
-package tool, and the import/export page links to it through the Universal
-package builder admin page. The older object-specific browser editors are no
-longer shipped; universal packages are the single supported operator workflow.
+Portal exposes the package builder as a normal localized admin page at
+`/admin/universalpackagebuilder`. The standalone tool at
+`tools/universal-package-builder/index.html` creates the same zip format
+entirely in the browser for offline use. The import/export page links to the
+Portal builder and the Portal builder links to the standalone version. The older
+object-specific browser editors are no longer shipped; universal packages are
+the single supported operator workflow.
 
 ## Repository Export Standard
 
@@ -207,6 +216,27 @@ and artifact package manifest envelope. Do not add generator-specific metadata
 to artifact packages. `moduleDefinition.minVersion` is present only when the
 owning component declares `minModuleDefinitionVersion`.
 
+Exact package comparisons require the same object selection. A current-state
+package should contain the newest artifact version per artifact identity. A
+history package may contain older artifact versions as well, but that package is
+not expected to have the same object set as a current-state repository export.
+
+Repository `.NET` artifact builds must use deterministic publish settings so the
+same source, component version, and package metadata do not produce different
+artifact content when built through different entry points. The standard
+`scripts/omp/build-repository-objects.ps1` script and the Bootstrapper
+developer-source refresh both pass:
+
+```text
+-p:ContinuousIntegrationBuild=true
+-p:Deterministic=true
+-p:PathMap=<repository-root>=/_/<repository-key>
+```
+
+If a repository provides its own artifact build hook, it must preserve the same
+principle: same source plus same artifact version must create identical
+import-relevant payload bytes.
+
 The outer universal zip can still differ at byte level because zip entry
 timestamps, compression method, package key/version, and `createdUtc` are
 transport metadata. Import correctness is based on the portable object paths,
@@ -216,7 +246,7 @@ repository comparison helper when validating package generators:
 ```powershell
 .\scripts\omp\compare-universal-package-data.ps1 `
   -FirstPackage E:\Private\installer\data\global `
-  -SecondPackage .\artifacts\universal-packages\openmoduleplatform-global-0.3.5-universal.zip `
+  -SecondPackage .\artifacts\universal-packages\openmoduleplatform-global-0.3.6-universal.zip `
   -CommonOnly
 ```
 
@@ -230,7 +260,7 @@ Node/Playwright helper:
 ```powershell
 npm exec --package playwright -- node .\scripts\omp\validate-universal-package-builder-html.cjs `
   --module .\OpenModulePlatform.Portal\omp_portal.module-definition.json `
-  --artifact E:\Private\installer\data\global\artifacts\omp_portal__omp_portal__web-app__omp-portal__0.3.184.zip `
+  --artifact E:\Private\installer\data\global\artifacts\omp_portal__omp_portal__web-app__omp-portal__0.3.185.zip `
   --output $env:TEMP\omp-html-builder-validation.zip
 ```
 

@@ -19,8 +19,9 @@ still part of the current OMP object/installer model.
   and universal-package objects.
   OMP-compatible module repositories should expose a root
   `build-omp-objects.ps1` wrapper plus the standard `scripts/omp/` wrappers:
-  `bump-version.ps1`, `bump-version.cmd`, `build-universal-package.ps1`,
-  `build-universal-package.cmd`, and `export-universal-package.ps1`.
+  `bump-version.ps1`, `bump-version.cmd`, `build-repository-objects.ps1`,
+  `build-universal-package.ps1`, `build-universal-package.cmd`,
+  `export-universal-package.ps1`, and `export-universal-package.cmd`.
   See `docs/OMP_COMPONENT_MANIFEST.md` for the conformance checklist and
   `scripts/omp/README.md` for the canonical object-builder behavior.
 
