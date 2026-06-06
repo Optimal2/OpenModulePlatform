@@ -13,6 +13,12 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class OmpHostArtifactRepository
 {
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
+    private const int HostAgentRuntimeServiceNameMaxLength = 200;
+    private const int HostAgentRuntimeVersionMaxLength = 50;
+    private const int HostAgentRuntimeInstallPathMaxLength = 500;
+    private const int HostAgentRuntimeModeMaxLength = 40;
+    private const int HostAgentRuntimeStatusMessageMaxLength = 1000;
+    private const int StoredDiagnosticMessageMaxLength = 4000;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -21,6 +27,7 @@ public sealed class OmpHostArtifactRepository
         WriteIndented = true
     };
 
+    // Short repository-local alias for the SQL connection factory; all database access still creates scoped SqlConnection instances.
     private readonly SqlConnectionFactory _db;
 
     public OmpHostArtifactRepository(SqlConnectionFactory db)
@@ -212,19 +219,19 @@ WHEN NOT MATCHED THEN
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostId", hostId);
-        cmd.Parameters.AddWithValue("@serviceName", process.ServiceName);
-        cmd.Parameters.AddWithValue("@version", string.IsNullOrWhiteSpace(process.Version) ? DBNull.Value : process.Version);
-        cmd.Parameters.AddWithValue("@artifactId", artifactId.HasValue ? artifactId.Value : DBNull.Value);
-        cmd.Parameters.AddWithValue("@installPath", string.IsNullOrWhiteSpace(installPath) ? DBNull.Value : installPath);
-        cmd.Parameters.AddWithValue("@processId", process.ProcessId);
-        cmd.Parameters.AddWithValue("@runtimeMode", runtimeMode);
-        cmd.Parameters.AddWithValue("@isActive", isActive);
+        Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
+        Add(cmd, "@serviceName", SqlDbType.NVarChar, HostAgentRuntimeServiceNameMaxLength, process.ServiceName);
+        Add(cmd, "@version", SqlDbType.NVarChar, HostAgentRuntimeVersionMaxLength, NullIfWhiteSpace(process.Version));
+        Add(cmd, "@artifactId", SqlDbType.Int, artifactId);
+        Add(cmd, "@installPath", SqlDbType.NVarChar, HostAgentRuntimeInstallPathMaxLength, NullIfWhiteSpace(installPath));
+        Add(cmd, "@processId", SqlDbType.Int, process.ProcessId);
+        Add(cmd, "@runtimeMode", SqlDbType.NVarChar, HostAgentRuntimeModeMaxLength, runtimeMode);
+        Add(cmd, "@isActive", SqlDbType.Bit, isActive);
         var takeoverFromServiceName = string.Equals(runtimeMode, HostAgentRuntimeMode.Normal, StringComparison.OrdinalIgnoreCase)
             ? null
             : process.TakeoverFromServiceName;
-        cmd.Parameters.AddWithValue("@takeoverFromServiceName", string.IsNullOrWhiteSpace(takeoverFromServiceName) ? DBNull.Value : takeoverFromServiceName);
-        cmd.Parameters.AddWithValue("@statusMessage", string.IsNullOrWhiteSpace(statusMessage) ? DBNull.Value : Truncate(statusMessage, 1000));
+        Add(cmd, "@takeoverFromServiceName", SqlDbType.NVarChar, HostAgentRuntimeServiceNameMaxLength, NullIfWhiteSpace(takeoverFromServiceName));
+        Add(cmd, "@statusMessage", SqlDbType.NVarChar, HostAgentRuntimeStatusMessageMaxLength, NullIfWhiteSpace(Truncate(statusMessage ?? string.Empty, HostAgentRuntimeStatusMessageMaxLength)));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -249,7 +256,8 @@ WHERE HostId = @hostId
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@hostId", hostId);
         cmd.Parameters.AddWithValue("@serviceName", serviceName);
-        cmd.Parameters.AddWithValue("@statusMessage", Truncate($"Retired by {retiredByServiceName}.", 1000));
+        var retiredBy = SanitizeStatusMessageFragment(retiredByServiceName);
+        Add(cmd, "@statusMessage", SqlDbType.NVarChar, HostAgentRuntimeStatusMessageMaxLength, Truncate($"Retired by {retiredBy}.", HostAgentRuntimeStatusMessageMaxLength));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -1695,9 +1703,9 @@ WHERE HostDeploymentId = @hostDeploymentId
         var safeMessage = string.IsNullOrWhiteSpace(outcomeMessage)
             ? null
             : outcomeMessage.Trim();
-        if (safeMessage?.Length > 4000)
+        if (safeMessage?.Length > StoredDiagnosticMessageMaxLength)
         {
-            safeMessage = safeMessage[..4000];
+            safeMessage = safeMessage[..StoredDiagnosticMessageMaxLength];
         }
 
         await using var conn = _db.Create();
@@ -2284,7 +2292,7 @@ WHERE HostAgentJobId = @hostAgentJobId
         cmd.Parameters.AddWithValue("@status", status);
         cmd.Parameters.AddWithValue("@runningStatus", HostAgentJobStatuses.Running);
         cmd.Parameters.AddWithValue("@resultJson", string.IsNullOrWhiteSpace(resultJson) ? DBNull.Value : resultJson);
-        cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(lastError) ? DBNull.Value : Truncate(lastError, 4000));
+        cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(lastError) ? DBNull.Value : Truncate(lastError, StoredDiagnosticMessageMaxLength));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -3161,9 +3169,9 @@ WHEN NOT MATCHED THEN
         var safeMessage = string.IsNullOrWhiteSpace(result.ErrorMessage)
             ? null
             : result.ErrorMessage.Trim();
-        if (safeMessage?.Length > 4000)
+        if (safeMessage?.Length > StoredDiagnosticMessageMaxLength)
         {
-            safeMessage = safeMessage[..4000];
+            safeMessage = safeMessage[..StoredDiagnosticMessageMaxLength];
         }
 
         await using var conn = _db.Create();
@@ -3739,7 +3747,7 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@moduleDefinitionSqlExecutionId", executionId);
         Add(cmd, "@executionStatus", status);
-        Add(cmd, "@errorMessage", Truncate(errorMessage ?? string.Empty, 4000));
+        Add(cmd, "@errorMessage", Truncate(errorMessage ?? string.Empty, StoredDiagnosticMessageMaxLength));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -4569,6 +4577,41 @@ VALUES(@widget_id, @permission_id, @role_id);";
 
     private static void Add(SqlCommand cmd, string name, object? value)
         => cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+
+    private static void Add(SqlCommand cmd, string name, SqlDbType sqlDbType, object? value)
+        => cmd.Parameters.Add(name, sqlDbType).Value = value ?? DBNull.Value;
+
+    private static void Add(SqlCommand cmd, string name, SqlDbType sqlDbType, int size, object? value)
+        => cmd.Parameters.Add(name, sqlDbType, size).Value = value ?? DBNull.Value;
+
+    private static string SanitizeStatusMessageFragment(string? value)
+    {
+        var rawValue = value?.Trim() ?? string.Empty;
+        var builder = new StringBuilder(rawValue.Length);
+        var previousWasWhitespace = false;
+        foreach (var character in rawValue)
+        {
+            var normalized = char.IsControl(character) ? ' ' : character;
+            if (char.IsWhiteSpace(normalized))
+            {
+                if (!previousWasWhitespace)
+                {
+                    builder.Append(' ');
+                    previousWasWhitespace = true;
+                }
+
+                continue;
+            }
+
+            builder.Append(normalized);
+            previousWasWhitespace = false;
+        }
+
+        var sanitized = builder.ToString().Trim();
+        return string.IsNullOrWhiteSpace(sanitized)
+            ? "unknown HostAgent service"
+            : Truncate(sanitized, HostAgentRuntimeServiceNameMaxLength);
+    }
 
     private static string Truncate(string value, int maxLength)
     {
