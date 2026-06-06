@@ -3443,17 +3443,7 @@ internal static partial class Program
                     lines.Add($"  BUILD   {component.ComponentKey}: publishing {GetDisplayPath(component.SourceRoot, projectFile)}.");
                     RunProcess(
                         "dotnet",
-                        [
-                            "publish",
-                            projectFile,
-                            "-c",
-                            "Release",
-                            "-o",
-                            publishRoot,
-                            "--nologo",
-                            "--verbosity",
-                            "minimal"
-                        ],
+                        BuildDeterministicDotNetPublishArguments(component, projectFile, publishRoot),
                         workingDirectory: component.SourceRoot);
                 }
                 else
@@ -3502,6 +3492,41 @@ internal static partial class Program
             }
 
             return Path.Join(component.SourceRoot, "artifacts");
+        }
+
+        private static string[] BuildDeterministicDotNetPublishArguments(
+            ManifestComponent component,
+            string projectFile,
+            string publishRoot)
+        {
+            var sourceRoot = Path.GetFullPath(component.SourceRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var pathMapRoot = "/_/" + SanitizeMsBuildPathMapSegment(component.RepositoryKey);
+
+            return
+            [
+                "publish",
+                projectFile,
+                "-c",
+                "Release",
+                "-o",
+                publishRoot,
+                "--nologo",
+                "--verbosity",
+                "minimal",
+                "-p:ContinuousIntegrationBuild=true",
+                "-p:Deterministic=true",
+                $"-p:PathMap={sourceRoot}={pathMapRoot}"
+            ];
+        }
+
+        private static string SanitizeMsBuildPathMapSegment(string value)
+        {
+            var chars = value.Trim()
+                .Select(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-' ? ch : '-')
+                .ToArray();
+            var sanitized = new string(chars).Trim('-');
+            return string.IsNullOrWhiteSpace(sanitized) ? "repository" : sanitized;
         }
 
         private static string? ResolveComponentProjectFile(ManifestComponent component)
@@ -4446,6 +4471,12 @@ ORDER BY ar.ArtifactId DESC;
             Checked = true,
             Text = "Include host-specific package objects"
         };
+        private readonly CheckBox _includeHistoricalArtifacts = new()
+        {
+            AutoSize = true,
+            Checked = false,
+            Text = "Include older artifact versions"
+        };
         private readonly TextBox _packageKeyBox = new() { Width = 220 };
         private readonly TextBox _packageVersionBox = new() { Width = 160 };
         private readonly TextBox _displayNameBox = new() { Width = 420 };
@@ -4520,6 +4551,7 @@ ORDER BY ar.ArtifactId DESC;
             };
             _includeGlobalObjects.CheckedChanged += (_, _) => RefreshCandidateList();
             _includeHostObjects.CheckedChanged += (_, _) => RefreshCandidateList();
+            _includeHistoricalArtifacts.CheckedChanged += (_, _) => RefreshCandidateList();
             _packageKeyBox.TextChanged += (_, _) => UpdateDefaultOutputPath(force: false);
             _packageVersionBox.TextChanged += (_, _) => UpdateDefaultOutputPath(force: false);
             _displayNameBox.TextChanged += (_, _) => UpdateCreateButtonState();
@@ -4609,6 +4641,7 @@ ORDER BY ar.ArtifactId DESC;
             };
             includePanel.Controls.Add(_includeGlobalObjects);
             includePanel.Controls.Add(_includeHostObjects);
+            includePanel.Controls.Add(_includeHistoricalArtifacts);
             hostGrid.SetColumnSpan(includePanel, 2);
             hostGrid.Controls.Add(includePanel, 0, 1);
             root.Controls.Add(hostGrid, 0, 2);
@@ -4717,6 +4750,11 @@ ORDER BY ar.ArtifactId DESC;
                 SelectedHostChoice,
                 _includeGlobalObjects.Checked,
                 _includeHostObjects.Checked);
+            if (!_includeHistoricalArtifacts.Checked)
+            {
+                candidates = FilterLatestUniversalPackageArtifacts(candidates);
+            }
+
             foreach (var candidate in candidates)
             {
                 var item = new UniversalPackageCandidateListItem(candidate);
@@ -4986,6 +5024,99 @@ ORDER BY ar.ArtifactId DESC;
             .OrderBy(static item => item.Kind, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static item => item.PackagePath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyList<UniversalPackageCandidate> FilterLatestUniversalPackageArtifacts(
+        IReadOnlyList<UniversalPackageCandidate> candidates)
+    {
+        var latestByIdentity = new Dictionary<string, (UniversalPackageCandidate Candidate, string Version)>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in candidates)
+        {
+            if (!TryParseUniversalPackageArtifactIdentity(candidate, out var identity))
+            {
+                continue;
+            }
+
+            var identityKey = string.Join(
+                "__",
+                identity.ModuleKey,
+                identity.AppKey,
+                identity.PackageType,
+                identity.TargetName);
+            if (!latestByIdentity.TryGetValue(identityKey, out var current)
+                || CompareUniversalPackageVersionText(identity.Version, current.Version) > 0)
+            {
+                latestByIdentity[identityKey] = (candidate, identity.Version);
+            }
+        }
+
+        var latestArtifactPaths = latestByIdentity.Values
+            .Select(static item => item.Candidate.PackagePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return candidates
+            .Where(candidate => !TryParseUniversalPackageArtifactIdentity(candidate, out _)
+                || latestArtifactPaths.Contains(candidate.PackagePath))
+            .ToArray();
+    }
+
+    private static bool TryParseUniversalPackageArtifactIdentity(
+        UniversalPackageCandidate candidate,
+        out ArtifactPackageIdentity identity)
+    {
+        identity = default!;
+        if (!candidate.Kind.Equals("artifact", StringComparison.OrdinalIgnoreCase)
+            || !candidate.PackagePath.StartsWith("artifacts/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var fileName = Path.GetFileNameWithoutExtension(candidate.PackagePath);
+        var parts = fileName.Split(["__"], StringSplitOptions.None);
+        if (parts.Length != 5)
+        {
+            return false;
+        }
+
+        identity = new ArtifactPackageIdentity(parts[0], parts[1], parts[2], parts[3], parts[4]);
+        return true;
+    }
+
+    private static int CompareUniversalPackageVersionText(string left, string right)
+    {
+        if (Version.TryParse(left, out var leftVersion) && Version.TryParse(right, out var rightVersion))
+        {
+            return leftVersion.CompareTo(rightVersion);
+        }
+
+        var leftParts = left.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
+        var rightParts = right.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
+        var count = Math.Max(leftParts.Length, rightParts.Length);
+        for (var index = 0; index < count; index++)
+        {
+            var leftPart = index < leftParts.Length ? leftParts[index] : "0";
+            var rightPart = index < rightParts.Length ? rightParts[index] : "0";
+            if (int.TryParse(leftPart, out var leftNumber) && int.TryParse(rightPart, out var rightNumber))
+            {
+                var numberComparison = leftNumber.CompareTo(rightNumber);
+                if (numberComparison != 0)
+                {
+                    return numberComparison;
+                }
+
+                continue;
+            }
+
+            var textComparison = string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
+            if (textComparison != 0)
+            {
+                return textComparison;
+            }
+        }
+
+        return 0;
     }
 
     private static void AddUniversalPackageCandidates(

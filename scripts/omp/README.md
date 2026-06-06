@@ -44,6 +44,11 @@ HostAgent import folders, or installer package libraries. Runtime or
 customer-specific configuration should be supplied through command-line
 mappings, not committed to the public repository.
 
+For .NET components, this script publishes with deterministic MSBuild settings
+and a stable `PathMap`. The same source and artifact version should therefore
+produce identical import-relevant artifact payload bytes whether the package is
+built from a repository script or by the Bootstrapper developer-source refresh.
+
 Use `-WidgetFile` for dashboard widget JSON objects that should be copied into
 the same output shape as the other portable OMP objects.
 
@@ -59,7 +64,8 @@ selected components. Use `-AllComponents` for a full repository package.
 `export-universal-package.ps1` is the standard command that every
 OMP-compatible module repository should expose at the same path. It uses the
 object builder and then creates one universal zip with
-`omp-universal-package.json` at the root.
+`omp-universal-package.json` at the root. `export-universal-package.cmd` is the
+matching double-click wrapper.
 
 Examples:
 

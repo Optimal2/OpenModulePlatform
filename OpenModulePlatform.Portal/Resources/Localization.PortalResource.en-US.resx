@@ -787,4 +787,30 @@
   <data name="Select a valid iFrame app." xml:space="preserve"><value>Select a valid iFrame app.</value></data>
   <data name="Select a valid iFrame URL." xml:space="preserve"><value>Select a valid iFrame URL.</value></data>
   <data name="Select a valid iFrame app and URL." xml:space="preserve"><value>Select a valid iFrame app and URL.</value></data>
+  <data name="Open standalone builder" xml:space="preserve"><value>Open standalone builder</value></data>
+  <data name="Package metadata" xml:space="preserve"><value>Package metadata</value></data>
+  <data name="OpenModulePlatform universal package" xml:space="preserve"><value>OpenModulePlatform universal package</value></data>
+  <data name="Optional host key/profile" xml:space="preserve"><value>Optional host key/profile</value></data>
+  <data name="Add objects" xml:space="preserve"><value>Add objects</value></data>
+  <data name="Object type" xml:space="preserve"><value>Object type</value></data>
+  <data name="Module definition JSON" xml:space="preserve"><value>Module definition JSON</value></data>
+  <data name="Artifact package zip" xml:space="preserve"><value>Artifact package zip</value></data>
+  <data name="Host configuration JSON/zip" xml:space="preserve"><value>Host configuration JSON/zip</value></data>
+  <data name="Config overlay JSON/zip" xml:space="preserve"><value>Config overlay JSON/zip</value></data>
+  <data name="Dashboard widget JSON" xml:space="preserve"><value>Dashboard widget JSON</value></data>
+  <data name="Widget runtime data zip" xml:space="preserve"><value>Widget runtime data zip</value></data>
+  <data name="Host-specific folder" xml:space="preserve"><value>Host-specific folder</value></data>
+  <data name="Optional host subfolder for host-specific objects" xml:space="preserve"><value>Optional host subfolder for host-specific objects</value></data>
+  <data name="Choose any number of object files, then add them to the package list. Host-specific folders apply to host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Choose any number of object files, then add them to the package list. Host-specific folders apply to host configs, config overlays, widgets, and widget runtime data.</value></data>
+  <data name="Add files" xml:space="preserve"><value>Add files</value></data>
+  <data name="Clear list" xml:space="preserve"><value>Clear list</value></data>
+  <data name="Package items" xml:space="preserve"><value>Package items</value></data>
+  <data name="No items added." xml:space="preserve"><value>No items added.</value></data>
+  <data name="{0} item(s) ready." xml:space="preserve"><value>{0} item(s) ready.</value></data>
+  <data name="Skipped duplicate package path: {0}" xml:space="preserve"><value>Skipped duplicate package path: {0}</value></data>
+  <data name="Package key and package version are required." xml:space="preserve"><value>Package key and package version are required.</value></data>
+  <data name="Created {0}." xml:space="preserve"><value>Created {0}.</value></data>
+  <data name="Package path" xml:space="preserve"><value>Package path</value></data>
+  <data name="Source file" xml:space="preserve"><value>Source file</value></data>
+  <data name="Create package" xml:space="preserve"><value>Create package</value></data>
 </root>

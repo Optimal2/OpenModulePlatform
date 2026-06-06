@@ -1748,7 +1748,6 @@
   <data name="Stored" xml:space="preserve"><value>Sparad</value></data>
   <data name="Back to module definitions" xml:space="preserve"><value>Tillbaka till moduldefinitioner</value></data>
   <data name="Upload one versioned module definition JSON document. The definition can be stored first or applied immediately so future artifact imports are validated against it." xml:space="preserve"><value>Ladda upp ett versionerat JSON-dokument för moduldefinitionen. Definitionen kan sparas först eller appliceras direkt så att framtida artefaktimporter valideras mot den.</value></data>
-  <data name="Module definition JSON" xml:space="preserve"><value>Moduldefinition JSON</value></data>
   <data name="The JSON must contain moduleKey, definitionVersion, and compatibleArtifacts when the module has deployable artifacts." xml:space="preserve"><value>JSON måste innehålla moduleKey, definitionVersion och compatibleArtifacts när modulen har deploybara artefakter.</value></data>
   <data name="Apply immediately" xml:space="preserve"><value>Applicera direkt</value></data>
   <data name="Applying the definition makes it the active contract for the module and updates the module/app metadata described by the JSON." xml:space="preserve"><value>När definitionen appliceras blir den modulens aktiva kontrakt och modul-/appmetadata från JSON-dokumentet uppdateras.</value></data>
@@ -2458,4 +2457,30 @@
   <data name="Select a valid iFrame app." xml:space="preserve"><value>Välj en giltig iFrame-app.</value></data>
   <data name="Select a valid iFrame URL." xml:space="preserve"><value>Välj en giltig iFrame-URL.</value></data>
   <data name="Select a valid iFrame app and URL." xml:space="preserve"><value>Välj en giltig iFrame-app och URL.</value></data>
+  <data name="Open standalone builder" xml:space="preserve"><value>Öppna fristående byggare</value></data>
+  <data name="Package metadata" xml:space="preserve"><value>Paketmetadata</value></data>
+  <data name="OpenModulePlatform universal package" xml:space="preserve"><value>OpenModulePlatform universalpaket</value></data>
+  <data name="Optional host key/profile" xml:space="preserve"><value>Valfri värdnyckel/profil</value></data>
+  <data name="Add objects" xml:space="preserve"><value>Lägg till objekt</value></data>
+  <data name="Object type" xml:space="preserve"><value>Objekttyp</value></data>
+  <data name="Module definition JSON" xml:space="preserve"><value>Moduldefinition JSON</value></data>
+  <data name="Artifact package zip" xml:space="preserve"><value>Artefaktpaket zip</value></data>
+  <data name="Host configuration JSON/zip" xml:space="preserve"><value>Värdkonfiguration JSON/zip</value></data>
+  <data name="Config overlay JSON/zip" xml:space="preserve"><value>Konfigurationsöverlägg JSON/zip</value></data>
+  <data name="Dashboard widget JSON" xml:space="preserve"><value>Dashboard-widget JSON</value></data>
+  <data name="Widget runtime data zip" xml:space="preserve"><value>Widget-runtime-data zip</value></data>
+  <data name="Host-specific folder" xml:space="preserve"><value>Värdspecifik mapp</value></data>
+  <data name="Optional host subfolder for host-specific objects" xml:space="preserve"><value>Valfri värdundermapp för värdspecifika objekt</value></data>
+  <data name="Choose any number of object files, then add them to the package list. Host-specific folders apply to host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Välj valfritt antal objektfiler och lägg sedan till dem i paketlistan. Värdspecifika mappar används för värdkonfigurationer, konfigurationsöverlägg, widgets och widget-runtime-data.</value></data>
+  <data name="Add files" xml:space="preserve"><value>Lägg till filer</value></data>
+  <data name="Clear list" xml:space="preserve"><value>Rensa lista</value></data>
+  <data name="Package items" xml:space="preserve"><value>Paketobjekt</value></data>
+  <data name="No items added." xml:space="preserve"><value>Inga objekt tillagda.</value></data>
+  <data name="{0} item(s) ready." xml:space="preserve"><value>{0} objekt redo.</value></data>
+  <data name="Skipped duplicate package path: {0}" xml:space="preserve"><value>Hoppade över duplicerad paketsökväg: {0}</value></data>
+  <data name="Package key and package version are required." xml:space="preserve"><value>Paketnyckel och paketversion krävs.</value></data>
+  <data name="Created {0}." xml:space="preserve"><value>Skapade {0}.</value></data>
+  <data name="Package path" xml:space="preserve"><value>Paketsökväg</value></data>
+  <data name="Source file" xml:space="preserve"><value>Källfil</value></data>
+  <data name="Create package" xml:space="preserve"><value>Skapa paket</value></data>
 </root>

@@ -136,6 +136,26 @@ function Get-ArtifactPackageName {
         [string]$Component.version
 }
 
+function Get-SafePathMapSegment {
+    param([string]$Value)
+
+    $safeChars = foreach ($ch in $Value.ToCharArray()) {
+        if ([char]::IsLetterOrDigit($ch) -or $ch -eq '.' -or $ch -eq '_' -or $ch -eq '-') {
+            $ch
+        }
+        else {
+            '-'
+        }
+    }
+
+    $safe = (-join $safeChars).Trim('-')
+    if ([string]::IsNullOrWhiteSpace($safe)) {
+        return 'repository'
+    }
+
+    return $safe
+}
+
 function Read-ConfigurationMappings {
     param([string[]]$Mappings)
 
@@ -174,7 +194,8 @@ function Publish-DotNetComponent {
         [Parameter(Mandatory = $true)][object]$Component,
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
         [Parameter(Mandatory = $true)][string]$BuildRoot,
-        [Parameter(Mandatory = $true)][string]$Configuration
+        [Parameter(Mandatory = $true)][string]$Configuration,
+        [Parameter(Mandatory = $true)][string]$PathMapRoot
     )
 
     $projectPath = [string](Get-JsonPropertyValue -Object $Component -Name 'projectPath')
@@ -207,7 +228,15 @@ function Publish-DotNetComponent {
     }
 
     $outputPath = Join-Path $BuildRoot ([string]$Component.componentKey)
-    & dotnet publish $projectFile -c $Configuration -o $outputPath | ForEach-Object { Write-Host $_ }
+    $pathMap = '{0}={1}' -f $RepositoryRoot.TrimEnd('\', '/'), $PathMapRoot
+    & dotnet publish $projectFile `
+        -c $Configuration `
+        -o $outputPath `
+        --nologo `
+        --verbosity minimal `
+        -p:ContinuousIntegrationBuild=true `
+        -p:Deterministic=true `
+        "-p:PathMap=$pathMap" | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet publish failed for component '$($Component.componentKey)'."
     }
@@ -521,6 +550,12 @@ $configurationMappings = Read-ConfigurationMappings -Mappings $ArtifactConfigura
 $ompRoot = Find-OmpRepositoryRoot -ConfiguredRoot $OmpRepositoryRoot -CurrentRepositoryRoot $repositoryRoot
 $newArtifactPackageScript = Join-Path $ompRoot 'scripts\deployment\new-omp-artifact-package.ps1'
 $buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-repository-objects-' + [Guid]::NewGuid().ToString('N'))
+$repositoryKey = [string](Get-JsonPropertyValue -Object $manifest -Name 'repositoryKey')
+if ([string]::IsNullOrWhiteSpace($repositoryKey)) {
+    $repositoryKey = Split-Path -Leaf $repositoryRoot
+}
+
+$pathMapRoot = '/_/' + (Get-SafePathMapSegment -Value $repositoryKey)
 
 try {
     foreach ($component in $selectedComponents) {
@@ -540,7 +575,8 @@ try {
             -Component $component `
             -RepositoryRoot $repositoryRoot `
             -BuildRoot $buildRoot `
-            -Configuration $Configuration
+            -Configuration $Configuration `
+            -PathMapRoot $pathMapRoot
 
         if ([string]::IsNullOrWhiteSpace($payloadPath)) {
             $payloadPath = Publish-NodeWebComponent `
