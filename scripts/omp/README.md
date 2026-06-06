@@ -205,6 +205,11 @@ universal object comparison and expands artifact packages before comparing
 their payloads. `compare-artifact-payload-files.ps1` is available for a focused
 artifact-to-artifact comparison when a single artifact identity is suspected.
 
+The Bootstrapper installer refresh may keep local `*.zip.source-stamp.json`
+files next to artifact packages in its object archive. Those files are cache
+metadata only: universal package export includes `artifacts/*.zip`, not the
+stamp files, and importers ignore them.
+
 To create a universal package from an already validated object root, use:
 
 ```powershell
