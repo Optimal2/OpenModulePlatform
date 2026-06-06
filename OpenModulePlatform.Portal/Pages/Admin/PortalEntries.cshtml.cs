@@ -337,13 +337,15 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
     private bool ValidateIFrameStandaloneSelection(string prefix, Guid? appInstanceId, int? urlId)
     {
         var isValid = true;
-        if (!appInstanceId.HasValue || !IFrameStandaloneHelper.Apps.Any(option => option.AppInstanceId == appInstanceId.Value))
+        if (appInstanceId is not Guid selectedAppInstanceId
+            || !IFrameStandaloneHelper.Apps.Any(option => option.AppInstanceId == selectedAppInstanceId))
         {
             ModelState.AddModelError($"{prefix}.IFrameStandaloneAppInstanceId", T("Select a valid iFrame app."));
             isValid = false;
         }
 
-        if (!urlId.HasValue || !IFrameStandaloneHelper.Urls.Any(option => option.UrlId == urlId.Value))
+        if (urlId is not int selectedUrlId
+            || !IFrameStandaloneHelper.Urls.Any(option => option.UrlId == selectedUrlId))
         {
             ModelState.AddModelError($"{prefix}.IFrameStandaloneUrlId", T("Select a valid iFrame URL."));
             isValid = false;
