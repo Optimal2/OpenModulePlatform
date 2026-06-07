@@ -512,14 +512,24 @@ public sealed class ArtifactZipImportService
                 SqlRepairCount: 0);
         }
 
+        var requiresPreApplySqlRepairs = RequiresPreApplySqlRepairs(definition);
+        var repairs = 0;
+        if (requiresPreApplySqlRepairs)
+        {
+            repairs = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+                saveResult.ModuleDefinitionDocumentId,
+                cancellationToken);
+        }
+
         var applied = await _repository.ApplyImportedModuleDefinitionAsync(
             saveResult.ModuleDefinitionDocumentId,
             cancellationToken);
-        var repairs = applied
-            ? await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+        if (applied && !requiresPreApplySqlRepairs)
+        {
+            repairs += await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
                 saveResult.ModuleDefinitionDocumentId,
-                cancellationToken)
-            : 0;
+                cancellationToken);
+        }
 
         return new ModuleDefinitionImportResult(
             definition.ModuleKey,
@@ -527,6 +537,14 @@ public sealed class ArtifactZipImportService
             saveResult.ModuleDefinitionDocumentId,
             applied,
             repairs);
+    }
+
+    private static bool RequiresPreApplySqlRepairs(ModuleDefinitionImportDocument definition)
+    {
+        // Platform core schema changes may be required by the apply step itself.
+        // Run embedded idempotent repairs before applying that definition so old
+        // installations can bridge schema gaps such as newly introduced columns.
+        return string.Equals(definition.ModuleKey, "omp_core", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<ArtifactZipImportResult> ImportArtifactPackageAsync(
