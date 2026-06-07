@@ -4634,10 +4634,9 @@ VALUES(@widget_id, @permission_id, @role_id);";
         var rawValue = value?.Trim() ?? string.Empty;
         var builder = new StringBuilder(rawValue.Length);
         var previousWasWhitespace = false;
-        // Keep this as an explicit loop because whitespace coalescing depends on previous output state.
-        foreach (var character in rawValue)
+        // Normalize characters with Select; the remaining loop is stateful because it coalesces consecutive whitespace.
+        foreach (var normalized in rawValue.Select(static character => char.IsControl(character) ? ' ' : character))
         {
-            var normalized = char.IsControl(character) ? ' ' : character;
             if (char.IsWhiteSpace(normalized))
             {
                 if (!previousWasWhitespace)
