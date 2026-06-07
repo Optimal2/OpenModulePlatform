@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Validates configurable OMP repository command wrappers with per-repository timeouts.
+Validates OMP repository command wrappers with configurable per-repository timeouts.
 
 .DESCRIPTION
 Runs the wrapper specified by -CommandWrapperRelativePath in non-interactive mode
@@ -9,6 +9,10 @@ scripts/omp/build-universal-package.cmd. Each repository is executed in its own
 process with stdout and stderr redirected to log files. If a repository exceeds
 the timeout, the whole command process tree is terminated with taskkill so
 validation cannot hang indefinitely.
+
+The script is expected to live in scripts/omp. Startup validates that ..\..
+resolves to a repository root that contains omp-components.json, so the wrapper
+fails loudly if it is moved without updating this assumption.
 
 The timeout is measured by WaitForExit after the child process has been started.
 WaitForExit returns true when the process exits within that interval and false
@@ -115,6 +119,10 @@ $StreamFlushWaitSeconds = [int]3
 # taskkill.exe uses normal process exit codes. -1 is reserved here to mean that
 # PowerShell could not start or observe taskkill.exe itself.
 $TaskKillExecutionExceptionExitCode = -1
+# Windows can round Process.StartTime differently between the original Process
+# handle and a refreshed lookup. A small tolerance avoids rejecting the same
+# child process because of timestamp precision differences.
+$ProcessStartTimeTolerance = [TimeSpan]::FromMilliseconds(100)
 
 function Convert-SecondsToIntMilliseconds {
     param(
@@ -561,6 +569,7 @@ function Invoke-TaskKillTree {
         $stderrTask = $taskKillProcess.StandardError.ReadToEndAsync()
         if (-not $taskKillProcess.WaitForExit($TaskKillWaitMilliseconds)) {
             try {
+                Write-Verbose "taskkill.exe exceeded $TaskKillWaitSeconds seconds and is being forcefully terminated."
                 $taskKillProcess.Kill()
             }
             catch {
@@ -636,7 +645,14 @@ function Test-ExpectedCmdProcess {
         }
 
         $actualStartTime = Get-ProcessStartTimeOrNull -Process $Process
-        if ($null -eq $actualStartTime -or $actualStartTime -ne $ExpectedStartTime) {
+        if ($null -eq $actualStartTime) {
+            Write-Verbose 'Could not read process start time before taskkill.'
+            return $false
+        }
+
+        $startTimeDelta = ($actualStartTime - $ExpectedStartTime).Duration()
+        if ($startTimeDelta -gt $ProcessStartTimeTolerance) {
+            Write-Verbose "Process start time changed by $($startTimeDelta.TotalMilliseconds) ms, which exceeds the $($ProcessStartTimeTolerance.TotalMilliseconds) ms tolerance."
             return $false
         }
 
@@ -848,6 +864,10 @@ $scriptDirectory = Get-ScriptDirectory
 # This script is intentionally kept in scripts/omp, so ..\.. is the repository
 # root for every OMP-compatible repository that carries the shared wrappers.
 $currentRepositoryRoot = Resolve-FullPathSafely -Name 'current repository root' -Path '..\..' -BasePath $scriptDirectory
+$currentRepositoryMarkerPath = Join-Path $currentRepositoryRoot 'omp-components.json'
+if (-not (Test-Path -LiteralPath $currentRepositoryMarkerPath -PathType Leaf)) {
+    throw "Resolved repository root '$currentRepositoryRoot' does not contain omp-components.json. test-cmd-wrappers.ps1 assumes it is stored below scripts/omp."
+}
 
 if ([string]::IsNullOrWhiteSpace($WorkspaceRoot)) {
     # OMP-compatible repositories are normally cloned as siblings; default to
@@ -911,9 +931,9 @@ else {
     )
 }
 
-$commandWrapperFileName = Split-Path -Leaf $CommandWrapperRelativePath
-if ([string]::IsNullOrWhiteSpace($commandWrapperFileName)) {
-    $commandWrapperFileName = $CommandWrapperRelativePath
+$commandWrapperDisplayName = Split-Path -Leaf $CommandWrapperRelativePath
+if ([string]::IsNullOrWhiteSpace($commandWrapperDisplayName)) {
+    $commandWrapperDisplayName = $CommandWrapperRelativePath
 }
 
 if ($repositories.Count -eq 0) {
@@ -968,6 +988,15 @@ foreach ($repository in $repositories) {
         # reader handles both BOM and no-BOM files.
         $manifestJson = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
     }
+    catch [System.Management.Automation.ItemNotFoundException] {
+        throw "Component manifest is missing: $manifestPath"
+    }
+    catch [System.UnauthorizedAccessException] {
+        throw "Could not read component manifest '$manifestPath' because access was denied: $($_.Exception.Message)"
+    }
+    catch [System.IO.IOException] {
+        throw "Could not read component manifest '$manifestPath' because of an I/O error. The file may be locked or unavailable: $($_.Exception.Message)"
+    }
     catch {
         throw "Could not read component manifest '$manifestPath': $($_.Exception.Message)"
     }
@@ -976,7 +1005,7 @@ foreach ($repository in $repositories) {
         $manifest = $manifestJson | ConvertFrom-Json
     }
     catch {
-        throw "Could not parse component manifest JSON '$manifestPath': $($_.Exception.Message). The manifest file was read successfully but could not be parsed as JSON."
+        throw "Component manifest '$manifestPath' was read but could not be parsed as JSON: $($_.Exception.Message)"
     }
 
     $packageKey = Get-RequiredManifestText -Manifest $manifest -PropertyName 'repositoryKey' -ManifestPath $manifestPath
@@ -1001,7 +1030,7 @@ foreach ($repository in $repositories) {
     Remove-ExistingFileSafely -Path $stdoutPath -Description 'stdout log'
     Remove-ExistingFileSafely -Path $stderrPath -Description 'stderr log'
 
-    Write-Host "[$repoDisplayName] Running $commandWrapperFileName with a timeout of $PerRepositoryTimeoutSeconds seconds..."
+    Write-Host "[$repoDisplayName] Running $commandWrapperDisplayName (timeout: $PerRepositoryTimeoutSeconds seconds)..."
 
     # --no-pause is a CMD-wrapper flag; the wrapper removes it before invoking
     # the underlying PowerShell script. call ensures the invoked .cmd file
@@ -1050,7 +1079,7 @@ foreach ($repository in $repositories) {
             -Package $expectedPackagePath `
             -StdoutLog $stdoutPath `
             -StderrLog $stderrPath `
-            -Detail "Process start failed. Stdout/stderr log files may not exist if cmd.exe could not start or if a redirected log path was locked. $startError"))
+            -Detail "Process start failed. Stdout/stderr log files may not exist if cmd.exe could not start or if a redirected log path was locked.$([Environment]::NewLine)$startError"))
         continue
     }
 
