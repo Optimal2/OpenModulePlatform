@@ -90,8 +90,14 @@ Use the narrowest level that gives real confidence:
 - Formatting hygiene: `git diff --check`
 - Local web visibility: publish/update the runtime, then verify the relevant localhost URL
 
-Avoid parallel builds that write the same referenced project outputs. Build
-OpenModulePlatform first, then dependent repositories such as IbsPackager.
+- Never run builds, publishes, or package creation in parallel when more than
+  one command can build shared OMP projects such as
+  `OpenModulePlatform.Web.Shared`. This applies to OMP web projects and
+  dependent module repositories such as Dokumentbibliotek, LogSearch,
+  EArkivChecker, VajSkrivare, IbsPackager, ODVGateway, and iKrock2.
+- Parallel file reads and searches are fine. Build/publish/package validation
+  must be sequential: build OpenModulePlatform first when shared platform
+  projects may be involved, then build one dependent repository at a time.
 
 ## Local Runtime Defaults
 

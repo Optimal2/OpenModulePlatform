@@ -17,6 +17,18 @@ Before making changes:
 - If a change must be visible in the local IIS/runtime environment, run the matching publish or install script after the code change.
 - When a task produces repository changes, validate them, commit with a focused message, and push unless the user asks not to or the worktree contains unrelated user changes.
 
+## Cross-repository build sequencing
+
+When working across more than one repository, never run builds, publishes, or
+package creation in parallel if more than one command can build shared OMP
+projects such as `OpenModulePlatform.Web.Shared`. This applies especially to
+OMP web projects and dependent module repositories such as Dokumentbibliotek,
+LogSearch, EArkivChecker, VajSkrivare, IbsPackager, ODVGateway, and iKrock2.
+
+Parallel file reads and searches are fine. Build/publish/package work must be
+sequential: build OpenModulePlatform first when shared platform projects may be
+involved, then build one dependent repository at a time.
+
 ## Security / antivirus compatibility
 
 This environment uses Bitdefender on Windows. PowerShell-heavy or suspicious command lines may be blocked.
