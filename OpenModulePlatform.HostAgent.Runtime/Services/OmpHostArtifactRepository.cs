@@ -3890,9 +3890,9 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
             return "Module definition SQL must not contain USE database directives.";
         }
 
-        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b"))
+        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE|INDEX|VIEW|PROCEDURE|PROC)\b"))
         {
-            return "The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE.";
+            return "The script contains a destructive DROP statement.";
         }
 
         if (Regex.IsMatch(sqlText, @"(?is)\bTRUNCATE\s+TABLE\b"))
@@ -3900,9 +3900,7 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
             return "The script contains TRUNCATE TABLE.";
         }
 
-        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)(?:\A|(?<=\n)|;)[^\S\r\n]*DELETE\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|\z)")
-            .Cast<Match>()
-            .Select(static match => match.Groups["statement"].Value)
+        var unsafeDeleteStatement = ExtractDeleteStatements(sqlText)
             .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
         if (unsafeDeleteStatement is not null)
         {
@@ -3910,6 +3908,23 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
         }
 
         return null;
+    }
+
+    private static IEnumerable<string> ExtractDeleteStatements(string sqlText)
+    {
+        foreach (var batch in SplitSqlBatches(sqlText))
+        {
+            foreach (Match match in Regex.Matches(
+                batch,
+                @"(?ims)\bDELETE\b(?<statement>.*?)(?=;|^\s*(?:GO|INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE|DENY|SELECT)\b|\z)"))
+            {
+                var statement = ("DELETE" + match.Groups["statement"].Value).Trim();
+                if (!string.IsNullOrWhiteSpace(statement))
+                {
+                    yield return statement;
+                }
+            }
+        }
     }
 
     private static string? ValidateReadOnlyModuleDefinitionSql(string sqlText)
@@ -4414,7 +4429,7 @@ ORDER BY match_priority,
         var value = await cmd.ExecuteScalarAsync(ct);
         return value is null || value == DBNull.Value
             ? null
-            : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+            : ToInt32Invariant(value);
     }
 
     private static async Task<int> InsertDashboardWidgetAsync(
@@ -4431,7 +4446,7 @@ VALUES(@widget_key, @title, @widget_type, @payload, @module_key, @author, SYSUTC
         await using var cmd = new SqlCommand(sql, conn, tx);
         AddDashboardWidgetParameters(cmd, widget);
         var value = await cmd.ExecuteScalarAsync(ct);
-        return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+        return ToInt32Invariant(value);
     }
 
     private static async Task UpdateDashboardWidgetAsync(
@@ -4535,6 +4550,9 @@ VALUES(@widget_id, @permission_id, @role_id);";
         string label,
         CancellationToken ct)
     {
+        ValidateSqlIdentifierPath(tableName, nameof(tableName));
+        ValidateSqlIdentifier(idColumn, nameof(idColumn));
+
         var ids = new List<int>(names.Count);
         foreach (var name in names)
         {
@@ -4547,11 +4565,38 @@ VALUES(@widget_id, @permission_id, @role_id);";
                 throw new InvalidOperationException($"The dashboard widget {label} '{name}' does not exist.");
             }
 
-            ids.Add(Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture));
+            ids.Add(ToInt32Invariant(value));
         }
 
         return ids;
     }
+
+    private static void ValidateSqlIdentifierPath(string value, string parameterName)
+    {
+        var parts = value.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length > 0 && parts.All(IsSqlIdentifier))
+        {
+            return;
+        }
+
+        throw new ArgumentException($"Invalid SQL identifier path '{value}'.", parameterName);
+    }
+
+    private static void ValidateSqlIdentifier(string value, string parameterName)
+    {
+        if (IsSqlIdentifier(value))
+        {
+            return;
+        }
+
+        throw new ArgumentException($"Invalid SQL identifier '{value}'.", parameterName);
+    }
+
+    private static bool IsSqlIdentifier(string value)
+        => Regex.IsMatch(value, @"^[A-Za-z_][A-Za-z0-9_]*$");
+
+    private static int ToInt32Invariant(object value)
+        => Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
 
     private static void AddDashboardWidgetIdentityParameters(
         SqlCommand cmd,
@@ -4589,6 +4634,7 @@ VALUES(@widget_id, @permission_id, @role_id);";
         var rawValue = value?.Trim() ?? string.Empty;
         var builder = new StringBuilder(rawValue.Length);
         var previousWasWhitespace = false;
+        // Keep this as an explicit loop because whitespace coalescing depends on previous output state.
         foreach (var character in rawValue)
         {
             var normalized = char.IsControl(character) ? ' ' : character;
