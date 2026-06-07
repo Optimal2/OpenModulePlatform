@@ -105,6 +105,7 @@ function Get-ProcessExitCodeOrNull {
     param([Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process)
 
     try {
+        $Process.Refresh()
         if ($Process.HasExited) {
             return $Process.ExitCode
         }
@@ -190,6 +191,9 @@ foreach ($repository in $repositories) {
         throw "Manifest must contain repositoryKey and repositoryVersion: $manifestPath"
     }
 
+    # build-universal-package.cmd creates the repository's global package by
+    # default, and global packages use the same __global__ naming convention as
+    # export-universal-package.ps1.
     $expectedPackagePath = Join-Path $outputRootPath ('{0}__global__{1}.zip' -f $packageKey, $packageVersion)
     if (Test-Path -LiteralPath $expectedPackagePath -PathType Leaf) {
         Remove-Item -LiteralPath $expectedPackagePath -Force
@@ -203,6 +207,8 @@ foreach ($repository in $repositories) {
 
     Write-Host "[$repoDisplayName] Running build-universal-package.cmd with a $PerRepositoryTimeoutSeconds second timeout..."
 
+    # --no-pause is a CMD-wrapper flag; the wrapper removes it before invoking
+    # the underlying PowerShell script.
     $cmdInvocation = 'call ' + (Join-CmdCommandLine -Arguments @($cmdPath, '--no-pause', '-OutputDirectory', $outputRootPath))
     $cmdArguments = @('/d', '/c', $cmdInvocation)
     $process = Start-Process -FilePath $env:ComSpec `

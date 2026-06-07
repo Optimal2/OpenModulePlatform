@@ -16,7 +16,6 @@ param(
     [switch]$AllModuleDefinitions,
     [switch]$UpdateModuleMinimums,
     [switch]$SkipRepositoryVersion,
-    [ValidateSet('patch', 'minor', 'major')]
     [string]$Part = 'patch',
     [string]$Version = '',
     [switch]$Interactive,
@@ -25,6 +24,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$ValidVersionParts = @('patch', 'minor', 'major')
 
 function Get-ScriptDirectory {
     if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
@@ -64,9 +64,20 @@ function Resolve-FullPath {
 function Test-VersionText {
     param([Parameter(Mandatory = $true)][string]$Value)
 
-    if ($Value -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+    if ($Value -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$') {
         throw "Version must use simplified SemVer-compatible text such as 1.2.3, 1.2.3-beta.1, or 1.2.3+build.5."
     }
+}
+
+function ConvertTo-VersionPart {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $normalized = $Value.Trim().ToLowerInvariant()
+    if ($script:ValidVersionParts -notcontains $normalized) {
+        throw "Version part must be one of: $($script:ValidVersionParts -join ', ')."
+    }
+
+    return $normalized
 }
 
 function Get-BumpedVersion {
@@ -171,7 +182,7 @@ function Format-JsonText {
             if ($isEscaped) {
                 $isEscaped = $false
             }
-            elseif ($ch -eq '\') {
+            elseif ($ch -eq [char]92) {
                 $isEscaped = $true
             }
             elseif ($ch -eq '"') {
@@ -186,11 +197,9 @@ function Format-JsonText {
                 $inString = $true
                 [void]$builder.Append($ch)
             }
-            { $_ -eq '{' -or $_ -eq '[' } {
+            '{' {
                 $nextIndex = Get-NextJsonNonWhitespaceIndex -Json $Json -StartIndex ($index + 1)
-                $isEmptyObject = $ch -eq '{' -and $nextIndex -ge 0 -and $Json[$nextIndex] -eq '}'
-                $isEmptyArray = $ch -eq '[' -and $nextIndex -ge 0 -and $Json[$nextIndex] -eq ']'
-                if ($isEmptyObject -or $isEmptyArray) {
+                if ($nextIndex -ge 0 -and $Json[$nextIndex] -eq '}') {
                     [void]$builder.Append($ch)
                     [void]$builder.Append($Json[$nextIndex])
                     $index = $nextIndex
@@ -202,7 +211,27 @@ function Format-JsonText {
                 [void]$builder.Append([Environment]::NewLine)
                 [void]$builder.Append((Get-JsonIndent -Level $indent -IndentSize $IndentSize))
             }
-            { $_ -eq '}' -or $_ -eq ']' } {
+            '[' {
+                $nextIndex = Get-NextJsonNonWhitespaceIndex -Json $Json -StartIndex ($index + 1)
+                if ($nextIndex -ge 0 -and $Json[$nextIndex] -eq ']') {
+                    [void]$builder.Append($ch)
+                    [void]$builder.Append($Json[$nextIndex])
+                    $index = $nextIndex
+                    continue
+                }
+
+                [void]$builder.Append($ch)
+                $indent++
+                [void]$builder.Append([Environment]::NewLine)
+                [void]$builder.Append((Get-JsonIndent -Level $indent -IndentSize $IndentSize))
+            }
+            '}' {
+                $indent = [Math]::Max(0, $indent - 1)
+                [void]$builder.Append([Environment]::NewLine)
+                [void]$builder.Append((Get-JsonIndent -Level $indent -IndentSize $IndentSize))
+                [void]$builder.Append($ch)
+            }
+            ']' {
                 $indent = [Math]::Max(0, $indent - 1)
                 [void]$builder.Append([Environment]::NewLine)
                 [void]$builder.Append((Get-JsonIndent -Level $indent -IndentSize $IndentSize))
@@ -235,7 +264,9 @@ function Save-JsonFile {
 
     $json = $Value | ConvertTo-Json -Depth 50 -Compress
     $formattedJson = Format-JsonText -Json $json
-    [IO.File]::WriteAllText($Path, $formattedJson + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+    if ($PSCmdlet.ShouldProcess($Path, 'Write JSON file')) {
+        [IO.File]::WriteAllText($Path, $formattedJson + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+    }
 }
 
 function Convert-KeyInput {
@@ -248,12 +279,13 @@ function Convert-KeyInput {
     return @(
         $Value.Split(',', [StringSplitOptions]::RemoveEmptyEntries) |
             ForEach-Object { $_.Trim() } |
-            Where-Object { -not [string]::IsNullOrEmpty($_) }
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     )
 }
 
 $exitCode = 0
 try {
+    $Part = ConvertTo-VersionPart -Value $Part
     $scriptDirectory = Get-ScriptDirectory
     if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
         $RepositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..\..')).Path
