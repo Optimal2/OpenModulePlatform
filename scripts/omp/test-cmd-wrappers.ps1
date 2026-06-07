@@ -75,7 +75,11 @@ function ConvertTo-CmdArgument {
         throw "CMD wrapper arguments cannot contain double quotes: $Value"
     }
 
-    $escaped = $Value.Replace('^', '^^').Replace('%', '%%')
+    if ($Value.Contains('%')) {
+        throw "CMD wrapper arguments cannot contain percent signs because cmd.exe expands environment variables: $Value"
+    }
+
+    $escaped = $Value.Replace('^', '^^')
     if ($escaped -notmatch '[\s&|<>^%]') {
         return $escaped
     }

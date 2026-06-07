@@ -50,9 +50,20 @@ function Get-RelativePath {
     }
 
     $targetFullPath = [System.IO.Path]::GetFullPath($Path)
+    $baseRoot = [System.IO.Path]::GetPathRoot($baseFullPath)
+    $targetRoot = [System.IO.Path]::GetPathRoot($targetFullPath)
+    if (-not [string]::Equals($baseRoot, $targetRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Cannot calculate a relative path across different filesystem roots: '$baseFullPath' and '$targetFullPath'."
+    }
+
     $baseUri = [Uri]::new($baseFullPath)
     $targetUri = [Uri]::new($targetFullPath)
-    return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($targetUri).ToString()).Replace('\', '/')
+    $relativeUri = $baseUri.MakeRelativeUri($targetUri)
+    if ($relativeUri.IsAbsoluteUri) {
+        throw "Cannot calculate a relative path for '$targetFullPath' below '$baseFullPath'."
+    }
+
+    return [Uri]::UnescapeDataString($relativeUri.ToString()).Replace('\', '/')
 }
 
 function Get-FileSha256 {
@@ -111,7 +122,7 @@ foreach ($package in $packages) {
                 if (Test-Path -LiteralPath $destination -PathType Leaf) {
                     $sourceHash = Get-FileSha256 -Path $file.FullName
                     $destinationHash = Get-FileSha256 -Path $destination
-                    if (-not $sourceHash.Equals($destinationHash, [StringComparison]::OrdinalIgnoreCase)) {
+                    if (-not $sourceHash.Equals($destinationHash, [StringComparison]::Ordinal)) {
                         throw "Conflicting object path while merging universal packages: $relativePath"
                     }
 
