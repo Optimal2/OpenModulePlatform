@@ -1075,6 +1075,14 @@ public sealed class PortableModulePackageService
         var repairCount = 0;
         if (options.ApplyModuleDefinition && !keepNewerAppliedDefinition)
         {
+            if (options.ExecuteSqlRepairs && RequiresPreApplySqlRepairs(definition))
+            {
+                var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                    saveResult.ModuleDefinitionDocumentId,
+                    ct);
+                repairCount += repairResult.ExecutedCount;
+            }
+
             var applyResult = await _repo.ApplyModuleDefinitionDocumentAsync(
                 saveResult.ModuleDefinitionDocumentId,
                 options.AllowTemporaryIncompatibleArtifacts,
@@ -1086,7 +1094,7 @@ public sealed class PortableModulePackageService
                 var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
                     saveResult.ModuleDefinitionDocumentId,
                     ct);
-                repairCount = repairResult.ExecutedCount;
+                repairCount += repairResult.ExecutedCount;
             }
         }
 
@@ -1131,6 +1139,14 @@ public sealed class PortableModulePackageService
             applied,
             repairCount,
             artifactResults);
+    }
+
+    private static bool RequiresPreApplySqlRepairs(ModuleDefinitionDocumentEditData definition)
+    {
+        // Platform core schema changes may be required by the apply step itself.
+        // Run embedded idempotent repairs before applying that definition so old
+        // installations can bridge schema gaps such as newly introduced columns.
+        return string.Equals(definition.ModuleKey, "omp_core", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<PortableModulePackageArtifactImportResult> ImportArtifactPackageAsync(
