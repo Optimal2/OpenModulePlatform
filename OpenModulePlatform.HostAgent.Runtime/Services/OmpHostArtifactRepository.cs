@@ -151,7 +151,8 @@ WHERE HostId = @hostId
         string? installPath,
         bool isActive,
         string? statusMessage,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool preserveExistingStatusMessage = false)
     {
         const string sql = @"
 DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
@@ -180,7 +181,7 @@ WHEN MATCHED THEN
         IsActive = @isActive,
         TakeoverFromServiceName = @takeoverFromServiceName,
         LastSeenUtc = @nowUtc,
-        StatusMessage = @statusMessage,
+        StatusMessage = CASE WHEN @preserveExistingStatusMessage = 1 THEN target.StatusMessage ELSE @statusMessage END,
         UpdatedUtc = @nowUtc
 WHEN NOT MATCHED THEN
     INSERT
@@ -232,6 +233,7 @@ WHEN NOT MATCHED THEN
             : process.TakeoverFromServiceName;
         Add(cmd, "@takeoverFromServiceName", SqlDbType.NVarChar, HostAgentRuntimeServiceNameMaxLength, NullIfWhiteSpace(takeoverFromServiceName));
         Add(cmd, "@statusMessage", SqlDbType.NVarChar, HostAgentRuntimeStatusMessageMaxLength, NullIfWhiteSpace(Truncate(statusMessage ?? string.Empty, HostAgentRuntimeStatusMessageMaxLength)));
+        Add(cmd, "@preserveExistingStatusMessage", SqlDbType.Bit, preserveExistingStatusMessage);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
