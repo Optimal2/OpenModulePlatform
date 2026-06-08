@@ -2503,4 +2503,39 @@
   <data name="Reason" xml:space="preserve"><value>Orsak</value></data>
   <data name="Placement" xml:space="preserve"><value>Placering</value></data>
   <data name="Materialized" xml:space="preserve"><value>Materialiserad</value></data>
+  <data name="iFrame URLs" xml:space="preserve"><value>iFrame-URL:er</value></data>
+  <data name="Manage iFrame URL targets and URL sets used by the iFrame module." xml:space="preserve"><value>Hantera iFrame-URL-mål och URL-set som används av iFrame-modulen.</value></data>
+  <data name="The iFrame URL tables are not installed." xml:space="preserve"><value>iFrame-URL-tabellerna är inte installerade.</value></data>
+  <data name="iFrame URL administration" xml:space="preserve"><value>Administration av iFrame-URL:er</value></data>
+  <data name="URL" xml:space="preserve"><value>URL</value></data>
+  <data name="URLs" xml:space="preserve"><value>URL:er</value></data>
+  <data name="URL sets" xml:space="preserve"><value>URL-set</value></data>
+  <data name="Allowed roles" xml:space="preserve"><value>Tillåtna roller</value></data>
+  <data name="Set key" xml:space="preserve"><value>Set-nyckel</value></data>
+  <data name="Create URL" xml:space="preserve"><value>Skapa URL</value></data>
+  <data name="Add one target URL that can be used by normal iFrame URL sets or standalone portal entries." xml:space="preserve"><value>Lägg till ett URL-mål som kan användas av vanliga iFrame-URL-set eller fristående portal entries.</value></data>
+  <data name="Optional comma or semicolon separated active role names." xml:space="preserve"><value>Valfria aktiva rollnamn separerade med kommatecken eller semikolon.</value></data>
+  <data name="Existing URLs" xml:space="preserve"><value>Befintliga URL:er</value></data>
+  <data name="No iFrame URLs found." xml:space="preserve"><value>Inga iFrame-URL:er hittades.</value></data>
+  <data name="All roles" xml:space="preserve"><value>Alla roller</value></data>
+  <data name="Disable URL" xml:space="preserve"><value>Inaktivera URL</value></data>
+  <data name="Enable URL" xml:space="preserve"><value>Aktivera URL</value></data>
+  <data name="Create URL set" xml:space="preserve"><value>Skapa URL-set</value></data>
+  <data name="Create a URL set and choose which iFrame URLs it should contain." xml:space="preserve"><value>Skapa ett URL-set och välj vilka iFrame-URL:er det ska innehålla.</value></data>
+  <data name="Use letters, numbers, dot, dash, colon or underscore." xml:space="preserve"><value>Använd bokstäver, siffror, punkt, bindestreck, kolon eller understreck.</value></data>
+  <data name="Create at least one iFrame URL before creating a URL set." xml:space="preserve"><value>Skapa minst en iFrame-URL innan du skapar ett URL-set.</value></data>
+  <data name="Existing URL sets" xml:space="preserve"><value>Befintliga URL-set</value></data>
+  <data name="No iFrame URL sets found." xml:space="preserve"><value>Inga iFrame-URL-set hittades.</value></data>
+  <data name="No URLs" xml:space="preserve"><value>Inga URL:er</value></data>
+  <data name="Disable URL set" xml:space="preserve"><value>Inaktivera URL-set</value></data>
+  <data name="Enable URL set" xml:space="preserve"><value>Aktivera URL-set</value></data>
+  <data name="iFrame URL created." xml:space="preserve"><value>iFrame-URL skapad.</value></data>
+  <data name="iFrame URL enabled." xml:space="preserve"><value>iFrame-URL aktiverad.</value></data>
+  <data name="iFrame URL disabled." xml:space="preserve"><value>iFrame-URL inaktiverad.</value></data>
+  <data name="iFrame URL set created." xml:space="preserve"><value>iFrame-URL-set skapat.</value></data>
+  <data name="iFrame URL set enabled." xml:space="preserve"><value>iFrame-URL-set aktiverat.</value></data>
+  <data name="iFrame URL set disabled." xml:space="preserve"><value>iFrame-URL-set inaktiverat.</value></data>
+  <data name="An iFrame URL set with this key already exists." xml:space="preserve"><value>Det finns redan ett iFrame-URL-set med den här nyckeln.</value></data>
+  <data name="Select valid iFrame URLs." xml:space="preserve"><value>Välj giltiga iFrame-URL:er.</value></data>
+  <data name="Select at least one iFrame URL." xml:space="preserve"><value>Välj minst en iFrame-URL.</value></data>
 </root>
