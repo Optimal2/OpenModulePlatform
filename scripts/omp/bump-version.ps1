@@ -1,11 +1,13 @@
 <#
 .SYNOPSIS
-Bumps OMP repository, component, and module-definition versions.
+Bumps OMP repository, component, module-definition, and widget versions.
 
 .DESCRIPTION
 This helper edits omp-components.json and, when module definitions are selected,
-also updates the referenced module-definition JSON files. It is intentionally
-manifest-driven so OMP-compatible repositories can expose the same command.
+also updates the referenced module-definition JSON files. When widgets are
+selected, it updates both the manifest widget entry and the referenced widget
+package JSON. It is intentionally manifest-driven so OMP-compatible repositories
+can expose the same command.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -14,6 +16,8 @@ param(
     [switch]$AllComponents,
     [string[]]$ModuleKey = @(),
     [switch]$AllModuleDefinitions,
+    [string[]]$WidgetFile = @(),
+    [switch]$AllWidgets,
     [switch]$UpdateModuleMinimums,
     [switch]$SkipRepositoryVersion,
     [string]$Part = 'patch',
@@ -121,6 +125,20 @@ function Get-NextVersion {
 
     Test-VersionText -Value $script:Version
     return $script:Version.Trim()
+}
+
+function Get-JsonPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)][object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return $property.Value
 }
 
 function Set-JsonProperty {
@@ -283,6 +301,116 @@ function Convert-KeyInput {
     )
 }
 
+function Get-WidgetFileEntryPath {
+    param([object]$Entry)
+
+    if ($Entry -is [string]) {
+        return $Entry
+    }
+
+    $path = [string](Get-JsonPropertyValue -Object $Entry -Name 'sourcePath')
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        $path = [string](Get-JsonPropertyValue -Object $Entry -Name 'path')
+    }
+
+    return $path
+}
+
+function Get-WidgetFileEntryVersion {
+    param([object]$Entry)
+
+    if ($Entry -is [string]) {
+        return ''
+    }
+
+    $version = [string](Get-JsonPropertyValue -Object $Entry -Name 'widgetVersion')
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        $version = [string](Get-JsonPropertyValue -Object $Entry -Name 'packageVersion')
+    }
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        $version = [string](Get-JsonPropertyValue -Object $Entry -Name 'version')
+    }
+
+    return $version
+}
+
+function Get-ManifestWidgetFileEntries {
+    param(
+        [Parameter(Mandatory = $true)][object]$Manifest,
+        [string]$RepositoryVersion
+    )
+
+    $entries = @((Get-JsonPropertyValue -Object $Manifest -Name 'widgetFiles'))
+    $result = [System.Collections.Generic.List[object]]::new()
+    for ($index = 0; $index -lt $entries.Count; $index++) {
+        $entry = $entries[$index]
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $path = Get-WidgetFileEntryPath -Entry $entry
+        if ([string]::IsNullOrWhiteSpace($path)) {
+            continue
+        }
+
+        $version = Get-WidgetFileEntryVersion -Entry $entry
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = $RepositoryVersion
+        }
+
+        $result.Add([pscustomobject]@{
+            Index = $index
+            Entry = $entry
+            Path = $path.Trim()
+            WidgetVersion = if ([string]::IsNullOrWhiteSpace($version)) { '' } else { $version.Trim() }
+        })
+    }
+
+    return $result.ToArray()
+}
+
+function Set-WidgetFileEntryVersion {
+    param(
+        [Parameter(Mandatory = $true)][object]$Manifest,
+        [Parameter(Mandatory = $true)][object]$WidgetEntry,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    if ($WidgetEntry.Entry -is [string]) {
+        $replacement = [pscustomobject]@{
+            path = $WidgetEntry.Path
+            widgetVersion = $Version
+        }
+        $Manifest.widgetFiles[$WidgetEntry.Index] = $replacement
+        return
+    }
+
+    Set-JsonProperty -Object $WidgetEntry.Entry -Name 'widgetVersion' -Value $Version
+}
+
+function Update-WidgetPackageFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Widget file was not found: $Path"
+    }
+
+    $json = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    Set-JsonProperty -Object $json -Name 'packageVersion' -Value $Version
+    foreach ($widget in @((Get-JsonPropertyValue -Object $json -Name 'widgets'))) {
+        if ($null -ne $widget) {
+            Set-JsonProperty -Object $widget -Name 'widgetVersion' -Value $Version
+        }
+    }
+
+    if ($PSCmdlet.ShouldProcess($Path, "Set dashboard widget packageVersion/widgetVersion to $Version")) {
+        Save-JsonFile -Path $Path -Value $json
+    }
+}
+
 $exitCode = 0
 try {
     $Part = ConvertTo-VersionPart -Value $Part
@@ -300,6 +428,8 @@ try {
     $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $components = @($manifest.components)
     $moduleDefinitions = @($manifest.moduleDefinitions)
+    $repositoryVersion = [string](Get-JsonPropertyValue -Object $manifest -Name 'repositoryVersion')
+    $widgetEntries = @(Get-ManifestWidgetFileEntries -Manifest $manifest -RepositoryVersion $repositoryVersion)
 
     if ($Interactive) {
         Write-Host ''
@@ -340,6 +470,20 @@ try {
             }
         }
 
+        if ($widgetEntries.Count -gt 0) {
+            Write-Host ''
+            Write-Host 'Dashboard widget files:'
+            $widgetEntries | Select-Object Path, WidgetVersion | Format-Table -AutoSize
+
+            $widgetInput = Read-Host 'Widget file paths to bump (Enter=none, all=all, comma-separated paths)'
+            if ($widgetInput.Trim().Equals('all', [StringComparison]::OrdinalIgnoreCase)) {
+                $AllWidgets = $true
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($widgetInput)) {
+                $WidgetFile = Convert-KeyInput -Value $widgetInput
+            }
+        }
+
         $partInput = Read-Host 'Version part to bump (patch/minor/major, Enter=patch)'
         if (-not [string]::IsNullOrWhiteSpace($partInput)) {
             if (@('patch', 'minor', 'major') -notcontains $partInput.Trim().ToLowerInvariant()) {
@@ -358,7 +502,11 @@ try {
         throw 'Use either -AllModuleDefinitions or -ModuleKey, not both.'
     }
 
-    if (-not $AllComponents -and $ComponentKey.Count -eq 0 -and -not $AllModuleDefinitions -and $ModuleKey.Count -eq 0 -and -not $Interactive) {
+    if ($AllWidgets -and $WidgetFile.Count -gt 0) {
+        throw 'Use either -AllWidgets or -WidgetFile, not both.'
+    }
+
+    if (-not $AllComponents -and $ComponentKey.Count -eq 0 -and -not $AllModuleDefinitions -and $ModuleKey.Count -eq 0 -and -not $AllWidgets -and $WidgetFile.Count -eq 0 -and -not $Interactive) {
         $AllComponents = $true
     }
 
@@ -390,9 +538,23 @@ try {
         })
     }
 
+    if ($AllWidgets) {
+        $selectedWidgets = @($widgetEntries)
+    }
+    else {
+        $selectedWidgets = @(foreach ($path in $WidgetFile) {
+            $match = @($widgetEntries | Where-Object { $_.Path -eq $path })
+            if ($match.Count -ne 1) {
+                throw "Widget file '$path' was not found exactly once in $manifestPath."
+            }
+
+            $match[0]
+        })
+    }
+
     $updates = [System.Collections.Generic.List[object]]::new()
 
-    $hasSelectedVersionTargets = $selectedComponents.Count -gt 0 -or $selectedModuleDefinitions.Count -gt 0
+    $hasSelectedVersionTargets = $selectedComponents.Count -gt 0 -or $selectedModuleDefinitions.Count -gt 0 -or $selectedWidgets.Count -gt 0
     if (-not $SkipRepositoryVersion -and $hasSelectedVersionTargets) {
         $currentRepositoryVersion = [string]$manifest.repositoryVersion
         if ([string]::IsNullOrWhiteSpace($currentRepositoryVersion)) {
@@ -462,6 +624,26 @@ try {
                 NewVersion = $newMinimum
             })
         }
+    }
+
+    foreach ($widgetEntry in $selectedWidgets) {
+        $currentVersion = [string]$widgetEntry.WidgetVersion
+        if ([string]::IsNullOrWhiteSpace($currentVersion)) {
+            throw "Widget file '$($widgetEntry.Path)' has no widgetVersion and repositoryVersion is missing. Set a version manually or add repositoryVersion."
+        }
+
+        $nextVersion = Get-NextVersion -CurrentVersion $currentVersion
+        Set-WidgetFileEntryVersion -Manifest $manifest -WidgetEntry $widgetEntry -Version $nextVersion
+
+        $widgetPath = Resolve-FullPath -Path (Join-Path $repositoryRoot ([string]$widgetEntry.Path))
+        Update-WidgetPackageFile -Path $widgetPath -Version $nextVersion
+
+        [void]$updates.Add([pscustomobject]@{
+            Item = 'dashboard-widget'
+            Key = [string]$widgetEntry.Path
+            OldVersion = $currentVersion
+            NewVersion = $nextVersion
+        })
     }
 
     if ($updates.Count -gt 0 -and $PSCmdlet.ShouldProcess($manifestPath, 'Update OMP component manifest versions')) {

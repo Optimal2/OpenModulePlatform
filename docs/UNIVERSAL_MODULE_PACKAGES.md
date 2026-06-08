@@ -98,6 +98,21 @@ should contain its own `widgetVersion`. OMP stores the installed widget version
 in `omp_portal.widgets.widget_version`; old widget JSON without a version imports
 as `0.0.0` for backward compatibility.
 
+Universal package manifest items for dashboard widgets should also include the
+same package-level version:
+
+```json
+{
+  "kind": "dashboard-widget",
+  "path": "widgets/log-search-widgets__0.1.25.json",
+  "version": "0.1.25"
+}
+```
+
+The item `version` lets installer archive imports keep several widget package
+versions under `data/global/widgets` without relying on file content checks. The
+widget JSON remains the source of truth during Portal and HostAgent import.
+
 Widget import version rules are intentionally the same across Portal and
 HostAgent unattended imports:
 
@@ -114,10 +129,23 @@ an `omp-widget-runtime-data.json` manifest and binary entries. Runtime JSON may
 refer to media with `binaryDataHash`; `binaryDataId` remains supported for
 backward compatibility and is remapped on import. New exporters include both
 when possible, and new importers can resolve hash-only references before the
-target installation has assigned database ids.
+target installation has assigned database ids. When Portal exports widget-data
+together with dashboard widgets, the runtime-data manifest and the universal
+package item use the same `packageVersion` as the widget package. This keeps the
+transport object versioned without giving runtime data an independent database
+version lifecycle.
 
 Paths in the manifest must be relative package paths. Absolute paths, drive
 letters, `..` segments, and invalid file-name characters are rejected.
+
+Every package item that represents a versioned object should include `version`
+in `omp-universal-package.json`. Importers still read the object itself as the
+source of truth and remain compatible with older packages that omit the field,
+but current exporters write it for module definitions, artifact packages, host
+configuration objects, config overlays, dashboard widget packages, and widget
+runtime-data packages. The field is primarily used by archive tools, quick
+import, and humans comparing packages; it must match the version stored inside
+the object.
 
 ## Installer Object Archive
 
@@ -177,11 +205,13 @@ config cannot be read or parsed. Then use
 - the output zip path
 
 The installer package builder selects only the latest artifact package version
-for each module/app/package slot by default. Older artifact package versions can
-be included deliberately with `Include older artifact versions`, but that creates
-a history/library package rather than the standard current-state package. This
-matches repository exports and Portal exports, which produce current portable
-objects unless an operator explicitly asks for historical versions.
+for each module/app/package slot and the latest dashboard widget package version
+for each widget package identity by default. Older artifact and widget package
+versions can be included deliberately with `Include older artifact/widget
+versions`, but that creates a history/library package rather than the standard
+current-state package. This matches repository exports and Portal exports, which
+produce current portable objects unless an operator explicitly asks for
+historical versions.
 
 The generated zip contains `omp-universal-package.json` and only the selected
 objects. This is the recommended way to create a customer or host-specific
@@ -390,6 +420,10 @@ Importers process universal packages item by item.
   versioned by `widgetVersion` even though OMP stores only the currently
   installed widget row; older package files can still be imported deliberately
   through Portal full import when an operator needs to roll back.
+- Widget runtime data is transported as versioned package data when exported
+  together with dashboard widgets. The database rows remain current-state rows:
+  import remaps binary references and upserts the data for the installed widget
+  keys instead of storing a historical runtime-data table.
 
 The result should report imported, skipped, and failed item counts. Failed items
 belong to the package item, not to the whole package, unless the zip or manifest

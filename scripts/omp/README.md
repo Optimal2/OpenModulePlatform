@@ -37,14 +37,19 @@ you need explicit parameters such as host profiles, selected components, or
 extra object files.
 
 `bump-version.ps1` updates the current repository's `omp-components.json`.
-It can bump repository, component, and module-definition versions. When module
-definitions are selected it also updates the referenced module-definition JSON
-files. Use the `.cmd` launcher for an interactive double-click flow.
+It can bump repository, component, module-definition, and dashboard widget
+versions. When module definitions are selected it also updates the referenced
+module-definition JSON files. When widget files are selected it updates both the
+manifest `widgetVersion` and the referenced widget package JSON
+`packageVersion`/`widgetVersion` values. Use the `.cmd` launcher for an
+interactive double-click flow.
 
 ```powershell
 .\scripts\omp\bump-version.ps1 -ComponentKey omp-portal-web
 .\scripts\omp\bump-version.ps1 -AllComponents -Part minor
 .\scripts\omp\bump-version.ps1 -ModuleKey omp_portal -UpdateModuleMinimums
+.\scripts\omp\bump-version.ps1 -WidgetFile widgets/log-search-widgets.json
+.\scripts\omp\bump-version.ps1 -AllWidgets
 ```
 
 Double-click `bump-version.cmd` for an interactive version bump. The default
@@ -97,12 +102,20 @@ produce identical import-relevant artifact payload bytes whether the package is
 built from a repository script or by the Bootstrapper developer-source refresh.
 
 Use `-WidgetFile` for dashboard widget JSON objects that should be copied into
-the same output shape as the other portable OMP objects.
+the same output shape as the other portable OMP objects. Repository manifest
+`widgetFiles` entries should normally be objects with `path` and
+`widgetVersion`. The builder stamps the widget package root `packageVersion` and
+each widget's `widgetVersion`, and writes default destinations as
+`<name>__<widgetVersion>.json` so installer archives can keep several widget
+versions side by side.
 
 Use `-WidgetDataFile` for widget runtime-data zips that contain shared
 `widget_data` JSON and referenced `widget_binary_data` rows. Portal can export
 these objects from the universal package form for database-backed widget media
-such as music-player tracks and custom blank-widget images.
+such as music-player tracks and custom blank-widget images. When Portal exports
+runtime data together with dashboard widgets, the runtime-data package uses the
+same `packageVersion` as the widget package so the universal manifest can track
+the object version.
 
 When `-ComponentKey` is used, the builder exports only those component artifact
 packages and the module definition files whose `moduleKey` belongs to the
