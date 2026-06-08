@@ -7,13 +7,16 @@ namespace OpenModulePlatform.Artifacts;
 public sealed record PortableDashboardWidgetPackage(
     string Format,
     int FormatVersion,
+    string PackageVersion,
     string? ModuleKey,
     string? Author,
     IReadOnlyList<PortableDashboardWidgetDefinition> Widgets);
 
 public sealed record PortableDashboardWidgetDefinition(
     string WidgetKey,
+    string WidgetVersion,
     string Title,
+    string? Description,
     string WidgetType,
     string? Payload,
     string? ModuleKey,
@@ -29,6 +32,7 @@ public sealed class DashboardWidgetPackageReader
     public const string FormatName = "omp.portal.dashboard.widgets";
 
     private const int FormatVersion = 1;
+    private const string LegacyWidgetVersion = "0.0.0";
     private const int MaxJsonBytes = 1024 * 1024;
     private const int MaxPayloadLength = 4000;
 
@@ -58,6 +62,7 @@ public sealed class DashboardWidgetPackageReader
         return new PortableDashboardWidgetPackage(
             document.Format,
             document.FormatVersion,
+            CleanVersionText(document.PackageVersion, "packageVersion") ?? LegacyWidgetVersion,
             CleanOptionalKey(document.ModuleKey, "moduleKey", 100),
             CleanOptionalText(document.Author, "author", 200),
             document.Widgets.Select(item => Normalize(document, item)).ToArray());
@@ -111,7 +116,9 @@ public sealed class DashboardWidgetPackageReader
         DashboardWidgetDocumentItem item)
     {
         var widgetKey = CleanRequiredKey(item.WidgetKey, "widgetKey", 200);
+        var widgetVersion = CleanVersionText(item.WidgetVersion ?? document.PackageVersion, "widgetVersion") ?? LegacyWidgetVersion;
         var title = CleanRequiredText(item.Title, "title", 200);
+        var description = CleanOptionalText(item.Description, "description", 1000);
         var widgetType = CleanRequiredKey(item.WidgetType, "widgetType", 50);
         var moduleKey = CleanOptionalKey(item.ModuleKey ?? document.ModuleKey, "moduleKey", 100);
         var payload = CleanOptionalText(item.Payload, "payload", MaxPayloadLength);
@@ -124,7 +131,9 @@ public sealed class DashboardWidgetPackageReader
 
         return new PortableDashboardWidgetDefinition(
             widgetKey,
+            widgetVersion,
             title,
+            description,
             widgetType,
             payload,
             moduleKey,
@@ -177,6 +186,23 @@ public sealed class DashboardWidgetPackageReader
         return text;
     }
 
+    private static string? CleanVersionText(string? value, string propertyName)
+    {
+        var version = CleanOptionalText(value, propertyName, 50);
+        if (version is null)
+        {
+            return null;
+        }
+
+        if (!version.All(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '+' or '-'))
+        {
+            throw new InvalidOperationException(
+                $"Dashboard widget {propertyName} may only contain letters, digits, period, underscore, plus, or hyphen.");
+        }
+
+        return version;
+    }
+
     private static IReadOnlyList<string> CleanDistinctNames(IReadOnlyList<string>? values, string propertyName)
     {
         if (values is null)
@@ -218,6 +244,8 @@ public sealed class DashboardWidgetPackageReader
 
         public int FormatVersion { get; set; }
 
+        public string? PackageVersion { get; set; }
+
         public string? ModuleKey { get; set; }
 
         public string? Author { get; set; }
@@ -229,7 +257,11 @@ public sealed class DashboardWidgetPackageReader
     {
         public string WidgetKey { get; set; } = string.Empty;
 
+        public string? WidgetVersion { get; set; }
+
         public string Title { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
 
         public string WidgetType { get; set; } = "portal";
 

@@ -47,6 +47,7 @@ BEGIN
         payload nvarchar(max) NULL,
         module_key nvarchar(100) NULL,
         author nvarchar(200) NULL,
+        widget_version nvarchar(50) NOT NULL CONSTRAINT DF_omp_portal_widgets_widget_version DEFAULT(N'0.0.0'),
         is_enabled bit NOT NULL CONSTRAINT DF_omp_portal_widgets_is_enabled DEFAULT(1),
         modified_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_widgets_modified_at DEFAULT(SYSUTCDATETIME()),
 
@@ -73,6 +74,14 @@ IF COL_LENGTH(N'omp_portal.widgets', N'is_enabled') IS NULL
 BEGIN
     ALTER TABLE omp_portal.widgets
         ADD is_enabled bit NOT NULL CONSTRAINT DF_omp_portal_widgets_is_enabled DEFAULT(1);
+END
+GO
+
+IF COL_LENGTH(N'omp_portal.widgets', N'widget_version') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.widgets
+        ADD widget_version nvarchar(50) NOT NULL
+            CONSTRAINT DF_omp_portal_widgets_widget_version DEFAULT(N'0.0.0');
 END
 GO
 
@@ -533,7 +542,8 @@ USING
            N'portal' AS widget_type,
            N'blank-rectangle' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'admin-overview' AS widget_key,
            N'Admin overview' AS title,
@@ -541,7 +551,8 @@ USING
            N'portal' AS widget_type,
            N'admin-overview' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'portal-entry-favorites' AS widget_key,
            N'Favorite portal entries' AS title,
@@ -549,7 +560,8 @@ USING
            N'portal' AS widget_type,
            N'portal-entry-favorites' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'portal-entry-list' AS widget_key,
            N'All portal entries' AS title,
@@ -557,7 +569,8 @@ USING
            N'portal' AS widget_type,
            N'portal-entry-list' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'portal-entry-combolist' AS widget_key,
            N'Combolist' AS title,
@@ -565,7 +578,8 @@ USING
            N'portal' AS widget_type,
            N'portal-entry-combolist' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'portal-navbar-links' AS widget_key,
            N'Portal navigation' AS title,
@@ -573,7 +587,8 @@ USING
            N'portal' AS widget_type,
            N'portal-navbar-links' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'user-roles' AS widget_key,
            N'User roles' AS title,
@@ -581,7 +596,8 @@ USING
            N'portal' AS widget_type,
            N'user-roles' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'content-pages' AS widget_key,
            N'Content pages' AS title,
@@ -589,7 +605,8 @@ USING
            N'portal' AS widget_type,
            N'content-pages' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'notification-feed' AS widget_key,
            N'Notification feed' AS title,
@@ -597,7 +614,8 @@ USING
            N'portal' AS widget_type,
            N'notification-feed' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'message-conversations' AS widget_key,
            N'Latest chats' AS title,
@@ -605,7 +623,8 @@ USING
            N'portal' AS widget_type,
            N'message-conversations' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'weekday-date' AS widget_key,
            N'Weekday and date' AS title,
@@ -613,7 +632,8 @@ USING
            N'portal' AS widget_type,
            N'weekday-date' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
     UNION ALL
     SELECT N'music-player' AS widget_key,
            N'Music player' AS title,
@@ -621,7 +641,8 @@ USING
            N'portal' AS widget_type,
            N'music-player' AS payload,
            N'omp_portal' AS module_key,
-           N'OpenModulePlatform' AS author
+           N'OpenModulePlatform' AS author,
+           N'0.3.90' AS widget_version
 ) AS source
 ON target.widget_key = source.widget_key
 WHEN MATCHED THEN
@@ -631,10 +652,11 @@ WHEN MATCHED THEN
                payload = source.payload,
                module_key = source.module_key,
                author = source.author,
+               widget_version = source.widget_version,
                modified_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(widget_key, title, description, widget_type, payload, module_key, author, modified_at)
-    VALUES(source.widget_key, source.title, source.description, source.widget_type, source.payload, source.module_key, source.author, SYSUTCDATETIME());
+    INSERT(widget_key, title, description, widget_type, payload, module_key, author, widget_version, modified_at)
+    VALUES(source.widget_key, source.title, source.description, source.widget_type, source.payload, source.module_key, source.author, source.widget_version, SYSUTCDATETIME());
 GO
 
 IF OBJECT_ID(N'omp.config_setting_definitions', N'U') IS NOT NULL

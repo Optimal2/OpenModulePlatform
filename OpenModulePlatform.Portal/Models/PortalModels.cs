@@ -390,6 +390,8 @@ public sealed class DashboardWidgetAdminRow
 
     public string? Author { get; set; }
 
+    public string WidgetVersion { get; set; } = "0.0.0";
+
     public bool IsEnabled { get; set; }
 
     public DateTime ModifiedUtc { get; set; }
@@ -407,6 +409,8 @@ public sealed class DashboardWidgetImportResult
     public int CreatedCount { get; set; }
 
     public int UpdatedCount { get; set; }
+
+    public int SkippedCount { get; set; }
 
     public int PermissionRowCount { get; set; }
 }

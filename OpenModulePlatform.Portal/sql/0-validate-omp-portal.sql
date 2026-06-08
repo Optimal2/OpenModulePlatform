@@ -44,6 +44,7 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'widgets', N'description'),
         (N'omp_portal', N'widgets', N'widget_type'),
         (N'omp_portal', N'widgets', N'payload'),
+        (N'omp_portal', N'widgets', N'widget_version'),
         (N'omp_portal', N'widgets', N'is_enabled'),
         (N'omp_portal', N'widget_permissions', N'widget_id'),
         (N'omp_portal', N'widget_permissions', N'permission_id'),

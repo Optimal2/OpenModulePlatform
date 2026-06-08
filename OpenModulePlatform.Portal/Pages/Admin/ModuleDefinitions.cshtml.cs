@@ -262,6 +262,7 @@ public sealed class ModuleDefinitionsModel : OmpPortalPageModel
             AllowTemporaryIncompatibleArtifacts: true,
             ReplaceExistingModuleDefinition: false,
             ReplaceExistingArtifacts: false,
+            ReplaceExistingDashboardWidgets: false,
             CopyConfigurationFilesFromPreviousVersion: true,
             UseArtifactsImmediately: true);
 }

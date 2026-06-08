@@ -670,7 +670,7 @@ WHERE OverlayKey = @overlayKey
         }
     }
 
-    public async Task<(int CreatedCount, int UpdatedCount, int PermissionRowCount)> SaveImportedDashboardWidgetsAsync(
+    public async Task<(int CreatedCount, int UpdatedCount, int SkippedCount, int PermissionRowCount)> SaveImportedDashboardWidgetsAsync(
         PortableDashboardWidgetPackage input,
         CancellationToken ct)
     {
@@ -683,30 +683,51 @@ WHERE OverlayKey = @overlayKey
             await EnsureDashboardWidgetTablesAsync(conn, tx, ct);
             var created = 0;
             var updated = 0;
+            var skipped = 0;
             var permissionRows = 0;
 
             foreach (var widget in input.Widgets)
             {
                 var permissionIds = await ResolveDashboardWidgetPermissionIdsAsync(conn, tx, widget.PermissionNames, ct);
                 var roleIds = await ResolveDashboardWidgetRoleIdsAsync(conn, tx, widget.RoleNames, ct);
-                var widgetId = await FindDashboardWidgetIdAsync(conn, tx, widget, ct);
-                if (widgetId.HasValue)
+                var existing = await FindDashboardWidgetAsync(conn, tx, widget, ct);
+                if (existing is not null)
                 {
-                    await UpdateDashboardWidgetAsync(conn, tx, widgetId.Value, widget, ct);
+                    var versionComparison = CompareArtifactVersions(widget.WidgetVersion, existing.WidgetVersion);
+                    if (versionComparison < 0)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (versionComparison == 0)
+                    {
+                        if (DashboardWidgetMatches(existing, widget, permissionIds, roleIds))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        throw new InvalidOperationException(
+                            $"Dashboard widget '{widget.WidgetKey}' already exists with version {existing.WidgetVersion}, but the imported content is different. Use a new widgetVersion for unattended HostAgent folder imports.");
+                    }
+
+                    await UpdateDashboardWidgetAsync(conn, tx, existing.WidgetId, widget, ct);
+                    await ReplaceDashboardWidgetPermissionRowsAsync(conn, tx, existing.WidgetId, permissionIds, roleIds, ct);
                     updated++;
+                    permissionRows += permissionIds.Count + roleIds.Count;
                 }
                 else
                 {
-                    widgetId = await InsertDashboardWidgetAsync(conn, tx, widget, ct);
+                    var widgetId = await InsertDashboardWidgetAsync(conn, tx, widget, ct);
+                    await ReplaceDashboardWidgetPermissionRowsAsync(conn, tx, widgetId, permissionIds, roleIds, ct);
                     created++;
+                    permissionRows += permissionIds.Count + roleIds.Count;
                 }
-
-                await ReplaceDashboardWidgetPermissionRowsAsync(conn, tx, widgetId.Value, permissionIds, roleIds, ct);
-                permissionRows += permissionIds.Count + roleIds.Count;
             }
 
             await tx.CommitAsync(ct);
-            return (created, updated, permissionRows);
+            return (created, updated, skipped, permissionRows);
         }
         catch
         {
@@ -4114,6 +4135,7 @@ SELECT CASE
      AND OBJECT_ID(N'omp_portal.widget_permissions', N'U') IS NOT NULL
      AND OBJECT_ID(N'omp.Permissions', N'U') IS NOT NULL
      AND OBJECT_ID(N'omp.Roles', N'U') IS NOT NULL
+     AND COL_LENGTH(N'omp_portal.widgets', N'widget_version') IS NOT NULL
     THEN CAST(1 AS bit)
     ELSE CAST(0 AS bit)
 END;";
@@ -4398,7 +4420,7 @@ WHEN NOT MATCHED THEN
     private static string ToSha256Hex(byte[] hash)
         => Convert.ToHexString(hash).ToLowerInvariant();
 
-    private static async Task<int?> FindDashboardWidgetIdAsync(
+    private static async Task<DashboardWidgetSnapshot?> FindDashboardWidgetAsync(
         SqlConnection conn,
         SqlTransaction tx,
         PortableDashboardWidgetDefinition widget,
@@ -4427,9 +4449,73 @@ ORDER BY match_priority,
         await using var cmd = new SqlCommand(sql, conn, tx);
         AddDashboardWidgetIdentityParameters(cmd, widget);
         var value = await cmd.ExecuteScalarAsync(ct);
-        return value is null || value == DBNull.Value
-            ? null
-            : ToInt32Invariant(value);
+        if (value is null || value == DBNull.Value)
+        {
+            return null;
+        }
+
+        return await ReadDashboardWidgetSnapshotAsync(conn, tx, ToInt32Invariant(value), ct);
+    }
+
+    private static async Task<DashboardWidgetSnapshot> ReadDashboardWidgetSnapshotAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int widgetId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT w.widget_id,
+       w.widget_key,
+       w.title,
+       w.description,
+       w.widget_type,
+       w.payload,
+       w.module_key,
+       w.author,
+       w.widget_version,
+       p.PermissionId AS permission_id,
+       r.RoleId AS role_id
+FROM omp_portal.widgets w
+LEFT JOIN omp_portal.widget_permissions wp ON wp.widget_id = w.widget_id
+LEFT JOIN omp.Permissions p ON p.PermissionId = wp.permission_id
+LEFT JOIN omp.Roles r ON r.RoleId = wp.role_id
+WHERE w.widget_id = @widget_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        DashboardWidgetSnapshot? snapshot = null;
+        var permissionIds = new List<int>();
+        var roleIds = new List<int>();
+        while (await rdr.ReadAsync(ct))
+        {
+            snapshot ??= new DashboardWidgetSnapshot(
+                rdr.GetInt32(0),
+                rdr.IsDBNull(1) ? string.Empty : rdr.GetString(1),
+                rdr.GetString(2),
+                rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                rdr.GetString(4),
+                rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                rdr.IsDBNull(8) ? "0.0.0" : rdr.GetString(8),
+                permissionIds,
+                roleIds);
+
+            if (!rdr.IsDBNull(9))
+            {
+                AddDistinct(permissionIds, rdr.GetInt32(9));
+            }
+
+            if (!rdr.IsDBNull(10))
+            {
+                AddDistinct(roleIds, rdr.GetInt32(10));
+            }
+        }
+
+        return snapshot
+            ?? throw new InvalidOperationException($"Dashboard widget {widgetId} was not found.");
     }
 
     private static async Task<int> InsertDashboardWidgetAsync(
@@ -4439,9 +4525,9 @@ ORDER BY match_priority,
         CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp_portal.widgets(widget_key, title, widget_type, payload, module_key, author, modified_at)
+INSERT INTO omp_portal.widgets(widget_key, title, description, widget_type, payload, module_key, author, widget_version, modified_at)
 OUTPUT INSERTED.widget_id
-VALUES(@widget_key, @title, @widget_type, @payload, @module_key, @author, SYSUTCDATETIME());";
+VALUES(@widget_key, @title, @description, @widget_type, @payload, @module_key, @author, @widget_version, SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         AddDashboardWidgetParameters(cmd, widget);
@@ -4460,10 +4546,12 @@ VALUES(@widget_key, @title, @widget_type, @payload, @module_key, @author, SYSUTC
 UPDATE omp_portal.widgets
 SET widget_key = @widget_key,
     title = @title,
+    description = @description,
     widget_type = @widget_type,
     payload = @payload,
     module_key = @module_key,
     author = @author,
+    widget_version = @widget_version,
     modified_at = SYSUTCDATETIME()
 WHERE widget_id = @widget_id;";
 
@@ -4614,11 +4702,42 @@ VALUES(@widget_id, @permission_id, @role_id);";
         PortableDashboardWidgetDefinition widget)
     {
         AddDashboardWidgetIdentityParameters(cmd, widget);
+        cmd.Parameters.Add("@description", SqlDbType.NVarChar, 1000).Value =
+            widget.Description is null ? DBNull.Value : widget.Description;
         cmd.Parameters.Add("@payload", SqlDbType.NVarChar, -1).Value =
             widget.Payload is null ? DBNull.Value : widget.Payload;
         cmd.Parameters.Add("@author", SqlDbType.NVarChar, 200).Value =
             widget.Author is null ? DBNull.Value : widget.Author;
+        cmd.Parameters.Add("@widget_version", SqlDbType.NVarChar, 50).Value =
+            string.IsNullOrWhiteSpace(widget.WidgetVersion) ? "0.0.0" : widget.WidgetVersion;
     }
+
+    private static void AddDistinct(List<int> values, int value)
+    {
+        if (!values.Contains(value))
+        {
+            values.Add(value);
+        }
+    }
+
+    private static bool DashboardWidgetMatches(
+        DashboardWidgetSnapshot existing,
+        PortableDashboardWidgetDefinition imported,
+        IReadOnlyList<int> permissionIds,
+        IReadOnlyList<int> roleIds)
+        => string.Equals(existing.WidgetKey, imported.WidgetKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(existing.Title, imported.Title, StringComparison.Ordinal)
+            && string.Equals(existing.Description, imported.Description, StringComparison.Ordinal)
+            && string.Equals(existing.WidgetType, imported.WidgetType, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(existing.Payload, imported.Payload, StringComparison.Ordinal)
+            && string.Equals(existing.ModuleKey, imported.ModuleKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(existing.Author, imported.Author, StringComparison.Ordinal)
+            && IdSetsMatch(existing.PermissionIds, permissionIds)
+            && IdSetsMatch(existing.RoleIds, roleIds);
+
+    private static bool IdSetsMatch(IReadOnlyList<int> left, IReadOnlyList<int> right)
+        => left.Count == right.Count
+            && left.Order().SequenceEqual(right.Order());
 
     private static void Add(SqlCommand cmd, string name, object? value)
         => cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
@@ -4744,4 +4863,17 @@ VALUES(@widget_id, @permission_id, @role_id);";
         string Version,
         string PackageType,
         string AppType);
+
+    private sealed record DashboardWidgetSnapshot(
+        int WidgetId,
+        string WidgetKey,
+        string Title,
+        string? Description,
+        string WidgetType,
+        string? Payload,
+        string? ModuleKey,
+        string? Author,
+        string WidgetVersion,
+        IReadOnlyList<int> PermissionIds,
+        IReadOnlyList<int> RoleIds);
 }

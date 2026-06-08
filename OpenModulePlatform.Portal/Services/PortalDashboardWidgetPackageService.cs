@@ -17,6 +17,7 @@ public sealed class PortalDashboardWidgetPackageService
     public const string FormatName = "omp.portal.dashboard.widgets";
 
     private const int FormatVersion = 1;
+    private const string LegacyWidgetVersion = "0.0.0";
     private const int MaxJsonBytes = 1024 * 1024;
     private const int MaxPayloadLength = 4000;
 
@@ -48,6 +49,7 @@ SELECT w.widget_id,
        w.payload,
        w.module_key,
        w.author,
+       w.widget_version,
        w.is_enabled,
        w.modified_at,
        p.Name AS permission_name,
@@ -88,8 +90,9 @@ ORDER BY w.module_key,
                     Payload = rdr.IsDBNull(5) ? null : rdr.GetString(5),
                     ModuleKey = rdr.IsDBNull(6) ? string.Empty : rdr.GetString(6),
                     Author = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                    IsEnabled = rdr.GetBoolean(8),
-                    ModifiedUtc = rdr.GetDateTime(9)
+                    WidgetVersion = rdr.IsDBNull(8) ? LegacyWidgetVersion : rdr.GetString(8),
+                    IsEnabled = rdr.GetBoolean(9),
+                    ModifiedUtc = rdr.GetDateTime(10)
                 };
 
                 row.WidgetKey = string.IsNullOrWhiteSpace(row.WidgetKey)
@@ -98,14 +101,14 @@ ORDER BY w.module_key,
                 rows.Add(widgetId, row);
             }
 
-            if (!rdr.IsDBNull(10))
-            {
-                AddDistinct(row.PermissionNames, rdr.GetString(10));
-            }
-
             if (!rdr.IsDBNull(11))
             {
-                AddDistinct(row.RoleNames, rdr.GetString(11));
+                AddDistinct(row.PermissionNames, rdr.GetString(11));
+            }
+
+            if (!rdr.IsDBNull(12))
+            {
+                AddDistinct(row.RoleNames, rdr.GetString(12));
             }
         }
 
@@ -152,7 +155,7 @@ WHERE widget_id = @widget_id;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<(byte[] Content, string FileName)> ExportAsync(
+    public async Task<(byte[] Content, string FileName, string PackageVersion)> ExportAsync(
         string? moduleKey,
         CancellationToken ct)
     {
@@ -161,7 +164,7 @@ WHERE widget_id = @widget_id;";
         return ExportRows(rows, trimmedModuleKey, trimmedModuleKey ?? "all");
     }
 
-    public async Task<(byte[] Content, string FileName)> ExportWidgetAsync(
+    public async Task<(byte[] Content, string FileName, string PackageVersion)> ExportWidgetAsync(
         int widgetId,
         CancellationToken ct)
     {
@@ -172,7 +175,7 @@ WHERE widget_id = @widget_id;";
         return ExportRows([row], null, row.WidgetKey);
     }
 
-    public async Task<(byte[] Content, string FileName)> ExportWidgetsAsync(
+    public async Task<(byte[] Content, string FileName, string PackageVersion)> ExportWidgetsAsync(
         IReadOnlyList<int> widgetIds,
         CancellationToken ct)
     {
@@ -193,15 +196,20 @@ WHERE widget_id = @widget_id;";
         return ExportRows(rows, null, rows.Length == 1 ? rows[0].WidgetKey : "selected");
     }
 
-    private static (byte[] Content, string FileName) ExportRows(
+    private static (byte[] Content, string FileName, string PackageVersion) ExportRows(
         IReadOnlyList<DashboardWidgetAdminRow> rows,
         string? documentModuleKey,
         string fileNameKey)
     {
+        var packageVersion = rows
+            .Select(static row => string.IsNullOrWhiteSpace(row.WidgetVersion) ? LegacyWidgetVersion : row.WidgetVersion)
+            .OrderByDescending(static version => version, WidgetVersionComparer.Instance)
+            .FirstOrDefault() ?? LegacyWidgetVersion;
         var document = new DashboardWidgetDocument
         {
             Format = FormatName,
             FormatVersion = FormatVersion,
+            PackageVersion = packageVersion,
             ModuleKey = documentModuleKey,
             ExportedAtUtc = DateTime.UtcNow,
             Widgets = rows
@@ -210,6 +218,7 @@ WHERE widget_id = @widget_id;";
                 .Select(row => new DashboardWidgetDocumentItem
                 {
                     WidgetKey = row.WidgetKey,
+                    WidgetVersion = string.IsNullOrWhiteSpace(row.WidgetVersion) ? LegacyWidgetVersion : row.WidgetVersion,
                     Title = row.Title,
                     Description = row.Description,
                     WidgetType = row.WidgetType,
@@ -227,13 +236,15 @@ WHERE widget_id = @widget_id;";
         };
 
         var json = JsonSerializer.Serialize(document, JsonOptions);
-        var fileName = $"omp-dashboard-widgets-{SanitizeFileName(fileNameKey)}-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
-        return (Encoding.UTF8.GetBytes(json), fileName);
+        var fileName = $"omp-dashboard-widgets-{SanitizeFileName(fileNameKey)}-{SanitizeFileName(packageVersion)}-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
+        return (Encoding.UTF8.GetBytes(json), fileName, packageVersion);
     }
 
     public async Task<DashboardWidgetImportResult> ImportAsync(
         Stream stream,
         string sourceName,
+        bool replaceExistingWidgets,
+        bool quickImport,
         CancellationToken ct)
     {
         if (!stream.CanRead)
@@ -259,20 +270,40 @@ WHERE widget_id = @widget_id;";
             {
                 var permissionIds = await ResolvePermissionIdsAsync(conn, tx, normalized.PermissionNames, ct);
                 var roleIds = await ResolveRoleIdsAsync(conn, tx, normalized.RoleNames, ct);
-                var widgetId = await FindWidgetIdAsync(conn, tx, normalized, ct);
-                if (widgetId.HasValue)
+                var existing = await FindWidgetAsync(conn, tx, normalized, ct);
+                if (existing is not null)
                 {
-                    await UpdateWidgetAsync(conn, tx, widgetId.Value, normalized, ct);
+                    var versionComparison = CompareWidgetVersions(normalized.WidgetVersion, existing.WidgetVersion);
+                    if (ShouldSkipExistingWidget(existing, normalized, quickImport, replaceExistingWidgets))
+                    {
+                        result.SkippedCount++;
+                        continue;
+                    }
+
+                    if (!replaceExistingWidgets && versionComparison == 0)
+                    {
+                        if (DashboardWidgetMatches(existing, normalized, permissionIds, roleIds))
+                        {
+                            result.SkippedCount++;
+                            continue;
+                        }
+
+                        throw new InvalidOperationException(
+                            $"Dashboard widget '{normalized.WidgetKey}' already exists with version {existing.WidgetVersion}, but the imported content is different. Use a new widgetVersion, or disable quick import and enable widget replacement for an intentional rollback or repair.");
+                    }
+
+                    await UpdateWidgetAsync(conn, tx, existing.WidgetId, normalized, ct);
+                    await ReplacePermissionRowsAsync(conn, tx, existing.WidgetId, permissionIds, roleIds, ct);
                     result.UpdatedCount++;
+                    result.PermissionRowCount += permissionIds.Count + roleIds.Count;
                 }
                 else
                 {
-                    widgetId = await InsertWidgetAsync(conn, tx, normalized, ct);
+                    var widgetId = await InsertWidgetAsync(conn, tx, normalized, ct);
+                    await ReplacePermissionRowsAsync(conn, tx, widgetId, permissionIds, roleIds, ct);
                     result.CreatedCount++;
+                    result.PermissionRowCount += permissionIds.Count + roleIds.Count;
                 }
-
-                await ReplacePermissionRowsAsync(conn, tx, widgetId.Value, permissionIds, roleIds, ct);
-                result.PermissionRowCount += permissionIds.Count + roleIds.Count;
             }
 
             await tx.CommitAsync(ct);
@@ -337,6 +368,7 @@ WHERE widget_id = @widget_id;";
         DashboardWidgetDocumentItem item)
     {
         var widgetKey = CleanRequiredKey(item.WidgetKey, "widgetKey", 200);
+        var widgetVersion = CleanVersionText(item.WidgetVersion ?? document.PackageVersion, "widgetVersion") ?? LegacyWidgetVersion;
         var title = CleanRequiredText(item.Title, "title", 200);
         var description = CleanOptionalText(item.Description, "description", 1000);
         var widgetType = CleanRequiredKey(item.WidgetType, "widgetType", 50);
@@ -354,6 +386,7 @@ WHERE widget_id = @widget_id;";
 
         return new NormalizedDashboardWidget(
             widgetKey,
+            widgetVersion,
             title,
             description,
             widgetType,
@@ -364,7 +397,7 @@ WHERE widget_id = @widget_id;";
             roleNames);
     }
 
-    private static async Task<int?> FindWidgetIdAsync(
+    private static async Task<DashboardWidgetSnapshot?> FindWidgetAsync(
         SqlConnection conn,
         SqlTransaction tx,
         NormalizedDashboardWidget widget,
@@ -393,9 +426,77 @@ ORDER BY match_priority,
         await using var cmd = new SqlCommand(sql, conn, tx);
         AddIdentityParameters(cmd, widget);
         var value = await cmd.ExecuteScalarAsync(ct);
-        return value is null || value == DBNull.Value
-            ? null
-            : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+        if (value is null || value == DBNull.Value)
+        {
+            return null;
+        }
+
+        return await ReadWidgetSnapshotAsync(
+            conn,
+            tx,
+            Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture),
+            ct);
+    }
+
+    private static async Task<DashboardWidgetSnapshot> ReadWidgetSnapshotAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int widgetId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT w.widget_id,
+       w.widget_key,
+       w.title,
+       w.description,
+       w.widget_type,
+       w.payload,
+       w.module_key,
+       w.author,
+       w.widget_version,
+       p.PermissionId AS permission_id,
+       r.RoleId AS role_id
+FROM omp_portal.widgets w
+LEFT JOIN omp_portal.widget_permissions wp ON wp.widget_id = w.widget_id
+LEFT JOIN omp.Permissions p ON p.PermissionId = wp.permission_id
+LEFT JOIN omp.Roles r ON r.RoleId = wp.role_id
+WHERE w.widget_id = @widget_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        DashboardWidgetSnapshot? snapshot = null;
+        var permissionIds = new List<int>();
+        var roleIds = new List<int>();
+        while (await rdr.ReadAsync(ct))
+        {
+            snapshot ??= new DashboardWidgetSnapshot(
+                rdr.GetInt32(0),
+                rdr.IsDBNull(1) ? string.Empty : rdr.GetString(1),
+                rdr.GetString(2),
+                rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                rdr.GetString(4),
+                rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                rdr.IsDBNull(8) ? LegacyWidgetVersion : rdr.GetString(8),
+                permissionIds,
+                roleIds);
+
+            if (!rdr.IsDBNull(9))
+            {
+                AddDistinct(permissionIds, rdr.GetInt32(9));
+            }
+
+            if (!rdr.IsDBNull(10))
+            {
+                AddDistinct(roleIds, rdr.GetInt32(10));
+            }
+        }
+
+        return snapshot
+            ?? throw new InvalidOperationException($"Dashboard widget {widgetId} was not found.");
     }
 
     private static async Task<int> InsertWidgetAsync(
@@ -405,9 +506,9 @@ ORDER BY match_priority,
         CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp_portal.widgets(widget_key, title, description, widget_type, payload, module_key, author, modified_at)
+INSERT INTO omp_portal.widgets(widget_key, title, description, widget_type, payload, module_key, author, widget_version, modified_at)
 OUTPUT INSERTED.widget_id
-VALUES(@widget_key, @title, @description, @widget_type, @payload, @module_key, @author, SYSUTCDATETIME());";
+VALUES(@widget_key, @title, @description, @widget_type, @payload, @module_key, @author, @widget_version, SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         AddWidgetParameters(cmd, widget);
@@ -426,11 +527,12 @@ VALUES(@widget_key, @title, @description, @widget_type, @payload, @module_key, @
 UPDATE omp_portal.widgets
 SET widget_key = @widget_key,
     title = @title,
-    description = COALESCE(@description, description),
+    description = @description,
     widget_type = @widget_type,
     payload = @payload,
     module_key = @module_key,
     author = @author,
+    widget_version = @widget_version,
     modified_at = SYSUTCDATETIME()
 WHERE widget_id = @widget_id;";
 
@@ -553,6 +655,7 @@ VALUES(@widget_id, @permission_id, @role_id);";
             widget.Payload is null ? DBNull.Value : widget.Payload;
         cmd.Parameters.Add("@author", SqlDbType.NVarChar, 200).Value =
             widget.Author is null ? DBNull.Value : widget.Author;
+        cmd.Parameters.Add("@widget_version", SqlDbType.NVarChar, 50).Value = widget.WidgetVersion;
     }
 
     private static string CleanRequiredText(string? value, string propertyName, int maxLength)
@@ -614,6 +717,23 @@ VALUES(@widget_id, @permission_id, @role_id);";
             .ToArray();
     }
 
+    private static string? CleanVersionText(string? value, string propertyName)
+    {
+        var version = CleanOptionalText(value, propertyName, 50);
+        if (version is null)
+        {
+            return null;
+        }
+
+        if (!version.All(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '+' or '-'))
+        {
+            throw new InvalidOperationException(
+                $"Dashboard widget {propertyName} may only contain letters, digits, period, underscore, plus, or hyphen.");
+        }
+
+        return version;
+    }
+
     private static string CreateFallbackWidgetKey(DashboardWidgetAdminRow row)
     {
         var preferred = !string.IsNullOrWhiteSpace(row.Payload)
@@ -669,6 +789,84 @@ VALUES(@widget_id, @permission_id, @role_id);";
         }
     }
 
+    private static void AddDistinct(List<int> values, int value)
+    {
+        if (!values.Contains(value))
+        {
+            values.Add(value);
+        }
+    }
+
+    private static bool ShouldSkipExistingWidget(
+        DashboardWidgetSnapshot existing,
+        NormalizedDashboardWidget imported,
+        bool quickImport,
+        bool replaceExistingWidgets)
+    {
+        if (replaceExistingWidgets)
+        {
+            return false;
+        }
+
+        var comparison = CompareWidgetVersions(imported.WidgetVersion, existing.WidgetVersion);
+        if (quickImport && comparison <= 0)
+        {
+            return true;
+        }
+
+        if (comparison < 0)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool DashboardWidgetMatches(
+        DashboardWidgetSnapshot existing,
+        NormalizedDashboardWidget imported,
+        IReadOnlyList<int> permissionIds,
+        IReadOnlyList<int> roleIds)
+        => string.Equals(existing.WidgetKey, imported.WidgetKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(existing.Title, imported.Title, StringComparison.Ordinal)
+            && string.Equals(existing.Description, imported.Description, StringComparison.Ordinal)
+            && string.Equals(existing.WidgetType, imported.WidgetType, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(existing.Payload, imported.Payload, StringComparison.Ordinal)
+            && string.Equals(existing.ModuleKey, imported.ModuleKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(existing.Author, imported.Author, StringComparison.Ordinal)
+            && IdSetsMatch(existing.PermissionIds, permissionIds)
+            && IdSetsMatch(existing.RoleIds, roleIds);
+
+    private static bool IdSetsMatch(IReadOnlyList<int> left, IReadOnlyList<int> right)
+        => left.Count == right.Count
+            && left.Order().SequenceEqual(right.Order());
+
+    private static int CompareWidgetVersions(string left, string right)
+    {
+        if (TryParseComparableVersion(left, out var leftVersion)
+            && TryParseComparableVersion(right, out var rightVersion))
+        {
+            return leftVersion.CompareTo(rightVersion);
+        }
+
+        return string.Compare(
+            left?.Trim(),
+            right?.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseComparableVersion(string? value, out Version version)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        var suffixIndex = text.IndexOfAny(['-', '+']);
+        if (suffixIndex >= 0)
+        {
+            text = text[..suffixIndex];
+        }
+
+        return Version.TryParse(text, out version!);
+    }
+
     private static string SanitizeFileName(string value)
     {
         var invalid = Path.GetInvalidFileNameChars();
@@ -684,6 +882,8 @@ VALUES(@widget_id, @permission_id, @role_id);";
 
         public int FormatVersion { get; set; }
 
+        public string? PackageVersion { get; set; }
+
         public string? ModuleKey { get; set; }
 
         public string? Author { get; set; }
@@ -696,6 +896,8 @@ VALUES(@widget_id, @permission_id, @role_id);";
     private sealed class DashboardWidgetDocumentItem
     {
         public string WidgetKey { get; set; } = string.Empty;
+
+        public string? WidgetVersion { get; set; }
 
         public string Title { get; set; } = string.Empty;
 
@@ -716,6 +918,7 @@ VALUES(@widget_id, @permission_id, @role_id);";
 
     private sealed record NormalizedDashboardWidget(
         string WidgetKey,
+        string WidgetVersion,
         string Title,
         string? Description,
         string WidgetType,
@@ -724,4 +927,27 @@ VALUES(@widget_id, @permission_id, @role_id);";
         string? Author,
         IReadOnlyList<string> PermissionNames,
         IReadOnlyList<string> RoleNames);
+
+    private sealed record DashboardWidgetSnapshot(
+        int WidgetId,
+        string WidgetKey,
+        string Title,
+        string? Description,
+        string WidgetType,
+        string? Payload,
+        string? ModuleKey,
+        string? Author,
+        string WidgetVersion,
+        IReadOnlyList<int> PermissionIds,
+        IReadOnlyList<int> RoleIds);
+
+    private sealed class WidgetVersionComparer : IComparer<string>
+    {
+        public static readonly WidgetVersionComparer Instance = new();
+
+        public int Compare(string? x, string? y)
+            => CompareWidgetVersions(
+                string.IsNullOrWhiteSpace(x) ? LegacyWidgetVersion : x,
+                string.IsNullOrWhiteSpace(y) ? LegacyWidgetVersion : y);
+    }
 }

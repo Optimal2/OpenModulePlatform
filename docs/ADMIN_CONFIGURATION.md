@@ -185,12 +185,15 @@ The portable JSON format is:
 {
   "format": "omp.portal.dashboard.widgets",
   "formatVersion": 1,
+  "packageVersion": "1.0.0",
   "moduleKey": "example_module",
   "author": "Example module",
   "widgets": [
     {
       "widgetKey": "example:status",
+      "widgetVersion": "1.0.0",
       "title": "Example status",
+      "description": "Shows the current example module status.",
       "widgetType": "portal",
       "payload": "example-status",
       "permissionNames": [ "Example.View" ],
@@ -202,11 +205,22 @@ The portable JSON format is:
 
 `widgetKey` is the stable portable identity for a widget and must be globally
 unique within one OMP installation. `moduleKey` is optional ownership metadata
-used for filtering and export; it is not part of the widget identity. Re-importing
-the same `widgetKey` updates the existing definition and replaces its permission
-restrictions, even when the widget moves from module-owned to global or the
-other way around. Use empty `permissionNames` and `roleNames` arrays only when
-the widget should be available to every signed-in OMP user.
+used for filtering and export; it is not part of the widget identity.
+`widgetVersion` is the installed version for that widget definition. New
+packages should set both `packageVersion` and each widget's `widgetVersion`;
+legacy packages without those values import as version `0.0.0`.
+
+Normal universal imports only update an existing widget when the imported
+`widgetVersion` is newer. Older versions are skipped, and same-version packages
+are skipped when their content already matches. Same-version packages with
+different content are rejected so operators do not accidentally create the
+"same version, different content" problem for widgets. Portal full import can
+explicitly replace existing dashboard widgets to repair or roll back a widget;
+HostAgent import-folder imports remain unattended and require a new
+`widgetVersion` for changed content.
+
+Use empty `permissionNames` and `roleNames` arrays only when the widget should
+be available to every signed-in OMP user.
 
 ### 2. Manage the installation topology
 

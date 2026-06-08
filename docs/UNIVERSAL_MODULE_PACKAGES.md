@@ -89,8 +89,25 @@ Supported item kinds:
 | `artifact-package` | `artifacts/` | `.zip` | Standard OMP artifact package envelope. |
 | `host-configuration` | `host-configs/` | `.json`, `.zip` | Host bootstrap/configuration object. |
 | `config-overlay` | `config-overlays/` | `.json`, `.zip` | Host-specific config files applied outside artifact hashes. |
-| `dashboard-widget` | `widgets/` | `.json` | Portal dashboard widget package JSON. |
+| `dashboard-widget` | `widgets/` | `.json` | Versioned Portal dashboard widget package JSON. |
 | `widget-data` | `widget-data/` | `.zip` | Portal shared widget runtime data package containing `widget_data` JSON plus remappable `widget_binary_data` files. |
+
+Dashboard widget packages use the portable `omp.portal.dashboard.widgets` JSON
+format. The package should contain a root `packageVersion` and each widget
+should contain its own `widgetVersion`. OMP stores the installed widget version
+in `omp_portal.widgets.widget_version`; old widget JSON without a version imports
+as `0.0.0` for backward compatibility.
+
+Widget import version rules are intentionally the same across Portal and
+HostAgent unattended imports:
+
+- newer `widgetVersion` updates the installed widget definition and replaces
+  its permission restrictions
+- older `widgetVersion` is skipped
+- same `widgetVersion` with identical content is skipped
+- same `widgetVersion` with different content fails and requires either a new
+  `widgetVersion` or an explicit Portal full-import replacement for rollback or
+  repair
 
 `widget-data` objects are zip files inside the universal package. They contain
 an `omp-widget-runtime-data.json` manifest and binary entries. Runtime JSON may
@@ -369,7 +386,10 @@ Importers process universal packages item by item.
   object library.
 - Dashboard widgets are imported by both Portal and HostAgent. HostAgent writes
   the same portable widget format into the Portal widget tables so import-folder
-  packages can carry complete common OMP objects.
+  packages can carry complete common OMP objects. Widget definitions are
+  versioned by `widgetVersion` even though OMP stores only the currently
+  installed widget row; older package files can still be imported deliberately
+  through Portal full import when an operator needs to roll back.
 
 The result should report imported, skipped, and failed item counts. Failed items
 belong to the package item, not to the whole package, unless the zip or manifest

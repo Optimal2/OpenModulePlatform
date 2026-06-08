@@ -474,6 +474,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             input.AllowTemporaryIncompatibleArtifacts,
             input.ReplaceExistingModuleDefinitions,
             input.ReplaceExistingArtifacts,
+            input.ReplaceExistingDashboardWidgets,
             input.CopyConfigurationFilesFromPreviousVersion,
             input.UseArtifactsImmediately,
             input.QuickImport));
@@ -485,6 +486,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             input.AllowTemporaryIncompatibleArtifacts,
             input.ReplaceExistingModuleDefinitions,
             input.ReplaceExistingArtifacts,
+            input.ReplaceExistingDashboardWidgets,
             input.CopyConfigurationFilesFromPreviousVersion,
             input.UseArtifactsImmediately,
             input.QuickImport));
@@ -494,7 +496,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             ? options with
             {
                 ReplaceExistingModuleDefinition = false,
-                ReplaceExistingArtifacts = false
+                ReplaceExistingArtifacts = false,
+                ReplaceExistingDashboardWidgets = false
             }
             : options;
 
@@ -533,6 +536,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
         public bool ReplaceExistingArtifacts { get; set; }
 
+        public bool ReplaceExistingDashboardWidgets { get; set; }
+
         public bool ReplaceExistingConfigObjects { get; set; }
 
         public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
@@ -558,6 +563,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
         public bool ReplaceExistingArtifacts { get; set; }
 
+        public bool ReplaceExistingDashboardWidgets { get; set; }
+
         public bool ReplaceExistingConfigObjects { get; set; }
 
         public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
@@ -576,6 +583,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 AllowTemporaryIncompatibleArtifacts = input.AllowTemporaryIncompatibleArtifacts,
                 ReplaceExistingModuleDefinitions = input.ReplaceExistingModuleDefinitions,
                 ReplaceExistingArtifacts = input.ReplaceExistingArtifacts,
+                ReplaceExistingDashboardWidgets = input.ReplaceExistingDashboardWidgets,
                 ReplaceExistingConfigObjects = input.ReplaceExistingConfigObjects,
                 CopyConfigurationFilesFromPreviousVersion = input.CopyConfigurationFilesFromPreviousVersion,
                 UseArtifactsImmediately = input.UseArtifactsImmediately
