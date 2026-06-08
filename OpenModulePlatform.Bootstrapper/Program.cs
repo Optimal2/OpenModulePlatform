@@ -24,6 +24,7 @@ internal static partial class Program
     private const string HostAgentWindowsServiceExecutableName = "OpenModulePlatform.HostAgent.WindowsService.exe";
     private static readonly string[] KnownHostAgentServiceNamePrefixes =
     [
+        "EMP.HostAgent",
         "OMP.HostAgent",
         "OpenModulePlatform.HostAgent"
     ];

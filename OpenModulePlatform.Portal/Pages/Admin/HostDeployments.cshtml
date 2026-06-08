@@ -311,6 +311,31 @@
                             {
                                 <span class="muted">@L["None"]</span>
                             }
+                            @if (!string.IsNullOrWhiteSpace(row.TargetServiceName)
+                                                            && !string.Equals(row.TargetServiceName, row.CurrentServiceName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="muted">
+                                    @L["Target service"]: <code>@row.TargetServiceName</code>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(row.TargetRuntimeMode))
+                                {
+                                    <div class="muted">
+                                        @L["Target mode"]: @row.TargetRuntimeMode
+                                        @if (!row.TargetIsActive)
+                                        {
+                                            <span>(@L["inactive"])</span>
+                                        }
+                                    </div>
+                                }
+                                @if (row.TargetRuntimeLastSeenUtc.HasValue)
+                                {
+                                    <div class="muted">@L["Target last seen"]: @row.TargetRuntimeLastSeenUtc.Value.ToString("u")</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(row.TargetRuntimeStatusMessage))
+                                {
+                                    <div>@row.TargetRuntimeStatusMessage</div>
+                                }
+                            }
                         </td>
                     </tr>
                 }

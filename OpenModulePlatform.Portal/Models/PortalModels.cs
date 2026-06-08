@@ -1273,6 +1273,16 @@ public sealed class HostAgentUpgradeRow
     public DateTime? RuntimeLastSeenUtc { get; set; }
 
     public string? RuntimeStatusMessage { get; set; }
+
+    public string? TargetServiceName { get; set; }
+
+    public string? TargetRuntimeMode { get; set; }
+
+    public bool TargetIsActive { get; set; }
+
+    public DateTime? TargetRuntimeLastSeenUtc { get; set; }
+
+    public string? TargetRuntimeStatusMessage { get; set; }
 }
 
 /// <summary>
