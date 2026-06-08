@@ -2475,5 +2475,6 @@
   <data name="Created {0}." xml:space="preserve"><value>Skapade {0}.</value></data>
   <data name="Package path" xml:space="preserve"><value>Paketsökväg</value></data>
   <data name="Source file" xml:space="preserve"><value>Källfil</value></data>
+  <data name="Quick import" xml:space="preserve"><value>Snabb-import</value></data>
   <data name="Create package" xml:space="preserve"><value>Skapa paket</value></data>
 </root>
