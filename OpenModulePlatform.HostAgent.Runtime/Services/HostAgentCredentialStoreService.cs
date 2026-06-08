@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
@@ -15,6 +17,11 @@ public sealed class HostAgentCredentialStoreService
     {
         WriteIndented = true
     };
+
+    static HostAgentCredentialStoreService()
+    {
+        JsonOptions.Converters.Add(new CredentialStoreDateTimeOffsetConverter());
+    }
 
     private readonly HostAgentSettings _settings;
 
@@ -260,6 +267,74 @@ public sealed class HostAgentCredentialStoreService
         if (string.IsNullOrWhiteSpace(key))
         {
             throw new ArgumentException("Credential key must be configured.", nameof(key));
+        }
+    }
+
+    private sealed class CredentialStoreDateTimeOffsetConverter : JsonConverter<DateTimeOffset>
+    {
+        public override DateTimeOffset Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                var value = reader.GetString();
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    return DateTimeOffset.MinValue;
+                }
+
+                var trimmed = value.Trim();
+                if (DateTimeOffset.TryParse(
+                    trimmed,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces,
+                    out var parsed))
+                {
+                    return parsed;
+                }
+
+                if (TryParseMicrosoftJsonDate(trimmed, out parsed))
+                {
+                    return parsed;
+                }
+            }
+
+            return reader.GetDateTimeOffset();
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            DateTimeOffset value,
+            JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        }
+
+        private static bool TryParseMicrosoftJsonDate(string value, out DateTimeOffset result)
+        {
+            result = default;
+            if (!value.StartsWith("/Date(", StringComparison.Ordinal)
+                || !value.EndsWith(")/", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var millisecondsText = value["/Date(".Length..^2];
+            var offsetIndex = millisecondsText.IndexOfAny(new[] { '+', '-' }, 1);
+            if (offsetIndex > 0)
+            {
+                millisecondsText = millisecondsText[..offsetIndex];
+            }
+
+            if (!long.TryParse(millisecondsText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var milliseconds))
+            {
+                return false;
+            }
+
+            result = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
+            return true;
         }
     }
 }

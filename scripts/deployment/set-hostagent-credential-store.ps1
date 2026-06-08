@@ -89,6 +89,10 @@ function Protect-Password {
     return [Convert]::ToBase64String($encryptedBytes)
 }
 
+function Get-UtcTimestampText {
+    return [DateTimeOffset]::UtcNow.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+}
+
 function Resolve-PathText {
     param(
         [string]$Value,
@@ -149,7 +153,7 @@ try {
         protectionProvider = 'WindowsDpapi'
         protectionScope = $ProtectionScope
         description = 'Written by set-hostagent-credential-store.ps1.'
-        updatedUtc = [DateTimeOffset]::UtcNow
+        updatedUtc = Get-UtcTimestampText
     }
 
     $document = if (Test-Path -LiteralPath $storePath -PathType Leaf) {
@@ -158,7 +162,7 @@ try {
     else {
         [pscustomobject]@{
             formatVersion = 1
-            updatedUtc = [DateTimeOffset]::UtcNow
+            updatedUtc = Get-UtcTimestampText
             credentials = [pscustomobject]@{}
         }
     }
@@ -171,7 +175,7 @@ try {
     else {
         $document.credentials.PSObject.Properties[$CredentialKey].Value = [pscustomobject]$entry
     }
-    $document.updatedUtc = [DateTimeOffset]::UtcNow
+    $document.updatedUtc = Get-UtcTimestampText
 
     $hostAgent.SelfUpgrade.ServiceAccountName = $UserName.Trim()
     $hostAgent.SelfUpgrade.ServiceAccountPasswordCredentialKey = $CredentialKey
