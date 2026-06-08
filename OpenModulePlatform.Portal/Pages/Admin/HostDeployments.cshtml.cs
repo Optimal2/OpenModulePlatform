@@ -26,6 +26,8 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     public IReadOnlyList<HostAgentArtifactOption> HostAgentArtifactOptions { get; private set; } = [];
 
+    public IReadOnlyList<HostDriftSummaryRow> HostDriftSummaries { get; private set; } = [];
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -70,6 +72,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     private async Task LoadAsync(CancellationToken ct)
     {
         SetTitles("Operations");
+        HostDriftSummaries = await _repo.GetHostDriftSummariesAsync(ct);
         HostAgentRows = await _repo.GetHostAgentUpgradeRowsAsync(ct);
         var hostAgentArtifactOptions = (await _repo.GetHostAgentArtifactOptionsAsync(ct)).ToList();
         hostAgentArtifactOptions.Sort(CompareHostAgentArtifactOptions);
@@ -109,6 +112,36 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     public static bool IsInterestingArtifactState(HostArtifactStateRow row)
         => row.ProvisioningState != 2
            || !string.IsNullOrWhiteSpace(row.LastError);
+
+    public static string FormatHostDriftStatus(HostDriftSummaryRow row)
+    {
+        if (row.FailedAppCount > 0)
+        {
+            return "Failed";
+        }
+
+        if (row.RunningAppCount > 0)
+        {
+            return "Running";
+        }
+
+        if (row.HostAgentUpgradePending || row.PendingAppCount > 0 || row.MaterializationPendingCount > 0)
+        {
+            return "Pending";
+        }
+
+        if (row.WarningAppCount > 0)
+        {
+            return "Warning";
+        }
+
+        if (row.DesiredAppCount == 0)
+        {
+            return "No desired apps";
+        }
+
+        return "In sync";
+    }
 
     public int GetSelectedHostAgentArtifactId(HostAgentUpgradeRow row)
     {
