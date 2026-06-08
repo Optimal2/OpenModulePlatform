@@ -283,9 +283,14 @@
     const itemsBody = document.getElementById("itemsBody");
     const status = document.getElementById("status");
 
-    packageVersion.value = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "Z");
-
     const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    const pad2 = value => String(value).padStart(2, "0");
+    const formatUtcPackageVersion = date =>
+        `${date.getUTCFullYear()}${pad2(date.getUTCMonth() + 1)}${pad2(date.getUTCDate())}${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}${pad2(date.getUTCSeconds())}`;
+
+    packageVersion.value = formatUtcPackageVersion(new Date());
 
     const sanitizeSegment = value => {
         const text = String(value || "").trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/^\.+|\.+$/g, "");
@@ -328,11 +333,104 @@
         updateStatus(items.length === 0 ? "No items added." : `${items.length} item(s) ready.`);
     };
 
+    const compareVersionText = (left, right) =>
+        String(left || "").localeCompare(String(right || ""), undefined, {
+            numeric: true,
+            sensitivity: "base"
+        });
+
+    const inflateRawBytes = async bytes => {
+        if (typeof DecompressionStream !== "function") {
+            return null;
+        }
+
+        try {
+            const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+            return new Uint8Array(await new Response(stream).arrayBuffer());
+        } catch {
+            return null;
+        }
+    };
+
+    const readZipTextEntry = async (file, entryName) => {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const getUint16 = offset => view.getUint16(offset, true);
+        const getUint32 = offset => view.getUint32(offset, true);
+        const eocdSignature = 0x06054b50;
+        const centralDirectorySignature = 0x02014b50;
+        const localHeaderSignature = 0x04034b50;
+        const maxCommentLength = 0xffff;
+        const searchStart = Math.max(0, bytes.length - maxCommentLength - 22);
+        let eocdOffset = -1;
+        for (let offset = bytes.length - 22; offset >= searchStart; offset--) {
+            if (getUint32(offset) === eocdSignature) {
+                eocdOffset = offset;
+                break;
+            }
+        }
+
+        if (eocdOffset < 0) {
+            return "";
+        }
+
+        let entryCount = getUint16(eocdOffset + 10);
+        let centralOffset = getUint32(eocdOffset + 16);
+        while (entryCount-- > 0 && centralOffset + 46 <= bytes.length) {
+            if (getUint32(centralOffset) !== centralDirectorySignature) {
+                return "";
+            }
+
+            const compressionMethod = getUint16(centralOffset + 10);
+            const compressedSize = getUint32(centralOffset + 20);
+            const fileNameLength = getUint16(centralOffset + 28);
+            const extraLength = getUint16(centralOffset + 30);
+            const commentLength = getUint16(centralOffset + 32);
+            const localHeaderOffset = getUint32(centralOffset + 42);
+            const nameStart = centralOffset + 46;
+            const name = decoder.decode(bytes.subarray(nameStart, nameStart + fileNameLength));
+            if (name === entryName) {
+                if (getUint32(localHeaderOffset) !== localHeaderSignature) {
+                    return "";
+                }
+
+                const localNameLength = getUint16(localHeaderOffset + 26);
+                const localExtraLength = getUint16(localHeaderOffset + 28);
+                const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+                const compressedBytes = bytes.subarray(dataStart, dataStart + compressedSize);
+                if (compressionMethod === 0) {
+                    return decoder.decode(compressedBytes);
+                }
+
+                if (compressionMethod === 8) {
+                    const inflated = await inflateRawBytes(compressedBytes);
+                    return inflated ? decoder.decode(inflated) : "";
+                }
+
+                return "";
+            }
+
+            centralOffset += 46 + fileNameLength + extraLength + commentLength;
+        }
+
+        return "";
+    };
+
     const readItemVersion = async (kind, file) => {
         if (kind === "artifact-package") {
             const baseName = file.name.replace(/\.[^.]+$/, "");
             const parts = baseName.split("__");
             return parts.length >= 5 ? String(parts[parts.length - 1]).trim() : "";
+        }
+
+        if (kind === "widget-data") {
+            try {
+                const manifestText = await readZipTextEntry(file, "omp-widget-runtime-data.json");
+                const manifest = manifestText ? JSON.parse(manifestText) : null;
+                return manifest && manifest.packageVersion ? String(manifest.packageVersion).trim() : "";
+            } catch {
+                return "";
+            }
         }
 
         try {
@@ -361,7 +459,7 @@
                 ? document.widgets
                     .map(widget => widget && widget.widgetVersion ? String(widget.widgetVersion).trim() : "")
                     .filter(Boolean)
-                    .sort((left, right) => right.localeCompare(left))
+                    .sort((left, right) => compareVersionText(right, left))
                 : [];
             return versions[0] || "";
         } catch {
