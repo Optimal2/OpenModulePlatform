@@ -62,6 +62,7 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
         SetTitles("iFrame URLs");
         ActiveTab = "urls";
         await LoadAsync(ct);
+        RemoveModelStatePrefix(nameof(UrlSetInput));
         NormalizeUrlInput();
         ValidateUrlInput();
 
@@ -114,6 +115,7 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
         SetTitles("iFrame URLs");
         ActiveTab = "sets";
         await LoadAsync(ct);
+        RemoveModelStatePrefix(nameof(UrlInput));
         NormalizeUrlSetInput();
         ValidateUrlSetInput();
 
@@ -203,6 +205,17 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
 
     private static string NormalizeTab(string? tab)
         => string.Equals(tab, "sets", StringComparison.OrdinalIgnoreCase) ? "sets" : "urls";
+
+    private void RemoveModelStatePrefix(string prefix)
+    {
+        foreach (var key in ModelState.Keys
+                     .Where(key => string.Equals(key, prefix, StringComparison.Ordinal)
+                                   || key.StartsWith(prefix + ".", StringComparison.Ordinal))
+                     .ToArray())
+        {
+            ModelState.Remove(key);
+        }
+    }
 
     public sealed class UrlInputModel
     {
