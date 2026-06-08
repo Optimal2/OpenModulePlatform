@@ -1068,6 +1068,52 @@ public sealed class HostDeploymentRow
 }
 
 /// <summary>
+/// Per-host comparison between desired template apps and the latest HostAgent runtime result.
+/// </summary>
+public sealed class HostDriftSummaryRow
+{
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string? DisplayName { get; set; }
+
+    public DateTime? HostLastSeenUtc { get; set; }
+
+    public int DesiredAppCount { get; set; }
+
+    public int InSyncAppCount { get; set; }
+
+    public int MaterializationPendingCount { get; set; }
+
+    public int MissingRuntimeCount { get; set; }
+
+    public int VersionMismatchCount { get; set; }
+
+    public int PendingAppCount { get; set; }
+
+    public int RunningAppCount { get; set; }
+
+    public int FailedAppCount { get; set; }
+
+    public int WarningAppCount { get; set; }
+
+    public DateTime? LastCheckedUtc { get; set; }
+
+    public DateTime? LastAppliedUtc { get; set; }
+
+    public string? HostAgentDesiredVersion { get; set; }
+
+    public string? HostAgentCurrentVersion { get; set; }
+
+    public DateTime? HostAgentLastSeenUtc { get; set; }
+
+    public bool HostAgentUpgradePending { get; set; }
+
+    public int DriftAppCount => Math.Max(0, DesiredAppCount - InSyncAppCount);
+}
+
+/// <summary>
 /// Latest HostAgent app deployment state for a materialized app on a host.
 /// </summary>
 public sealed class HostAppDeploymentStateRow
