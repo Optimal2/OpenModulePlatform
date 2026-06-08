@@ -162,6 +162,8 @@ internal static class ArtifactConfigurationFileWriter
     {
         var databaseName = ResolveDatabaseName(ompConnectionString);
         var dataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
+        var forwardedHeadersKnownProxies = settings.WebAppForwardedHeadersKnownProxies ?? Array.Empty<string>();
+        var forwardedHeadersKnownNetworks = settings.WebAppForwardedHeadersKnownNetworks ?? Array.Empty<string>();
         var webAppOptions = new
         {
             Title = deployment.DisplayName,
@@ -173,7 +175,10 @@ internal static class ArtifactConfigurationFileWriter
                 PortalBaseUrl = "/"
             },
             AllowAnonymous = false,
-            UseForwardedHeaders = false,
+            UseForwardedHeaders = settings.WebAppUseForwardedHeaders,
+            ForwardedHeadersTrustAllProxies = settings.WebAppForwardedHeadersTrustAllProxies,
+            ForwardedHeadersKnownProxies = forwardedHeadersKnownProxies,
+            ForwardedHeadersKnownNetworks = forwardedHeadersKnownNetworks,
             PermissionMode = "Any"
         };
         var content = JsonSerializer.Serialize(
@@ -401,7 +406,11 @@ internal static class ArtifactConfigurationFileWriter
             ["Omp.HostAgent.WebAppsRoot"] = settings.WebAppsRoot,
             ["Omp.HostAgent.PortalPhysicalPath"] = settings.PortalPhysicalPath,
             ["Omp.HostAgent.ServicesRoot"] = settings.ServicesRoot,
-            ["Omp.HostAgent.WebAppDataProtectionKeyPath"] = ResolveWebAppDataProtectionKeyPath(settings)
+            ["Omp.HostAgent.WebAppDataProtectionKeyPath"] = ResolveWebAppDataProtectionKeyPath(settings),
+            ["Omp.HostAgent.WebAppUseForwardedHeaders"] = settings.WebAppUseForwardedHeaders.ToString(CultureInfo.InvariantCulture),
+            ["Omp.HostAgent.WebAppForwardedHeadersTrustAllProxies"] = settings.WebAppForwardedHeadersTrustAllProxies.ToString(CultureInfo.InvariantCulture),
+            ["Omp.HostAgent.WebAppForwardedHeadersKnownProxies"] = string.Join(",", settings.WebAppForwardedHeadersKnownProxies ?? Array.Empty<string>()),
+            ["Omp.HostAgent.WebAppForwardedHeadersKnownNetworks"] = string.Join(",", settings.WebAppForwardedHeadersKnownNetworks ?? Array.Empty<string>())
         };
 
         foreach (var item in variables.ToArray())
