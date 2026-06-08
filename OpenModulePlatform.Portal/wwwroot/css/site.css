@@ -1545,15 +1545,6 @@ code {
     color: #8f1f1f;
 }
 
-
-.empty-state {
-    padding: 14px;
-    border: 1px dashed var(--border-strong);
-    border-radius: 14px;
-    background: var(--surface-muted);
-    color: var(--text-muted);
-}
-
 .inline-form {
     display: inline;
 }

@@ -810,6 +810,7 @@
   <data name="Skipped duplicate package path: {0}" xml:space="preserve"><value>Skipped duplicate package path: {0}</value></data>
   <data name="Package key and package version are required." xml:space="preserve"><value>Package key and package version are required.</value></data>
   <data name="Created {0}." xml:space="preserve"><value>Created {0}.</value></data>
+  <data name="Package item path" xml:space="preserve"><value>Package item path</value></data>
   <data name="Package path" xml:space="preserve"><value>Package path</value></data>
   <data name="Source file" xml:space="preserve"><value>Source file</value></data>
   <data name="Quick import" xml:space="preserve"><value>Quick import</value></data>
