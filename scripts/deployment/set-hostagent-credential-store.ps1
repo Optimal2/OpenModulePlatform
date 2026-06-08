@@ -130,6 +130,10 @@ try {
     Ensure-Property -Object $hostAgent.CredentialStore -Name 'EntropyPurpose' -Value $EntropyPurpose
     Ensure-Property -Object $hostAgent.SelfUpgrade -Name 'ServiceAccountName' -Value ''
     Ensure-Property -Object $hostAgent.SelfUpgrade -Name 'ServiceAccountPasswordCredentialKey' -Value ''
+    Ensure-Property -Object $hostAgent -Name 'ServiceAppUserName' -Value ''
+    Ensure-Property -Object $hostAgent -Name 'ServiceAppPasswordCredentialKey' -Value ''
+    Ensure-Property -Object $hostAgent -Name 'IisAppPoolUserName' -Value ''
+    Ensure-Property -Object $hostAgent -Name 'IisAppPoolPasswordCredentialKey' -Value ''
 
     $storePath = if ([string]::IsNullOrWhiteSpace($CredentialStorePath)) {
         $configuredStorePath = [string]$hostAgent.CredentialStore.FilePath
