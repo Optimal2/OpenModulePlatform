@@ -66,6 +66,14 @@ public sealed class HostAgentSettings
 
     public string WebAppDataProtectionKeyPath { get; set; } = string.Empty;
 
+    public bool WebAppUseForwardedHeaders { get; set; }
+
+    public bool WebAppForwardedHeadersTrustAllProxies { get; set; }
+
+    public string[] WebAppForwardedHeadersKnownProxies { get; set; } = [];
+
+    public string[] WebAppForwardedHeadersKnownNetworks { get; set; } = [];
+
     public bool UseAppOfflineForWebAppDeployment { get; set; } = true;
 
     public int AppOfflineShutdownDelayMilliseconds { get; set; } = 1500;

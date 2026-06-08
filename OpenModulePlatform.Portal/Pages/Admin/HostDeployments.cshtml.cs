@@ -28,6 +28,9 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     public IReadOnlyList<HostDriftSummaryRow> HostDriftSummaries { get; private set; } = [];
 
+    public IReadOnlyDictionary<Guid, IReadOnlyList<HostDriftDetailRow>> HostDriftDetailsByHost { get; private set; }
+        = new Dictionary<Guid, IReadOnlyList<HostDriftDetailRow>>();
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -73,6 +76,11 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     {
         SetTitles("Operations");
         HostDriftSummaries = await _repo.GetHostDriftSummariesAsync(ct);
+        HostDriftDetailsByHost = (await _repo.GetHostDriftDetailsAsync(ct))
+            .GroupBy(row => row.HostId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<HostDriftDetailRow>)group.ToList());
         HostAgentRows = await _repo.GetHostAgentUpgradeRowsAsync(ct);
         var hostAgentArtifactOptions = (await _repo.GetHostAgentArtifactOptionsAsync(ct)).ToList();
         hostAgentArtifactOptions.Sort(CompareHostAgentArtifactOptions);

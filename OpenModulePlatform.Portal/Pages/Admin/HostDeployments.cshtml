@@ -43,6 +43,9 @@
                 <tbody>
                 @foreach (var row in Model.HostDriftSummaries)
                 {
+                    var hostDriftDetails = Model.HostDriftDetailsByHost.TryGetValue(row.HostId, out var details)
+                        ? details
+                        : Array.Empty<HostDriftDetailRow>();
                     <tr>
                         <td>
                             <div><code>@row.HostKey</code></div>
@@ -122,6 +125,76 @@
                         <td>@row.LastCheckedUtc?.ToString("u")</td>
                         <td>@row.LastAppliedUtc?.ToString("u")</td>
                     </tr>
+                    @if (hostDriftDetails.Count > 0)
+                    {
+                        <tr>
+                            <td colspan="8">
+                                <details class="inline-details">
+                                    <summary>@L["Show drift details"] (@hostDriftDetails.Count)</summary>
+                                    <div class="table-scroll">
+                                        <table class="grid app-instances-grid">
+                                            <thead>
+                                                <tr>
+                                                    <th>@L["Reason"]</th>
+                                                    <th>@L["App instance"]</th>
+                                                    <th>@L["Placement"]</th>
+                                                    <th>@L["Desired"]</th>
+                                                    <th>@L["Materialized"]</th>
+                                                    <th>@L["Runtime"]</th>
+                                                    <th>@L["Status"]</th>
+                                                    <th>@L["Error"]</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach (var detail in hostDriftDetails)
+                                            {
+                                                <tr>
+                                                    <td><span class="pill">@L[detail.DriftReason]</span></td>
+                                                    <td>
+                                                        <div><code>@detail.AppInstanceKey</code></div>
+                                                        <div class="muted">@detail.AppDisplayName</div>
+                                                        <div class="muted"><code>@detail.ModuleInstanceKey</code> / <code>@detail.AppKey</code></div>
+                                                    </td>
+                                                    <td>@(string.IsNullOrWhiteSpace(detail.Placement) ? L["Any host"].Value : detail.Placement)</td>
+                                                    <td>
+                                                        <div>@(detail.DesiredArtifactVersion ?? L["Not set"].Value)</div>
+                                                        <div class="muted">@detail.DesiredPackageType</div>
+                                                        <div class="muted">@detail.DesiredTargetName</div>
+                                                    </td>
+                                                    <td>@(detail.MaterializedArtifactVersion ?? L["Not set"].Value)</td>
+                                                    <td>@(detail.RuntimeArtifactVersion ?? L["Not set"].Value)</td>
+                                                    <td>
+                                                        @if (detail.DeploymentState.HasValue)
+                                                        {
+                                                            <div>@L[HostDeploymentsModel.FormatHostDeploymentStatus(detail.DeploymentState.Value)]</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="muted">@L["No runtime state"]</span>
+                                                        }
+                                                        @if (detail.LastCheckedUtc.HasValue)
+                                                        {
+                                                            <div class="muted">@L["Last checked UTC"]: @detail.LastCheckedUtc.Value.ToString("u")</div>
+                                                        }
+                                                        @if (detail.LastAppliedUtc.HasValue)
+                                                        {
+                                                            <div class="muted">@L["Last applied UTC"]: @detail.LastAppliedUtc.Value.ToString("u")</div>
+                                                        }
+                                                        @if (!string.IsNullOrWhiteSpace(detail.IdentityCheckStatus))
+                                                        {
+                                                            <div class="muted">@L["Identity"]: @L[detail.IdentityCheckStatus]</div>
+                                                        }
+                                                    </td>
+                                                    <td>@(string.IsNullOrWhiteSpace(detail.LastError) ? L["None"].Value : detail.LastError)</td>
+                                                </tr>
+                                            }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

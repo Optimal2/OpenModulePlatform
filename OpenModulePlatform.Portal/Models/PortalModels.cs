@@ -1114,6 +1114,48 @@ public sealed class HostDriftSummaryRow
 }
 
 /// <summary>
+/// One desired app/runtime mismatch behind a host drift summary.
+/// </summary>
+public sealed class HostDriftDetailRow
+{
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string DriftReason { get; set; } = string.Empty;
+
+    public string ModuleInstanceKey { get; set; } = string.Empty;
+
+    public string AppKey { get; set; } = string.Empty;
+
+    public string AppInstanceKey { get; set; } = string.Empty;
+
+    public string AppDisplayName { get; set; } = string.Empty;
+
+    public string? DesiredArtifactVersion { get; set; }
+
+    public string? MaterializedArtifactVersion { get; set; }
+
+    public string? RuntimeArtifactVersion { get; set; }
+
+    public string? DesiredPackageType { get; set; }
+
+    public string? DesiredTargetName { get; set; }
+
+    public string? Placement { get; set; }
+
+    public byte? DeploymentState { get; set; }
+
+    public DateTime? LastCheckedUtc { get; set; }
+
+    public DateTime? LastAppliedUtc { get; set; }
+
+    public string? LastError { get; set; }
+
+    public string? IdentityCheckStatus { get; set; }
+}
+
+/// <summary>
 /// Latest HostAgent app deployment state for a materialized app on a host.
 /// </summary>
 public sealed class HostAppDeploymentStateRow

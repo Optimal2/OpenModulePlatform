@@ -2507,4 +2507,8 @@
   <data name="materialization pending" xml:space="preserve"><value>materialisering väntar</value></data>
   <data name="missing runtime" xml:space="preserve"><value>runtime saknas</value></data>
   <data name="version mismatch" xml:space="preserve"><value>versionsskillnad</value></data>
+  <data name="Show drift details" xml:space="preserve"><value>Visa driftdetaljer</value></data>
+  <data name="Reason" xml:space="preserve"><value>Orsak</value></data>
+  <data name="Placement" xml:space="preserve"><value>Placering</value></data>
+  <data name="Materialized" xml:space="preserve"><value>Materialiserad</value></data>
 </root>

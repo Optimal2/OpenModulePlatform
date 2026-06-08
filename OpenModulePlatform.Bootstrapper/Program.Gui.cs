@@ -2704,7 +2704,7 @@ internal static partial class Program
                 var packageName = GetArtifactPackageFileName(component);
                 var expectedTarget = component.RelativePathTemplate.Replace("{version}", component.Version, StringComparison.OrdinalIgnoreCase);
                 var libraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
-                var sourcePackage = string.IsNullOrWhiteSpace(component.ProjectPath)
+                var sourcePackage = quickMode || string.IsNullOrWhiteSpace(component.ProjectPath)
                     ? FindSourceArtifactPackage(packageName, artifactSearchRoots)
                     : null;
                 var current = FindConfiguredArtifact(component);

@@ -476,7 +476,9 @@ objects`, updates module-definition JSON files, and copies already-built
 standard artifact packages into the shared package library as needed. When a
 required standard artifact package is
 missing and the component manifest points at a single .NET project through
-`projectPath`, the bootstrapper publishes only that project, wraps the publish
+`projectPath`, the bootstrapper first reuses a matching standard package from
+the source repository `artifacts` folders when fast mode is enabled. If no
+matching package exists, it publishes only that project, wraps the publish
 output as an OMP artifact package, and writes it to `RuntimeRoot\ArtifactArchive`
 for reuse. This avoids a full package rebuild when one or two compiled
 artifacts are missing. Non-.NET artifacts, such as externally built web bundles,

@@ -1413,6 +1413,232 @@ ORDER BY h.HostKey;";
         return rows;
     }
 
+    public async Task<IReadOnlyList<HostDriftDetailRow>> GetHostDriftDetailsAsync(CancellationToken ct)
+    {
+        var rows = new List<HostDriftDetailRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var hasIdentityColumns = await ColumnExistsAsync(conn, "omp.HostAppDeploymentStates", "IdentityCheckStatus", ct);
+        var identityWarningExpression = hasIdentityColumns
+            ? "state.IdentityCheckStatus IN (N'ManualActionRequired', N'WaitingForPortalAdminApproval')"
+            : "1 = 0";
+        var identityStatusSelect = hasIdentityColumns
+            ? "state.IdentityCheckStatus"
+            : "CAST(NULL AS nvarchar(40))";
+
+        var sql = $@"
+WITH DesiredTemplateApps AS
+(
+    SELECT h.HostId,
+           h.HostKey,
+           mi.ModuleInstanceId,
+           tmi.ModuleInstanceKey,
+           app.AppKey,
+           tai.AppId,
+           tai.AppInstanceKey,
+           tai.DisplayName AS AppDisplayName,
+           tai.DesiredArtifactId,
+           desiredArtifact.Version AS DesiredArtifactVersion,
+           desiredArtifact.PackageType AS DesiredPackageType,
+           desiredArtifact.TargetName AS DesiredTargetName,
+           tai.InstanceTemplateHostId,
+           tai.TargetHostTemplateId,
+           pinnedHost.HostKey AS PinnedHostKey,
+           targetHostTemplate.TemplateKey AS TargetHostTemplateKey
+    FROM omp.Hosts h
+    INNER JOIN omp.Instances i ON i.InstanceId = h.InstanceId
+    INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
+    INNER JOIN omp.InstanceTemplateModuleInstances tmi
+        ON tmi.InstanceTemplateId = it.InstanceTemplateId
+       AND tmi.IsEnabled = 1
+    INNER JOIN omp.ModuleInstances mi
+        ON mi.InstanceId = i.InstanceId
+       AND mi.ModuleInstanceKey = tmi.ModuleInstanceKey
+       AND mi.IsEnabled = 1
+    INNER JOIN omp.InstanceTemplateAppInstances tai
+        ON tai.InstanceTemplateModuleInstanceId = tmi.InstanceTemplateModuleInstanceId
+       AND tai.IsEnabled = 1
+       AND tai.IsAllowed = 1
+       AND tai.DesiredState = 1
+    INNER JOIN omp.Apps app
+        ON app.AppId = tai.AppId
+       AND app.IsEnabled = 1
+    LEFT JOIN omp.Artifacts desiredArtifact ON desiredArtifact.ArtifactId = tai.DesiredArtifactId
+    LEFT JOIN omp.InstanceTemplateHosts pinnedHost
+        ON pinnedHost.InstanceTemplateHostId = tai.InstanceTemplateHostId
+       AND pinnedHost.IsEnabled = 1
+    LEFT JOIN omp.HostTemplates targetHostTemplate ON targetHostTemplate.HostTemplateId = tai.TargetHostTemplateId
+    WHERE h.IsEnabled = 1
+      AND i.IsEnabled = 1
+      AND it.IsEnabled = 1
+      AND
+      (
+          (
+              tai.InstanceTemplateHostId IS NOT NULL
+              AND pinnedHost.HostKey = h.HostKey
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostDeploymentAssignments assignment
+                  WHERE assignment.HostId = h.HostId
+                    AND assignment.HostTemplateId = pinnedHost.HostTemplateId
+                    AND assignment.IsActive = 1
+              )
+          )
+          OR
+          (
+              tai.InstanceTemplateHostId IS NULL
+              AND tai.TargetHostTemplateId IS NULL
+          )
+          OR
+          (
+              tai.InstanceTemplateHostId IS NULL
+              AND tai.TargetHostTemplateId IS NOT NULL
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostDeploymentAssignments assignment
+                  WHERE assignment.HostId = h.HostId
+                    AND assignment.HostTemplateId = tai.TargetHostTemplateId
+                    AND assignment.IsActive = 1
+              )
+          )
+      )
+),
+ResolvedApps AS
+(
+    SELECT desired.HostId,
+           desired.HostKey,
+           desired.ModuleInstanceKey,
+           desired.AppKey,
+           desired.AppInstanceKey,
+           desired.AppDisplayName,
+           desired.DesiredArtifactVersion,
+           desired.DesiredArtifactId,
+           desired.DesiredPackageType,
+           desired.DesiredTargetName,
+           desired.PinnedHostKey,
+           desired.TargetHostTemplateKey,
+           appInstance.AppInstanceId,
+           appInstance.ArtifactId AS MaterializedArtifactId,
+           materializedArtifact.Version AS MaterializedArtifactVersion,
+           state.ArtifactId AS RuntimeArtifactId,
+           runtimeArtifact.Version AS RuntimeArtifactVersion,
+           state.DeploymentState,
+           state.LastCheckedUtc,
+           state.LastAppliedUtc,
+           state.LastError,
+           {identityStatusSelect} AS IdentityCheckStatus,
+           CAST(CASE WHEN {identityWarningExpression} THEN 1 ELSE 0 END AS bit) AS HasIdentityWarning
+    FROM DesiredTemplateApps desired
+    LEFT JOIN omp.AppInstances appInstance
+        ON appInstance.ModuleInstanceId = desired.ModuleInstanceId
+       AND appInstance.AppId = desired.AppId
+       AND appInstance.AppInstanceKey = desired.AppInstanceKey
+       AND appInstance.IsEnabled = 1
+       AND appInstance.IsAllowed = 1
+       AND appInstance.DesiredState = 1
+       AND
+       (
+           (
+               desired.InstanceTemplateHostId IS NOT NULL
+               AND appInstance.HostId = desired.HostId
+           )
+           OR
+           (
+               desired.InstanceTemplateHostId IS NULL
+               AND appInstance.HostId IS NULL
+               AND ISNULL(appInstance.TargetHostTemplateId, -1) = ISNULL(desired.TargetHostTemplateId, -1)
+           )
+       )
+    LEFT JOIN omp.Artifacts materializedArtifact ON materializedArtifact.ArtifactId = appInstance.ArtifactId
+    LEFT JOIN omp.HostAppDeploymentStates state
+        ON state.HostId = desired.HostId
+       AND state.AppInstanceId = appInstance.AppInstanceId
+    LEFT JOIN omp.Artifacts runtimeArtifact ON runtimeArtifact.ArtifactId = state.ArtifactId
+),
+Classified AS
+(
+    SELECT *,
+           CASE
+               WHEN AppInstanceId IS NULL THEN N'materialization pending'
+               WHEN ISNULL(MaterializedArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN N'materialization pending'
+               WHEN RuntimeArtifactId IS NULL THEN N'missing runtime'
+               WHEN ISNULL(RuntimeArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN N'version mismatch'
+               WHEN DeploymentState = 0 THEN N'Pending'
+               WHEN DeploymentState = 1 THEN N'Running'
+               WHEN DeploymentState = 3 OR LastError IS NOT NULL THEN N'Failed'
+               WHEN DeploymentState = 4 OR HasIdentityWarning = 1 THEN N'Warning'
+               ELSE N'In sync'
+           END AS DriftReason,
+           COALESCE(PinnedHostKey, TargetHostTemplateKey, N'Any host') AS Placement
+    FROM ResolvedApps
+)
+SELECT HostId,
+       HostKey,
+       DriftReason,
+       ModuleInstanceKey,
+       AppKey,
+       AppInstanceKey,
+       AppDisplayName,
+       DesiredArtifactVersion,
+       MaterializedArtifactVersion,
+       RuntimeArtifactVersion,
+       DesiredPackageType,
+       DesiredTargetName,
+       Placement,
+       DeploymentState,
+       LastCheckedUtc,
+       LastAppliedUtc,
+       LastError,
+       IdentityCheckStatus
+FROM Classified
+WHERE DriftReason <> N'In sync'
+ORDER BY HostKey,
+         CASE DriftReason
+             WHEN N'Failed' THEN 0
+             WHEN N'Running' THEN 1
+             WHEN N'materialization pending' THEN 2
+             WHEN N'missing runtime' THEN 3
+             WHEN N'version mismatch' THEN 4
+             WHEN N'Pending' THEN 5
+             WHEN N'Warning' THEN 6
+             ELSE 7
+         END,
+         ModuleInstanceKey,
+         AppInstanceKey;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new HostDriftDetailRow
+            {
+                HostId = rdr.GetGuid(0),
+                HostKey = rdr.GetString(1),
+                DriftReason = rdr.GetString(2),
+                ModuleInstanceKey = rdr.GetString(3),
+                AppKey = rdr.GetString(4),
+                AppInstanceKey = rdr.GetString(5),
+                AppDisplayName = rdr.GetString(6),
+                DesiredArtifactVersion = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                MaterializedArtifactVersion = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                RuntimeArtifactVersion = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                DesiredPackageType = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                DesiredTargetName = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+                Placement = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                DeploymentState = rdr.IsDBNull(13) ? null : rdr.GetByte(13),
+                LastCheckedUtc = rdr.IsDBNull(14) ? null : rdr.GetDateTime(14),
+                LastAppliedUtc = rdr.IsDBNull(15) ? null : rdr.GetDateTime(15),
+                LastError = rdr.IsDBNull(16) ? null : rdr.GetString(16),
+                IdentityCheckStatus = rdr.IsDBNull(17) ? null : rdr.GetString(17)
+            });
+        }
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<HostAppDeploymentStateRow>> GetHostAppDeploymentStatesAsync(CancellationToken ct)
     {
         var rows = new List<HostAppDeploymentStateRow>();
