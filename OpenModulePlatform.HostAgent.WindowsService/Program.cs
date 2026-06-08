@@ -49,15 +49,23 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddHostedService<HostAgentRpcHostedService>();
     });
 
-using var host = builder.Build();
-if (runOnce)
+try
 {
-    var engine = host.Services.GetRequiredService<HostAgentEngine>();
-    await engine.RunOnceAsync(CancellationToken.None);
-    return;
-}
+    using var host = builder.Build();
+    if (runOnce)
+    {
+        var engine = host.Services.GetRequiredService<HostAgentEngine>();
+        await engine.RunOnceAsync(CancellationToken.None);
+        return;
+    }
 
-await host.RunAsync();
+    await host.RunAsync();
+}
+catch (Exception ex)
+{
+    WriteEmergencyStartupFailure(ex);
+    throw;
+}
 
 static HostAgentProcessContext CreateProcessContext(string[] args, HostAgentSettings? settings)
 {
@@ -81,4 +89,25 @@ static string? GetArgumentValue(string[] args, string name)
     var prefix = name + "=";
     var match = args.FirstOrDefault(arg => arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     return match is null ? null : match[prefix.Length..];
+}
+
+static void WriteEmergencyStartupFailure(Exception exception)
+{
+    try
+    {
+        var logDirectory = Path.Join(AppContext.BaseDirectory, "logs");
+        Directory.CreateDirectory(logDirectory);
+        var logPath = Path.Join(
+            logDirectory,
+            $"hostagent-startup-error-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.log");
+
+        File.WriteAllText(
+            logPath,
+            $"{DateTimeOffset.UtcNow:O}{Environment.NewLine}{exception}",
+            System.Text.Encoding.UTF8);
+    }
+    catch
+    {
+        // Last-resort diagnostic logging must never hide the original startup failure.
+    }
 }
