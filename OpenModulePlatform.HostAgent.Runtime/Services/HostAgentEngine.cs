@@ -89,7 +89,8 @@ public sealed class HostAgentEngine
             AppContext.BaseDirectory,
             isActive: true,
             statusMessage: null,
-            cancellationToken);
+            cancellationToken,
+            preserveExistingStatusMessage: true);
 
         if (runtimeMode == HostAgentRuntimeMode.Takeover)
         {

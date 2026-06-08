@@ -19,9 +19,11 @@ public sealed class HostAgentSelfUpgradeService
     private const string DefaultNLogDirectory = "${basedir}/logs";
     private static readonly string[] KnownHostAgentServiceNamePrefixes =
     [
+        "EMP.HostAgent",
         "OMP.HostAgent",
         "OpenModulePlatform.HostAgent"
     ];
+    private static readonly TimeSpan PreparedServiceStartupVerificationDelay = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
@@ -115,7 +117,18 @@ public sealed class HostAgentSelfUpgradeService
         if (settings.SelfUpgrade.StartPreparedService)
         {
             StartServiceIfStopped(serviceName, settings.SelfUpgrade.TakeoverStopTimeoutSeconds);
+            await VerifyPreparedServiceStayedRunningAsync(hostId, desired, serviceName, installPath, cancellationToken);
         }
+
+        await _repository.PublishHostAgentRuntimeStateAsync(
+            hostId,
+            _process,
+            _process.RuntimeMode,
+            desired.ArtifactId,
+            AppContext.BaseDirectory,
+            isActive: true,
+            $"Prepared HostAgent {desired.Version} as {serviceName}; waiting for takeover.",
+            cancellationToken);
 
         _logger.LogInformation(
             "Prepared HostAgent takeover service. CurrentService={CurrentService}, NewService={NewService}, Version={Version}, InstallPath={InstallPath}",
@@ -123,6 +136,38 @@ public sealed class HostAgentSelfUpgradeService
             serviceName,
             desired.Version,
             installPath);
+    }
+
+    private async Task VerifyPreparedServiceStayedRunningAsync(
+        Guid hostId,
+        HostAgentUpgradeDescriptor desired,
+        string serviceName,
+        string installPath,
+        CancellationToken cancellationToken)
+    {
+        await Task.Delay(PreparedServiceStartupVerificationDelay, cancellationToken);
+
+        var state = GetServiceState(serviceName);
+        if (string.Equals(state, "RUNNING", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var status = string.IsNullOrWhiteSpace(state) ? "not found" : state;
+        var message =
+            $"Prepared HostAgent {desired.Version} as {serviceName}, but the Windows service is {status} shortly after start. Check the Windows Event Log and logs below '{installPath}'.";
+
+        await _repository.PublishHostAgentRuntimeStateAsync(
+            hostId,
+            _process,
+            _process.RuntimeMode,
+            desired.ArtifactId,
+            AppContext.BaseDirectory,
+            isActive: true,
+            message,
+            cancellationToken);
+
+        throw new InvalidOperationException(message);
     }
 
     public async Task<bool> ShouldForceLeaseTakeoverAsync(

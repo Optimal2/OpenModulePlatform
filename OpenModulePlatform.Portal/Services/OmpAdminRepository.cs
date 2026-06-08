@@ -1866,7 +1866,12 @@ SELECT h.HostId,
        CAST(ISNULL(runtimeState.IsActive, 0) AS bit) AS CurrentIsActive,
        runtimeState.TakeoverFromServiceName,
        runtimeState.LastSeenUtc,
-       runtimeState.StatusMessage
+       runtimeState.StatusMessage,
+       desiredService.DesiredServiceName AS TargetServiceName,
+       targetRuntimeState.RuntimeMode AS TargetRuntimeMode,
+       CAST(ISNULL(targetRuntimeState.IsActive, 0) AS bit) AS TargetIsActive,
+       targetRuntimeState.LastSeenUtc AS TargetRuntimeLastSeenUtc,
+       targetRuntimeState.StatusMessage AS TargetRuntimeStatusMessage
 FROM omp.Hosts h
 LEFT JOIN omp.HostAgentDesiredStates desired ON desired.HostId = h.HostId
 LEFT JOIN omp.Artifacts desiredArtifact ON desiredArtifact.ArtifactId = desired.ArtifactId
@@ -1877,6 +1882,33 @@ OUTER APPLY
     WHERE r.HostId = h.HostId
     ORDER BY r.IsActive DESC, COALESCE(r.LastSeenUtc, r.UpdatedUtc, r.CreatedUtc) DESC, r.ServiceName
 ) runtimeState
+OUTER APPLY
+(
+    SELECT NULLIF(CHARINDEX(N'.', REVERSE(runtimeState.ServiceName)), 0) AS LastDotFromEnd
+) serviceNameParts
+OUTER APPLY
+(
+    SELECT
+        CASE
+            WHEN runtimeState.ServiceName IS NULL THEN NULL
+            WHEN serviceNameParts.LastDotFromEnd IS NOT NULL
+             AND PATINDEX(N'%[0-9]%', RIGHT(runtimeState.ServiceName, serviceNameParts.LastDotFromEnd - 1)) > 0
+                THEN LEFT(runtimeState.ServiceName, LEN(runtimeState.ServiceName) - serviceNameParts.LastDotFromEnd)
+            ELSE runtimeState.ServiceName
+        END AS CurrentServicePrefix
+) currentService
+OUTER APPLY
+(
+    SELECT
+        CASE
+            WHEN desiredArtifact.Version IS NULL THEN NULL
+            WHEN NULLIF(COALESCE(NULLIF(desired.ServiceNamePrefix, N''), currentService.CurrentServicePrefix), N'') IS NULL THEN NULL
+            ELSE CONCAT(COALESCE(NULLIF(desired.ServiceNamePrefix, N''), currentService.CurrentServicePrefix), N'.', desiredArtifact.Version)
+        END AS DesiredServiceName
+) desiredService
+LEFT JOIN omp.HostAgentRuntimeStates targetRuntimeState
+    ON targetRuntimeState.HostId = h.HostId
+   AND targetRuntimeState.ServiceName = desiredService.DesiredServiceName
 WHERE h.IsEnabled = 1
 ORDER BY h.HostKey;";
 
@@ -1906,7 +1938,12 @@ ORDER BY h.HostKey;";
                 CurrentIsActive = rdr.GetBoolean(14),
                 TakeoverFromServiceName = rdr.IsDBNull(15) ? null : rdr.GetString(15),
                 RuntimeLastSeenUtc = rdr.IsDBNull(16) ? null : rdr.GetDateTime(16),
-                RuntimeStatusMessage = rdr.IsDBNull(17) ? null : rdr.GetString(17)
+                RuntimeStatusMessage = rdr.IsDBNull(17) ? null : rdr.GetString(17),
+                TargetServiceName = rdr.IsDBNull(18) ? null : rdr.GetString(18),
+                TargetRuntimeMode = rdr.IsDBNull(19) ? null : rdr.GetString(19),
+                TargetIsActive = rdr.GetBoolean(20),
+                TargetRuntimeLastSeenUtc = rdr.IsDBNull(21) ? null : rdr.GetDateTime(21),
+                TargetRuntimeStatusMessage = rdr.IsDBNull(22) ? null : rdr.GetString(22)
             });
         }
         return rows;
