@@ -108,7 +108,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 var result = await _packages.ImportUniversalPackageUploadAsync(
                     file,
                     CreateOptions(UniversalUploadInput),
-                    UniversalUploadInput.ReplaceExistingConfigObjects,
+                    UniversalUploadInput.QuickImport ? false : UniversalUploadInput.ReplaceExistingConfigObjects,
                     ct);
                 results.Add(result);
             }
@@ -179,7 +179,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 UniversalStagedInput.Token,
                 UniversalStagedInput.SelectedItemPaths,
                 CreateOptions(UniversalStagedInput),
-                UniversalStagedInput.ReplaceExistingConfigObjects,
+                UniversalStagedInput.QuickImport ? false : UniversalStagedInput.ReplaceExistingConfigObjects,
                 ct);
 
             StatusMessage = BuildUniversalImportStatus(result);
@@ -468,24 +468,35 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             .ToArray();
 
     private static PortableModulePackageImportOptions CreateOptions(UniversalUploadInputModel input)
-        => new(
+        => NormalizeQuickImportOptions(new(
             input.ApplyModuleDefinitions,
             input.ExecuteSqlRepairs,
             input.AllowTemporaryIncompatibleArtifacts,
             input.ReplaceExistingModuleDefinitions,
             input.ReplaceExistingArtifacts,
             input.CopyConfigurationFilesFromPreviousVersion,
-            input.UseArtifactsImmediately);
+            input.UseArtifactsImmediately,
+            input.QuickImport));
 
     private static PortableModulePackageImportOptions CreateOptions(UniversalStagedImportInputModel input)
-        => new(
+        => NormalizeQuickImportOptions(new(
             input.ApplyModuleDefinitions,
             input.ExecuteSqlRepairs,
             input.AllowTemporaryIncompatibleArtifacts,
             input.ReplaceExistingModuleDefinitions,
             input.ReplaceExistingArtifacts,
             input.CopyConfigurationFilesFromPreviousVersion,
-            input.UseArtifactsImmediately);
+            input.UseArtifactsImmediately,
+            input.QuickImport));
+
+    private static PortableModulePackageImportOptions NormalizeQuickImportOptions(PortableModulePackageImportOptions options)
+        => options.QuickImport
+            ? options with
+            {
+                ReplaceExistingModuleDefinition = false,
+                ReplaceExistingArtifacts = false
+            }
+            : options;
 
     private static void TryDeleteTemporaryFile(string path)
     {
@@ -510,6 +521,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     {
         public List<IFormFile> PackageFiles { get; set; } = [];
 
+        public bool QuickImport { get; set; } = true;
+
         public bool ApplyModuleDefinitions { get; set; } = true;
 
         public bool ExecuteSqlRepairs { get; set; } = true;
@@ -533,6 +546,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
         public List<string> SelectedItemPaths { get; set; } = [];
 
+        public bool QuickImport { get; set; } = true;
+
         public bool ApplyModuleDefinitions { get; set; } = true;
 
         public bool ExecuteSqlRepairs { get; set; } = true;
@@ -555,6 +570,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             => new()
             {
                 Token = token,
+                QuickImport = input.QuickImport,
                 ApplyModuleDefinitions = input.ApplyModuleDefinitions,
                 ExecuteSqlRepairs = input.ExecuteSqlRepairs,
                 AllowTemporaryIncompatibleArtifacts = input.AllowTemporaryIncompatibleArtifacts,

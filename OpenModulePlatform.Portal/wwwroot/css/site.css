@@ -1503,6 +1503,10 @@ code {
     background: transparent;
 }
 
+.option-cluster .checkbox-row--boxed.is-disabled {
+    opacity: 0.55;
+}
+
 .selection-list {
     display: grid;
     gap: 4px;
