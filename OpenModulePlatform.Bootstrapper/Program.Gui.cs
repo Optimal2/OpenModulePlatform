@@ -401,7 +401,9 @@ internal static partial class Program
             SynchronizationContext.SetSynchronizationContext(null);
 
             WriteProgress("> Sync installer package objects from source");
-            var result = await form.SyncDeveloperPackageObjectsCoreAsync(WriteProgress);
+            var result = await form.SyncDeveloperPackageObjectsCoreAsync(
+                WriteProgress,
+                quickMode: !cli.FullContentCheck);
             foreach (var line in result.Lines)
             {
                 WriteProgress(line);
@@ -500,6 +502,12 @@ internal static partial class Program
             AutoSize = true,
             Checked = true,
             Text = "Refresh installer package from source first"
+        };
+        private readonly CheckBox _quickPackageObjectRefresh = new()
+        {
+            AutoSize = true,
+            Checked = true,
+            Text = "Fast mode (trust version numbers)"
         };
         private readonly Label _developerSourceStatusLabel = new()
         {
@@ -777,9 +785,20 @@ internal static partial class Program
             panel.Controls.Add(_refreshPackageBeforePrimaryAction, 0, 1);
             panel.Controls.Add(_developerSourceStatusLabel, 1, 1);
 
+            _quickPackageObjectRefresh.Margin = new Padding(0, 4, 12, 4);
+            panel.Controls.Add(_quickPackageObjectRefresh, 0, 2);
+            panel.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(850, 0),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 7, 0, 4),
+                Text = "Default: skip expensive content checks when the package/archive already has the same version. Clear this for a full same-version content verification."
+            }, 1, 2);
+
             _refreshObjectArchiveButton.Width = 260;
             _refreshObjectArchiveButton.Margin = new Padding(0, 4, 12, 4);
-            panel.Controls.Add(_refreshObjectArchiveButton, 0, 2);
+            panel.Controls.Add(_refreshObjectArchiveButton, 0, 3);
             panel.Controls.Add(new Label
             {
                 AutoSize = true,
@@ -787,7 +806,7 @@ internal static partial class Program
                 Anchor = AnchorStyles.Left,
                 Margin = new Padding(0, 7, 0, 4),
                 Text = "Updates the local installer object archive from configured source repositories without starting an install."
-            }, 1, 2);
+            }, 1, 3);
 
             group.Controls.Add(panel);
             return group;
@@ -1147,6 +1166,8 @@ internal static partial class Program
             _refreshPackageBeforePrimaryAction.Checked = _hasDeveloperSource;
             _refreshObjectArchiveButton.Visible = _hasDeveloperSource;
             _refreshObjectArchiveButton.Enabled = _hasDeveloperSource;
+            _quickPackageObjectRefresh.Visible = _hasDeveloperSource || _hasExistingInstallation;
+            _quickPackageObjectRefresh.Enabled = _hasDeveloperSource || _hasExistingInstallation;
             _developerSourceStatusLabel.ForeColor = _hasDeveloperSource ? Color.DarkGreen : SystemColors.GrayText;
             _developerSourceStatusLabel.Text += string.IsNullOrWhiteSpace(developerSourceDetails)
                 ? string.Empty
@@ -1277,7 +1298,8 @@ internal static partial class Program
                             _config,
                             _configPath,
                             _payloadRoot,
-                            _payloadZipPath)
+                            _payloadZipPath,
+                            trustVersionNumbers: _quickPackageObjectRefresh.Checked)
                         : await RunBootstrapAsync(
                             _config,
                             _configPath,
@@ -1292,7 +1314,8 @@ internal static partial class Program
         private async Task<int> RefreshInstallerPackageObjectsForPrimaryActionAsync()
         {
             Console.WriteLine("> Refresh installer package objects from source");
-            var result = await SyncDeveloperPackageObjectsCoreAsync();
+            var result = await SyncDeveloperPackageObjectsCoreAsync(
+                quickMode: _quickPackageObjectRefresh.Checked);
             foreach (var line in result.Lines)
             {
                 Console.WriteLine(line);
@@ -1334,6 +1357,12 @@ internal static partial class Program
             builder.AppendLine(refreshPackage
                 ? "Before the main action, the installer package will be refreshed from the configured source repositories. Warnings stop the main action so package problems can be reviewed first."
                 : "The installer package will be used as-is.");
+            if (refreshPackage || _hasExistingInstallation)
+            {
+                builder.AppendLine(_quickPackageObjectRefresh.Checked
+                    ? "Fast mode is enabled: same-version objects are trusted by version and expensive content checks are skipped."
+                    : "Fast mode is disabled: same-version objects are verified by content where the installer supports it.");
+            }
             if (packageWarnings.Count > 0)
             {
                 builder.AppendLine();
@@ -1427,7 +1456,15 @@ internal static partial class Program
         {
             ApplyValues();
             var confirmation = MessageBox.Show(
-                "This adds newer or missing module definitions and missing artifact folders from the selected package. It does not run the full SQL bootstrap and it does not reinstall artifact folders or HostAgent when they already exist. Continue?",
+                "This adds newer or missing module definitions and missing artifact folders from the selected package. It does not run the full SQL bootstrap and it does not reinstall artifact folders or HostAgent when they already exist."
+                + Environment.NewLine
+                + Environment.NewLine
+                + (_quickPackageObjectRefresh.Checked
+                    ? "Fast mode is enabled: same-version objects are trusted by version."
+                    : "Fast mode is disabled: same-version objects are verified by content where possible.")
+                + Environment.NewLine
+                + Environment.NewLine
+                + "Continue?",
                 "Upgrade / complete",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
@@ -1446,7 +1483,8 @@ internal static partial class Program
                     _config,
                     _configPath,
                     _payloadRoot,
-                    _payloadZipPath));
+                    _payloadZipPath,
+                    trustVersionNumbers: _quickPackageObjectRefresh.Checked));
         }
 
         private async Task CheckDeveloperSourceAsync()
@@ -1473,7 +1511,15 @@ internal static partial class Program
         {
             ApplyValues();
             var confirmation = MessageBox.Show(
-                "This updates this installer package with newer or missing module definition JSON files and artifact package zips. Existing package zips are reused first. If a .NET artifact package is missing, only that component project is published and packaged. Non-.NET packages still need to exist in ArtifactArchive or the source artifacts folder. Continue?",
+                "This updates this installer package with newer or missing module definition JSON files and artifact package zips. Existing package zips are reused first. If a .NET artifact package is missing, only that component project is published and packaged. Non-.NET packages still need to exist in ArtifactArchive or the source artifacts folder."
+                + Environment.NewLine
+                + Environment.NewLine
+                + (_quickPackageObjectRefresh.Checked
+                    ? "Fast mode is enabled: same-version objects are trusted by version."
+                    : "Fast mode is disabled: same-version objects are verified by content where possible.")
+                + Environment.NewLine
+                + Environment.NewLine
+                + "Continue?",
                 "Sync package objects",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
@@ -1490,7 +1536,8 @@ internal static partial class Program
                 "Package object sync failed.",
                 async () =>
                 {
-                    var result = await SyncDeveloperPackageObjectsCoreAsync();
+                    var result = await SyncDeveloperPackageObjectsCoreAsync(
+                        quickMode: _quickPackageObjectRefresh.Checked);
                     foreach (var line in result.Lines)
                     {
                         Console.WriteLine(line);
@@ -2414,7 +2461,9 @@ internal static partial class Program
             return new DeveloperSourceCheckResult(hasPackageUpdates || hasInstalledUpdates, lines);
         }
 
-        internal async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync(Action<string>? progress = null)
+        internal async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync(
+            Action<string>? progress = null,
+            bool quickMode = true)
         {
             void Report(string message) => progress?.Invoke(message);
 
@@ -2464,6 +2513,10 @@ internal static partial class Program
             }
 
             lines.Add(string.Empty);
+            lines.Add(quickMode
+                ? "Fast mode: enabled. Same-version package objects are accepted by version when the expected archive file is present."
+                : "Fast mode: disabled. Same-version package objects are verified by content when possible.");
+            lines.Add(string.Empty);
             lines.Add("Module definitions:");
             foreach (var definition in sourceDefinitions)
             {
@@ -2477,6 +2530,18 @@ internal static partial class Program
                 }
 
                 var packagePath = FindPackageModuleDefinitionPath(definition);
+                if (quickMode && File.Exists(packagePath))
+                {
+                    var packageIdentity = await ReadModuleDefinitionIdentityAsync(packagePath);
+                    if (string.Equals(packageIdentity.ModuleKey, definition.ModuleKey, StringComparison.OrdinalIgnoreCase)
+                        && CompareVersionText(packageIdentity.DefinitionVersion, definition.DefinitionVersion) >= 0)
+                    {
+                        lines.Add($"  OK      {definition.ModuleKey}: fast mode accepted package definition {packageIdentity.DefinitionVersion}; source is {definition.DefinitionVersion}.");
+                        unchanged++;
+                        continue;
+                    }
+                }
+
                 if (await CopyModuleDefinitionIfDifferentAsync(sourcePath, packagePath))
                 {
                     lines.Add($"  UPDATED {definition.ModuleKey}: copied {definition.DefinitionVersion} to the package library.");
@@ -2575,6 +2640,7 @@ internal static partial class Program
                 Report($"Syncing artifact package {component.ComponentKey} {component.Version}...");
                 var packageName = GetArtifactPackageFileName(component);
                 var expectedTarget = component.RelativePathTemplate.Replace("{version}", component.Version, StringComparison.OrdinalIgnoreCase);
+                var libraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
                 var sourcePackage = string.IsNullOrWhiteSpace(component.ProjectPath)
                     ? FindSourceArtifactPackage(packageName, artifactSearchRoots)
                     : null;
@@ -2629,6 +2695,45 @@ internal static partial class Program
                         continue;
                     }
 
+                    if (quickMode && File.Exists(payloadPath))
+                    {
+                        if (!File.Exists(libraryPath))
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(libraryPath))!);
+                            File.Copy(payloadPath, libraryPath, overwrite: false);
+                            CopyArtifactBuildStampIfPresent(payloadPath, libraryPath);
+                            lines.Add($"  UPDATED {component.ComponentKey}: mirrored existing package payload to the package library.");
+                            updated++;
+                        }
+
+                        if (!string.Equals(current.Source, expectedSource, StringComparison.OrdinalIgnoreCase))
+                        {
+                            current.Source = expectedSource;
+                            configUpdated = true;
+                            lines.Add($"  UPDATED {component.ComponentKey}: using package library artifact {expectedSource} for this run.");
+                            updated++;
+                        }
+                        else
+                        {
+                            lines.Add($"  OK      {component.ComponentKey}: fast mode accepted existing artifact package {component.Version}.");
+                            unchanged++;
+                        }
+
+                        continue;
+                    }
+
+                    if (quickMode && File.Exists(libraryPath))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(payloadPath))!);
+                        File.Copy(libraryPath, payloadPath, overwrite: false);
+                        CopyArtifactBuildStampIfPresent(libraryPath, payloadPath);
+                        current.Source = expectedSource;
+                        configUpdated = true;
+                        lines.Add($"  UPDATED {component.ComponentKey}: restored package payload from library artifact {packageName}.");
+                        updated++;
+                        continue;
+                    }
+
                     if (File.Exists(payloadPath))
                     {
                         sourcePackage ??= ResolveOrBuildSourceArtifactPackage(
@@ -2675,6 +2780,21 @@ internal static partial class Program
                     var currentSourcePath = ResolvePackagePath(current.Source);
                     if (File.Exists(currentSourcePath))
                     {
+                        if (quickMode)
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(payloadPath))!);
+                            File.Copy(currentSourcePath, payloadPath, overwrite: false);
+                            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(libraryPath))!);
+                            File.Copy(currentSourcePath, libraryPath, overwrite: false);
+                            CopyArtifactBuildStampIfPresent(currentSourcePath, payloadPath);
+                            CopyArtifactBuildStampIfPresent(currentSourcePath, libraryPath);
+                            current.Source = expectedSource;
+                            configUpdated = true;
+                            lines.Add($"  UPDATED {component.ComponentKey}: fast mode normalized existing artifact package path to {expectedSource}.");
+                            updated++;
+                            continue;
+                        }
+
                         sourcePackage ??= ResolveOrBuildSourceArtifactPackage(
                             component,
                             packageName,
@@ -2738,9 +2858,15 @@ internal static partial class Program
                     continue;
                 }
 
-                var libraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
                 if (File.Exists(libraryPath))
                 {
+                    if (quickMode)
+                    {
+                        lines.Add($"  OK      {component.ComponentKey}: fast mode accepted package library artifact {packageName}.");
+                        unchanged++;
+                        continue;
+                    }
+
                     sourcePackage ??= ResolveOrBuildSourceArtifactPackage(
                         component,
                         packageName,
@@ -4160,6 +4286,20 @@ internal static partial class Program
             return true;
         }
 
+        private static async Task<(string ModuleKey, string DefinitionVersion)> ReadModuleDefinitionIdentityAsync(string path)
+        {
+            var json = await ReadJsonNodeAsync(path);
+            var moduleKey = GetJsonStringProperty(json, "moduleKey");
+            var definitionVersion = GetJsonStringProperty(json, "definitionVersion");
+            if (string.IsNullOrWhiteSpace(moduleKey) || string.IsNullOrWhiteSpace(definitionVersion))
+            {
+                throw new InvalidOperationException(
+                    $"Module definition file '{path}' must contain moduleKey and definitionVersion.");
+            }
+
+            return (moduleKey, definitionVersion);
+        }
+
         private static bool FilesHaveSameContent(string firstPath, string secondPath)
         {
             var first = new FileInfo(firstPath);
@@ -4799,6 +4939,7 @@ ORDER BY ar.ArtifactId DESC;
         {
             _primaryActionButton.Enabled = enabled;
             _refreshPackageBeforePrimaryAction.Enabled = enabled && _hasDeveloperSource;
+            _quickPackageObjectRefresh.Enabled = enabled && (_hasDeveloperSource || _hasExistingInstallation);
             _refreshObjectArchiveButton.Enabled = enabled && _hasDeveloperSource;
             _showAdvancedActions.Enabled = enabled;
             _installButton.Enabled = enabled;

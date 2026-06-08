@@ -100,7 +100,12 @@ internal static partial class Program
 
             if (cli.UpgradeOrComplete)
             {
-                return await RunUpgradeOrCompleteAsync(config, configPath, payloadRoot, cli.PayloadZipPath);
+                return await RunUpgradeOrCompleteAsync(
+                    config,
+                    configPath,
+                    payloadRoot,
+                    cli.PayloadZipPath,
+                    trustVersionNumbers: !cli.FullContentCheck);
             }
 
             return await RunBootstrapAsync(config, configPath, payloadRoot, cli.PayloadZipPath, cli.Yes);
@@ -203,7 +208,8 @@ internal static partial class Program
         BootstrapConfig config,
         string configPath,
         string payloadRoot,
-        string payloadZipPath)
+        string payloadZipPath,
+        bool trustVersionNumbers = false)
     {
         var temporaryPayloadRoot = string.Empty;
 
@@ -226,7 +232,11 @@ internal static partial class Program
 
             if (config.Sql.Enabled)
             {
-                await ImportModuleDefinitionsAsync(config, payloadRoot, onlyNewerOrChanged: true);
+                await ImportModuleDefinitionsAsync(
+                    config,
+                    payloadRoot,
+                    onlyNewerOrChanged: true,
+                    trustSameVersion: trustVersionNumbers);
                 await EnsureRuntimeDatabaseAccessAsync(config);
             }
 
@@ -235,7 +245,9 @@ internal static partial class Program
                 configPath,
                 payloadRoot,
                 ArtifactPreparationMode.AddMissingOnly);
-            await RegisterPackageArtifactsAsync(config);
+            await RegisterPackageArtifactsAsync(
+                config,
+                trustExistingArtifactVersions: trustVersionNumbers);
             await RegisterPreparedArtifactConfigurationFilesAsync(config, preparedArtifactConfigurationFiles);
             await CopyMissingArtifactConfigurationFilesFromPreviousVersionsAsync(
                 config,
@@ -458,12 +470,12 @@ internal static partial class Program
         Console.WriteLine("OpenModulePlatform.Bootstrapper");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action] [--yes]");
-        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --upgrade-or-complete [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action] [--full-content-check] [--yes]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --upgrade-or-complete [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action] [--full-content-check]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --uninstall [--remove-runtime-files] [--remove-database-objects] [--yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui [--config <bootstrap.json> | --config-dir <configs>] [--payload-root <path>] [--payload-zip <zip>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> --payload-root <path> [--parent-process-id <pid>] [--restart-gui]");
-        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --sync-package-objects --config <bootstrap.json> [--payload-root <path>]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --sync-package-objects --config <bootstrap.json> [--payload-root <path>] [--full-content-check]");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
@@ -778,7 +790,8 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
     private static async Task ImportModuleDefinitionsAsync(
         BootstrapConfig config,
         string payloadRoot,
-        bool onlyNewerOrChanged = false)
+        bool onlyNewerOrChanged = false,
+        bool trustSameVersion = false)
     {
         var definitionsRoot = ResolvePackageModuleDefinitionsRoot(payloadRoot);
         if (!Directory.Exists(definitionsRoot))
@@ -819,6 +832,15 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
                 {
                     Console.WriteLine(
                         $"  {definition.ModuleKey} {definition.DefinitionVersion} skipped; installed definition {current.DefinitionVersion} is newer.");
+                    continue;
+                }
+
+                if (current is not null
+                    && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) == 0
+                    && trustSameVersion)
+                {
+                    Console.WriteLine(
+                        $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; fast mode trusted the installed version and skipped same-version content checks.");
                     continue;
                 }
 
@@ -2979,7 +3001,9 @@ END;
         }
     }
 
-    private static async Task RegisterPackageArtifactsAsync(BootstrapConfig config)
+    private static async Task RegisterPackageArtifactsAsync(
+        BootstrapConfig config,
+        bool trustExistingArtifactVersions = false)
     {
         if (!config.Sql.Enabled)
         {
@@ -3031,19 +3055,35 @@ END;
             }
 
             var relativePath = NormalizePathForMatch(artifact.Target);
-            var sha256 = ComputeDirectorySha256(targetPath);
-            var artifactId = await UpsertArtifactMetadataAsync(
-                connection,
-                appId.Value,
-                identity.Version,
-                identity.PackageType,
-                identity.TargetName,
-                relativePath,
-                sha256);
+            var artifactId = trustExistingArtifactVersions
+                ? await TryReuseExistingArtifactMetadataAsync(
+                    connection,
+                    appId.Value,
+                    identity.Version,
+                    identity.PackageType,
+                    identity.TargetName,
+                    relativePath)
+                : null;
+            if (artifactId is null)
+            {
+                var sha256 = ComputeDirectorySha256(targetPath);
+                artifactId = await UpsertArtifactMetadataAsync(
+                    connection,
+                    appId.Value,
+                    identity.Version,
+                    identity.PackageType,
+                    identity.TargetName,
+                    relativePath,
+                    sha256);
+            }
+            else
+            {
+                Console.WriteLine($"> Artifact metadata {artifact.Target}: fast mode reused existing metadata for version {identity.Version}.");
+            }
 
             var updates = await ApplyConfiguredArtifactToMatchingApplicationsAsync(
                 connection,
-                artifactId,
+                artifactId.Value,
                 identity.PackageType);
             if (updates.TemplateAppRowsUpdated + updates.AppInstanceRowsUpdated + updates.WorkerInstanceRowsUpdated > 0)
             {
@@ -3055,7 +3095,7 @@ END;
             {
                 var hostAgentDesiredRows = await ApplyConfiguredHostAgentArtifactToCurrentHostAsync(
                     connection,
-                    artifactId,
+                    artifactId.Value,
                     config.HostAgent);
                 if (hostAgentDesiredRows > 0)
                 {
@@ -3102,6 +3142,49 @@ ORDER BY app.AppId;
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@moduleKey", moduleKey);
         command.Parameters.AddWithValue("@appKey", appKey);
+
+        var value = await command.ExecuteScalarAsync();
+        return value is null or DBNull ? null : Convert.ToInt32(value);
+    }
+
+    private static async Task<int?> TryReuseExistingArtifactMetadataAsync(
+        SqlConnection connection,
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        string relativePath)
+    {
+        const string sql = """
+DECLARE @artifactId int;
+
+SELECT TOP (1) @artifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = @appId
+  AND Version = @version
+  AND PackageType = @packageType
+  AND ((TargetName = @targetName) OR (TargetName IS NULL AND @targetName IS NULL))
+  AND RelativePath = @relativePath
+ORDER BY ArtifactId;
+
+IF @artifactId IS NOT NULL
+BEGIN
+    UPDATE omp.Artifacts
+    SET IsEnabled = 1,
+        UpdatedUtc = CASE WHEN IsEnabled = 0 THEN SYSUTCDATETIME() ELSE UpdatedUtc END
+    WHERE ArtifactId = @artifactId;
+END;
+
+SELECT @artifactId;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@appId", System.Data.SqlDbType.Int).Value = appId;
+        command.Parameters.Add("@version", System.Data.SqlDbType.NVarChar, 50).Value = version;
+        command.Parameters.Add("@packageType", System.Data.SqlDbType.NVarChar, 50).Value = packageType;
+        command.Parameters.Add("@targetName", System.Data.SqlDbType.NVarChar, 200).Value =
+            string.IsNullOrWhiteSpace(targetName) ? DBNull.Value : targetName.Trim();
+        command.Parameters.Add("@relativePath", System.Data.SqlDbType.NVarChar, 512).Value = relativePath;
 
         var value = await command.ExecuteScalarAsync();
         return value is null or DBNull ? null : Convert.ToInt32(value);
@@ -5736,6 +5819,8 @@ internal sealed class CliOptions
 
     public bool SyncPackageObjectsBeforeAction { get; private init; }
 
+    public bool FullContentCheck { get; private init; }
+
     public bool UpgradeOrComplete { get; private init; }
 
     public bool Uninstall { get; private init; }
@@ -5788,6 +5873,9 @@ internal sealed class CliOptions
                     break;
                 case "--sync-package-objects-before-action":
                     options.SyncPackageObjectsBeforeAction = true;
+                    break;
+                case "--full-content-check":
+                    options.FullContentCheck = true;
                     break;
                 case "--upgrade-or-complete":
                     options.UpgradeOrComplete = true;
@@ -5848,6 +5936,8 @@ internal sealed class CliOptions
 
         public bool SyncPackageObjectsBeforeAction { get; set; }
 
+        public bool FullContentCheck { get; set; }
+
         public bool UpgradeOrComplete { get; set; }
 
         public bool Uninstall { get; set; }
@@ -5891,6 +5981,7 @@ internal sealed class CliOptions
                 RefreshInstallerPackage = RefreshInstallerPackage,
                 SyncPackageObjects = SyncPackageObjects,
                 SyncPackageObjectsBeforeAction = SyncPackageObjectsBeforeAction,
+                FullContentCheck = FullContentCheck,
                 UpgradeOrComplete = UpgradeOrComplete,
                 Uninstall = Uninstall,
                 RemoveRuntimeFiles = RemoveRuntimeFiles,

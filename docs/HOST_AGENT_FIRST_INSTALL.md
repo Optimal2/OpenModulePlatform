@@ -321,6 +321,16 @@ profile when HostAgent installation is enabled. Use `Upgrade / complete` for
 normal package catch-up on an existing installation when existing runtime
 folders and HostAgent service configuration should be left unchanged.
 
+The graphical installer enables `Fast mode (trust version numbers)` by default.
+Fast mode skips expensive same-version content verification during package
+object refresh and existing-installation catch-up: if the object archive or the
+database already has the same version, the bootstrapper trusts the version and
+moves on. Clear the option before deliberate same-version repair, checksum
+investigation, or recovery from a package that was previously built with the
+same version but different content. The equivalent CLI opt-out is
+`--full-content-check` for `--upgrade-or-complete`, `--sync-package-objects`,
+or `--sync-package-objects-before-action`.
+
 When imported module definitions include validation SQL, the bootstrapper runs
 the read-only validation script first. Idempotent repair SQL runs only when the
 validation reports an unhealthy state or the validation itself cannot complete.
