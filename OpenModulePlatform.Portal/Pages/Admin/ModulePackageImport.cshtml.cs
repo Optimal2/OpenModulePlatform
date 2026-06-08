@@ -15,6 +15,10 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 /// </summary>
 public sealed class ModulePackageImportModel : OmpPortalPageModel
 {
+    private const int MaxStatusMessageLength = 1800;
+    private const int MaxImportDetailRows = 12;
+    private const int MaxImportDetailTextLength = 180;
+
     private readonly OmpAdminRepository _repo;
     private readonly PortableModulePackageService _packages;
     private readonly PortalDashboardWidgetPackageService _widgets;
@@ -425,10 +429,13 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             .ToArray();
         if (detailRows.Length > 0)
         {
-            message += " " + T("Import details:") + " " + string.Join(" | ", detailRows);
+            message += " " + BuildBoundedDetailMessage(
+                T("Import details:"),
+                detailRows,
+                detailRows.Length);
         }
 
-        return message;
+        return BoundStatusMessage(message);
     }
 
     private string BuildUniversalImportStatus(IReadOnlyList<UniversalPackageImportResult> results)
@@ -456,10 +463,58 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             .ToArray();
         if (detailRows.Length > 0)
         {
-            message += " " + T("Package details:") + " " + string.Join(" | ", detailRows);
+            message += " " + BuildBoundedDetailMessage(
+                T("Package details:"),
+                detailRows,
+                detailRows.Length);
+        }
+
+        return BoundStatusMessage(message);
+    }
+
+    private string BuildBoundedDetailMessage(
+        string heading,
+        IReadOnlyList<string> details,
+        int totalDetailCount)
+    {
+        var selectedDetails = details
+            .Take(MaxImportDetailRows)
+            .Select(static detail => TruncateSingleLine(detail, MaxImportDetailTextLength))
+            .ToArray();
+        var message = heading + " " + string.Join(" | ", selectedDetails);
+        var omitted = totalDetailCount - selectedDetails.Length;
+        if (omitted > 0)
+        {
+            message += " " + string.Format(
+                T("Showing first {0} detail rows; {1} additional rows were omitted to keep the browser cookie small."),
+                selectedDetails.Length,
+                omitted);
         }
 
         return message;
+    }
+
+    private string BoundStatusMessage(string message)
+    {
+        if (message.Length <= MaxStatusMessageLength)
+        {
+            return message;
+        }
+
+        var suffix = " " + T("The import result was shortened to avoid an oversized browser cookie.");
+        var availableLength = Math.Max(0, MaxStatusMessageLength - suffix.Length);
+        return message[..availableLength] + suffix;
+    }
+
+    private static string TruncateSingleLine(string value, int maxLength)
+    {
+        var normalized = value
+            .ReplaceLineEndings(" ")
+            .Replace('\t', ' ')
+            .Trim();
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength] + "...";
     }
 
     private IReadOnlyList<IFormFile> GetSelectedPackageFiles()
