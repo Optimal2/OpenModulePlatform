@@ -460,8 +460,8 @@ public sealed class ArtifactZipImportService
             return new UniversalHostAgentImportItemResult(
                 "dashboard-widget",
                 item.Path,
-                "Imported",
-                $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; permission rows: {result.PermissionRowCount}.");
+                result.CreatedCount + result.UpdatedCount > 0 ? "Imported" : "Skipped",
+                $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; skipped: {result.SkippedCount}; permission rows: {result.PermissionRowCount}.");
         }
         catch (Exception ex) when (IsExpectedImportFailure(ex))
         {

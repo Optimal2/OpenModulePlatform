@@ -519,7 +519,7 @@ public sealed class PortableModulePackageService
 
             foreach (var item in packageItems.Where(static item => item.Kind == UniversalModulePackageItemKind.DashboardWidget))
             {
-                results.Add(await ImportUniversalWidgetItemAsync(item, ct));
+                results.Add(await ImportUniversalWidgetItemAsync(item, options, ct));
             }
 
             foreach (var item in packageItems.Where(static item => item.Kind == UniversalModulePackageItemKind.WidgetRuntimeData))
@@ -667,17 +667,26 @@ public sealed class PortableModulePackageService
 
     private async Task<UniversalPackageImportItemResult> ImportUniversalWidgetItemAsync(
         PortableUniversalModulePackageItem item,
+        PortableModulePackageImportOptions options,
         CancellationToken ct)
     {
         try
         {
             await using var stream = File.OpenRead(item.ExtractedPath);
-            var result = await _widgets.ImportAsync(stream, item.SourceName, ct);
+            var result = await _widgets.ImportAsync(
+                stream,
+                item.SourceName,
+                options.ReplaceExistingDashboardWidgets,
+                options.QuickImport,
+                ct);
+            var status = result.CreatedCount + result.UpdatedCount > 0
+                ? "Imported"
+                : "Skipped";
             return new UniversalPackageImportItemResult(
                 "dashboard-widget",
                 item.Path,
-                "Imported",
-                $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; permission rows: {result.PermissionRowCount}.");
+                status,
+                $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; skipped: {result.SkippedCount}; permission rows: {result.PermissionRowCount}.");
         }
         catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
         {
@@ -1001,7 +1010,7 @@ public sealed class PortableModulePackageService
                     var widgets = await _widgets.ExportWidgetsAsync(request.WidgetIds, ct);
                     var entryName = $"{WidgetsFolder}/{Path.GetFileName(widgets.FileName)}";
                     await AddBytesEntryAsync(archive, usedEntryNames, entryName, widgets.Content, ct);
-                    items.Add(CreateUniversalPackageItem("dashboard-widget", entryName));
+                    items.Add(CreateUniversalPackageItem("dashboard-widget", entryName, widgets.PackageVersion));
 
                     if (request.IncludeWidgetRuntimeData)
                     {
@@ -1934,12 +1943,20 @@ public sealed class PortableModulePackageService
         string version)
         => $"{moduleKey}__{appKey}__{packageType}__{targetName}__{version}.zip";
 
-    private static JsonObject CreateUniversalPackageItem(string kind, string path)
-        => new()
+    private static JsonObject CreateUniversalPackageItem(string kind, string path, string? version = null)
+    {
+        var item = new JsonObject
         {
             ["kind"] = kind,
             ["path"] = path
         };
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            item["version"] = version.Trim();
+        }
+
+        return item;
+    }
 
     private async Task<string?> AddArtifactPackageEntryAsync(
         ZipArchive archive,
@@ -2693,6 +2710,7 @@ public sealed record PortableModulePackageImportOptions(
     bool AllowTemporaryIncompatibleArtifacts,
     bool ReplaceExistingModuleDefinition,
     bool ReplaceExistingArtifacts,
+    bool ReplaceExistingDashboardWidgets,
     bool CopyConfigurationFilesFromPreviousVersion,
     bool UseArtifactsImmediately,
     bool QuickImport = false);
