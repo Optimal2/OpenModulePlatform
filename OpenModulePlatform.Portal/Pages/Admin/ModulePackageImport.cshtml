@@ -1,5 +1,8 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ModulePackageImportModel
+@{
+    var statusMessage = Model.InlineStatusMessage ?? Model.StatusMessage;
+}
 
 <section class="page-header">
     <div>
@@ -13,9 +16,62 @@
     <a class="action-link" href="~/admin/universalpackagebuilder">@L["Create universal package"]</a>
 </div>
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+@if (!string.IsNullOrWhiteSpace(statusMessage))
 {
-    <div class="card status-banner">@Model.StatusMessage</div>
+    <div class="card status-banner">@statusMessage</div>
+}
+
+@if (Model.UniversalImportResults.Count > 0)
+{
+    <section class="card top-gap">
+        <h3>@L["Import details"]</h3>
+        <p class="muted">
+            @string.Format(
+                L["Showing {0} import detail rows from the completed import response. These details are rendered in the page and are not stored in cookies."].Value,
+                Model.UniversalImportDetailCount)
+        </p>
+        <div class="table-scroll">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Package"]</th>
+                        <th>@L["Kind"]</th>
+                        <th>@L["Path"]</th>
+                        <th>@L["Status"]</th>
+                        <th>@L["Message"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var result in Model.UniversalImportResults)
+                {
+                    foreach (var item in result.Items)
+                    {
+                        <tr>
+                            <td>
+                                <code>@result.PackageName</code>
+                                <div class="small-text">
+                                    @string.Format(
+                                        L["Imported/updated: {0}. Skipped: {1}. Failed: {2}."].Value,
+                                        result.ImportedCount,
+                                        result.SkippedCount,
+                                        result.FailedCount)
+                                    @if (!string.IsNullOrWhiteSpace(result.TargetHostProfile))
+                                    {
+                                        <span>@string.Format(L["Target host profile: {0}."].Value, result.TargetHostProfile)</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>@item.Kind</td>
+                            <td><code>@item.Path</code></td>
+                            <td>@item.Status</td>
+                            <td>@item.Message</td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
 }
 
 @if (!ViewContext.ModelState.IsValid)

@@ -777,7 +777,15 @@
   <data name="Select one universal module package zip to preview." xml:space="preserve"><value>Select one universal module package zip to preview.</value></data>
   <data name="Preview supports one universal module package at a time. Use Import all to import multiple packages." xml:space="preserve"><value>Preview supports one universal module package at a time. Use Import all to import multiple packages.</value></data>
   <data name="Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}." xml:space="preserve"><value>Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}.</value></data>
+  <data name="Imported/updated: {0}. Skipped: {1}. Failed: {2}." xml:space="preserve"><value>Imported/updated: {0}. Skipped: {1}. Failed: {2}.</value></data>
+  <data name="Import details" xml:space="preserve"><value>Import details</value></data>
   <data name="Import details:" xml:space="preserve"><value>Import details:</value></data>
+  <data name="Package" xml:space="preserve"><value>Package</value></data>
+  <data name="Kind" xml:space="preserve"><value>Kind</value></data>
+  <data name="Path" xml:space="preserve"><value>Path</value></data>
+  <data name="Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Target host profile: {0}." xml:space="preserve"><value>Target host profile: {0}.</value></data>
+  <data name="Showing {0} import detail rows from the completed import response. These details are rendered in the page and are not stored in cookies." xml:space="preserve"><value>Showing {0} import detail rows from the completed import response. These details are rendered in the page and are not stored in cookies.</value></data>
   <data name="Package details:" xml:space="preserve"><value>Package details:</value></data>
   <data name="Showing first {0} detail rows; {1} additional rows were omitted to keep the browser cookie small." xml:space="preserve"><value>Showing first {0} detail rows; {1} additional rows were omitted to keep the browser cookie small.</value></data>
   <data name="The import result was shortened to avoid an oversized browser cookie." xml:space="preserve"><value>The import result was shortened to avoid an oversized browser cookie.</value></data>

@@ -16,8 +16,6 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 public sealed class ModulePackageImportModel : OmpPortalPageModel
 {
     private const int MaxStatusMessageLength = 1800;
-    private const int MaxImportDetailRows = 12;
-    private const int MaxImportDetailTextLength = 180;
 
     private readonly OmpAdminRepository _repo;
     private readonly PortableModulePackageService _packages;
@@ -64,6 +62,12 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     [TempData]
     public string? StatusMessage { get; set; }
+
+    public string? InlineStatusMessage { get; private set; }
+
+    public IReadOnlyList<UniversalImportResultViewModel> UniversalImportResults { get; private set; } = [];
+
+    public int UniversalImportDetailCount => UniversalImportResults.Sum(static result => result.Items.Count);
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -117,8 +121,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 results.Add(result);
             }
 
-            StatusMessage = BuildUniversalImportStatus(results);
-            return RedirectToPage("/Admin/ModulePackageImport");
+            return await ShowUniversalImportResultsAsync(results, ct);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
@@ -186,8 +189,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 UniversalStagedInput.QuickImport ? false : UniversalStagedInput.ReplaceExistingConfigObjects,
                 ct);
 
-            StatusMessage = BuildUniversalImportStatus(result);
-            return RedirectToPage("/Admin/ModulePackageImport");
+            return await ShowUniversalImportResultsAsync([result], ct);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
@@ -400,11 +402,20 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             .ToList();
     }
 
-    private string BuildUniversalImportStatus(UniversalPackageImportResult result)
+    private async Task<IActionResult> ShowUniversalImportResultsAsync(
+        IReadOnlyList<UniversalPackageImportResult> results,
+        CancellationToken ct)
     {
-        var packageName = string.IsNullOrWhiteSpace(result.PackageKey)
-            ? result.SourceName
-            : $"{result.PackageKey} {result.PackageVersion}".Trim();
+        InlineStatusMessage = BuildUniversalImportSummary(results);
+        UniversalImportResults = BuildUniversalImportResultViewModels(results);
+        ActivePanel = "import-universal";
+        await LoadAsync(ct);
+        return Page();
+    }
+
+    private string BuildUniversalImportSummary(UniversalPackageImportResult result)
+    {
+        var packageName = GetUniversalPackageName(result);
         var message = string.Format(
             T("Imported universal module package {0}. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
             packageName,
@@ -418,31 +429,14 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 result.TargetHostProfile);
         }
 
-        var detailRows = result.Items
-            .Where(static item =>
-                string.Equals(item.Status, "Failed", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(item.Status, "Skipped", StringComparison.OrdinalIgnoreCase)
-                || !string.IsNullOrWhiteSpace(item.Message))
-            .Select(static item => string.IsNullOrWhiteSpace(item.Message)
-                ? $"{item.Kind} {item.Path}: {item.Status}"
-                : $"{item.Kind} {item.Path}: {item.Status} - {item.Message}")
-            .ToArray();
-        if (detailRows.Length > 0)
-        {
-            message += " " + BuildBoundedDetailMessage(
-                T("Import details:"),
-                detailRows,
-                detailRows.Length);
-        }
-
         return BoundStatusMessage(message);
     }
 
-    private string BuildUniversalImportStatus(IReadOnlyList<UniversalPackageImportResult> results)
+    private string BuildUniversalImportSummary(IReadOnlyList<UniversalPackageImportResult> results)
     {
         if (results.Count == 1)
         {
-            return BuildUniversalImportStatus(results[0]);
+            return BuildUniversalImportSummary(results[0]);
         }
 
         var message = string.Format(
@@ -452,47 +446,33 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             results.Sum(static result => result.SkippedCount),
             results.Sum(static result => result.FailedCount));
 
-        var detailRows = results
-            .Select(result =>
-            {
-                var packageName = string.IsNullOrWhiteSpace(result.PackageKey)
-                    ? result.SourceName
-                    : $"{result.PackageKey} {result.PackageVersion}".Trim();
-                return $"{packageName}: {result.ImportedCount}/{result.SkippedCount}/{result.FailedCount}";
-            })
-            .ToArray();
-        if (detailRows.Length > 0)
-        {
-            message += " " + BuildBoundedDetailMessage(
-                T("Package details:"),
-                detailRows,
-                detailRows.Length);
-        }
-
         return BoundStatusMessage(message);
     }
 
-    private string BuildBoundedDetailMessage(
-        string heading,
-        IReadOnlyList<string> details,
-        int totalDetailCount)
+    private static IReadOnlyList<UniversalImportResultViewModel> BuildUniversalImportResultViewModels(
+        IReadOnlyList<UniversalPackageImportResult> results)
     {
-        var selectedDetails = details
-            .Take(MaxImportDetailRows)
-            .Select(static detail => TruncateSingleLine(detail, MaxImportDetailTextLength))
+        return results
+            .Select(result => new UniversalImportResultViewModel(
+                GetUniversalPackageName(result),
+                result.ImportedCount,
+                result.SkippedCount,
+                result.FailedCount,
+                result.TargetHostProfile,
+                result.Items
+                    .Select(item => new UniversalImportItemViewModel(
+                        item.Kind,
+                        item.Path,
+                        item.Status,
+                        item.Message))
+                    .ToArray()))
             .ToArray();
-        var message = heading + " " + string.Join(" | ", selectedDetails);
-        var omitted = totalDetailCount - selectedDetails.Length;
-        if (omitted > 0)
-        {
-            message += " " + string.Format(
-                T("Showing first {0} detail rows; {1} additional rows were omitted to keep the browser cookie small."),
-                selectedDetails.Length,
-                omitted);
-        }
-
-        return message;
     }
+
+    private static string GetUniversalPackageName(UniversalPackageImportResult result)
+        => string.IsNullOrWhiteSpace(result.PackageKey)
+            ? result.SourceName
+            : $"{result.PackageKey} {result.PackageVersion}".Trim();
 
     private string BoundStatusMessage(string message)
     {
@@ -504,17 +484,6 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         var suffix = " " + T("The import result was shortened to avoid an oversized browser cookie.");
         var availableLength = Math.Max(0, MaxStatusMessageLength - suffix.Length);
         return message[..availableLength] + suffix;
-    }
-
-    private static string TruncateSingleLine(string value, int maxLength)
-    {
-        var normalized = value
-            .ReplaceLineEndings(" ")
-            .Replace('\t', ' ')
-            .Trim();
-        return normalized.Length <= maxLength
-            ? normalized
-            : normalized[..maxLength] + "...";
     }
 
     private IReadOnlyList<IFormFile> GetSelectedPackageFiles()
@@ -599,6 +568,20 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
         public bool UseArtifactsImmediately { get; set; } = true;
     }
+
+    public sealed record UniversalImportResultViewModel(
+        string PackageName,
+        int ImportedCount,
+        int SkippedCount,
+        int FailedCount,
+        string? TargetHostProfile,
+        IReadOnlyList<UniversalImportItemViewModel> Items);
+
+    public sealed record UniversalImportItemViewModel(
+        string Kind,
+        string Path,
+        string Status,
+        string? Message);
 
     public sealed class UniversalStagedImportInputModel
     {
