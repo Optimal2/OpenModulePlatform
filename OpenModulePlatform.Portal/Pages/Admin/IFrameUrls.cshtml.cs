@@ -62,8 +62,9 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
         SetTitles("iFrame URLs");
         ActiveTab = "urls";
         await LoadAsync(ct);
-        RemoveModelStatePrefix(nameof(UrlSetInput));
+        ModelState.Clear();
         NormalizeUrlInput();
+        TryValidateModel(UrlInput, nameof(UrlInput));
         ValidateUrlInput();
 
         if (!ModelState.IsValid)
@@ -115,8 +116,9 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
         SetTitles("iFrame URLs");
         ActiveTab = "sets";
         await LoadAsync(ct);
-        RemoveModelStatePrefix(nameof(UrlInput));
+        ModelState.Clear();
         NormalizeUrlSetInput();
+        TryValidateModel(UrlSetInput, nameof(UrlSetInput));
         ValidateUrlSetInput();
 
         if (!ModelState.IsValid)
@@ -199,23 +201,14 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
 
         if (UrlSetInput.SelectedUrlIds.Count == 0)
         {
-            ModelState.AddModelError(nameof(UrlSetInput.SelectedUrlIds), T("Select at least one iFrame URL."));
+            ModelState.AddModelError(
+                $"{nameof(UrlSetInput)}.{nameof(UrlSetInputModel.SelectedUrlIds)}",
+                T("Select at least one iFrame URL."));
         }
     }
 
     private static string NormalizeTab(string? tab)
         => string.Equals(tab, "sets", StringComparison.OrdinalIgnoreCase) ? "sets" : "urls";
-
-    private void RemoveModelStatePrefix(string prefix)
-    {
-        foreach (var key in ModelState.Keys
-                     .Where(key => string.Equals(key, prefix, StringComparison.Ordinal)
-                                   || key.StartsWith(prefix + ".", StringComparison.Ordinal))
-                     .ToArray())
-        {
-            ModelState.Remove(key);
-        }
-    }
 
     public sealed class UrlInputModel
     {
