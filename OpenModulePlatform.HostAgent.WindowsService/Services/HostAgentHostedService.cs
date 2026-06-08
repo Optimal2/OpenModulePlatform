@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -87,6 +89,18 @@ public sealed class HostAgentHostedService : BackgroundService
         catch (TimeoutException ex)
         {
             LogCycleFailure(ex);
+        }
+        catch (CryptographicException ex)
+        {
+            LogCycleFailure(ex);
+        }
+        catch (JsonException ex)
+        {
+            LogCycleFailure(ex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "HostAgent cycle failed with an unexpected error.");
         }
     }
 
