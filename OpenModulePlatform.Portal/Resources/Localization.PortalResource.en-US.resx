@@ -827,4 +827,39 @@
   <data name="Source file" xml:space="preserve"><value>Source file</value></data>
   <data name="Quick import" xml:space="preserve"><value>Quick import</value></data>
   <data name="Create package" xml:space="preserve"><value>Create package</value></data>
+  <data name="iFrame URLs" xml:space="preserve"><value>iFrame URLs</value></data>
+  <data name="Manage iFrame URL targets and URL sets used by the iFrame module." xml:space="preserve"><value>Manage iFrame URL targets and URL sets used by the iFrame module.</value></data>
+  <data name="The iFrame URL tables are not installed." xml:space="preserve"><value>The iFrame URL tables are not installed.</value></data>
+  <data name="iFrame URL administration" xml:space="preserve"><value>iFrame URL administration</value></data>
+  <data name="URL" xml:space="preserve"><value>URL</value></data>
+  <data name="URLs" xml:space="preserve"><value>URLs</value></data>
+  <data name="URL sets" xml:space="preserve"><value>URL sets</value></data>
+  <data name="Allowed roles" xml:space="preserve"><value>Allowed roles</value></data>
+  <data name="Set key" xml:space="preserve"><value>Set key</value></data>
+  <data name="Create URL" xml:space="preserve"><value>Create URL</value></data>
+  <data name="Add one target URL that can be used by normal iFrame URL sets or standalone portal entries." xml:space="preserve"><value>Add one target URL that can be used by normal iFrame URL sets or standalone portal entries.</value></data>
+  <data name="Optional comma or semicolon separated active role names." xml:space="preserve"><value>Optional comma or semicolon separated active role names.</value></data>
+  <data name="Existing URLs" xml:space="preserve"><value>Existing URLs</value></data>
+  <data name="No iFrame URLs found." xml:space="preserve"><value>No iFrame URLs found.</value></data>
+  <data name="All roles" xml:space="preserve"><value>All roles</value></data>
+  <data name="Disable URL" xml:space="preserve"><value>Disable URL</value></data>
+  <data name="Enable URL" xml:space="preserve"><value>Enable URL</value></data>
+  <data name="Create URL set" xml:space="preserve"><value>Create URL set</value></data>
+  <data name="Create a URL set and choose which iFrame URLs it should contain." xml:space="preserve"><value>Create a URL set and choose which iFrame URLs it should contain.</value></data>
+  <data name="Use letters, numbers, dot, dash, colon or underscore." xml:space="preserve"><value>Use letters, numbers, dot, dash, colon or underscore.</value></data>
+  <data name="Create at least one iFrame URL before creating a URL set." xml:space="preserve"><value>Create at least one iFrame URL before creating a URL set.</value></data>
+  <data name="Existing URL sets" xml:space="preserve"><value>Existing URL sets</value></data>
+  <data name="No iFrame URL sets found." xml:space="preserve"><value>No iFrame URL sets found.</value></data>
+  <data name="No URLs" xml:space="preserve"><value>No URLs</value></data>
+  <data name="Disable URL set" xml:space="preserve"><value>Disable URL set</value></data>
+  <data name="Enable URL set" xml:space="preserve"><value>Enable URL set</value></data>
+  <data name="iFrame URL created." xml:space="preserve"><value>iFrame URL created.</value></data>
+  <data name="iFrame URL enabled." xml:space="preserve"><value>iFrame URL enabled.</value></data>
+  <data name="iFrame URL disabled." xml:space="preserve"><value>iFrame URL disabled.</value></data>
+  <data name="iFrame URL set created." xml:space="preserve"><value>iFrame URL set created.</value></data>
+  <data name="iFrame URL set enabled." xml:space="preserve"><value>iFrame URL set enabled.</value></data>
+  <data name="iFrame URL set disabled." xml:space="preserve"><value>iFrame URL set disabled.</value></data>
+  <data name="An iFrame URL set with this key already exists." xml:space="preserve"><value>An iFrame URL set with this key already exists.</value></data>
+  <data name="Select valid iFrame URLs." xml:space="preserve"><value>Select valid iFrame URLs.</value></data>
+  <data name="Select at least one iFrame URL." xml:space="preserve"><value>Select at least one iFrame URL.</value></data>
 </root>

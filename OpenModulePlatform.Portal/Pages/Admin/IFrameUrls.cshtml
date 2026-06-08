@@ -1,0 +1,306 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.IFrameUrlsModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Administration"]</div>
+        <h2>@L["iFrame URLs"]</h2>
+        <p class="lede">@L["Manage iFrame URL targets and URL sets used by the iFrame module."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+@if (!Model.HasIFrameTables)
+{
+    <section class="card top-gap">
+        <div class="empty-state">@L["The iFrame URL tables are not installed."]</div>
+    </section>
+}
+else
+{
+    <section class="import-export-tabs top-gap" data-iframe-url-tabs data-initial-panel="@Model.ActiveTab">
+        <div class="tab-list" role="tablist" aria-label="@L["iFrame URL administration"]">
+            <button type="button" class="tab-button" role="tab" data-iframe-url-tab="urls" aria-controls="iframe-urls-panel">
+                <span>@L["URLs"]</span>
+            </button>
+            <button type="button" class="tab-button" role="tab" data-iframe-url-tab="sets" aria-controls="iframe-url-sets-panel">
+                <span>@L["URL sets"]</span>
+            </button>
+        </div>
+
+        <section class="card import-export-panel" id="iframe-urls-panel" role="tabpanel" data-iframe-url-panel="urls" hidden>
+            <div class="section-header">
+                <div>
+                    <h3>@L["Create URL"]</h3>
+                    <p class="muted">@L["Add one target URL that can be used by normal iFrame URL sets or standalone portal entries."]</p>
+                </div>
+            </div>
+
+            <form method="post" asp-page-handler="CreateUrl" class="settings-form">
+                <div class="field-grid field-grid--2">
+                    <div class="form-field">
+                        <label asp-for="UrlInput.DisplayName"></label>
+                        <input asp-for="UrlInput.DisplayName" />
+                        <span asp-validation-for="UrlInput.DisplayName" class="field-validation-error"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="UrlInput.Url"></label>
+                        <input asp-for="UrlInput.Url" placeholder="/SomeInternalApp" />
+                        <span asp-validation-for="UrlInput.Url" class="field-validation-error"></span>
+                    </div>
+                </div>
+
+                <div class="field-grid field-grid--2">
+                    <div class="form-field">
+                        <label asp-for="UrlInput.AllowedRoles"></label>
+                        <input asp-for="UrlInput.AllowedRoles" placeholder="PortalAdmins; SomeRole" />
+                        <div class="field-help">@L["Optional comma or semicolon separated active role names."]</div>
+                        <span asp-validation-for="UrlInput.AllowedRoles" class="field-validation-error"></span>
+                    </div>
+                    <label class="checkbox-row checkbox-row--boxed">
+                        <input asp-for="UrlInput.Enabled" type="checkbox" />
+                        <span>@L["Enabled"]</span>
+                    </label>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit" class="btn btn-primary">@L["Create URL"]</button>
+                </div>
+            </form>
+
+            <div class="section-header top-gap">
+                <div>
+                    <h3>@L["Existing URLs"]</h3>
+                </div>
+            </div>
+
+            @if (Model.UrlRows.Count == 0)
+            {
+                <div class="empty-state">@L["No iFrame URLs found."]</div>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="grid">
+                        <thead>
+                            <tr>
+                                <th>@L["Name"]</th>
+                                <th>@L["URL"]</th>
+                                <th>@L["Allowed roles"]</th>
+                                <th>@L["Status"]</th>
+                                <th class="actions-col">@L["Actions"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var row in Model.UrlRows)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@row.DisplayName</strong>
+                                    <div class="small-text"><code>@row.UrlId</code></div>
+                                </td>
+                                <td><code>@row.Url</code></td>
+                                <td>@(string.IsNullOrWhiteSpace(row.AllowedRoles) ? L["All roles"] : row.AllowedRoles)</td>
+                                <td><span class="pill">@(row.Enabled ? L["Enabled"] : L["Disabled"])</span></td>
+                                <td class="actions-col">
+                                    <form method="post" asp-page-handler="SetUrlEnabled" class="inline-form">
+                                        <input type="hidden" name="urlId" value="@row.UrlId" />
+                                        <input type="hidden" name="enabled" value="@(!row.Enabled)" />
+                                        <button type="submit"
+                                                class="admin-icon-button @(row.Enabled ? "admin-icon-button--visible-off" : "admin-icon-button--visible")"
+                                                title="@(row.Enabled ? L["Disable URL"] : L["Enable URL"])"
+                                                aria-label="@(row.Enabled ? L["Disable URL"] : L["Enable URL"])">
+                                            <span class="visually-hidden">@(row.Enabled ? L["Disable URL"] : L["Enable URL"])</span>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="card import-export-panel" id="iframe-url-sets-panel" role="tabpanel" data-iframe-url-panel="sets" hidden>
+            <div class="section-header">
+                <div>
+                    <h3>@L["Create URL set"]</h3>
+                    <p class="muted">@L["Create a URL set and choose which iFrame URLs it should contain."]</p>
+                </div>
+            </div>
+
+            <form method="post" asp-page-handler="CreateUrlSet" class="settings-form">
+                <div class="field-grid field-grid--2">
+                    <div class="form-field">
+                        <label asp-for="UrlSetInput.SetKey"></label>
+                        <input asp-for="UrlSetInput.SetKey" placeholder="my-set" />
+                        <div class="field-help">@L["Use letters, numbers, dot, dash, colon or underscore."]</div>
+                        <span asp-validation-for="UrlSetInput.SetKey" class="field-validation-error"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="UrlSetInput.DisplayName"></label>
+                        <input asp-for="UrlSetInput.DisplayName" />
+                        <span asp-validation-for="UrlSetInput.DisplayName" class="field-validation-error"></span>
+                    </div>
+                </div>
+
+                <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UrlSetInput.Enabled" type="checkbox" />
+                    <span>@L["Enabled"]</span>
+                </label>
+
+                <div class="form-field">
+                    <label asp-for="UrlSetInput.SelectedUrlIds"></label>
+                    @if (Model.UrlRows.Count == 0)
+                    {
+                        <div class="empty-state">@L["Create at least one iFrame URL before creating a URL set."]</div>
+                    }
+                    else
+                    {
+                        <div class="selection-list">
+                            @foreach (var url in Model.UrlRows)
+                            {
+                                var isChecked = Model.UrlSetInput.SelectedUrlIds.Contains(url.UrlId);
+                                <label class="checkbox-row">
+                                    <input type="checkbox" name="UrlSetInput.SelectedUrlIds" value="@url.UrlId" checked="@isChecked" />
+                                    <span>
+                                        @url.DisplayName
+                                        <code>@url.Url</code>
+                                        @if (!url.Enabled)
+                                        {
+                                            <span class="pill">@L["Disabled"]</span>
+                                        }
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                    }
+                    <span asp-validation-for="UrlSetInput.SelectedUrlIds" class="field-validation-error"></span>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit" class="btn btn-primary" disabled="@(Model.UrlRows.Count == 0)">@L["Create URL set"]</button>
+                </div>
+            </form>
+
+            <div class="section-header top-gap">
+                <div>
+                    <h3>@L["Existing URL sets"]</h3>
+                </div>
+            </div>
+
+            @if (Model.UrlSetRows.Count == 0)
+            {
+                <div class="empty-state">@L["No iFrame URL sets found."]</div>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="grid">
+                        <thead>
+                            <tr>
+                                <th>@L["Set"]</th>
+                                <th>@L["URLs"]</th>
+                                <th>@L["Status"]</th>
+                                <th class="actions-col">@L["Actions"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var row in Model.UrlSetRows)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@row.DisplayName</strong>
+                                    <div class="small-text"><code>@row.SetKey</code></div>
+                                </td>
+                                <td>
+                                    @if (row.Urls.Count == 0)
+                                    {
+                                        <span class="muted">@L["No URLs"]</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="small-text">
+                                            @foreach (var url in row.Urls)
+                                            {
+                                                <div>
+                                                    <span>@url.SortOrder</span><span>.</span>
+                                                    <strong>@url.DisplayName</strong>
+                                                    <code>@url.Url</code>
+                                                    @if (!url.Enabled)
+                                                    {
+                                                        <span class="pill">@L["Disabled"]</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td><span class="pill">@(row.Enabled ? L["Enabled"] : L["Disabled"])</span></td>
+                                <td class="actions-col">
+                                    <form method="post" asp-page-handler="SetUrlSetEnabled" class="inline-form">
+                                        <input type="hidden" name="urlSetId" value="@row.UrlSetId" />
+                                        <input type="hidden" name="enabled" value="@(!row.Enabled)" />
+                                        <button type="submit"
+                                                class="admin-icon-button @(row.Enabled ? "admin-icon-button--visible-off" : "admin-icon-button--visible")"
+                                                title="@(row.Enabled ? L["Disable URL set"] : L["Enable URL set"])"
+                                                aria-label="@(row.Enabled ? L["Disable URL set"] : L["Enable URL set"])">
+                                            <span class="visually-hidden">@(row.Enabled ? L["Disable URL set"] : L["Enable URL set"])</span>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </section>
+}
+
+<script>
+(() => {
+    const root = document.querySelector('[data-iframe-url-tabs]');
+    if (!root) {
+        return;
+    }
+
+    const tabs = Array.from(root.querySelectorAll('[data-iframe-url-tab]'));
+    const panels = Array.from(root.querySelectorAll('[data-iframe-url-panel]'));
+
+    const showPanel = panelName => {
+        const panel = panels.find(candidate => candidate.dataset.iframeUrlPanel === panelName)
+            || panels.find(candidate => candidate.dataset.iframeUrlPanel === 'urls');
+        if (!panel) {
+            return;
+        }
+
+        tabs.forEach(button => {
+            const isActive = button.dataset.iframeUrlTab === panel.dataset.iframeUrlPanel;
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            button.tabIndex = isActive ? 0 : -1;
+        });
+
+        panels.forEach(candidate => {
+            candidate.hidden = candidate !== panel;
+        });
+    };
+
+    tabs.forEach(button => {
+        button.addEventListener('click', () => showPanel(button.dataset.iframeUrlTab));
+    });
+
+    showPanel(root.dataset.initialPanel || 'urls');
+})();
+</script>
