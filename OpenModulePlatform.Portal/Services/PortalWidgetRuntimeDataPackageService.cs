@@ -42,6 +42,7 @@ public sealed class PortalWidgetRuntimeDataPackageService
 
     public async Task<WidgetRuntimeDataPackageExportResult?> ExportAsync(
         IReadOnlyList<int> widgetIds,
+        string? packageVersion,
         CancellationToken ct)
     {
         var normalizedWidgetIds = widgetIds
@@ -86,6 +87,10 @@ public sealed class PortalWidgetRuntimeDataPackageService
                     ["formatVersion"] = 1,
                     ["objectType"] = PackageObjectType
                 };
+                if (!string.IsNullOrWhiteSpace(packageVersion))
+                {
+                    manifest["packageVersion"] = packageVersion.Trim();
+                }
 
                 var dataArray = new JsonArray();
                 foreach (var document in documents)
@@ -131,6 +136,7 @@ public sealed class PortalWidgetRuntimeDataPackageService
             return new WidgetRuntimeDataPackageExportResult(
                 packagePath,
                 fileName,
+                string.IsNullOrWhiteSpace(packageVersion) ? null : packageVersion.Trim(),
                 documents.Count,
                 binaryRows.Count);
         }
@@ -817,6 +823,7 @@ WHEN NOT MATCHED THEN
 public sealed record WidgetRuntimeDataPackageExportResult(
     string PackagePath,
     string FileName,
+    string? PackageVersion,
     int DataDocumentCount,
     int BinaryDataCount);
 

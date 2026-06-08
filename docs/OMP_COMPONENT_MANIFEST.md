@@ -41,6 +41,13 @@ own `version`, and that value is the version that belongs in
   from a newer module definition. Leave it empty for normal code-only artifact
   releases so the artifact can be imported and selected without bumping the
   module definition.
+- `widgetFiles` optionally lists dashboard widget package JSON files owned by
+  the repository. Prefer object entries with `path`, optional `moduleKey`,
+  and `widgetVersion`. When `destinationName` is omitted, the standard builders
+  write the package as `<name>__<widgetVersion>.json` so installer archives can
+  keep multiple widget versions side by side. String entries are still accepted
+  for compatibility and use `repositoryVersion` as the widget version when the
+  package is built.
 
 ## Bumping Versions
 
@@ -58,6 +65,8 @@ OMP-compatible repositories also expose a friendlier repository-local wrapper:
 .\scripts\omp\bump-version.ps1 -ComponentKey content-webapp
 .\scripts\omp\bump-version.ps1 -AllComponents
 .\scripts\omp\bump-version.ps1 -ModuleKey content_webapp -UpdateModuleMinimums
+.\scripts\omp\bump-version.ps1 -WidgetFile widgets/my-module-widgets.json
+.\scripts\omp\bump-version.ps1 -AllWidgets
 ```
 
 For a double-click workflow, use `scripts/omp/bump-version.cmd`. It launches the
@@ -67,7 +76,8 @@ when needed, module-definition keys.
 The older `scripts/bump-component-version.ps1` helper updates
 `omp-components.json` only. The repository-local `scripts/omp/bump-version.ps1`
 helper can also update referenced module-definition JSON files when module
-definitions are selected. The HostAgent-first package script consumes the
+definitions are selected, and referenced dashboard widget package JSON files
+when widget files are selected. The HostAgent-first package script consumes the
 manifest directly when it prepares ArtifactStore payloads and SQL
 artifact-version overrides. Older suite scripts still have separate package
 version fields, so keep those aligned if you use the legacy installer.
@@ -158,6 +168,12 @@ config-overlays/
 widgets/
 widget-data/
 ```
+
+Dashboard widget packages are versioned portable objects. The repository object
+builder stamps root `packageVersion` and each widget's `widgetVersion` from the
+manifest `widgetVersion` value, falling back to `repositoryVersion` only for
+older manifests. Do not reuse a widget package/version combination with
+different widget content; bump `widgetVersion` instead.
 
 When `-ComponentKey` is used, the generated object set is scoped to the selected
 components. Artifact packages are emitted only for those components, and module

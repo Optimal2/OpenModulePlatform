@@ -2069,11 +2069,17 @@ internal static partial class Program
                     item.SourcePath,
                     item.PackagePath,
                     CompressionLevel.Optimal);
-                items.Add(new JsonObject
+                var manifestItem = new JsonObject
                 {
                     ["kind"] = item.Kind,
                     ["path"] = item.PackagePath
-                });
+                };
+                if (!string.IsNullOrWhiteSpace(item.Version))
+                {
+                    manifestItem["version"] = item.Version;
+                }
+
+                items.Add(manifestItem);
             }
 
             var manifest = new JsonObject
@@ -2199,6 +2205,11 @@ internal static partial class Program
             {
                 warning = "item path does not contain a file name";
                 return false;
+            }
+
+            if (item.Kind == UniversalModulePackageItemKind.DashboardWidget)
+            {
+                rootRelativePath = EnsureVersionedWidgetRelativePath(rootRelativePath, item.Version);
             }
 
             var targetRoot = item.Kind switch
@@ -2379,6 +2390,9 @@ internal static partial class Program
             var sourceComponents = manifests
                 .SelectMany(manifest => ReadManifestComponents(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
                 .ToArray();
+            var sourceWidgets = manifests
+                .SelectMany(manifest => ReadManifestWidgetFiles(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                .ToArray();
             var hasPackageUpdates = false;
 
             lines.Add("Module definitions:");
@@ -2449,11 +2463,47 @@ internal static partial class Program
             }
 
             lines.Add(string.Empty);
+            lines.Add("Dashboard widgets:");
+            foreach (var widget in sourceWidgets)
+            {
+                var sourcePath = ResolveSourceRelativePath(widget.SourceRoot, widget.SourcePath);
+                var packagePath = Path.Join(ResolvePackageWidgetsRoot(_payloadRoot), widget.DestinationName);
+                if (!File.Exists(sourcePath))
+                {
+                    lines.Add($"  UPDATE  {widget.RepositoryKey}: source widget file is missing ({sourcePath}).");
+                    hasPackageUpdates = true;
+                    continue;
+                }
+
+                if (!File.Exists(packagePath))
+                {
+                    lines.Add($"  UPDATE  {widget.RepositoryKey}: package widget file is missing ({widget.DestinationName}).");
+                    hasPackageUpdates = true;
+                    continue;
+                }
+
+                var sourceJson = NormalizeDashboardWidgetPackageJson(sourcePath, widget.Version);
+                var packageJson = File.ReadAllText(packagePath, Encoding.UTF8);
+                if (!string.Equals(sourceJson, packageJson, StringComparison.Ordinal))
+                {
+                    lines.Add(string.IsNullOrWhiteSpace(widget.Version)
+                        ? $"  UPDATE  {widget.RepositoryKey}: widget package {widget.DestinationName} differs from source."
+                        : $"  UPDATE  {widget.RepositoryKey}: widget package {widget.DestinationName} differs from source {widget.Version}.");
+                    hasPackageUpdates = true;
+                    continue;
+                }
+
+                lines.Add(string.IsNullOrWhiteSpace(widget.Version)
+                    ? $"  OK      {widget.RepositoryKey}: widget package {widget.DestinationName}."
+                    : $"  OK      {widget.RepositoryKey}: widget package {widget.DestinationName} {widget.Version}.");
+            }
+
+            lines.Add(string.Empty);
             var hasInstalledUpdates = await AppendDatabaseStatusAsync(sourceDefinitions, sourceComponents, lines);
 
             lines.Add(string.Empty);
             lines.Add(hasPackageUpdates
-                ? "Result: source contains module definitions or artifact entries that are newer/different than this installer package."
+                ? "Result: source contains package objects that are newer/different than this installer package."
                 : hasInstalledUpdates
                     ? "Result: this installer package matches the source manifest. The installed database has pending updates for configured modules or artifacts."
                     : "Result: this installer package matches the source manifest. Installed configured modules and artifacts are up to date.");
@@ -2575,9 +2625,22 @@ internal static partial class Program
                 }
 
                 var packagePath = Path.Join(ResolvePackageWidgetsRoot(_payloadRoot), widget.DestinationName);
-                if (CopyFileIfDifferent(sourcePath, packagePath))
+                if (quickMode
+                    && File.Exists(packagePath)
+                    && TryReadDashboardWidgetPackageVersion(packagePath, out var packageWidgetVersion)
+                    && !string.IsNullOrWhiteSpace(widget.Version)
+                    && CompareVersionText(packageWidgetVersion, widget.Version) >= 0)
                 {
-                    lines.Add($"  UPDATED {widget.RepositoryKey}: copied widget file {widget.DestinationName}.");
+                    lines.Add($"  OK      {widget.RepositoryKey}: fast mode accepted widget package {packageWidgetVersion}; source is {widget.Version}.");
+                    unchanged++;
+                    continue;
+                }
+
+                if (CopyWidgetPackageIfDifferent(sourcePath, packagePath, widget.Version))
+                {
+                    lines.Add(string.IsNullOrWhiteSpace(widget.Version)
+                        ? $"  UPDATED {widget.RepositoryKey}: copied widget file {widget.DestinationName}."
+                        : $"  UPDATED {widget.RepositoryKey}: copied widget file {widget.DestinationName} ({widget.Version}).");
                     updated++;
                 }
                 else
@@ -4593,14 +4656,17 @@ ORDER BY ar.ArtifactId DESC;
             }
 
             var result = new List<ManifestPortableObject>();
+            var repositoryVersion = GetJsonStringProperty(manifest, "repositoryVersion");
             foreach (var item in items)
             {
                 var sourcePath = string.Empty;
                 var destinationName = string.Empty;
+                var version = string.Empty;
 
                 if (item is JsonValue value && value.TryGetValue<string>(out var stringValue))
                 {
                     sourcePath = stringValue;
+                    version = repositoryVersion;
                 }
                 else if (item is JsonObject obj)
                 {
@@ -4611,6 +4677,19 @@ ORDER BY ar.ArtifactId DESC;
                     }
 
                     destinationName = GetJsonStringProperty(obj, "destinationName");
+                    version = GetJsonStringProperty(obj, "widgetVersion");
+                    if (string.IsNullOrWhiteSpace(version))
+                    {
+                        version = GetJsonStringProperty(obj, "packageVersion");
+                    }
+                    if (string.IsNullOrWhiteSpace(version))
+                    {
+                        version = GetJsonStringProperty(obj, "version");
+                    }
+                    if (string.IsNullOrWhiteSpace(version))
+                    {
+                        version = repositoryVersion;
+                    }
                 }
 
                 if (string.IsNullOrWhiteSpace(sourcePath))
@@ -4620,7 +4699,7 @@ ORDER BY ar.ArtifactId DESC;
 
                 if (string.IsNullOrWhiteSpace(destinationName))
                 {
-                    destinationName = Path.GetFileName(sourcePath);
+                    destinationName = GetVersionedWidgetFileName(sourcePath, version);
                 }
 
                 if (!string.IsNullOrWhiteSpace(destinationName))
@@ -4629,11 +4708,114 @@ ORDER BY ar.ArtifactId DESC;
                         sourceRoot,
                         repositoryKey,
                         sourcePath,
-                        destinationName));
+                        destinationName,
+                        NullIfWhiteSpace(version)));
                 }
             }
 
             return result;
+        }
+
+        private static string GetVersionedWidgetFileName(string sourcePath, string? version)
+        {
+            var fileName = Path.GetFileName(sourcePath);
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                return fileName;
+            }
+
+            var baseName = Path.GetFileNameWithoutExtension(fileName);
+            var safeVersion = SanitizeUniversalPackagePathSegment(version);
+            return baseName.EndsWith("__" + safeVersion, StringComparison.OrdinalIgnoreCase)
+                ? baseName + ".json"
+                : $"{baseName}__{safeVersion}.json";
+        }
+
+        private static string EnsureVersionedWidgetRelativePath(string relativePath, string? version)
+        {
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                return relativePath;
+            }
+
+            var normalized = NormalizeUniversalPackagePath(relativePath);
+            var directory = Path.GetDirectoryName(normalized)?.Replace('\\', '/') ?? string.Empty;
+            var fileName = GetVersionedWidgetFileName(Path.GetFileName(normalized), version);
+            return string.IsNullOrWhiteSpace(directory)
+                ? fileName
+                : NormalizeUniversalPackagePath($"{directory}/{fileName}");
+        }
+
+        private static bool TryReadDashboardWidgetPackageVersion(string path, out string version)
+        {
+            version = string.Empty;
+            try
+            {
+                var node = JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8));
+                version = ReadDashboardWidgetPackageVersion(node);
+                return !string.IsNullOrWhiteSpace(version);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string ReadDashboardWidgetPackageVersion(JsonNode? node)
+        {
+            var packageVersion = GetJsonStringProperty(node, "packageVersion");
+            if (!string.IsNullOrWhiteSpace(packageVersion))
+            {
+                return packageVersion;
+            }
+
+            if (GetJsonObjectProperty(node, "widgets") is not JsonArray widgets)
+            {
+                return string.Empty;
+            }
+
+            return widgets
+                .Select(widget => GetJsonStringProperty(widget, "widgetVersion"))
+                .Where(static widgetVersion => !string.IsNullOrWhiteSpace(widgetVersion))
+                .OrderByDescending(static widgetVersion => widgetVersion, VersionTextComparer.Instance)
+                .FirstOrDefault() ?? string.Empty;
+        }
+
+        private static string NormalizeDashboardWidgetPackageJson(string sourcePath, string? version)
+        {
+            var node = JsonNode.Parse(File.ReadAllText(sourcePath, Encoding.UTF8)) as JsonObject
+                ?? throw new InvalidOperationException($"Dashboard widget package JSON must be an object: {sourcePath}");
+            var resolvedVersion = string.IsNullOrWhiteSpace(version)
+                ? ReadDashboardWidgetPackageVersion(node)
+                : version.Trim();
+            if (!string.IsNullOrWhiteSpace(resolvedVersion))
+            {
+                node["packageVersion"] = resolvedVersion;
+                if (GetJsonObjectProperty(node, "widgets") is JsonArray widgets)
+                {
+                    foreach (var widget in widgets.OfType<JsonObject>())
+                    {
+                        widget["widgetVersion"] = resolvedVersion;
+                    }
+                }
+            }
+
+            return node.ToJsonString(JsonOptions) + Environment.NewLine;
+        }
+
+        private static bool CopyWidgetPackageIfDifferent(string sourcePath, string targetPath, string? version)
+        {
+            var content = NormalizeDashboardWidgetPackageJson(sourcePath, version);
+            var targetExists = File.Exists(targetPath);
+            if (targetExists
+                && string.Equals(File.ReadAllText(targetPath, Encoding.UTF8), content, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.WriteAllText(targetPath, content, new UTF8Encoding(false));
+            return true;
         }
 
         private string? ResolveDeveloperSourceRoot(bool throwIfMissing)
@@ -5038,9 +5220,12 @@ ORDER BY ar.ArtifactId DESC;
     private sealed record UniversalPackageCandidate(
         string Kind,
         string SourcePath,
-        string PackagePath)
+        string PackagePath,
+        string? Version)
     {
-        public string DisplayName => $"{Kind}: {PackagePath}";
+        public string DisplayName => string.IsNullOrWhiteSpace(Version)
+            ? $"{Kind}: {PackagePath}"
+            : $"{Kind}: {PackagePath} ({Version})";
     }
 
     private sealed record UniversalPackageHostChoice(
@@ -5089,7 +5274,7 @@ ORDER BY ar.ArtifactId DESC;
         {
             AutoSize = true,
             Checked = false,
-            Text = "Include older artifact versions"
+            Text = "Include older artifact/widget versions"
         };
         private readonly TextBox _packageKeyBox = new() { Width = 220 };
         private readonly TextBox _packageVersionBox = new() { Width = 160 };
@@ -5366,7 +5551,7 @@ ORDER BY ar.ArtifactId DESC;
                 _includeHostObjects.Checked);
             if (!_includeHistoricalArtifacts.Checked)
             {
-                candidates = FilterLatestUniversalPackageArtifacts(candidates);
+                candidates = FilterLatestUniversalPackageVersionedObjects(candidates);
             }
 
             foreach (var candidate in candidates)
@@ -5570,7 +5755,7 @@ ORDER BY ar.ArtifactId DESC;
                 candidates,
                 ResolvePackageArtifactsRoot(payloadRoot),
                 "artifacts",
-                "artifact",
+                "artifact-package",
                 "*.zip");
             AddUniversalPackageCandidates(
                 candidates,
@@ -5640,7 +5825,7 @@ ORDER BY ar.ArtifactId DESC;
             .ToArray();
     }
 
-    private static IReadOnlyList<UniversalPackageCandidate> FilterLatestUniversalPackageArtifacts(
+    private static IReadOnlyList<UniversalPackageCandidate> FilterLatestUniversalPackageVersionedObjects(
         IReadOnlyList<UniversalPackageCandidate> candidates)
     {
         var latestByIdentity = new Dictionary<string, (UniversalPackageCandidate Candidate, string Version)>(
@@ -5648,32 +5833,83 @@ ORDER BY ar.ArtifactId DESC;
 
         foreach (var candidate in candidates)
         {
-            if (!TryParseUniversalPackageArtifactIdentity(candidate, out var identity))
+            if (TryParseUniversalPackageArtifactIdentity(candidate, out var artifactIdentity))
             {
+                var identityKey = string.Join(
+                    "__",
+                    "artifact",
+                    artifactIdentity.ModuleKey,
+                    artifactIdentity.AppKey,
+                    artifactIdentity.PackageType,
+                    artifactIdentity.TargetName);
+                AddLatestVersionedCandidate(latestByIdentity, identityKey, candidate, artifactIdentity.Version);
                 continue;
             }
 
-            var identityKey = string.Join(
-                "__",
-                identity.ModuleKey,
-                identity.AppKey,
-                identity.PackageType,
-                identity.TargetName);
-            if (!latestByIdentity.TryGetValue(identityKey, out var current)
-                || CompareVersionText(identity.Version, current.Version) > 0)
+            if (TryParseUniversalPackageWidgetIdentity(candidate, out var widgetIdentity, out var widgetVersion))
             {
-                latestByIdentity[identityKey] = (candidate, identity.Version);
+                AddLatestVersionedCandidate(latestByIdentity, "widget__" + widgetIdentity, candidate, widgetVersion);
             }
         }
 
-        var latestArtifactPaths = latestByIdentity.Values
+        var latestPaths = latestByIdentity.Values
             .Select(static item => item.Candidate.PackagePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return candidates
-            .Where(candidate => !TryParseUniversalPackageArtifactIdentity(candidate, out _)
-                || latestArtifactPaths.Contains(candidate.PackagePath))
+            .Where(candidate =>
+                (!TryParseUniversalPackageArtifactIdentity(candidate, out _)
+                 && !TryParseUniversalPackageWidgetIdentity(candidate, out _, out _))
+                || latestPaths.Contains(candidate.PackagePath))
             .ToArray();
+    }
+
+    private static void AddLatestVersionedCandidate(
+        Dictionary<string, (UniversalPackageCandidate Candidate, string Version)> latestByIdentity,
+        string identityKey,
+        UniversalPackageCandidate candidate,
+        string version)
+    {
+        if (!latestByIdentity.TryGetValue(identityKey, out var current)
+            || CompareVersionText(version, current.Version) > 0)
+        {
+            latestByIdentity[identityKey] = (candidate, version);
+        }
+    }
+
+    private static bool TryReadDashboardWidgetPackageVersion(string path, out string version)
+    {
+        version = string.Empty;
+        try
+        {
+            var node = JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8));
+            version = ReadDashboardWidgetPackageVersion(node);
+            return !string.IsNullOrWhiteSpace(version);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string ReadDashboardWidgetPackageVersion(JsonNode? node)
+    {
+        var packageVersion = GetJsonStringProperty(node, "packageVersion");
+        if (!string.IsNullOrWhiteSpace(packageVersion))
+        {
+            return packageVersion;
+        }
+
+        if (GetJsonObjectProperty(node, "widgets") is not JsonArray widgets)
+        {
+            return string.Empty;
+        }
+
+        return widgets
+            .Select(widget => GetJsonStringProperty(widget, "widgetVersion"))
+            .Where(static widgetVersion => !string.IsNullOrWhiteSpace(widgetVersion))
+            .OrderByDescending(static widgetVersion => widgetVersion, VersionTextComparer.Instance)
+            .FirstOrDefault() ?? string.Empty;
     }
 
     private static bool TryParseUniversalPackageArtifactIdentity(
@@ -5681,7 +5917,8 @@ ORDER BY ar.ArtifactId DESC;
         out ArtifactPackageIdentity identity)
     {
         identity = default!;
-        if (!candidate.Kind.Equals("artifact", StringComparison.OrdinalIgnoreCase)
+        if ((!candidate.Kind.Equals("artifact", StringComparison.OrdinalIgnoreCase)
+             && !candidate.Kind.Equals("artifact-package", StringComparison.OrdinalIgnoreCase))
             || !candidate.PackagePath.StartsWith("artifacts/", StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -5696,6 +5933,35 @@ ORDER BY ar.ArtifactId DESC;
 
         identity = new ArtifactPackageIdentity(parts[0], parts[1], parts[2], parts[3], parts[4]);
         return true;
+    }
+
+    private static bool TryParseUniversalPackageWidgetIdentity(
+        UniversalPackageCandidate candidate,
+        out string identity,
+        out string version)
+    {
+        identity = string.Empty;
+        version = string.Empty;
+        if (!candidate.Kind.Equals("dashboard-widget", StringComparison.OrdinalIgnoreCase)
+            || !candidate.PackagePath.StartsWith("widgets/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        version = candidate.Version ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(version)
+            && !TryReadDashboardWidgetPackageVersion(candidate.SourcePath, out version))
+        {
+            version = "0.0.0";
+        }
+
+        var fileName = Path.GetFileNameWithoutExtension(candidate.PackagePath);
+        var safeVersion = SanitizeUniversalPackagePathSegment(version);
+        var versionSuffix = "__" + safeVersion;
+        identity = fileName.EndsWith(versionSuffix, StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^versionSuffix.Length]
+            : fileName;
+        return !string.IsNullOrWhiteSpace(identity);
     }
 
     private static void AddUniversalPackageCandidates(
@@ -5729,7 +5995,106 @@ ORDER BY ar.ArtifactId DESC;
             candidates.TryAdd(packagePath, new UniversalPackageCandidate(
                 kind,
                 sourcePath,
-                packagePath));
+                packagePath,
+                ReadUniversalPackageCandidateVersion(kind, sourcePath)));
+        }
+    }
+
+    private static string? ReadUniversalPackageCandidateVersion(string kind, string sourcePath)
+    {
+        if (kind.Equals("artifact", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("artifact-package", StringComparison.OrdinalIgnoreCase))
+        {
+            var fileName = Path.GetFileNameWithoutExtension(sourcePath);
+            var parts = fileName.Split(["__"], StringSplitOptions.None);
+            return parts.Length >= 5 ? NullIfWhiteSpace(parts[^1]) : null;
+        }
+
+        if (kind.Equals("module-definition", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryReadJsonFileVersion(sourcePath, "definitionVersion", out var version)
+                ? version
+                : null;
+        }
+
+        if (kind.Equals("host-config", StringComparison.OrdinalIgnoreCase)
+            || kind.Equals("host-configuration", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryReadJsonOrZipManifestVersion(sourcePath, "configurationVersion", "omp-host-config.json", out var version)
+                ? version
+                : null;
+        }
+
+        if (kind.Equals("config-overlay", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryReadJsonOrZipManifestVersion(sourcePath, "overlayVersion", "omp-config-overlay.json", out var version)
+                ? version
+                : null;
+        }
+
+        if (kind.Equals("dashboard-widget", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryReadDashboardWidgetPackageVersion(sourcePath, out var version)
+                ? version
+                : null;
+        }
+
+        if (kind.Equals("widget-data", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryReadJsonOrZipManifestVersion(sourcePath, "packageVersion", "omp-widget-runtime-data.json", out var version)
+                ? version
+                : null;
+        }
+
+        return null;
+    }
+
+    private static bool TryReadJsonFileVersion(string path, string propertyName, out string version)
+    {
+        version = string.Empty;
+        try
+        {
+            var node = JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8));
+            version = GetJsonStringProperty(node, propertyName);
+            return !string.IsNullOrWhiteSpace(version);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadJsonOrZipManifestVersion(
+        string path,
+        string propertyName,
+        string zipManifestName,
+        out string version)
+    {
+        version = string.Empty;
+        if (Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryReadJsonFileVersion(path, propertyName, out version);
+        }
+
+        try
+        {
+            using var archive = ZipFile.OpenRead(path);
+            var entry = archive.Entries.FirstOrDefault(candidate =>
+                candidate.FullName.Equals(zipManifestName, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+            {
+                return false;
+            }
+
+            using var stream = entry.Open();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var node = JsonNode.Parse(reader.ReadToEnd());
+            version = GetJsonStringProperty(node, propertyName);
+            return !string.IsNullOrWhiteSpace(version);
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -5901,7 +6266,8 @@ ORDER BY ar.ArtifactId DESC;
         string SourceRoot,
         string RepositoryKey,
         string SourcePath,
-        string DestinationName);
+        string DestinationName,
+        string? Version);
 
     private sealed record ArtifactPackageIdentity(
         string ModuleKey,

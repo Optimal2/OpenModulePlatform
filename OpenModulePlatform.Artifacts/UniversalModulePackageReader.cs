@@ -31,7 +31,8 @@ public sealed record PortableUniversalModulePackageItem(
     UniversalModulePackageItemKind Kind,
     string Path,
     string ExtractedPath,
-    string SourceName);
+    string SourceName,
+    string? Version);
 
 /// <summary>
 /// Reads universal OMP module packages: a neutral container for portable OMP
@@ -128,7 +129,11 @@ public sealed class UniversalModulePackageReader
                 GetString(item, "kind")
                     ?? GetString(item, "type")
                     ?? InferKindFromPath(path).ToString());
-            result.Add(CreateItem(kind, path, extractionRoot));
+            result.Add(CreateItem(
+                kind,
+                path,
+                extractionRoot,
+                NullIfWhiteSpace(GetString(item, "version"))));
         }
 
         return result;
@@ -179,14 +184,16 @@ public sealed class UniversalModulePackageReader
     private static PortableUniversalModulePackageItem CreateItem(
         UniversalModulePackageItemKind kind,
         string path,
-        string extractionRoot)
+        string extractionRoot,
+        string? version = null)
     {
         var extractedPath = ResolveUnderRoot(extractionRoot, path);
         return new PortableUniversalModulePackageItem(
             kind,
             path,
             extractedPath,
-            Path.GetFileName(path));
+            Path.GetFileName(path),
+            version);
     }
 
     private static UniversalModulePackageItemKind InferKindFromPath(string path)

@@ -87,6 +87,151 @@ function Add-ZipEntryFromText {
     }
 }
 
+function Get-JsonPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)][object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return $property.Value
+}
+
+function Get-PortableObjectVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$Kind,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    if ($Kind.Equals('artifact-package', [StringComparison]::OrdinalIgnoreCase) -or $Kind.Equals('artifact', [StringComparison]::OrdinalIgnoreCase)) {
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+        $parts = $name.Split([string[]]@('__'), [StringSplitOptions]::None)
+        if ($parts.Length -ge 5 -and -not [string]::IsNullOrWhiteSpace($parts[$parts.Length - 1])) {
+            return $parts[$parts.Length - 1].Trim()
+        }
+
+        return ''
+    }
+
+    if ($Kind.Equals('module-definition', [StringComparison]::OrdinalIgnoreCase)) {
+        try {
+            $document = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+            $definitionVersion = [string](Get-JsonPropertyValue -Object $document -Name 'definitionVersion')
+            if ([string]::IsNullOrWhiteSpace($definitionVersion)) {
+                return ''
+            }
+
+            return $definitionVersion.Trim()
+        }
+        catch {
+            return ''
+        }
+    }
+
+    if ($Kind.Equals('host-config', [StringComparison]::OrdinalIgnoreCase) -or $Kind.Equals('host-configuration', [StringComparison]::OrdinalIgnoreCase)) {
+        return Get-JsonOrZipManifestVersion -Path $Path -JsonPropertyName 'configurationVersion' -ZipManifestName 'omp-host-config.json'
+    }
+
+    if ($Kind.Equals('config-overlay', [StringComparison]::OrdinalIgnoreCase)) {
+        return Get-JsonOrZipManifestVersion -Path $Path -JsonPropertyName 'overlayVersion' -ZipManifestName 'omp-config-overlay.json'
+    }
+
+    if ($Kind.Equals('widget-data', [StringComparison]::OrdinalIgnoreCase)) {
+        return Get-JsonOrZipManifestVersion -Path $Path -JsonPropertyName 'packageVersion' -ZipManifestName 'omp-widget-runtime-data.json'
+    }
+
+    if ($Kind.Equals('dashboard-widget', [StringComparison]::OrdinalIgnoreCase)) {
+        try {
+            $document = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+            $packageVersion = [string](Get-JsonPropertyValue -Object $document -Name 'packageVersion')
+            if (-not [string]::IsNullOrWhiteSpace($packageVersion)) {
+                return $packageVersion.Trim()
+            }
+
+            $widgetVersions = @(
+                foreach ($widget in @((Get-JsonPropertyValue -Object $document -Name 'widgets'))) {
+                    if ($null -eq $widget) {
+                        continue
+                    }
+
+                    $widgetVersion = [string](Get-JsonPropertyValue -Object $widget -Name 'widgetVersion')
+                    if (-not [string]::IsNullOrWhiteSpace($widgetVersion)) {
+                        $widgetVersion.Trim()
+                    }
+                }
+            )
+
+            $latestWidgetVersion = @($widgetVersions | Sort-Object -Descending | Select-Object -First 1)
+            return [string]($latestWidgetVersion | Select-Object -First 1)
+        }
+        catch {
+            return ''
+        }
+    }
+
+    return ''
+}
+
+function Get-JsonOrZipManifestVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$JsonPropertyName,
+        [Parameter(Mandatory = $true)][string]$ZipManifestName
+    )
+
+    try {
+        if ([System.IO.Path]::GetExtension($Path).Equals('.json', [StringComparison]::OrdinalIgnoreCase)) {
+            $document = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+            $version = [string](Get-JsonPropertyValue -Object $document -Name $JsonPropertyName)
+            if ([string]::IsNullOrWhiteSpace($version)) {
+                return ''
+            }
+
+            return $version.Trim()
+        }
+
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+        try {
+            $manifestEntry = $archive.Entries |
+                Where-Object { $_.FullName -eq $ZipManifestName } |
+                Select-Object -First 1
+            if ($null -eq $manifestEntry) {
+                return ''
+            }
+
+            $stream = $manifestEntry.Open()
+            try {
+                $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8)
+                try {
+                    $document = $reader.ReadToEnd() | ConvertFrom-Json
+                    $version = [string](Get-JsonPropertyValue -Object $document -Name $JsonPropertyName)
+                    if ([string]::IsNullOrWhiteSpace($version)) {
+                        return ''
+                    }
+
+                    return $version.Trim()
+                }
+                finally {
+                    $reader.Dispose()
+                }
+            }
+            finally {
+                $stream.Dispose()
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    catch {
+        return ''
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
     $PackageVersion = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmm')
 }
@@ -108,7 +253,7 @@ if (Test-Path -LiteralPath $outputPathFull -PathType Leaf) {
 
 $folderKinds = @(
     @{ Folder = 'module-definitions'; Kind = 'module-definition'; Patterns = @('*.json') },
-    @{ Folder = 'artifacts'; Kind = 'artifact'; Patterns = @('*.zip') },
+    @{ Folder = 'artifacts'; Kind = 'artifact-package'; Patterns = @('*.zip') },
     @{ Folder = 'host-configs'; Kind = 'host-config'; Patterns = @('*.json', '*.zip') },
     @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Patterns = @('*.json', '*.zip') },
     @{ Folder = 'widgets'; Kind = 'dashboard-widget'; Patterns = @('*.json') },
@@ -128,6 +273,7 @@ $files = foreach ($folder in $folderKinds) {
                 FullName = $file.FullName
                 PackagePath = $relativePath
                 Kind = $folder.Kind
+                Version = Get-PortableObjectVersion -Kind $folder.Kind -Path $file.FullName
             }
         }
     }
@@ -142,10 +288,15 @@ try {
             $file.FullName,
             $file.PackagePath,
             [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
-        $items.Add([ordered]@{
+        $item = [ordered]@{
             kind = $file.Kind
             path = $file.PackagePath
-        })
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$file.Version)) {
+            $item.version = [string]$file.Version
+        }
+
+        $items.Add($item)
     }
 
     $manifest = [ordered]@{

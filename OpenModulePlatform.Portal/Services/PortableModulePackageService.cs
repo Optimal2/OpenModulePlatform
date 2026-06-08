@@ -748,7 +748,7 @@ public sealed class PortableModulePackageService
                     await writer.WriteAsync(definition.DefinitionJson.AsMemory(), ct);
                 }
 
-                universalItems.Add(CreateUniversalPackageItem("module-definition", definitionEntryName));
+                universalItems.Add(CreateUniversalPackageItem("module-definition", definitionEntryName, definition.DefinitionVersion));
 
                 foreach (var artifact in artifactRows)
                 {
@@ -793,7 +793,7 @@ public sealed class PortableModulePackageService
                         artifactPackagePath,
                         artifactEntryName,
                         CompressionLevel.Optimal);
-                    universalItems.Add(CreateUniversalPackageItem("artifact-package", artifactEntryName));
+                    universalItems.Add(CreateUniversalPackageItem("artifact-package", artifactEntryName, artifact.Version));
                     File.Delete(artifactPackagePath);
                 }
 
@@ -922,7 +922,7 @@ public sealed class PortableModulePackageService
 
                     var definitionEntryName = $"{ModuleDefinitionFolder}/{SanitizePathSegment(moduleKey)}.module-definition.json";
                     await AddTextEntryAsync(archive, usedEntryNames, definitionEntryName, definition.DefinitionJson, ct);
-                    items.Add(CreateUniversalPackageItem("module-definition", definitionEntryName));
+                    items.Add(CreateUniversalPackageItem("module-definition", definitionEntryName, definition.DefinitionVersion));
 
                     if (request.IncludeArtifactsForSelectedModules)
                     {
@@ -947,7 +947,7 @@ public sealed class PortableModulePackageService
                                     skipMissingPayload: true,
                                     ct) is { } artifactEntryName)
                             {
-                                items.Add(CreateUniversalPackageItem("artifact-package", artifactEntryName));
+                                items.Add(CreateUniversalPackageItem("artifact-package", artifactEntryName, artifact.Version));
                             }
                         }
                     }
@@ -977,7 +977,7 @@ public sealed class PortableModulePackageService
                         ct);
                     if (artifactEntryName is not null)
                     {
-                        items.Add(CreateUniversalPackageItem("artifact-package", artifactEntryName));
+                        items.Add(CreateUniversalPackageItem("artifact-package", artifactEntryName, artifact.Version));
                     }
                 }
 
@@ -990,7 +990,7 @@ public sealed class PortableModulePackageService
                         row.HostKey,
                         $"{row.HostKey}__host-config__{row.ConfigurationVersion}.json");
                     await AddTextEntryAsync(archive, usedEntryNames, entryName, row.Json, ct);
-                    items.Add(CreateUniversalPackageItem("host-config", entryName));
+                    items.Add(CreateUniversalPackageItem("host-config", entryName, row.ConfigurationVersion));
                 }
 
                 foreach (var documentId in request.ConfigOverlayDocumentIds.Distinct().Order())
@@ -1002,7 +1002,7 @@ public sealed class PortableModulePackageService
                         row.HostKey,
                         $"{row.HostKey}__{row.OverlayKey}__overlay__{row.OverlayVersion}.json");
                     await AddTextEntryAsync(archive, usedEntryNames, entryName, row.Json, ct);
-                    items.Add(CreateUniversalPackageItem("config-overlay", entryName));
+                    items.Add(CreateUniversalPackageItem("config-overlay", entryName, row.OverlayVersion));
                 }
 
                 if (request.WidgetIds.Count > 0)
@@ -1014,12 +1014,12 @@ public sealed class PortableModulePackageService
 
                     if (request.IncludeWidgetRuntimeData)
                     {
-                        var runtimeData = await _widgetRuntimeData.ExportAsync(request.WidgetIds, ct);
+                        var runtimeData = await _widgetRuntimeData.ExportAsync(request.WidgetIds, widgets.PackageVersion, ct);
                         if (runtimeData is not null)
                         {
                             var runtimeDataEntryName = $"{WidgetDataFolder}/{Path.GetFileName(runtimeData.FileName)}";
                             AddFileEntry(archive, usedEntryNames, runtimeData.PackagePath, runtimeDataEntryName);
-                            items.Add(CreateUniversalPackageItem("widget-data", runtimeDataEntryName));
+                            items.Add(CreateUniversalPackageItem("widget-data", runtimeDataEntryName, runtimeData.PackageVersion));
                             TryDelete(Path.GetDirectoryName(runtimeData.PackagePath)!);
                         }
                     }

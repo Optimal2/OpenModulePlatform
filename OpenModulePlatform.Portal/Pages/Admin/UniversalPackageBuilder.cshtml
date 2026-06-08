@@ -92,6 +92,7 @@
                 <tr>
                     <th>@L["Kind"]</th>
                     <th>@L["Package path"]</th>
+                    <th>@L["Version"]</th>
                     <th>@L["Source file"]</th>
                     <th>@L["Actions"]</th>
                 </tr>
@@ -151,11 +152,13 @@
             row.innerHTML = `
                 <td><code></code></td>
                 <td><code></code></td>
+                <td><code></code></td>
                 <td></td>
                 <td><button type="button" class="danger"></button></td>`;
             row.children[0].querySelector("code").textContent = item.kind;
             row.children[1].querySelector("code").textContent = item.path;
-            row.children[2].textContent = item.file.name;
+            row.children[2].querySelector("code").textContent = item.version || "";
+            row.children[3].textContent = item.file.name;
             row.querySelector("button").textContent = labels.remove;
             row.querySelector("button").addEventListener("click", () => {
                 items.splice(index, 1);
@@ -167,7 +170,48 @@
         updateStatus(items.length === 0 ? labels.noItems : format(labels.itemReady, items.length));
     };
 
-    const addFiles = () => {
+    const readItemVersion = async (kind, file) => {
+        if (kind === "artifact-package") {
+            const baseName = file.name.replace(/\.[^.]+$/, "");
+            const parts = baseName.split("__");
+            return parts.length >= 5 ? String(parts[parts.length - 1]).trim() : "";
+        }
+
+        try {
+            const document = JSON.parse(await file.text());
+            if (kind === "module-definition") {
+                return document.definitionVersion ? String(document.definitionVersion).trim() : "";
+            }
+
+            if (kind === "host-config") {
+                return document.configurationVersion ? String(document.configurationVersion).trim() : "";
+            }
+
+            if (kind === "config-overlay") {
+                return document.overlayVersion ? String(document.overlayVersion).trim() : "";
+            }
+
+            if (kind !== "dashboard-widget") {
+                return "";
+            }
+
+            if (document.packageVersion) {
+                return String(document.packageVersion).trim();
+            }
+
+            const versions = Array.isArray(document.widgets)
+                ? document.widgets
+                    .map(widget => widget && widget.widgetVersion ? String(widget.widgetVersion).trim() : "")
+                    .filter(Boolean)
+                    .sort((left, right) => right.localeCompare(left))
+                : [];
+            return versions[0] || "";
+        } catch {
+            return "";
+        }
+    };
+
+    const addFiles = async () => {
         const kind = objectKind.value;
         const folder = folderByKind[kind];
         const host = sanitizeSegment(hostFolder.value);
@@ -181,7 +225,8 @@
                 continue;
             }
 
-            items.push({ kind, path, file });
+            const version = await readItemVersion(kind, file);
+            items.push({ kind, path, file, version });
         }
 
         objectFiles.value = "";
@@ -282,7 +327,14 @@
                 description: document.getElementById("description").value.trim() || null,
                 targetHostProfile: document.getElementById("targetHostProfile").value.trim() || null,
                 createdUtc: new Date().toISOString(),
-                items: packageItems.map(item => ({ kind: item.kind, path: item.path }))
+                items: packageItems.map(item => {
+                    const manifestItem = { kind: item.kind, path: item.path };
+                    if (item.version) {
+                        manifestItem.version = item.version;
+                    }
+
+                    return manifestItem;
+                })
             };
 
             if (!manifest.packageKey || !manifest.packageVersion) {
@@ -318,7 +370,9 @@
         }
     };
 
-    document.getElementById("addFiles").addEventListener("click", addFiles);
+    document.getElementById("addFiles").addEventListener("click", () => {
+        addFiles().catch(error => updateStatus(error instanceof Error ? error.message : String(error), true));
+    });
     document.getElementById("clearFiles").addEventListener("click", () => {
         items.length = 0;
         renderItems();
