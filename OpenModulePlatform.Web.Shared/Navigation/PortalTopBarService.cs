@@ -27,6 +27,7 @@ public sealed class PortalTopBarService
     private const string AppEntryPrefix = "app:";
     private const string AppEntrySuffix = ":home";
     public const string ToggleFavoritePath = "/navigation/favorites/toggle";
+    public const string SummaryPath = PortalTopBarModel.DefaultTopBarSummaryPath;
 
     private readonly SqlConnectionFactory _db;
     private readonly RbacService _rbac;
@@ -170,6 +171,7 @@ public sealed class PortalTopBarService
                 unreadMessageCount,
                 messageMarkAllReadUrl: BuildRequestEndpointHref(request, MessageService.MarkAllReadPath),
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
+                topBarSummaryUrl: BuildRequestEndpointHref(request, SummaryPath),
                 dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl(),
@@ -385,6 +387,7 @@ public sealed class PortalTopBarService
                 unreadMessageCount,
                 messageMarkAllReadUrl: BuildUriEndpointHref(currentUri, MessageService.MarkAllReadPath),
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
+                topBarSummaryUrl: BuildUriEndpointHref(currentUri, SummaryPath),
                 dropdownsOpenOnHover,
                 options,
                 GetLogoutUrl(),
@@ -471,6 +474,7 @@ public sealed class PortalTopBarService
             unreadMessageCount: 0,
             messageMarkAllReadUrl: MessageService.MarkAllReadPath,
             messagesUrl: "/messages",
+            topBarSummaryUrl: SummaryPath,
             dropdownsOpenOnHover: true,
             options,
             logoutUrl,
@@ -533,6 +537,7 @@ public sealed class PortalTopBarService
         int unreadMessageCount,
         string messageMarkAllReadUrl,
         string messagesUrl,
+        string topBarSummaryUrl,
         bool dropdownsOpenOnHover,
         WebAppOptions options,
         string logoutUrl,
@@ -564,6 +569,10 @@ public sealed class PortalTopBarService
             UnreadMessageCount = unreadMessageCount,
             MessageMarkAllReadUrl = messageMarkAllReadUrl,
             MessagesUrl = messagesUrl,
+            TopBarPollingEnabled = options.TopBarPolling?.Enabled != false,
+            TopBarSummaryUrl = topBarSummaryUrl,
+            TopBarPollingVisibleIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.VisibleIntervalSeconds, 60),
+            TopBarPollingHiddenIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.HiddenIntervalSeconds, 180),
             Links = [portalLink, .. moduleLinks],
             IsPortalAdmin = isPortalAdmin,
             PortalAdminSections = portalAdminSections,

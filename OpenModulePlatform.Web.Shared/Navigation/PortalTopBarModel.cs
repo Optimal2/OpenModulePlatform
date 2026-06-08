@@ -9,6 +9,7 @@ public sealed class PortalTopBarModel
 {
     public const string DefaultSettingsPath = "/account/settings";
     public const string DefaultSessionStatusPath = "/auth/session-status";
+    public const string DefaultTopBarSummaryPath = "/topbar/summary";
 
     public static PortalTopBarModel Hidden { get; } = new()
     {
@@ -53,7 +54,11 @@ public sealed class PortalTopBarModel
         SessionStatusUrl = DefaultSessionStatusPath,
         SessionLoginUrl = OmpAuthDefaults.LoginPath,
         SessionStatusVisibleIntervalSeconds = 60,
-        SessionStatusHiddenIntervalSeconds = 180
+        SessionStatusHiddenIntervalSeconds = 180,
+        TopBarPollingEnabled = true,
+        TopBarSummaryUrl = DefaultTopBarSummaryPath,
+        TopBarPollingVisibleIntervalSeconds = 60,
+        TopBarPollingHiddenIntervalSeconds = 180
     };
 
     public bool IsVisible { get; init; }
@@ -186,4 +191,12 @@ public sealed class PortalTopBarModel
     public int SessionStatusVisibleIntervalSeconds { get; init; } = 60;
 
     public int SessionStatusHiddenIntervalSeconds { get; init; } = 180;
+
+    public bool TopBarPollingEnabled { get; init; } = true;
+
+    public string TopBarSummaryUrl { get; init; } = DefaultTopBarSummaryPath;
+
+    public int TopBarPollingVisibleIntervalSeconds { get; init; } = 60;
+
+    public int TopBarPollingHiddenIntervalSeconds { get; init; } = 180;
 }

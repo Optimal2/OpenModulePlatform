@@ -19,6 +19,13 @@
         currentKind: '',
         handlersRegistered: false
     };
+    var topbarPollingState = {
+        root: null,
+        timer: 0,
+        running: false,
+        failures: 0,
+        handlersRegistered: false
+    };
     var canHoverMedia = typeof window.matchMedia === 'function'
         ? window.matchMedia('(hover: hover) and (pointer: fine)')
         : null;
@@ -565,6 +572,26 @@
         var safeCount = Math.max(0, Number(count) || 0);
         badge.textContent = notificationBadgeText(safeCount);
         badge.hidden = safeCount === 0;
+    }
+
+    function updateMessageBadge(root, count) {
+        if (!root) {
+            return;
+        }
+
+        var badge = root.querySelector('[data-portal-topbar-message-badge]');
+        if (!badge) {
+            return;
+        }
+
+        var safeCount = Math.max(0, Number(count) || 0);
+        badge.textContent = notificationBadgeText(safeCount);
+        badge.hidden = safeCount === 0;
+
+        var markAll = root.querySelector('.portal-topbar__messages-mark-all-form');
+        if (markAll) {
+            markAll.hidden = safeCount === 0;
+        }
     }
 
     function updateNotificationEmptyState(root) {
@@ -1230,6 +1257,162 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
     }
 
+    function getTopbarPollingConfig(root) {
+        return {
+            enabled: !!root && root.getAttribute('data-topbar-polling-enabled') === 'true',
+            url: root ? root.getAttribute('data-topbar-summary-url') || '/topbar/summary' : '/topbar/summary',
+            visibleInterval: parsePositiveInteger(root ? root.getAttribute('data-topbar-polling-visible-interval') : '', 60) * 1000,
+            hiddenInterval: parsePositiveInteger(root ? root.getAttribute('data-topbar-polling-hidden-interval') : '', 180) * 1000
+        };
+    }
+
+    function getTopbarPollingDelay(config) {
+        var baseDelay = document.visibilityState === 'hidden'
+            ? config.hiddenInterval
+            : config.visibleInterval;
+        if (topbarPollingState.failures > 0) {
+            return baseDelay * Math.min(6, topbarPollingState.failures + 1);
+        }
+
+        return baseDelay;
+    }
+
+    function scheduleTopbarSummaryRefresh(delay) {
+        if (topbarPollingState.timer) {
+            window.clearTimeout(topbarPollingState.timer);
+        }
+
+        if (!topbarPollingState.root) {
+            return;
+        }
+
+        topbarPollingState.timer = window.setTimeout(runTopbarSummaryRefresh, Math.max(0, delay));
+    }
+
+    function runTopbarSummaryRefreshSoon() {
+        if (!topbarPollingState.root) {
+            return;
+        }
+
+        scheduleTopbarSummaryRefresh(0);
+    }
+
+    function applyTopbarSummary(payload) {
+        if (!payload) {
+            return;
+        }
+
+        initializedTopbars.forEach(function (root) {
+            if (!root || !root.isConnected) {
+                return;
+            }
+
+            if (payload.notifications) {
+                updateNotificationBadge(root, payload.notifications.unreadCount);
+            }
+
+            if (payload.messages) {
+                updateMessageBadge(root, payload.messages.unreadCount);
+            }
+        });
+    }
+
+    async function fetchTopbarJson(url) {
+        var response = await fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+            reportNotificationSessionWarning('auth');
+            throw new Error('Topbar summary requires sign-in.');
+        }
+
+        if (!response.ok) {
+            throw new Error('Topbar summary failed with status ' + response.status + '.');
+        }
+
+        var contentType = response.headers.get('content-type') || '';
+        if (contentType.indexOf('application/json') < 0) {
+            throw new Error('Topbar summary returned a non-JSON response.');
+        }
+
+        return await response.json();
+    }
+
+    async function runTopbarSummaryRefresh() {
+        var root = topbarPollingState.root;
+        var config = getTopbarPollingConfig(root);
+        if (!config.enabled || !config.url) {
+            return;
+        }
+
+        if (topbarPollingState.running) {
+            scheduleTopbarSummaryRefresh(config.visibleInterval);
+            return;
+        }
+
+        topbarPollingState.running = true;
+        try {
+            var payload = await fetchTopbarJson(config.url);
+            topbarPollingState.failures = 0;
+            applyTopbarSummary(payload);
+        } catch (error) {
+            topbarPollingState.failures += 1;
+            if (window.console && typeof window.console.warn === 'function' && topbarPollingState.failures === 1) {
+                window.console.warn('OMP topbar summary refresh failed.', error);
+            }
+        } finally {
+            topbarPollingState.running = false;
+            scheduleTopbarSummaryRefresh(getTopbarPollingDelay(config));
+        }
+    }
+
+    function initTopbarSummaryDropdownRefresh(menu) {
+        if (!menu || menu.dataset.portalTopbarSummaryRefreshInitialized === 'true') {
+            return;
+        }
+
+        menu.dataset.portalTopbarSummaryRefreshInitialized = 'true';
+        menu.addEventListener('toggle', function () {
+            if (menu.open) {
+                runTopbarSummaryRefreshSoon();
+            }
+        });
+    }
+
+    function initTopbarSummaryPolling(topbar) {
+        if (!topbar || topbar.getAttribute('data-topbar-polling-enabled') !== 'true') {
+            return;
+        }
+
+        topbarPollingState.root = topbar;
+
+        if (!topbarPollingState.handlersRegistered) {
+            topbarPollingState.handlersRegistered = true;
+            window.addEventListener('focus', runTopbarSummaryRefreshSoon);
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                    runTopbarSummaryRefreshSoon();
+                } else {
+                    scheduleTopbarSummaryRefresh(getTopbarPollingDelay(getTopbarPollingConfig(topbarPollingState.root)));
+                }
+            });
+            window.addEventListener(NOTIFICATION_CHANGED_EVENT, runTopbarSummaryRefreshSoon);
+        }
+
+        topbar.querySelectorAll('[data-portal-topbar-notifications], [data-portal-topbar-messages]').forEach(initTopbarSummaryDropdownRefresh);
+
+        if (!topbarPollingState.timer) {
+            scheduleTopbarSummaryRefresh(0);
+        }
+    }
+
     function getSessionStatusConfig(root) {
         return {
             enabled: !!root && root.getAttribute('data-session-status-enabled') === 'true',
@@ -1501,6 +1684,7 @@
         topbar.querySelectorAll('[data-portal-topbar-notifications-list]').forEach(initNotificationLazyList);
         updateNotificationEmptyState(topbar);
         initSessionStatusCheck(topbar);
+        initTopbarSummaryPolling(topbar);
     }
 
     function initTopbar(topbar) {
