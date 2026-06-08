@@ -2434,7 +2434,14 @@
   <data name="Select one universal module package zip to preview." xml:space="preserve"><value>Välj ett universellt modulpaket som zip-fil för förhandsgranskning.</value></data>
   <data name="Preview supports one universal module package at a time. Use Import all to import multiple packages." xml:space="preserve"><value>Förhandsgranskning stöder ett universalpaket i taget. Använd Importera alla för att importera flera paket.</value></data>
   <data name="Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}." xml:space="preserve"><value>Importerade {0} universalpaket. Importerade/uppdaterade: {1}. Hoppade över: {2}. Misslyckades: {3}.</value></data>
+  <data name="Imported/updated: {0}. Skipped: {1}. Failed: {2}." xml:space="preserve"><value>Importerade/uppdaterade: {0}. Hoppade över: {1}. Misslyckades: {2}.</value></data>
+  <data name="Import details" xml:space="preserve"><value>Importdetaljer</value></data>
   <data name="Import details:" xml:space="preserve"><value>Importdetaljer:</value></data>
+  <data name="Package" xml:space="preserve"><value>Paket</value></data>
+  <data name="Kind" xml:space="preserve"><value>Typ</value></data>
+  <data name="Path" xml:space="preserve"><value>Sökväg</value></data>
+  <data name="Target host profile: {0}." xml:space="preserve"><value>Målprofil för host: {0}.</value></data>
+  <data name="Showing {0} import detail rows from the completed import response. These details are rendered in the page and are not stored in cookies." xml:space="preserve"><value>Visar {0} importdetaljrader från det slutförda importsvaret. Detaljerna renderas på sidan och lagras inte i cookies.</value></data>
   <data name="Package details:" xml:space="preserve"><value>Paketdetaljer:</value></data>
   <data name="Showing first {0} detail rows; {1} additional rows were omitted to keep the browser cookie small." xml:space="preserve"><value>Visar de första {0} detaljraderna; {1} ytterligare rader utelämnades för att hålla browser-cookien liten.</value></data>
   <data name="The import result was shortened to avoid an oversized browser cookie." xml:space="preserve"><value>Importresultatet kortades för att undvika en för stor browser-cookie.</value></data>
