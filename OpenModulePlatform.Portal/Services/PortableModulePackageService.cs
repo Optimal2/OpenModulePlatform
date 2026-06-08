@@ -149,7 +149,7 @@ public sealed class PortableModulePackageService
                 .Select(static item => (item.Path, Artifact: item.Artifact!)))
             : [];
 
-        return await ImportAsync(definition, artifactPaths, options, ct);
+        return await ImportAsync(definition, artifactPaths, options, quickImportState: null, ct);
     }
 
     public async Task<PortableModulePackageImportResult> ImportUploadsAsync(
@@ -181,7 +181,7 @@ public sealed class PortableModulePackageService
                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-                return await ImportAsync(definition, packagePaths, options, ct);
+                return await ImportAsync(definition, packagePaths, options, quickImportState: null, ct);
             }
 
             if (definitionFile is null || definitionFile.Length == 0)
@@ -209,7 +209,7 @@ public sealed class PortableModulePackageService
                 packageUploadPaths.Add(packagePath);
             }
 
-            return await ImportAsync(uploadedDefinition, packageUploadPaths, options, ct);
+            return await ImportAsync(uploadedDefinition, packageUploadPaths, options, quickImportState: null, ct);
         }
         finally
         {
@@ -433,6 +433,9 @@ public sealed class PortableModulePackageService
             var packageItems = selectedItemPaths is null
                 ? package.Items
                 : package.Items.Where(item => selectedItemPaths.Contains(item.Path)).ToArray();
+            var quickImportState = options.QuickImport
+                ? await QuickImportState.CreateAsync(_repo, ct)
+                : null;
             var results = new List<UniversalPackageImportItemResult>();
             var processedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var artifactItems = packageItems
@@ -448,6 +451,16 @@ public sealed class PortableModulePackageService
                         item.SourceName,
                         ct,
                         package.ExtractionRoot);
+                    if (quickImportState?.TryGetModuleDefinitionSkipMessage(definition, out var skipMessage) == true)
+                    {
+                        results.Add(new UniversalPackageImportItemResult(
+                            "module-definition",
+                            item.Path,
+                            "Skipped",
+                            skipMessage));
+                        continue;
+                    }
+
                     var matchingArtifactItems = artifactItems
                         .Where(artifactItem => TryReadArtifactPackageFile(artifactItem.ExtractedPath) is { } artifact
                             && artifact.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
@@ -456,6 +469,7 @@ public sealed class PortableModulePackageService
                         definition,
                         matchingArtifactItems.Select(static artifactItem => artifactItem.ExtractedPath).ToArray(),
                         options,
+                        quickImportState,
                         ct);
 
                     foreach (var artifactItem in matchingArtifactItems)
@@ -490,17 +504,17 @@ public sealed class PortableModulePackageService
 
             foreach (var item in artifactItems.Where(item => !processedArtifactPaths.Contains(item.ExtractedPath)))
             {
-                results.Add(await ImportUniversalArtifactItemAsync(item, options, ct));
+                results.Add(await ImportUniversalArtifactItemAsync(item, options, quickImportState, ct));
             }
 
             foreach (var item in packageItems.Where(static item => item.Kind == UniversalModulePackageItemKind.HostConfiguration))
             {
-                results.Add(await ImportUniversalHostConfigurationItemAsync(item, replaceExistingConfigObjects, ct));
+                results.Add(await ImportUniversalHostConfigurationItemAsync(item, replaceExistingConfigObjects, quickImportState, ct));
             }
 
             foreach (var item in packageItems.Where(static item => item.Kind == UniversalModulePackageItemKind.ConfigOverlay))
             {
-                results.Add(await ImportUniversalConfigOverlayItemAsync(item, replaceExistingConfigObjects, ct));
+                results.Add(await ImportUniversalConfigOverlayItemAsync(item, replaceExistingConfigObjects, quickImportState, ct));
             }
 
             foreach (var item in packageItems.Where(static item => item.Kind == UniversalModulePackageItemKind.DashboardWidget))
@@ -538,6 +552,7 @@ public sealed class PortableModulePackageService
     private async Task<UniversalPackageImportItemResult> ImportUniversalArtifactItemAsync(
         PortableUniversalModulePackageItem item,
         PortableModulePackageImportOptions options,
+        QuickImportState? quickImportState,
         CancellationToken ct)
     {
         try
@@ -550,6 +565,15 @@ public sealed class PortableModulePackageService
                     item.Path,
                     "Failed",
                     "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.");
+            }
+
+            if (quickImportState?.TryGetArtifactSkipMessage(artifact, out var skipMessage) == true)
+            {
+                return new UniversalPackageImportItemResult(
+                    "artifact-package",
+                    item.Path,
+                    "Skipped",
+                    skipMessage);
             }
 
             var result = await ImportArtifactPackageAsync(artifact, item.ExtractedPath, options, ct);
@@ -568,6 +592,7 @@ public sealed class PortableModulePackageService
     private async Task<UniversalPackageImportItemResult> ImportUniversalHostConfigurationItemAsync(
         PortableUniversalModulePackageItem item,
         bool replaceExisting,
+        QuickImportState? quickImportState,
         CancellationToken ct)
     {
         try
@@ -577,6 +602,15 @@ public sealed class PortableModulePackageService
                 item.ExtractedPath,
                 item.SourceName,
                 ct);
+            if (quickImportState?.TryGetHostConfigurationSkipMessage(hostConfiguration, out var skipMessage) == true)
+            {
+                return new UniversalPackageImportItemResult(
+                    "host-configuration",
+                    item.Path,
+                    "Skipped",
+                    skipMessage);
+            }
+
             var result = await _repo.SaveImportedHostConfigurationAsync(
                 hostConfiguration,
                 replaceExisting,
@@ -596,6 +630,7 @@ public sealed class PortableModulePackageService
     private async Task<UniversalPackageImportItemResult> ImportUniversalConfigOverlayItemAsync(
         PortableUniversalModulePackageItem item,
         bool replaceExisting,
+        QuickImportState? quickImportState,
         CancellationToken ct)
     {
         try
@@ -605,6 +640,15 @@ public sealed class PortableModulePackageService
                 item.ExtractedPath,
                 item.SourceName,
                 ct);
+            if (quickImportState?.TryGetConfigOverlaySkipMessage(overlay, out var skipMessage) == true)
+            {
+                return new UniversalPackageImportItemResult(
+                    "config-overlay",
+                    item.Path,
+                    "Skipped",
+                    skipMessage);
+            }
+
             var result = await _repo.SaveImportedConfigOverlayAsync(
                 overlay,
                 replaceExisting,
@@ -1061,6 +1105,7 @@ public sealed class PortableModulePackageService
         ModuleDefinitionDocumentEditData definition,
         IReadOnlyList<string> artifactPaths,
         PortableModulePackageImportOptions options,
+        QuickImportState? quickImportState,
         CancellationToken ct)
     {
         var saveResult = await _repo.SaveModuleDefinitionDocumentAsync(
@@ -1109,6 +1154,16 @@ public sealed class PortableModulePackageService
                     Path.GetFileName(plan.Path),
                     "Skipped",
                     plan.SkipMessage ?? "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
+                    null));
+                continue;
+            }
+
+            if (quickImportState?.TryGetArtifactSkipMessage(plan.Identity, out var quickSkipMessage) == true)
+            {
+                artifactResults.Add(new PortableModulePackageArtifactImportResult(
+                    Path.GetFileName(plan.Path),
+                    "Skipped",
+                    quickSkipMessage,
                     null));
                 continue;
             }
@@ -2497,6 +2552,132 @@ public sealed class PortableModulePackageService
         ArtifactPackageFile? Identity,
         string? SkipMessage);
 
+    private sealed class QuickImportState
+    {
+        private readonly Dictionary<string, string> _moduleDefinitionVersions;
+        private readonly Dictionary<string, string> _artifactVersions;
+        private readonly Dictionary<string, string> _hostConfigurationVersions;
+        private readonly Dictionary<string, string> _configOverlayVersions;
+
+        private QuickImportState(
+            Dictionary<string, string> moduleDefinitionVersions,
+            Dictionary<string, string> artifactVersions,
+            Dictionary<string, string> hostConfigurationVersions,
+            Dictionary<string, string> configOverlayVersions)
+        {
+            _moduleDefinitionVersions = moduleDefinitionVersions;
+            _artifactVersions = artifactVersions;
+            _hostConfigurationVersions = hostConfigurationVersions;
+            _configOverlayVersions = configOverlayVersions;
+        }
+
+        public static async Task<QuickImportState> CreateAsync(OmpAdminRepository repo, CancellationToken ct)
+        {
+            var moduleDefinitionVersions = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var row in await repo.GetModuleDefinitionDocumentsAsync(ct))
+            {
+                AddLatest(moduleDefinitionVersions, BuildKey(row.ModuleKey), row.DefinitionVersion);
+            }
+
+            var artifactVersions = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var row in await repo.GetArtifactsAsync(ct))
+            {
+                AddLatest(
+                    artifactVersions,
+                    BuildKey(row.ModuleKey, row.AppKey, row.PackageType, row.TargetName),
+                    row.Version);
+            }
+
+            var hostConfigurationVersions = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var row in await repo.GetHostConfigurationDocumentsAsync(ct))
+            {
+                AddLatest(hostConfigurationVersions, BuildKey(row.HostKey), row.ConfigurationVersion);
+            }
+
+            var configOverlayVersions = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var row in await repo.GetConfigOverlayDocumentsAsync(ct))
+            {
+                AddLatest(configOverlayVersions, BuildKey(row.HostKey, row.OverlayKey), row.OverlayVersion);
+            }
+
+            return new QuickImportState(
+                moduleDefinitionVersions,
+                artifactVersions,
+                hostConfigurationVersions,
+                configOverlayVersions);
+        }
+
+        public bool TryGetModuleDefinitionSkipMessage(ModuleDefinitionDocumentEditData definition, out string message)
+            => TryGetSkipMessage(
+                _moduleDefinitionVersions,
+                BuildKey(definition.ModuleKey),
+                definition.DefinitionVersion,
+                $"module definition {definition.ModuleKey}",
+                out message);
+
+        public bool TryGetArtifactSkipMessage(ArtifactPackageFile artifact, out string message)
+            => TryGetSkipMessage(
+                _artifactVersions,
+                BuildKey(artifact.ModuleKey, artifact.AppKey, artifact.PackageType, artifact.TargetName),
+                artifact.Version,
+                $"artifact {artifact.ModuleKey}/{artifact.AppKey}/{artifact.PackageType}/{artifact.TargetName}",
+                out message);
+
+        public bool TryGetHostConfigurationSkipMessage(PortableHostConfigurationDocument hostConfiguration, out string message)
+            => TryGetSkipMessage(
+                _hostConfigurationVersions,
+                BuildKey(hostConfiguration.HostKey),
+                hostConfiguration.ConfigurationVersion,
+                $"host configuration {hostConfiguration.HostKey}",
+                out message);
+
+        public bool TryGetConfigOverlaySkipMessage(PortableConfigOverlayDocument overlay, out string message)
+            => TryGetSkipMessage(
+                _configOverlayVersions,
+                BuildKey(overlay.HostKey, overlay.OverlayKey),
+                overlay.OverlayVersion,
+                $"config overlay {overlay.HostKey}/{overlay.OverlayKey}",
+                out message);
+
+        private static bool TryGetSkipMessage(
+            IReadOnlyDictionary<string, string> installedVersions,
+            string key,
+            string packageVersion,
+            string label,
+            out string message)
+        {
+            if (installedVersions.TryGetValue(key, out var installedVersion)
+                && CompareArtifactVersions(installedVersion, packageVersion) >= 0)
+            {
+                message = $"Quick import skipped {label} because package version {packageVersion} is not newer than installed version {installedVersion}.";
+                return true;
+            }
+
+            message = string.Empty;
+            return false;
+        }
+
+        private static void AddLatest(Dictionary<string, string> versions, string key, string version)
+        {
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                return;
+            }
+
+            if (!versions.TryGetValue(key, out var currentVersion)
+                || CompareArtifactVersions(version, currentVersion) > 0)
+            {
+                versions[key] = version;
+            }
+        }
+
+        private static string BuildKey(params string?[] parts)
+            => string.Join('\u001f', parts.Select(NormalizeKeyPart));
+
+        private static string NormalizeKeyPart(string? value)
+            => value?.Trim().ToUpperInvariant() ?? string.Empty;
+    }
+
     private sealed class ArtifactVersionComparer : IComparer<string>
     {
         public static readonly ArtifactVersionComparer Instance = new();
@@ -2513,7 +2694,8 @@ public sealed record PortableModulePackageImportOptions(
     bool ReplaceExistingModuleDefinition,
     bool ReplaceExistingArtifacts,
     bool CopyConfigurationFilesFromPreviousVersion,
-    bool UseArtifactsImmediately);
+    bool UseArtifactsImmediately,
+    bool QuickImport = false);
 
 public sealed record AvailablePortableModulePackage(
     string ModuleKey,

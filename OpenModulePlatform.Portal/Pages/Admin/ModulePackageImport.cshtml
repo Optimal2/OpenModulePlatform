@@ -58,6 +58,11 @@
 
             <div class="option-cluster option-cluster--2">
                 <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.QuickImport" type="checkbox" data-quick-import-toggle />
+                    <span>@L["Quick import"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
                     <input asp-for="UniversalUploadInput.ApplyModuleDefinitions" type="checkbox" />
                     <span>@L["Apply module definitions"]</span>
                 </label>
@@ -83,17 +88,17 @@
                 </label>
 
                 <label class="checkbox-row checkbox-row--boxed">
-                    <input asp-for="UniversalUploadInput.ReplaceExistingModuleDefinitions" type="checkbox" />
+                    <input asp-for="UniversalUploadInput.ReplaceExistingModuleDefinitions" type="checkbox" data-quick-import-disabled />
                     <span>@L["Replace existing module definitions with same key and version"]</span>
                 </label>
 
                 <label class="checkbox-row checkbox-row--boxed">
-                    <input asp-for="UniversalUploadInput.ReplaceExistingArtifacts" type="checkbox" />
+                    <input asp-for="UniversalUploadInput.ReplaceExistingArtifacts" type="checkbox" data-quick-import-disabled />
                     <span>@L["Replace existing artifacts with same identity"]</span>
                 </label>
 
                 <label class="checkbox-row checkbox-row--boxed">
-                    <input asp-for="UniversalUploadInput.ReplaceExistingConfigObjects" type="checkbox" />
+                    <input asp-for="UniversalUploadInput.ReplaceExistingConfigObjects" type="checkbox" data-quick-import-disabled />
                     <span>@L["Replace existing host configs and overlays with same key and version"]</span>
                 </label>
             </div>
@@ -108,6 +113,7 @@
         {
             <form method="post" asp-page-handler="ImportStagedUniversal" class="form-grid top-gap">
                 <input type="hidden" asp-for="UniversalStagedInput.Token" />
+                <input type="hidden" asp-for="UniversalStagedInput.QuickImport" />
                 <input type="hidden" asp-for="UniversalStagedInput.ApplyModuleDefinitions" />
                 <input type="hidden" asp-for="UniversalStagedInput.ExecuteSqlRepairs" />
                 <input type="hidden" asp-for="UniversalStagedInput.UseArtifactsImmediately" />
@@ -376,6 +382,25 @@
         input.addEventListener('change', renderFiles);
         renderFiles();
     });
+
+    const quickImportToggle = root.querySelector('[data-quick-import-toggle]');
+    const quickImportDisabledOptions = Array.from(root.querySelectorAll('[data-quick-import-disabled]'));
+    const syncQuickImportOptions = () => {
+        const quickImportEnabled = Boolean(quickImportToggle?.checked);
+        quickImportDisabledOptions.forEach(input => {
+            if (quickImportEnabled) {
+                input.checked = false;
+            }
+
+            input.disabled = quickImportEnabled;
+            input.closest('.checkbox-row')?.classList.toggle('is-disabled', quickImportEnabled);
+        });
+    };
+
+    if (quickImportToggle) {
+        quickImportToggle.addEventListener('change', syncQuickImportOptions);
+        syncQuickImportOptions();
+    }
 
     if (root.dataset.initialPanel) {
         showPanel(root.dataset.initialPanel);
