@@ -117,7 +117,11 @@
          data-session-lost-text="@L["Your session appears to have expired. Sign in again before continuing."]"
          data-session-network-lost-text="@L["The server could not be reached. Check the connection."]"
          data-session-login-text="@L["Sign in again"]"
-         data-session-reload-text="@L["Reload"]">
+         data-session-reload-text="@L["Reload"]"
+         data-topbar-polling-enabled="@Model.TopBarPollingEnabled.ToString().ToLowerInvariant()"
+         data-topbar-summary-url="@Model.TopBarSummaryUrl"
+         data-topbar-polling-visible-interval="@Model.TopBarPollingVisibleIntervalSeconds"
+         data-topbar-polling-hidden-interval="@Model.TopBarPollingHiddenIntervalSeconds">
         <nav class="portal-topbar__nav" aria-label="@Model.PortalLink.TextKey" data-portal-topbar>
             <a class="portal-topbar__portal-link" href="@Model.PortalLink.Href">@Model.PortalLink.TextKey</a>
 
@@ -430,11 +434,11 @@
 
             @if (Model.CanUseMessages)
             {
-                <details class="portal-topbar__messages" data-portal-topbar-overlay data-portal-topbar-hover-menu>
+                <details class="portal-topbar__messages" data-portal-topbar-overlay data-portal-topbar-hover-menu data-portal-topbar-messages>
                     <summary title="@L[Model.MessagesToggleTextKey]" aria-label="@L[Model.MessagesToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
                             <span class="portal-topbar__icon portal-topbar__icon--messages" aria-hidden="true"></span>
-                            <span class="portal-topbar__message-badge" hidden="@(Model.UnreadMessageCount == 0)">
+                            <span class="portal-topbar__message-badge" data-portal-topbar-message-badge hidden="@(Model.UnreadMessageCount == 0)">
                                 @NotificationBadgeText(Model.UnreadMessageCount)
                             </span>
                         </span>
