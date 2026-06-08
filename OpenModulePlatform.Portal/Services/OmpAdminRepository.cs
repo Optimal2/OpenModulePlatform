@@ -1220,6 +1220,7 @@ WITH DesiredTemplateApps AS
            tai.AppId,
            tai.AppInstanceKey,
            tai.DesiredArtifactId,
+           desiredArtifact.PackageType AS DesiredPackageType,
            tai.InstanceTemplateHostId,
            tai.TargetHostTemplateId
     FROM omp.Hosts h
@@ -1240,6 +1241,10 @@ WITH DesiredTemplateApps AS
     INNER JOIN omp.Apps app
         ON app.AppId = tai.AppId
        AND app.IsEnabled = 1
+    INNER JOIN omp.Artifacts desiredArtifact
+        ON desiredArtifact.ArtifactId = tai.DesiredArtifactId
+       AND desiredArtifact.IsEnabled = 1
+       AND desiredArtifact.PackageType IN (N'web-app', N'service-app')
     LEFT JOIN omp.InstanceTemplateHosts pinnedHost
         ON pinnedHost.InstanceTemplateHostId = tai.InstanceTemplateHostId
        AND pinnedHost.IsEnabled = 1
@@ -1264,6 +1269,7 @@ WITH DesiredTemplateApps AS
           (
               tai.InstanceTemplateHostId IS NULL
               AND tai.TargetHostTemplateId IS NULL
+              AND desiredArtifact.PackageType = N'web-app'
           )
           OR
           (
@@ -1284,6 +1290,7 @@ ResolvedApps AS
 (
     SELECT desired.HostId,
            desired.DesiredArtifactId,
+           desired.DesiredPackageType,
            appInstance.AppInstanceId,
            appInstance.ArtifactId AS MaterializedArtifactId,
            state.ArtifactId AS RuntimeArtifactId,
@@ -1328,12 +1335,13 @@ Aggregated AS
                          AND HasIdentityWarning = 0 THEN 1 ELSE 0 END) AS InSyncAppCount,
            SUM(CASE WHEN AppInstanceId IS NULL
                          OR ISNULL(MaterializedArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN 1 ELSE 0 END) AS MaterializationPendingCount,
-           SUM(CASE WHEN AppInstanceId IS NULL
-                         OR RuntimeArtifactId IS NULL THEN 1 ELSE 0 END) AS MissingRuntimeCount,
+           SUM(CASE WHEN AppInstanceId IS NOT NULL
+                         AND DesiredPackageType IN (N'web-app', N'service-app')
+                         AND RuntimeArtifactId IS NULL THEN 1 ELSE 0 END) AS MissingRuntimeCount,
            SUM(CASE WHEN RuntimeArtifactId IS NOT NULL
                          AND ISNULL(RuntimeArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN 1 ELSE 0 END) AS VersionMismatchCount,
            SUM(CASE WHEN AppInstanceId IS NULL
-                         OR RuntimeArtifactId IS NULL
+                         OR (DesiredPackageType IN (N'web-app', N'service-app') AND RuntimeArtifactId IS NULL)
                          OR DeploymentState = 0
                          OR ISNULL(RuntimeArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN 1 ELSE 0 END) AS PendingAppCount,
            SUM(CASE WHEN DeploymentState = 1 THEN 1 ELSE 0 END) AS RunningAppCount,
@@ -1464,7 +1472,10 @@ WITH DesiredTemplateApps AS
     INNER JOIN omp.Apps app
         ON app.AppId = tai.AppId
        AND app.IsEnabled = 1
-    LEFT JOIN omp.Artifacts desiredArtifact ON desiredArtifact.ArtifactId = tai.DesiredArtifactId
+    INNER JOIN omp.Artifacts desiredArtifact
+        ON desiredArtifact.ArtifactId = tai.DesiredArtifactId
+       AND desiredArtifact.IsEnabled = 1
+       AND desiredArtifact.PackageType IN (N'web-app', N'service-app')
     LEFT JOIN omp.InstanceTemplateHosts pinnedHost
         ON pinnedHost.InstanceTemplateHostId = tai.InstanceTemplateHostId
        AND pinnedHost.IsEnabled = 1
@@ -1490,6 +1501,7 @@ WITH DesiredTemplateApps AS
           (
               tai.InstanceTemplateHostId IS NULL
               AND tai.TargetHostTemplateId IS NULL
+              AND desiredArtifact.PackageType = N'web-app'
           )
           OR
           (
