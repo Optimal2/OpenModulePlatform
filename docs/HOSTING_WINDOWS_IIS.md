@@ -46,6 +46,20 @@ It is useful when you need IIS-level rewrite or redirect rules, reverse-proxy st
 Official download:
 - https://www.iis.net/downloads/microsoft/url-rewrite
 
+## Load-balanced IIS deployments
+
+When multiple IIS servers serve the same OMP DNS name, configure every Portal
+and module web application with the same `OmpAuth:DataProtectionKeyPath`. Use a
+shared folder that every relevant application pool identity can read and write.
+Without shared Data Protection keys, an auth cookie created on one node cannot
+be decrypted on another node, which commonly shows up as repeated redirects to
+the login flow.
+
+If TLS is terminated by a load balancer or reverse proxy, enable forwarded
+headers and configure the trusted proxy IPs or networks. HostAgent-generated
+web-app `appsettings.json` files inherit `WebAppUseForwardedHeaders` and the
+matching `WebAppForwardedHeaders*` settings from the HostAgent configuration.
+
 ## Recommended OMP deployment posture on Windows
 
 For the current public repository, the recommended baseline is:

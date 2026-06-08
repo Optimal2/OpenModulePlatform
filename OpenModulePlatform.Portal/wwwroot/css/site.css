@@ -1139,6 +1139,16 @@ button[aria-disabled=true]:hover,
     overflow-x: auto;
 }
 
+.inline-details summary {
+    cursor: pointer;
+    color: var(--link);
+    font-weight: 600;
+}
+
+.inline-details[open] summary {
+    margin-bottom: 10px;
+}
+
 .portal-entries-admin-scroll {
     overflow-x: hidden;
 }
