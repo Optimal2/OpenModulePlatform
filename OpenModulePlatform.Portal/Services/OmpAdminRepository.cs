@@ -1884,16 +1884,12 @@ OUTER APPLY
 ) runtimeState
 OUTER APPLY
 (
-    SELECT NULLIF(CHARINDEX(N'.', REVERSE(runtimeState.ServiceName)), 0) AS LastDotFromEnd
-) serviceNameParts
-OUTER APPLY
-(
     SELECT
         CASE
             WHEN runtimeState.ServiceName IS NULL THEN NULL
-            WHEN serviceNameParts.LastDotFromEnd IS NOT NULL
-             AND PATINDEX(N'%[0-9]%', RIGHT(runtimeState.ServiceName, serviceNameParts.LastDotFromEnd - 1)) > 0
-                THEN LEFT(runtimeState.ServiceName, LEN(runtimeState.ServiceName) - serviceNameParts.LastDotFromEnd)
+            WHEN NULLIF(runtimeState.Version, N'') IS NOT NULL
+             AND runtimeState.ServiceName LIKE N'%.' + runtimeState.Version
+                THEN LEFT(runtimeState.ServiceName, LEN(runtimeState.ServiceName) - LEN(runtimeState.Version) - 1)
             ELSE runtimeState.ServiceName
         END AS CurrentServicePrefix
 ) currentService

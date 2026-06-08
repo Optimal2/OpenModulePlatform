@@ -469,14 +469,21 @@ public sealed class HostAgentSelfUpgradeService
     private static string TrimTrailingVersion(string serviceName)
     {
         var trimmed = serviceName.Trim();
-        var lastDot = trimmed.LastIndexOf('.');
-        if (lastDot <= 0)
+        var parts = trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
         {
             return trimmed;
         }
 
-        var suffix = trimmed[(lastDot + 1)..];
-        return suffix.Any(char.IsDigit) ? trimmed[..lastDot] : trimmed;
+        var suffixStart = parts.Length;
+        while (suffixStart > 0 && parts[suffixStart - 1].All(char.IsDigit))
+        {
+            suffixStart--;
+        }
+
+        return suffixStart == parts.Length
+            ? trimmed
+            : string.Join('.', parts.Take(Math.Max(1, suffixStart)));
     }
 
     private static void PrepareInstallDirectory(
