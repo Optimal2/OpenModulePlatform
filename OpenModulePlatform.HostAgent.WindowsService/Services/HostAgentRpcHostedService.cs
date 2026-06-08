@@ -12,6 +12,7 @@ namespace OpenModulePlatform.HostAgent.WindowsService.Services;
 public sealed class HostAgentRpcHostedService : BackgroundService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly TimeSpan TakeoverRpcDelay = TimeSpan.FromSeconds(1);
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly HostAgentEngine _engine;
@@ -39,51 +40,77 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             return;
         }
 
+        if (_process.RuntimeMode.Equals(HostAgentRuntimeMode.Takeover, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "HostAgent RPC startup is delayed until takeover completes. ServiceName={ServiceName}",
+                _process.ServiceName);
+        }
+
+        while (!stoppingToken.IsCancellationRequested
+               && _process.RuntimeMode.Equals(HostAgentRuntimeMode.Takeover, StringComparison.OrdinalIgnoreCase)
+               && !_process.IsQuiesceRequested)
+        {
+            await Task.Delay(TakeoverRpcDelay, stoppingToken);
+        }
+
+        if (stoppingToken.IsCancellationRequested || _process.IsQuiesceRequested)
+        {
+            return;
+        }
+
         var pipeName = settings.ResolveRpcPipeName();
         _logger.LogInformation("HostAgent RPC named pipe started. PipeName={PipeName}", pipeName);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var pipe = new NamedPipeServerStream(
-                pipeName,
-                PipeDirection.InOut,
-                maxNumberOfServerInstances: 8,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
-
+            NamedPipeServerStream? pipe = null;
             try
             {
+                pipe = new NamedPipeServerStream(
+                    pipeName,
+                    PipeDirection.InOut,
+                    maxNumberOfServerInstances: 8,
+                    PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous);
                 await pipe.WaitForConnectionAsync(stoppingToken);
                 _ = Task.Run(() => HandleClientAsync(pipe, stoppingToken), CancellationToken.None);
+                pipe = null;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                await pipe.DisposeAsync();
                 break;
             }
             catch (IOException ex)
             {
-                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
+                await DelayAfterAcceptFailureAsync(ex, stoppingToken);
             }
             catch (ObjectDisposedException ex)
             {
-                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
+                await DelayAfterAcceptFailureAsync(ex, stoppingToken);
             }
             catch (InvalidOperationException ex)
             {
-                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
+                await DelayAfterAcceptFailureAsync(ex, stoppingToken);
             }
             catch (UnauthorizedAccessException ex)
             {
-                await DisposePipeAfterAcceptFailureAsync(pipe, ex);
+                await DelayAfterAcceptFailureAsync(ex, stoppingToken);
+            }
+            finally
+            {
+                if (pipe is not null)
+                {
+                    await pipe.DisposeAsync();
+                }
             }
         }
     }
 
-    private async Task DisposePipeAfterAcceptFailureAsync(NamedPipeServerStream pipe, Exception exception)
+    private async Task DelayAfterAcceptFailureAsync(Exception exception, CancellationToken cancellationToken)
     {
-        await pipe.DisposeAsync();
         _logger.LogError(exception, "HostAgent RPC accept loop failed.");
+        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
     }
 
     private async Task HandleClientAsync(NamedPipeServerStream pipe, CancellationToken serviceCancellationToken)
