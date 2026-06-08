@@ -17,6 +17,119 @@
 }
 
 <section class="card section-card section-card--wide">
+    <h3>@L["Template/runtime drift overview"]</h3>
+    <p class="muted">@L["Compares desired template app artifacts with the latest HostAgent deployment state per host. Use this first after changing desired versions or host placement."]</p>
+
+    @if (Model.HostDriftSummaries.Count == 0)
+    {
+        <div class="empty-state">@L["No enabled hosts were found."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid app-instances-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Host"]</th>
+                        <th>@L["Overall"]</th>
+                        <th>@L["Desired apps"]</th>
+                        <th>@L["Runtime match"]</th>
+                        <th>@L["Differences"]</th>
+                        <th>@L["HostAgent"]</th>
+                        <th>@L["Last checked UTC"]</th>
+                        <th>@L["Last applied UTC"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.HostDriftSummaries)
+                {
+                    <tr>
+                        <td>
+                            <div><code>@row.HostKey</code></div>
+                            @if (!string.IsNullOrWhiteSpace(row.DisplayName))
+                            {
+                                <div class="muted">@row.DisplayName</div>
+                            }
+                            @if (row.HostLastSeenUtc.HasValue)
+                            {
+                                <div class="muted">@L["Last seen"]: @row.HostLastSeenUtc.Value.ToString("u")</div>
+                            }
+                        </td>
+                        <td><span class="pill">@L[HostDeploymentsModel.FormatHostDriftStatus(row)]</span></td>
+                        <td>@row.DesiredAppCount</td>
+                        <td>@(row.DesiredAppCount == 0 ? L["Not set"].Value : $"{row.InSyncAppCount} / {row.DesiredAppCount}")</td>
+                        <td>
+                            @if (row.DriftAppCount == 0)
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                            else
+                            {
+                                @if (row.MaterializationPendingCount > 0)
+                                {
+                                    <div>@row.MaterializationPendingCount @L["materialization pending"]</div>
+                                }
+                                @if (row.MissingRuntimeCount > 0)
+                                {
+                                    <div>@row.MissingRuntimeCount @L["missing runtime"]</div>
+                                }
+                                @if (row.VersionMismatchCount > 0)
+                                {
+                                    <div>@row.VersionMismatchCount @L["version mismatch"]</div>
+                                }
+                                @if (row.RunningAppCount > 0)
+                                {
+                                    <div>@row.RunningAppCount @L["Running"]</div>
+                                }
+                                @if (row.FailedAppCount > 0)
+                                {
+                                    <div>@row.FailedAppCount @L["Failed"]</div>
+                                }
+                                @if (row.WarningAppCount > 0)
+                                {
+                                    <div>@row.WarningAppCount @L["Warning"]</div>
+                                }
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.HostAgentDesiredVersion)
+                                && string.IsNullOrWhiteSpace(row.HostAgentCurrentVersion))
+                            {
+                                <span class="muted">@L["No runtime state"]</span>
+                            }
+                            else if (row.HostAgentUpgradePending)
+                            {
+                                <div><span class="pill">@L["Pending"]</span></div>
+                                <div class="muted">
+                                    @(string.IsNullOrWhiteSpace(row.HostAgentCurrentVersion) ? "?" : row.HostAgentCurrentVersion)
+                                    &rarr;
+                                    @row.HostAgentDesiredVersion
+                                </div>
+                            }
+                            else
+                            {
+                                <div><span class="pill">@L["In sync"]</span></div>
+                                @if (!string.IsNullOrWhiteSpace(row.HostAgentCurrentVersion))
+                                {
+                                    <div class="muted">@row.HostAgentCurrentVersion</div>
+                                }
+                            }
+                            @if (row.HostAgentLastSeenUtc.HasValue)
+                            {
+                                <div class="muted">@L["Last seen"]: @row.HostAgentLastSeenUtc.Value.ToString("u")</div>
+                            }
+                        </td>
+                        <td>@row.LastCheckedUtc?.ToString("u")</td>
+                        <td>@row.LastAppliedUtc?.ToString("u")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="card section-card section-card--wide">
     <h3>@L["HostAgent self-upgrade"]</h3>
     <p class="muted">@L["Select the desired HostAgent artifact per host. The active HostAgent installs the selected version and hands over to it during its next cycle."]</p>
 
