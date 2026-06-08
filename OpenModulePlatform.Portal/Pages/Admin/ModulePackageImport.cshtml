@@ -98,6 +98,11 @@
                 </label>
 
                 <label class="checkbox-row checkbox-row--boxed">
+                    <input asp-for="UniversalUploadInput.ReplaceExistingDashboardWidgets" type="checkbox" data-quick-import-disabled />
+                    <span>@L["Replace existing dashboard widgets for rollback or repair"]</span>
+                </label>
+
+                <label class="checkbox-row checkbox-row--boxed">
                     <input asp-for="UniversalUploadInput.ReplaceExistingConfigObjects" type="checkbox" data-quick-import-disabled />
                     <span>@L["Replace existing host configs and overlays with same key and version"]</span>
                 </label>
@@ -121,6 +126,7 @@
                 <input type="hidden" asp-for="UniversalStagedInput.AllowTemporaryIncompatibleArtifacts" />
                 <input type="hidden" asp-for="UniversalStagedInput.ReplaceExistingModuleDefinitions" />
                 <input type="hidden" asp-for="UniversalStagedInput.ReplaceExistingArtifacts" />
+                <input type="hidden" asp-for="UniversalStagedInput.ReplaceExistingDashboardWidgets" />
                 <input type="hidden" asp-for="UniversalStagedInput.ReplaceExistingConfigObjects" />
 
                 <div class="section-heading-row">
@@ -272,7 +278,7 @@
                         {
                             <label class="checkbox-row">
                                 <input type="checkbox" name="UniversalExportInput.WidgetIds" value="@widget.WidgetId" />
-                                <span>@widget.Title <code>@widget.WidgetKey</code></span>
+                                <span>@widget.Title <code>@widget.WidgetKey</code> @widget.WidgetVersion</span>
                             </label>
                         }
                     </div>
