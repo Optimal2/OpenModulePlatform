@@ -26,7 +26,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$InstallRoot,
 
-    [string]$ServiceNamePrefix = 'EMP.HostAgent',
+    [string]$ServiceNamePrefix = 'OMP.HostAgent',
 
     [string]$SettingsSourcePath = '',
 
