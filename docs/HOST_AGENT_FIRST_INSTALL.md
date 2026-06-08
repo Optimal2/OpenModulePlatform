@@ -9,7 +9,7 @@ environments. The package performs only the bootstrap work that cannot be done
 by HostAgent itself:
 
 1. Run the initial SQL setup and initialization scripts.
-2. Prepare the central `ArtifactStore` with the package's component artifacts.
+2. Prepare the central ArtifactStore with the package's component artifacts.
 3. Install or update the HostAgent Windows service.
 4. Start HostAgent so it can materialize templates, create/update the IIS site
    and app pools when configured, and deploy web apps, service apps, workers,
@@ -607,6 +607,10 @@ ContentWebApp = @{
 SharedServerReportsPath -> <WebAppsRoot>\<ContentWebAppPath>\App_Data\ContentReports
 SharedHtmlFilesPath     -> <WebAppsRoot>\<ContentWebAppPath>\App_Data\ContentPages
 ```
+
+`<ContentWebAppPath>` is the relative web-app folder for the Content artifact
+below `hostAgent.webAppsRoot`, for example `content` when the Content web app is
+deployed to `<WebAppsRoot>\content`.
 
 For a single-machine development install, the shared paths can simply be two
 folders on the same disk as the runtime. For a multi-server install, point the

@@ -312,11 +312,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             var result = await _packages.ExportUniversalPackageAsync(
                 UniversalExportInput.ToRequest(),
                 ct);
-            Response.OnCompleted(static state =>
-            {
-                TryDeleteTemporaryFile((string)state);
-                return Task.CompletedTask;
-            }, result.PackagePath);
+            Response.OnCompleted(DeleteTemporaryExportFileOnCompleted, result.PackagePath);
 
             return PhysicalFile(result.PackagePath, "application/zip", result.FileName);
         }
@@ -397,7 +393,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             .Select(static group => group
                 .OrderByDescending(row => row.AppliedUtc)
                 .ThenByDescending(row => row.UpdatedUtc)
-            .First())
+                .First())
             .OrderBy(static row => row.ModuleKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -519,11 +515,18 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         => options.QuickImport
             ? options with
             {
+                // The service option is singular because one module definition document is imported per package item.
                 ReplaceExistingModuleDefinition = false,
                 ReplaceExistingArtifacts = false,
                 ReplaceExistingDashboardWidgets = false
             }
             : options;
+
+    private static Task DeleteTemporaryExportFileOnCompleted(object state)
+    {
+        TryDeleteTemporaryFile((string)state);
+        return Task.CompletedTask;
+    }
 
     private static void TryDeleteTemporaryFile(string path)
     {
@@ -632,7 +635,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     {
         public string PackageKey { get; set; } = "omp-universal";
 
-        public string PackageVersion { get; set; } = DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        public string PackageVersion { get; set; } = CreateDefaultPackageVersion();
 
         public string DisplayName { get; set; } = "OpenModulePlatform universal package";
 
@@ -671,6 +674,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 ConfigOverlayDocumentIds,
                 WidgetIds,
                 IncludeWidgetRuntimeData);
+
+        private static string CreateDefaultPackageVersion()
+            => DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
     }
 
 }
