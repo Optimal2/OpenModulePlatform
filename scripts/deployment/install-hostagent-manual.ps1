@@ -158,7 +158,7 @@ function Get-ExistingHostAgentServices {
 
 function Resolve-ReferenceServiceName {
     param(
-        [Parameter(Mandatory = $true)][string]$ExplicitName,
+        [string]$ExplicitName,
         [Parameter(Mandatory = $true)][string]$Prefix,
         [Parameter(Mandatory = $true)][string]$TargetName
     )
