@@ -70,7 +70,11 @@ public static class PortalTopBarModelFactory
             SessionStatusUrl = PortalTopBarModel.DefaultSessionStatusPath,
             SessionLoginUrl = OmpAuthDefaults.LoginPath,
             SessionStatusVisibleIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.VisibleIntervalSeconds, 60),
-            SessionStatusHiddenIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.HiddenIntervalSeconds, 180)
+            SessionStatusHiddenIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.HiddenIntervalSeconds, 180),
+            TopBarPollingEnabled = options.TopBarPolling?.Enabled != false,
+            TopBarSummaryUrl = PortalTopBarModel.DefaultTopBarSummaryPath,
+            TopBarPollingVisibleIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.VisibleIntervalSeconds, 60),
+            TopBarPollingHiddenIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.HiddenIntervalSeconds, 180)
         };
     }
 

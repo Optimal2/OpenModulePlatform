@@ -50,6 +50,15 @@ public sealed class SessionStatusCheckOptions
     public int HiddenIntervalSeconds { get; set; } = 180;
 }
 
+public sealed class TopBarPollingOptions
+{
+    public bool Enabled { get; set; } = true;
+
+    public int VisibleIntervalSeconds { get; set; } = 60;
+
+    public int HiddenIntervalSeconds { get; set; } = 180;
+}
+
 public sealed class WebAppOptions
 {
     public const string DefaultSectionName = "WebApp";
@@ -60,6 +69,7 @@ public sealed class WebAppOptions
     public PortalTopBarOptions PortalTopBar { get; set; } = new();
     public TopbarShortcutsOptions TopbarShortcuts { get; set; } = new();
     public SessionStatusCheckOptions SessionStatusCheck { get; set; } = new();
+    public TopBarPollingOptions TopBarPolling { get; set; } = new();
     public bool AllowAnonymous { get; set; }
     public bool UseForwardedHeaders { get; set; }
     public PermissionMode PermissionMode { get; set; } = PermissionMode.Any;

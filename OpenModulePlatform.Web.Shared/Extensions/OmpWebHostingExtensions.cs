@@ -402,6 +402,37 @@ public static class OmpWebHostingExtensions
             return Results.Redirect(returnUrl);
         }).RequireAuthorization();
 
+        app.MapGet(PortalTopBarService.SummaryPath, async (
+            HttpContext context,
+            NotificationService notificationService,
+            MessageService messageService,
+            CancellationToken ct) =>
+        {
+            if (context.User.Identity?.IsAuthenticated != true)
+            {
+                return Results.Unauthorized();
+            }
+
+            var userId = NotificationService.TryGetOmpUserId(context.User);
+            if (userId is null)
+            {
+                return Results.Json(new
+                {
+                    notifications = new { unreadCount = 0 },
+                    messages = new { unreadCount = 0 }
+                });
+            }
+
+            var notificationUnreadCount = await notificationService.GetUnreadCountAsync(userId.Value, ct);
+            var messageUnreadCount = await messageService.GetUnreadMessageCountAsync(userId.Value, ct);
+
+            return Results.Json(new
+            {
+                notifications = new { unreadCount = notificationUnreadCount },
+                messages = new { unreadCount = messageUnreadCount }
+            });
+        }).AllowAnonymous();
+
         app.MapGet(NotificationService.RecentPath, async (
             HttpContext context,
             NotificationService notificationService,
