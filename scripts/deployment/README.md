@@ -15,6 +15,12 @@ The supported deployment flow is the HostAgent-first installer:
 - `package-hostagent-first-public.cmd` builds a neutral public sample package.
 - `new-omp-artifact-package.ps1` wraps a deployable payload and optional
   runtime configuration files as a standard OMP artifact package object.
+- `install-hostagent-manual.ps1` is a recovery tool for manually installing a
+  versioned HostAgent service from a published folder, payload zip, artifact
+  package, or universal package when automatic HostAgent self-upgrade cannot be
+  trusted. It copies existing production settings and credential-store data,
+  installs the service in normal runtime mode, and disables self-upgrade by
+  default.
 - `hostagent-first.config.sample.psd1` is the neutral package-build config.
   Copy it to `hostagent-first.local.psd1` for local source-package experiments
   that should not be committed.
