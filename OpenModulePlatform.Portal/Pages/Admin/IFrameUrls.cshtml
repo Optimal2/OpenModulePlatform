@@ -293,7 +293,15 @@ else
         });
 
         panels.forEach(candidate => {
-            candidate.hidden = candidate !== panel;
+            const isActivePanel = candidate === panel;
+            candidate.hidden = !isActivePanel;
+            candidate.querySelectorAll('input, select, textarea, button').forEach(control => {
+                if (!control.dataset.iframeOriginalDisabled) {
+                    control.dataset.iframeOriginalDisabled = control.disabled ? 'true' : 'false';
+                }
+
+                control.disabled = !isActivePanel || control.dataset.iframeOriginalDisabled === 'true';
+            });
         });
     };
 
