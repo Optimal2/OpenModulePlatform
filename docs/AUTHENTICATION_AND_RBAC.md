@@ -99,6 +99,19 @@ If a Windows identity matches an `omp.user_auth` AD link to a disabled OMP user,
 the auth app blocks sign-in instead of falling back to direct AD user/group role
 principals. This keeps `account_status` authoritative for linked OMP users.
 
+The core config setting `auth/externalUserProvisioningMode` controls whether
+AD identities can be automatically promoted to first-class OMP users after a
+successful sign-in. The default value is `Manual`, which preserves the manual
+admin and self-service flows. `AutomaticForAuthorizedUsers` creates an active
+`omp.users` row and AD `omp.user_auth` links during the same sign-in only when
+the AD identity resolves at least one non-system role through `User`, `ADUser`,
+or `ADGroup` role principals. The built-in `Everyone` and `AuthenticatedUsers`
+roles do not count. AD group roles may trigger provisioning, but they are not
+copied or migrated to the new OMP user; group-based access remains group-based
+so removal from an AD group removes that access at the next login/session
+refresh. A disabled linked OMP user still blocks sign-in and is never bypassed
+by auto-provisioning.
+
 ## User Settings
 
 The Portal exposes `/account/settings` for the signed-in user. A signed-in AD
@@ -173,6 +186,10 @@ the core config setting `rbac/authenticatedUsersWindowsDomains`. The value is a
 comma- or semicolon-separated list of allowed domain, workgroup, or computer
 prefixes from `DOMAIN\User` style principals. Empty or `*` accepts any
 authenticated principal.
+
+`auth/externalUserProvisioningMode` accepts `Manual` and
+`AutomaticForAuthorizedUsers`. Invalid or missing values are treated as
+`Manual` by the Auth app.
 
 ## Request Flow
 
