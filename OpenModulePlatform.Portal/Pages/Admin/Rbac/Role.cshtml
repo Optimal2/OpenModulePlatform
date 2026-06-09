@@ -255,7 +255,7 @@
         <section class="card section-card">
             <div class="eyebrow">@L["Principals"]</div>
             <h3>@L["Assigned principals"]</h3>
-            <p class="muted">@ompBranding.ApplyPlatformName(L["Bind OMP users or AD users to the role. AD group assignment is not available yet."].Value)</p>
+            <p class="muted">@ompBranding.ApplyPlatformName(L["Bind OMP users, AD users or AD groups to the role."].Value)</p>
 
             @if (Model.Principals.Count == 0)
             {
@@ -309,7 +309,7 @@
                     <input id="principal" name="principal" value="@Model.NewPrincipal" list="principal-suggestions" autocomplete="off" />
                     <datalist id="principal-suggestions"></datalist>
                     <div class="field-help">
-                        @ompBranding.ApplyPlatformName(L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, start typing an existing AD user principal or enter DOMAIN\\User."].Value)
+                        @ompBranding.ApplyPlatformName(L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, enter DOMAIN\\User. For AD groups, enter a group SID or DOMAIN\\Group; local group names are resolved to a SID when possible."].Value)
                     </div>
                 </div>
 
@@ -348,7 +348,7 @@
                 dataList.replaceChildren();
                 suggestionValues = new Map();
 
-                if (principalType.value !== 'OmpUser' && principalType.value !== 'ADUser') {
+                if (principalType.value !== 'OmpUser' && principalType.value !== 'ADUser' && principalType.value !== 'ADGroup') {
                     return;
                 }
 

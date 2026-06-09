@@ -347,6 +347,48 @@ ORDER BY Principal;";
         return rows;
     }
 
+    /// <summary>
+    /// Returns existing AD group principals for lightweight role-principal autocomplete suggestions.
+    /// </summary>
+    public async Task<IReadOnlyList<PrincipalSuggestion>> SearchAdGroupPrincipalSuggestionsAsync(
+        string? term,
+        int maxResults,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT DISTINCT TOP (@maxResults)
+       Principal
+FROM omp.RolePrincipals
+WHERE PrincipalType = N'ADGroup'
+  AND LTRIM(RTRIM(Principal)) <> N''
+  AND
+  (
+      @term = ''
+      OR Principal LIKE @termPattern
+  )
+ORDER BY Principal;";
+
+        var rows = new List<PrincipalSuggestion>();
+        term = term?.Trim() ?? string.Empty;
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@maxResults", maxResults);
+        cmd.Parameters.AddWithValue("@term", term);
+        cmd.Parameters.AddWithValue("@termPattern", $"%{term}%");
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var principal = rdr.GetString(0).Trim();
+            rows.Add(new PrincipalSuggestion(principal, principal));
+        }
+
+        return rows;
+    }
+
     public async Task<bool> OmpUserExistsAsync(int userId, CancellationToken ct)
     {
         const string sql = @"
