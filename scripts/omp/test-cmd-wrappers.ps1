@@ -46,11 +46,11 @@ Directory where stdout/stderr logs are written. Use a user-private or
 ACL-protected location when logs may contain sensitive diagnostics.
 
 .PARAMETER PerRepositoryTimeoutSeconds
-Maximum validation time per repository. Must be between 60 and 3600 seconds (inclusive); the
-upper bound of 3600 seconds (1 hour) is enforced by ValidateRange and the
-default is 1200 seconds (20 minutes). The lower bound of 60 seconds avoids
-premature timeout failures during minimal restore/validation startup work on slower
-Windows runners.
+Maximum validation time per repository. The value must be between 60 and 3600
+seconds, inclusive. The upper bound of 3600 seconds (1 hour) is enforced by
+ValidateRange and the default is 1200 seconds (20 minutes). The lower bound of
+60 seconds avoids premature timeout failures during minimal dependency restore
+and validation startup work on slower Windows runners.
 #>
 [CmdletBinding()]
 param(
@@ -229,13 +229,30 @@ if ($HashPrefixLength -lt 1 -or $HashPrefixLength -gt $Sha256HexLength) {
     throw "HashPrefixLength must be between 1 and Sha256HexLength. HashPrefixLength=$HashPrefixLength, Sha256HexLength=$Sha256HexLength."
 }
 
-if ($ComputedValidateRangeMaximumSafeSeconds -ne $ValidateRangeLiteralForMaximumSafeSeconds) {
-    throw "ValidateRange literal $ValidateRangeLiteralForMaximumSafeSeconds does not match floor([int]::MaxValue / $MillisecondsPerSecond) = $ComputedValidateRangeMaximumSafeSeconds."
+function Assert-ValidateRangeLiteralMatches {
+    param(
+        [Parameter(Mandatory = $true)][string]$LiteralName,
+        [Parameter(Mandatory = $true)][int]$LiteralValue,
+        [Parameter(Mandatory = $true)][string]$ComputedName,
+        [Parameter(Mandatory = $true)][int]$ComputedValue
+    )
+
+    if ($LiteralValue -ne $ComputedValue) {
+        throw "ValidateRange literal mismatch for $LiteralName. Actual literal: $LiteralValue. Expected computed ${ComputedName}: $ComputedValue."
+    }
 }
 
-if ($MaximumSafeSecondsForMillisecondConversion -ne $ValidateRangeLiteralForMaximumSafeSeconds) {
-    throw "ValidateRange literal $ValidateRangeLiteralForMaximumSafeSeconds does not match computed maximum $MaximumSafeSecondsForMillisecondConversion for Convert-SecondsToIntMilliseconds."
-}
+Assert-ValidateRangeLiteralMatches `
+    -LiteralName 'ValidateRangeLiteralForMaximumSafeSeconds' `
+    -LiteralValue $ValidateRangeLiteralForMaximumSafeSeconds `
+    -ComputedName 'floor([int]::MaxValue / 1000)' `
+    -ComputedValue $ComputedValidateRangeMaximumSafeSeconds
+
+Assert-ValidateRangeLiteralMatches `
+    -LiteralName 'ValidateRangeLiteralForMaximumSafeSeconds' `
+    -LiteralValue $ValidateRangeLiteralForMaximumSafeSeconds `
+    -ComputedName 'MaximumSafeSecondsForMillisecondConversion' `
+    -ComputedValue $MaximumSafeSecondsForMillisecondConversion
 
 function Convert-SecondsToIntMilliseconds {
     <#
@@ -267,7 +284,7 @@ function Convert-SecondsToIntMilliseconds {
         # the largest whole-second value that safely converts back to
         # WaitForExit(int milliseconds). Startup asserts this literal still
         # matches $MaximumSafeSecondsForMillisecondConversion.
-        [ValidateRange(1, 2147483)] # Upper bound: floor([int]::MaxValue / 1000).
+        [ValidateRange(1, 2147483)] # Upper bound prevents seconds-to-milliseconds overflow for WaitForExit(int).
         [Parameter(Mandatory = $true)][int]$Seconds
     )
 
@@ -327,7 +344,8 @@ function Get-SafeDiagnosticExcerpt {
     $safeLines = [System.Collections.Generic.List[string]]::new()
     # This handles CRLF, LF, CR, and mixed line endings in the same string.
     $lines = $Value -split "`r`n|`n|`r"
-    for ($lineNumber = 0; $lineNumber -lt $MaximumLines -and $lineNumber -lt $lines.Count; $lineNumber++) {
+    $lineLimit = [Math]::Min($MaximumLines, $lines.Count)
+    for ($lineNumber = 0; $lineNumber -lt $lineLimit; $lineNumber++) {
         $safeLines.Add((Get-SafeDiagnosticText -Value $lines[$lineNumber]))
     }
 
@@ -474,7 +492,7 @@ function New-DirectorySafely {
     )
 
     try {
-        [System.IO.Directory]::CreateDirectory($Path) | Out-Null
+        [void][System.IO.Directory]::CreateDirectory($Path)
     }
     catch {
         throw "Could not create $Description '$Path': $($_.Exception.Message)"
@@ -1125,6 +1143,10 @@ function Test-ExpectedCmdProcess {
             # metadata snapshots.
             $startTimeDifferenceMilliseconds = [Math]::Abs(($actualStartTime - $ExpectedStartTime).TotalMilliseconds)
         }
+        catch [System.ArgumentOutOfRangeException] {
+            Write-Verbose "Process start time comparison exceeded the supported TimeSpan range: $($_.Exception.Message)"
+            return $false
+        }
         catch {
             Write-Verbose "Could not compare process start times before taskkill: $($_.Exception.Message)"
             return $false
@@ -1636,9 +1658,10 @@ foreach ($repository in $repositories) {
         $manifestExcerpt = Get-SafeDiagnosticExcerpt -Value $manifestJson
         $manifestParseDetail = @(
             "Component manifest '$manifestPath' was read but could not be parsed as JSON."
-            'Common causes include missing commas, trailing commas, or unescaped quotes.'
-            "First lines: $manifestExcerpt"
             "Parser message: $($_.Exception.Message)"
+            'Common causes include missing commas, trailing commas, or unescaped quotes.'
+            "First lines from manifest: $manifestExcerpt"
+            'Only the first few manifest lines are shown here; inspect the full file if the parser message points beyond this excerpt.'
         ) -join [Environment]::NewLine
 
         $results.Add((New-ValidationResult `
@@ -1776,6 +1799,8 @@ foreach ($repository in $repositories) {
             # exited" as a successful no-op so this known race never becomes a
             # script failure or an unsafe taskkill attempt.
             $process.Refresh()
+            # Phase 1: verify the original cmd.exe still exists and is still the
+            # same process instance before any termination attempt.
             if ($process.HasExited) {
                 Write-Warning "[$repositoryName] Process exited after the timeout was detected; taskkill was not needed."
             }
@@ -1795,6 +1820,10 @@ foreach ($repository in $repositories) {
                     $taskKillOutput = @()
                     $taskKillExitCode = $TaskKillExecutionExceptionExitCode
                     try {
+                        # Phase 2: use taskkill.exe for the process tree. Do not
+                        # cache identity checks; each check follows a Refresh()
+                        # because the process can exit or change state between
+                        # timeout handling steps.
                         $process.Refresh()
                         if ($process.HasExited) {
                             Write-Warning "[$repositoryName] Process exited immediately before taskkill; termination was not needed."
@@ -1832,6 +1861,11 @@ foreach ($repository in $repositories) {
                     elseif (-not $process.WaitForExit($PostTerminationWaitMilliseconds)) {
                         Write-Warning "[$repositoryName] Process did not exit within $PostTerminationWaitSeconds seconds after termination attempt; exit code may be unavailable."
                         try {
+                            # Phase 3: direct Process.Kill() is only a fallback
+                            # for the wrapper cmd.exe itself when taskkill.exe
+                            # could not end the tree. taskkill.exe helper
+                            # termination is handled separately in
+                            # Invoke-TaskKillTree.
                             $process.Refresh()
                             if ($process.HasExited) {
                                 Write-Warning "[$repositoryName] Process exited immediately before direct Process.Kill(); no further termination was needed."
