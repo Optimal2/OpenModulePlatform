@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Validates OpenModulePlatform (OMP) repository command wrappers with configurable per-repository timeouts.
+Validates Open Module Platform (OMP) repository command wrappers with configurable per-repository timeouts.
 
 .DESCRIPTION
 Runs the wrapper specified by -CommandWrapperRelativePath in non-interactive mode
@@ -45,7 +45,9 @@ ACL-protected location when logs may contain sensitive diagnostics.
 .PARAMETER PerRepositoryTimeoutSeconds
 Maximum build time per repository. Must be between 60 and 3600 seconds; the
 upper bound of 3600 seconds (1 hour) is enforced by ValidateRange and the
-default is 1200 seconds (20 minutes).
+default is 1200 seconds (20 minutes). The lower bound of 60 seconds avoids
+false timeout failures during minimal restore/build startup work on slower
+Windows runners.
 #>
 [CmdletBinding()]
 param(
@@ -59,6 +61,8 @@ param(
     # 3600 seconds (1 hour) so CI/manual validation stays bounded. ValidateRange
     # requires literal values in a Windows PowerShell 5.1 script parameter block,
     # so the accepted range is repeated here and in the parameter help above.
+    # These literal values cannot be replaced by constants in Windows PowerShell
+    # 5.1 ValidateRange attributes.
     [ValidateRange(60, 3600)]
     [int]$PerRepositoryTimeoutSeconds = 1200
 )
@@ -73,7 +77,7 @@ else {
     Split-Path -Leaf $PSCommandPath
 }
 
-$SafeFileNamePattern = '[^A-Za-z0-9._-]+'
+$SafeFileNamePattern = '[^-A-Za-z0-9._]+'
 $PackageIdentityPattern = '^[A-Za-z0-9._+-]+$'
 # Delimiter between repositoryKey and repositoryVersion in
 # repositoryKey__global__repositoryVersion.zip.
@@ -140,7 +144,7 @@ $MaximumSafeSecondsForMillisecondConversion = $MaximumWaitForExitSeconds
 # ValidateRange attributes in Windows PowerShell 5.1 cannot reference variables.
 # Keep this named constant as the single documented literal value and assert
 # below that the computed WaitForExit limit still matches it.
-# 2147483 is floor([int]::MaxValue / 1000), or floor(2147483647 / 1000).
+# 2147483 is floor(2147483647 / 1000) = floor(2147483.647) = 2147483.
 $ValidateRangeLiteralForMaximumSafeSeconds = 2147483
 
 # Script-scoped second values are retained for human-readable diagnostics;
@@ -227,9 +231,9 @@ function Convert-SecondsToIntMilliseconds {
         [Parameter(Mandatory = $true)][string]$TimeoutDescription,
         # SYNC-WITH: $ValidateRangeLiteralForMaximumSafeSeconds.
         # ValidateRange requires a literal value in Windows PowerShell 5.1.
-        # 2147483 is floor([int]::MaxValue / 1000), or floor(2147483647 / 1000),
-        # which is the largest whole-second value that safely converts back to
-        # WaitForExit(int milliseconds). Startup asserts that this literal still
+        # Literal sync note: 2147483 is floor([int]::MaxValue / 1000), which is
+        # the largest whole-second value that safely converts back to
+        # WaitForExit(int milliseconds). Startup asserts this literal still
         # matches $MaximumSafeSecondsForMillisecondConversion.
         [ValidateRange(1, 2147483)]
         [Parameter(Mandatory = $true)][int]$Seconds
@@ -255,6 +259,14 @@ function Convert-SecondsToIntMilliseconds {
 }
 
 function Get-SafeDiagnosticText {
+    <#
+    .SYNOPSIS
+    Converts diagnostic text into a short, control-character-safe string.
+
+    .DESCRIPTION
+    Returns '<null>' for null input, preserves empty strings, replaces ASCII
+    control characters, and truncates overly long values with an indicator.
+    #>
     param([AllowNull()][AllowEmptyString()][string]$Value)
 
     if ($null -eq $Value) {
@@ -281,19 +293,9 @@ function Get-SafeDiagnosticExcerpt {
     }
 
     $safeLines = [System.Collections.Generic.List[string]]::new()
-    $reader = [System.IO.StringReader]::new($Value)
-    try {
-        for ($lineNumber = 0; $lineNumber -lt $MaximumLines; $lineNumber++) {
-            $line = $reader.ReadLine()
-            if ($null -eq $line) {
-                break
-            }
-
-            $safeLines.Add((Get-SafeDiagnosticText -Value $line))
-        }
-    }
-    finally {
-        $reader.Dispose()
+    $lines = $Value -split "`r`n|`n|`r"
+    for ($lineNumber = 0; $lineNumber -lt $MaximumLines -and $lineNumber -lt $lines.Count; $lineNumber++) {
+        $safeLines.Add((Get-SafeDiagnosticText -Value $lines[$lineNumber]))
     }
 
     return ($safeLines.ToArray() -join ' | ')
@@ -617,7 +619,8 @@ function ConvertTo-CmdArgument {
     # in quotes. The quoting pattern includes ^, so a caret escaped to ^^ is
     # still forced into a quoted argument below. The script invokes cmd.exe
     # without /v:on, so this cmd instance does not perform delayed ! expansion;
-    # AutoRun hooks are disabled later with /d.
+    # a literal ! is therefore safe and does not need escaping here. AutoRun
+    # hooks are disabled later with /d.
     $escaped = $Value.Replace('^', '^^')
     if ($escaped -notmatch $CmdArgumentNeedsQuotingPattern) {
         return $escaped
@@ -936,7 +939,7 @@ function Invoke-TaskKillTree {
             }
             catch {
                 $taskKillProcessId = Get-ValidProcessIdOrNull -Process $taskKillProcess
-                $taskKillListProcessId = if ($null -ne $taskKillProcessId) { $taskKillProcessId } else { $InvalidProcessIdSentinel }
+                $taskKillListProcessId = Get-ProcessIdOrSentinel -ProcessId $taskKillProcessId
                 $taskKillListCommand = Get-TaskListDiagnosticCommand -ProcessId $taskKillListProcessId
                 $warning = @(
                     'Could not terminate stuck taskkill.exe helper process.'
@@ -1020,7 +1023,7 @@ function Test-ExpectedCmdProcess {
         }
 
         if (-not ($ExpectedStartTime -is [System.DateTime])) {
-            Write-Verbose "Expected process start time must be of type [System.DateTime] but got '$(Get-ObjectTypeName -Value $ExpectedStartTime)'."
+            Write-Verbose "Internal process verification skipped because expected start time was not [System.DateTime]. Actual type: '$(Get-ObjectTypeName -Value $ExpectedStartTime)'."
             return $false
         }
 
@@ -1030,13 +1033,20 @@ function Test-ExpectedCmdProcess {
             return $false
         }
 
-        # TotalMilliseconds is a double; keep that precision for the tolerance
-        # comparison instead of rounding to whole milliseconds. The absolute
-        # difference absorbs Windows timer-resolution variance between process
-        # metadata snapshots.
-        $startTimeDifferenceAbsoluteMilliseconds = [Math]::Abs(($actualStartTime - $ExpectedStartTime).TotalMilliseconds)
-        if ($startTimeDifferenceAbsoluteMilliseconds -gt $ProcessStartTimeTolerance.TotalMilliseconds) {
-            Write-Verbose "Process start time changed by $startTimeDifferenceAbsoluteMilliseconds ms, which exceeds the $($ProcessStartTimeTolerance.TotalMilliseconds) ms tolerance."
+        try {
+            # TotalMilliseconds is a double; keep that precision for the tolerance
+            # comparison instead of rounding to whole milliseconds. The absolute
+            # difference absorbs Windows timer-resolution variance between process
+            # metadata snapshots.
+            $startTimeDifferenceMilliseconds = [Math]::Abs(($actualStartTime - $ExpectedStartTime).TotalMilliseconds)
+        }
+        catch {
+            Write-Verbose "Could not compare process start times before taskkill: $($_.Exception.Message)"
+            return $false
+        }
+
+        if ($startTimeDifferenceMilliseconds -gt $ProcessStartTimeTolerance.TotalMilliseconds) {
+            Write-Verbose "Process start time changed by $startTimeDifferenceMilliseconds ms, which exceeds the $($ProcessStartTimeTolerance.TotalMilliseconds) ms tolerance."
             return $false
         }
 
@@ -1096,6 +1106,18 @@ function Get-ProcessIdDisplayText {
     }
 
     return $Fallback
+}
+
+function Get-ProcessIdOrSentinel {
+    param([AllowNull()][object]$ProcessId)
+
+    if ($ProcessId -is [int] -and $ProcessId -ge $MinimumValidProcessId) {
+        return $ProcessId
+    }
+
+    # Windows PowerShell 5.1 does not support the ?? null-coalescing operator,
+    # so keep this helper instead of inline PowerShell 7+ syntax.
+    return $InvalidProcessIdSentinel
 }
 
 function Write-TaskKillFailureWarning {
@@ -1306,7 +1328,7 @@ function Get-RequiredManifestText {
 # WaitForExit expects a 32-bit millisecond value. Validate timeout input before
 # path setup creates output/log directories, so invalid parameters fail fast.
 try {
-    $perRepositoryTimeoutMilliseconds = Convert-SecondsToIntMilliseconds `
+    $PerRepositoryTimeoutMilliseconds = Convert-SecondsToIntMilliseconds `
         -TimeoutDescription 'PerRepositoryTimeoutSeconds' `
         -Seconds $PerRepositoryTimeoutSeconds
 }
@@ -1670,7 +1692,7 @@ foreach ($repository in $repositories) {
         # validation result, log paths, process identity diagnostics, and final
         # package inspection in one flow. Extracting it would require a wide
         # parameter object without making the operational logic safer.
-        $processTimedOut = -not $process.WaitForExit($perRepositoryTimeoutMilliseconds)
+        $processTimedOut = -not $process.WaitForExit($PerRepositoryTimeoutMilliseconds)
         $process.Refresh()
         if ($processTimedOut) {
             # The process can exit between timeout detection and the following
@@ -1744,10 +1766,14 @@ foreach ($repository in $repositories) {
                             # diagnostic warning instead of a script failure.
                             Write-Warning "[$repositoryName] taskkill did not terminate the wrapper process tree; attempting direct Process.Kill() for PID $processIdText."
                             $process.Kill()
+                            $process.Refresh()
+                            if ($process.HasExited) {
+                                Write-Verbose "[$repositoryName] Direct Process.Kill() completed before the follow-up wait."
+                            }
                         }
 
                         if (-not $process.WaitForExit($DirectProcessKillWaitMilliseconds)) {
-                            $taskListProcessId = if ($null -ne $processId) { $processId } else { $InvalidProcessIdSentinel }
+                            $taskListProcessId = Get-ProcessIdOrSentinel -ProcessId $processId
                             $taskListCommand = Get-TaskListDiagnosticCommand -ProcessId $taskListProcessId
                             Write-Warning "[$repositoryName] Process with PID $processIdText still did not exit after direct Process.Kill(). Use Task Manager or run '$taskListCommand' to verify the process tree has terminated before rerunning package validation."
                         }
