@@ -1527,7 +1527,7 @@ span.portal-topbar__nav-group-link {
 
 .omp-session-status-banner {
     position: fixed;
-    top: 12px;
+    top: max(64px, calc(env(safe-area-inset-top, 0px) + 56px));
     left: 50%;
     z-index: 30000;
     display: flex;
@@ -1581,7 +1581,7 @@ span.portal-topbar__nav-group-link {
     padding: 6px 10px;
     border: 1px solid currentColor;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.56);
+    background: rgba(255, 255, 255, 0.82);
     color: inherit;
     font: inherit;
     font-size: 0.82rem;
