@@ -4755,7 +4755,7 @@ ORDER BY ar.ArtifactId DESC;
                 version = ReadDashboardWidgetPackageVersion(node);
                 return !string.IsNullOrWhiteSpace(version);
             }
-            catch
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
             {
                 return false;
             }
@@ -5886,7 +5886,7 @@ ORDER BY ar.ArtifactId DESC;
             version = ReadDashboardWidgetPackageVersion(node);
             return !string.IsNullOrWhiteSpace(version);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
         {
             return false;
         }
@@ -6058,7 +6058,7 @@ ORDER BY ar.ArtifactId DESC;
             version = GetJsonStringProperty(node, propertyName);
             return !string.IsNullOrWhiteSpace(version);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
         {
             return false;
         }
@@ -6092,7 +6092,7 @@ ORDER BY ar.ArtifactId DESC;
             version = GetJsonStringProperty(node, propertyName);
             return !string.IsNullOrWhiteSpace(version);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or ArgumentException or NotSupportedException)
         {
             return false;
         }
