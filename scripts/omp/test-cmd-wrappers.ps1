@@ -18,6 +18,9 @@ The timeout is measured by WaitForExit after the child process has been started.
 WaitForExit returns true when the process exits within that interval and false
 when the timeout expires. On timeout, the script attempts to terminate the whole
 cmd.exe process tree and avoids reading ExitCode until the process has exited.
+PerRepositoryTimeoutSeconds is deliberately bounded so parameter validation
+fails before any repository process starts when the value is outside the
+documented validation range.
 
 .PARAMETER WorkspaceRoot
 Workspace that contains the OMP-compatible repository folders. Defaults to the
@@ -43,10 +46,10 @@ Directory where stdout/stderr logs are written. Use a user-private or
 ACL-protected location when logs may contain sensitive diagnostics.
 
 .PARAMETER PerRepositoryTimeoutSeconds
-Maximum build time per repository. Must be between 60 and 3600 seconds (inclusive); the
+Maximum validation time per repository. Must be between 60 and 3600 seconds (inclusive); the
 upper bound of 3600 seconds (1 hour) is enforced by ValidateRange and the
 default is 1200 seconds (20 minutes). The lower bound of 60 seconds avoids
-premature timeout failures during minimal restore/build startup work on slower
+premature timeout failures during minimal restore/validation startup work on slower
 Windows runners.
 #>
 [CmdletBinding()]
@@ -57,7 +60,7 @@ param(
     [string]$CommandWrapperRelativePath = 'scripts/omp/build-universal-package.cmd',
     [string]$OutputRoot = '',
     [string]$LogRoot = '',
-    # Allow at least 60 seconds for minimal build work, and cap the maximum at
+    # Allow at least 60 seconds for minimal validation startup work, and cap the maximum at
     # 3600 seconds (1 hour) so CI/manual validation stays bounded. ValidateRange
     # requires literal values in a Windows PowerShell 5.1 script parameter block,
     # so the accepted range is repeated here and in the parameter help above.
@@ -135,6 +138,11 @@ $MaximumWaitForExitMilliseconds = [int]::MaxValue
 # WaitForExit(int milliseconds) without overflowing after conversion back to
 # milliseconds.
 $MaximumWaitForExitSeconds = [int][Math]::Floor($MaximumWaitForExitMilliseconds / $MillisecondsPerSecond)
+# Keep the explicit [int]::MaxValue calculation visible next to the literal
+# used by ValidateRange below. This duplicates the value intentionally so future
+# edits can validate the attribute literal without first reasoning through the
+# alias chain above.
+$ComputedValidateRangeMaximumSafeSeconds = [int][Math]::Floor([int]::MaxValue / $MillisecondsPerSecond)
 # Named alias for the same computed limit. The ValidateRange attribute inside
 # Convert-SecondsToIntMilliseconds must still use a literal value in Windows
 # PowerShell 5.1, because ValidateRange attribute arguments cannot reference
@@ -221,6 +229,10 @@ if ($HashPrefixLength -lt 1 -or $HashPrefixLength -gt $Sha256HexLength) {
     throw "HashPrefixLength must be between 1 and Sha256HexLength. HashPrefixLength=$HashPrefixLength, Sha256HexLength=$Sha256HexLength."
 }
 
+if ($ComputedValidateRangeMaximumSafeSeconds -ne $ValidateRangeLiteralForMaximumSafeSeconds) {
+    throw "ValidateRange literal $ValidateRangeLiteralForMaximumSafeSeconds does not match floor([int]::MaxValue / $MillisecondsPerSecond) = $ComputedValidateRangeMaximumSafeSeconds."
+}
+
 if ($MaximumSafeSecondsForMillisecondConversion -ne $ValidateRangeLiteralForMaximumSafeSeconds) {
     throw "ValidateRange literal $ValidateRangeLiteralForMaximumSafeSeconds does not match computed maximum $MaximumSafeSecondsForMillisecondConversion for Convert-SecondsToIntMilliseconds."
 }
@@ -240,6 +252,12 @@ function Convert-SecondsToIntMilliseconds {
 
     .PARAMETER Seconds
     Whole-second timeout value to convert.
+
+    .NOTES
+    Windows PowerShell 5.1 requires literal values in ValidateRange attributes.
+    Keep the upper-bound literal synchronized with
+    $ValidateRangeLiteralForMaximumSafeSeconds; startup asserts that the literal
+    still equals floor([int]::MaxValue / 1000).
     #>
     param(
         [Parameter(Mandatory = $true)][string]$TimeoutDescription,
@@ -599,8 +617,8 @@ function Get-ShortStableHash {
 
     # 16 hex characters gives 64 bits of stable filename entropy, which is
     # intentionally more than enough for the small set of sibling repositories.
-    # Build the full SHA256 hex string before taking the configured prefix so
-    # the length check below still verifies a complete digest.
+    # Startup validation keeps HashPrefixLength within the fixed SHA256 hex
+    # length, so this hot path can take the configured prefix directly.
     $hashBuilder = [System.Text.StringBuilder]::new($Sha256HexLength)
     foreach ($hashByte in $hashBytes) {
         # Cast to [void] to suppress StringBuilder output without adding
@@ -608,12 +626,7 @@ function Get-ShortStableHash {
         [void]$hashBuilder.Append($hashByte.ToString('x2', [System.Globalization.CultureInfo]::InvariantCulture))
     }
 
-    $hash = $hashBuilder.ToString()
-    if ($HashPrefixLength -gt $hash.Length) {
-        throw "HashPrefixLength exceeded the generated SHA256 hash length. HashLength=$($hash.Length), HashPrefixLength=$HashPrefixLength."
-    }
-
-    return $hash.Substring(0, $HashPrefixLength)
+    return $hashBuilder.ToString().Substring(0, $HashPrefixLength)
 }
 
 function Get-SafeFileName {
@@ -668,11 +681,14 @@ function ConvertTo-CmdArgument {
     # Escape carets before quoting so a literal caret cannot alter parsing of
     # the generated command line. cmd.exe can treat ^ as an escape character
     # even in quoted edge cases, so the raw value is escaped before wrapping it
-    # in quotes. The quoting pattern includes ^, so a caret escaped to ^^ is
-    # still forced into a quoted argument below. The script invokes cmd.exe
-    # without /v:on, so this cmd instance does not perform delayed ! expansion;
-    # a literal ! is therefore safe and does not need escaping here. AutoRun
-    # hooks are disabled later with /d.
+    # in quotes. This function expects raw, unescaped input; feeding it already
+    # cmd-escaped text is intentionally unsupported because double escaping can
+    # change the literal value that the child process receives. The quoting
+    # pattern includes ^, so a caret escaped to ^^ is still forced into a quoted
+    # argument below. The script invokes cmd.exe without /v:on, so this cmd
+    # instance does not perform delayed ! expansion; a literal ! is therefore
+    # safe and does not need escaping here. AutoRun hooks are disabled later
+    # with /d.
     $escaped = $Value.Replace('^', '^^')
     if ($escaped -notmatch $CmdArgumentNeedsQuotingPattern) {
         return $escaped
@@ -888,7 +904,9 @@ function Add-TaskOutputOrDiagnostic {
     times out, this helper reports that condition and leaves the read task to
     complete later; timeout cleanup is handled by the owning process path. A
     timed-out read task may hold stream resources until the helper process exits
-    or the PowerShell process unloads its AppDomain.
+    or the PowerShell process unloads its AppDomain. Repeated helper stream
+    timeouts could therefore temporarily retain resources; the script reports
+    those timeouts explicitly and remains bounded instead of waiting forever.
     This is acceptable here because the tasks read independent helper-process
     streams and do not marshal continuations back to the PowerShell thread; no
     synchronization context is required for their completion.
@@ -1005,6 +1023,8 @@ function Invoke-TaskKillTree {
             $output = [System.Collections.Generic.List[string]]::new()
             $output.Add("taskkill.exe did not exit within $TaskKillWaitSeconds seconds.")
 
+            # WaitForExit uses milliseconds; diagnostics report the matching
+            # script-level seconds value because operators think in seconds.
             if ($taskKillProcess.WaitForExit($TaskKillPostTerminationWaitMilliseconds)) {
                 Add-TaskOutputOrDiagnostic -Output $output -Task $stdoutTask -StreamName 'stdout'
                 Add-TaskOutputOrDiagnostic -Output $output -Task $stderrTask -StreamName 'stderr'
@@ -1050,6 +1070,12 @@ function Test-IsCmdProcessName {
     )
 }
 
+function Test-IsValidProcessTimestamp {
+    param([Parameter(Mandatory = $true)][DateTime]$Value)
+
+    return ($Value -ne [DateTime]::MinValue -and $Value -ne [DateTime]::MaxValue)
+}
+
 function Test-ExpectedCmdProcess {
     param(
         [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
@@ -1075,8 +1101,8 @@ function Test-ExpectedCmdProcess {
             return $true
         }
 
-        if (-not ($ExpectedStartTime -is [System.DateTime])) {
-            Write-Verbose "Internal process verification skipped because expected start time was not [System.DateTime]. Actual type: '$(Get-ObjectTypeName -Value $ExpectedStartTime)'."
+        if (-not ($ExpectedStartTime -is [DateTime])) {
+            Write-Verbose "Internal process verification skipped because expected start time was not [DateTime]. Actual type: '$(Get-ObjectTypeName -Value $ExpectedStartTime)'."
             return $false
         }
 
@@ -1086,10 +1112,8 @@ function Test-ExpectedCmdProcess {
             return $false
         }
 
-        if ($actualStartTime -eq [DateTime]::MinValue -or
-            $actualStartTime -eq [DateTime]::MaxValue -or
-            $ExpectedStartTime -eq [DateTime]::MinValue -or
-            $ExpectedStartTime -eq [DateTime]::MaxValue) {
+        if (-not (Test-IsValidProcessTimestamp -Value $actualStartTime) -or
+            -not (Test-IsValidProcessTimestamp -Value $ExpectedStartTime)) {
             Write-Verbose 'Process start time comparison skipped because one timestamp was DateTime.MinValue or DateTime.MaxValue.'
             return $false
         }
@@ -1746,110 +1770,113 @@ foreach ($repository in $repositories) {
         # package inspection in one flow. Extracting it would require a wide
         # parameter object without making the operational logic safer.
         $processTimedOut = -not $process.WaitForExit($PerRepositoryTimeoutMilliseconds)
-        $process.Refresh()
         if ($processTimedOut) {
-            # The process can exit between timeout detection and the following
-            # state reads. Every termination branch refreshes the Process object
-            # and treats "already exited" as a successful no-op.
-            $processId = Get-ValidProcessIdOrNull -Process $process
-            $processIdText = Get-ProcessIdDisplayText -ProcessId $processId -Fallback '<unknown>'
-            Write-Warning "[$repositoryName] Timeout reached after $PerRepositoryTimeoutSeconds seconds. Terminating process tree for PID $processIdText."
+            # The process can exit immediately after the timeout result is
+            # observed. Refresh before every state decision and treat "already
+            # exited" as a successful no-op so this known race never becomes a
+            # script failure or an unsafe taskkill attempt.
             $process.Refresh()
             if ($process.HasExited) {
                 Write-Warning "[$repositoryName] Process exited after the timeout was detected; taskkill was not needed."
             }
-            elseif ($null -eq $processId) {
-                Write-Warning "[$repositoryName] Process PID could not be read or was invalid; taskkill was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
-            }
-            elseif (-not (Test-ExpectedCmdProcess -Process $process -ExpectedStartTime $processStartTime)) {
-                Write-Warning "[$repositoryName] Timed-out process is no longer the expected cmd.exe instance; taskkill was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
-            }
             else {
-                $taskKillAttempted = $false
-                $taskKillOutput = @()
-                $taskKillExitCode = $TaskKillExecutionExceptionExitCode
-                try {
-                    $process.Refresh()
-                    if ($process.HasExited) {
-                        Write-Warning "[$repositoryName] Process exited immediately before taskkill; termination was not needed."
-                    }
-                    elseif (-not (Test-ExpectedCmdProcess -Process $process -ExpectedStartTime $processStartTime)) {
-                        Write-Warning "[$repositoryName] Process identity changed immediately before taskkill; termination was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
-                    }
-                    else {
-                        # This intentionally repeats the earlier process-state
-                        # checks immediately before taskkill to narrow the
-                        # time-of-check/time-of-use window.
-                        # The Process object keeps a handle to the child cmd.exe
-                        # and HasExited/ProcessName/StartTime are checked
-                        # immediately before taskkill, so PID reuse is not
-                        # expected in normal Windows process lifetime semantics.
-                        $taskKillAttempted = $true
-                        $taskKillResult = Invoke-TaskKillTree -ProcessId $processId
-                        $taskKillOutput = $taskKillResult.Output
-                        $taskKillExitCode = $taskKillResult.ExitCode
-                    }
+                $processId = Get-ValidProcessIdOrNull -Process $process
+                $processIdText = Get-ProcessIdDisplayText -ProcessId $processId -Fallback '<unknown>'
+                Write-Warning "[$repositoryName] Timeout reached after $PerRepositoryTimeoutSeconds seconds. Terminating process tree for PID $processIdText."
+
+                if ($null -eq $processId) {
+                    Write-Warning "[$repositoryName] Process PID could not be read or was invalid; taskkill was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
                 }
-                catch {
-                    $taskKillOutput = @($_.Exception.ToString())
+                elseif (-not (Test-ExpectedCmdProcess -Process $process -ExpectedStartTime $processStartTime)) {
+                    Write-Warning "[$repositoryName] Timed-out process is no longer the expected cmd.exe instance; taskkill was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
+                }
+                else {
+                    $taskKillAttempted = $false
+                    $taskKillOutput = @()
                     $taskKillExitCode = $TaskKillExecutionExceptionExitCode
-                }
-
-                if ($taskKillAttempted -and $taskKillExitCode -ne 0) {
-                    Write-TaskKillFailureWarning -RepositoryName $repositoryName -ExitCode $taskKillExitCode -ProcessId $processId -Output @($taskKillOutput)
-                }
-
-                $process.Refresh()
-                if ($process.HasExited) {
-                    Write-Verbose "[$repositoryName] Process exited after termination attempt."
-                }
-                elseif (-not $process.WaitForExit($PostTerminationWaitMilliseconds)) {
-                    Write-Warning "[$repositoryName] Process did not exit within $PostTerminationWaitSeconds seconds after termination attempt; exit code may be unavailable."
                     try {
                         $process.Refresh()
                         if ($process.HasExited) {
-                            Write-Warning "[$repositoryName] Process exited immediately before direct Process.Kill(); no further termination was needed."
+                            Write-Warning "[$repositoryName] Process exited immediately before taskkill; termination was not needed."
                         }
                         elseif (-not (Test-ExpectedCmdProcess -Process $process -ExpectedStartTime $processStartTime)) {
-                            Write-Warning "[$repositoryName] Process identity changed immediately before direct Process.Kill(); termination was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
+                            Write-Warning "[$repositoryName] Process identity changed immediately before taskkill; termination was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
                         }
                         else {
-                            # The process can still exit between HasExited and
-                            # Kill(); the catch below treats that race as a
-                            # diagnostic warning instead of a script failure.
+                            # This intentionally repeats the earlier process-state
+                            # checks immediately before taskkill to narrow the
+                            # time-of-check/time-of-use window.
+                            # The Process object keeps a handle to the child cmd.exe
+                            # and HasExited/ProcessName/StartTime are checked
+                            # immediately before taskkill, so PID reuse is not
+                            # expected in normal Windows process lifetime semantics.
+                            $taskKillAttempted = $true
+                            $taskKillResult = Invoke-TaskKillTree -ProcessId $processId
+                            $taskKillOutput = $taskKillResult.Output
+                            $taskKillExitCode = $taskKillResult.ExitCode
+                        }
+                    }
+                    catch {
+                        $taskKillOutput = @($_.Exception.ToString())
+                        $taskKillExitCode = $TaskKillExecutionExceptionExitCode
+                    }
+
+                    if ($taskKillAttempted -and $taskKillExitCode -ne 0) {
+                        Write-TaskKillFailureWarning -RepositoryName $repositoryName -ExitCode $taskKillExitCode -ProcessId $processId -Output @($taskKillOutput)
+                    }
+
+                    $process.Refresh()
+                    if ($process.HasExited) {
+                        Write-Verbose "[$repositoryName] Process exited after termination attempt."
+                    }
+                    elseif (-not $process.WaitForExit($PostTerminationWaitMilliseconds)) {
+                        Write-Warning "[$repositoryName] Process did not exit within $PostTerminationWaitSeconds seconds after termination attempt; exit code may be unavailable."
+                        try {
                             $process.Refresh()
                             if ($process.HasExited) {
                                 Write-Warning "[$repositoryName] Process exited immediately before direct Process.Kill(); no further termination was needed."
                             }
+                            elseif (-not (Test-ExpectedCmdProcess -Process $process -ExpectedStartTime $processStartTime)) {
+                                Write-Warning "[$repositoryName] Process identity changed immediately before direct Process.Kill(); termination was not attempted. Current identity: $(Get-ProcessIdentityDiagnostic -Process $process)."
+                            }
                             else {
-                                Write-Warning "[$repositoryName] taskkill did not terminate the wrapper process tree; attempting direct Process.Kill() for PID $processIdText."
-                                $process.Kill()
+                                # The process can still exit between HasExited and
+                                # Kill(); the catch below treats that race as a
+                                # diagnostic warning instead of a script failure.
                                 $process.Refresh()
                                 if ($process.HasExited) {
-                                    Write-Verbose "[$repositoryName] Direct Process.Kill() completed before the follow-up wait."
+                                    Write-Warning "[$repositoryName] Process exited immediately before direct Process.Kill(); no further termination was needed."
+                                }
+                                else {
+                                    Write-Warning "[$repositoryName] taskkill did not terminate the wrapper process tree; attempting direct Process.Kill() for PID $processIdText."
+                                    $process.Kill()
+                                    $process.Refresh()
+                                    if ($process.HasExited) {
+                                        Write-Verbose "[$repositoryName] Direct Process.Kill() completed before the follow-up wait."
+                                    }
                                 }
                             }
-                        }
 
-                        if (-not $process.WaitForExit($DirectProcessKillWaitMilliseconds)) {
-                            $targetProcessIdOrSentinel = Get-ProcessIdOrSentinel -ProcessId $processId
-                            $targetDiagnosticCommand = Get-TaskListDiagnosticCommand -ProcessId $targetProcessIdOrSentinel
-                            Write-Warning "[$repositoryName] Process with PID $processIdText still did not exit after direct Process.Kill(). Use Task Manager or run '$targetDiagnosticCommand' to verify the process tree has terminated before rerunning package validation."
-                        }
-                    }
-                    catch {
-                        $killError = $_.Exception.Message
-                        try {
-                            $process.Refresh()
-                            if ($process.HasExited) {
-                                Write-Warning "[$repositoryName] Direct Process.Kill() raced with natural process exit; no further termination was needed. Original error: $killError"
-                            }
-                            else {
-                                Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed while the process still appeared to be running: $killError"
+                            if (-not $process.WaitForExit($DirectProcessKillWaitMilliseconds)) {
+                                $targetProcessIdOrSentinel = Get-ProcessIdOrSentinel -ProcessId $processId
+                                $targetDiagnosticCommand = Get-TaskListDiagnosticCommand -ProcessId $targetProcessIdOrSentinel
+                                Write-Warning "[$repositoryName] Process with PID $processIdText still did not exit after direct Process.Kill(). Use Task Manager or run '$targetDiagnosticCommand' to verify the process tree has terminated before rerunning package validation."
                             }
                         }
                         catch {
-                            Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed and the final process state could not be inspected: $killError"
+                            $killError = $_.Exception.Message
+                            try {
+                                $process.Refresh()
+                                if ($process.HasExited) {
+                                    Write-Warning "[$repositoryName] Direct Process.Kill() raced with natural process exit; no further termination was needed. Original error: $killError"
+                                }
+                                else {
+                                    Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed while the process still appeared to be running: $killError"
+                                }
+                            }
+                            catch {
+                                Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed and the final process state could not be inspected: $killError"
+                            }
                         }
                     }
                 }
@@ -1919,7 +1946,15 @@ $results | Format-Table $ValidationSummaryColumns -AutoSize
 
 # The table stays compact for CI logs. StdoutLog, StderrLog, and Detail remain
 # on each result object for callers that capture the script output.
-$hasFailures = $null -ne ($results | Where-Object { $_.Status -ne 'OK' } | Select-Object -First 1)
+$hasFailures = $false
+foreach ($result in $results) {
+    # Keep this as an explicit loop instead of a pipeline so Windows PowerShell
+    # 5.1 short-circuits immediately on the first failure.
+    if ($result.Status -ne 'OK') {
+        $hasFailures = $true
+        break
+    }
+}
 
 if ($hasFailures) {
     # Keep one generic failure exit code for compatibility with existing
