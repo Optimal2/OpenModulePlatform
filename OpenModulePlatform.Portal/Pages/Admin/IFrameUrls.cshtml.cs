@@ -186,18 +186,19 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
 
     private void ValidateUrlInput()
     {
-        if (!HasIFrameTables)
+        ValidateIFrameTablesAvailable();
+
+        if (!string.IsNullOrWhiteSpace(UrlInput.Url) && !IsHttpOrHttpsUrl(UrlInput.Url))
         {
-            ModelState.AddModelError(string.Empty, T("The iFrame URL tables are not installed."));
+            ModelState.AddModelError(
+                $"{nameof(UrlInput)}.{nameof(UrlInputModel.Url)}",
+                T("Enter an absolute HTTP or HTTPS URL."));
         }
     }
 
     private void ValidateUrlSetInput()
     {
-        if (!HasIFrameTables)
-        {
-            ModelState.AddModelError(string.Empty, T("The iFrame URL tables are not installed."));
-        }
+        ValidateIFrameTablesAvailable();
 
         if (UrlSetInput.SelectedUrlIds.Count == 0)
         {
@@ -205,6 +206,20 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
                 $"{nameof(UrlSetInput)}.{nameof(UrlSetInputModel.SelectedUrlIds)}",
                 T("Select at least one iFrame URL."));
         }
+    }
+
+    private void ValidateIFrameTablesAvailable()
+    {
+        if (!HasIFrameTables)
+        {
+            ModelState.AddModelError(string.Empty, T("The iFrame URL tables are not installed."));
+        }
+    }
+
+    private static bool IsHttpOrHttpsUrl(string? value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
     private static string NormalizeTab(string? tab)

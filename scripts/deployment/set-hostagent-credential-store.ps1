@@ -83,10 +83,63 @@ function Protect-Password {
         [Security.Cryptography.DataProtectionScope]::LocalMachine
     }
 
-    $passwordBytes = [Text.Encoding]::UTF8.GetBytes($PlainText)
     $entropyBytes = [Text.Encoding]::UTF8.GetBytes($Purpose)
-    $encryptedBytes = [Security.Cryptography.ProtectedData]::Protect($passwordBytes, $entropyBytes, $scopeValue)
-    return [Convert]::ToBase64String($encryptedBytes)
+    $passwordBytes = [Text.Encoding]::UTF8.GetBytes($PlainText)
+    try {
+        $encryptedBytes = [Security.Cryptography.ProtectedData]::Protect($passwordBytes, $entropyBytes, $scopeValue)
+        return [Convert]::ToBase64String($encryptedBytes)
+    }
+    finally {
+        if ($null -ne $passwordBytes) {
+            [Array]::Clear($passwordBytes, 0, $passwordBytes.Length)
+        }
+    }
+}
+
+function Set-RestrictedCredentialStoreAcl {
+    param(
+        [Parameter(Mandatory = $true)] [string]$Path,
+        [Parameter(Mandatory = $true)] [string]$ServiceAccountName
+    )
+
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        return
+    }
+
+    try {
+        $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+        $acl = Get-Acl -LiteralPath $item.FullName
+        $acl.SetAccessRuleProtection($true, $false)
+
+        $inheritanceFlags = if ($item.PSIsContainer) {
+            [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+        }
+        else {
+            [Security.AccessControl.InheritanceFlags]::None
+        }
+        $propagationFlags = [Security.AccessControl.PropagationFlags]::None
+        $accessControlType = [Security.AccessControl.AccessControlType]::Allow
+        $identities = @(
+            'BUILTIN\Administrators',
+            'NT AUTHORITY\SYSTEM',
+            $ServiceAccountName.Trim()
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+        foreach ($identity in $identities) {
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+                $identity,
+                [Security.AccessControl.FileSystemRights]::FullControl,
+                $inheritanceFlags,
+                $propagationFlags,
+                $accessControlType)
+            $acl.SetAccessRule($rule)
+        }
+
+        Set-Acl -LiteralPath $item.FullName -AclObject $acl
+    }
+    catch {
+        Write-Warning "Could not restrict ACLs on credential-store path '$Path'. Review permissions manually. $($_.Exception.Message)"
+    }
 }
 
 function Get-UtcTimestampText {
@@ -198,8 +251,10 @@ try {
         $storeDirectory = Split-Path -Parent $storePath
         if (-not [string]::IsNullOrWhiteSpace($storeDirectory)) {
             New-Item -ItemType Directory -Path $storeDirectory -Force | Out-Null
+            Set-RestrictedCredentialStoreAcl -Path $storeDirectory -ServiceAccountName $UserName
         }
         $document | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $storePath -Encoding UTF8
+        Set-RestrictedCredentialStoreAcl -Path $storePath -ServiceAccountName $UserName
     }
 
     if ($PSCmdlet.ShouldProcess($settingsPath, 'Update HostAgent credential-store settings')) {
