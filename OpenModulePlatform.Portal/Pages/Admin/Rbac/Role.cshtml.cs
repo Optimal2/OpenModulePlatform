@@ -8,6 +8,7 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Security.Principal;
 using System.Text.RegularExpressions;
 
 namespace OpenModulePlatform.Portal.Pages.Admin.Rbac;
@@ -65,7 +66,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     [
         new() { Value = "OmpUser", Label = T("OMP user") },
         new() { Value = "ADUser", Label = T("AD user") },
-        new() { Value = "ADGroup", Label = T("AD group"), Disabled = true }
+        new() { Value = "ADGroup", Label = T("AD group") }
     ];
 
     public async Task<IActionResult> OnGet(int? roleId, CancellationToken ct)
@@ -286,6 +287,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return new JsonResult(suggestions);
         }
 
+        if (string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase))
+        {
+            var suggestions = await _repo.SearchAdGroupPrincipalSuggestionsAsync(term, 12, ct);
+            return new JsonResult(suggestions);
+        }
+
         return new JsonResult(Array.Empty<PrincipalSuggestion>());
     }
 
@@ -371,7 +378,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase))
         {
-            return new NormalizedPrincipalResult(null, "AD group assignment is not available yet.");
+            return new NormalizedPrincipalResult(NormalizeAdGroupPrincipal(principal));
         }
 
         if (string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase))
@@ -408,6 +415,46 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         => string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase)
             || string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase)
             || string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeAdGroupPrincipal(string principal)
+    {
+        principal = principal.Trim();
+        if (principal.StartsWith("S-1-", StringComparison.OrdinalIgnoreCase) ||
+            !OperatingSystem.IsWindows())
+        {
+            return principal;
+        }
+
+        foreach (var candidate in GetAdGroupPrincipalCandidates(principal))
+        {
+            try
+            {
+                if (new NTAccount(candidate).Translate(typeof(SecurityIdentifier)) is SecurityIdentifier sid)
+                {
+                    return sid.Value;
+                }
+            }
+            catch (Exception ex) when (
+                ex is IdentityNotMappedException or UnauthorizedAccessException or ArgumentException)
+            {
+                // Keep the entered value. Domain groups can still match by translated
+                // DOMAIN\Group names in the Windows login token when SID lookup is not
+                // available from this host.
+            }
+        }
+
+        return principal;
+    }
+
+    private static IEnumerable<string> GetAdGroupPrincipalCandidates(string principal)
+    {
+        yield return principal;
+
+        if (!principal.Contains('\\') && !string.IsNullOrWhiteSpace(Environment.MachineName))
+        {
+            yield return Environment.MachineName + "\\" + principal;
+        }
+    }
 
     private static bool TryParseOmpUserPrincipal(string value, out int userId)
     {
