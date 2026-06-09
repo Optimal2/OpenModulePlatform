@@ -980,6 +980,23 @@ a:hover {
     margin-top: 12px;
 }
 
+.top-gap-sm {
+    margin-top: 6px;
+}
+
+.split-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+}
+
+@media (max-width: 760px) {
+    .split-header {
+        flex-direction: column;
+    }
+}
+
 .bottom-gap {
     margin-bottom: 16px;
 }

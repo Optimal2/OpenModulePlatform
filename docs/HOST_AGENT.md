@@ -29,8 +29,8 @@ OMP metadata; it does not infer the latest version from file or folder names.
   `host-agent` artifacts registered in `omp.HostAgentDesiredStates`
 - Web app deployment state in `omp.HostAppDeploymentStates`
 - Database-backed HostAgent job queue in `omp.HostAgentJobs`, currently used
-  for central artifact store and host-local artifact cache cleanup requested
-  from Portal maintenance
+  for central artifact store, host-local artifact cache cleanup, and
+  maintenance scan/cleanup tasks requested from Portal maintenance
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
   - operation: `quiesce`
@@ -46,6 +46,7 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - `omp.HostAgentRuntimeStates`
 - `omp.HostAgentLeases`
 - `omp.HostAgentJobs`
+- `omp.MaintenanceFindings`
 - `omp.WorkerInstances`
 - `omp.WorkerInstanceRuntimeStates`
 
@@ -82,12 +83,35 @@ The cleanup job types are:
   HostAgent only deletes paths inside `HostAgent:LocalArtifactCacheRoot`, refuses
   to delete the cache root or `.staging`, and skips paths that are still
   referenced by current host state.
+- `MaintenanceScan` - global or host-specific scan requested by Portal
+  maintenance. The global scan records stale HostAgent runtime-state rows that
+  are inactive, unleased, and no longer match desired state. The host-specific
+  scan records stopped old HostAgent Windows services and HostAgent install or
+  staging directories below the configured HostAgent install root. Scan jobs only
+  create or reopen rows in `omp.MaintenanceFindings`; they do not delete
+  anything.
+- `MaintenanceCleanup` - global or host-specific cleanup request for selected
+  `omp.MaintenanceFindings` rows. HostAgent revalidates every target immediately
+  before cleanup. It refuses to delete the active HostAgent service, running
+  services, directories outside the configured install root, the install root
+  itself, the active process directory, credential-store directories, and
+  directories still referenced by HostAgent services.
 
 Artifact retention cleanup protects artifact versions that are still referenced
 by desired state, current app deployment state, host requirements, templates, or
 active HostAgent runtime state. Portal only previews candidates and queues the
 global job; the HostAgent recomputes the candidate set at execution time before
 it changes the database or filesystem.
+
+Maintenance findings use these statuses:
+
+- `Open` - visible in Portal and eligible for cleanup or ignore.
+- `Ignored` - hidden until a future scan reports the same target again.
+- `CleanupQueued` - selected for a queued cleanup job.
+- `Cleaned` - cleanup completed or the target was already missing.
+- `Failed` - cleanup attempted but failed; the row is visible again.
+- `Skipped` - HostAgent intentionally skipped the target because a safety check
+  failed.
 
 The job loop is enabled by default:
 

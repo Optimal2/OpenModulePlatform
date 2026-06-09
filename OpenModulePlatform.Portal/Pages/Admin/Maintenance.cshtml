@@ -29,10 +29,148 @@
     </div>
 }
 
+@if (Model.MaintenanceScanResult is not null)
+{
+    <div class="card status-banner">
+        @L["Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back.",
+            Model.MaintenanceScanResult.TotalJobCount,
+            Model.MaintenanceScanResult.HostJobCount]
+    </div>
+}
+
+@if (Model.MaintenanceCleanupResult is not null)
+{
+    <div class="card status-banner">
+        @L["Queued cleanup for {0} of {1} selected maintenance finding(s) across {2} HostAgent job(s).",
+            Model.MaintenanceCleanupResult.QueuedFindingCount,
+            Model.MaintenanceCleanupResult.SelectedFindingCount,
+            Model.MaintenanceCleanupResult.QueuedJobCount]
+    </div>
+}
+
+@if (Model.IgnoredMaintenanceFindingCount > 0)
+{
+    <div class="card status-banner">
+        @L["Ignored {0} maintenance finding(s). They are hidden until a future scan reports them again.", Model.IgnoredMaintenanceFindingCount]
+    </div>
+}
+
 @if (!ViewContext.ModelState.IsValid)
 {
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
+
+<section class="card top-gap">
+    <div class="split-header">
+        <div>
+            <h3>@L["OMP scan"]</h3>
+            <p class="muted">@L["Scan the shared installation and every enabled host for stale HostAgent runtime rows, stopped old HostAgent services, and leftover HostAgent folders. The scan only reports candidates; cleanup is queued separately after review."]</p>
+        </div>
+        <form method="post">
+            <button type="submit" asp-page-handler="QueueMaintenanceScan">@L["Start OMP scan"]</button>
+        </form>
+    </div>
+
+    @if (Model.MaintenanceFindings.Count == 0)
+    {
+        <div class="empty-state top-gap">@L["No open maintenance findings. Start a scan to collect new findings."]</div>
+    }
+    else
+    {
+        <form method="post" class="top-gap">
+            <div class="toolbar">
+                <button type="submit"
+                        asp-page-handler="CleanupMaintenanceFindings"
+                        class="btn btn-danger"
+                        onclick="return confirm('@L["Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything."]');">
+                    @L["Queue cleanup"]
+                </button>
+                <button type="submit"
+                        asp-page-handler="IgnoreMaintenanceFindings"
+                        class="btn btn-secondary">
+                    @L["Ignore selected"]
+                </button>
+            </div>
+
+            <div class="table-scroll top-gap">
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>
+                                <input type="checkbox"
+                                       id="select-maintenance-findings"
+                                       aria-label="@L["Select all maintenance findings"]" />
+                            </th>
+                            <th>@L["Target"]</th>
+                            <th>@L["Host"]</th>
+                            <th>@L["Status"]</th>
+                            <th>@L["Safety"]</th>
+                            <th>@L["Last seen UTC"]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in Model.MaintenanceFindings)
+                    {
+                        <tr>
+                            <td>
+                                <input type="checkbox"
+                                       name="SelectedMaintenanceFindingIds"
+                                       value="@row.MaintenanceFindingId"
+                                       class="maintenance-finding-checkbox"
+                                       aria-label="@L["Select maintenance finding {0}", row.MaintenanceFindingId]" />
+                            </td>
+                            <td>
+                                <strong>@row.Title</strong>
+                                <div class="muted">@row.Category / @row.TargetKind</div>
+                                <code>@row.TargetIdentifier</code>
+                                @if (!string.IsNullOrWhiteSpace(row.Detail))
+                                {
+                                    <details class="top-gap-sm">
+                                        <summary>@L["Details"]</summary>
+                                        <div>@row.Detail</div>
+                                        @if (!string.IsNullOrWhiteSpace(row.RecommendedAction))
+                                        {
+                                            <div class="top-gap-sm"><strong>@L["Recommended action"]:</strong> @row.RecommendedAction</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(row.SafetyNotes))
+                                        {
+                                            <div class="top-gap-sm"><strong>@L["Why this is considered safe"]:</strong> @row.SafetyNotes</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(row.ResultMessage))
+                                        {
+                                            <div class="top-gap-sm"><strong>@L["Result"]:</strong> @row.ResultMessage</div>
+                                        }
+                                    </details>
+                                }
+                            </td>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(row.HostKey))
+                                {
+                                    <span class="muted">@L["Shared"]</span>
+                                }
+                                else
+                                {
+                                    <code>@row.HostKey</code>
+                                    @if (!string.IsNullOrWhiteSpace(row.HostDisplayName))
+                                    {
+                                        <div class="muted">@row.HostDisplayName</div>
+                                    }
+                                }
+                            </td>
+                            <td><span class="pill">@L[MaintenanceModel.FormatMaintenanceFindingStatus(row.Status)]</span></td>
+                            <td>
+                                <div>@L["Severity"]: @row.Severity</div>
+                                <div>@L["Confidence"]: @row.Confidence%</div>
+                            </td>
+                            <td>@row.LastSeenUtc.ToString("u")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </form>
+    }
+</section>
 
 <section class="card top-gap">
     <h3>@L["Artifact retention"]</h3>
@@ -213,3 +351,19 @@ else
         </table>
     </div>
 }
+
+<script>
+(() => {
+    const selector = document.getElementById('select-maintenance-findings');
+    if (!selector) {
+        return;
+    }
+
+    const boxes = Array.from(document.querySelectorAll('.maintenance-finding-checkbox'));
+    selector.addEventListener('change', () => {
+        for (const box of boxes) {
+            box.checked = selector.checked;
+        }
+    });
+})();
+</script>

@@ -735,6 +735,75 @@ public sealed class ArtifactRetentionCleanupResult
     public int DeletableCandidateCount { get; init; }
 }
 
+public static class MaintenanceFindingStatuses
+{
+    public const byte Open = 0;
+    public const byte Ignored = 1;
+    public const byte CleanupQueued = 2;
+    public const byte Cleaned = 3;
+    public const byte Failed = 4;
+    public const byte Skipped = 5;
+}
+
+public sealed class MaintenanceScanQueueResult
+{
+    public long? GlobalHostAgentJobId { get; init; }
+
+    public int HostJobCount { get; init; }
+
+    public int TotalJobCount => (GlobalHostAgentJobId.HasValue ? 1 : 0) + HostJobCount;
+}
+
+public sealed class MaintenanceCleanupQueueResult
+{
+    public int SelectedFindingCount { get; init; }
+
+    public int QueuedFindingCount { get; init; }
+
+    public int QueuedJobCount { get; init; }
+}
+
+public sealed class MaintenanceFindingRow
+{
+    public long MaintenanceFindingId { get; set; }
+
+    public string FindingKey { get; set; } = string.Empty;
+
+    public string Scope { get; set; } = string.Empty;
+
+    public Guid? HostId { get; set; }
+
+    public string? HostKey { get; set; }
+
+    public string? HostDisplayName { get; set; }
+
+    public string Category { get; set; } = string.Empty;
+
+    public string TargetKind { get; set; } = string.Empty;
+
+    public string TargetIdentifier { get; set; } = string.Empty;
+
+    public string Title { get; set; } = string.Empty;
+
+    public string? Detail { get; set; }
+
+    public string? RecommendedAction { get; set; }
+
+    public string? SafetyNotes { get; set; }
+
+    public byte Status { get; set; }
+
+    public byte Severity { get; set; }
+
+    public byte Confidence { get; set; }
+
+    public DateTime DetectedUtc { get; set; }
+
+    public DateTime LastSeenUtc { get; set; }
+
+    public string? ResultMessage { get; set; }
+}
+
 public sealed class HostAgentJobRow
 {
     public long HostAgentJobId { get; set; }
