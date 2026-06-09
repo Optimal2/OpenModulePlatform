@@ -116,7 +116,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 var result = await _packages.ImportUniversalPackageUploadAsync(
                     file,
                     CreateOptions(UniversalUploadInput),
-                    UniversalUploadInput.QuickImport ? false : UniversalUploadInput.ReplaceExistingConfigObjects,
+                    !UniversalUploadInput.QuickImport && UniversalUploadInput.ReplaceExistingConfigObjects,
                     ct);
                 results.Add(result);
             }
@@ -186,7 +186,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 UniversalStagedInput.Token,
                 UniversalStagedInput.SelectedItemPaths,
                 CreateOptions(UniversalStagedInput),
-                UniversalStagedInput.QuickImport ? false : UniversalStagedInput.ReplaceExistingConfigObjects,
+                !UniversalStagedInput.QuickImport && UniversalStagedInput.ReplaceExistingConfigObjects,
                 ct);
 
             return await ShowUniversalImportResultsAsync([result], ct);

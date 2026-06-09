@@ -1505,7 +1505,7 @@
                 return;
             }
 
-            var payload = response.headers.get('content-type')?.indexOf('application/json') >= 0
+            var payload = (response.headers.get('content-type') || '').indexOf('application/json') >= 0
                 ? await response.json()
                 : null;
             if (payload && payload.authenticated === false) {
@@ -1517,7 +1517,7 @@
             sessionStatusState.failures = 0;
             sessionStatusState.currentKind = '';
             hideSessionStatusBanner();
-        } catch {
+        } catch (error) {
             sessionStatusState.failures += 1;
             sessionStatusState.currentKind = 'network';
             showSessionStatusBanner('network', config);

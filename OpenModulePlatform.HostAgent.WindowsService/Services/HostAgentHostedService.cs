@@ -58,7 +58,7 @@ public sealed class HostAgentHostedService : BackgroundService
                 await RunCycleSafelyAsync(stoppingToken);
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (IsExpectedShutdownCancellation(ex, stoppingToken))
         {
             _logger.LogInformation("HostAgent cancellation requested. HostKey={HostKey}", hostKey);
         }
@@ -70,38 +70,27 @@ public sealed class HostAgentHostedService : BackgroundService
         {
             await _engine.RunOnceAsync(cancellationToken);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (IsRecoverableCycleFailure(ex))
         {
             LogCycleFailure(ex);
         }
-        catch (IOException ex)
-        {
-            LogCycleFailure(ex);
-        }
-        catch (DbException ex)
-        {
-            LogCycleFailure(ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            LogCycleFailure(ex);
-        }
-        catch (TimeoutException ex)
-        {
-            LogCycleFailure(ex);
-        }
-        catch (CryptographicException ex)
-        {
-            LogCycleFailure(ex);
-        }
-        catch (JsonException ex)
-        {
-            LogCycleFailure(ex);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogCritical(ex, "HostAgent cycle failed with an unexpected error.");
-        }
+    }
+
+    private static bool IsExpectedShutdownCancellation(OperationCanceledException ex, CancellationToken stoppingToken)
+    {
+        return stoppingToken.IsCancellationRequested
+            && (ex.CancellationToken == stoppingToken || !ex.CancellationToken.CanBeCanceled);
+    }
+
+    private static bool IsRecoverableCycleFailure(Exception exception)
+    {
+        return exception is InvalidOperationException
+            or IOException
+            or DbException
+            or UnauthorizedAccessException
+            or TimeoutException
+            or CryptographicException
+            or JsonException;
     }
 
     private void LogCycleFailure(Exception exception)
