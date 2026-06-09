@@ -73,7 +73,7 @@ else {
     Split-Path -Leaf $PSCommandPath
 }
 
-$SafeFileNamePattern = '[^A-Za-z0-9._\-]+'
+$SafeFileNamePattern = '[^A-Za-z0-9._-]+'
 $PackageIdentityPattern = '^[A-Za-z0-9._+-]+$'
 # Delimiter between repositoryKey and repositoryVersion in
 # repositoryKey__global__repositoryVersion.zip.
@@ -113,6 +113,9 @@ $MinimumMeaningfulZipFileLengthBytes = 22
 # Keep diagnostics short enough for CI tables and warnings while still showing
 # enough context to identify the bad value.
 $MaximumDiagnosticTextLength = 160
+# Keep at least a few characters before the truncation indicator so shortened
+# diagnostics remain useful if the maximum length is changed later.
+$MinimumDiagnosticPrefixLength = 8
 $TruncationIndicator = '...'
 $MillisecondsPerSecond = 1000
 # The shared wrappers are intentionally stored at scripts/omp/test-cmd-wrappers.ps1.
@@ -137,6 +140,7 @@ $MaximumSafeSecondsForMillisecondConversion = $MaximumWaitForExitSeconds
 # ValidateRange attributes in Windows PowerShell 5.1 cannot reference variables.
 # Keep this named constant as the single documented literal value and assert
 # below that the computed WaitForExit limit still matches it.
+# 2147483 is floor([int]::MaxValue / 1000), or floor(2147483647 / 1000).
 $ValidateRangeLiteralForMaximumSafeSeconds = 2147483
 
 # Script-scoped second values are retained for human-readable diagnostics;
@@ -200,8 +204,22 @@ if ($MaximumDiagnosticTextLength -le $TruncationIndicator.Length) {
     throw $message
 }
 
+if (($MaximumDiagnosticTextLength - $TruncationIndicator.Length) -lt $MinimumDiagnosticPrefixLength) {
+    $message = @(
+        'MaximumDiagnosticTextLength must leave a meaningful prefix before the truncation indicator.'
+        "MinimumDiagnosticPrefixLength=$MinimumDiagnosticPrefixLength."
+        "MaximumDiagnosticTextLength=$MaximumDiagnosticTextLength."
+        "TruncationIndicatorLength=$($TruncationIndicator.Length)."
+    ) -join ' '
+    throw $message
+}
+
+if ($HashPrefixLength -lt 1 -or $HashPrefixLength -gt $Sha256HexLength) {
+    throw "HashPrefixLength must be between 1 and Sha256HexLength. HashPrefixLength=$HashPrefixLength, Sha256HexLength=$Sha256HexLength."
+}
+
 if ($MaximumSafeSecondsForMillisecondConversion -ne $ValidateRangeLiteralForMaximumSafeSeconds) {
-    throw "ValidateRange literal for Convert-SecondsToIntMilliseconds is out of sync. Expected $ValidateRangeLiteralForMaximumSafeSeconds but computed $MaximumSafeSecondsForMillisecondConversion."
+    throw "ValidateRange literal $ValidateRangeLiteralForMaximumSafeSeconds does not match computed maximum $MaximumSafeSecondsForMillisecondConversion for Convert-SecondsToIntMilliseconds."
 }
 
 function Convert-SecondsToIntMilliseconds {
@@ -265,7 +283,7 @@ function Get-SafeDiagnosticExcerpt {
     $safeLines = [System.Collections.Generic.List[string]]::new()
     $reader = [System.IO.StringReader]::new($Value)
     try {
-        while ($safeLines.Count -lt $MaximumLines) {
+        for ($lineNumber = 0; $lineNumber -lt $MaximumLines; $lineNumber++) {
             $line = $reader.ReadLine()
             if ($null -eq $line) {
                 break
@@ -298,9 +316,10 @@ function Get-ControlCharacterDiagnostic {
 }
 
 try {
-    # Keep these conversions explicit instead of looping over variable names:
-    # each output variable is consumed by different process-wait branches, and
-    # spelling them out makes timeout diagnostics easier to trace.
+    # Keep these conversions explicit instead of looping over variable names.
+    # This is intentional duplication: each output variable is consumed by a
+    # different process-wait branch, and spelling them out makes timeout
+    # diagnostics easier to trace than a hashtable of indirect assignments.
     $PostTerminationWaitMilliseconds = Convert-SecondsToIntMilliseconds -TimeoutDescription 'PostTerminationWaitSeconds' -Seconds $PostTerminationWaitSeconds
     $TaskKillWaitMilliseconds = Convert-SecondsToIntMilliseconds -TimeoutDescription 'TaskKillWaitSeconds' -Seconds $TaskKillWaitSeconds
     $TaskKillPostTerminationWaitMilliseconds = Convert-SecondsToIntMilliseconds -TimeoutDescription 'TaskKillPostTerminationWaitSeconds' -Seconds $TaskKillPostTerminationWaitSeconds
@@ -431,6 +450,9 @@ function Test-IsSubPath {
         [Parameter(Mandatory = $true)][string]$BasePath
     )
 
+    # This helper is used for low-volume boundary checks around repository and
+    # output paths. Keep full resolution local to the helper so every call is a
+    # complete containment check instead of relying on caller-side cache state.
     $fullPath = ConvertTo-ComparablePath -Name 'path' -Path $Path
     $fullBasePath = ConvertTo-ComparablePath -Name 'base path' -Path $BasePath
     # ConvertTo-ComparablePath trims trailing separators, so adding exactly one
@@ -527,24 +549,24 @@ function Get-ShortStableHash {
     # the length check below still verifies a complete digest.
     $hashBuilder = [System.Text.StringBuilder]::new($Sha256HexLength)
     foreach ($hashByte in $hashBytes) {
-        # Assign to $null to suppress StringBuilder output without adding
+        # Cast to [void] to suppress StringBuilder output without adding
         # pipeline overhead inside this tight loop.
-        $null = $hashBuilder.Append($hashByte.ToString('x2', [System.Globalization.CultureInfo]::InvariantCulture))
+        [void]$hashBuilder.Append($hashByte.ToString('x2', [System.Globalization.CultureInfo]::InvariantCulture))
     }
 
     $hash = $hashBuilder.ToString()
-    if ($hash.Length -lt $HashPrefixLength) {
-        throw "Generated SHA256 hash was shorter than HashPrefixLength. HashLength=$($hash.Length), HashPrefixLength=$HashPrefixLength."
+    if ($HashPrefixLength -gt $hash.Length) {
+        throw "HashPrefixLength exceeded the generated SHA256 hash length. HashLength=$($hash.Length), HashPrefixLength=$HashPrefixLength."
     }
 
     return $hash.Substring(0, $HashPrefixLength)
 }
 
 function Get-SafeFileName {
-    param([Parameter(Mandatory = $true)][string]$Value)
+    param([Parameter(Mandatory = $true)][object]$Value)
 
     # Keep log filenames portable across Windows shells and filesystems.
-    $safe = $Value -replace $SafeFileNamePattern, '-'
+    $safe = ([string]$Value) -replace $SafeFileNamePattern, '-'
     $safe = $safe.Trim('-')
     if ([string]::IsNullOrWhiteSpace($safe)) {
         return 'repository'
@@ -590,10 +612,12 @@ function ConvertTo-CmdArgument {
 
     # cmd.exe treats ^ as its escape character; ^^ emits one literal caret.
     # Escape carets before quoting so a literal caret cannot alter parsing of
-    # the generated command line. The quoting pattern includes ^, so a caret
-    # escaped to ^^ is still forced into a quoted argument below. The script
-    # invokes cmd.exe without /v:on, so this cmd instance does not perform
-    # delayed ! expansion; AutoRun hooks are disabled later with /d.
+    # the generated command line. cmd.exe can treat ^ as an escape character
+    # even in quoted edge cases, so the raw value is escaped before wrapping it
+    # in quotes. The quoting pattern includes ^, so a caret escaped to ^^ is
+    # still forced into a quoted argument below. The script invokes cmd.exe
+    # without /v:on, so this cmd instance does not perform delayed ! expansion;
+    # AutoRun hooks are disabled later with /d.
     $escaped = $Value.Replace('^', '^^')
     if ($escaped -notmatch $CmdArgumentNeedsQuotingPattern) {
         return $escaped
@@ -741,10 +765,16 @@ function Get-ProcessStartTimeOrNull {
         $Process.Refresh()
         return $Process.StartTime
     }
+    catch [System.InvalidOperationException] {
+        Write-Verbose "Could not read process start time because the process has exited or is not associated with a local process: $($_.Exception.Message)"
+        return $null
+    }
+    catch [System.ComponentModel.Win32Exception] {
+        Write-Verbose "Could not read process start time because Windows denied access or process metadata was unavailable: $($_.Exception.Message)"
+        return $null
+    }
     catch {
-        # StartTime can be unavailable when the process exits between checks or
-        # when the caller lacks permission to inspect process metadata.
-        Write-Verbose "Could not read process start time: $($_.Exception.Message)"
+        Write-Verbose "Could not read process start time ($($_.Exception.GetType().FullName)): $($_.Exception.Message)"
         return $null
     }
 }
@@ -805,7 +835,8 @@ function Add-TaskOutputOrDiagnostic {
     timed-out read task may hold stream resources until the helper process exits
     or the PowerShell process unloads its AppDomain.
     This is acceptable here because the tasks read independent helper-process
-    streams and do not marshal continuations back to the PowerShell thread.
+    streams and do not marshal continuations back to the PowerShell thread; no
+    synchronization context is required for their completion.
     #>
     param(
         [Parameter(Mandatory = $true)][System.Collections.Generic.List[string]]$Output,
@@ -817,8 +848,8 @@ function Add-TaskOutputOrDiagnostic {
         # Task.Wait can surface stream read failures as AggregateException; the
         # catch below converts them into diagnostics instead of hiding them.
         # The call blocks the current PowerShell thread, but the wait is
-        # bounded and Windows PowerShell 5.1 has no async/await syntax that
-        # would make this helper-process stream read clearer.
+        # bounded and safe from synchronization-context deadlocks because these
+        # tasks only read independent redirected streams from taskkill.exe.
         $taskCompleted = $Task.Wait($TaskKillStreamReadWaitMilliseconds)
 
         if (-not $taskCompleted) {
@@ -1045,14 +1076,26 @@ function Get-TaskListDiagnosticCommand {
 function Get-TaskKillDiagnosticCommand {
     param([int]$ProcessId = $InvalidProcessIdSentinel)
 
-    if ($ProcessId -ge $MinimumValidProcessId) {
-        $processIdText = [string]$ProcessId
-    }
-    else {
-        $processIdText = '<PID>'
-    }
+    $processIdText = Get-ProcessIdDisplayText -ProcessId $ProcessId -Fallback '<PID>'
 
     return "taskkill $TaskKillForceSwitch $TaskKillProcessIdSwitch $processIdText $TaskKillTerminateTreeSwitch"
+}
+
+function Get-ProcessIdDisplayText {
+    param(
+        [AllowNull()][object]$ProcessId,
+        [Parameter(Mandatory = $true)][string]$Fallback
+    )
+
+    if ($null -eq $ProcessId) {
+        return $Fallback
+    }
+
+    if ($ProcessId -is [int] -and $ProcessId -ge $MinimumValidProcessId) {
+        return [string]$ProcessId
+    }
+
+    return $Fallback
 }
 
 function Write-TaskKillFailureWarning {
@@ -1082,22 +1125,22 @@ function Write-TaskKillFailureWarning {
 
 function New-ValidationResult {
     param(
-        [Parameter(Mandatory = $true)][string]$Repository,
-        [Parameter(Mandatory = $true)][string]$Status,
+        [Parameter(Mandatory = $true)][object]$Repository,
+        [Parameter(Mandatory = $true)][object]$Status,
         [AllowNull()][object]$ExitCode,
-        [Parameter(Mandatory = $true)][string]$Package,
-        [Parameter(Mandatory = $true)][string]$StdoutLog,
-        [Parameter(Mandatory = $true)][string]$StderrLog,
+        [Parameter(Mandatory = $true)][object]$Package,
+        [Parameter(Mandatory = $true)][object]$StdoutLog,
+        [Parameter(Mandatory = $true)][object]$StderrLog,
         [AllowNull()][string]$Detail
     )
 
     return [pscustomobject]@{
-        Repository = $Repository
-        Status = $Status
+        Repository = [string]$Repository
+        Status = [string]$Status
         ExitCode = $ExitCode
-        Package = $Package
-        StdoutLog = $StdoutLog
-        StderrLog = $StderrLog
+        Package = [string]$Package
+        StdoutLog = [string]$StdoutLog
+        StderrLog = [string]$StderrLog
         Detail = $Detail
     }
 }
@@ -1202,8 +1245,10 @@ function Assert-SafePackageIdentityPart {
 
     # Dot validation is intentionally split into explicit cases: reject every
     # run of two or more consecutive dots, a single dot, and leading/trailing
-    # dots. Ordinary version text such as '1.0.0' stays valid, but path-like
-    # or shell-normalized identity text is rejected before filenames are built.
+    # dots. The allow-list above already rejects slash, backslash, and colon
+    # separators, so these dot checks cover the remaining traversal-like forms.
+    # Ordinary version text such as '1.0.0' stays valid, but path-like or
+    # shell-normalized identity text is rejected before filenames are built.
     if ($Value.Contains('..')) {
         throw "Manifest field '$Name' must not contain two or more consecutive dots, including path traversal sequences like '..'. Value: '$safeValue'. Manifest: $ManifestPath"
     }
@@ -1220,7 +1265,7 @@ function Assert-SafePackageIdentityPart {
         throw "Manifest field '$Name' must not end with a dot. Value: '$safeValue'. Manifest: $ManifestPath"
     }
 
-    if ($Value.Contains($GlobalPackageFileNameDelimiter)) {
+    if ($Value.IndexOf($GlobalPackageFileNameDelimiter, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
         throw "Manifest field '$Name' must not contain the global package filename delimiter '$GlobalPackageFileNameDelimiter'. Value: '$safeValue'. Manifest: $ManifestPath"
     }
 }
@@ -1372,9 +1417,15 @@ if ($repositories.Count -eq 0) {
 $results = [System.Collections.Generic.List[object]]::new()
 
 foreach ($repository in $repositories) {
-    $repositoryName = $repository.Name
-    $manifestPath = Join-Path $repository.FullName $ManifestRelativePath
-    $cmdPath = Join-Path $repository.FullName $CommandWrapperRelativePath
+    $repositoryPath = if ($repository -is [System.IO.DirectoryInfo]) {
+        $repository.FullName
+    }
+    else {
+        [string]$repository
+    }
+    $repositoryName = Split-Path -Leaf $repositoryPath
+    $manifestPath = Join-Path $repositoryPath $ManifestRelativePath
+    $cmdPath = Join-Path $repositoryPath $CommandWrapperRelativePath
 
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
         $results.Add((New-ValidationResult `
@@ -1400,19 +1451,21 @@ foreach ($repository in $repositories) {
         continue
     }
 
-    Assert-RepositoryPathUnderWorkspace -RepositoryPath $repository.FullName -WorkspaceRootPath $workspaceRootPath
+    Assert-RepositoryPathUnderWorkspace -RepositoryPath $repositoryPath -WorkspaceRootPath $workspaceRootPath
 
     try {
         # Keep -Encoding UTF8 for Windows PowerShell 5.1 compatibility. The OMP
         # repository tooling writes component manifests as UTF-8 JSON, with or
         # without BOM depending on the writer. Windows PowerShell 5.1 treats
         # UTF8 writes differently from PowerShell 6+, but reads both BOM and
-        # non-BOM UTF-8 manifests correctly here. Avoid the literal utf8NoBOM
-        # -Encoding name because Windows PowerShell 5.1's Get-Content
-        # -Encoding parameter does not support that value. -Raw is required so
-        # ConvertFrom-Json receives the whole manifest as one string instead of
-        # line-by-line input from an array of strings. Component manifests are
-        # small repository metadata files, so full-document loading is expected.
+        # non-BOM UTF-8 manifests correctly here. A manifest saved with another
+        # encoding can still fail JSON parsing, and that failure is reported in
+        # the parse diagnostic below. Avoid the literal utf8NoBOM -Encoding name
+        # because Windows PowerShell 5.1's Get-Content -Encoding parameter does
+        # not support that value. -Raw is required so ConvertFrom-Json receives
+        # the whole manifest as one string instead of line-by-line input from an
+        # array of strings. Component manifests are small repository metadata
+        # files, so full-document loading is expected.
         $manifestJson = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
     }
     catch [System.Management.Automation.ItemNotFoundException] {
@@ -1531,7 +1584,7 @@ foreach ($repository in $repositories) {
     # Keep the sanitized name for human-readable logs and the path hash for
     # uniqueness when different workspace roots contain same-named repositories.
     $safeRepositoryName = Get-SafeFileName -Value $repositoryName
-    $repoPathHash = Get-ShortStableHash -Value $repository.FullName
+    $repoPathHash = Get-ShortStableHash -Value $repositoryPath
     $safeName = "$safeRepositoryName-$repoPathHash"
     $stdoutPath = Join-Path $runLogRootPath "$safeName$StdoutLogExtension"
     $stderrPath = Join-Path $runLogRootPath "$safeName$StderrLogExtension"
@@ -1558,7 +1611,7 @@ foreach ($repository in $repositories) {
     $joinedWrapperArguments = Join-CmdCommandLine -Arguments $wrapperArguments
     # $CmdCallKeyword is the cmd.exe built-in keyword 'call', not user input.
     # Only the wrapper path and arguments are escaped and quoted.
-    $cmdInvocation = "$CmdCallKeyword $joinedWrapperArguments"
+    $cmdInvocation = @($CmdCallKeyword, $joinedWrapperArguments) -join ' '
     Assert-CmdCommandLineLength -CommandLine $cmdInvocation
     # /d disables cmd.exe AutoRun hooks and /c runs the wrapper then exits.
     $cmdArguments = @('/d', '/c', $cmdInvocation)
@@ -1578,12 +1631,12 @@ foreach ($repository in $repositories) {
         # even though the repository was validated earlier, because junctions or
         # filesystem changes between enumeration and execution should not move
         # command execution outside the intended workspace.
-        Assert-RepositoryPathUnderWorkspace -RepositoryPath $repository.FullName -WorkspaceRootPath $workspaceRootPath
+        Assert-RepositoryPathUnderWorkspace -RepositoryPath $repositoryPath -WorkspaceRootPath $workspaceRootPath
 
         $processParameters = @{
             FilePath = $cmdExePath
             ArgumentList = $cmdArguments
-            WorkingDirectory = $repository.FullName
+            WorkingDirectory = $repositoryPath
             RedirectStandardOutput = $stdoutPath
             RedirectStandardError = $stderrPath
             WindowStyle = 'Hidden'
@@ -1624,12 +1677,7 @@ foreach ($repository in $repositories) {
             # state reads. Every termination branch refreshes the Process object
             # and treats "already exited" as a successful no-op.
             $processId = Get-ValidProcessIdOrNull -Process $process
-            if ($null -eq $processId) {
-                $processIdText = '<unknown>'
-            }
-            else {
-                $processIdText = [string]$processId
-            }
+            $processIdText = Get-ProcessIdDisplayText -ProcessId $processId -Fallback '<unknown>'
             Write-Warning "[$repositoryName] Timeout reached after $PerRepositoryTimeoutSeconds seconds. Terminating process tree for PID $processIdText."
             $process.Refresh()
             if ($process.HasExited) {
@@ -1786,13 +1834,7 @@ $results | Format-Table $ValidationSummaryColumns -AutoSize
 
 # The table stays compact for CI logs. StdoutLog, StderrLog, and Detail remain
 # on each result object for callers that capture the script output.
-$hasFailures = $false
-foreach ($result in $results) {
-    if ($result.Status -ne 'OK') {
-        $hasFailures = $true
-        break
-    }
-}
+$hasFailures = $null -ne ($results | Where-Object { $_.Status -ne 'OK' } | Select-Object -First 1)
 
 if ($hasFailures) {
     # Keep one generic failure exit code for compatibility with existing
