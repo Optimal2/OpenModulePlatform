@@ -25,12 +25,23 @@ public sealed class MaintenanceModel : OmpPortalPageModel
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
+    [BindProperty]
+    public List<long> SelectedMaintenanceFindingIds { get; set; } = [];
+
     public ArtifactRetentionPreview Preview { get; private set; } = new()
     {
         MaxVersionsToKeep = 5
     };
 
     public ArtifactRetentionCleanupResult? CleanupResult { get; private set; }
+
+    public MaintenanceScanQueueResult? MaintenanceScanResult { get; private set; }
+
+    public MaintenanceCleanupQueueResult? MaintenanceCleanupResult { get; private set; }
+
+    public int IgnoredMaintenanceFindingCount { get; private set; }
+
+    public IReadOnlyList<MaintenanceFindingRow> MaintenanceFindings { get; private set; } = [];
 
     public IReadOnlyList<HostAgentJobRow> RecentHostAgentJobs { get; private set; } = [];
 
@@ -73,14 +84,14 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
         if (!ModelState.IsValid)
         {
-            await LoadRecentHostAgentJobsAsync(ct);
+            await LoadOperationalListsAsync(ct);
             return Page();
         }
 
         if (Preview.DeletableCandidateCount == 0)
         {
             ModelState.AddModelError(string.Empty, T("There are no unreferenced old artifact versions to delete."));
-            await LoadRecentHostAgentJobsAsync(ct);
+            await LoadOperationalListsAsync(ct);
             return Page();
         }
 
@@ -98,13 +109,83 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         };
 
         Preview = await LoadPreviewCoreAsync(ct);
-        await LoadRecentHostAgentJobsAsync(ct);
+        await LoadOperationalListsAsync(ct);
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostQueueMaintenanceScan(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Maintenance");
+        MaintenanceScanResult = await _repo.QueueMaintenanceScanAsync(User.Identity?.Name, ct);
+        await LoadPageDataAsync(ct);
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostCleanupMaintenanceFindings(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Maintenance");
+        if (SelectedMaintenanceFindingIds.Count == 0)
+        {
+            ModelState.AddModelError(string.Empty, T("Select at least one maintenance finding first."));
+            await LoadPageDataAsync(ct);
+            return Page();
+        }
+
+        MaintenanceCleanupResult = await _repo.QueueMaintenanceCleanupAsync(
+            SelectedMaintenanceFindingIds,
+            User.Identity?.Name,
+            ct);
+
+        await LoadPageDataAsync(ct);
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostIgnoreMaintenanceFindings(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Maintenance");
+        if (SelectedMaintenanceFindingIds.Count == 0)
+        {
+            ModelState.AddModelError(string.Empty, T("Select at least one maintenance finding first."));
+            await LoadPageDataAsync(ct);
+            return Page();
+        }
+
+        IgnoredMaintenanceFindingCount = await _repo.IgnoreMaintenanceFindingsAsync(
+            SelectedMaintenanceFindingIds,
+            User.Identity?.Name,
+            ct);
+
+        await LoadPageDataAsync(ct);
         return Page();
     }
 
     private async Task LoadPageDataAsync(CancellationToken ct)
     {
         Preview = await LoadPreviewCoreAsync(ct);
+        await LoadOperationalListsAsync(ct);
+    }
+
+    private async Task LoadOperationalListsAsync(CancellationToken ct)
+    {
+        MaintenanceFindings = await _repo.GetMaintenanceFindingsAsync(200, ct);
         await LoadRecentHostAgentJobsAsync(ct);
     }
 
@@ -135,6 +216,18 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             3 => "Failed",
             4 => "Warning",
             5 => "Cancelled",
+            _ => "Unknown"
+        };
+
+    public static string FormatMaintenanceFindingStatus(byte status)
+        => status switch
+        {
+            MaintenanceFindingStatuses.Open => "Open",
+            MaintenanceFindingStatuses.Ignored => "Ignored",
+            MaintenanceFindingStatuses.CleanupQueued => "Cleanup queued",
+            MaintenanceFindingStatuses.Cleaned => "Cleaned",
+            MaintenanceFindingStatuses.Failed => "Failed",
+            MaintenanceFindingStatuses.Skipped => "Skipped",
             _ => "Unknown"
         };
 

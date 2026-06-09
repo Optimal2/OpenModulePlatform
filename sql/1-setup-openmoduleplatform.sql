@@ -915,6 +915,75 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.MaintenanceFindings
+    (
+        MaintenanceFindingId bigint IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_MaintenanceFindings PRIMARY KEY,
+        FindingKey nvarchar(450) NOT NULL,
+        Scope nvarchar(20) NOT NULL,
+        HostId uniqueidentifier NULL,
+        Category nvarchar(100) NOT NULL,
+        TargetKind nvarchar(80) NOT NULL,
+        TargetIdentifier nvarchar(1000) NOT NULL,
+        Title nvarchar(300) NOT NULL,
+        Detail nvarchar(max) NULL,
+        RecommendedAction nvarchar(300) NULL,
+        SafetyNotes nvarchar(max) NULL,
+        ActionJson nvarchar(max) NULL,
+        Status tinyint NOT NULL CONSTRAINT DF_omp_MaintenanceFindings_Status DEFAULT(0),
+        Severity tinyint NOT NULL CONSTRAINT DF_omp_MaintenanceFindings_Severity DEFAULT(1),
+        Confidence tinyint NOT NULL CONSTRAINT DF_omp_MaintenanceFindings_Confidence DEFAULT(80),
+        DetectedByHostAgentJobId bigint NULL,
+        CleanupHostAgentJobId bigint NULL,
+        ResultMessage nvarchar(max) NULL,
+        RequestedBy nvarchar(256) NULL,
+        IgnoredBy nvarchar(256) NULL,
+        DetectedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_MaintenanceFindings_DetectedUtc DEFAULT SYSUTCDATETIME(),
+        LastSeenUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_MaintenanceFindings_LastSeenUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_MaintenanceFindings_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT UQ_omp_MaintenanceFindings_FindingKey UNIQUE(FindingKey),
+        CONSTRAINT FK_omp_MaintenanceFindings_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_MaintenanceFindings_DetectedJob FOREIGN KEY(DetectedByHostAgentJobId) REFERENCES omp.HostAgentJobs(HostAgentJobId),
+        CONSTRAINT FK_omp_MaintenanceFindings_CleanupJob FOREIGN KEY(CleanupHostAgentJobId) REFERENCES omp.HostAgentJobs(HostAgentJobId),
+        CONSTRAINT CK_omp_MaintenanceFindings_Scope CHECK(Scope IN (N'Global', N'Host')),
+        CONSTRAINT CK_omp_MaintenanceFindings_TargetKind CHECK(TargetKind IN (N'DatabaseRow', N'Directory', N'File', N'WindowsService', N'IisApplication', N'IisAppPool')),
+        CONSTRAINT CK_omp_MaintenanceFindings_Status CHECK(Status IN (0, 1, 2, 3, 4, 5)),
+        CONSTRAINT CK_omp_MaintenanceFindings_Severity CHECK(Severity BETWEEN 0 AND 4),
+        CONSTRAINT CK_omp_MaintenanceFindings_Confidence CHECK(Confidence BETWEEN 0 AND 100),
+        CONSTRAINT CK_omp_MaintenanceFindings_ActionJson CHECK(ActionJson IS NULL OR ISJSON(ActionJson) = 1)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.MaintenanceFindings')
+      AND name = N'IX_omp_MaintenanceFindings_Status'
+)
+BEGIN
+    CREATE INDEX IX_omp_MaintenanceFindings_Status
+        ON omp.MaintenanceFindings(Status, LastSeenUtc DESC, MaintenanceFindingId DESC)
+        INCLUDE(HostId, Category, TargetKind, TargetIdentifier, Title, Severity, Confidence);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.MaintenanceFindings')
+      AND name = N'IX_omp_MaintenanceFindings_Host_Status'
+)
+BEGIN
+    CREATE INDEX IX_omp_MaintenanceFindings_Host_Status
+        ON omp.MaintenanceFindings(HostId, Status, LastSeenUtc DESC, MaintenanceFindingId DESC);
+END
+GO
+
 IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.WorkerInstances

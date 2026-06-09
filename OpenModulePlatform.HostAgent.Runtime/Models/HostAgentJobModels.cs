@@ -7,6 +7,10 @@ public static class HostAgentJobTypes
     public const string ArtifactCacheCleanup = "ArtifactCacheCleanup";
 
     public const string ArtifactStoreCleanup = "ArtifactStoreCleanup";
+
+    public const string MaintenanceScan = "MaintenanceScan";
+
+    public const string MaintenanceCleanup = "MaintenanceCleanup";
 }
 
 public static class HostAgentJobStatuses
@@ -177,4 +181,137 @@ public sealed class ArtifactStoreCleanupEntryResult
     public string Outcome { get; set; } = string.Empty;
 
     public string? Message { get; set; }
+}
+
+public static class MaintenanceScanScopes
+{
+    public const string Global = "Global";
+
+    public const string Host = "Host";
+}
+
+public static class MaintenanceFindingStatuses
+{
+    public const byte Open = 0;
+    public const byte Ignored = 1;
+    public const byte CleanupQueued = 2;
+    public const byte Cleaned = 3;
+    public const byte Failed = 4;
+    public const byte Skipped = 5;
+}
+
+public static class MaintenanceTargetKinds
+{
+    public const string DatabaseRow = "DatabaseRow";
+    public const string Directory = "Directory";
+    public const string File = "File";
+    public const string WindowsService = "WindowsService";
+    public const string IisApplication = "IisApplication";
+    public const string IisAppPool = "IisAppPool";
+}
+
+public sealed class MaintenanceScanJobPayload
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public string Scope { get; set; } = MaintenanceScanScopes.Host;
+}
+
+public sealed class MaintenanceCleanupJobPayload
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public List<long> FindingIds { get; set; } = [];
+}
+
+public sealed class MaintenanceFindingUpsert
+{
+    public string FindingKey { get; set; } = string.Empty;
+
+    public string Scope { get; set; } = MaintenanceScanScopes.Host;
+
+    public Guid? HostId { get; set; }
+
+    public string Category { get; set; } = string.Empty;
+
+    public string TargetKind { get; set; } = string.Empty;
+
+    public string TargetIdentifier { get; set; } = string.Empty;
+
+    public string Title { get; set; } = string.Empty;
+
+    public string? Detail { get; set; }
+
+    public string? RecommendedAction { get; set; }
+
+    public string? SafetyNotes { get; set; }
+
+    public string? ActionJson { get; set; }
+
+    public byte Severity { get; set; } = 1;
+
+    public byte Confidence { get; set; } = 80;
+}
+
+public sealed class MaintenanceScanJobResult
+{
+    public string Scope { get; set; } = string.Empty;
+
+    public int FindingCount { get; set; }
+
+    public List<string> FindingKeys { get; set; } = [];
+}
+
+public sealed class MaintenanceCleanupJobResult
+{
+    public int CleanedCount { get; set; }
+
+    public int MissingCount { get; set; }
+
+    public int SkippedCount { get; set; }
+
+    public int ErrorCount { get; set; }
+
+    public List<MaintenanceCleanupEntryResult> Entries { get; set; } = [];
+}
+
+public sealed class MaintenanceCleanupEntryResult
+{
+    public long MaintenanceFindingId { get; set; }
+
+    public string TargetKind { get; set; } = string.Empty;
+
+    public string TargetIdentifier { get; set; } = string.Empty;
+
+    public string Outcome { get; set; } = string.Empty;
+
+    public string? Message { get; set; }
+}
+
+public sealed class MaintenanceFindingCleanupEntry
+{
+    public long MaintenanceFindingId { get; set; }
+
+    public Guid? HostId { get; set; }
+
+    public string TargetKind { get; set; } = string.Empty;
+
+    public string TargetIdentifier { get; set; } = string.Empty;
+
+    public string? ActionJson { get; set; }
+}
+
+public sealed class MaintenanceFindingAction
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public string TargetKind { get; set; } = string.Empty;
+
+    public Guid? HostId { get; set; }
+
+    public string? ServiceName { get; set; }
+
+    public string? Path { get; set; }
+
+    public string? InstallRoot { get; set; }
 }

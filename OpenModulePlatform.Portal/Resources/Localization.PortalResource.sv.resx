@@ -2546,4 +2546,30 @@
   <data name="An iFrame URL set with this key already exists." xml:space="preserve"><value>Det finns redan ett iFrame-URL-set med den här nyckeln.</value></data>
   <data name="Select valid iFrame URLs." xml:space="preserve"><value>Välj giltiga iFrame-URL:er.</value></data>
   <data name="Select at least one iFrame URL." xml:space="preserve"><value>Välj minst en iFrame-URL.</value></data>
+  <data name="Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back." xml:space="preserve"><value>Köade {0} underhållsskanningsjobb: en global skanning och {1} värdskanningsjobb. Fynd visas på den här sidan när Host Agents rapporterar tillbaka.</value></data>
+  <data name="Queued cleanup for {0} of {1} selected maintenance finding(s) across {2} HostAgent job(s)." xml:space="preserve"><value>Köade rensning för {0} av {1} markerade underhållsfynd fördelat på {2} HostAgent-jobb.</value></data>
+  <data name="Ignored {0} maintenance finding(s). They are hidden until a future scan reports them again." xml:space="preserve"><value>Ignorerade {0} underhållsfynd. De är dolda tills en framtida skanning rapporterar dem igen.</value></data>
+  <data name="OMP scan" xml:space="preserve"><value>OMP-skanning</value></data>
+  <data name="Scan the shared installation and every enabled host for stale HostAgent runtime rows, stopped old HostAgent services, and leftover HostAgent folders. The scan only reports candidates; cleanup is queued separately after review." xml:space="preserve"><value>Skanna den gemensamma installationen och varje aktiverad värd efter gamla HostAgent-runtime-rader, stoppade gamla HostAgent-tjänster och kvarlämnade HostAgent-mappar. Skanningen rapporterar bara kandidater; rensning köas separat efter granskning.</value></data>
+  <data name="Start OMP scan" xml:space="preserve"><value>Starta OMP-skanning</value></data>
+  <data name="No open maintenance findings. Start a scan to collect new findings." xml:space="preserve"><value>Inga öppna underhållsfynd. Starta en skanning för att samla in nya fynd.</value></data>
+  <data name="Queue cleanup" xml:space="preserve"><value>Köa rensning</value></data>
+  <data name="Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything." xml:space="preserve"><value>Köa rensningsjobb för markerade underhållsfynd? Host Agents kontrollerar varje mål igen innan något tas bort.</value></data>
+  <data name="Ignore selected" xml:space="preserve"><value>Ignorera markerade</value></data>
+  <data name="Select all maintenance findings" xml:space="preserve"><value>Markera alla underhållsfynd</value></data>
+  <data name="Select maintenance finding {0}" xml:space="preserve"><value>Markera underhållsfynd {0}</value></data>
+  <data name="Safety" xml:space="preserve"><value>Säkerhet</value></data>
+  <data name="Last seen UTC" xml:space="preserve"><value>Senast sedd UTC</value></data>
+  <data name="Shared" xml:space="preserve"><value>Gemensamt</value></data>
+  <data name="Recommended action" xml:space="preserve"><value>Rekommenderad åtgärd</value></data>
+  <data name="Why this is considered safe" xml:space="preserve"><value>Varför detta bedöms säkert</value></data>
+  <data name="Result" xml:space="preserve"><value>Resultat</value></data>
+  <data name="Severity" xml:space="preserve"><value>Allvarlighetsgrad</value></data>
+  <data name="Confidence" xml:space="preserve"><value>Säkerhet</value></data>
+  <data name="Select at least one maintenance finding first." xml:space="preserve"><value>Markera minst ett underhållsfynd först.</value></data>
+  <data name="Open" xml:space="preserve"><value>Öppen</value></data>
+  <data name="Ignored" xml:space="preserve"><value>Ignorerad</value></data>
+  <data name="Cleanup queued" xml:space="preserve"><value>Rensning köad</value></data>
+  <data name="Cleaned" xml:space="preserve"><value>Rensad</value></data>
+  <data name="Skipped" xml:space="preserve"><value>Hoppades över</value></data>
 </root>

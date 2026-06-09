@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Portal.Models;
+using System.Text.Json;
 
 namespace OpenModulePlatform.Portal.Services;
 
@@ -162,6 +163,287 @@ VALUES
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    public async Task<MaintenanceScanQueueResult> QueueMaintenanceScanAsync(
+        string? requestedBy,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NULL
+BEGIN
+    THROW 51000, 'HostAgent job queue is not available. Apply the core OMP schema before queueing maintenance jobs.', 1;
+END;
+
+IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
+BEGIN
+    THROW 51000, 'Maintenance findings are not available. Apply the core OMP schema before queueing a maintenance scan.', 1;
+END;
+
+DECLARE @CreatedJobs TABLE
+(
+    HostAgentJobId bigint NOT NULL,
+    HostId uniqueidentifier NULL
+);
+
+INSERT INTO omp.HostAgentJobs
+(
+    HostId,
+    JobType,
+    PayloadJson,
+    Status,
+    RequestedBy,
+    MaxAttempts
+)
+OUTPUT inserted.HostAgentJobId, inserted.HostId INTO @CreatedJobs(HostAgentJobId, HostId)
+VALUES
+(
+    NULL,
+    N'MaintenanceScan',
+    N'{""schemaVersion"":1,""scope"":""Global""}',
+    CAST(0 AS tinyint),
+    @RequestedBy,
+    3
+);
+
+INSERT INTO omp.HostAgentJobs
+(
+    HostId,
+    JobType,
+    PayloadJson,
+    Status,
+    RequestedBy,
+    MaxAttempts
+)
+OUTPUT inserted.HostAgentJobId, inserted.HostId INTO @CreatedJobs(HostAgentJobId, HostId)
+SELECT host.HostId,
+       N'MaintenanceScan',
+       N'{""schemaVersion"":1,""scope"":""Host""}',
+       CAST(0 AS tinyint),
+       @RequestedBy,
+       3
+FROM omp.Hosts host
+WHERE host.IsEnabled = 1
+  AND
+  (
+      EXISTS
+      (
+          SELECT 1
+          FROM omp.HostAgentDesiredStates desired
+          WHERE desired.HostId = host.HostId
+            AND desired.IsEnabled = 1
+      )
+      OR EXISTS
+      (
+          SELECT 1
+          FROM omp.HostAgentRuntimeStates runtime
+          WHERE runtime.HostId = host.HostId
+            AND runtime.IsActive = 1
+      )
+  );
+
+SELECT
+    MAX(CASE WHEN HostId IS NULL THEN HostAgentJobId END) AS GlobalHostAgentJobId,
+    SUM(CASE WHEN HostId IS NOT NULL THEN 1 ELSE 0 END) AS HostJobCount
+FROM @CreatedJobs;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return new MaintenanceScanQueueResult();
+        }
+
+        return new MaintenanceScanQueueResult
+        {
+            GlobalHostAgentJobId = rdr.IsDBNull(0) ? null : rdr.GetInt64(0),
+            HostJobCount = rdr.IsDBNull(1) ? 0 : rdr.GetInt32(1)
+        };
+    }
+
+    public async Task<IReadOnlyList<MaintenanceFindingRow>> GetMaintenanceFindingsAsync(
+        int limit,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS bigint) AS MaintenanceFindingId,
+        CAST(NULL AS nvarchar(450)) AS FindingKey,
+        CAST(NULL AS nvarchar(20)) AS Scope,
+        CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS nvarchar(128)) AS HostKey,
+        CAST(NULL AS nvarchar(200)) AS HostDisplayName,
+        CAST(NULL AS nvarchar(100)) AS Category,
+        CAST(NULL AS nvarchar(80)) AS TargetKind,
+        CAST(NULL AS nvarchar(1000)) AS TargetIdentifier,
+        CAST(NULL AS nvarchar(300)) AS Title,
+        CAST(NULL AS nvarchar(max)) AS Detail,
+        CAST(NULL AS nvarchar(300)) AS RecommendedAction,
+        CAST(NULL AS nvarchar(max)) AS SafetyNotes,
+        CAST(NULL AS tinyint) AS Status,
+        CAST(NULL AS tinyint) AS Severity,
+        CAST(NULL AS tinyint) AS Confidence,
+        CAST(NULL AS datetime2(3)) AS DetectedUtc,
+        CAST(NULL AS datetime2(3)) AS LastSeenUtc,
+        CAST(NULL AS nvarchar(max)) AS ResultMessage;
+    RETURN;
+END;
+
+SELECT TOP (@Limit)
+       finding.MaintenanceFindingId,
+       finding.FindingKey,
+       finding.Scope,
+       finding.HostId,
+       host.HostKey,
+       host.DisplayName AS HostDisplayName,
+       finding.Category,
+       finding.TargetKind,
+       finding.TargetIdentifier,
+       finding.Title,
+       finding.Detail,
+       finding.RecommendedAction,
+       finding.SafetyNotes,
+       finding.Status,
+       finding.Severity,
+       finding.Confidence,
+       finding.DetectedUtc,
+       finding.LastSeenUtc,
+       finding.ResultMessage
+FROM omp.MaintenanceFindings finding
+LEFT JOIN omp.Hosts host ON host.HostId = finding.HostId
+WHERE finding.Status IN (0, 2, 4)
+ORDER BY CASE finding.Status WHEN 4 THEN 0 WHEN 0 THEN 1 ELSE 2 END,
+         finding.Severity DESC,
+         finding.LastSeenUtc DESC,
+         finding.MaintenanceFindingId DESC;";
+
+        var rows = new List<MaintenanceFindingRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@Limit", Math.Clamp(limit, 1, 500));
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new MaintenanceFindingRow
+            {
+                MaintenanceFindingId = rdr.GetInt64(0),
+                FindingKey = rdr.GetString(1),
+                Scope = rdr.GetString(2),
+                HostId = rdr.IsDBNull(3) ? null : rdr.GetGuid(3),
+                HostKey = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                HostDisplayName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                Category = rdr.GetString(6),
+                TargetKind = rdr.GetString(7),
+                TargetIdentifier = rdr.GetString(8),
+                Title = rdr.GetString(9),
+                Detail = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                RecommendedAction = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+                SafetyNotes = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                Status = rdr.GetByte(13),
+                Severity = rdr.GetByte(14),
+                Confidence = rdr.GetByte(15),
+                DetectedUtc = rdr.GetDateTime(16),
+                LastSeenUtc = rdr.GetDateTime(17),
+                ResultMessage = rdr.IsDBNull(18) ? null : rdr.GetString(18)
+            });
+        }
+
+        return rows;
+    }
+
+    public async Task<int> IgnoreMaintenanceFindingsAsync(
+        IReadOnlyCollection<long> findingIds,
+        string? requestedBy,
+        CancellationToken ct)
+    {
+        if (findingIds.Count == 0)
+        {
+            return 0;
+        }
+
+        const string sql = @"
+IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
+BEGIN
+    SELECT 0;
+    RETURN;
+END;
+
+DECLARE @Ids TABLE(MaintenanceFindingId bigint NOT NULL PRIMARY KEY);
+
+INSERT INTO @Ids(MaintenanceFindingId)
+SELECT DISTINCT TRY_CONVERT(bigint, value)
+FROM OPENJSON(@FindingIdsJson)
+WHERE TRY_CONVERT(bigint, value) IS NOT NULL;
+
+UPDATE finding
+SET Status = 1,
+    IgnoredBy = @RequestedBy,
+    ResultMessage = N'Ignored by portal administrator.',
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.MaintenanceFindings finding
+INNER JOIN @Ids ids ON ids.MaintenanceFindingId = finding.MaintenanceFindingId
+WHERE finding.Status IN (0, 4);
+
+SELECT @@ROWCOUNT;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@FindingIdsJson", JsonSerializer.Serialize(findingIds.Distinct().Order()));
+        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public async Task<MaintenanceCleanupQueueResult> QueueMaintenanceCleanupAsync(
+        IReadOnlyCollection<long> findingIds,
+        string? requestedBy,
+        CancellationToken ct)
+    {
+        if (findingIds.Count == 0)
+        {
+            return new MaintenanceCleanupQueueResult();
+        }
+
+        var selectedIds = findingIds.Distinct().Order().ToArray();
+        var candidates = await GetMaintenanceCleanupCandidatesAsync(selectedIds, ct);
+        var queuedJobCount = 0;
+        var queuedFindingCount = 0;
+
+        foreach (var group in candidates.GroupBy(static row => row.JobHostId))
+        {
+            var ids = group.Select(static row => row.MaintenanceFindingId).Order().ToArray();
+            if (ids.Length == 0)
+            {
+                continue;
+            }
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1,
+                findingIds = ids
+            });
+
+            var jobId = await QueueMaintenanceCleanupJobAsync(group.Key, payload, requestedBy, ct);
+            var updated = await MarkMaintenanceFindingsCleanupQueuedAsync(ids, jobId, requestedBy, ct);
+            queuedFindingCount += updated;
+            queuedJobCount++;
+        }
+
+        return new MaintenanceCleanupQueueResult
+        {
+            SelectedFindingCount = selectedIds.Length,
+            QueuedFindingCount = queuedFindingCount,
+            QueuedJobCount = queuedJobCount
+        };
+    }
+
     public async Task<IReadOnlyList<HostAgentJobRow>> GetRecentHostAgentJobsAsync(
         int limit,
         CancellationToken ct)
@@ -247,6 +529,130 @@ ORDER BY job.RequestedUtc DESC,
         return rows;
     }
 
+    private async Task<IReadOnlyList<MaintenanceCleanupCandidate>> GetMaintenanceCleanupCandidatesAsync(
+        IReadOnlyCollection<long> findingIds,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS bigint) AS MaintenanceFindingId,
+        CAST(NULL AS uniqueidentifier) AS JobHostId;
+    RETURN;
+END;
+
+DECLARE @Ids TABLE(MaintenanceFindingId bigint NOT NULL PRIMARY KEY);
+
+INSERT INTO @Ids(MaintenanceFindingId)
+SELECT DISTINCT TRY_CONVERT(bigint, value)
+FROM OPENJSON(@FindingIdsJson)
+WHERE TRY_CONVERT(bigint, value) IS NOT NULL;
+
+SELECT finding.MaintenanceFindingId,
+       CASE WHEN finding.Scope = N'Host' THEN finding.HostId ELSE CAST(NULL AS uniqueidentifier) END AS JobHostId
+FROM omp.MaintenanceFindings finding
+INNER JOIN @Ids ids ON ids.MaintenanceFindingId = finding.MaintenanceFindingId
+WHERE finding.Status IN (0, 4)
+  AND finding.ActionJson IS NOT NULL
+  AND
+  (
+      finding.Scope = N'Global'
+      OR finding.HostId IS NOT NULL
+  )
+ORDER BY JobHostId,
+         finding.MaintenanceFindingId;";
+
+        var rows = new List<MaintenanceCleanupCandidate>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@FindingIdsJson", JsonSerializer.Serialize(findingIds.Distinct().Order()));
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new MaintenanceCleanupCandidate(
+                rdr.GetInt64(0),
+                rdr.IsDBNull(1) ? null : rdr.GetGuid(1)));
+        }
+
+        return rows;
+    }
+
+    private async Task<long> QueueMaintenanceCleanupJobAsync(
+        Guid? hostId,
+        string payloadJson,
+        string? requestedBy,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.HostAgentJobs
+(
+    HostId,
+    JobType,
+    PayloadJson,
+    Status,
+    RequestedBy,
+    MaxAttempts
+)
+OUTPUT inserted.HostAgentJobId
+VALUES
+(
+    @HostId,
+    N'MaintenanceCleanup',
+    @PayloadJson,
+    CAST(0 AS tinyint),
+    @RequestedBy,
+    3
+);";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@HostId", hostId.HasValue ? hostId.Value : DBNull.Value);
+        Add(cmd, "@PayloadJson", payloadJson);
+        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private async Task<int> MarkMaintenanceFindingsCleanupQueuedAsync(
+        IReadOnlyCollection<long> findingIds,
+        long hostAgentJobId,
+        string? requestedBy,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @Ids TABLE(MaintenanceFindingId bigint NOT NULL PRIMARY KEY);
+
+INSERT INTO @Ids(MaintenanceFindingId)
+SELECT DISTINCT TRY_CONVERT(bigint, value)
+FROM OPENJSON(@FindingIdsJson)
+WHERE TRY_CONVERT(bigint, value) IS NOT NULL;
+
+UPDATE finding
+SET Status = 2,
+    CleanupHostAgentJobId = @HostAgentJobId,
+    RequestedBy = @RequestedBy,
+    ResultMessage = N'Cleanup queued.',
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.MaintenanceFindings finding
+INNER JOIN @Ids ids ON ids.MaintenanceFindingId = finding.MaintenanceFindingId
+WHERE finding.Status IN (0, 4);
+
+SELECT @@ROWCOUNT;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@FindingIdsJson", JsonSerializer.Serialize(findingIds.Distinct().Order()));
+        Add(cmd, "@HostAgentJobId", hostAgentJobId);
+        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private async Task<IReadOnlyList<ArtifactRetentionCandidateRow>> ReadArtifactRetentionCandidatesAsync(
         string sql,
         int maxVersionsToKeep,
@@ -299,4 +705,8 @@ ORDER BY job.RequestedUtc DESC,
             TotalVersions = rdr.GetInt32(9),
             ProtectedReferenceCount = rdr.GetInt32(10)
         };
+
+    private sealed record MaintenanceCleanupCandidate(
+        long MaintenanceFindingId,
+        Guid? JobHostId);
 }
