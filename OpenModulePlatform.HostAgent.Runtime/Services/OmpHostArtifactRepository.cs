@@ -10,7 +10,7 @@ using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
-public sealed class OmpHostArtifactRepository
+public sealed partial class OmpHostArtifactRepository
 {
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
     private const int HostAgentRuntimeServiceNameMaxLength = 200;
@@ -3913,9 +3913,12 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
             return "Module definition SQL must not contain USE database directives.";
         }
 
-        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE|INDEX|VIEW|PROCEDURE|PROC)\b"))
+        // Module definition setup scripts are allowed to perform bounded schema maintenance,
+        // such as dropping/recreating indexes or constraints. Keep this guard focused on
+        // destructive operations that remove data-bearing roots.
+        if (Regex.IsMatch(sqlText, @"(?is)\bDROP\s+(?:DATABASE|SCHEMA|TABLE)\b"))
         {
-            return "The script contains a destructive DROP statement.";
+            return "The script contains DROP DATABASE, DROP SCHEMA, or DROP TABLE.";
         }
 
         if (Regex.IsMatch(sqlText, @"(?is)\bTRUNCATE\s+TABLE\b"))
@@ -3941,6 +3944,11 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
                 batch,
                 @"(?ims)\bDELETE\b(?<statement>.*?)(?=;|^\s*(?:GO|INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE|DENY|SELECT)\b|\z)"))
             {
+                if (IsForeignKeyOnDeleteClause(batch, match.Index))
+                {
+                    continue;
+                }
+
                 var statement = ("DELETE" + match.Groups["statement"].Value).Trim();
                 if (!string.IsNullOrWhiteSpace(statement))
                 {
@@ -3948,6 +3956,12 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
                 }
             }
         }
+    }
+
+    private static bool IsForeignKeyOnDeleteClause(string sqlText, int deleteIndex)
+    {
+        var beforeDelete = sqlText[..deleteIndex].TrimEnd();
+        return Regex.IsMatch(beforeDelete, @"(?is)\bON$");
     }
 
     private static string? ValidateReadOnlyModuleDefinitionSql(string sqlText)
