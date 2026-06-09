@@ -16,4 +16,9 @@ public static class OmpAuthDefaults
     public const string ProviderClaimType = "omp:provider";
     public const string ProviderUserKeyClaimType = "omp:provider_user_key";
     public const string PrincipalClaimType = "omp:principal";
+
+    public const string ConfigurationCategory = "auth";
+    public const string ExternalUserProvisioningModeSetting = "externalUserProvisioningMode";
+    public const string ExternalUserProvisioningModeManual = "Manual";
+    public const string ExternalUserProvisioningModeAutomaticForAuthorizedUsers = "AutomaticForAuthorizedUsers";
 }
