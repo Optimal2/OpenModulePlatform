@@ -73,12 +73,15 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$CurrentScriptDisplayName = if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
-    'this script'
+function Get-CurrentScriptDisplayName {
+    if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
+        return 'this script'
+    }
+
+    return Split-Path -Leaf $PSCommandPath
 }
-else {
-    Split-Path -Leaf $PSCommandPath
-}
+
+$CurrentScriptDisplayName = Get-CurrentScriptDisplayName
 
 $SafeFileNamePattern = '[^-A-Za-z0-9._]+'
 $PackageIdentityPattern = '^[A-Za-z0-9._+-]+$'
@@ -279,6 +282,7 @@ function Convert-SecondsToIntMilliseconds {
     param(
         [Parameter(Mandatory = $true)][string]$TimeoutDescription,
         # SYNC-WITH: $ValidateRangeLiteralForMaximumSafeSeconds.
+        # Literal value: floor([int]::MaxValue / 1000) = 2147483.
         # ValidateRange requires a literal value in Windows PowerShell 5.1.
         # Literal sync note: 2147483 is floor([int]::MaxValue / 1000), which is
         # the largest whole-second value that safely converts back to
@@ -316,7 +320,7 @@ function Get-SafeDiagnosticText {
     Returns '<null>' for null input, preserves empty strings, replaces ASCII
     control characters, and truncates overly long values with an indicator.
     #>
-    param([AllowNull()][AllowEmptyString()][string]$Value)
+    param([AllowEmptyString()][string]$Value)
 
     if ($null -eq $Value) {
         return '<null>'
@@ -333,7 +337,7 @@ function Get-SafeDiagnosticText {
 
 function Get-SafeDiagnosticExcerpt {
     param(
-        [AllowNull()][AllowEmptyString()][string]$Value,
+        [AllowEmptyString()][string]$Value,
         [int]$MaximumLines = 5
     )
 
@@ -687,6 +691,19 @@ function Assert-SafeCmdArgumentText {
 }
 
 function ConvertTo-CmdArgument {
+    <#
+    .SYNOPSIS
+    Escapes and quotes one argument for the generated cmd.exe command line.
+
+    .NOTES
+    This helper expects raw, unescaped input. Feeding it already cmd-escaped
+    text is intentionally unsupported because double escaping can change the
+    literal value received by the child process. cmd.exe treats ^ as its escape
+    character; ^^ emits one literal caret. Carets are escaped before quoting so
+    a literal caret cannot alter parsing of the generated command line, including
+    quoted edge cases. The script invokes cmd.exe without /v:on, so delayed !
+    expansion is not active; AutoRun hooks are disabled later with /d.
+    #>
     param([Parameter(Mandatory = $true)][string]$Value)
 
     # This helper only supports the argument shapes generated below; reject
@@ -695,18 +712,8 @@ function ConvertTo-CmdArgument {
     # pre-validation if this helper ever gains new callers.
     Assert-SafeCmdArgumentText -Name 'cmd wrapper argument' -Value $Value
 
-    # cmd.exe treats ^ as its escape character; ^^ emits one literal caret.
-    # Escape carets before quoting so a literal caret cannot alter parsing of
-    # the generated command line. cmd.exe can treat ^ as an escape character
-    # even in quoted edge cases, so the raw value is escaped before wrapping it
-    # in quotes. This function expects raw, unescaped input; feeding it already
-    # cmd-escaped text is intentionally unsupported because double escaping can
-    # change the literal value that the child process receives. The quoting
-    # pattern includes ^, so a caret escaped to ^^ is still forced into a quoted
-    # argument below. The script invokes cmd.exe without /v:on, so this cmd
-    # instance does not perform delayed ! expansion; a literal ! is therefore
-    # safe and does not need escaping here. AutoRun hooks are disabled later
-    # with /d.
+    # Escape carets for cmd.exe parsing. The quoting pattern includes ^, so a
+    # caret escaped to ^^ is still forced into a quoted argument below.
     $escaped = $Value.Replace('^', '^^')
     if ($escaped -notmatch $CmdArgumentNeedsQuotingPattern) {
         return $escaped
@@ -869,7 +876,7 @@ function Get-ProcessStartTimeOrNull {
 }
 
 function Get-ObjectTypeName {
-    param([AllowNull()][object]$Value)
+    param([object]$Value)
 
     if ($null -eq $Value) {
         return '[null type]'
@@ -968,6 +975,9 @@ function Add-TaskOutputOrDiagnostic {
                 $errorText = $Task.Exception.GetBaseException().Message
             }
             else {
+                # Purely defensive: a faulted Task should normally expose an
+                # AggregateException, but keep a useful diagnostic if a runtime
+                # or mocked task reports an inconsistent state.
                 $taskObjectType = Get-ObjectTypeName -Value $Task
                 $errorText = "$NoTaskExceptionDiagnostic. TaskObjectType=$taskObjectType."
             }
@@ -1200,7 +1210,7 @@ function Get-TaskKillDiagnosticCommand {
 
 function Get-ProcessIdDisplayText {
     param(
-        [AllowNull()][object]$ProcessId,
+        [object]$ProcessId,
         [Parameter(Mandatory = $true)][string]$Fallback
     )
 
@@ -1216,7 +1226,7 @@ function Get-ProcessIdDisplayText {
 }
 
 function Get-ProcessIdOrSentinel {
-    param([AllowNull()][object]$ProcessId)
+    param([object]$ProcessId)
 
     if ($ProcessId -is [int] -and $ProcessId -ge $MinimumValidProcessId) {
         return $ProcessId
@@ -1256,11 +1266,11 @@ function New-ValidationResult {
     param(
         [Parameter(Mandatory = $true)][object]$Repository,
         [Parameter(Mandatory = $true)][object]$Status,
-        [AllowNull()][object]$ExitCode,
+        [object]$ExitCode,
         [Parameter(Mandatory = $true)][object]$Package,
         [Parameter(Mandatory = $true)][object]$StdoutLog,
         [Parameter(Mandatory = $true)][object]$StderrLog,
-        [AllowNull()][string]$Detail
+        [string]$Detail
     )
 
     return [pscustomobject]@{
@@ -1434,6 +1444,9 @@ function Get-RequiredManifestText {
 
 # WaitForExit expects a 32-bit millisecond value. Validate timeout input before
 # path setup creates output/log directories, so invalid parameters fail fast.
+# The public PerRepositoryTimeoutSeconds parameter has its own ValidateRange,
+# but this conversion helper is also used for script constants and protects
+# future edits that may not pass through parameter binding.
 try {
     $PerRepositoryTimeoutMilliseconds = Convert-SecondsToIntMilliseconds `
         -TimeoutDescription 'PerRepositoryTimeoutSeconds' `
@@ -1550,6 +1563,9 @@ foreach ($repository in $repositories) {
         $repository.FullName
     }
     else {
+        # Repository discovery normally yields DirectoryInfo objects. Keep this
+        # string fallback for tests or future callers that pass repository-like
+        # values directly into this script block.
         [string]$repository
     }
     $repositoryName = Split-Path -Leaf $repositoryPath
@@ -1823,7 +1839,9 @@ foreach ($repository in $repositories) {
                         # Phase 2: use taskkill.exe for the process tree. Do not
                         # cache identity checks; each check follows a Refresh()
                         # because the process can exit or change state between
-                        # timeout handling steps.
+                        # timeout handling steps. Windows process termination is
+                        # asynchronous, so this is best-effort safety rather
+                        # than an atomic guarantee.
                         $process.Refresh()
                         if ($process.HasExited) {
                             Write-Warning "[$repositoryName] Process exited immediately before taskkill; termination was not needed."
@@ -1865,7 +1883,9 @@ foreach ($repository in $repositories) {
                             # for the wrapper cmd.exe itself when taskkill.exe
                             # could not end the tree. taskkill.exe helper
                             # termination is handled separately in
-                            # Invoke-TaskKillTree.
+                            # Invoke-TaskKillTree. The repeated Refresh() calls
+                            # below intentionally narrow, but cannot eliminate,
+                            # the natural-exit race before Kill().
                             $process.Refresh()
                             if ($process.HasExited) {
                                 Write-Warning "[$repositoryName] Process exited immediately before direct Process.Kill(); no further termination was needed."
