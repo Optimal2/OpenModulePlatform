@@ -709,6 +709,7 @@ USING
     VALUES
         (N'branding', N'platformName', N'Display name for the installed OpenModulePlatform instance.', 10, CONVERT(bit, 1)),
         (N'branding', N'portalName', N'Display name for the portal concept in this installation.', 20, CONVERT(bit, 1)),
+        (N'auth', N'externalUserProvisioningMode', N'Controls whether external/AD sign-ins may automatically create and link an OMP user after they resolve at least one non-system role. Supported values: Manual, AutomaticForAuthorizedUsers.', 100, CONVERT(bit, 1)),
         (N'rbac', N'authenticatedUsersWindowsDomains', N'Comma-, semicolon-, or newline-separated Windows account domain/workgroup/computer prefixes that may receive the built-in AuthenticatedUsers principal. Empty or * accepts any authenticated principal.', 100, CONVERT(bit, 1))
 ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
 ON target.ConfigCategory = source.ConfigCategory
@@ -736,6 +737,7 @@ USING
         VALUES
             (N'branding', N'platformName', N'OMP', 0),
             (N'branding', N'portalName', N'Portal', 0),
+            (N'auth', N'externalUserProvisioningMode', N'Manual', 0),
             (N'rbac', N'authenticatedUsersWindowsDomains', N'', 0)
     ) AS seed(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
     INNER JOIN omp.config_setting_definitions def
