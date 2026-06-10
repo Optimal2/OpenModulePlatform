@@ -136,16 +136,24 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
             return guard;
         }
 
+        ModelState.Clear();
         var templateId = Input.InstanceTemplateId;
+        var hostId = Input.InstanceTemplateHostId;
 
         try
         {
-            await _repo.DeleteInstanceTemplateHostAsync(Input.InstanceTemplateHostId, ct);
+            await _repo.DeleteInstanceTemplateHostAsync(hostId, ct);
             StatusMessage = T("Host removed.");
             return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });
         }
         catch (SqlException ex)
         {
+            var row = await _repo.GetInstanceTemplateHostAsync(hostId, ct);
+            if (row is not null)
+            {
+                Input = ToInput(row);
+            }
+
             await LoadAsync(ct);
             SetTitles("Edit host");
             ModelState.AddModelError(string.Empty, T(ToFriendlySqlMessage(ex)));
