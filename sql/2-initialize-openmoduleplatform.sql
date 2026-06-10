@@ -76,7 +76,7 @@ BEGIN
     -- Set @BootstrapPortalAdminPrincipal manually or use the HostAgent-first
     -- installer profile bootstrapPortalAdminPrincipal setting.
     -- This script inserts one bootstrap principal per execution.
-    THROW 51000, 'Bootstrap portal admin principal was not replaced.', 1;
+    THROW 51000, 'Bootstrap portal admin principal was not replaced. Set @BootstrapPortalAdminPrincipal to a valid Windows user or group (DOMAIN\Name or user@domain) before running this script, or use the HostAgent-first installer profile bootstrapPortalAdminPrincipal setting.', 1;
 END
 
 -- The setup script also adds database constraint
@@ -218,7 +218,7 @@ END
 
 IF @DefaultInstanceTemplateId IS NULL
 BEGIN
-    THROW 51001, 'Unable to resolve the default instance template id after seeding omp.InstanceTemplates.', 1;
+    THROW 51001, 'Unable to resolve the default instance template id after seeding omp.InstanceTemplates. Verify that omp.InstanceTemplates can be written to and that no constraints prevented the default template row from being inserted.', 1;
 END
 
 SELECT TOP (1) @DefaultHostTemplateId = HostTemplateId
@@ -234,7 +234,7 @@ END
 
 IF @DefaultHostTemplateId IS NULL
 BEGIN
-    THROW 51002, 'Unable to resolve the default host template id after seeding omp.HostTemplates.', 1;
+    THROW 51002, 'Unable to resolve the default host template id after seeding omp.HostTemplates. Verify that omp.HostTemplates can be written to and that the template with TemplateKey=''default-host'' was successfully inserted.', 1;
 END
 
 SELECT TOP (1) @IisHostTemplateId = HostTemplateId
@@ -249,7 +249,7 @@ ORDER BY HostTemplateId;
 
 IF @IisHostTemplateId IS NULL OR @ServiceHostTemplateId IS NULL
 BEGIN
-    THROW 51012, 'Unable to resolve the standard IISHost and ServiceHost host template ids after seeding omp.HostTemplates.', 1;
+    THROW 51012, 'Unable to resolve the standard IISHost and ServiceHost host template ids after seeding omp.HostTemplates. Expected TemplateKeys: IISHost and ServiceHost. Verify that the MERGE operation completed successfully and that no constraints prevented these templates from being inserted.', 1;
 END
 
 SELECT @DefaultInstanceId = InstanceId
