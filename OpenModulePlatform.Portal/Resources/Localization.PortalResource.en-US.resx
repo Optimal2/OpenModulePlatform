@@ -862,4 +862,7 @@
   <data name="An iFrame URL set with this key already exists." xml:space="preserve"><value>An iFrame URL set with this key already exists.</value></data>
   <data name="Select valid iFrame URLs." xml:space="preserve"><value>Select valid iFrame URLs.</value></data>
   <data name="Select at least one iFrame URL." xml:space="preserve"><value>Select at least one iFrame URL.</value></data>
+  <data name="Close notification" xml:space="preserve"><value>Close notification</value></data>
+  <data name="New notifications" xml:space="preserve"><value>New notifications</value></data>
+  <data name="{0} new notifications" xml:space="preserve"><value>{0} new notifications</value></data>
 </root>

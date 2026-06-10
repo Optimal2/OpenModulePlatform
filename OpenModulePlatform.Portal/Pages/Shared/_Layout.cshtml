@@ -40,6 +40,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>@documentTitle</title>
     <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/portal-notification-toasts.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
     @if (ViewData["OmpPreventBackCache"] is true)
@@ -87,8 +88,22 @@
     <main class="content-shell">
         @RenderBody()
     </main>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <div data-portal-notification-toasts
+             data-enabled="true"
+             data-summary-url="@Url.Content("~/notifications/summary")"
+             data-notifications-url="@Url.Content("~/notifications")"
+             data-visible-interval="60000"
+             data-hidden-interval="180000"
+             data-toast-duration="7000"
+             data-close-label="@L["Close notification"]"
+             data-summary-title="@L["New notifications"]"
+             data-summary-template="@L["{0} new notifications"]"></div>
+    }
     <script src="~/js/portal-nav-dropdowns.js"></script>
     <script src="~/js/site.js"></script>
+    <script src="~/js/portal-notification-toasts.js"></script>
     <script src="~/_content/OpenModulePlatform.Web.Shared/js/portal-topbar.js"></script>
     <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-secure-page-navigation.js"></script>
     @await RenderSectionAsync("Scripts", required: false)
