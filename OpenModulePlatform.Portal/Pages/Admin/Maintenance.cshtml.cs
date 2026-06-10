@@ -22,11 +22,14 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         _repo = repo;
     }
 
-    [BindProperty]
+    [BindProperty(SupportsGet = true)]
     public InputModel Input { get; set; } = new();
 
     [BindProperty]
     public List<long> SelectedMaintenanceFindingIds { get; set; } = [];
+
+    [TempData]
+    public string? StatusMessage { get; set; }
 
     public ArtifactRetentionPreview Preview { get; private set; } = new()
     {
@@ -45,12 +48,17 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     public IReadOnlyList<HostAgentJobRow> RecentHostAgentJobs { get; private set; } = [];
 
-    public async Task<IActionResult> OnGet(CancellationToken ct)
+    public async Task<IActionResult> OnGet(int? maxVersionsToKeep, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
         {
             return guard;
+        }
+
+        if (maxVersionsToKeep.HasValue)
+        {
+            Input.MaxVersionsToKeep = maxVersionsToKeep.Value;
         }
 
         SetTitles("Maintenance");
@@ -66,9 +74,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Maintenance");
-        await LoadPageDataAsync(ct);
-        return Page();
+        return RedirectToMaintenancePage();
     }
 
     public async Task<IActionResult> OnPostCleanupArtifacts(CancellationToken ct)
@@ -100,17 +106,15 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             User.Identity?.Name,
             ct);
 
-        CleanupResult = new ArtifactRetentionCleanupResult
-        {
-            QueuedHostAgentJobId = jobId,
-            MaxVersionsToKeep = Input.MaxVersionsToKeep,
-            CandidateCount = Preview.CandidateCount,
-            DeletableCandidateCount = Preview.DeletableCandidateCount
-        };
+        StatusMessage = string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            T("Queued HostAgent artifact retention cleanup job {0}. The HostAgent will recompute the candidates and perform both database and file cleanup. Current preview shows {1} deletable old versions out of {2} candidates with a keep limit of {3}."),
+            jobId,
+            Preview.DeletableCandidateCount,
+            Preview.CandidateCount,
+            Input.MaxVersionsToKeep);
 
-        Preview = await LoadPreviewCoreAsync(ct);
-        await LoadOperationalListsAsync(ct);
-        return Page();
+        return RedirectToMaintenancePage();
     }
 
     public async Task<IActionResult> OnPostQueueMaintenanceScan(CancellationToken ct)
@@ -121,10 +125,13 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Maintenance");
         MaintenanceScanResult = await _repo.QueueMaintenanceScanAsync(User.Identity?.Name, ct);
-        await LoadPageDataAsync(ct);
-        return Page();
+        StatusMessage = string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            T("Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back."),
+            MaintenanceScanResult.TotalJobCount,
+            MaintenanceScanResult.HostJobCount);
+        return RedirectToMaintenancePage();
     }
 
     public async Task<IActionResult> OnPostCleanupMaintenanceFindings(CancellationToken ct)
@@ -148,8 +155,13 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             User.Identity?.Name,
             ct);
 
-        await LoadPageDataAsync(ct);
-        return Page();
+        StatusMessage = string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            T("Queued cleanup for {0} of {1} selected maintenance finding(s) across {2} HostAgent job(s)."),
+            MaintenanceCleanupResult.QueuedFindingCount,
+            MaintenanceCleanupResult.SelectedFindingCount,
+            MaintenanceCleanupResult.QueuedJobCount);
+        return RedirectToMaintenancePage();
     }
 
     public async Task<IActionResult> OnPostIgnoreMaintenanceFindings(CancellationToken ct)
@@ -173,9 +185,15 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             User.Identity?.Name,
             ct);
 
-        await LoadPageDataAsync(ct);
-        return Page();
+        StatusMessage = string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            T("Ignored {0} maintenance finding(s). They are hidden until a future scan reports them again."),
+            IgnoredMaintenanceFindingCount);
+        return RedirectToMaintenancePage();
     }
+
+    private IActionResult RedirectToMaintenancePage()
+        => RedirectToPage("/Admin/Maintenance", new { maxVersionsToKeep = Input.MaxVersionsToKeep });
 
     private async Task LoadPageDataAsync(CancellationToken ct)
     {
