@@ -251,7 +251,7 @@ WHERE notification_id = @notification_id
             await using var rdr = await selectCmd.ExecuteReaderAsync(ct);
             if (!await rdr.ReadAsync(ct))
             {
-                return new NotificationMarkReadResult(false, null, await GetUnreadCountAsync(userId, ct));
+                return new NotificationMarkReadResult(false, null, await GetUnreadCountAsync(conn, userId, ct));
             }
 
             destinationUrl = rdr.IsDBNull(0) ? null : rdr.GetString(0);
@@ -273,7 +273,7 @@ WHERE notification_id = @notification_id
             await updateCmd.ExecuteNonQueryAsync(ct);
         }
 
-        return new NotificationMarkReadResult(true, destinationUrl, await GetUnreadCountAsync(userId, ct));
+        return new NotificationMarkReadResult(true, destinationUrl, await GetUnreadCountAsync(conn, userId, ct));
     }
 
     public async Task<int> MarkAllAsReadAsync(int userId, CancellationToken ct)

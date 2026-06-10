@@ -2787,6 +2787,10 @@
 
     function getFileStem(path) {
         const name = String(path || '').split(/[\\/]/).pop() || '';
+        if (name.startsWith('.') && name.indexOf('.', 1) < 0) {
+            return name;
+        }
+
         return name.replace(/\.[^.]+$/, '');
     }
 
@@ -4608,7 +4612,51 @@
             return window.CSS.escape(value);
         }
 
-        return String(value).replace(/["\\]/g, '\\$&');
+        const text = String(value);
+        const length = text.length;
+        const firstCodeUnit = text.charCodeAt(0);
+        let result = '';
+
+        for (let index = 0; index < length; index += 1) {
+            const character = text.charAt(index);
+            const codeUnit = text.charCodeAt(index);
+
+            if (codeUnit === 0) {
+                result += '\uFFFD';
+                continue;
+            }
+
+            const isControlCharacter = (codeUnit >= 1 && codeUnit <= 31) || codeUnit === 127;
+            const isInitialDigit = index === 0 && codeUnit >= 48 && codeUnit <= 57;
+            const isSecondDigitAfterHyphen = index === 1
+                && codeUnit >= 48
+                && codeUnit <= 57
+                && firstCodeUnit === 45;
+
+            if (isControlCharacter || isInitialDigit || isSecondDigitAfterHyphen) {
+                result += `\\${codeUnit.toString(16)} `;
+                continue;
+            }
+
+            if (index === 0 && codeUnit === 45 && length === 1) {
+                result += '\\-';
+                continue;
+            }
+
+            if (codeUnit >= 128
+                || codeUnit === 45
+                || codeUnit === 95
+                || (codeUnit >= 48 && codeUnit <= 57)
+                || (codeUnit >= 65 && codeUnit <= 90)
+                || (codeUnit >= 97 && codeUnit <= 122)) {
+                result += character;
+                continue;
+            }
+
+            result += `\\${character}`;
+        }
+
+        return result;
     }
 
     function initAll() {
