@@ -129,10 +129,8 @@ $MinimumDiagnosticPrefixLength = 8
 $TruncationIndicator = '...'
 $MillisecondsPerSecond = 1000
 # The shared wrappers are intentionally stored at scripts/omp/test-cmd-wrappers.ps1.
-# Build the relative path from segments and validate it during startup so moving
-# the script fails loudly.
-$RepositoryRootRelativePathSegments = @('..', '..')
-$RepositoryRootRelativePath = Join-Path $RepositoryRootRelativePathSegments[0] $RepositoryRootRelativePathSegments[1]
+# Validate this relative path during startup so moving the script fails loudly.
+$RepositoryRootRelativePath = Join-Path '..' '..'
 # Store the theoretical .NET API limit separately because WaitForExit accepts an
 # [int] millisecond value. The practical wrapper timeout is much lower and is
 # constrained by the PerRepositoryTimeoutSeconds parameter.
@@ -193,18 +191,20 @@ $InvalidProcessIdSentinel = -1
 $TaskKillProcessIdSwitch = '/PID'
 $TaskKillTerminateTreeSwitch = '/T'
 $TaskKillForceSwitch = '/F'
-$CmdCallKeyword = 'call'
 $StdoutLogExtension = '.stdout.log'
 $StderrLogExtension = '.stderr.log'
 $GuidFormatNoHyphens = 'N'
 $RunLogDirectoryCreationAttempts = 5
+# The final table is intentionally compact. New-ValidationResult also carries
+# StdoutLog, StderrLog, and Detail for callers that capture the returned objects.
 $ValidationSummaryColumns = @('Repository', 'Status', 'ExitCode', 'Package')
 # Windows can round Process.StartTime differently between the original Process
-# handle and a refreshed lookup because process metadata is read from snapshots
-# with timer-resolution limits. 100 ms is intentionally far above normal tick
-# variance while still small enough to catch a different process after PID reuse.
+# handle and a refreshed lookup because process metadata is exposed through
+# Windows/.NET snapshots with scheduler and timer-resolution limits. 100 ms is
+# intentionally far above normal tick variance while still small enough to catch
+# a different process after PID reuse.
 $ProcessStartTimeToleranceMilliseconds = 100
-$NoTaskExceptionDiagnostic = 'Async stream read task faulted without exception information'
+$TaskFaultedWithoutExceptionMessage = 'Async stream read task faulted without exception information'
 
 # This startup guard intentionally protects future edits to the script-level
 # constants. It keeps later truncation logic simple and avoids defensive math in
@@ -281,14 +281,10 @@ function Convert-SecondsToIntMilliseconds {
     #>
     param(
         [Parameter(Mandatory = $true)][string]$TimeoutDescription,
-        # SYNC-WITH: $ValidateRangeLiteralForMaximumSafeSeconds.
-        # Literal value: floor([int]::MaxValue / 1000) = 2147483.
+        # SYNC-WITH: $ValidateRangeLiteralForMaximumSafeSeconds
+        # (2147483 = floor([int]::MaxValue / 1000)).
         # ValidateRange requires a literal value in Windows PowerShell 5.1.
-        # Literal sync note: 2147483 is floor([int]::MaxValue / 1000), which is
-        # the largest whole-second value that safely converts back to
-        # WaitForExit(int milliseconds). Startup asserts this literal still
-        # matches $MaximumSafeSecondsForMillisecondConversion.
-        [ValidateRange(1, 2147483)] # Upper bound prevents seconds-to-milliseconds overflow for WaitForExit(int).
+        [ValidateRange(1, 2147483)] # 2147483 = floor([int]::MaxValue / 1000); prevents WaitForExit(int) overflow.
         [Parameter(Mandatory = $true)][int]$Seconds
     )
 
@@ -930,8 +926,10 @@ function Add-TaskOutputOrDiagnostic {
     complete later; timeout cleanup is handled by the owning process path. A
     timed-out read task may hold stream resources until the helper process exits
     or the PowerShell process unloads its AppDomain. Repeated helper stream
-    timeouts could therefore temporarily retain resources; the script reports
-    those timeouts explicitly and remains bounded instead of waiting forever.
+    timeouts could therefore temporarily retain resources. There is no reliable
+    cancellation fallback for these read tasks in Windows PowerShell 5.1, so the
+    script reports those timeouts explicitly and remains bounded instead of
+    waiting forever.
     This is acceptable here because the tasks read independent helper-process
     streams and do not marshal continuations back to the PowerShell thread; no
     synchronization context is required for their completion.
@@ -979,7 +977,7 @@ function Add-TaskOutputOrDiagnostic {
                 # AggregateException, but keep a useful diagnostic if a runtime
                 # or mocked task reports an inconsistent state.
                 $taskObjectType = Get-ObjectTypeName -Value $Task
-                $errorText = "$NoTaskExceptionDiagnostic. TaskObjectType=$taskObjectType."
+                $errorText = "$TaskFaultedWithoutExceptionMessage. TaskObjectType=$taskObjectType."
             }
 
             $Output.Add("Could not read taskkill ${StreamName}; the async stream read task faulted: $errorText")
@@ -1190,6 +1188,32 @@ function Get-ProcessIdentityDiagnostic {
     }
 }
 
+function Get-ProcessKillFailureReason {
+    param([Parameter(Mandatory = $true)][Exception]$Exception)
+
+    if ($Exception -is [System.InvalidOperationException]) {
+        return 'Process may already have exited, or the Process object is no longer associated with a local process.'
+    }
+
+    if ($Exception -is [System.ComponentModel.Win32Exception]) {
+        if ($Exception.NativeErrorCode -eq 5) {
+            return 'Access denied while terminating the process.'
+        }
+
+        return "Windows process API failure. NativeErrorCode=$($Exception.NativeErrorCode)."
+    }
+
+    if ($Exception -is [System.UnauthorizedAccessException]) {
+        return 'Access denied while terminating the process.'
+    }
+
+    if ($Exception -is [System.NotSupportedException]) {
+        return 'The process object does not support local termination.'
+    }
+
+    return "Unexpected Process.Kill failure type: $($Exception.GetType().FullName)."
+}
+
 function Get-TaskListDiagnosticCommand {
     param([int]$ProcessId = $InvalidProcessIdSentinel)
 
@@ -1282,6 +1306,19 @@ function New-ValidationResult {
         StderrLog = [string]$StderrLog
         Detail = $Detail
     }
+}
+
+function Get-RepositoryPath {
+    param([Parameter(Mandatory = $true)][object]$Repository)
+
+    if ($Repository -is [System.IO.DirectoryInfo]) {
+        return $Repository.FullName
+    }
+
+    # Repository discovery normally yields DirectoryInfo objects. Keep this
+    # string fallback for tests or future callers that pass repository-like
+    # values directly into this script block.
+    return [string]$Repository
 }
 
 function Test-PackageCreated {
@@ -1559,15 +1596,7 @@ if ($repositories.Count -eq 0) {
 $results = [System.Collections.Generic.List[object]]::new()
 
 foreach ($repository in $repositories) {
-    $repositoryPath = if ($repository -is [System.IO.DirectoryInfo]) {
-        $repository.FullName
-    }
-    else {
-        # Repository discovery normally yields DirectoryInfo objects. Keep this
-        # string fallback for tests or future callers that pass repository-like
-        # values directly into this script block.
-        [string]$repository
-    }
+    $repositoryPath = Get-RepositoryPath -Repository $repository
     $repositoryName = Split-Path -Leaf $repositoryPath
     $manifestPath = Join-Path $repositoryPath $ManifestRelativePath
     $cmdPath = Join-Path $repositoryPath $CommandWrapperRelativePath
@@ -1711,7 +1740,7 @@ foreach ($repository in $repositories) {
     # global packages use the same __global__ naming convention as
     # export-universal-package.ps1.
     # Global package files are named repositoryKey__global__repositoryVersion.zip.
-    $expectedPackageFileName = "${packageKey}${GlobalPackageFileNameDelimiter}${packageVersion}.zip"
+    $expectedPackageFileName = @($packageKey, $GlobalPackageFileNameDelimiter, $packageVersion, '.zip') -join ''
     $expectedPackagePath = Join-Path $outputRootPath $expectedPackageFileName
     # Manifest fields are allow-listed before the filename is built, and this
     # final base-path check is kept as defense in depth against traversal if the
@@ -1747,9 +1776,9 @@ foreach ($repository in $repositories) {
     # including the immutable output root path.
     $wrapperArguments = @($cmdPath, '--no-pause', '-OutputDirectory', $outputRootPath)
     $joinedWrapperArguments = Join-CmdCommandLine -Arguments $wrapperArguments
-    # $CmdCallKeyword is the cmd.exe built-in keyword 'call', not user input.
-    # Only the wrapper path and arguments are escaped and quoted.
-    $cmdInvocation = @($CmdCallKeyword, $joinedWrapperArguments) -join ' '
+    # 'call' is the cmd.exe built-in keyword, not user input. Only the wrapper
+    # path and arguments are escaped and quoted.
+    $cmdInvocation = @('call', $joinedWrapperArguments) -join ' '
     Assert-CmdCommandLineLength -CommandLine $cmdInvocation
     # /d disables cmd.exe AutoRun hooks and /c runs the wrapper then exits.
     $cmdArguments = @('/d', '/c', $cmdInvocation)
@@ -1808,6 +1837,10 @@ foreach ($repository in $repositories) {
         # validation result, log paths, process identity diagnostics, and final
         # package inspection in one flow. Extracting it would require a wide
         # parameter object without making the operational logic safer.
+        # Known race: WaitForExit(false) only says the process was still running
+        # when the timeout elapsed. It can exit naturally before any later
+        # Refresh(), HasExited check, or taskkill call, so every later decision
+        # treats process state as a fresh best-effort snapshot.
         $processTimedOut = -not $process.WaitForExit($PerRepositoryTimeoutMilliseconds)
         if ($processTimedOut) {
             # The process can exit immediately after the timeout result is
@@ -1815,9 +1848,10 @@ foreach ($repository in $repositories) {
             # exited" as a successful no-op so this known race never becomes a
             # script failure or an unsafe taskkill attempt.
             $process.Refresh()
+            $processExitedAfterTimeout = $process.HasExited
             # Phase 1: verify the original cmd.exe still exists and is still the
             # same process instance before any termination attempt.
-            if ($process.HasExited) {
+            if ($processExitedAfterTimeout) {
                 Write-Warning "[$repositoryName] Process exited after the timeout was detected; taskkill was not needed."
             }
             else {
@@ -1859,6 +1893,11 @@ foreach ($repository in $repositories) {
                             # expected in normal Windows process lifetime semantics.
                             $taskKillAttempted = $true
                             $taskKillResult = Invoke-TaskKillTree -ProcessId $processId
+                            # Invoke-TaskKillTree returns only after taskkill.exe
+                            # has exited, failed to start, or its helper process
+                            # was itself timed out and terminated. Phase 3 below
+                            # therefore does not run while an observed taskkill
+                            # helper is still active.
                             $taskKillOutput = $taskKillResult.Output
                             $taskKillExitCode = $taskKillResult.ExitCode
                         }
@@ -1902,7 +1941,9 @@ foreach ($repository in $repositories) {
                                     Write-Warning "[$repositoryName] Process exited immediately before direct Process.Kill(); no further termination was needed."
                                 }
                                 else {
-                                    Write-Warning "[$repositoryName] taskkill did not terminate the wrapper process tree; attempting direct Process.Kill() for PID $processIdText."
+                                    $currentProcessId = Get-ValidProcessIdOrNull -Process $process
+                                    $currentProcessIdText = Get-ProcessIdDisplayText -ProcessId $currentProcessId -Fallback $processIdText
+                                    Write-Warning "[$repositoryName] taskkill did not terminate the wrapper process tree; attempting direct Process.Kill() for PID $currentProcessIdText."
                                     $process.Kill()
                                     $process.Refresh()
                                     if ($process.HasExited) {
@@ -1912,24 +1953,27 @@ foreach ($repository in $repositories) {
                             }
 
                             if (-not $process.WaitForExit($DirectProcessKillWaitMilliseconds)) {
-                                $targetProcessIdOrSentinel = Get-ProcessIdOrSentinel -ProcessId $processId
+                                $targetProcessId = Get-ValidProcessIdOrNull -Process $process
+                                $targetProcessIdOrSentinel = Get-ProcessIdOrSentinel -ProcessId $targetProcessId
+                                $targetProcessIdText = Get-ProcessIdDisplayText -ProcessId $targetProcessId -Fallback $processIdText
                                 $targetDiagnosticCommand = Get-TaskListDiagnosticCommand -ProcessId $targetProcessIdOrSentinel
-                                Write-Warning "[$repositoryName] Process with PID $processIdText still did not exit after direct Process.Kill(). Use Task Manager or run '$targetDiagnosticCommand' to verify the process tree has terminated before rerunning package validation."
+                                Write-Warning "[$repositoryName] Process with PID $targetProcessIdText still did not exit after direct Process.Kill(). Use Task Manager or run '$targetDiagnosticCommand' to verify the process tree has terminated before rerunning package validation."
                             }
                         }
                         catch {
                             $killError = $_.Exception.Message
+                            $killFailureReason = Get-ProcessKillFailureReason -Exception $_.Exception
                             try {
                                 $process.Refresh()
                                 if ($process.HasExited) {
-                                    Write-Warning "[$repositoryName] Direct Process.Kill() raced with natural process exit; no further termination was needed. Original error: $killError"
+                                    Write-Warning "[$repositoryName] Direct Process.Kill() raced with natural process exit; no further termination was needed. Failure classification: $killFailureReason Original error: $killError"
                                 }
                                 else {
-                                    Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed while the process still appeared to be running: $killError"
+                                    Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed while the process still appeared to be running. Failure classification: $killFailureReason Original error: $killError"
                                 }
                             }
                             catch {
-                                Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed and the final process state could not be inspected: $killError"
+                                Write-Warning "[$repositoryName] Direct Process.Kill() after timeout failed and the final process state could not be inspected. Failure classification: $killFailureReason Original error: $killError"
                             }
                         }
                     }
