@@ -237,15 +237,12 @@ BEGIN
     THROW 51002, 'Unable to resolve the default host template id after seeding omp.HostTemplates. Verify that omp.HostTemplates can be written to and that the template with TemplateKey=''default-host'' was successfully inserted.', 1;
 END
 
-SELECT TOP (1) @IisHostTemplateId = HostTemplateId
+SELECT @IisHostTemplateId =
+           MIN(CASE WHEN TemplateKey = N'IISHost' THEN HostTemplateId END),
+       @ServiceHostTemplateId =
+           MIN(CASE WHEN TemplateKey = N'ServiceHost' THEN HostTemplateId END)
 FROM omp.HostTemplates
-WHERE TemplateKey = N'IISHost'
-ORDER BY HostTemplateId;
-
-SELECT TOP (1) @ServiceHostTemplateId = HostTemplateId
-FROM omp.HostTemplates
-WHERE TemplateKey = N'ServiceHost'
-ORDER BY HostTemplateId;
+WHERE TemplateKey IN (N'IISHost', N'ServiceHost');
 
 IF @IisHostTemplateId IS NULL OR @ServiceHostTemplateId IS NULL
 BEGIN
@@ -464,23 +461,15 @@ WHEN NOT MATCHED THEN
     INSERT(ModuleId, AppKey, DisplayName, AppType, Description, SortOrder, IsEnabled)
     VALUES(source.ModuleId, source.AppKey, source.DisplayName, source.AppType, source.Description, source.SortOrder, source.IsEnabled);
 
-SELECT TOP (1) @HostAgentAppId = AppId
+SELECT @HostAgentAppId =
+           MIN(CASE WHEN AppKey = N'omp_hostagent' THEN AppId END),
+       @WorkerManagerAppId =
+           MIN(CASE WHEN AppKey = N'omp_workermanager' THEN AppId END),
+       @WorkerProcessHostAppId =
+           MIN(CASE WHEN AppKey = N'omp_workerprocesshost' THEN AppId END)
 FROM omp.Apps
 WHERE ModuleId = @CoreModuleId
-  AND AppKey = N'omp_hostagent'
-ORDER BY AppId;
-
-SELECT TOP (1) @WorkerManagerAppId = AppId
-FROM omp.Apps
-WHERE ModuleId = @CoreModuleId
-  AND AppKey = N'omp_workermanager'
-ORDER BY AppId;
-
-SELECT TOP (1) @WorkerProcessHostAppId = AppId
-FROM omp.Apps
-WHERE ModuleId = @CoreModuleId
-  AND AppKey = N'omp_workerprocesshost'
-ORDER BY AppId;
+  AND AppKey IN (N'omp_hostagent', N'omp_workermanager', N'omp_workerprocesshost');
 
 MERGE omp.Artifacts AS target
 USING
@@ -552,26 +541,32 @@ FROM
 ) ranked
 WHERE ranked.VersionRank = 1;
 
-SELECT @HostAgentArtifactId = ArtifactId
+SELECT @HostAgentArtifactId =
+           MAX(CASE
+                   WHEN AppId = @HostAgentAppId
+                    AND PackageType = N'host-agent'
+                    AND TargetName = N'omp-hostagent'
+                    AND VersionRank = 1
+                   THEN ArtifactId
+               END),
+       @WorkerManagerArtifactId =
+           MAX(CASE
+                   WHEN AppId = @WorkerManagerAppId
+                    AND PackageType = N'service-app'
+                    AND TargetName = N'omp-workermanager'
+                    AND VersionRank = 1
+                   THEN ArtifactId
+               END),
+       @WorkerProcessHostArtifactId =
+           MAX(CASE
+                   WHEN AppId = @WorkerProcessHostAppId
+                    AND PackageType = N'worker-host'
+                    AND TargetName = N'omp-workerprocesshost'
+                    AND VersionRank = 1
+                   THEN ArtifactId
+               END)
 FROM @LatestEnabledArtifacts
-WHERE AppId = @HostAgentAppId
-  AND PackageType = N'host-agent'
-  AND TargetName = N'omp-hostagent'
-  AND VersionRank = 1;
-
-SELECT @WorkerManagerArtifactId = ArtifactId
-FROM @LatestEnabledArtifacts
-WHERE AppId = @WorkerManagerAppId
-  AND PackageType = N'service-app'
-  AND TargetName = N'omp-workermanager'
-  AND VersionRank = 1;
-
-SELECT @WorkerProcessHostArtifactId = ArtifactId
-FROM @LatestEnabledArtifacts
-WHERE AppId = @WorkerProcessHostAppId
-  AND PackageType = N'worker-host'
-  AND TargetName = N'omp-workerprocesshost'
-  AND VersionRank = 1;
+WHERE VersionRank = 1;
 
 MERGE omp.InstanceTemplateModuleInstances AS target
 USING
@@ -676,9 +671,11 @@ BEGIN
       AND ISNULL(Description, N'') = N'';
 END
 
-SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
-SELECT @EveryoneRoleId = RoleId FROM omp.Roles WHERE Name = N'Everyone';
-SELECT @AuthenticatedUsersRoleId = RoleId FROM omp.Roles WHERE Name = N'AuthenticatedUsers';
+SELECT @PortalAdminsRoleId = MAX(CASE WHEN Name = N'PortalAdmins' THEN RoleId END),
+       @EveryoneRoleId = MAX(CASE WHEN Name = N'Everyone' THEN RoleId END),
+       @AuthenticatedUsersRoleId = MAX(CASE WHEN Name = N'AuthenticatedUsers' THEN RoleId END)
+FROM omp.Roles
+WHERE Name IN (N'PortalAdmins', N'Everyone', N'AuthenticatedUsers');
 
 IF @EveryoneRoleId IS NOT NULL
    AND NOT EXISTS
