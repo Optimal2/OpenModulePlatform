@@ -25,19 +25,39 @@
     opacity: 0;
     pointer-events: auto;
     transform: translateY(8px);
-    filter: saturate(0.78);
-    transition: opacity 160ms ease, transform 160ms ease, filter 160ms ease;
+    transition: opacity 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.portal-notification-toast::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: rgba(241, 245, 249, 0.48);
+    content: "";
+    opacity: 1;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+}
+
+.portal-notification-toast > * {
+    position: relative;
+    z-index: 1;
 }
 
 .portal-notification-toast.is-visible {
-    opacity: 0.74;
+    opacity: 1;
     transform: translateY(0);
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
 }
 
 .portal-notification-toast.is-visible:hover,
 .portal-notification-toast.is-visible:focus-within {
-    filter: none;
-    opacity: 1;
+    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.18);
+}
+
+.portal-notification-toast.is-visible:hover::before,
+.portal-notification-toast.is-visible:focus-within::before {
+    opacity: 0;
 }
 
 .portal-notification-toast:focus-visible {
@@ -66,6 +86,7 @@
     font: inherit;
     font-size: 1.25rem;
     line-height: 1;
+    z-index: 2;
 }
 
 .portal-notification-toast__close:hover,
@@ -81,6 +102,12 @@
     font-weight: 800;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.portal-notification-toast.is-visible:not(:hover):not(:focus-within) .portal-notification-toast__close,
+.portal-notification-toast.is-visible:not(:hover):not(:focus-within) .portal-notification-toast__title,
+.portal-notification-toast.is-visible:not(:hover):not(:focus-within) .portal-notification-toast__content {
+    opacity: 0.72;
 }
 
 .portal-notification-toast__timer {
