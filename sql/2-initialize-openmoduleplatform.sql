@@ -47,6 +47,10 @@ DECLARE @ServiceHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
+-- These versions seed the minimum artifact rows bundled with the baseline SQL
+-- script. They are not desired runtime targets; after portable packages have
+-- been imported, the template state below resolves the latest compatible
+-- registered artifact versions from omp.Artifacts.
 DECLARE @BaselineHostAgentArtifactVersion nvarchar(50) = N'0.3.55';
 DECLARE @BaselineWorkerManagerArtifactVersion nvarchar(50) = N'0.3.8';
 DECLARE @BaselineWorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
@@ -245,7 +249,7 @@ ORDER BY HostTemplateId;
 
 IF @IisHostTemplateId IS NULL OR @ServiceHostTemplateId IS NULL
 BEGIN
-    THROW 51003, 'Unable to resolve the standard IISHost and ServiceHost role ids after seeding omp.HostTemplates.', 1;
+    THROW 51003, 'Unable to resolve the standard IISHost and ServiceHost host template ids after seeding omp.HostTemplates.', 1;
 END
 
 SELECT @DefaultInstanceId = InstanceId

@@ -17,6 +17,7 @@ public sealed class MessageService
     private const long DefaultMaxAttachmentBytes = 5 * 1024 * 1024;
     private const long MinConfiguredAttachmentBytes = 1024;
     private const long MaxConfiguredAttachmentBytes = 100 * 1024 * 1024;
+    private const int MaxFileNameLength = 260;
     public const string ConfigurationCategory = "messages";
     public const string AttachmentMaxBytesSetting = "attachmentMaxBytes";
     public const string MarkAllReadPath = "/messages/mark-all-read";
@@ -46,9 +47,6 @@ public sealed class MessageService
         await conn.OpenAsync(ct);
         return await MessagesTablesExistAsync(conn, ct);
     }
-
-    public async Task<int> GetUnreadConversationCountAsync(int userId, CancellationToken ct)
-        => await GetUnreadMessageCountAsync(userId, ct);
 
     public async Task<int> GetUnreadMessageCountAsync(int userId, CancellationToken ct)
     {
@@ -733,7 +731,9 @@ WHERE cp.conversation_id = @conversation_id
             return 0;
         }
 
-        var unreadCount = await GetUnreadMessageCountAsync(userId, ct);
+        // This count is intentionally captured before the update; callers use
+        // it as the number of unread messages that were marked read.
+        var messagesMarkedRead = await GetUnreadMessageCountAsync(conn, userId, ct);
 
         const string sql = @"
 UPDATE cp
@@ -754,7 +754,7 @@ WHERE cp.user_id = @user_id
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         await cmd.ExecuteNonQueryAsync(ct);
-        return unreadCount;
+        return messagesMarkedRead;
     }
 
     private static async Task<int> GetUnreadMessageCountAsync(SqlConnection conn, int userId, CancellationToken ct)
@@ -1071,7 +1071,7 @@ VALUES
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.Add("@message_id", SqlDbType.BigInt).Value = messageId;
-        cmd.Parameters.Add("@file_name", SqlDbType.NVarChar, 260).Value = fileName;
+        cmd.Parameters.Add("@file_name", SqlDbType.NVarChar, MaxFileNameLength).Value = fileName;
         cmd.Parameters.Add("@content_type", SqlDbType.NVarChar, 128).Value = contentType;
         cmd.Parameters.Add("@file_size", SqlDbType.BigInt).Value = file.Length;
         cmd.Parameters.Add("@storage_key", SqlDbType.NVarChar, 120).Value = storageKey;
@@ -1208,7 +1208,7 @@ ORDER BY attachment_id;";
         }
 
         fileName = fileName.Trim();
-        return fileName.Length <= 260 ? fileName : fileName[^260..];
+        return fileName.Length <= MaxFileNameLength ? fileName : fileName[^MaxFileNameLength..];
     }
 
     private static string? CleanOptional(string? value, int maxLength)
