@@ -6,6 +6,7 @@
     var defaultVisibleInterval = 60000;
     var defaultHiddenInterval = 180000;
     var defaultToastDuration = 7000;
+    var dismissTransitionDuration = 180;
 
     var state = {
         root: null,
@@ -121,8 +122,13 @@
             var payload = await fetchSummary(config);
             state.failures = 0;
             applySummary(payload, config);
-        } catch {
+        } catch (error) {
             state.failures += 1;
+            if ((state.failures === 1 || state.failures % 6 === 0)
+                && window.console
+                && typeof window.console.warn === "function") {
+                window.console.warn("Notification toast polling failed.", error);
+            }
         } finally {
             state.running = false;
             scheduleNext(getPollingDelay(config));
@@ -373,7 +379,7 @@
         window.setTimeout(function () {
             visibleState.element.remove();
             drainQueue(config);
-        }, 180);
+        }, dismissTransitionDuration);
     }
 
     function init() {
