@@ -28,9 +28,11 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - HostAgent self-upgrade preparation and takeover for desired
   `host-agent` artifacts registered in `omp.HostAgentDesiredStates`
 - Web app deployment state in `omp.HostAppDeploymentStates`
+- Per-host Portal health state in `omp.WebAppHealthStates`
 - Database-backed HostAgent job queue in `omp.HostAgentJobs`, currently used
   for central artifact store, host-local artifact cache cleanup, and
-  maintenance scan/cleanup tasks requested from Portal maintenance
+  maintenance scan/cleanup tasks requested from Portal maintenance and
+  Portal web-app health operations
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
   - operation: `quiesce`
@@ -47,6 +49,7 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - `omp.HostAgentLeases`
 - `omp.HostAgentJobs`
 - `omp.MaintenanceFindings`
+- `omp.WebAppHealthStates`
 - `omp.WorkerInstances`
 - `omp.WorkerInstanceRuntimeStates`
 
@@ -96,6 +99,16 @@ The cleanup job types are:
   services, directories outside the configured install root, the install root
   itself, the active process directory, credential-store directories, and
   directories still referenced by HostAgent services.
+- `WebAppHealthProbe` - host-specific Portal health probe requested from the
+  operations page. It calls the configured Portal readiness endpoint and writes
+  `omp.WebAppHealthStates`. The request can optionally ask HostAgent to recycle
+  the Portal app pool when the probe is unhealthy.
+- `RecycleWebAppAppPool` - host-specific manual recycle of a managed web-app
+  app pool. The first implementation targets the Portal health row and records
+  the action in `omp.WebAppHealthStates`.
+- `CollectWebAppLogs` - host-specific diagnostic job that reads a bounded tail
+  of the latest Portal log file and stores the result on the job row for review
+  from Portal.
 
 Artifact retention cleanup protects artifact versions that are still referenced
 by desired state, current app deployment state, host requirements, templates, or
@@ -190,6 +203,46 @@ HostAgent also clears the IIS Anonymous Authentication username and password for
 managed sites and applications. That makes anonymous requests execute as the app
 pool identity instead of the machine-level IUSR account, which keeps static
 apps and ASP.NET apps on the same filesystem permission model.
+
+## Portal health monitoring
+
+Portal exposes `/health/live` and `/health/ready`. HostAgent can probe the
+Portal readiness endpoint on each web host and write the latest result to
+`omp.WebAppHealthStates`. This is intentionally application-specific health, not
+a whole-node load-balancer decision. A broken Portal instance should answer with
+a non-success status, while unrelated module applications on the same IIS node
+can still be routed independently.
+
+Default HostAgent settings:
+
+```json
+{
+  "HostAgent": {
+    "PortalHealthCheck": {
+      "Enabled": true,
+      "HealthKey": "portal",
+      "DisplayName": "OMP Portal",
+      "Path": "/health/ready",
+      "TimeoutSeconds": 10,
+      "FailureThreshold": 3,
+      "AutoRecycleAppPool": false,
+      "AutoRecycleCooldownMinutes": 15
+    }
+  }
+}
+```
+
+When `HostName` is empty, HostAgent probes `localhost` on the configured IIS
+binding port. Use `HostHeader` when the web server needs the public host header
+for routing, and set `AllowInvalidTlsCertificate` only for environments where a
+load balancer terminates the public certificate and the local server certificate
+does not match the probed host name.
+
+Automatic app-pool recycle is disabled by default. Operators can use the Portal
+operations page to trigger a probe, recycle the Portal app pool, or collect a
+small log tail from the affected host. Enable `AutoRecycleAppPool` only when the
+environment has agreed that repeated readiness failures should be remediated by
+HostAgent without an operator click.
 
 An app instance with `HostId = NULL` is treated as host-neutral. HostAgent
 deploys that same logical app instance on every enabled host that runs the

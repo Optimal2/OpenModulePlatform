@@ -841,6 +841,45 @@ public sealed class HostAgentJobRow
     public string? LastError { get; set; }
 }
 
+public sealed class WebAppHealthStateRow
+{
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string? HostDisplayName { get; set; }
+
+    public string HealthKey { get; set; } = string.Empty;
+
+    public string? AppKey { get; set; }
+
+    public string? DisplayName { get; set; }
+
+    public string? ProbeUrl { get; set; }
+
+    public string? AppPoolName { get; set; }
+
+    public byte Status { get; set; }
+
+    public int? HttpStatusCode { get; set; }
+
+    public int ConsecutiveFailures { get; set; }
+
+    public DateTime? LastProbeUtc { get; set; }
+
+    public DateTime? LastSuccessUtc { get; set; }
+
+    public DateTime? LastFailureUtc { get; set; }
+
+    public DateTime? LastActionUtc { get; set; }
+
+    public string? LastActionMessage { get; set; }
+
+    public string? ResponseSummary { get; set; }
+
+    public string? LastError { get; set; }
+}
+
 /// <summary>
 /// Artifact row with enough identity information to export a portable artifact package.
 /// </summary>

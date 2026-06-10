@@ -27,15 +27,18 @@ public sealed class HostAgentJobProcessor
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
+    private readonly WebAppHealthMonitor _webAppHealthMonitor;
     private readonly ILogger<HostAgentJobProcessor> _logger;
 
     public HostAgentJobProcessor(
         IOptionsMonitor<HostAgentSettings> settings,
         OmpHostArtifactRepository repository,
+        WebAppHealthMonitor webAppHealthMonitor,
         ILogger<HostAgentJobProcessor> logger)
     {
         _settings = settings;
         _repository = repository;
+        _webAppHealthMonitor = webAppHealthMonitor;
         _logger = logger;
     }
 
@@ -96,6 +99,18 @@ public sealed class HostAgentJobProcessor
                     await ProcessMaintenanceCleanupJobAsync(job, cancellationToken);
                     break;
 
+                case HostAgentJobTypes.WebAppHealthProbe:
+                    await ProcessWebAppHealthProbeJobAsync(job, cancellationToken);
+                    break;
+
+                case HostAgentJobTypes.RecycleWebAppAppPool:
+                    await ProcessRecycleWebAppAppPoolJobAsync(job, cancellationToken);
+                    break;
+
+                case HostAgentJobTypes.CollectWebAppLogs:
+                    await ProcessCollectWebAppLogsJobAsync(job, cancellationToken);
+                    break;
+
                 default:
                     await CompleteFailedAsync(
                         job,
@@ -114,6 +129,118 @@ public sealed class HostAgentJobProcessor
 
             await CompleteFailedAsync(job, ex.Message, cancellationToken);
         }
+    }
+
+    private async Task ProcessWebAppHealthProbeJobAsync(
+        HostAgentJobWorkItem job,
+        CancellationToken cancellationToken)
+    {
+        if (!job.HostId.HasValue)
+        {
+            await CompleteFailedAsync(
+                job,
+                "Web app health probe jobs must target a specific host.",
+                cancellationToken);
+            return;
+        }
+
+        var payload = string.IsNullOrWhiteSpace(job.PayloadJson)
+            ? new WebAppHealthProbeJobPayload()
+            : JsonSerializer.Deserialize<WebAppHealthProbeJobPayload>(job.PayloadJson, JsonOptions)
+                ?? new WebAppHealthProbeJobPayload();
+
+        var probe = await _webAppHealthMonitor.ProbePortalAsync(
+            job.HostId.Value,
+            payload.RecycleIfUnhealthy,
+            cancellationToken);
+        if (probe is null)
+        {
+            await CompleteFailedAsync(
+                job,
+                "Portal health monitoring is disabled for this HostAgent.",
+                cancellationToken);
+            return;
+        }
+
+        var result = new WebAppHealthProbeJobResult
+        {
+            HealthKey = probe.HealthKey,
+            ProbeUrl = probe.ProbeUrl,
+            Status = probe.Status,
+            HttpStatusCode = probe.HttpStatusCode,
+            ConsecutiveFailures = probe.ConsecutiveFailures,
+            Message = probe.IsHealthy ? probe.ResponseSummary : probe.Error,
+            RecycledAppPool = payload.RecycleIfUnhealthy && !probe.IsHealthy
+        };
+
+        await _repository.CompleteHostAgentJobAsync(
+            job.HostAgentJobId,
+            probe.IsHealthy ? HostAgentJobStatuses.Succeeded : HostAgentJobStatuses.Warning,
+            JsonSerializer.Serialize(result, JsonOptions),
+            probe.IsHealthy ? null : probe.Error,
+            cancellationToken);
+    }
+
+    private async Task ProcessRecycleWebAppAppPoolJobAsync(
+        HostAgentJobWorkItem job,
+        CancellationToken cancellationToken)
+    {
+        if (!job.HostId.HasValue)
+        {
+            await CompleteFailedAsync(
+                job,
+                "Web app application-pool recycle jobs must target a specific host.",
+                cancellationToken);
+            return;
+        }
+
+        var payload = string.IsNullOrWhiteSpace(job.PayloadJson)
+            ? new RecycleWebAppAppPoolJobPayload()
+            : JsonSerializer.Deserialize<RecycleWebAppAppPoolJobPayload>(job.PayloadJson, JsonOptions)
+                ?? new RecycleWebAppAppPoolJobPayload();
+
+        var result = await _webAppHealthMonitor.RecyclePortalAppPoolAsync(
+            job.HostId.Value,
+            payload.HealthKey,
+            payload.AppPoolName,
+            cancellationToken);
+
+        await _repository.CompleteHostAgentJobAsync(
+            job.HostAgentJobId,
+            HostAgentJobStatuses.Succeeded,
+            JsonSerializer.Serialize(result, JsonOptions),
+            null,
+            cancellationToken);
+    }
+
+    private async Task ProcessCollectWebAppLogsJobAsync(
+        HostAgentJobWorkItem job,
+        CancellationToken cancellationToken)
+    {
+        if (!job.HostId.HasValue)
+        {
+            await CompleteFailedAsync(
+                job,
+                "Web app log collection jobs must target a specific host.",
+                cancellationToken);
+            return;
+        }
+
+        var payload = string.IsNullOrWhiteSpace(job.PayloadJson)
+            ? new CollectWebAppLogsJobPayload()
+            : JsonSerializer.Deserialize<CollectWebAppLogsJobPayload>(job.PayloadJson, JsonOptions)
+                ?? new CollectWebAppLogsJobPayload();
+        var result = _webAppHealthMonitor.CollectPortalLogTail(payload.HealthKey, payload.MaxLines);
+        var status = string.IsNullOrWhiteSpace(result.Content)
+            ? HostAgentJobStatuses.Warning
+            : HostAgentJobStatuses.Succeeded;
+
+        await _repository.CompleteHostAgentJobAsync(
+            job.HostAgentJobId,
+            status,
+            JsonSerializer.Serialize(result, JsonOptions),
+            status == HostAgentJobStatuses.Succeeded ? null : result.Message,
+            cancellationToken);
     }
 
     private async Task ProcessMaintenanceScanJobAsync(
