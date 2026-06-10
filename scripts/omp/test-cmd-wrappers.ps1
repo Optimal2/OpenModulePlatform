@@ -108,6 +108,9 @@ $ControlCharacterReplacement = '?'
 # Same range as $AsciiControlMaximum and $AsciiDeleteCodePoint, expressed in
 # regex hexadecimal notation for PowerShell's regular-expression engine.
 $ControlCharacterPattern = '[\x00-\x1F\x7F]'
+# CRLF must be listed first so the regex consumes Windows line endings as one
+# separator. The remaining alternatives cover LF-only, CR-only, and mixed text.
+$LineBreakPattern = '\r\n|\n|\r'
 # Whitespace and these cmd.exe metacharacters can change command parsing unless
 # the generated argument is quoted.
 $CmdArgumentNeedsQuotingPattern = '[\s&|<>()^,;=]'
@@ -153,7 +156,8 @@ $MaximumSafeSecondsForMillisecondConversion = $MaximumWaitForExitSeconds
 # ValidateRange attributes in Windows PowerShell 5.1 cannot reference variables.
 # Keep this named constant as the single documented literal value and assert
 # below that the computed WaitForExit limit still matches it.
-# floor([int]::MaxValue / 1000) = floor(2147483647 / 1000) = floor(2147483.647) = 2147483.
+# [int]::MaxValue is 2147483647; 2147483647 / 1000 = 2147483.647,
+# and floor(2147483.647) gives the literal 2147483 used by ValidateRange.
 $ValidateRangeLiteralForMaximumSafeSeconds = 2147483
 
 # Script-scoped second values are retained for human-readable diagnostics;
@@ -245,6 +249,10 @@ function Assert-ValidateRangeLiteralMatches {
     }
 }
 
+# Keep both assertions separate on purpose: one validates the literal directly
+# against the independent [int]::MaxValue calculation, and the other validates
+# the named alias used by conversion logic. If either path drifts, fail at
+# startup before any child process is started.
 Assert-ValidateRangeLiteralMatches `
     -LiteralName 'ValidateRangeLiteralForMaximumSafeSeconds' `
     -LiteralValue $ValidateRangeLiteralForMaximumSafeSeconds `
@@ -277,12 +285,15 @@ function Convert-SecondsToIntMilliseconds {
     Windows PowerShell 5.1 requires literal values in ValidateRange attributes.
     Keep the upper-bound literal synchronized with
     $ValidateRangeLiteralForMaximumSafeSeconds; startup asserts that the literal
-    still equals floor([int]::MaxValue / 1000).
+    still equals floor([int]::MaxValue / 1000). The lower bound is 1 because
+    this helper also validates short internal process-cleanup timeouts; the
+    public PerRepositoryTimeoutSeconds parameter enforces its own 60-second
+    minimum before repository validation starts.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$TimeoutDescription,
         # SYNC-WITH: $ValidateRangeLiteralForMaximumSafeSeconds
-        # (2147483 = floor([int]::MaxValue / 1000)).
+        # 2147483 is the literal form of floor([int]::MaxValue / 1000).
         # ValidateRange requires a literal value in Windows PowerShell 5.1.
         [ValidateRange(1, 2147483)] # 2147483 = floor([int]::MaxValue / 1000); prevents WaitForExit(int) overflow.
         [Parameter(Mandatory = $true)][int]$Seconds
@@ -342,14 +353,34 @@ function Get-SafeDiagnosticExcerpt {
     }
 
     $safeLines = [System.Collections.Generic.List[string]]::new()
-    # This handles CRLF, LF, CR, and mixed line endings in the same string.
-    $lines = $Value -split "`r`n|`n|`r"
+    $lines = $Value -split $LineBreakPattern
     $lineLimit = [Math]::Min($MaximumLines, $lines.Count)
     for ($lineNumber = 0; $lineNumber -lt $lineLimit; $lineNumber++) {
         $safeLines.Add((Get-SafeDiagnosticText -Value $lines[$lineNumber]))
     }
 
     return ($safeLines.ToArray() -join ' | ')
+}
+
+function Get-JsonParseLocationDiagnostic {
+    param([Parameter(Mandatory = $true)][System.Exception]$Exception)
+
+    $message = $Exception.Message
+    if ([string]::IsNullOrWhiteSpace($message)) {
+        return 'Parser location: not reported by this PowerShell runtime.'
+    }
+
+    $matches = [regex]::Matches($message, '(?im)\b(line|position)\s+(\d+)\b')
+    if ($matches.Count -eq 0) {
+        return 'Parser location: not reported by this PowerShell runtime.'
+    }
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    foreach ($match in $matches) {
+        $parts.Add("$($match.Groups[1].Value): $($match.Groups[2].Value)")
+    }
+
+    return "Parser location: $($parts.ToArray() -join ', ')."
 }
 
 function Get-ControlCharacterDiagnostic {
@@ -450,7 +481,17 @@ function Resolve-FullPathSafely {
                 throw $message
             }
 
-            $currentLocation.ProviderPath
+            $providerPath = $currentLocation.ProviderPath
+            if ([string]::IsNullOrWhiteSpace($providerPath)) {
+                $message = @(
+                    'Current PowerShell location is a FileSystem provider location, but ProviderPath was empty.'
+                    "Current path: $($currentLocation.Path)."
+                    'Provide an explicit BasePath parameter, or use Set-Location to switch to a concrete filesystem directory.'
+                ) -join ' '
+                throw $message
+            }
+
+            $providerPath
         }
         else {
             $BasePath
@@ -947,7 +988,12 @@ function Add-TaskOutputOrDiagnostic {
         # explicit millisecond timeout and is safe from synchronization-context
         # deadlocks because these tasks only read independent redirected streams
         # from taskkill.exe.
-        $taskCompleted = $Task.Wait($TaskKillStreamReadWaitMilliseconds)
+        $taskCompleted = if ($Task.IsCompleted) {
+            $true
+        }
+        else {
+            $Task.Wait($TaskKillStreamReadWaitMilliseconds)
+        }
 
         if (-not $taskCompleted) {
             # ReadToEndAsync has no cancellation token in the runtimes this
@@ -1218,6 +1264,9 @@ function Get-TaskListDiagnosticCommand {
     param([int]$ProcessId = $InvalidProcessIdSentinel)
 
     if ($ProcessId -ge $MinimumValidProcessId) {
+        # Display-only PowerShell text. The backticks make the filter readable
+        # when written from PowerShell; adjust quoting if copying the command
+        # into another shell.
         return "tasklist /FI `"PID eq $ProcessId`""
     }
 
@@ -1441,7 +1490,7 @@ function Assert-SafePackageIdentityPart {
         throw "Manifest field '$Name' must not end with a dot. Value: '$safeValue'. Manifest: $ManifestPath"
     }
 
-    if ($Value.IndexOf($GlobalPackageFileNameDelimiter, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+    if ($Value.IndexOf($GlobalPackageFileNameDelimiter, [StringComparison]::Ordinal) -ge 0) {
         throw "Manifest field '$Name' must not contain the global package filename delimiter '$GlobalPackageFileNameDelimiter'. Value: '$safeValue'. Manifest: $ManifestPath"
     }
 }
@@ -1701,9 +1750,11 @@ foreach ($repository in $repositories) {
     }
     catch {
         $manifestExcerpt = Get-SafeDiagnosticExcerpt -Value $manifestJson
+        $manifestLocationDiagnostic = Get-JsonParseLocationDiagnostic -Exception $_.Exception
         $manifestParseDetail = @(
             "Component manifest '$manifestPath' was read but could not be parsed as JSON."
             "Parser message: $($_.Exception.Message)"
+            $manifestLocationDiagnostic
             'Common causes include missing commas, trailing commas, or unescaped quotes.'
             "First lines from manifest: $manifestExcerpt"
             'Only the first few manifest lines are shown here; inspect the full file if the parser message points beyond this excerpt.'
@@ -1786,6 +1837,8 @@ foreach ($repository in $repositories) {
     # execution uses ArgumentList above so arguments stay separated. Keep the
     # executable path and argument list as separate labeled fields so paths with
     # spaces are readable without pretending this is a pasteable command line.
+    # This joined string is intentionally not shell-safe for all cmd.exe edge
+    # cases; it is only human-readable context for start-failure diagnostics.
     $cmdArgumentDiagnosticOnlyText = $cmdArguments -join ' '
     $cmdStartDiagnosticText = "FilePath='$cmdExePath'; Arguments='$cmdArgumentDiagnosticOnlyText'"
     $process = $null
@@ -1837,6 +1890,12 @@ foreach ($repository in $repositories) {
         # validation result, log paths, process identity diagnostics, and final
         # package inspection in one flow. Extracting it would require a wide
         # parameter object without making the operational logic safer.
+        # Strategy after timeout:
+        # 1. Re-check that the original cmd.exe process is still alive and is
+        #    still the expected process instance.
+        # 2. Ask taskkill.exe to terminate the full process tree.
+        # 3. If the wrapper cmd.exe remains alive, use direct Process.Kill() as
+        #    a final fallback for that wrapper process only.
         # Known race: WaitForExit(false) only says the process was still running
         # when the timeout elapsed. It can exit naturally before any later
         # Refresh(), HasExited check, or taskkill call, so every later decision
