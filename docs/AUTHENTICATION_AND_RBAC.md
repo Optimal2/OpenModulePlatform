@@ -102,15 +102,19 @@ principals. This keeps `account_status` authoritative for linked OMP users.
 The core config setting `auth/externalUserProvisioningMode` controls whether
 AD identities can be automatically promoted to first-class OMP users after a
 successful sign-in. The default value is `Manual`, which preserves the manual
-admin and self-service flows. `AutomaticForAuthorizedUsers` creates an active
-`omp.users` row and AD `omp.user_auth` links during the same sign-in only when
+admin and self-service flows. `AutoIfRole` creates an active `omp.users` row
+and AD `omp.user_auth` links during the same sign-in only when
 the AD identity resolves at least one non-system role through `User`, `ADUser`,
 or `ADGroup` role principals. The built-in `Everyone` and `AuthenticatedUsers`
 roles do not count. AD group roles may trigger provisioning, but they are not
 copied or migrated to the new OMP user; group-based access remains group-based
 so removal from an AD group removes that access at the next login/session
 refresh. A disabled linked OMP user still blocks sign-in and is never bypassed
-by auto-provisioning.
+by auto-provisioning. `AutoIfAuthenticated` creates and links an OMP user for a
+successful AD sign-in when the identity is allowed to receive the built-in
+`AuthenticatedUsers` principal according to
+`rbac/authenticatedUsersWindowsDomains`. The legacy
+`AutomaticForAuthorizedUsers` value is accepted as an alias for `AutoIfRole`.
 
 ## User Settings
 
@@ -187,9 +191,9 @@ comma- or semicolon-separated list of allowed domain, workgroup, or computer
 prefixes from `DOMAIN\User` style principals. Empty or `*` accepts any
 authenticated principal.
 
-`auth/externalUserProvisioningMode` accepts `Manual` and
-`AutomaticForAuthorizedUsers`. Invalid or missing values are treated as
-`Manual` by the Auth app.
+`auth/externalUserProvisioningMode` accepts `Manual`, `AutoIfRole`, and
+`AutoIfAuthenticated`. Invalid or missing values are treated as `Manual` by the
+Auth app.
 
 ## Request Flow
 

@@ -20,5 +20,7 @@ public static class OmpAuthDefaults
     public const string ConfigurationCategory = "auth";
     public const string ExternalUserProvisioningModeSetting = "externalUserProvisioningMode";
     public const string ExternalUserProvisioningModeManual = "Manual";
+    public const string ExternalUserProvisioningModeAutoIfRole = "AutoIfRole";
+    public const string ExternalUserProvisioningModeAutoIfAuthenticated = "AutoIfAuthenticated";
     public const string ExternalUserProvisioningModeAutomaticForAuthorizedUsers = "AutomaticForAuthorizedUsers";
 }

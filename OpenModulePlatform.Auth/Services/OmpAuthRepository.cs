@@ -16,6 +16,13 @@ public sealed class OmpAuthRepository
     private const int ProviderUserKeyMaxLength = 1000;
     private const int AdGroupPrincipalQueryChunkSize = 500;
 
+    private enum ExternalUserProvisioningMode
+    {
+        Manual,
+        AutoIfRole,
+        AutoIfAuthenticated
+    }
+
     private readonly SqlConnectionFactory _db;
     private readonly LocalPasswordHasher _passwordHasher;
     private readonly WindowsPrincipalReader _windows;
@@ -107,8 +114,7 @@ public sealed class OmpAuthRepository
         }
 
         if (linkedUser is null &&
-            await IsAutomaticExternalUserProvisioningEnabledAsync(ct) &&
-            await HasNonSystemRoleAssignmentAsync(conn, principals, ct))
+            await ShouldAutoProvisionExternalUserAsync(conn, principals, ct))
         {
             linkedUser = await TryAutoProvisionLinkedUserAsync(
                 conn,
@@ -292,17 +298,57 @@ ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
         return new LinkedUserRow(rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetString(2), rdr.GetInt32(3));
     }
 
-    private async Task<bool> IsAutomaticExternalUserProvisioningEnabledAsync(CancellationToken ct)
+    private async Task<ExternalUserProvisioningMode> GetExternalUserProvisioningModeAsync(CancellationToken ct)
     {
         var mode = await _configuration.GetGlobalStringAsync(
             OmpAuthDefaults.ConfigurationCategory,
             OmpAuthDefaults.ExternalUserProvisioningModeSetting,
             ct);
 
-        return string.Equals(
-            mode?.Trim(),
-            OmpAuthDefaults.ExternalUserProvisioningModeAutomaticForAuthorizedUsers,
-            StringComparison.OrdinalIgnoreCase);
+        var normalized = mode?.Trim();
+        if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfRole, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutomaticForAuthorizedUsers, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExternalUserProvisioningMode.AutoIfRole;
+        }
+
+        if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfAuthenticated, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExternalUserProvisioningMode.AutoIfAuthenticated;
+        }
+
+        return ExternalUserProvisioningMode.Manual;
+    }
+
+    private async Task<bool> ShouldAutoProvisionExternalUserAsync(
+        SqlConnection conn,
+        IReadOnlyList<(string PrincipalType, string Principal)> principals,
+        CancellationToken ct)
+    {
+        return await GetExternalUserProvisioningModeAsync(ct) switch
+        {
+            ExternalUserProvisioningMode.AutoIfRole => await HasNonSystemRoleAssignmentAsync(conn, principals, ct),
+            ExternalUserProvisioningMode.AutoIfAuthenticated => await IsAuthenticatedUsersProvisioningTriggerAllowedAsync(principals, ct),
+            _ => false
+        };
+    }
+
+    private async Task<bool> IsAuthenticatedUsersProvisioningTriggerAllowedAsync(
+        IReadOnlyList<(string PrincipalType, string Principal)> principals,
+        CancellationToken ct)
+    {
+        var allowedDomainsValue = await _configuration.GetGlobalStringAsync(
+            OmpRbacDefaults.ConfigurationCategory,
+            OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting,
+            ct);
+
+        var allowedDomains = SplitDomainList(allowedDomainsValue);
+        if (allowedDomains.Count == 0 || allowedDomains.Contains("*"))
+        {
+            return true;
+        }
+
+        return GetWindowsAccountDomains(principals).Any(allowedDomains.Contains);
     }
 
     private static async Task<bool> HasNonSystemRoleAssignmentAsync(
@@ -372,6 +418,40 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
         => string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase)
            || string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase)
            || string.Equals(principalType, "User", StringComparison.OrdinalIgnoreCase);
+
+    private static HashSet<string> SplitDomainList(string? value)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parts = (value ?? string.Empty).Split(
+            [',', ';', '\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var part in parts.Where(part => !string.IsNullOrWhiteSpace(part)))
+        {
+            result.Add(part);
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<string> GetWindowsAccountDomains(
+        IReadOnlyList<(string PrincipalType, string Principal)> principals)
+    {
+        foreach (var principal in principals)
+        {
+            if (!string.Equals(principal.PrincipalType, "User", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(principal.PrincipalType, "ADUser", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var slashIndex = principal.Principal.IndexOf('\\', StringComparison.Ordinal);
+            if (slashIndex > 0)
+            {
+                yield return principal.Principal[..slashIndex];
+            }
+        }
+    }
 
     private async Task<LinkedUserRow?> TryAutoProvisionLinkedUserAsync(
         SqlConnection conn,
