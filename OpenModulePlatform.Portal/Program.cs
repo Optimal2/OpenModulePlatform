@@ -68,7 +68,9 @@ app.UseOmpWebDefaults(optionsSectionName: "Portal", mapRazorPages: true);
 app.MapGet("/notifications/summary", async (
     HttpContext context,
     NotificationService notificationService,
+    MessageService messageService,
     long? afterNotificationId,
+    long? afterMessageId,
     CancellationToken ct) =>
 {
     if (context.User.Identity?.IsAuthenticated != true)
@@ -84,27 +86,47 @@ app.MapGet("/notifications/summary", async (
             unreadCount = 0,
             latestNotificationId = 0L,
             newNotificationCount = 0,
-            newNotifications = Array.Empty<object>()
+            newNotifications = Array.Empty<object>(),
+            unreadMessageCount = 0,
+            latestMessageId = 0L,
+            newMessageCount = 0,
+            newMessages = Array.Empty<object>()
         });
     }
 
-    var summary = await notificationService.GetToastSummaryForUserAsync(
+    var notificationSummary = await notificationService.GetToastSummaryForUserAsync(
         userId.Value,
         afterNotificationId,
+        limit: 5,
+        ct);
+    var messageSummary = await messageService.GetToastSummaryForUserAsync(
+        userId.Value,
+        afterMessageId,
         limit: 5,
         ct);
 
     return Results.Json(new
     {
-        unreadCount = summary.UnreadCount,
-        latestNotificationId = summary.LatestNotificationId,
-        newNotificationCount = summary.NewNotificationCount,
-        newNotifications = summary.NewNotifications.Select(row => new
+        unreadCount = notificationSummary.UnreadCount,
+        latestNotificationId = notificationSummary.LatestNotificationId,
+        newNotificationCount = notificationSummary.NewNotificationCount,
+        newNotifications = notificationSummary.NewNotifications.Select(row => new
         {
             notificationId = row.NotificationId,
             title = row.Title,
             content = ToToastSnippet(row.Content),
             targetUrl = IsSafeLocalDestination(row.DestinationUrl) ? row.DestinationUrl : "/notifications"
+        }),
+        unreadMessageCount = messageSummary.UnreadCount,
+        latestMessageId = messageSummary.LatestMessageId,
+        newMessageCount = messageSummary.NewMessageCount,
+        newMessages = messageSummary.NewMessages.Select(row => new
+        {
+            messageId = row.MessageId,
+            conversationId = row.ConversationId,
+            title = row.Title,
+            content = ToToastSnippet(row.Content),
+            targetUrl = $"/messages/{row.ConversationId.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
         })
     });
 }).AllowAnonymous();
