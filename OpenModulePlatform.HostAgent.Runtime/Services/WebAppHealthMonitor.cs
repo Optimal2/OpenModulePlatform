@@ -219,9 +219,7 @@ public sealed class WebAppHealthMonitor
         var scheme = string.IsNullOrWhiteSpace(healthSettings.Scheme)
             ? CleanScheme(settings.IisBindingProtocol)
             : CleanScheme(healthSettings.Scheme);
-        var host = string.IsNullOrWhiteSpace(healthSettings.HostName)
-            ? "localhost"
-            : healthSettings.HostName.Trim();
+        var host = ResolvePortalHealthHostName(settings);
         var port = healthSettings.Port.GetValueOrDefault(settings.IisBindingPort);
         var path = healthSettings.Path.Trim();
         if (!path.StartsWith('/'))
@@ -245,7 +243,17 @@ public sealed class WebAppHealthMonitor
             return settings.PortalHealthCheck.HostHeader.Trim();
         }
 
-        return settings.IisBindingHostHeader?.Trim() ?? string.Empty;
+        return string.Empty;
+    }
+
+    private static string ResolvePortalHealthHostName(HostAgentSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.PortalHealthCheck.HostName))
+        {
+            return settings.PortalHealthCheck.HostName.Trim();
+        }
+
+        return settings.ResolveHostKey();
     }
 
     private static string ResolvePortalAppPoolName(HostAgentSettings settings)
