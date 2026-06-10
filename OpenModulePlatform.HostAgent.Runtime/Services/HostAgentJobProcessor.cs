@@ -10,6 +10,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class HostAgentJobProcessor
 {
     private const int ScServiceNotFoundExitCode = 1060;
+    private const int ScServiceMarkedForDeletionExitCode = 1072;
     private const int DirectoryDeleteMaxAttempts = 20;
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
     private static readonly string[] KnownHostAgentServiceNamePrefixes =
@@ -1063,6 +1064,14 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Cleaned", $"Deleted Windows service '{serviceName}'.");
         }
 
+        if (IsServiceMarkedForDeletion(result))
+        {
+            return CreateMaintenanceCleanupEntryResult(
+                entry,
+                "Cleaned",
+                $"Windows service '{serviceName}' is already marked for deletion. Windows will remove it after all service handles are released, or after the next reboot.");
+        }
+
         return CreateMaintenanceCleanupEntryResult(
             entry,
             "Error",
@@ -1484,6 +1493,11 @@ public sealed class HostAgentJobProcessor
         => result.ExitCode == ScServiceNotFoundExitCode
             || result.CombinedOutput.Contains("FAILED 1060", StringComparison.OrdinalIgnoreCase)
             || result.CombinedOutput.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsServiceMarkedForDeletion(ScResult result)
+        => result.ExitCode == ScServiceMarkedForDeletionExitCode
+            || result.CombinedOutput.Contains("FAILED 1072", StringComparison.OrdinalIgnoreCase)
+            || result.CombinedOutput.Contains("marked for deletion", StringComparison.OrdinalIgnoreCase);
 
     private static string FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
