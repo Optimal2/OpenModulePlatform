@@ -51,9 +51,9 @@ DECLARE @AuthenticatedUsersRoleId int;
 -- script. They are not desired runtime targets; after portable packages have
 -- been imported, the template state below resolves the latest compatible
 -- registered artifact versions from omp.Artifacts.
-DECLARE @BaselineHostAgentArtifactVersion nvarchar(50) = N'0.3.55';
-DECLARE @BaselineWorkerManagerArtifactVersion nvarchar(50) = N'0.3.8';
-DECLARE @BaselineWorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3';
+DECLARE @BaselineHostAgentArtifactVersion nvarchar(50) = N'0.3.55'; -- Minimum bundled host-agent artifact only.
+DECLARE @BaselineWorkerManagerArtifactVersion nvarchar(50) = N'0.3.8'; -- Minimum bundled service-app artifact only.
+DECLARE @BaselineWorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3'; -- Minimum bundled worker-host artifact only.
 DECLARE @DefaultHostKey nvarchar(128) = N'sample-host';
 DECLARE @DefaultHostDisplayName nvarchar(200) = N'Sample Host';
 DECLARE @DefaultHostEnvironment nvarchar(50) = N'Development';
@@ -397,6 +397,15 @@ DECLARE @WorkerManagerArtifactId int;
 DECLARE @WorkerProcessHostArtifactId int;
 DECLARE @CoreTemplateModuleInstanceId int;
 DECLARE @DefaultInstanceTemplateHostId int;
+DECLARE @LatestEnabledArtifacts TABLE
+(
+    AppId int NOT NULL,
+    PackageType nvarchar(50) NOT NULL,
+    TargetName nvarchar(100) NOT NULL,
+    ArtifactId int NOT NULL,
+    VersionRank int NOT NULL,
+    PRIMARY KEY(AppId, PackageType, TargetName, VersionRank)
+);
 
 IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'omp_core')
 BEGIN
@@ -512,47 +521,57 @@ WHEN NOT MATCHED THEN
 -- Repair runs seed the packaged baseline artifact rows but should never
 -- downgrade desired state after newer compatible core artifacts have been
 -- imported. Use the latest registered artifacts for template state.
-SELECT TOP (1) @HostAgentArtifactId = ArtifactId
-FROM omp.Artifacts
+INSERT INTO @LatestEnabledArtifacts(AppId, PackageType, TargetName, ArtifactId, VersionRank)
+SELECT ranked.AppId,
+       ranked.PackageType,
+       ranked.TargetName,
+       ranked.ArtifactId,
+       ranked.VersionRank
+FROM
+(
+    SELECT ArtifactId,
+           AppId,
+           PackageType,
+           TargetName,
+           ROW_NUMBER() OVER
+           (
+               PARTITION BY AppId, PackageType, TargetName
+               ORDER BY
+                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
+                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
+                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
+                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
+                   Version DESC,
+                   ArtifactId DESC
+           ) AS VersionRank
+    FROM omp.Artifacts
+    WHERE IsEnabled = 1
+      AND TargetName IS NOT NULL
+      AND AppId IN (@HostAgentAppId, @WorkerManagerAppId, @WorkerProcessHostAppId)
+      AND TargetName IN (N'omp-hostagent', N'omp-workermanager', N'omp-workerprocesshost')
+) ranked
+WHERE ranked.VersionRank = 1;
+
+SELECT @HostAgentArtifactId = ArtifactId
+FROM @LatestEnabledArtifacts
 WHERE AppId = @HostAgentAppId
   AND PackageType = N'host-agent'
   AND TargetName = N'omp-hostagent'
-  AND IsEnabled = 1
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
+  AND VersionRank = 1;
 
-SELECT TOP (1) @WorkerManagerArtifactId = ArtifactId
-FROM omp.Artifacts
+SELECT @WorkerManagerArtifactId = ArtifactId
+FROM @LatestEnabledArtifacts
 WHERE AppId = @WorkerManagerAppId
   AND PackageType = N'service-app'
   AND TargetName = N'omp-workermanager'
-  AND IsEnabled = 1
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
+  AND VersionRank = 1;
 
-SELECT TOP (1) @WorkerProcessHostArtifactId = ArtifactId
-FROM omp.Artifacts
+SELECT @WorkerProcessHostArtifactId = ArtifactId
+FROM @LatestEnabledArtifacts
 WHERE AppId = @WorkerProcessHostAppId
   AND PackageType = N'worker-host'
   AND TargetName = N'omp-workerprocesshost'
-  AND IsEnabled = 1
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
+  AND VersionRank = 1;
 
 MERGE omp.InstanceTemplateModuleInstances AS target
 USING
@@ -756,6 +775,8 @@ WHEN NOT MATCHED THEN
     INSERT(ConfigSettingId, ConfigValue, ConfigPriority)
     VALUES(source.ConfigSettingId, source.ConfigValue, source.ConfigPriority);
 
+-- Legacy configuration value from early external-user bootstrap builds.
+-- AutoIfRole is the current equivalent name used by Portal settings.
 UPDATE cs
 SET ConfigValue = N'AutoIfRole'
 FROM omp.config_settings cs
