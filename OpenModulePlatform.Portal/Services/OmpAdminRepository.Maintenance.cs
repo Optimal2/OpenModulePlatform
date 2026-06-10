@@ -56,6 +56,7 @@ WITH RankedArtifacts AS
             SELECT 1
             FROM omp.HostArtifactRequirements har
             WHERE har.ArtifactId = ar.ArtifactId
+              AND har.IsEnabled = 1
 
             UNION ALL
 

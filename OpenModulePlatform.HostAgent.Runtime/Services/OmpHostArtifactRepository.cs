@@ -1836,6 +1836,7 @@ WITH RankedArtifacts AS
             SELECT 1
             FROM omp.HostArtifactRequirements har
             WHERE har.ArtifactId = ar.ArtifactId
+              AND har.IsEnabled = 1
 
             UNION ALL
 
@@ -1938,6 +1939,11 @@ INNER JOIN @DeleteArtifacts d ON d.ArtifactId = s.ArtifactId;
 DELETE s
 FROM omp.HostArtifactStates s
 INNER JOIN @DeleteArtifacts d ON d.ArtifactId = s.ArtifactId;
+
+DELETE har
+FROM omp.HostArtifactRequirements har
+INNER JOIN @DeleteArtifacts d ON d.ArtifactId = har.ArtifactId
+WHERE har.IsEnabled = 0;
 
 DELETE c
 FROM omp.ArtifactConfigurationFiles c

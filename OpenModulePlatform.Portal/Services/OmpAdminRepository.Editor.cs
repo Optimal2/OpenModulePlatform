@@ -1730,6 +1730,9 @@ WHERE ArtifactId = @ArtifactId;
 DELETE FROM omp.HostArtifactStates
 WHERE ArtifactId = @ArtifactId;
 
+DELETE FROM omp.HostArtifactRequirements
+WHERE ArtifactId = @ArtifactId;
+
 DELETE FROM omp.ArtifactConfigurationFiles
 WHERE ArtifactId = @ArtifactId;
 
