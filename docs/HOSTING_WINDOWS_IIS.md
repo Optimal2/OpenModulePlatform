@@ -60,6 +60,23 @@ headers and configure the trusted proxy IPs or networks. HostAgent-generated
 web-app `appsettings.json` files inherit `WebAppUseForwardedHeaders` and the
 matching `WebAppForwardedHeaders*` settings from the HostAgent configuration.
 
+Load-balancer health checks should be scoped to the application route they are
+protecting. Do not treat one unhealthy module web application as a reason to
+drain the whole IIS node unless that is the intended operational policy for the
+environment.
+
+Portal exposes these anonymous health endpoints:
+
+- `/health/live` returns HTTP 200 when the Portal process can answer requests.
+- `/health/ready` returns HTTP 200 only when Portal can also reach the OMP
+  database with a small SQL probe. It returns HTTP 503 when Portal cannot serve
+  real traffic safely.
+
+Use `/health/ready` for Portal-specific routing decisions. If a deployment
+fronts several applications through the same DNS name, use equivalent
+application-specific checks for those applications instead of a single
+site-wide node check.
+
 ## Recommended OMP deployment posture on Windows
 
 For the current public repository, the recommended baseline is:

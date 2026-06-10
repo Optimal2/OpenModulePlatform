@@ -2569,4 +2569,20 @@
   <data name="{0} new notifications" xml:space="preserve"><value>{0} nya notifikationer</value></data>
   <data name="New messages" xml:space="preserve"><value>Nya meddelanden</value></data>
   <data name="{0} new messages" xml:space="preserve"><value>{0} nya meddelanden</value></data>
+  <data name="Web app health" xml:space="preserve"><value>Webbappshälsa</value></data>
+  <data name="Shows per-host web app probes written by HostAgent. Portal health should return a non-success status when the app cannot serve real traffic." xml:space="preserve"><value>Visar webbappsprober per värd som skrivits av Host Agent. Portalens hälsa ska returnera en felstatus när appen inte kan hantera riktig trafik.</value></data>
+  <data name="No web app health state has been recorded yet." xml:space="preserve"><value>Ingen webbappshälsa har registrerats ännu.</value></data>
+  <data name="App pool" xml:space="preserve"><value>App-pool</value></data>
+  <data name="Probe" xml:space="preserve"><value>Probe</value></data>
+  <data name="Failures" xml:space="preserve"><value>Fel i rad</value></data>
+  <data name="Last action" xml:space="preserve"><value>Senaste åtgärd</value></data>
+  <data name="Last success UTC" xml:space="preserve"><value>Senaste lyckade UTC</value></data>
+  <data name="Last failure UTC" xml:space="preserve"><value>Senaste fel UTC</value></data>
+  <data name="Healthy" xml:space="preserve"><value>Frisk</value></data>
+  <data name="Degraded" xml:space="preserve"><value>Nedsatt</value></data>
+  <data name="Unhealthy" xml:space="preserve"><value>Inte frisk</value></data>
+  <data name="Probe now" xml:space="preserve"><value>Kontrollera nu</value></data>
+  <data name="Recycle app pool" xml:space="preserve"><value>Starta om app-pool</value></data>
+  <data name="Collect logs" xml:space="preserve"><value>Hämta loggar</value></data>
+  <data name="Recent web app operations" xml:space="preserve"><value>Senaste webbappsoperationer</value></data>
 </root>
