@@ -258,6 +258,10 @@
         timer.className = "portal-notification-toast__timer";
         timer.setAttribute("aria-hidden", "true");
 
+        var timerFill = document.createElement("span");
+        timerFill.className = "portal-notification-toast__timer-fill";
+        timer.append(timerFill);
+
         var content = document.createElement("div");
         content.className = "portal-notification-toast__content";
         content.textContent = toast.content;
