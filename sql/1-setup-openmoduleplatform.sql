@@ -761,6 +761,51 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.WebAppHealthStates', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.WebAppHealthStates
+    (
+        HostId uniqueidentifier NOT NULL,
+        HealthKey nvarchar(200) NOT NULL,
+        AppInstanceId uniqueidentifier NULL,
+        AppKey nvarchar(200) NULL,
+        DisplayName nvarchar(200) NULL,
+        ProbeUrl nvarchar(1000) NULL,
+        AppPoolName nvarchar(200) NULL,
+        Status tinyint NOT NULL CONSTRAINT DF_omp_WebAppHealthStates_Status DEFAULT(0),
+        HttpStatusCode int NULL,
+        ConsecutiveFailures int NOT NULL CONSTRAINT DF_omp_WebAppHealthStates_ConsecutiveFailures DEFAULT(0),
+        LastProbeUtc datetime2(3) NULL,
+        LastSuccessUtc datetime2(3) NULL,
+        LastFailureUtc datetime2(3) NULL,
+        LastActionUtc datetime2(3) NULL,
+        LastActionMessage nvarchar(1000) NULL,
+        ResponseSummary nvarchar(1000) NULL,
+        LastError nvarchar(4000) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WebAppHealthStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WebAppHealthStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT PK_omp_WebAppHealthStates PRIMARY KEY(HostId, HealthKey),
+        CONSTRAINT FK_omp_WebAppHealthStates_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
+        CONSTRAINT FK_omp_WebAppHealthStates_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId),
+        CONSTRAINT CK_omp_WebAppHealthStates_Status CHECK(Status IN (0, 1, 2, 3))
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.WebAppHealthStates')
+      AND name = N'IX_omp_WebAppHealthStates_Status'
+)
+BEGIN
+    CREATE INDEX IX_omp_WebAppHealthStates_Status
+        ON omp.WebAppHealthStates(Status, LastProbeUtc DESC)
+        INCLUDE(HostId, HealthKey, AppKey, DisplayName, AppPoolName, ConsecutiveFailures);
+END
+GO
+
 IF OBJECT_ID(N'omp.HostAgentDesiredStates', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostAgentDesiredStates

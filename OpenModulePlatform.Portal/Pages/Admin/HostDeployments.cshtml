@@ -17,6 +17,162 @@
 }
 
 <section class="card section-card section-card--wide">
+    <h3>@L["Web app health"]</h3>
+    <p class="muted">@L["Shows per-host web app probes written by HostAgent. Portal health should return a non-success status when the app cannot serve real traffic."]</p>
+
+    @if (Model.WebAppHealthStates.Count == 0)
+    {
+        <div class="empty-state">@L["No web app health state has been recorded yet."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid app-instances-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Host"]</th>
+                        <th>@L["App"]</th>
+                        <th>@L["Status"]</th>
+                        <th>@L["Probe"]</th>
+                        <th>@L["Failures"]</th>
+                        <th>@L["Last action"]</th>
+                        <th>@L["Message"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.WebAppHealthStates)
+                {
+                    <tr>
+                        <td>
+                            <div><code>@row.HostKey</code></div>
+                            @if (!string.IsNullOrWhiteSpace(row.HostDisplayName))
+                            {
+                                <div class="muted">@row.HostDisplayName</div>
+                            }
+                        </td>
+                        <td>
+                            <div>@(string.IsNullOrWhiteSpace(row.DisplayName) ? row.HealthKey : row.DisplayName)</div>
+                            <div class="muted"><code>@row.HealthKey</code></div>
+                            @if (!string.IsNullOrWhiteSpace(row.AppPoolName))
+                            {
+                                <div class="muted">@L["App pool"]: <code>@row.AppPoolName</code></div>
+                            }
+                        </td>
+                        <td>
+                            <span class="pill">@L[HostDeploymentsModel.FormatWebAppHealthStatus(row.Status)]</span>
+                            @if (row.HttpStatusCode.HasValue)
+                            {
+                                <div class="muted">HTTP @row.HttpStatusCode</div>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.ProbeUrl))
+                            {
+                                <div><code>@row.ProbeUrl</code></div>
+                            }
+                            @if (row.LastProbeUtc.HasValue)
+                            {
+                                <div class="muted">@L["Last checked UTC"]: @row.LastProbeUtc.Value.ToString("u")</div>
+                            }
+                            @if (row.LastSuccessUtc.HasValue)
+                            {
+                                <div class="muted">@L["Last success UTC"]: @row.LastSuccessUtc.Value.ToString("u")</div>
+                            }
+                            @if (row.LastFailureUtc.HasValue)
+                            {
+                                <div class="muted">@L["Last failure UTC"]: @row.LastFailureUtc.Value.ToString("u")</div>
+                            }
+                        </td>
+                        <td>@row.ConsecutiveFailures</td>
+                        <td>
+                            @if (row.LastActionUtc.HasValue)
+                            {
+                                <div>@row.LastActionUtc.Value.ToString("u")</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(row.LastActionMessage))
+                            {
+                                <div class="muted">@row.LastActionMessage</div>
+                            }
+                            @if (!row.LastActionUtc.HasValue && string.IsNullOrWhiteSpace(row.LastActionMessage))
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.LastError))
+                            {
+                                <div>@row.LastError</div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(row.ResponseSummary))
+                            {
+                                <div class="muted">@row.ResponseSummary</div>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                        </td>
+                        <td>
+                            <form method="post" asp-page-handler="ProbeWebAppHealth" class="inline-form">
+                                <input type="hidden" name="hostId" value="@row.HostId" />
+                                <input type="hidden" name="healthKey" value="@row.HealthKey" />
+                                <button type="submit" class="btn btn-secondary">@L["Probe now"]</button>
+                            </form>
+                            <form method="post" asp-page-handler="RecycleWebAppAppPool" class="inline-form">
+                                <input type="hidden" name="hostId" value="@row.HostId" />
+                                <input type="hidden" name="healthKey" value="@row.HealthKey" />
+                                <input type="hidden" name="appPoolName" value="@row.AppPoolName" />
+                                <button type="submit" class="btn btn-secondary" disabled="@string.IsNullOrWhiteSpace(row.AppPoolName)">@L["Recycle app pool"]</button>
+                            </form>
+                            <form method="post" asp-page-handler="CollectWebAppLogs" class="inline-form">
+                                <input type="hidden" name="hostId" value="@row.HostId" />
+                                <input type="hidden" name="healthKey" value="@row.HealthKey" />
+                                <button type="submit" class="btn btn-secondary">@L["Collect logs"]</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (Model.RecentWebAppHealthJobs.Count > 0)
+    {
+        <h4>@L["Recent web app operations"]</h4>
+        <div class="table-scroll">
+            <table class="grid app-instances-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Job"]</th>
+                        <th>@L["Host"]</th>
+                        <th>@L["Status"]</th>
+                        <th>@L["Completed UTC"]</th>
+                        <th>@L["Message"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var job in Model.RecentWebAppHealthJobs)
+                {
+                    <tr>
+                        <td>
+                            <code>@job.HostAgentJobId</code>
+                            <div class="muted">@job.JobType</div>
+                        </td>
+                        <td><code>@(string.IsNullOrWhiteSpace(job.HostKey) ? L["Any HostAgent"].Value : job.HostKey)</code></td>
+                        <td><span class="pill">@L[MaintenanceModel.FormatHostAgentJobStatus(job.Status)]</span></td>
+                        <td>@(job.CompletedUtc.HasValue ? job.CompletedUtc.Value.ToString("u") : L["None"].Value)</td>
+                        <td><pre class="code-block">@HostDeploymentsModel.FormatJobResult(job)</pre></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="card section-card section-card--wide">
     <h3>@L["Template/runtime drift overview"]</h3>
     <p class="muted">@L["Compares desired template app artifacts with the latest HostAgent deployment state per host. Use this first after changing desired versions or host placement."]</p>
 

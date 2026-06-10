@@ -11,6 +11,12 @@ public static class HostAgentJobTypes
     public const string MaintenanceScan = "MaintenanceScan";
 
     public const string MaintenanceCleanup = "MaintenanceCleanup";
+
+    public const string WebAppHealthProbe = "WebAppHealthProbe";
+
+    public const string RecycleWebAppAppPool = "RecycleWebAppAppPool";
+
+    public const string CollectWebAppLogs = "CollectWebAppLogs";
 }
 
 public static class HostAgentJobStatuses
@@ -314,4 +320,105 @@ public sealed class MaintenanceFindingAction
     public string? Path { get; set; }
 
     public string? InstallRoot { get; set; }
+}
+
+public static class WebAppHealthStatuses
+{
+    public const byte Unknown = 0;
+    public const byte Healthy = 1;
+    public const byte Degraded = 2;
+    public const byte Unhealthy = 3;
+}
+
+public sealed class WebAppHealthProbeJobPayload
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public string HealthKey { get; set; } = "portal";
+
+    public bool RecycleIfUnhealthy { get; set; }
+}
+
+public sealed class WebAppHealthProbeJobResult
+{
+    public string HealthKey { get; set; } = string.Empty;
+
+    public string ProbeUrl { get; set; } = string.Empty;
+
+    public byte Status { get; set; }
+
+    public int? HttpStatusCode { get; set; }
+
+    public int ConsecutiveFailures { get; set; }
+
+    public string? Message { get; set; }
+
+    public bool RecycledAppPool { get; set; }
+}
+
+public sealed class RecycleWebAppAppPoolJobPayload
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public string HealthKey { get; set; } = "portal";
+
+    public string AppPoolName { get; set; } = string.Empty;
+}
+
+public sealed class RecycleWebAppAppPoolJobResult
+{
+    public string HealthKey { get; set; } = string.Empty;
+
+    public string AppPoolName { get; set; } = string.Empty;
+
+    public string Message { get; set; } = string.Empty;
+}
+
+public sealed class CollectWebAppLogsJobPayload
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public string HealthKey { get; set; } = "portal";
+
+    public int MaxLines { get; set; } = 120;
+}
+
+public sealed class CollectWebAppLogsJobResult
+{
+    public string HealthKey { get; set; } = string.Empty;
+
+    public string LogDirectory { get; set; } = string.Empty;
+
+    public string? LogFile { get; set; }
+
+    public int LineCount { get; set; }
+
+    public string Content { get; set; } = string.Empty;
+
+    public string? Message { get; set; }
+}
+
+public sealed class WebAppHealthProbeResult
+{
+    public string HealthKey { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string ProbeUrl { get; set; } = string.Empty;
+
+    public string AppPoolName { get; set; } = string.Empty;
+
+    public byte Status { get; set; } = WebAppHealthStatuses.Unknown;
+
+    public int? HttpStatusCode { get; set; }
+
+    public int ConsecutiveFailures { get; set; }
+
+    public DateTime? LastActionUtc { get; set; }
+
+    public string? ResponseSummary { get; set; }
+
+    public string? Error { get; set; }
+
+    public bool IsHealthy => Status == WebAppHealthStatuses.Healthy;
 }

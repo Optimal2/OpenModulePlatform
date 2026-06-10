@@ -84,6 +84,8 @@ public sealed class HostAgentSettings
 
     public int IisAppPoolStopTimeoutSeconds { get; set; } = 30;
 
+    public HostAgentPortalHealthCheckSettings PortalHealthCheck { get; set; } = new();
+
     public string[] WebAppDeploymentExcludedEntries { get; set; } =
     [
         "appsettings.json",
@@ -224,6 +226,8 @@ public sealed class HostAgentSettings
             {
                 throw new InvalidOperationException("HostAgent:AppOfflineShutdownDelayMilliseconds must be zero or greater.");
             }
+
+            PortalHealthCheck.Validate();
         }
 
         if (DeployServiceApps)
@@ -267,6 +271,68 @@ public sealed class HostAgentIisAppPoolIdentitySettings
     public string Password { get; set; } = string.Empty;
 
     public string PasswordCredentialKey { get; set; } = string.Empty;
+}
+
+public sealed class HostAgentPortalHealthCheckSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    public string HealthKey { get; set; } = "portal";
+
+    public string DisplayName { get; set; } = "OMP Portal";
+
+    public string Path { get; set; } = "/health/ready";
+
+    public string Scheme { get; set; } = string.Empty;
+
+    public string HostName { get; set; } = string.Empty;
+
+    public int? Port { get; set; }
+
+    public string HostHeader { get; set; } = string.Empty;
+
+    public int TimeoutSeconds { get; set; } = 10;
+
+    public int FailureThreshold { get; set; } = 3;
+
+    public bool AutoRecycleAppPool { get; set; }
+
+    public int AutoRecycleCooldownMinutes { get; set; } = 15;
+
+    public bool AllowInvalidTlsCertificate { get; set; }
+
+    public void Validate()
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(HealthKey))
+        {
+            throw new InvalidOperationException("HostAgent:PortalHealthCheck:HealthKey must be configured when portal health checks are enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Path))
+        {
+            throw new InvalidOperationException("HostAgent:PortalHealthCheck:Path must be configured when portal health checks are enabled.");
+        }
+
+        if (TimeoutSeconds < 1)
+        {
+            throw new InvalidOperationException("HostAgent:PortalHealthCheck:TimeoutSeconds must be at least 1.");
+        }
+
+        if (FailureThreshold < 1)
+        {
+            throw new InvalidOperationException("HostAgent:PortalHealthCheck:FailureThreshold must be at least 1.");
+        }
+
+        if (AutoRecycleCooldownMinutes < 1)
+        {
+            throw new InvalidOperationException("HostAgent:PortalHealthCheck:AutoRecycleCooldownMinutes must be at least 1.");
+        }
+    }
 }
 
 public sealed class HostAgentServiceAppIdentitySettings

@@ -31,6 +31,10 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     public IReadOnlyDictionary<Guid, IReadOnlyList<HostDriftDetailRow>> HostDriftDetailsByHost { get; private set; }
         = new Dictionary<Guid, IReadOnlyList<HostDriftDetailRow>>();
 
+    public IReadOnlyList<WebAppHealthStateRow> WebAppHealthStates { get; private set; } = [];
+
+    public IReadOnlyList<HostAgentJobRow> RecentWebAppHealthJobs { get; private set; } = [];
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -72,6 +76,75 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostProbeWebAppHealth(Guid hostId, string healthKey, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+            return guard;
+
+        if (hostId == Guid.Empty)
+        {
+            TempData["StatusMessage"] = "Select a host before requesting a web app health probe.";
+            return RedirectToPage();
+        }
+
+        var jobId = await _repo.QueueWebAppHealthProbeAsync(
+            hostId,
+            healthKey,
+            recycleIfUnhealthy: false,
+            User.Identity?.Name,
+            ct);
+        TempData["StatusMessage"] = $"Web app health probe job {jobId} was queued.";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostRecycleWebAppAppPool(
+        Guid hostId,
+        string healthKey,
+        string? appPoolName,
+        CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+            return guard;
+
+        if (hostId == Guid.Empty)
+        {
+            TempData["StatusMessage"] = "Select a host before requesting an application-pool recycle.";
+            return RedirectToPage();
+        }
+
+        var jobId = await _repo.QueueWebAppAppPoolRecycleAsync(
+            hostId,
+            healthKey,
+            appPoolName,
+            User.Identity?.Name,
+            ct);
+        TempData["StatusMessage"] = $"Web app application-pool recycle job {jobId} was queued.";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostCollectWebAppLogs(Guid hostId, string healthKey, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+            return guard;
+
+        if (hostId == Guid.Empty)
+        {
+            TempData["StatusMessage"] = "Select a host before requesting web app logs.";
+            return RedirectToPage();
+        }
+
+        var jobId = await _repo.QueueWebAppLogCollectionAsync(
+            hostId,
+            healthKey,
+            User.Identity?.Name,
+            ct);
+        TempData["StatusMessage"] = $"Web app log collection job {jobId} was queued.";
+        return RedirectToPage();
+    }
+
     private async Task LoadAsync(CancellationToken ct)
     {
         SetTitles("Operations");
@@ -82,6 +155,13 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
                 group => group.Key,
                 group => (IReadOnlyList<HostDriftDetailRow>)group.ToList());
         HostAgentRows = await _repo.GetHostAgentUpgradeRowsAsync(ct);
+        WebAppHealthStates = await _repo.GetWebAppHealthStatesAsync(ct);
+        RecentWebAppHealthJobs = (await _repo.GetRecentHostAgentJobsAsync(30, ct))
+            .Where(static row => string.Equals(row.JobType, "WebAppHealthProbe", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(row.JobType, "RecycleWebAppAppPool", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(row.JobType, "CollectWebAppLogs", StringComparison.OrdinalIgnoreCase))
+            .Take(10)
+            .ToList();
         var hostAgentArtifactOptions = (await _repo.GetHostAgentArtifactOptionsAsync(ct)).ToList();
         hostAgentArtifactOptions.Sort(CompareHostAgentArtifactOptions);
         HostAgentArtifactOptions = hostAgentArtifactOptions;
@@ -151,6 +231,16 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         return "In sync";
     }
 
+    public static string FormatWebAppHealthStatus(byte status)
+        => status switch
+        {
+            0 => "Unknown",
+            1 => "Healthy",
+            2 => "Degraded",
+            3 => "Unhealthy",
+            _ => "Unknown"
+        };
+
     public int GetSelectedHostAgentArtifactId(HostAgentUpgradeRow row)
     {
         if (row.DesiredArtifactId is int desiredArtifactId
@@ -170,6 +260,22 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         => value.HasValue
             ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
             : 0;
+
+    public static string FormatJobResult(HostAgentJobRow row)
+    {
+        if (!string.IsNullOrWhiteSpace(row.LastError))
+        {
+            return row.LastError;
+        }
+
+        if (string.IsNullOrWhiteSpace(row.ResultJson))
+        {
+            return string.Empty;
+        }
+
+        var text = row.ResultJson.Trim();
+        return text.Length <= 1200 ? text : text[..1200];
+    }
 
     private static int CompareHostAgentArtifactOptions(HostAgentArtifactOption left, HostAgentArtifactOption right)
     {

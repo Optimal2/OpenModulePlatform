@@ -41,6 +41,7 @@ builder.Services.AddScoped<UserProfileImageService>();
 builder.Services.AddScoped<RbacAdminRepository>();
 builder.Services.AddScoped<PortableModulePackageService>();
 builder.Services.AddScoped<ConfigOverlayObjectService>();
+builder.Services.AddScoped<PortalHealthService>();
 builder.Services.Configure<ArtifactUploadOptions>(
     builder.Configuration.GetSection(ArtifactUploadOptions.SectionName));
 builder.Services.Configure<IISServerOptions>(options =>
@@ -129,6 +130,24 @@ app.MapGet("/notifications/summary", async (
             targetUrl = $"/messages/{row.ConversationId.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
         })
     });
+}).AllowAnonymous();
+
+app.MapGet("/health/live", (PortalHealthService healthService) =>
+{
+    var result = healthService.CheckLive();
+    return Results.Json(
+        result,
+        statusCode: StatusCodes.Status200OK);
+}).AllowAnonymous();
+
+app.MapGet("/health/ready", async (PortalHealthService healthService, CancellationToken ct) =>
+{
+    var result = await healthService.CheckReadyAsync(ct);
+    return Results.Json(
+        result,
+        statusCode: result.IsHealthy
+            ? StatusCodes.Status200OK
+            : StatusCodes.Status503ServiceUnavailable);
 }).AllowAnonymous();
 
 app.Run();

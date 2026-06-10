@@ -867,4 +867,20 @@
   <data name="{0} new notifications" xml:space="preserve"><value>{0} new notifications</value></data>
   <data name="New messages" xml:space="preserve"><value>New messages</value></data>
   <data name="{0} new messages" xml:space="preserve"><value>{0} new messages</value></data>
+  <data name="Web app health" xml:space="preserve"><value>Web app health</value></data>
+  <data name="Shows per-host web app probes written by HostAgent. Portal health should return a non-success status when the app cannot serve real traffic." xml:space="preserve"><value>Shows per-host web app probes written by HostAgent. Portal health should return a non-success status when the app cannot serve real traffic.</value></data>
+  <data name="No web app health state has been recorded yet." xml:space="preserve"><value>No web app health state has been recorded yet.</value></data>
+  <data name="App pool" xml:space="preserve"><value>App pool</value></data>
+  <data name="Probe" xml:space="preserve"><value>Probe</value></data>
+  <data name="Failures" xml:space="preserve"><value>Failures</value></data>
+  <data name="Last action" xml:space="preserve"><value>Last action</value></data>
+  <data name="Last success UTC" xml:space="preserve"><value>Last success UTC</value></data>
+  <data name="Last failure UTC" xml:space="preserve"><value>Last failure UTC</value></data>
+  <data name="Healthy" xml:space="preserve"><value>Healthy</value></data>
+  <data name="Degraded" xml:space="preserve"><value>Degraded</value></data>
+  <data name="Unhealthy" xml:space="preserve"><value>Unhealthy</value></data>
+  <data name="Probe now" xml:space="preserve"><value>Probe now</value></data>
+  <data name="Recycle app pool" xml:space="preserve"><value>Recycle app pool</value></data>
+  <data name="Collect logs" xml:space="preserve"><value>Collect logs</value></data>
+  <data name="Recent web app operations" xml:space="preserve"><value>Recent web app operations</value></data>
 </root>
