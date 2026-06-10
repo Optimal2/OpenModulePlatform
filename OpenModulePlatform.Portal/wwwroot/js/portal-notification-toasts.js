@@ -3,6 +3,9 @@
 
     var maxVisibleToasts = 2;
     var maxQueuedToasts = 8;
+    var maxBackoffMultiplier = 6;
+    var summaryThreshold = 3;
+    var minToastDuration = 1;
     var defaultVisibleInterval = 60000;
     var defaultHiddenInterval = 180000;
     var defaultToastDuration = 7000;
@@ -52,7 +55,7 @@
             : config.visibleInterval;
 
         if (state.failures > 0) {
-            return baseDelay * Math.min(6, state.failures + 1);
+            return baseDelay * Math.min(maxBackoffMultiplier, state.failures + 1);
         }
 
         return baseDelay;
@@ -124,7 +127,7 @@
             applySummary(payload, config);
         } catch (error) {
             state.failures += 1;
-            if ((state.failures === 1 || state.failures % 6 === 0)
+            if ((state.failures === 1 || state.failures % maxBackoffMultiplier === 0)
                 && window.console
                 && typeof window.console.warn === "function") {
                 window.console.warn("Notification toast polling failed.", error);
@@ -161,7 +164,7 @@
         var newNotificationCount = Number(payload.newNotificationCount || items.length || 0);
 
         if (hasNotificationBaseline) {
-            if (newNotificationCount >= 3) {
+            if (newNotificationCount >= summaryThreshold) {
                 enqueueToast({
                     title: config.summaryTitle,
                     content: formatText(config.summaryTemplate, newNotificationCount),
@@ -188,7 +191,7 @@
         var newMessageCount = Number(payload.newMessageCount || messageItems.length || 0);
 
         if (hasMessageBaseline) {
-            if (newMessageCount >= 3) {
+            if (newMessageCount >= summaryThreshold) {
                 enqueueToast({
                     title: config.messageSummaryTitle,
                     content: formatText(config.messageSummaryTemplate, newMessageCount),
@@ -325,7 +328,7 @@
     }
 
     function getToastTimerProgress(visibleState) {
-        var duration = Math.max(1, visibleState.duration || defaultToastDuration);
+        var duration = Math.max(minToastDuration, visibleState.duration || defaultToastDuration);
         return visibleState.remaining / duration;
     }
 

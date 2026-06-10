@@ -249,7 +249,7 @@ ORDER BY HostTemplateId;
 
 IF @IisHostTemplateId IS NULL OR @ServiceHostTemplateId IS NULL
 BEGIN
-    THROW 51003, 'Unable to resolve the standard IISHost and ServiceHost host template ids after seeding omp.HostTemplates.', 1;
+    THROW 51012, 'Unable to resolve the standard IISHost and ServiceHost host template ids after seeding omp.HostTemplates.', 1;
 END
 
 SELECT @DefaultInstanceId = InstanceId
