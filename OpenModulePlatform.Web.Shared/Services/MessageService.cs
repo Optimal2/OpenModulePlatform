@@ -80,6 +80,109 @@ WHERE cp.user_id = @user_id
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
+    public async Task<MessageToastSummary> GetToastSummaryForUserAsync(
+        int userId,
+        long? afterMessageId,
+        int limit,
+        CancellationToken ct)
+    {
+        if (userId <= 0)
+        {
+            return new MessageToastSummary(0, 0, 0, []);
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            return new MessageToastSummary(0, 0, 0, []);
+        }
+
+        var unreadCount = await GetUnreadMessageCountAsync(conn, userId, ct);
+        var latestMessageId = await GetLatestUnreadMessageIdAsync(conn, userId, ct);
+
+        if (!afterMessageId.HasValue)
+        {
+            return new MessageToastSummary(unreadCount, latestMessageId, 0, []);
+        }
+
+        var baselineMessageId = Math.Max(0L, afterMessageId.Value);
+        if (latestMessageId <= baselineMessageId)
+        {
+            return new MessageToastSummary(unreadCount, latestMessageId, 0, []);
+        }
+
+        var pageSize = Math.Clamp(limit, 1, 20);
+        var newMessageCount = await GetNewUnreadMessageCountAsync(conn, userId, baselineMessageId, ct);
+        const string sql = @"
+SELECT TOP (@limit)
+       m.message_id,
+       m.conversation_id,
+       c.conversation_type,
+       c.title,
+       sender.display_name,
+       m.content,
+       other_user.display_name,
+       participants.participant_names
+FROM omp.conversation_participants cp
+INNER JOIN omp.messages m ON m.conversation_id = cp.conversation_id
+INNER JOIN omp.conversations c ON c.conversation_id = cp.conversation_id
+INNER JOIN omp.users sender ON sender.user_id = m.sender_user_id
+OUTER APPLY
+(
+    SELECT TOP (1)
+           u.display_name
+    FROM omp.conversation_participants cp2
+    INNER JOIN omp.users u ON u.user_id = cp2.user_id
+    WHERE cp2.conversation_id = c.conversation_id
+      AND cp2.user_id <> @user_id
+      AND cp2.left_at IS NULL
+    ORDER BY u.display_name,
+             u.user_id
+) other_user
+OUTER APPLY
+(
+    SELECT STRING_AGG(CONVERT(nvarchar(max), u.display_name), N', ') AS participant_names
+    FROM omp.conversation_participants cp3
+    INNER JOIN omp.users u ON u.user_id = cp3.user_id
+    WHERE cp3.conversation_id = c.conversation_id
+      AND cp3.left_at IS NULL
+) participants
+WHERE cp.user_id = @user_id
+  AND cp.left_at IS NULL
+  AND m.deleted_at IS NULL
+  AND m.sender_user_id <> @user_id
+  AND m.message_id > ISNULL(cp.last_read_message_id, 0)
+  AND m.message_id > @after_message_id
+ORDER BY m.message_id DESC;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@limit", SqlDbType.Int).Value = pageSize;
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@after_message_id", SqlDbType.BigInt).Value = baselineMessageId;
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<MessageToastItem>();
+        while (await rdr.ReadAsync(ct))
+        {
+            var conversationType = rdr.GetString(2);
+            var title = rdr.IsDBNull(3) ? null : rdr.GetString(3);
+            var senderDisplayName = rdr.GetString(4);
+            var content = rdr.IsDBNull(5) ? null : rdr.GetString(5);
+            var otherDisplayName = rdr.IsDBNull(6) ? null : rdr.GetString(6);
+            var participantNames = rdr.IsDBNull(7) ? null : rdr.GetString(7);
+
+            rows.Add(new MessageToastItem(
+                rdr.GetInt64(0),
+                rdr.GetInt64(1),
+                BuildConversationTitle(conversationType, title, otherDisplayName, participantNames),
+                BuildLastMessagePreview(senderDisplayName, content) ?? senderDisplayName));
+        }
+
+        return new MessageToastSummary(unreadCount, latestMessageId, newMessageCount, rows);
+    }
+
     public async Task<IReadOnlyList<MessageConversationSummary>> GetConversationsForUserAsync(
         int userId,
         CancellationToken ct,
@@ -654,6 +757,63 @@ WHERE cp.user_id = @user_id
         return unreadCount;
     }
 
+    private static async Task<int> GetUnreadMessageCountAsync(SqlConnection conn, int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT_BIG(1)
+FROM omp.conversation_participants cp
+INNER JOIN omp.messages m ON m.conversation_id = cp.conversation_id
+WHERE cp.user_id = @user_id
+  AND cp.left_at IS NULL
+  AND m.deleted_at IS NULL
+  AND m.sender_user_id <> @user_id
+  AND m.message_id > ISNULL(cp.last_read_message_id, 0);";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<long> GetLatestUnreadMessageIdAsync(SqlConnection conn, int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ISNULL(MAX(m.message_id), 0)
+FROM omp.conversation_participants cp
+INNER JOIN omp.messages m ON m.conversation_id = cp.conversation_id
+WHERE cp.user_id = @user_id
+  AND cp.left_at IS NULL
+  AND m.deleted_at IS NULL
+  AND m.sender_user_id <> @user_id
+  AND m.message_id > ISNULL(cp.last_read_message_id, 0);";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<int> GetNewUnreadMessageCountAsync(
+        SqlConnection conn,
+        int userId,
+        long afterMessageId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT_BIG(1)
+FROM omp.conversation_participants cp
+INNER JOIN omp.messages m ON m.conversation_id = cp.conversation_id
+WHERE cp.user_id = @user_id
+  AND cp.left_at IS NULL
+  AND m.deleted_at IS NULL
+  AND m.sender_user_id <> @user_id
+  AND m.message_id > ISNULL(cp.last_read_message_id, 0)
+  AND m.message_id > @after_message_id;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@after_message_id", SqlDbType.BigInt).Value = afterMessageId;
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
     public async Task<IReadOnlyList<MessageUserOption>> SearchUsersAsync(
         int currentUserId,
         string? query,
@@ -1120,3 +1280,15 @@ public sealed record MessageAttachmentDownload(
 public sealed record MessageUserOption(
     int UserId,
     string DisplayName);
+
+public sealed record MessageToastSummary(
+    int UnreadCount,
+    long LatestMessageId,
+    int NewMessageCount,
+    IReadOnlyList<MessageToastItem> NewMessages);
+
+public sealed record MessageToastItem(
+    long MessageId,
+    long ConversationId,
+    string Title,
+    string Content);

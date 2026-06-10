@@ -11,6 +11,7 @@
         root: null,
         container: null,
         baselineNotificationId: null,
+        baselineMessageId: null,
         timer: null,
         running: false,
         failures: 0,
@@ -32,12 +33,15 @@
         return {
             summaryUrl: root.getAttribute("data-summary-url") || "/notifications/summary",
             notificationsUrl: root.getAttribute("data-notifications-url") || "/notifications",
+            messagesUrl: root.getAttribute("data-messages-url") || "/messages",
             visibleInterval: parsePositiveInteger(root.getAttribute("data-visible-interval"), defaultVisibleInterval),
             hiddenInterval: parsePositiveInteger(root.getAttribute("data-hidden-interval"), defaultHiddenInterval),
             toastDuration: parsePositiveInteger(root.getAttribute("data-toast-duration"), defaultToastDuration),
             closeLabel: root.getAttribute("data-close-label") || "Close",
             summaryTitle: root.getAttribute("data-summary-title") || "New notifications",
-            summaryTemplate: root.getAttribute("data-summary-template") || "{0} new notifications"
+            summaryTemplate: root.getAttribute("data-summary-template") || "{0} new notifications",
+            messageSummaryTitle: root.getAttribute("data-message-summary-title") || "New messages",
+            messageSummaryTemplate: root.getAttribute("data-message-summary-template") || "{0} new messages"
         };
     }
 
@@ -69,6 +73,10 @@
         var url = new URL(config.summaryUrl, window.location.origin);
         if (state.baselineNotificationId !== null) {
             url.searchParams.set("afterNotificationId", String(state.baselineNotificationId));
+        }
+
+        if (state.baselineMessageId !== null) {
+            url.searchParams.set("afterMessageId", String(state.baselineMessageId));
         }
 
         return url.toString();
@@ -127,34 +135,76 @@
         }
 
         var latestNotificationId = Number(payload.latestNotificationId || 0);
-        if (state.baselineNotificationId === null) {
+        var latestMessageId = Number(payload.latestMessageId || 0);
+        var hasNotificationBaseline = state.baselineNotificationId !== null;
+        var hasMessageBaseline = state.baselineMessageId !== null;
+
+        if (!hasNotificationBaseline) {
             state.baselineNotificationId = latestNotificationId;
+        }
+
+        if (!hasMessageBaseline) {
+            state.baselineMessageId = latestMessageId;
+        }
+
+        if (!hasNotificationBaseline && !hasMessageBaseline) {
             return;
         }
 
         var items = Array.isArray(payload.newNotifications) ? payload.newNotifications : [];
         var newNotificationCount = Number(payload.newNotificationCount || items.length || 0);
 
-        if (newNotificationCount >= 3) {
-            enqueueToast({
-                title: config.summaryTitle,
-                content: formatText(config.summaryTemplate, newNotificationCount),
-                targetUrl: config.notificationsUrl,
-                isSummary: true
-            }, config);
-        } else if (items.length > 0) {
-            items.slice().reverse().forEach(function (item) {
+        if (hasNotificationBaseline) {
+            if (newNotificationCount >= 3) {
                 enqueueToast({
-                    title: item.title || config.summaryTitle,
-                    content: item.content || "",
-                    targetUrl: item.targetUrl || config.notificationsUrl,
-                    isSummary: false
+                    title: config.summaryTitle,
+                    content: formatText(config.summaryTemplate, newNotificationCount),
+                    targetUrl: config.notificationsUrl,
+                    isSummary: true
                 }, config);
-            });
+            } else if (items.length > 0) {
+                items.slice().reverse().forEach(function (item) {
+                    enqueueToast({
+                        title: item.title || config.summaryTitle,
+                        content: item.content || "",
+                        targetUrl: item.targetUrl || config.notificationsUrl,
+                        isSummary: false
+                    }, config);
+                });
+            }
         }
 
         if (latestNotificationId > state.baselineNotificationId) {
             state.baselineNotificationId = latestNotificationId;
+        }
+
+        var messageItems = Array.isArray(payload.newMessages) ? payload.newMessages : [];
+        var newMessageCount = Number(payload.newMessageCount || messageItems.length || 0);
+
+        if (hasMessageBaseline) {
+            if (newMessageCount >= 3) {
+                enqueueToast({
+                    title: config.messageSummaryTitle,
+                    content: formatText(config.messageSummaryTemplate, newMessageCount),
+                    targetUrl: config.messagesUrl,
+                    isSummary: true,
+                    isMessage: true
+                }, config);
+            } else if (messageItems.length > 0) {
+                messageItems.slice().reverse().forEach(function (item) {
+                    enqueueToast({
+                        title: item.title || config.messageSummaryTitle,
+                        content: item.content || "",
+                        targetUrl: item.targetUrl || config.messagesUrl,
+                        isSummary: false,
+                        isMessage: true
+                    }, config);
+                });
+            }
+        }
+
+        if (latestMessageId > state.baselineMessageId) {
+            state.baselineMessageId = latestMessageId;
         }
     }
 
@@ -178,7 +228,9 @@
 
     function showToast(toast, config) {
         var element = document.createElement("article");
-        element.className = "portal-notification-toast" + (toast.isSummary ? " portal-notification-toast--summary" : "");
+        element.className = "portal-notification-toast"
+            + (toast.isSummary ? " portal-notification-toast--summary" : "")
+            + (toast.isMessage ? " portal-notification-toast--message" : "");
         element.tabIndex = 0;
         element.setAttribute("role", "status");
         element.setAttribute("aria-live", "polite");

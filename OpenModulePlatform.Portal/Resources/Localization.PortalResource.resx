@@ -2449,4 +2449,6 @@
   <data name="Close notification" xml:space="preserve"><value>Close notification</value></data>
   <data name="New notifications" xml:space="preserve"><value>New notifications</value></data>
   <data name="{0} new notifications" xml:space="preserve"><value>{0} new notifications</value></data>
+  <data name="New messages" xml:space="preserve"><value>New messages</value></data>
+  <data name="{0} new messages" xml:space="preserve"><value>{0} new messages</value></data>
 </root>

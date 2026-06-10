@@ -94,12 +94,15 @@
              data-enabled="true"
              data-summary-url="@Url.Content("~/notifications/summary")"
              data-notifications-url="@Url.Content("~/notifications")"
+             data-messages-url="@Url.Content("~/messages")"
              data-visible-interval="60000"
              data-hidden-interval="180000"
              data-toast-duration="7000"
              data-close-label="@L["Close notification"]"
              data-summary-title="@L["New notifications"]"
-             data-summary-template="@L["{0} new notifications"]"></div>
+             data-summary-template="@L["{0} new notifications"]"
+             data-message-summary-title="@L["New messages"]"
+             data-message-summary-template="@L["{0} new messages"]"></div>
     }
     <script src="~/js/portal-nav-dropdowns.js"></script>
     <script src="~/js/site.js"></script>
