@@ -18,6 +18,11 @@
     </div>
 </section>
 
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
 @if (Model.CleanupResult is not null)
 {
     <div class="card status-banner">
