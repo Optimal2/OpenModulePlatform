@@ -1,0 +1,330 @@
+(function () {
+    "use strict";
+
+    var maxVisibleToasts = 2;
+    var maxQueuedToasts = 8;
+    var defaultVisibleInterval = 60000;
+    var defaultHiddenInterval = 180000;
+    var defaultToastDuration = 7000;
+
+    var state = {
+        root: null,
+        container: null,
+        baselineNotificationId: null,
+        timer: null,
+        running: false,
+        failures: 0,
+        visible: [],
+        queue: []
+    };
+
+    function parsePositiveInteger(value, fallback) {
+        var parsed = parseInt(value || "", 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    }
+
+    function formatText(template, value) {
+        return (template || "").replace("{0}", String(value));
+    }
+
+    function getConfig() {
+        var root = state.root;
+        return {
+            summaryUrl: root.getAttribute("data-summary-url") || "/notifications/summary",
+            notificationsUrl: root.getAttribute("data-notifications-url") || "/notifications",
+            visibleInterval: parsePositiveInteger(root.getAttribute("data-visible-interval"), defaultVisibleInterval),
+            hiddenInterval: parsePositiveInteger(root.getAttribute("data-hidden-interval"), defaultHiddenInterval),
+            toastDuration: parsePositiveInteger(root.getAttribute("data-toast-duration"), defaultToastDuration),
+            closeLabel: root.getAttribute("data-close-label") || "Close",
+            summaryTitle: root.getAttribute("data-summary-title") || "New notifications",
+            summaryTemplate: root.getAttribute("data-summary-template") || "{0} new notifications"
+        };
+    }
+
+    function getPollingDelay(config) {
+        var baseDelay = document.visibilityState === "hidden"
+            ? config.hiddenInterval
+            : config.visibleInterval;
+
+        if (state.failures > 0) {
+            return baseDelay * Math.min(6, state.failures + 1);
+        }
+
+        return baseDelay;
+    }
+
+    function scheduleNext(delay) {
+        if (state.timer) {
+            window.clearTimeout(state.timer);
+        }
+
+        if (!state.root) {
+            return;
+        }
+
+        state.timer = window.setTimeout(runPoll, Math.max(0, delay));
+    }
+
+    function buildSummaryUrl(config) {
+        var url = new URL(config.summaryUrl, window.location.origin);
+        if (state.baselineNotificationId !== null) {
+            url.searchParams.set("afterNotificationId", String(state.baselineNotificationId));
+        }
+
+        return url.toString();
+    }
+
+    async function fetchSummary(config) {
+        var response = await fetch(buildSummaryUrl(config), {
+            method: "GET",
+            credentials: "same-origin",
+            cache: "no-store",
+            headers: {
+                "Accept": "application/json",
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+            throw new Error("Notification toast polling requires sign-in.");
+        }
+
+        if (!response.ok) {
+            throw new Error("Notification toast polling failed with status " + response.status + ".");
+        }
+
+        var contentType = response.headers.get("content-type") || "";
+        if (contentType.indexOf("application/json") < 0) {
+            throw new Error("Notification toast polling returned a non-JSON response.");
+        }
+
+        return await response.json();
+    }
+
+    async function runPoll() {
+        if (!state.root || state.running) {
+            return;
+        }
+
+        var config = getConfig();
+        state.running = true;
+
+        try {
+            var payload = await fetchSummary(config);
+            state.failures = 0;
+            applySummary(payload, config);
+        } catch {
+            state.failures += 1;
+        } finally {
+            state.running = false;
+            scheduleNext(getPollingDelay(config));
+        }
+    }
+
+    function applySummary(payload, config) {
+        if (!payload) {
+            return;
+        }
+
+        var latestNotificationId = Number(payload.latestNotificationId || 0);
+        if (state.baselineNotificationId === null) {
+            state.baselineNotificationId = latestNotificationId;
+            return;
+        }
+
+        var items = Array.isArray(payload.newNotifications) ? payload.newNotifications : [];
+        var newNotificationCount = Number(payload.newNotificationCount || items.length || 0);
+
+        if (newNotificationCount >= 3) {
+            enqueueToast({
+                title: config.summaryTitle,
+                content: formatText(config.summaryTemplate, newNotificationCount),
+                targetUrl: config.notificationsUrl,
+                isSummary: true
+            }, config);
+        } else if (items.length > 0) {
+            items.slice().reverse().forEach(function (item) {
+                enqueueToast({
+                    title: item.title || config.summaryTitle,
+                    content: item.content || "",
+                    targetUrl: item.targetUrl || config.notificationsUrl,
+                    isSummary: false
+                }, config);
+            });
+        }
+
+        if (latestNotificationId > state.baselineNotificationId) {
+            state.baselineNotificationId = latestNotificationId;
+        }
+    }
+
+    function enqueueToast(toast, config) {
+        if (state.visible.length < maxVisibleToasts) {
+            showToast(toast, config);
+            return;
+        }
+
+        state.queue.unshift(toast);
+        if (state.queue.length > maxQueuedToasts) {
+            state.queue.length = maxQueuedToasts;
+        }
+    }
+
+    function drainQueue(config) {
+        while (state.visible.length < maxVisibleToasts && state.queue.length > 0) {
+            showToast(state.queue.shift(), config);
+        }
+    }
+
+    function showToast(toast, config) {
+        var element = document.createElement("article");
+        element.className = "portal-notification-toast" + (toast.isSummary ? " portal-notification-toast--summary" : "");
+        element.tabIndex = 0;
+        element.setAttribute("role", "status");
+        element.setAttribute("aria-live", "polite");
+        element.style.setProperty("--portal-notification-toast-duration", config.toastDuration + "ms");
+
+        var close = document.createElement("button");
+        close.type = "button";
+        close.className = "portal-notification-toast__close";
+        close.setAttribute("aria-label", config.closeLabel);
+        close.textContent = "\u00d7";
+
+        var title = document.createElement("div");
+        title.className = "portal-notification-toast__title";
+        title.textContent = toast.title;
+
+        var timer = document.createElement("div");
+        timer.className = "portal-notification-toast__timer";
+        timer.setAttribute("aria-hidden", "true");
+
+        var content = document.createElement("div");
+        content.className = "portal-notification-toast__content";
+        content.textContent = toast.content;
+
+        element.append(close, title, timer, content);
+
+        var visibleState = {
+            element: element,
+            remaining: config.toastDuration,
+            startedAt: 0,
+            timeout: 0,
+            paused: false
+        };
+
+        close.addEventListener("click", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            dismissToast(visibleState, config);
+        });
+
+        element.addEventListener("click", function () {
+            window.location.href = toast.targetUrl || config.notificationsUrl;
+        });
+
+        element.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                window.location.href = toast.targetUrl || config.notificationsUrl;
+            }
+        });
+
+        element.addEventListener("mouseenter", function () {
+            pauseToast(visibleState);
+        });
+
+        element.addEventListener("mouseleave", function () {
+            resumeToast(visibleState, config);
+        });
+
+        element.addEventListener("focusin", function () {
+            pauseToast(visibleState);
+        });
+
+        element.addEventListener("focusout", function () {
+            resumeToast(visibleState, config);
+        });
+
+        state.visible.push(visibleState);
+        state.container.insertBefore(element, state.container.firstChild);
+        window.requestAnimationFrame(function () {
+            element.classList.add("is-visible");
+        });
+        resumeToast(visibleState, config);
+    }
+
+    function pauseToast(visibleState) {
+        if (visibleState.paused) {
+            return;
+        }
+
+        visibleState.paused = true;
+        visibleState.element.classList.add("is-paused");
+        if (visibleState.timeout) {
+            window.clearTimeout(visibleState.timeout);
+            visibleState.timeout = 0;
+        }
+
+        if (visibleState.startedAt > 0) {
+            visibleState.remaining = Math.max(0, visibleState.remaining - (performance.now() - visibleState.startedAt));
+        }
+    }
+
+    function resumeToast(visibleState, config) {
+        if (!visibleState.element.isConnected || visibleState.remaining <= 0) {
+            return;
+        }
+
+        visibleState.paused = false;
+        visibleState.element.classList.remove("is-paused");
+        visibleState.startedAt = performance.now();
+        visibleState.timeout = window.setTimeout(function () {
+            dismissToast(visibleState, config);
+        }, visibleState.remaining);
+    }
+
+    function dismissToast(visibleState, config) {
+        if (visibleState.timeout) {
+            window.clearTimeout(visibleState.timeout);
+        }
+
+        state.visible = state.visible.filter(function (item) {
+            return item !== visibleState;
+        });
+
+        visibleState.element.classList.remove("is-visible");
+        window.setTimeout(function () {
+            visibleState.element.remove();
+            drainQueue(config);
+        }, 180);
+    }
+
+    function init() {
+        state.root = document.querySelector("[data-portal-notification-toasts]");
+        if (!state.root || state.root.getAttribute("data-enabled") !== "true") {
+            return;
+        }
+
+        state.container = document.createElement("div");
+        state.container.className = "portal-notification-toast-stack";
+        document.body.appendChild(state.container);
+
+        window.addEventListener("focus", function () {
+            scheduleNext(0);
+        });
+
+        document.addEventListener("visibilitychange", function () {
+            if (document.visibilityState === "visible") {
+                scheduleNext(0);
+            }
+        });
+
+        scheduleNext(0);
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+    } else {
+        init();
+    }
+}());
