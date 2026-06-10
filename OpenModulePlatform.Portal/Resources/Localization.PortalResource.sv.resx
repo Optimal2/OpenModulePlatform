@@ -2575,4 +2575,6 @@
   <data name="Close notification" xml:space="preserve"><value>Stäng notifikation</value></data>
   <data name="New notifications" xml:space="preserve"><value>Nya notifikationer</value></data>
   <data name="{0} new notifications" xml:space="preserve"><value>{0} nya notifikationer</value></data>
+  <data name="New messages" xml:space="preserve"><value>Nya meddelanden</value></data>
+  <data name="{0} new messages" xml:space="preserve"><value>{0} nya meddelanden</value></data>
 </root>
