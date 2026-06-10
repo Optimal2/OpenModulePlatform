@@ -104,6 +104,7 @@ BEGIN
     SELECT @Missing = @Missing + CASE
         WHEN EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'TopbarDropdownsOpenOnHover')
          AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'ShowPortalNavbar')
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'NotificationToastsMuted')
         THEN 0 ELSE 1 END;
 END;
 

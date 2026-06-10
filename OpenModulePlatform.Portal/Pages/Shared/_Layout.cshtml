@@ -1,5 +1,6 @@
 @using OpenModulePlatform.Web.Shared.Navigation
 @inject OpenModulePlatform.Portal.Services.PortalUserSettingsService PortalUserSettingsService
+@inject OpenModulePlatform.Web.Shared.Services.OmpConfigurationService OmpConfigurationService
 @* File: OpenModulePlatform.Portal/Pages/Shared/_Layout.cshtml *@
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(Context.RequestAborted);
@@ -13,15 +14,29 @@
     var isMessagesPage = string.Equals(requestPath.TrimEnd('/'), "/messages", System.StringComparison.OrdinalIgnoreCase)
         || requestPath.StartsWith("/messages/", System.StringComparison.OrdinalIgnoreCase);
     var userIdClaim = User.FindFirst(OpenModulePlatform.Web.Shared.Security.OmpAuthDefaults.UserIdClaimType)?.Value;
-    if (isDashboardPage
-        && int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var portalLayoutUserId))
+    OpenModulePlatform.Portal.Services.PortalUserSettings? portalLayoutSettings = null;
+    if (int.TryParse(userIdClaim, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var portalLayoutUserId))
     {
-        showPortalNavbar = (await PortalUserSettingsService.GetForUserAsync(portalLayoutUserId, Context.RequestAborted)).ShowPortalNavbar;
+        portalLayoutSettings = await PortalUserSettingsService.GetForUserAsync(portalLayoutUserId, Context.RequestAborted);
+    }
+
+    if (isDashboardPage && portalLayoutSettings is not null)
+    {
+        showPortalNavbar = portalLayoutSettings.ShowPortalNavbar;
     }
     else if (isMessagesPage)
     {
         showPortalNavbar = false;
     }
+
+    var notificationToastsConfigValue = await OmpConfigurationService.GetGlobalStringAsync(
+        OpenModulePlatform.Portal.Services.PortalUserSettingsService.NotificationToastsConfigCategory,
+        OpenModulePlatform.Portal.Services.PortalUserSettingsService.NotificationToastsEnabledConfigSetting,
+        Context.RequestAborted);
+    var notificationToastsGloballyEnabled = OpenModulePlatform.Portal.Services.PortalUserSettingsService.ParseNotificationToastsEnabled(notificationToastsConfigValue);
+    var notificationToastsEnabled = User.Identity?.IsAuthenticated == true
+        && notificationToastsGloballyEnabled
+        && portalLayoutSettings?.NotificationToastsMuted != true;
 
     if (string.IsNullOrWhiteSpace(documentTitle))
     {
@@ -88,7 +103,7 @@
     <main class="content-shell">
         @RenderBody()
     </main>
-    @if (User.Identity?.IsAuthenticated == true)
+    @if (notificationToastsEnabled)
     {
         <div data-portal-notification-toasts
              data-enabled="true"

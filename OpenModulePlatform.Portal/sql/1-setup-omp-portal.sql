@@ -134,6 +134,15 @@ USING
            N'Controls whether the Portal navbar below the topbar is shown for the signed-in user.' AS description,
            30 AS sort_order,
            CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Portal' AS setting_category,
+           N'NotificationToastsMuted' AS setting_name,
+           CAST(1 AS tinyint) AS value_kind,
+           CAST(0 AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           N'Controls whether notification and message toasts are muted for the signed-in user.' AS description,
+           40 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
 ) AS source
 ON target.setting_category = source.setting_category
 AND target.setting_name = source.setting_name
@@ -1015,7 +1024,8 @@ BEGIN
     USING
     (
         VALUES
-            (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1))
+            (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1)),
+            (N'portal', N'notificationToastsEnabled', N'Controls whether Portal notification and message toast polling and display are enabled globally.', 100, CONVERT(bit, 1))
     ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
     ON target.ConfigCategory = source.ConfigCategory
        AND target.ConfigSetting = source.ConfigSetting
@@ -1032,11 +1042,17 @@ BEGIN
     USING
     (
         SELECT def.ConfigSettingId,
-               N'5242880' AS ConfigValue,
+               defaults.ConfigValue,
                0 AS ConfigPriority
         FROM omp.config_setting_definitions def
-        WHERE def.ConfigCategory = N'messages'
-          AND def.ConfigSetting = N'attachmentMaxBytes'
+        INNER JOIN
+        (
+            VALUES
+                (N'messages', N'attachmentMaxBytes', N'5242880'),
+                (N'portal', N'notificationToastsEnabled', N'true')
+        ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)
+            ON defaults.ConfigCategory = def.ConfigCategory
+           AND defaults.ConfigSetting = def.ConfigSetting
     ) AS source(ConfigSettingId, ConfigValue, ConfigPriority)
     ON target.ConfigSettingId = source.ConfigSettingId
        AND target.ConfigUsr IS NULL

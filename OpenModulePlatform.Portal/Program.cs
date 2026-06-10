@@ -70,6 +70,8 @@ app.MapGet("/notifications/summary", async (
     HttpContext context,
     NotificationService notificationService,
     MessageService messageService,
+    OmpConfigurationService configurationService,
+    PortalUserSettingsService portalUserSettings,
     long? afterNotificationId,
     long? afterMessageId,
     CancellationToken ct) =>
@@ -79,20 +81,25 @@ app.MapGet("/notifications/summary", async (
         return Results.Unauthorized();
     }
 
+    var toastsEnabledValue = await configurationService.GetGlobalStringAsync(
+        PortalUserSettingsService.NotificationToastsConfigCategory,
+        PortalUserSettingsService.NotificationToastsEnabledConfigSetting,
+        ct);
+    if (!PortalUserSettingsService.ParseNotificationToastsEnabled(toastsEnabledValue))
+    {
+        return Results.Json(CreateEmptyToastSummary());
+    }
+
     var userId = NotificationService.TryGetOmpUserId(context.User);
     if (userId is null)
     {
-        return Results.Json(new
-        {
-            unreadCount = 0,
-            latestNotificationId = 0L,
-            newNotificationCount = 0,
-            newNotifications = Array.Empty<object>(),
-            unreadMessageCount = 0,
-            latestMessageId = 0L,
-            newMessageCount = 0,
-            newMessages = Array.Empty<object>()
-        });
+        return Results.Json(CreateEmptyToastSummary());
+    }
+
+    var settings = await portalUserSettings.GetForUserAsync(userId.Value, ct);
+    if (settings.NotificationToastsMuted)
+    {
+        return Results.Json(CreateEmptyToastSummary());
     }
 
     var notificationSummary = await notificationService.GetToastSummaryForUserAsync(
@@ -131,6 +138,21 @@ app.MapGet("/notifications/summary", async (
         })
     });
 }).AllowAnonymous();
+
+static object CreateEmptyToastSummary()
+{
+    return new
+    {
+        unreadCount = 0,
+        latestNotificationId = 0L,
+        newNotificationCount = 0,
+        newNotifications = Array.Empty<object>(),
+        unreadMessageCount = 0,
+        latestMessageId = 0L,
+        newMessageCount = 0,
+        newMessages = Array.Empty<object>()
+    };
+}
 
 app.MapGet("/health/live", (PortalHealthService healthService) =>
 {
