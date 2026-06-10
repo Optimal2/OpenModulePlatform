@@ -2564,4 +2564,7 @@
   <data name="Cleanup queued" xml:space="preserve"><value>Rensning köad</value></data>
   <data name="Cleaned" xml:space="preserve"><value>Rensad</value></data>
   <data name="Skipped" xml:space="preserve"><value>Hoppades över</value></data>
+  <data name="Close notification" xml:space="preserve"><value>Stäng notifikation</value></data>
+  <data name="New notifications" xml:space="preserve"><value>Nya notifikationer</value></data>
+  <data name="{0} new notifications" xml:space="preserve"><value>{0} nya notifikationer</value></data>
 </root>

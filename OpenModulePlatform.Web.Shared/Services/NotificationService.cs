@@ -214,19 +214,7 @@ ORDER BY created_at DESC,
             return 0;
         }
 
-        const string sql = @"
-SELECT COUNT_BIG(1)
-FROM omp.notifications
-WHERE user_id = @user_id
-  AND status = N'unread'
-  AND read_at IS NULL
-  AND level <> N'banner'
-  AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        return await GetUnreadCountAsync(conn, userId, ct);
     }
 
     public async Task<NotificationMarkReadResult> MarkAsReadAsync(
@@ -316,6 +304,123 @@ WHERE user_id = @user_id
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<NotificationToastSummary> GetToastSummaryForUserAsync(
+        int userId,
+        long? afterNotificationId,
+        int limit,
+        CancellationToken ct)
+    {
+        if (userId <= 0)
+        {
+            return new NotificationToastSummary(0, 0, 0, Array.Empty<NotificationToastItem>());
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        if (!await NotificationsTableExistsAsync(conn, ct))
+        {
+            return new NotificationToastSummary(0, 0, 0, Array.Empty<NotificationToastItem>());
+        }
+
+        var unreadCount = await GetUnreadCountAsync(conn, userId, ct);
+        var latestNotificationId = await GetLatestNotificationIdAsync(conn, userId, ct);
+
+        if (!afterNotificationId.HasValue)
+        {
+            return new NotificationToastSummary(unreadCount, latestNotificationId, 0, Array.Empty<NotificationToastItem>());
+        }
+
+        var baselineNotificationId = Math.Max(0L, afterNotificationId.Value);
+        if (latestNotificationId <= baselineNotificationId)
+        {
+            return new NotificationToastSummary(unreadCount, latestNotificationId, 0, Array.Empty<NotificationToastItem>());
+        }
+
+        var pageSize = Math.Clamp(limit, 1, 20);
+        var newNotificationCount = await GetNewNotificationCountAsync(conn, userId, baselineNotificationId, ct);
+        const string sql = @"
+SELECT TOP (@limit)
+       notification_id,
+       title,
+       content,
+       destination_url
+FROM omp.notifications
+WHERE user_id = @user_id
+  AND notification_id > @after_notification_id
+  AND level <> N'banner'
+  AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME())
+ORDER BY notification_id DESC;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@limit", SqlDbType.Int).Value = pageSize;
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@after_notification_id", SqlDbType.BigInt).Value = baselineNotificationId;
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<NotificationToastItem>();
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new NotificationToastItem(
+                rdr.GetInt64(0),
+                rdr.GetString(1),
+                rdr.GetString(2),
+                rdr.IsDBNull(3) ? null : rdr.GetString(3)));
+        }
+
+        return new NotificationToastSummary(unreadCount, latestNotificationId, newNotificationCount, rows);
+    }
+
+    private static async Task<long> GetLatestNotificationIdAsync(SqlConnection conn, int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ISNULL(MAX(notification_id), 0)
+FROM omp.notifications
+WHERE user_id = @user_id
+  AND level <> N'banner'
+  AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<int> GetUnreadCountAsync(SqlConnection conn, int userId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT_BIG(1)
+FROM omp.notifications
+WHERE user_id = @user_id
+  AND status = N'unread'
+  AND read_at IS NULL
+  AND level <> N'banner'
+  AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<int> GetNewNotificationCountAsync(
+        SqlConnection conn,
+        int userId,
+        long afterNotificationId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT_BIG(1)
+FROM omp.notifications
+WHERE user_id = @user_id
+  AND notification_id > @after_notification_id
+  AND level <> N'banner'
+  AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@after_notification_id", SqlDbType.BigInt).Value = afterNotificationId;
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
     private static async Task<bool> NotificationsTableExistsAsync(SqlConnection conn, CancellationToken ct)
@@ -409,3 +514,15 @@ public sealed record NotificationMarkReadResult(
     bool Success,
     string? DestinationUrl,
     int UnreadCount);
+
+public sealed record NotificationToastSummary(
+    int UnreadCount,
+    long LatestNotificationId,
+    int NewNotificationCount,
+    IReadOnlyList<NotificationToastItem> NewNotifications);
+
+public sealed record NotificationToastItem(
+    long NotificationId,
+    string Title,
+    string Content,
+    string? DestinationUrl);

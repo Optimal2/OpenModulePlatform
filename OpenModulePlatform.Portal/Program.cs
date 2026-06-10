@@ -6,6 +6,7 @@ using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.Security;
+using OpenModulePlatform.Web.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var maxUploadBytes = builder.Configuration.GetValue<long?>(
@@ -64,4 +65,65 @@ var app = builder.Build();
 
 app.UseOmpWebDefaults(optionsSectionName: "Portal", mapRazorPages: true);
 
+app.MapGet("/notifications/summary", async (
+    HttpContext context,
+    NotificationService notificationService,
+    long? afterNotificationId,
+    CancellationToken ct) =>
+{
+    if (context.User.Identity?.IsAuthenticated != true)
+    {
+        return Results.Unauthorized();
+    }
+
+    var userId = NotificationService.TryGetOmpUserId(context.User);
+    if (userId is null)
+    {
+        return Results.Json(new
+        {
+            unreadCount = 0,
+            latestNotificationId = 0L,
+            newNotificationCount = 0,
+            newNotifications = Array.Empty<object>()
+        });
+    }
+
+    var summary = await notificationService.GetToastSummaryForUserAsync(
+        userId.Value,
+        afterNotificationId,
+        limit: 5,
+        ct);
+
+    return Results.Json(new
+    {
+        unreadCount = summary.UnreadCount,
+        latestNotificationId = summary.LatestNotificationId,
+        newNotificationCount = summary.NewNotificationCount,
+        newNotifications = summary.NewNotifications.Select(row => new
+        {
+            notificationId = row.NotificationId,
+            title = row.Title,
+            content = ToToastSnippet(row.Content),
+            targetUrl = IsSafeLocalDestination(row.DestinationUrl) ? row.DestinationUrl : "/notifications"
+        })
+    });
+}).AllowAnonymous();
+
 app.Run();
+
+static string ToToastSnippet(string value)
+{
+    var normalized = string.Join(
+        " ",
+        value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    return normalized.Length <= 180
+        ? normalized
+        : string.Concat(normalized.AsSpan(0, 177), "...");
+}
+
+static bool IsSafeLocalDestination(string? destinationUrl)
+    => !string.IsNullOrWhiteSpace(destinationUrl)
+       && destinationUrl.StartsWith("/", StringComparison.Ordinal)
+       && !destinationUrl.StartsWith("//", StringComparison.Ordinal)
+       && !destinationUrl.Contains('\\', StringComparison.Ordinal);
