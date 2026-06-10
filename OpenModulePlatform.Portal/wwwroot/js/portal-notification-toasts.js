@@ -235,6 +235,8 @@
         element.setAttribute("role", "status");
         element.setAttribute("aria-live", "polite");
         element.style.setProperty("--portal-notification-toast-duration", config.toastDuration + "ms");
+        element.style.setProperty("--portal-notification-toast-progress", "1");
+        element.style.setProperty("--portal-notification-toast-transition-duration", "0ms");
 
         var close = document.createElement("button");
         close.type = "button";
@@ -258,6 +260,7 @@
 
         var visibleState = {
             element: element,
+            duration: config.toastDuration,
             remaining: config.toastDuration,
             startedAt: 0,
             timeout: 0,
@@ -301,8 +304,19 @@
         state.container.insertBefore(element, state.container.firstChild);
         window.requestAnimationFrame(function () {
             element.classList.add("is-visible");
+            resumeToast(visibleState, config);
         });
-        resumeToast(visibleState, config);
+    }
+
+    function setToastTimerProgress(visibleState, progress, transitionDuration) {
+        var normalizedProgress = Math.max(0, Math.min(1, progress));
+        visibleState.element.style.setProperty("--portal-notification-toast-transition-duration", transitionDuration + "ms");
+        visibleState.element.style.setProperty("--portal-notification-toast-progress", String(normalizedProgress));
+    }
+
+    function getToastTimerProgress(visibleState) {
+        var duration = Math.max(1, visibleState.duration || defaultToastDuration);
+        return visibleState.remaining / duration;
     }
 
     function pauseToast(visibleState) {
@@ -320,6 +334,8 @@
         if (visibleState.startedAt > 0) {
             visibleState.remaining = Math.max(0, visibleState.remaining - (performance.now() - visibleState.startedAt));
         }
+
+        setToastTimerProgress(visibleState, getToastTimerProgress(visibleState), 0);
     }
 
     function resumeToast(visibleState, config) {
@@ -333,6 +349,15 @@
         visibleState.timeout = window.setTimeout(function () {
             dismissToast(visibleState, config);
         }, visibleState.remaining);
+
+        setToastTimerProgress(visibleState, getToastTimerProgress(visibleState), 0);
+        window.requestAnimationFrame(function () {
+            if (!visibleState.element.isConnected || visibleState.paused) {
+                return;
+            }
+
+            setToastTimerProgress(visibleState, 0, visibleState.remaining);
+        });
     }
 
     function dismissToast(visibleState, config) {

@@ -40,6 +40,15 @@ USING
            N'Controls whether the Portal navbar below the topbar is shown for the signed-in user.' AS description,
            30 AS sort_order,
            CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Portal' AS setting_category,
+           N'NotificationToastsMuted' AS setting_name,
+           CAST(1 AS tinyint) AS value_kind,
+           CAST(0 AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           N'Controls whether notification and message toasts are muted for the signed-in user.' AS description,
+           40 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
 ) AS source
 ON target.setting_category = source.setting_category
 AND target.setting_name = source.setting_name

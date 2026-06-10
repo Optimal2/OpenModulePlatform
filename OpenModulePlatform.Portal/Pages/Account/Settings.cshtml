@@ -131,6 +131,15 @@ else if (Model.IsActiveTab(SettingsModel.PortalTab))
         </div>
         <p class="muted">@L["When this is turned off, the dashboard navbar below the topbar is hidden."]</p>
 
+        @if (Model.NotificationToastsGloballyEnabled)
+        {
+            <div class="form-field checkbox-row checkbox-row--boxed">
+                <input asp-for="PortalInput.NotificationToastsMuted" type="checkbox" />
+                <label for="PortalInput_NotificationToastsMuted">@L["Mute toast notifications"]</label>
+            </div>
+            <p class="muted">@L["When this is turned on, notification and message toasts are not shown."]</p>
+        }
+
         <div class="toolbar">
             <button type="submit">@L["Save"]</button>
         </div>

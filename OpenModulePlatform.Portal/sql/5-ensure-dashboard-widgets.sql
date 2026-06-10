@@ -666,7 +666,8 @@ BEGIN
     USING
     (
         VALUES
-            (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1))
+            (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1)),
+            (N'portal', N'notificationToastsEnabled', N'Controls whether Portal notification and message toast polling and display are enabled globally.', 100, CONVERT(bit, 1))
     ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
     ON target.ConfigCategory = source.ConfigCategory
        AND target.ConfigSetting = source.ConfigSetting
@@ -683,11 +684,17 @@ BEGIN
     USING
     (
         SELECT def.ConfigSettingId,
-               N'5242880' AS ConfigValue,
+               defaults.ConfigValue,
                0 AS ConfigPriority
         FROM omp.config_setting_definitions def
-        WHERE def.ConfigCategory = N'messages'
-          AND def.ConfigSetting = N'attachmentMaxBytes'
+        INNER JOIN
+        (
+            VALUES
+                (N'messages', N'attachmentMaxBytes', N'5242880'),
+                (N'portal', N'notificationToastsEnabled', N'true')
+        ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)
+            ON defaults.ConfigCategory = def.ConfigCategory
+           AND defaults.ConfigSetting = def.ConfigSetting
     ) AS source(ConfigSettingId, ConfigValue, ConfigPriority)
     ON target.ConfigSettingId = source.ConfigSettingId
        AND target.ConfigUsr IS NULL

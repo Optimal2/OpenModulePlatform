@@ -8,6 +8,9 @@ namespace OpenModulePlatform.Portal.Services;
 public sealed class PortalUserSettingsService
 {
     public const int DisplayNameMaxLength = 200;
+    public const string NotificationToastsConfigCategory = "portal";
+    public const string NotificationToastsEnabledConfigSetting = "notificationToastsEnabled";
+
     private const int ActiveAccountStatus = 1;
     private const int ProviderUserKeyMaxLength = 1000;
     private const string AdProviderDisplayName = "AD";
@@ -15,6 +18,7 @@ public sealed class PortalUserSettingsService
     private const string AdminMetricsCollapsedSetting = "AdminMetricsCollapsed";
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
     private const string ShowPortalNavbarSetting = "ShowPortalNavbar";
+    private const string NotificationToastsMutedSetting = "NotificationToastsMuted";
     private const byte IntValueKind = 1;
 
     private readonly SqlConnectionFactory _db;
@@ -32,7 +36,8 @@ SELECT u.display_name,
        u.profile_image_storage_key,
        CAST(COALESCE(admin_v.setting_value, admin_d.default_int_value, 0) AS bit),
        CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit),
-       CAST(COALESCE(navbar_v.setting_value, navbar_d.default_int_value, 1) AS bit)
+       CAST(COALESCE(navbar_v.setting_value, navbar_d.default_int_value, 1) AS bit),
+       CAST(COALESCE(toasts_v.setting_value, toasts_d.default_int_value, 0) AS bit)
 FROM omp.users u
 LEFT JOIN omp_portal.user_setting_definitions admin_d
     ON admin_d.setting_category = @setting_category
@@ -58,6 +63,14 @@ LEFT JOIN omp_portal.user_setting_definitions navbar_d
 LEFT JOIN omp_portal.user_setting_int_values navbar_v
     ON navbar_v.user_id = u.user_id
    AND navbar_v.user_setting_definition_id = navbar_d.user_setting_definition_id
+LEFT JOIN omp_portal.user_setting_definitions toasts_d
+    ON toasts_d.setting_category = @setting_category
+   AND toasts_d.setting_name = @notification_toasts_muted_setting_name
+   AND toasts_d.value_kind = @value_kind
+   AND toasts_d.is_enabled = 1
+LEFT JOIN omp_portal.user_setting_int_values toasts_v
+    ON toasts_v.user_id = u.user_id
+   AND toasts_v.user_setting_definition_id = toasts_d.user_setting_definition_id
 WHERE u.user_id = @user_id
   AND u.account_status = 1;";
 
@@ -79,7 +92,8 @@ WHERE u.user_id = @user_id
             rdr.IsDBNull(2) ? null : rdr.GetString(2),
             rdr.GetBoolean(3),
             rdr.GetBoolean(4),
-            rdr.GetBoolean(5));
+            rdr.GetBoolean(5),
+            rdr.GetBoolean(6));
     }
 
     public async Task<PortalUserSettings> GetForUserAsync(int userId, CancellationToken ct)
@@ -104,8 +118,33 @@ WHERE u.user_id = @user_id
             ShowPortalNavbarSetting,
             defaultValue: true,
             ct);
+        var notificationToastsMuted = await GetPortalBoolSettingAsync(
+            conn,
+            userId,
+            NotificationToastsMutedSetting,
+            defaultValue: false,
+            ct);
 
-        return new PortalUserSettings(adminMetricsCollapsed, topbarDropdownsOpenOnHover, showPortalNavbar);
+        return new PortalUserSettings(
+            adminMetricsCollapsed,
+            topbarDropdownsOpenOnHover,
+            showPortalNavbar,
+            notificationToastsMuted);
+    }
+
+    public static bool ParseNotificationToastsEnabled(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var normalized = value.Trim();
+        return !string.Equals(normalized, "0", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(normalized, "false", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(normalized, "off", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(normalized, "disabled", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(normalized, "no", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<bool> UpdateDisplayNameAsync(int userId, string displayName, CancellationToken ct)
@@ -295,6 +334,16 @@ END;";
             missingDefinitionMessage: "Portal user setting definition is missing: Portal/ShowPortalNavbar.",
             ct);
 
+    public Task UpsertNotificationToastsMutedAsync(int userId, bool value, CancellationToken ct)
+        => UpsertPortalBoolSettingAsync(
+            userId,
+            NotificationToastsMutedSetting,
+            value,
+            defaultValue: false,
+            missingDefinitionErrorNumber: 52014,
+            missingDefinitionMessage: "Portal user setting definition is missing: Portal/NotificationToastsMuted.",
+            ct);
+
     private async Task UpsertPortalBoolSettingAsync(
         int userId,
         string settingName,
@@ -396,6 +445,7 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@admin_metrics_setting_name", SqlDbType.NVarChar, 200).Value = AdminMetricsCollapsedSetting;
         cmd.Parameters.Add("@topbar_dropdowns_setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
         cmd.Parameters.Add("@show_portal_navbar_setting_name", SqlDbType.NVarChar, 200).Value = ShowPortalNavbarSetting;
+        cmd.Parameters.Add("@notification_toasts_muted_setting_name", SqlDbType.NVarChar, 200).Value = NotificationToastsMutedSetting;
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
     }
 
@@ -512,12 +562,14 @@ public sealed record PortalAccountSettings(
     string? ProfileImageStorageKey,
     bool AdminMetricsCollapsed,
     bool TopbarDropdownsOpenOnHover,
-    bool ShowPortalNavbar);
+    bool ShowPortalNavbar,
+    bool NotificationToastsMuted);
 
 public sealed record PortalUserSettings(
     bool AdminMetricsCollapsed,
     bool TopbarDropdownsOpenOnHover,
-    bool ShowPortalNavbar);
+    bool ShowPortalNavbar,
+    bool NotificationToastsMuted);
 
 public sealed record CreateSelfServiceAdAccountResult(
     CreateSelfServiceAdAccountStatus Status,

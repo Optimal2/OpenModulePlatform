@@ -25,19 +25,22 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     private readonly PortalDashboardService _dashboard;
     private readonly RbacService _rbac;
     private readonly UserProfileImageService _profileImages;
+    private readonly OmpConfigurationService _configuration;
 
     public SettingsModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
         PortalUserSettingsService settings,
         PortalDashboardService dashboard,
-        UserProfileImageService profileImages)
+        UserProfileImageService profileImages,
+        OmpConfigurationService configuration)
         : base(options, rbac)
     {
         _settings = settings;
         _dashboard = dashboard;
         _rbac = rbac;
         _profileImages = profileImages;
+        _configuration = configuration;
     }
 
     [BindProperty]
@@ -65,6 +68,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     public string? ProfileImageFileName { get; private set; }
 
     public string ProfileImageInitials { get; private set; } = "?";
+
+    public bool NotificationToastsGloballyEnabled { get; private set; } = true;
 
     public async Task<IActionResult> OnGet(string? tab, CancellationToken ct)
     {
@@ -262,6 +267,10 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
         await _settings.UpsertTopbarDropdownsOpenOnHoverAsync(userId, PortalInput.TopbarDropdownsOpenOnHover, ct);
         await _settings.UpsertShowPortalNavbarAsync(userId, PortalInput.ShowPortalNavbar, ct);
+        if (NotificationToastsGloballyEnabled)
+        {
+            await _settings.UpsertNotificationToastsMutedAsync(userId, PortalInput.NotificationToastsMuted, ct);
+        }
 
         StatusMessage = T("Settings saved.");
         return RedirectToSettings(PortalTab);
@@ -336,6 +345,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         ActiveTab = NormalizeTab(tab);
         HasOmpUser = true;
         CanCreateOmpUser = false;
+        NotificationToastsGloballyEnabled = await GetNotificationToastsGloballyEnabledAsync(ct);
 
         var settings = await _settings.GetAccountSettingsAsync(userId, ct);
         if (settings is null)
@@ -356,6 +366,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         {
             PortalInput.TopbarDropdownsOpenOnHover = settings.TopbarDropdownsOpenOnHover;
             PortalInput.ShowPortalNavbar = settings.ShowPortalNavbar;
+            PortalInput.NotificationToastsMuted = settings.NotificationToastsMuted;
         }
 
         var permissions = await GetUserPermissionsAsync(ct);
@@ -380,6 +391,15 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         ProfileImageFileName = null;
         ProfileImageInitials = OmpAvatarHelper.GetInitials(SuggestedDisplayName());
         ViewData["IsPortalAdmin"] = false;
+    }
+
+    private async Task<bool> GetNotificationToastsGloballyEnabledAsync(CancellationToken ct)
+    {
+        var value = await _configuration.GetGlobalStringAsync(
+            PortalUserSettingsService.NotificationToastsConfigCategory,
+            PortalUserSettingsService.NotificationToastsEnabledConfigSetting,
+            ct);
+        return PortalUserSettingsService.ParseNotificationToastsEnabled(value);
     }
 
     private static string NormalizeTab(string? tab)
@@ -571,5 +591,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         public bool TopbarDropdownsOpenOnHover { get; set; } = true;
 
         public bool ShowPortalNavbar { get; set; } = true;
+
+        public bool NotificationToastsMuted { get; set; }
     }
 }

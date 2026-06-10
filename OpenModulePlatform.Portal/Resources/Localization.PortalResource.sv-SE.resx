@@ -1730,6 +1730,8 @@
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>Artefakten kunde inte väljas som önskad version automatiskt. Välj den från installationsmallens sida.</value></data>
   <data name="Open topbar menus on hover" xml:space="preserve"><value>Öppna topbar-menyer vid hovring</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>När detta är avstängt öppnas menyer bara med klick eller kortkommando.</value></data>
+  <data name="Mute toast notifications" xml:space="preserve"><value>Tysta toastnotiser</value></data>
+  <data name="When this is turned on, notification and message toasts are not shown." xml:space="preserve"><value>När detta är påslaget visas inte toastnotiser för notifikationer och meddelanden.</value></data>
   <data name="Definition versions" xml:space="preserve"><value>Definitionsversioner</value></data>
   <data name="Module definition versions" xml:space="preserve"><value>Moduldefinitionsversioner</value></data>
   <data name="Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review." xml:space="preserve"><value>Moduldefinitioner beskriver databas- och metadatakontraktet som artefaktversioner valideras mot. Äldre definitionsversioner finns kvar för granskning.</value></data>
