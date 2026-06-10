@@ -18,7 +18,227 @@
     const sessionStatusWarningEvent = 'omp:session-status-warning';
     const musicObjectUrls = new Set();
     const blankImageObjectUrls = new Set();
+    let activeWidgetPopup = null;
+    let dashboardWidgetPopupId = 0;
     let blankWidgetImagesCache = null;
+
+    function openDashboardWidgetPopup(options) {
+        const anchor = options?.anchor || null;
+        const content = options?.content || null;
+        const ownerWidget = options?.ownerWidget || anchor?.closest?.('[data-dashboard-widget]') || null;
+        const root = anchor?.closest?.('[data-dashboard-root]') || ownerWidget?.closest?.('[data-dashboard-root]') || null;
+        const canvas = root?.querySelector?.('[data-dashboard-canvas]') || null;
+        const layer = canvas?.querySelector?.('[data-dashboard-widget-popup-layer]') || null;
+
+        if (!anchor || !content || !root || !canvas || !layer || root.classList.contains('is-editing')) {
+            return false;
+        }
+
+        if (activeWidgetPopup?.content === content) {
+            closeDashboardWidgetPopup({ restoreFocus: false });
+        } else {
+            closeDashboardWidgetPopup({ restoreFocus: false });
+        }
+
+        const placeholder = document.createComment('dashboard-widget-popup-placeholder');
+        const originalParent = content.parentNode;
+        const originalNextSibling = content.nextSibling;
+        const originalState = {
+            hidden: content.hidden,
+            position: content.style.position,
+            inset: content.style.inset,
+            left: content.style.left,
+            top: content.style.top,
+            right: content.style.right,
+            bottom: content.style.bottom,
+            width: content.style.width,
+            maxWidth: content.style.maxWidth,
+            maxHeight: content.style.maxHeight,
+            visibility: content.style.visibility
+        };
+
+        if (originalParent) {
+            originalParent.insertBefore(placeholder, originalNextSibling);
+        }
+
+        if (!content.id) {
+            dashboardWidgetPopupId += 1;
+            content.id = `omp-dashboard-widget-popup-${dashboardWidgetPopupId}`;
+        }
+
+        activeWidgetPopup = {
+            anchor,
+            content,
+            canvas,
+            layer,
+            ownerWidget,
+            ownerWidgetId: options.ownerWidgetId || ownerWidget?.dataset?.userActiveWidgetId || '',
+            onClose: typeof options.onClose === 'function' ? options.onClose : null,
+            originalParent,
+            placeholder,
+            originalState,
+            placement: options.placement || 'bottom-start'
+        };
+
+        content.classList.add('omp-dashboard-widget-popup');
+        content.hidden = false;
+        content.style.position = 'absolute';
+        content.style.inset = 'auto';
+        content.style.left = '0px';
+        content.style.top = '0px';
+        content.style.right = 'auto';
+        content.style.bottom = 'auto';
+        content.style.visibility = 'hidden';
+        layer.appendChild(content);
+
+        anchor.setAttribute('aria-expanded', 'true');
+        anchor.setAttribute('aria-controls', content.id);
+
+        bindDashboardWidgetPopupEvents();
+        positionDashboardWidgetPopup();
+        content.style.visibility = originalState.visibility || '';
+        return true;
+    }
+
+    function closeDashboardWidgetPopup(options = {}) {
+        const popup = activeWidgetPopup;
+        if (!popup) {
+            return;
+        }
+
+        activeWidgetPopup = null;
+        unbindDashboardWidgetPopupEvents();
+
+        const { anchor, content, placeholder, originalState, onClose } = popup;
+        content.classList.remove('omp-dashboard-widget-popup');
+        content.hidden = originalState.hidden;
+        content.style.position = originalState.position;
+        content.style.inset = originalState.inset;
+        content.style.left = originalState.left;
+        content.style.top = originalState.top;
+        content.style.right = originalState.right;
+        content.style.bottom = originalState.bottom;
+        content.style.width = originalState.width;
+        content.style.maxWidth = originalState.maxWidth;
+        content.style.maxHeight = originalState.maxHeight;
+        content.style.visibility = originalState.visibility;
+
+        if (placeholder?.parentNode) {
+            placeholder.parentNode.insertBefore(content, placeholder);
+            placeholder.remove();
+        } else {
+            content.remove();
+        }
+
+        if (anchor?.isConnected) {
+            anchor.setAttribute('aria-expanded', 'false');
+            if (options.restoreFocus) {
+                anchor.focus({ preventScroll: true });
+            }
+        }
+
+        onClose?.();
+    }
+
+    function isDashboardWidgetPopupOpenFor(content) {
+        return !!activeWidgetPopup && activeWidgetPopup.content === content;
+    }
+
+    function closeDashboardWidgetPopupForWidget(widget) {
+        if (activeWidgetPopup?.ownerWidget === widget) {
+            closeDashboardWidgetPopup({ restoreFocus: false });
+        }
+    }
+
+    function positionDashboardWidgetPopup() {
+        const popup = activeWidgetPopup;
+        if (!popup || !popup.anchor.isConnected || !popup.content.isConnected) {
+            closeDashboardWidgetPopup({ restoreFocus: false });
+            return;
+        }
+
+        const { anchor, content, canvas, placement } = popup;
+        const gap = 8;
+        const viewportPadding = 12;
+        const anchorRect = anchor.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+
+        content.style.maxWidth = `calc(100vw - ${viewportPadding * 2}px)`;
+        content.style.maxHeight = `min(70vh, ${Math.max(180, window.innerHeight - viewportPadding * 2)}px)`;
+
+        const popupRect = content.getBoundingClientRect();
+        const openUpward = anchorRect.bottom + gap + popupRect.height > window.innerHeight - viewportPadding
+            && anchorRect.top - gap - popupRect.height >= viewportPadding;
+
+        let clientTop = openUpward
+            ? anchorRect.top - popupRect.height - gap
+            : anchorRect.bottom + gap;
+        let clientLeft = placement.endsWith('end')
+            ? anchorRect.right - popupRect.width
+            : anchorRect.left;
+
+        clientLeft = Math.min(
+            Math.max(clientLeft, viewportPadding),
+            Math.max(viewportPadding, window.innerWidth - popupRect.width - viewportPadding));
+        clientTop = Math.min(
+            Math.max(clientTop, viewportPadding),
+            Math.max(viewportPadding, window.innerHeight - popupRect.height - viewportPadding));
+
+        content.style.left = `${clientLeft - canvasRect.left}px`;
+        content.style.top = `${clientTop - canvasRect.top}px`;
+    }
+
+    function bindDashboardWidgetPopupEvents() {
+        document.addEventListener('pointerdown', handleDashboardWidgetPopupPointerDown, true);
+        document.addEventListener('keydown', handleDashboardWidgetPopupKeyDown, true);
+        window.addEventListener('resize', handleDashboardWidgetPopupResize, true);
+        window.addEventListener('scroll', handleDashboardWidgetPopupScroll, true);
+    }
+
+    function unbindDashboardWidgetPopupEvents() {
+        document.removeEventListener('pointerdown', handleDashboardWidgetPopupPointerDown, true);
+        document.removeEventListener('keydown', handleDashboardWidgetPopupKeyDown, true);
+        window.removeEventListener('resize', handleDashboardWidgetPopupResize, true);
+        window.removeEventListener('scroll', handleDashboardWidgetPopupScroll, true);
+    }
+
+    function handleDashboardWidgetPopupPointerDown(event) {
+        const popup = activeWidgetPopup;
+        if (!popup) {
+            return;
+        }
+
+        const target = event.target;
+        if (popup.content.contains(target) || popup.anchor.contains(target)) {
+            return;
+        }
+
+        closeDashboardWidgetPopup({ restoreFocus: false });
+    }
+
+    function handleDashboardWidgetPopupKeyDown(event) {
+        if (event.key === 'Escape' && activeWidgetPopup) {
+            closeDashboardWidgetPopup({ restoreFocus: true });
+        }
+    }
+
+    function handleDashboardWidgetPopupResize() {
+        closeDashboardWidgetPopup({ restoreFocus: false });
+    }
+
+    function handleDashboardWidgetPopupScroll(event) {
+        if (event.target instanceof Node && activeWidgetPopup?.content.contains(event.target)) {
+            return;
+        }
+
+        closeDashboardWidgetPopup({ restoreFocus: false });
+    }
+
+    window.ompDashboardWidgetPopups = {
+        open: openDashboardWidgetPopup,
+        close: closeDashboardWidgetPopup,
+        isOpenFor: isDashboardWidgetPopupOpenFor
+    };
 
     function initDashboard(root) {
         const canvas = root.querySelector('[data-dashboard-canvas]');
@@ -252,6 +472,10 @@
                 updateCanvasHeight(root, canvas, state);
                 updateDirtyState();
                 return;
+            }
+
+            if (next) {
+                closeDashboardWidgetPopup({ restoreFocus: false });
             }
 
             isEditing = next;
@@ -1713,14 +1937,59 @@
             return;
         }
 
-        bindMusicAdminTabs(panel);
-        open.addEventListener('click', () => {
-            panel.hidden = !panel.hidden;
-            open.setAttribute('aria-expanded', String(!panel.hidden));
-        });
-        close?.addEventListener('click', () => {
+        player.__ompMusicAdminPanel = panel;
+        if (!panel.id) {
+            dashboardWidgetPopupId += 1;
+            panel.id = `dashboard-music-admin-${dashboardWidgetPopupId}`;
+        }
+        open.setAttribute('aria-controls', panel.id);
+        open.setAttribute('aria-expanded', 'false');
+
+        const isPanelOpen = () => window.ompDashboardWidgetPopups?.isOpenFor?.(panel) || !panel.hidden;
+        const closePanel = (restoreFocus = false) => {
+            if (window.ompDashboardWidgetPopups?.isOpenFor?.(panel)) {
+                window.ompDashboardWidgetPopups.close({ restoreFocus });
+                return;
+            }
+
             panel.hidden = true;
             open.setAttribute('aria-expanded', 'false');
+            if (restoreFocus && open.isConnected) {
+                open.focus({ preventScroll: true });
+            }
+        };
+        const openPanel = () => {
+            const opened = window.ompDashboardWidgetPopups?.open?.({
+                anchor: open,
+                content: panel,
+                ownerWidget: player.closest('[data-dashboard-widget]'),
+                ownerWidgetId: player.closest('[data-dashboard-widget]')?.dataset?.userActiveWidgetId || '',
+                placement: 'bottom-end',
+                onClose: () => {
+                    panel.hidden = true;
+                    open.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            if (!opened) {
+                panel.hidden = false;
+                open.setAttribute('aria-expanded', 'true');
+            }
+        };
+
+        bindMusicAdminTabs(panel);
+        open.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (isPanelOpen()) {
+                closePanel(false);
+                return;
+            }
+
+            openPanel();
+        });
+        close?.addEventListener('click', (event) => {
+            event.preventDefault();
+            closePanel(true);
         });
 
         upload?.addEventListener('click', async () => {
@@ -1798,7 +2067,7 @@
     }
 
     function appendMusicAdminField(formData, player, field) {
-        const input = player.querySelector(`[data-music-admin-${field}]`);
+        const input = getMusicAdminInput(player, field);
         formData.append(field, input?.value || '');
     }
 
@@ -1831,11 +2100,16 @@
 
     function clearMusicAdminTrackFields(player) {
         ['file', 'title', 'artist', 'attribution', 'source', 'description'].forEach((field) => {
-            const input = player.querySelector(`[data-music-admin-${field}]`);
+            const input = getMusicAdminInput(player, field);
             if (input) {
                 input.value = '';
             }
         });
+    }
+
+    function getMusicAdminInput(player, field) {
+        return player.__ompMusicAdminPanel?.querySelector(`[data-music-admin-${field}]`)
+            || player.querySelector(`[data-music-admin-${field}]`);
     }
 
     async function loadBlankWidgetImages(root, force = false) {
@@ -4034,6 +4308,7 @@
     }
 
     function removeDashboardWidgetElement(widget) {
+        closeDashboardWidgetPopupForWidget(widget);
         revokeDashboardMusicPlayerObjectUrls(widget);
         revokeBlankWidgetObjectUrls(widget);
         widget.remove();

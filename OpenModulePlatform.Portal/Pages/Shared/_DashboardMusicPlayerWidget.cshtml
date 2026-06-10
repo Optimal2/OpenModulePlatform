@@ -60,7 +60,7 @@
         </label>
         @if (isPortalAdmin)
         {
-            <button type="button" class="dashboard-music-player__button" data-music-admin-open aria-label="@L["Manage music library"]" title="@L["Manage music library"]">
+            <button type="button" class="dashboard-music-player__button" data-music-admin-open aria-label="@L["Manage music library"]" title="@L["Manage music library"]" aria-expanded="false">
                 <span class="dashboard-music-player__icon dashboard-music-player__icon--library" aria-hidden="true"></span>
             </button>
         }
@@ -68,7 +68,7 @@
     <div class="dashboard-music-player__status" data-music-status>@L["Loading playlist"]</div>
     @if (isPortalAdmin)
     {
-        <div class="dashboard-music-player__admin" data-music-admin-panel hidden>
+        <div class="dashboard-music-player__admin" data-music-admin-panel role="dialog" aria-modal="false" aria-label="@L["Music library"]" hidden>
             <div class="dashboard-music-player__admin-header">
                 <strong>@L["Music library"]</strong>
                 <button type="button" class="dashboard-music-player__admin-close" data-music-admin-close aria-label="@L["Close"]"></button>
