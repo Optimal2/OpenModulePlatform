@@ -35,11 +35,7 @@
             return false;
         }
 
-        if (activeWidgetPopup?.content === content) {
-            closeDashboardWidgetPopup({ restoreFocus: false });
-        } else {
-            closeDashboardWidgetPopup({ restoreFocus: false });
-        }
+        closeDashboardWidgetPopup({ restoreFocus: false });
 
         const placeholder = document.createComment('dashboard-widget-popup-placeholder');
         const originalParent = content.parentNode;
@@ -364,7 +360,8 @@
             savedSignature: '',
             editCanvasWidth: 0,
             editCanvasHeight: 0,
-            draftWriteTimer: 0
+            draftWriteTimer: 0,
+            draftWriteSequence: 0
         };
         const updateDirtyState = () => {
             const isDirty = updateDashboardDirtyState(root, canvas, state, saveButton);
@@ -1754,7 +1751,16 @@
             shuffle: false,
             loop: false,
             seeking: false,
-            errorAdvanceTimer: null
+            errorAdvanceTimer: null,
+            errorAdvanceToken: 0
+        };
+
+        const cancelErrorAdvance = () => {
+            state.errorAdvanceToken += 1;
+            if (state.errorAdvanceTimer) {
+                window.clearTimeout(state.errorAdvanceTimer);
+                state.errorAdvanceTimer = null;
+            }
         };
 
         const setStatus = (message) => {
@@ -1800,10 +1806,7 @@
         };
 
         const setTrack = (index, autoplay = false) => {
-            if (state.errorAdvanceTimer) {
-                window.clearTimeout(state.errorAdvanceTimer);
-                state.errorAdvanceTimer = null;
-            }
+            cancelErrorAdvance();
 
             if (state.tracks.length === 0) {
                 audio.removeAttribute('src');
@@ -1910,11 +1913,14 @@
                 return;
             }
 
-            if (state.errorAdvanceTimer) {
-                window.clearTimeout(state.errorAdvanceTimer);
-            }
+            cancelErrorAdvance();
 
+            const errorAdvanceToken = state.errorAdvanceToken;
             state.errorAdvanceTimer = window.setTimeout(() => {
+                if (state.errorAdvanceToken !== errorAdvanceToken) {
+                    return;
+                }
+
                 state.errorAdvanceTimer = null;
                 const track = state.tracks[state.index];
                 const currentSource = audio.currentSrc || audio.src;
@@ -3393,9 +3399,20 @@
             window.clearTimeout(state.draftWriteTimer);
         }
 
+        state.draftWriteSequence += 1;
+        const draftWriteSequence = state.draftWriteSequence;
         state.draftWriteTimer = window.setTimeout(() => {
-            state.draftWriteTimer = 0;
-            writeDashboardDraft(root, canvas, state);
+            if (state.draftWriteSequence !== draftWriteSequence) {
+                return;
+            }
+
+            try {
+                writeDashboardDraft(root, canvas, state);
+            } finally {
+                if (state.draftWriteSequence === draftWriteSequence) {
+                    state.draftWriteTimer = 0;
+                }
+            }
         }, dashboardDraftWriteDelayMs);
     }
 
@@ -3446,6 +3463,9 @@
         if (state?.draftWriteTimer) {
             window.clearTimeout(state.draftWriteTimer);
             state.draftWriteTimer = 0;
+        }
+        if (state) {
+            state.draftWriteSequence += 1;
         }
 
         const key = getDashboardDraftStorageKey(root);
@@ -4734,6 +4754,8 @@
             return window.CSS.escape(value);
         }
 
+        // Prefer the native CSS.escape API. This spec-style fallback is kept for
+        // older embedded browsers because dashboard ids are interpolated into selectors.
         const text = String(value);
         const length = text.length;
         const firstCodeUnit = text.charCodeAt(0);
