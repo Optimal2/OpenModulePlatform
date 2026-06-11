@@ -653,7 +653,10 @@ ORDER BY m.message_id DESC;";
 
         if (normalizedAttachments.Length > MaxAttachmentCount)
         {
-            throw new InvalidOperationException($"A message can include at most {MaxAttachmentCount} attachments.");
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"A message can include at most {MaxAttachmentCount} attachments."));
         }
 
         var maxAttachmentBytes = await GetMaxAttachmentBytesAsync(ct);
@@ -1139,7 +1142,9 @@ VALUES
             throw new ArgumentOutOfRangeException(
                 nameof(messageIds),
                 messageIds.Count,
-                $"Message attachment batches are limited to {MaxMessageBatchSize.ToString(CultureInfo.InvariantCulture)} messages.");
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Message attachment batches are limited to {MaxMessageBatchSize} messages."));
         }
 
         // The dynamic SQL below only contains generated parameter names for a bounded batch size.
@@ -1258,7 +1263,9 @@ ORDER BY a.message_id, a.attachment_id;";
         if (file.Length > maxAttachmentBytes)
         {
             throw new InvalidOperationException(
-                $"Attachment file is too large. The current limit is {FormatByteSize(maxAttachmentBytes)}.");
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Attachment file is too large. The current limit is {FormatByteSize(maxAttachmentBytes)}."));
         }
 
         var contentType = CleanOptional(file.ContentType, 128) ?? "application/octet-stream";
