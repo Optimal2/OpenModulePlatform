@@ -4380,6 +4380,13 @@ a.dashboard-role-list__item:focus-visible {
     transform: translateY(0) scaleY(1);
 }
 
+.dashboard-edit-menu__save-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: stretch;
+}
+
 .dashboard-floating-button {
     display: inline-flex;
     align-items: center;
@@ -4445,11 +4452,27 @@ a.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-save-button:hover,
-.dashboard-save-button:focus-visible,
-.dashboard-reset-changes-button:hover,
-.dashboard-reset-changes-button:focus-visible {
+.dashboard-save-button:focus-visible {
     border-color: var(--border-strong);
     background: var(--surface);
+    outline: none;
+}
+
+.dashboard-reset-changes-button {
+    justify-content: center;
+    width: 38px;
+    min-width: 38px;
+    padding: 8px;
+    border-color: rgba(245, 158, 11, 0.9);
+    background: #f59e0b;
+    color: #ffffff;
+}
+
+.dashboard-reset-changes-button:hover,
+.dashboard-reset-changes-button:focus-visible {
+    border-color: #d97706;
+    background: #d97706;
+    color: #ffffff;
     outline: none;
 }
 
