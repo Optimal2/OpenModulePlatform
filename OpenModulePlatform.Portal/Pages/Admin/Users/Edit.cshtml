@@ -80,6 +80,43 @@
     </form>
 
     <section class="card section-card bottom-gap">
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h3>@L["Roles"]</h3>
+        <p class="muted">@ompBranding.ApplyPlatformName(L["Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here."].Value)</p>
+
+        @if (Model.UserRow.Roles.Count == 0)
+        {
+            <div class="empty-state top-gap">@L["No roles are assigned directly to this user."]</div>
+        }
+        else
+        {
+            <table class="grid compact-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Role"]</th>
+                        <th>@L["Source"]</th>
+                        <th>@L["Principal"]</th>
+                        <th>@L["Description"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var role in Model.UserRow.Roles)
+                    {
+                        <tr>
+                            <td>
+                                <a href="~/admin/security/role?roleId=@role.RoleId">@role.Name</a>
+                            </td>
+                            <td>@Model.RoleSourceText(role)</td>
+                            <td><code>@role.Principal</code></td>
+                            <td>@(string.IsNullOrWhiteSpace(role.Description) ? L["None"] : role.Description)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="card section-card bottom-gap">
         <div class="eyebrow">@ompBranding.PortalName</div>
         <h3>@ompBranding.ApplyTerms(L["Portal settings"].Value)</h3>
         <p class="muted">@ompBranding.ApplyTerms(L["Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user."].Value)</p>

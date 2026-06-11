@@ -120,6 +120,7 @@ WHERE user_id = @user_id;";
         }
 
         user.AuthLinks.AddRange(await GetAuthLinksAsync(conn, userId, ct));
+        user.Roles.AddRange(await GetUserRolesAsync(conn, userId, ct));
         user.MigratableAdUserRoleAssignmentCount = await GetMigratableAdUserRoleAssignmentCountAsync(conn, userId, ct);
         return user;
     }
@@ -534,6 +535,79 @@ ORDER BY ap.display_name,
                 ProviderUserKey = rdr.GetString(2),
                 CreatedAt = rdr.GetDateTime(3),
                 LastUsedAt = rdr.IsDBNull(4) ? null : rdr.GetDateTime(4)
+            });
+        }
+
+        return rows;
+    }
+
+    private static async Task<IReadOnlyList<OmpUserRoleRow>> GetUserRolesAsync(
+        SqlConnection conn,
+        int userId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @OmpUserPrincipal nvarchar(256) = CONVERT(nvarchar(20), @user_id);
+
+WITH AdProviderKeys(Principal) AS
+(
+    SELECT DISTINCT CONVERT(nvarchar(256), ua.provider_user_key)
+    FROM omp.user_auth ua
+    INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+    WHERE ua.user_id = @user_id
+      AND ap.display_name = @provider_display_name
+      AND LTRIM(RTRIM(ua.provider_user_key)) <> N''
+      AND LEN(ua.provider_user_key) <= 256
+    UNION
+    SELECT DISTINCT CONVERT(nvarchar(256), SUBSTRING(ua.provider_user_key, 6, LEN(ua.provider_user_key)))
+    FROM omp.user_auth ua
+    INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+    WHERE ua.user_id = @user_id
+      AND ap.display_name = @provider_display_name
+      AND ua.provider_user_key LIKE N'name:%'
+      AND LTRIM(RTRIM(SUBSTRING(ua.provider_user_key, 6, LEN(ua.provider_user_key)))) <> N''
+      AND LEN(SUBSTRING(ua.provider_user_key, 6, LEN(ua.provider_user_key))) <= 256
+    UNION
+    SELECT DISTINCT CONVERT(nvarchar(256), SUBSTRING(ua.provider_user_key, 5, LEN(ua.provider_user_key)))
+    FROM omp.user_auth ua
+    INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+    WHERE ua.user_id = @user_id
+      AND ap.display_name = @provider_display_name
+      AND ua.provider_user_key LIKE N'sid:%'
+      AND LTRIM(RTRIM(SUBSTRING(ua.provider_user_key, 5, LEN(ua.provider_user_key)))) <> N''
+      AND LEN(SUBSTRING(ua.provider_user_key, 5, LEN(ua.provider_user_key))) <= 256
+)
+SELECT DISTINCT
+       r.RoleId,
+       r.Name,
+       r.Description,
+       rp.PrincipalType,
+       rp.Principal
+FROM omp.RolePrincipals rp
+INNER JOIN omp.Roles r ON r.RoleId = rp.RoleId
+WHERE (rp.PrincipalType = N'OmpUser' AND rp.Principal = @OmpUserPrincipal)
+   OR (rp.PrincipalType = N'ADUser' AND rp.Principal IN (SELECT Principal FROM AdProviderKeys))
+ORDER BY r.Name,
+         r.RoleId,
+         rp.PrincipalType,
+         rp.Principal;";
+
+        var rows = new List<OmpUserRoleRow>();
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@user_id", userId);
+        Add(cmd, "@provider_display_name", AdProviderDisplayName);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new OmpUserRoleRow
+            {
+                RoleId = rdr.GetInt32(0),
+                Name = rdr.GetString(1),
+                Description = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                PrincipalType = rdr.GetString(3),
+                Principal = rdr.GetString(4)
             });
         }
 
@@ -1030,6 +1104,8 @@ public sealed class OmpUserDetail
 
     public List<OmpUserAuthLinkRow> AuthLinks { get; } = [];
 
+    public List<OmpUserRoleRow> Roles { get; } = [];
+
     public int MigratableAdUserRoleAssignmentCount { get; set; }
 }
 
@@ -1046,6 +1122,19 @@ public sealed class OmpUserAuthLinkRow
     public DateTime CreatedAt { get; set; }
 
     public DateTime? LastUsedAt { get; set; }
+}
+
+public sealed class OmpUserRoleRow
+{
+    public int RoleId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
+    public string PrincipalType { get; set; } = string.Empty;
+
+    public string Principal { get; set; } = string.Empty;
 }
 
 public sealed class OmpUserEditData

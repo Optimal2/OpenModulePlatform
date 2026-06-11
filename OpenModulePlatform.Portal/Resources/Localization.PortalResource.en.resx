@@ -894,4 +894,9 @@
   <data name="Recent web app operations" xml:space="preserve"><value>Recent web app operations</value></data>
   <data name="OMP account creation is disabled." xml:space="preserve"><value>OMP account creation is disabled.</value></data>
   <data name="You are signed in with Windows/AD, but creating your own OMP account is disabled for this installation." xml:space="preserve"><value>You are signed in with Windows/AD, but creating your own OMP account is disabled for this installation.</value></data>
+  <data name="This sign-in is not eligible to create an OMP account automatically. Contact an administrator if you need an OMP account." xml:space="preserve"><value>This sign-in is not eligible to create an OMP account automatically. Contact an administrator if you need an OMP account.</value></data>
+  <data name="Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here." xml:space="preserve"><value>Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here.</value></data>
+  <data name="No roles are assigned directly to this user." xml:space="preserve"><value>No roles are assigned directly to this user.</value></data>
+  <data name="Source" xml:space="preserve"><value>Source</value></data>
+  <data name="Linked AD account" xml:space="preserve"><value>Linked AD account</value></data>
 </root>

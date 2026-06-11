@@ -461,6 +461,13 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             ? row.DefaultIntValue?.ToString(CultureInfo.InvariantCulture) ?? T("None")
             : ValuePreview(row.DefaultStringValue);
 
+    public string RoleSourceText(OmpUserRoleRow row)
+        => string.Equals(row.PrincipalType, "OmpUser", StringComparison.OrdinalIgnoreCase)
+            ? T("OMP user")
+            : string.Equals(row.PrincipalType, "ADUser", StringComparison.OrdinalIgnoreCase)
+                ? T("Linked AD account")
+                : row.PrincipalType;
+
     private async Task<bool> LoadAsync(int userId, CancellationToken ct)
     {
         UserRow = await _repo.GetUserAsync(userId, ct);
