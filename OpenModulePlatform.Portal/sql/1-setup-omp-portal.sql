@@ -1024,6 +1024,7 @@ BEGIN
     USING
     (
         VALUES
+            (N'messages', N'enabled', N'Controls whether the OMP messages feature is available globally.', 90, CONVERT(bit, 1)),
             (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1)),
             (N'portal', N'notificationToastsEnabled', N'Controls whether Portal notification and message toast polling and display are enabled globally.', 100, CONVERT(bit, 1))
     ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
@@ -1048,6 +1049,7 @@ BEGIN
         INNER JOIN
         (
             VALUES
+                (N'messages', N'enabled', N'true'),
                 (N'messages', N'attachmentMaxBytes', N'5242880'),
                 (N'portal', N'notificationToastsEnabled', N'true')
         ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)

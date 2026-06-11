@@ -42,6 +42,8 @@ public sealed class NewModel : OmpSecurePageModel<PortalResource>
 
     public bool CanUseMessages { get; private set; }
 
+    public bool MessagesDisabled { get; private set; }
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         SetTitles("New conversation");
@@ -56,6 +58,11 @@ public sealed class NewModel : OmpSecurePageModel<PortalResource>
         if (!TryGetCurrentUserId(out var userId))
         {
             return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
         }
 
         if (DirectUserId <= 0)
@@ -87,6 +94,11 @@ public sealed class NewModel : OmpSecurePageModel<PortalResource>
             return Forbid();
         }
 
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
         if (GroupUserIds.Length == 0)
         {
             ModelState.AddModelError(nameof(GroupUserIds), T("Select users."));
@@ -109,6 +121,14 @@ public sealed class NewModel : OmpSecurePageModel<PortalResource>
 
     private async Task LoadAsync(CancellationToken ct)
     {
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            MessagesDisabled = true;
+            CanUseMessages = false;
+            Users = [];
+            return;
+        }
+
         if (!TryGetCurrentUserId(out var userId))
         {
             CanUseMessages = false;

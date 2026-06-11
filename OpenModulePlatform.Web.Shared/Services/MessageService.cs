@@ -19,6 +19,7 @@ public sealed class MessageService
     private const long MaxConfiguredAttachmentBytes = 100 * 1024 * 1024;
     private const int MaxFileNameLength = 260;
     public const string ConfigurationCategory = "messages";
+    public const string EnabledSetting = "enabled";
     public const string AttachmentMaxBytesSetting = "attachmentMaxBytes";
     public const string MarkAllReadPath = "/messages/mark-all-read";
 
@@ -48,9 +49,22 @@ public sealed class MessageService
         return await MessagesTablesExistAsync(conn, ct);
     }
 
+    public async Task<bool> IsEnabledAsync(CancellationToken ct)
+    {
+        var value = await _configuration.GetGlobalStringAsync(
+            ConfigurationCategory,
+            EnabledSetting,
+            ct);
+
+        return ParseEnabled(value);
+    }
+
+    public static bool ParseEnabled(string? value)
+        => !bool.TryParse(value, out var enabled) || enabled;
+
     public async Task<int> GetUnreadMessageCountAsync(int userId, CancellationToken ct)
     {
-        if (userId <= 0)
+        if (userId <= 0 || !await IsEnabledAsync(ct))
         {
             return 0;
         }
@@ -84,7 +98,7 @@ WHERE cp.user_id = @user_id
         int limit,
         CancellationToken ct)
     {
-        if (userId <= 0)
+        if (userId <= 0 || !await IsEnabledAsync(ct))
         {
             return new MessageToastSummary(0, 0, 0, []);
         }
@@ -186,7 +200,7 @@ ORDER BY m.message_id DESC;";
         CancellationToken ct,
         int? limit = null)
     {
-        if (userId <= 0)
+        if (userId <= 0 || !await IsEnabledAsync(ct))
         {
             return [];
         }
@@ -302,7 +316,7 @@ ORDER BY COALESCE(c.last_message_at, c.updated_at, c.created_at) DESC,
         long conversationId,
         CancellationToken ct)
     {
-        if (userId <= 0 || conversationId <= 0)
+        if (userId <= 0 || conversationId <= 0 || !await IsEnabledAsync(ct))
         {
             return null;
         }
@@ -387,6 +401,8 @@ WHERE c.conversation_id = @conversation_id;";
             throw new ArgumentException("Direct conversations require two distinct OMP users.");
         }
 
+        await RequireEnabledAsync(ct);
+
         var low = Math.Min(userA, userB);
         var high = Math.Max(userA, userB);
 
@@ -463,6 +479,8 @@ VALUES(@low, @high, @conversation_id);";
             throw new ArgumentOutOfRangeException(nameof(createdByUserId));
         }
 
+        await RequireEnabledAsync(ct);
+
         var participants = participantUserIds
             .Append(createdByUserId)
             .Where(userId => userId > 0)
@@ -521,7 +539,7 @@ VALUES(@low, @high, @conversation_id);";
         long? beforeMessageId,
         CancellationToken ct)
     {
-        if (userId <= 0 || conversationId <= 0 || limit <= 0)
+        if (userId <= 0 || conversationId <= 0 || limit <= 0 || !await IsEnabledAsync(ct))
         {
             return [];
         }
@@ -600,6 +618,8 @@ ORDER BY m.message_id DESC;";
         {
             throw new ArgumentOutOfRangeException(nameof(userId));
         }
+
+        await RequireEnabledAsync(ct);
 
         var cleanedContent = CleanOptional(content, maxLength: 4000);
         var normalizedAttachments = attachments
@@ -683,7 +703,7 @@ WHERE conversation_id = @conversation_id;";
 
     public async Task MarkConversationReadAsync(int userId, long conversationId, CancellationToken ct)
     {
-        if (userId <= 0 || conversationId <= 0)
+        if (userId <= 0 || conversationId <= 0 || !await IsEnabledAsync(ct))
         {
             return;
         }
@@ -718,7 +738,7 @@ WHERE cp.conversation_id = @conversation_id
 
     public async Task<int> MarkAllConversationsReadAsync(int userId, CancellationToken ct)
     {
-        if (userId <= 0)
+        if (userId <= 0 || !await IsEnabledAsync(ct))
         {
             return 0;
         }
@@ -820,7 +840,7 @@ WHERE cp.user_id = @user_id
         int limit,
         CancellationToken ct)
     {
-        if (currentUserId <= 0)
+        if (currentUserId <= 0 || !await IsEnabledAsync(ct))
         {
             return [];
         }
@@ -871,7 +891,7 @@ ORDER BY display_name,
         long attachmentId,
         CancellationToken ct)
     {
-        if (userId <= 0 || conversationId <= 0 || attachmentId <= 0)
+        if (userId <= 0 || conversationId <= 0 || attachmentId <= 0 || !await IsEnabledAsync(ct))
         {
             return null;
         }
@@ -1129,6 +1149,14 @@ ORDER BY attachment_id;";
         }
 
         return Math.Clamp(configuredBytes, MinConfiguredAttachmentBytes, MaxConfiguredAttachmentBytes);
+    }
+
+    private async Task RequireEnabledAsync(CancellationToken ct)
+    {
+        if (!await IsEnabledAsync(ct))
+        {
+            throw new InvalidOperationException("OMP messages are disabled.");
+        }
     }
 
     private static void ValidateAttachment(IFormFile file, long maxAttachmentBytes)

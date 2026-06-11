@@ -2365,6 +2365,7 @@
   <data name="Latest chats" xml:space="preserve"><value>Senaste chattar</value></data>
   <data name="Unread messages" xml:space="preserve"><value>Olästa meddelanden</value></data>
   <data name="Messages require an OMP user" xml:space="preserve"><value>Meddelanden kräver en OMP-användare</value></data>
+  <data name="Messages are disabled" xml:space="preserve"><value>Meddelanden är avstängda</value></data>
   <data name="Conversation" xml:space="preserve"><value>Konversation</value></data>
   <data name="Participants" xml:space="preserve"><value>Deltagare</value></data>
   <data name="Direct messages" xml:space="preserve"><value>Direktmeddelanden</value></data>

@@ -389,6 +389,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             ? resolvedUserId
             : (int?)null;
         CanEditDashboard = userId.HasValue;
+        var messagesEnabled = await _messages.IsEnabledAsync(ct);
 
         if (IsPortalAdmin)
         {
@@ -401,13 +402,19 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             var preferences = await _dashboard.GetPreferencesAsync(userId.Value, ct);
             DashboardAlignToGrid = preferences.AlignToGrid;
             DashboardExpandedCanvas = preferences.ExpandedCanvas;
-            ActiveWidgets = await _dashboard.GetActiveWidgetsAsync(userId.Value, roleIds, permissions, ct);
-            AvailableWidgets = await _dashboard.GetAvailableWidgetsAsync(roleIds, permissions, ct);
+            ActiveWidgets = FilterMessageWidgets(
+                await _dashboard.GetActiveWidgetsAsync(userId.Value, roleIds, permissions, ct),
+                messagesEnabled);
+            AvailableWidgets = FilterMessageWidgets(
+                await _dashboard.GetAvailableWidgetsAsync(roleIds, permissions, ct),
+                messagesEnabled);
             AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId.Value, permissions, includeHidden: false, ct);
             FavoritePortalEntries = await _portalEntries.GetNavigationFavoriteEntriesAsync(Request, userId.Value, permissions, ct);
             ContentPages = await _dashboard.GetReadableContentPagesAsync(Request, roleIds, permissions, ct);
             DashboardNotifications = await _notifications.GetRecentForUserAsync(userId.Value, 20, ct);
-            DashboardMessageConversations = await GetDashboardMessageConversationsAsync(userId.Value, ct);
+            DashboardMessageConversations = messagesEnabled
+                ? await GetDashboardMessageConversationsAsync(userId.Value, ct)
+                : [];
             NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
             NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
             LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
@@ -429,6 +436,24 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             EArkivCheckerWidget = new DashboardEArkivCheckerWidget("/earkivchecker", 0, 0, null, []);
         }
     }
+
+    private static IReadOnlyList<DashboardActiveWidget> FilterMessageWidgets(
+        IReadOnlyList<DashboardActiveWidget> widgets,
+        bool messagesEnabled)
+        => messagesEnabled
+            ? widgets
+            : widgets
+                .Where(widget => !string.Equals(widget.Payload, "message-conversations", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+    private static IReadOnlyList<DashboardWidgetDefinition> FilterMessageWidgets(
+        IReadOnlyList<DashboardWidgetDefinition> widgets,
+        bool messagesEnabled)
+        => messagesEnabled
+            ? widgets
+            : widgets
+                .Where(widget => !string.Equals(widget.Payload, "message-conversations", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
 
     private async Task<IReadOnlyList<DashboardMessageConversationLink>> GetDashboardMessageConversationsAsync(
         int userId,

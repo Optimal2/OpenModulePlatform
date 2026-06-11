@@ -692,6 +692,7 @@
   <data name="Latest chats" xml:space="preserve"><value>Latest chats</value></data>
   <data name="Unread messages" xml:space="preserve"><value>Unread messages</value></data>
   <data name="Messages require an OMP user" xml:space="preserve"><value>Messages require an OMP user</value></data>
+  <data name="Messages are disabled" xml:space="preserve"><value>Messages are disabled</value></data>
   <data name="Conversation" xml:space="preserve"><value>Conversation</value></data>
   <data name="Participants" xml:space="preserve"><value>Participants</value></data>
   <data name="Direct messages" xml:space="preserve"><value>Direct messages</value></data>

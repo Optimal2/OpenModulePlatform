@@ -19,7 +19,7 @@
 @if (!Model.CanUseMessages)
 {
     <section class="card top-gap">
-        <div class="empty-state">@L["Messages require an OMP user"]</div>
+        <div class="empty-state">@(Model.MessagesDisabled ? L["Messages are disabled"].Value : L["Messages require an OMP user"].Value)</div>
     </section>
 }
 else if (Model.Rows.Count == 0)
