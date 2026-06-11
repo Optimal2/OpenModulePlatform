@@ -113,8 +113,10 @@ refresh. A disabled linked OMP user still blocks sign-in and is never bypassed
 by auto-provisioning. `AutoIfAuthenticated` creates and links an OMP user for a
 successful AD sign-in when the identity is allowed to receive the built-in
 `AuthenticatedUsers` principal according to
-`rbac/authenticatedUsersWindowsDomains`. The legacy
-`AutomaticForAuthorizedUsers` value is accepted as an alias for `AutoIfRole`.
+`rbac/authenticatedUsersWindowsDomains`. `IfRole` is accepted as an alias for
+`AutoIfRole`, `IfAuthenticated` is accepted as an alias for
+`AutoIfAuthenticated`, and the legacy `AutomaticForAuthorizedUsers` value is
+accepted as an alias for `AutoIfRole`.
 
 ## User Settings
 
@@ -192,7 +194,8 @@ prefixes from `DOMAIN\User` style principals. Empty or `*` accepts any
 authenticated principal.
 
 `auth/externalUserProvisioningMode` accepts `Manual`, `AutoIfRole`, and
-`AutoIfAuthenticated`. Invalid or missing values are treated as `Manual` by the
+`AutoIfAuthenticated`. `IfRole` and `IfAuthenticated` are accepted as shorter
+aliases. Invalid or missing values are treated as `Manual` by the
 Auth app.
 
 ## Request Flow
