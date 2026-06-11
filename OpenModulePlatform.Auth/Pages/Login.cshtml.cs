@@ -15,6 +15,8 @@ namespace OpenModulePlatform.Auth.Pages;
 [AllowAnonymous]
 public sealed class LoginModel : PageModel
 {
+    private static readonly char[] ReturnUrlPathTerminators = ['?', '#'];
+
     private readonly OmpAuthRepository _repository;
     private readonly OmpBrandingService _brandingService;
     private readonly WindowsPasswordAuthenticator _windowsPasswordAuthenticator;
@@ -262,7 +264,7 @@ public sealed class LoginModel : PageModel
 
     private static string ExtractPath(string returnUrl)
     {
-        var queryIndex = returnUrl.IndexOfAny(new[] { '?', '#' });
+        var queryIndex = returnUrl.IndexOfAny(ReturnUrlPathTerminators);
         return queryIndex >= 0 ? returnUrl[..queryIndex] : returnUrl;
     }
 

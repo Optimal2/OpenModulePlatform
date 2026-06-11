@@ -665,10 +665,10 @@ SELECT @@ROWCOUNT;";
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var newCmd = new SqlCommand(sql, conn);
-        newCmd.CommandTimeout = ArtifactRetentionCommandTimeoutSeconds;
-        Add(newCmd, "@MaxVersionsToKeep", maxVersionsToKeep);
-        return await ReadArtifactRetentionCandidatesAsync(newCmd, ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.CommandTimeout = ArtifactRetentionCommandTimeoutSeconds;
+        Add(cmd, "@MaxVersionsToKeep", maxVersionsToKeep);
+        return await ReadArtifactRetentionCandidatesAsync(cmd, ct);
     }
 
     private static async Task<IReadOnlyList<ArtifactRetentionCandidateRow>> ReadArtifactRetentionCandidatesAsync(
