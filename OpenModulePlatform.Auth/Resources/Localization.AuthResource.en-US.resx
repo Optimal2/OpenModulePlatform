@@ -17,14 +17,25 @@
   <data name="Local password" xml:space="preserve"><value>Local password</value></data>
   <data name="User name" xml:space="preserve"><value>User name</value></data>
   <data name="Password" xml:space="preserve"><value>Password</value></data>
+  <data name="Confirm password" xml:space="preserve"><value>Confirm password</value></data>
   <data name="Sign in with local password" xml:space="preserve"><value>Sign in with local password</value></data>
+  <data name="Create account" xml:space="preserve"><value>Create account</value></data>
+  <data name="Create a local OMP account with a user name and password." xml:space="preserve"><value>Create a local OMP account with a user name and password.</value></data>
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Windows sign-in could not be resolved." xml:space="preserve"><value>Windows sign-in could not be resolved.</value></data>
   <data name="Alternate Windows sign-in is not available on this host." xml:space="preserve"><value>Alternate Windows sign-in is not available on this host.</value></data>
   <data name="Enter a user name and password." xml:space="preserve"><value>Enter a user name and password.</value></data>
+  <data name="Enter a user name." xml:space="preserve"><value>Enter a user name.</value></data>
+  <data name="User name must be 256 characters or fewer." xml:space="preserve"><value>User name must be 256 characters or fewer.</value></data>
+  <data name="User name is already in use." xml:space="preserve"><value>User name is already in use.</value></data>
+  <data name="Password is required." xml:space="preserve"><value>Password is required.</value></data>
+  <data name="Password must be at least 8 characters." xml:space="preserve"><value>Password must be at least 8 characters.</value></data>
+  <data name="Password and confirmation password do not match." xml:space="preserve"><value>Password and confirmation password do not match.</value></data>
   <data name="The user name or password is incorrect." xml:space="preserve"><value>The user name or password is incorrect.</value></data>
   <data name="Enter a Windows account name and password." xml:space="preserve"><value>Enter a Windows account name and password.</value></data>
   <data name="Windows credentials could not be validated." xml:space="preserve"><value>Windows credentials could not be validated.</value></data>
+  <data name="Local password sign-in is disabled." xml:space="preserve"><value>Local password sign-in is disabled.</value></data>
   <data name="The local password account is not linked to an OMP user." xml:space="preserve"><value>The local password account is not linked to an OMP user.</value></data>
   <data name="The linked OMP user is disabled." xml:space="preserve"><value>The linked OMP user is disabled.</value></data>
+  <data name="The OMP user account could not be created." xml:space="preserve"><value>The OMP user account could not be created.</value></data>
 </root>

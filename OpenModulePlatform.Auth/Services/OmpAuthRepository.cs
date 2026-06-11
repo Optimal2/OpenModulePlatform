@@ -209,6 +209,85 @@ public sealed class OmpAuthRepository
         }, null);
     }
 
+    public async Task<(OmpAuthenticatedUser? User, string? Error)> CreateLocalPasswordUserAsync(
+        string userName,
+        string password,
+        CancellationToken ct)
+    {
+        var displayName = CreateLocalDisplayName(userName);
+        var normalizedUserName = NormalizeLocalUserName(userName);
+        if (string.IsNullOrWhiteSpace(normalizedUserName))
+        {
+            return (null, "Enter a user name.");
+        }
+
+        if (normalizedUserName.Length > 256)
+        {
+            return (null, "User name must be 256 characters or fewer.");
+        }
+
+        if (string.IsNullOrEmpty(password))
+        {
+            return (null, "Password is required.");
+        }
+
+        if (password.Length < 8)
+        {
+            return (null, "Password must be at least 8 characters.");
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var provider = await EnsureProviderAsync(conn, LocalPasswordIdentity.ProviderDisplayName, ct);
+        if (provider is null)
+        {
+            return (null, "Local password sign-in is disabled.");
+        }
+
+        var passwordHash = _passwordHasher.Hash(password);
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            if (await LocalPasswordUserExistsAsync(conn, tx, normalizedUserName, ct) ||
+                await TryResolveLinkedUserAsync(conn, tx, provider.Value.ProviderId, [normalizedUserName, "name:" + normalizedUserName], ct) is not null)
+            {
+                await tx.RollbackAsync(ct);
+                return (null, "User name is already in use.");
+            }
+
+            var userId = await InsertActiveUserWithLastLoginAsync(conn, tx, displayName, ct);
+            await InsertLocalPasswordUserAsync(conn, tx, normalizedUserName, passwordHash, ct);
+            await InsertAuthLinkAsync(conn, tx, userId, provider.Value.ProviderId, normalizedUserName, ct);
+
+            await tx.CommitAsync(ct);
+
+            return (new OmpAuthenticatedUser
+            {
+                UserId = userId,
+                DisplayName = displayName,
+                Provider = LocalPasswordIdentity.ProviderDisplayName,
+                ProviderUserKey = normalizedUserName,
+                RolePrincipals =
+                [
+                    ("OmpUser", userId.ToString(CultureInfo.InvariantCulture)),
+                    ("LocalUser", normalizedUserName)
+                ]
+            }, null);
+        }
+        catch (SqlException ex) when (ex.Number is 2601 or 2627)
+        {
+            await tx.RollbackAsync(ct);
+            return (null, "User name is already in use.");
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     private static string NormalizeLocalUserName(string userName)
         => LocalPasswordIdentity.NormalizeUserName(userName);
 
@@ -488,10 +567,10 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             }
 
             var displayName = CreateAutoProvisionedDisplayName(userName);
-            var userId = await InsertAutoProvisionedUserAsync(conn, tx, displayName, ct);
+            var userId = await InsertActiveUserWithLastLoginAsync(conn, tx, displayName, ct);
             foreach (var key in keys)
             {
-                await InsertAutoProvisionedAuthLinkAsync(conn, tx, userId, providerId, key, ct);
+                await InsertAuthLinkAsync(conn, tx, userId, providerId, key, ct);
             }
 
             await tx.CommitAsync(ct);
@@ -533,7 +612,7 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             : displayName[..DisplayNameMaxLength];
     }
 
-    private static async Task<int> InsertAutoProvisionedUserAsync(
+    private static async Task<int> InsertActiveUserWithLastLoginAsync(
         SqlConnection conn,
         SqlTransaction tx,
         string displayName,
@@ -552,7 +631,7 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
-    private static async Task InsertAutoProvisionedAuthLinkAsync(
+    private static async Task InsertAuthLinkAsync(
         SqlConnection conn,
         SqlTransaction tx,
         int userId,
@@ -572,6 +651,40 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), SYSUTCDATET
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    private static async Task<bool> LocalPasswordUserExistsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string userName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.auth_provider_lpwd
+WHERE user_name = @user_name;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.AddWithValue("@user_name", userName);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture) > 0;
+    }
+
+    private static async Task InsertLocalPasswordUserAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string userName,
+        string passwordHash,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.auth_provider_lpwd(user_name, password_hash)
+VALUES(@user_name, @password_hash);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.AddWithValue("@user_name", userName);
+        cmd.Parameters.AddWithValue("@password_hash", passwordHash);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task<string?> GetLocalPasswordHashAsync(
         SqlConnection conn,
         string userName,
@@ -586,6 +699,17 @@ WHERE user_name = @user_name;";
         cmd.Parameters.AddWithValue("@user_name", userName);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result as string;
+    }
+
+    private static string CreateLocalDisplayName(string userName)
+    {
+        var displayName = string.IsNullOrWhiteSpace(userName)
+            ? "Local user"
+            : userName.Trim();
+
+        return displayName.Length <= DisplayNameMaxLength
+            ? displayName
+            : displayName[..DisplayNameMaxLength];
     }
 
     private static async Task<IReadOnlyList<string>> GetMappedAdGroupPrincipalsAsync(

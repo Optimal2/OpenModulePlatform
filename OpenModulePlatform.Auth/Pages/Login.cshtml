@@ -87,6 +87,27 @@
                         </div>
                         <button type="submit">@L["Sign in with local password"]</button>
                     </form>
+
+                    <form method="post" asp-page-handler="Register" class="stack divider">
+                        <input type="hidden" asp-for="ReturnUrl" />
+                        <div>
+                            <h2 style="margin: 0 0 .35rem; font-size: 1.1rem;">@L["Create account"]</h2>
+                            <p class="muted" style="margin: 0;">@L["Create a local OMP account with a user name and password."]</p>
+                        </div>
+                        <div>
+                            <label asp-for="RegisterUserName">@L["User name"]</label>
+                            <input asp-for="RegisterUserName" autocomplete="username" />
+                        </div>
+                        <div>
+                            <label asp-for="RegisterPassword">@L["Password"]</label>
+                            <input asp-for="RegisterPassword" type="password" value="" autocomplete="new-password" />
+                        </div>
+                        <div>
+                            <label asp-for="RegisterConfirmPassword">@L["Confirm password"]</label>
+                            <input asp-for="RegisterConfirmPassword" type="password" value="" autocomplete="new-password" />
+                        </div>
+                        <button type="submit">@L["Create account"]</button>
+                    </form>
                 </div>
             </details>
 
