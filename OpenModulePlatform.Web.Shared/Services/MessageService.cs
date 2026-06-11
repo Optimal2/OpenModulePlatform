@@ -18,6 +18,7 @@ public sealed class MessageService
     private const long MinConfiguredAttachmentBytes = 1024;
     private const long MaxConfiguredAttachmentBytes = 100 * 1024 * 1024;
     private const int MaxFileNameLength = 260;
+    private const int MaxPreviewLength = 160;
     private const string AttachmentHandlerName = "Attachment";
     public const string ConfigurationCategory = "messages";
     public const string EnabledSetting = "enabled";
@@ -597,11 +598,21 @@ ORDER BY m.message_id DESC;";
         }
 
         rows.Reverse();
+        var attachmentsByMessageId = await GetAttachmentsForMessagesAsync(
+            conn,
+            conversationId,
+            rows.Select(row => row.MessageId).ToArray(),
+            ct);
+
         for (var i = 0; i < rows.Count; i++)
         {
+            var attachments = attachmentsByMessageId.TryGetValue(rows[i].MessageId, out var messageAttachments)
+                ? messageAttachments
+                : [];
+
             rows[i] = rows[i] with
             {
-                Attachments = await GetAttachmentsForMessageAsync(conn, conversationId, rows[i].MessageId, ct)
+                Attachments = attachments
             };
         }
 
@@ -1105,40 +1116,68 @@ VALUES
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task<IReadOnlyList<MessageAttachmentRow>> GetAttachmentsForMessageAsync(
+    private static async Task<IReadOnlyDictionary<long, IReadOnlyList<MessageAttachmentRow>>> GetAttachmentsForMessagesAsync(
         SqlConnection conn,
         long conversationId,
-        long messageId,
+        IReadOnlyList<long> messageIds,
         CancellationToken ct)
     {
-        const string sql = @"
-SELECT attachment_id,
-       file_name,
-       content_type,
-       file_size
-FROM omp.message_attachments
-WHERE message_id = @message_id
-ORDER BY attachment_id;";
+        if (messageIds.Count == 0)
+        {
+            return new Dictionary<long, IReadOnlyList<MessageAttachmentRow>>();
+        }
+
+        var values = string.Join(
+            ",",
+            Enumerable.Range(0, messageIds.Count).Select(i => $"(@message{i})"));
+
+        var sql = $@"
+WITH RequestedMessages(message_id) AS
+(
+    SELECT v.message_id
+    FROM (VALUES {values}) AS v(message_id)
+)
+SELECT a.message_id,
+       a.attachment_id,
+       a.file_name,
+       a.content_type,
+       a.file_size
+FROM omp.message_attachments a
+INNER JOIN RequestedMessages requested
+    ON requested.message_id = a.message_id
+ORDER BY a.message_id, a.attachment_id;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@message_id", SqlDbType.BigInt).Value = messageId;
+        for (var i = 0; i < messageIds.Count; i++)
+        {
+            cmd.Parameters.Add("@message" + i, SqlDbType.BigInt).Value = messageIds[i];
+        }
 
-        var rows = new List<MessageAttachmentRow>();
+        var rows = new Dictionary<long, List<MessageAttachmentRow>>();
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            var contentType = rdr.GetString(2);
-            var attachmentId = rdr.GetInt64(0);
-            rows.Add(new MessageAttachmentRow(
+            var messageId = rdr.GetInt64(0);
+            var attachmentId = rdr.GetInt64(1);
+            var contentType = rdr.GetString(3);
+            if (!rows.TryGetValue(messageId, out var attachments))
+            {
+                attachments = [];
+                rows[messageId] = attachments;
+            }
+
+            attachments.Add(new MessageAttachmentRow(
                 attachmentId,
-                rdr.GetString(1),
+                rdr.GetString(2),
                 contentType,
-                rdr.GetInt64(3),
+                rdr.GetInt64(4),
                 BuildAttachmentDownloadUrl(conversationId, attachmentId),
                 IsImageContentType(contentType)));
         }
 
-        return rows;
+        return rows.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<MessageAttachmentRow>)pair.Value);
     }
 
     private static string BuildAttachmentDownloadUrl(long conversationId, long attachmentId)
@@ -1231,9 +1270,9 @@ ORDER BY attachment_id;";
         }
 
         var cleaned = content.Trim();
-        if (cleaned.Length > 160)
+        if (cleaned.Length > MaxPreviewLength)
         {
-            cleaned = cleaned[..160];
+            cleaned = cleaned[..MaxPreviewLength];
         }
 
         return string.IsNullOrWhiteSpace(senderDisplayName)
