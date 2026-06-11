@@ -134,6 +134,11 @@ public sealed class OmpAuthRepository
             }
         }
 
+        if (linkedUser is not null)
+        {
+            principals.Add(("OmpUser", linkedUser.Value.UserId.ToString(CultureInfo.InvariantCulture)));
+        }
+
         return new OmpAuthenticatedUser
         {
             UserId = linkedUser?.UserId,
@@ -392,12 +397,14 @@ ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
 
         var normalized = mode?.Trim();
         if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfRole, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeIfRole, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutomaticForAuthorizedUsers, StringComparison.OrdinalIgnoreCase))
         {
             return ExternalUserProvisioningMode.AutoIfRole;
         }
 
-        if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfAuthenticated, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfAuthenticated, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeIfAuthenticated, StringComparison.OrdinalIgnoreCase))
         {
             return ExternalUserProvisioningMode.AutoIfAuthenticated;
         }
