@@ -376,39 +376,54 @@ WHERE user_id = @user_id;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
-        var providerId = await GetAuthProviderIdAsync(conn, AdProviderDisplayName, ct);
-        if (providerId is null)
-        {
-            return new AddAuthLinkResult(AddAuthLinkStatus.ProviderMissing);
-        }
-
-        var existing = await GetExistingAuthLinkAsync(conn, providerId.Value, providerUserKey, ct);
-        if (existing is not null)
-        {
-            return existing.Value.UserId == userId
-                ? new AddAuthLinkResult(AddAuthLinkStatus.AlreadyLinkedToThisUser, existing.Value.UserId)
-                : new AddAuthLinkResult(AddAuthLinkStatus.AlreadyLinkedToAnotherUser, existing.Value.UserId);
-        }
-
         const string sql = @"
 INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, created_at)
 VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
 
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
-            await using var cmd = new SqlCommand(sql, conn);
+            var providerId = await GetAuthProviderIdAsync(conn, tx, AdProviderDisplayName, ct);
+            if (providerId is null)
+            {
+                await tx.RollbackAsync(ct);
+                return new AddAuthLinkResult(AddAuthLinkStatus.ProviderMissing);
+            }
+
+            var existing = await GetExistingAuthLinkAsync(conn, tx, providerId.Value, providerUserKey, ct);
+            if (existing is not null)
+            {
+                await tx.RollbackAsync(ct);
+                return existing.Value.UserId == userId
+                    ? new AddAuthLinkResult(AddAuthLinkStatus.AlreadyLinkedToThisUser, existing.Value.UserId)
+                    : new AddAuthLinkResult(AddAuthLinkStatus.AlreadyLinkedToAnotherUser, existing.Value.UserId);
+            }
+
+            await using var cmd = new SqlCommand(sql, conn, tx);
             Add(cmd, "@user_id", userId);
             Add(cmd, "@provider_id", providerId.Value);
             Add(cmd, "@provider_user_key", providerUserKey);
             await cmd.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
             return new AddAuthLinkResult(AddAuthLinkStatus.Added);
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
-            existing = await GetExistingAuthLinkAsync(conn, providerId.Value, providerUserKey, ct);
+            await tx.RollbackAsync(ct);
+
+            var providerId = await GetAuthProviderIdAsync(conn, AdProviderDisplayName, ct);
+            var existing = providerId is null
+                ? null
+                : await GetExistingAuthLinkAsync(conn, providerId.Value, providerUserKey, ct);
+
             return existing is null
                 ? new AddAuthLinkResult(AddAuthLinkStatus.AlreadyLinkedToAnotherUser)
                 : new AddAuthLinkResult(AddAuthLinkStatus.AlreadyLinkedToAnotherUser, existing.Value.UserId);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
         }
     }
 

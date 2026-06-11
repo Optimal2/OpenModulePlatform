@@ -22,6 +22,7 @@ public sealed class MessageService
     private const int MaxPreviewLength = 160;
     private const int MaxMessageBatchSize = 100;
     private const string AttachmentHandlerName = "Attachment";
+    private const string PreviewTruncationSuffix = "...";
     public const string ConfigurationCategory = "messages";
     public const string EnabledSetting = "enabled";
     public const string AttachmentMaxBytesSetting = "attachmentMaxBytes";
@@ -1270,9 +1271,10 @@ ORDER BY a.message_id, a.attachment_id;";
     private static string FormatByteSize(long bytes)
     {
         var megabytes = bytes / 1024d / 1024d;
+        var kilobytes = bytes / 1024d;
         return megabytes >= 1
             ? $"{megabytes.ToString("0.#", CultureInfo.InvariantCulture)} MB"
-            : $"{Math.Max(1, bytes / 1024).ToString(CultureInfo.InvariantCulture)} KB";
+            : $"{Math.Max(1d, kilobytes).ToString("0.#", CultureInfo.InvariantCulture)} KB";
     }
 
     private static string BuildConversationTitle(
@@ -1305,14 +1307,30 @@ ORDER BY a.message_id, a.attachment_id;";
         }
 
         var cleaned = content.Trim();
-        if (cleaned.Length > MaxPreviewLength)
-        {
-            cleaned = cleaned[..MaxPreviewLength];
-        }
+        cleaned = TruncateTextElements(cleaned, MaxPreviewLength);
 
         return string.IsNullOrWhiteSpace(senderDisplayName)
             ? cleaned
             : $"{senderDisplayName}: {cleaned}";
+    }
+
+    private static string TruncateTextElements(string value, int maxTextElements)
+    {
+        if (maxTextElements <= 0 || string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var textElementIndexes = StringInfo.ParseCombiningCharacters(value);
+        if (textElementIndexes.Length <= maxTextElements)
+        {
+            return value;
+        }
+
+        var suffixTextElements = StringInfo.ParseCombiningCharacters(PreviewTruncationSuffix).Length;
+        var contentTextElements = Math.Max(1, maxTextElements - suffixTextElements);
+        var endIndex = textElementIndexes[contentTextElements];
+        return value[..endIndex] + PreviewTruncationSuffix;
     }
 
     private static string CleanFileName(string? value)
