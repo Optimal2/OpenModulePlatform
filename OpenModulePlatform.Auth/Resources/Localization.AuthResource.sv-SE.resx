@@ -40,4 +40,5 @@
   <data name="The local password account is not linked to an OMP user." xml:space="preserve"><value>Det lokala lösenordskontot är inte kopplat till en OMP-användare.</value></data>
   <data name="The linked OMP user is disabled." xml:space="preserve"><value>Den kopplade OMP-användaren är inaktiverad.</value></data>
   <data name="The OMP user account could not be created." xml:space="preserve"><value>OMP-användarkontot kunde inte skapas.</value></data>
+  <data name="Account registration is disabled." xml:space="preserve"><value>Registrering av konto är avstängd.</value></data>
 </root>

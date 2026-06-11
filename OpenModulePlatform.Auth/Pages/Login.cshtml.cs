@@ -24,17 +24,20 @@ public sealed class LoginModel : PageModel
 
     private readonly OmpAuthRepository _repository;
     private readonly OmpBrandingService _brandingService;
+    private readonly OmpConfigurationService _configuration;
     private readonly WindowsPasswordAuthenticator _windowsPasswordAuthenticator;
     private readonly IStringLocalizer<AuthResource> _localizer;
 
     public LoginModel(
         OmpAuthRepository repository,
         OmpBrandingService brandingService,
+        OmpConfigurationService configuration,
         WindowsPasswordAuthenticator windowsPasswordAuthenticator,
         IStringLocalizer<AuthResource> localizer)
     {
         _repository = repository;
         _brandingService = brandingService;
+        _configuration = configuration;
         _windowsPasswordAuthenticator = windowsPasswordAuthenticator;
         _localizer = localizer;
     }
@@ -75,10 +78,12 @@ public sealed class LoginModel : PageModel
 
     public bool ShowOtherSignInOptions { get; private set; }
 
+    public bool SelfRegistrationEnabled { get; private set; } = true;
+
     public bool HasOpenPrompt =>
         ShowAlternateWindowsPrompt || ShowLocalAccountPrompt || ShowRegisterAccountPrompt;
 
-    public IActionResult OnGet(string? error)
+    public async Task<IActionResult> OnGetAsync(string? error, CancellationToken ct)
     {
         if (User.Identity?.IsAuthenticated == true &&
             User.HasClaim(c => c.Type == OmpAuthDefaults.ProviderClaimType))
@@ -94,7 +99,7 @@ public sealed class LoginModel : PageModel
         };
         ShowOtherSignInOptions = error == "windowsAlternateUnavailable";
 
-        BuildProviderUrls();
+        await PreparePageAsync(ct);
         return Page();
     }
 
@@ -105,7 +110,7 @@ public sealed class LoginModel : PageModel
             ErrorMessage = T("Enter a user name and password.");
             ShowLocalAccountPrompt = true;
             ShowOtherSignInOptions = true;
-            BuildProviderUrls();
+            await PreparePageAsync(ct);
             return Page();
         }
 
@@ -115,7 +120,7 @@ public sealed class LoginModel : PageModel
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The user name or password is incorrect.", ct);
             ShowLocalAccountPrompt = true;
             ShowOtherSignInOptions = true;
-            BuildProviderUrls();
+            await PreparePageAsync(ct);
             return Page();
         }
 
@@ -126,6 +131,15 @@ public sealed class LoginModel : PageModel
     public async Task<IActionResult> OnPostRegisterAsync(CancellationToken ct)
     {
         RegisterUserName = RegisterUserName?.Trim() ?? string.Empty;
+        await PreparePageAsync(ct);
+
+        if (!SelfRegistrationEnabled)
+        {
+            ErrorMessage = T("Account registration is disabled.");
+            ShowOtherSignInOptions = true;
+            ClearRegistrationPasswordFields();
+            return Page();
+        }
 
         var validationError = ValidateRegistrationInput();
         if (validationError is not null)
@@ -134,7 +148,6 @@ public sealed class LoginModel : PageModel
             ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
             ClearRegistrationPasswordFields();
-            BuildProviderUrls();
             return Page();
         }
 
@@ -145,7 +158,6 @@ public sealed class LoginModel : PageModel
             ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
             ClearRegistrationPasswordFields();
-            BuildProviderUrls();
             return Page();
         }
 
@@ -162,7 +174,7 @@ public sealed class LoginModel : PageModel
         if (!OperatingSystem.IsWindows())
         {
             ErrorMessage = T("Alternate Windows sign-in is not available on this host.");
-            BuildProviderUrls();
+            await PreparePageAsync(ct);
             return Page();
         }
 
@@ -171,7 +183,7 @@ public sealed class LoginModel : PageModel
             string.IsNullOrEmpty(AlternateWindowsPassword))
         {
             ErrorMessage = T("Enter a Windows account name and password.");
-            BuildProviderUrls();
+            await PreparePageAsync(ct);
             return Page();
         }
 
@@ -182,7 +194,7 @@ public sealed class LoginModel : PageModel
         if (!result.Succeeded || result.Principal is null)
         {
             ErrorMessage = T("Windows credentials could not be validated.");
-            BuildProviderUrls();
+            await PreparePageAsync(ct);
             return Page();
         }
 
@@ -190,7 +202,7 @@ public sealed class LoginModel : PageModel
         if (user is null)
         {
             ErrorMessage = T("Windows sign-in could not be resolved.");
-            BuildProviderUrls();
+            await PreparePageAsync(ct);
             return Page();
         }
 
@@ -232,6 +244,21 @@ public sealed class LoginModel : PageModel
     {
         var returnUrl = ResolveSafeReturnUrl();
         WindowsLoginUrl = QueryHelpers.AddQueryString(Url.Content("~/ad"), "returnUrl", returnUrl);
+    }
+
+    private async Task PreparePageAsync(CancellationToken ct)
+    {
+        SelfRegistrationEnabled = await GetSelfRegistrationEnabledAsync(ct);
+        BuildProviderUrls();
+    }
+
+    private async Task<bool> GetSelfRegistrationEnabledAsync(CancellationToken ct)
+    {
+        var value = await _configuration.GetGlobalStringAsync(
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthDefaults.SelfRegistrationEnabledSetting,
+            ct);
+        return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: true);
     }
 
     private string? ValidateRegistrationInput()

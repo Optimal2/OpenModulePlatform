@@ -40,4 +40,5 @@
   <data name="The local password account is not linked to an OMP user." xml:space="preserve"><value>The local password account is not linked to an OMP user.</value></data>
   <data name="The linked OMP user is disabled." xml:space="preserve"><value>The linked OMP user is disabled.</value></data>
   <data name="The OMP user account could not be created." xml:space="preserve"><value>The OMP user account could not be created.</value></data>
+  <data name="Account registration is disabled." xml:space="preserve"><value>Account registration is disabled.</value></data>
 </root>
