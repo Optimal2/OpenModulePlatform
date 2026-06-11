@@ -2926,13 +2926,21 @@
         return String(value || '').trim().toLocaleLowerCase();
     }
 
+    function getWindowScrollX() {
+        return window.scrollX || 0;
+    }
+
+    function getWindowScrollY() {
+        return window.scrollY || 0;
+    }
+
     function startDrag(root, canvas, widget, event, state, onChange = () => {}) {
         const canvasRect = canvas.getBoundingClientRect();
         const widgetRect = widget.getBoundingClientRect();
         const startX = event.clientX;
         const startY = event.clientY;
-        const startScrollX = window.scrollX || window.pageXOffset || 0;
-        const startScrollY = window.scrollY || window.pageYOffset || 0;
+        const startScrollX = getWindowScrollX();
+        const startScrollY = getWindowScrollY();
         const startLeft = widgetRect.left - canvasRect.left + canvas.scrollLeft;
         const startTop = widgetRect.top - canvasRect.top + canvas.scrollTop;
         const selectedWidgets = getSelectedWidgets(canvas);
@@ -2953,9 +2961,9 @@
 
         const move = (moveEvent) => {
             autoScrollPageNearEdges(moveEvent);
-            const scrollDeltaX = (window.scrollX || window.pageXOffset || 0) - startScrollX;
+            const scrollDeltaX = getWindowScrollX() - startScrollX;
             const nextLeft = Math.max(0, startLeft + moveEvent.clientX - startX + scrollDeltaX);
-            const scrollDeltaY = (window.scrollY || window.pageYOffset || 0) - startScrollY;
+            const scrollDeltaY = getWindowScrollY() - startScrollY;
             const nextTop = Math.max(0, startTop + moveEvent.clientY - startY + scrollDeltaY);
             const deltaLeft = Math.max(snapIfNeeded(nextLeft, state) - activeStart.left, -minStartLeft);
             const deltaTop = Math.max(snapIfNeeded(nextTop, state) - activeStart.top, -minStartTop);
@@ -3007,7 +3015,7 @@
     function startResize(root, canvas, widget, event, state, onChange = () => {}) {
         const startX = event.clientX;
         const startY = event.clientY;
-        const startScrollX = window.scrollX || window.pageXOffset || 0;
+        const startScrollX = getWindowScrollX();
         const startWidth = widget.offsetWidth;
         const startHeight = widget.offsetHeight;
 
@@ -3016,7 +3024,7 @@
 
         const move = (moveEvent) => {
             autoScrollPageNearEdges(moveEvent);
-            const scrollDeltaX = (window.scrollX || window.pageXOffset || 0) - startScrollX;
+            const scrollDeltaX = getWindowScrollX() - startScrollX;
             const nextWidth = Math.max(minWidth, startWidth + moveEvent.clientX - startX + scrollDeltaX);
             const nextHeight = Math.max(minHeight, startHeight + moveEvent.clientY - startY);
             widget.style.width = `${snapSizeIfNeeded(nextWidth, minWidth, state)}px`;

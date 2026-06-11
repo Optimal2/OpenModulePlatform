@@ -14,6 +14,7 @@ public sealed class OmpAuthRepository
     private const int ActiveAccountStatus = 1;
     private const int DisplayNameMaxLength = 200;
     private const int ProviderUserKeyMaxLength = 1000;
+    // SQL Server allows 2100 parameters per command; 500 keeps AD group lookups comfortably below that limit.
     private const int AdGroupPrincipalQueryChunkSize = 500;
 
     private enum ExternalUserProvisioningMode
