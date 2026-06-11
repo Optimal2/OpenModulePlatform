@@ -2598,4 +2598,9 @@
   <data name="Recent web app operations" xml:space="preserve"><value>Senaste webbappsoperationer</value></data>
   <data name="OMP account creation is disabled." xml:space="preserve"><value>Det går inte att skapa OMP-konto.</value></data>
   <data name="You are signed in with Windows/AD, but creating your own OMP account is disabled for this installation." xml:space="preserve"><value>Du är inloggad med Windows/AD, men möjligheten att skapa ett eget OMP-konto är avstängd för den här installationen.</value></data>
+  <data name="This sign-in is not eligible to create an OMP account automatically. Contact an administrator if you need an OMP account." xml:space="preserve"><value>Den här inloggningen uppfyller inte kraven för att skapa ett OMP-konto automatiskt. Kontakta en administratör om du behöver ett OMP-konto.</value></data>
+  <data name="Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here." xml:space="preserve"><value>Roller som är kopplade direkt till den här OMP-användaren eller till något av dess länkade AD-konton visas här.</value></data>
+  <data name="No roles are assigned directly to this user." xml:space="preserve"><value>Inga roller är direkt kopplade till den här användaren.</value></data>
+  <data name="Source" xml:space="preserve"><value>Källa</value></data>
+  <data name="Linked AD account" xml:space="preserve"><value>Länkat AD-konto</value></data>
 </root>
