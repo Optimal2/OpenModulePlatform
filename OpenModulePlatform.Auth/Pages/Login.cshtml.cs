@@ -42,6 +42,15 @@ public sealed class LoginModel : PageModel
     public string Password { get; set; } = "";
 
     [BindProperty]
+    public string RegisterUserName { get; set; } = "";
+
+    [BindProperty]
+    public string RegisterPassword { get; set; } = "";
+
+    [BindProperty]
+    public string RegisterConfirmPassword { get; set; } = "";
+
+    [BindProperty]
     public string AlternateWindowsUserName { get; set; } = "";
 
     [BindProperty]
@@ -90,6 +99,34 @@ public sealed class LoginModel : PageModel
         {
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The user name or password is incorrect.", ct);
             ShowOtherSignInOptions = true;
+            BuildProviderUrls();
+            return Page();
+        }
+
+        await SignInAsync(result.User);
+        return RedirectToSafeReturnUrl();
+    }
+
+    public async Task<IActionResult> OnPostRegisterAsync(CancellationToken ct)
+    {
+        RegisterUserName = RegisterUserName?.Trim() ?? string.Empty;
+
+        var validationError = ValidateRegistrationInput();
+        if (validationError is not null)
+        {
+            ErrorMessage = T(validationError);
+            ShowOtherSignInOptions = true;
+            ClearRegistrationPasswordFields();
+            BuildProviderUrls();
+            return Page();
+        }
+
+        var result = await _repository.CreateLocalPasswordUserAsync(RegisterUserName, RegisterPassword, ct);
+        if (result.User is null)
+        {
+            ErrorMessage = await TWithBrandingAsync(result.Error ?? "The OMP user account could not be created.", ct);
+            ShowOtherSignInOptions = true;
+            ClearRegistrationPasswordFields();
             BuildProviderUrls();
             return Page();
         }
@@ -176,6 +213,42 @@ public sealed class LoginModel : PageModel
     {
         var returnUrl = ResolveSafeReturnUrl();
         WindowsLoginUrl = Url.Content("~/ad") + "?returnUrl=" + Uri.EscapeDataString(returnUrl);
+    }
+
+    private string? ValidateRegistrationInput()
+    {
+        if (string.IsNullOrWhiteSpace(RegisterUserName))
+        {
+            return "Enter a user name.";
+        }
+
+        if (RegisterUserName.Length > 256)
+        {
+            return "User name must be 256 characters or fewer.";
+        }
+
+        if (string.IsNullOrEmpty(RegisterPassword))
+        {
+            return "Password is required.";
+        }
+
+        if (RegisterPassword.Length < 8)
+        {
+            return "Password must be at least 8 characters.";
+        }
+
+        if (!string.Equals(RegisterPassword, RegisterConfirmPassword, StringComparison.Ordinal))
+        {
+            return "Password and confirmation password do not match.";
+        }
+
+        return null;
+    }
+
+    private void ClearRegistrationPasswordFields()
+    {
+        RegisterPassword = string.Empty;
+        RegisterConfirmPassword = string.Empty;
     }
 
     private bool IsCurrentLoginUrl(string returnUrl)
