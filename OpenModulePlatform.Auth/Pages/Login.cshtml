@@ -47,6 +47,22 @@
         dialog::backdrop { background: rgba(15, 23, 42, .35); }
         .dialog-body { padding: 1.25rem; }
         .dialog-actions { display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
+        .auth-options-indicator { width: 0; height: 0; border-top: .32rem solid transparent; border-bottom: .32rem solid transparent; border-left: .44rem solid currentColor; transition: transform .12s ease; }
+        .auth-options[open] .auth-options-indicator { transform: rotate(90deg); }
+        @@media (prefers-color-scheme: dark) {
+            body { background: #0f172a; color: #e5edf7; }
+            .panel, dialog { background: #111c2d; border-color: #334155; box-shadow: 0 18px 48px rgba(0, 0, 0, .35); }
+            .muted, .auth-options-heading { color: #b6c3d5; }
+            .auth-options-heading::before,
+            .auth-options-heading::after { background: #334155; }
+            input { background: #0b1220; border-color: #475569; color: #e5edf7; }
+            .button.secondary { background: #111c2d; color: #e5edf7; border-color: #475569; }
+            .button.subtle-link { color: #8bb7ff; }
+            .button.subtle-link:hover,
+            .button.subtle-link:focus-visible { color: #b8d3ff; }
+            .error { background: #3a1518; border-color: #9f3a3f; color: #ffd4d7; }
+            dialog::backdrop { background: rgba(0, 0, 0, .55); }
+        }
     </style>
 </head>
 <body>
@@ -68,8 +84,15 @@
             </div>
 
             <details class="auth-options" @(Model.ShowOtherSignInOptions || Model.HasOpenPrompt ? "open" : null)>
-                <summary class="auth-options-heading" id="other-signin-options-heading">@L["Other sign-in options"]</summary>
-                <div class="auth-options-list">
+                <summary
+                    class="auth-options-heading"
+                    id="other-signin-options-heading"
+                    aria-controls="other-signin-options-list"
+                    aria-expanded="@((Model.ShowOtherSignInOptions || Model.HasOpenPrompt).ToString().ToLowerInvariant())">
+                    <span class="auth-options-indicator" aria-hidden="true"></span>
+                    <span>@L["Other sign-in options"]</span>
+                </summary>
+                <div class="auth-options-list" id="other-signin-options-list">
                     <button
                         type="button"
                         class="button secondary block"
@@ -92,11 +115,11 @@
                 </button>
             </div>
 
-            <dialog id="alternate-windows-dialog" data-open-on-load="@Model.ShowAlternateWindowsPrompt.ToString().ToLowerInvariant()">
+            <dialog id="alternate-windows-dialog" aria-labelledby="alternate-windows-dialog-title" data-open-on-load="@Model.ShowAlternateWindowsPrompt.ToString().ToLowerInvariant()">
                 <form method="post" asp-page-handler="AlternateWindows" class="stack dialog-body">
                     <input type="hidden" asp-for="ReturnUrl" />
                     <div>
-                        <h2 style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Other Windows / AD account"]</h2>
+                        <h2 id="alternate-windows-dialog-title" style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Other Windows / AD account"]</h2>
                         <p class="muted" style="margin: 0;">@L["Use DOMAIN\\user, .\\user, user@domain, or a local account name."]</p>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowAlternateWindowsPrompt)
@@ -109,7 +132,7 @@
                     </div>
                     <div>
                         <label asp-for="AlternateWindowsPassword">@L["Password"]</label>
-                        <input asp-for="AlternateWindowsPassword" type="password" value="" autocomplete="current-password" />
+                        <input asp-for="AlternateWindowsPassword" type="password" autocomplete="current-password" />
                     </div>
                     <div class="dialog-actions">
                         <button type="button" class="button secondary" data-dialog-cancel>@L["Cancel"]</button>
@@ -118,11 +141,11 @@
                 </form>
             </dialog>
 
-            <dialog id="local-account-dialog" data-open-on-load="@Model.ShowLocalAccountPrompt.ToString().ToLowerInvariant()">
+            <dialog id="local-account-dialog" aria-labelledby="local-account-dialog-title" data-open-on-load="@Model.ShowLocalAccountPrompt.ToString().ToLowerInvariant()">
                 <form method="post" asp-page-handler="Local" class="stack dialog-body">
                     <input type="hidden" asp-for="ReturnUrl" />
                     <div>
-                        <h2 style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Local account"]</h2>
+                        <h2 id="local-account-dialog-title" style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Local account"]</h2>
                         <p class="muted" style="margin: 0;">@L["Sign in with a local OMP user name and password."]</p>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowLocalAccountPrompt)
@@ -144,11 +167,11 @@
                 </form>
             </dialog>
 
-            <dialog id="register-account-dialog" data-open-on-load="@Model.ShowRegisterAccountPrompt.ToString().ToLowerInvariant()">
+            <dialog id="register-account-dialog" aria-labelledby="register-account-dialog-title" data-open-on-load="@Model.ShowRegisterAccountPrompt.ToString().ToLowerInvariant()">
                 <form method="post" asp-page-handler="Register" class="stack dialog-body">
                     <input type="hidden" asp-for="ReturnUrl" />
                     <div>
-                        <h2 style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Create account"]</h2>
+                        <h2 id="register-account-dialog-title" style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Create account"]</h2>
                         <p class="muted" style="margin: 0;">@L["Create a local OMP account with a user name and password."]</p>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowRegisterAccountPrompt)
@@ -161,11 +184,11 @@
                     </div>
                     <div>
                         <label asp-for="RegisterPassword">@L["Password"]</label>
-                        <input asp-for="RegisterPassword" type="password" value="" autocomplete="new-password" />
+                        <input asp-for="RegisterPassword" type="password" autocomplete="new-password" />
                     </div>
                     <div>
                         <label asp-for="RegisterConfirmPassword">@L["Confirm password"]</label>
-                        <input asp-for="RegisterConfirmPassword" type="password" value="" autocomplete="new-password" />
+                        <input asp-for="RegisterConfirmPassword" type="password" autocomplete="new-password" />
                     </div>
                     <div class="dialog-actions">
                         <button type="button" class="button secondary" data-dialog-cancel>@L["Cancel"]</button>
@@ -207,6 +230,18 @@
                     dialog.close();
                 });
             });
+        });
+
+        document.querySelectorAll('details.auth-options').forEach((details) => {
+            const summary = details.querySelector('summary[aria-expanded]');
+            const updateExpanded = () => {
+                if (summary) {
+                    summary.setAttribute('aria-expanded', details.open ? 'true' : 'false');
+                }
+            };
+
+            updateExpanded();
+            details.addEventListener('toggle', updateExpanded);
         });
     })();
 </script>

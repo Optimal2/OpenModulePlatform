@@ -18,6 +18,7 @@ public sealed class MessageService
     private const long MinConfiguredAttachmentBytes = 1024;
     private const long MaxConfiguredAttachmentBytes = 100 * 1024 * 1024;
     private const int MaxFileNameLength = 260;
+    private const string AttachmentHandlerName = "Attachment";
     public const string ConfigurationCategory = "messages";
     public const string EnabledSetting = "enabled";
     public const string AttachmentMaxBytesSetting = "attachmentMaxBytes";
@@ -614,9 +615,13 @@ ORDER BY m.message_id DESC;";
         IReadOnlyList<IFormFile> attachments,
         CancellationToken ct)
     {
-        if (userId <= 0 || conversationId <= 0)
+        if (userId <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(userId));
+        }
+        if (conversationId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(conversationId));
         }
 
         await RequireEnabledAsync(ct);
@@ -1129,12 +1134,21 @@ ORDER BY attachment_id;";
                 rdr.GetString(1),
                 contentType,
                 rdr.GetInt64(3),
-                $"/messages/{conversationId.ToString(CultureInfo.InvariantCulture)}?handler=Attachment&attachmentId={attachmentId.ToString(CultureInfo.InvariantCulture)}",
+                BuildAttachmentDownloadUrl(conversationId, attachmentId),
                 IsImageContentType(contentType)));
         }
 
         return rows;
     }
+
+    private static string BuildAttachmentDownloadUrl(long conversationId, long attachmentId)
+        => string.Concat(
+            "/messages/",
+            conversationId.ToString(CultureInfo.InvariantCulture),
+            "?handler=",
+            AttachmentHandlerName,
+            "&attachmentId=",
+            attachmentId.ToString(CultureInfo.InvariantCulture));
 
     private async Task<long> GetMaxAttachmentBytesAsync(CancellationToken ct)
     {
