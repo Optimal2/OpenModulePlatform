@@ -7,16 +7,23 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class WebAppHealthMonitor
 {
+    public const string PortalHealthHttpClientName = "PortalHealth";
+
+    public const string PortalHealthAllowInvalidTlsHttpClientName = "PortalHealthAllowInvalidTls";
+
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ILogger<WebAppHealthMonitor> _logger;
 
     public WebAppHealthMonitor(
         IOptionsMonitor<HostAgentSettings> settings,
+        IHttpClientFactory httpClientFactory,
         OmpHostArtifactRepository repository,
         ILogger<WebAppHealthMonitor> logger)
     {
         _settings = settings;
+        _httpClientFactory = httpClientFactory;
         _repository = repository;
         _logger = logger;
     }
@@ -106,11 +113,25 @@ public sealed class WebAppHealthMonitor
             };
         }
 
-        var logFile = Directory
-            .EnumerateFiles(logDirectory, "*.log", SearchOption.TopDirectoryOnly)
-            .Select(path => new FileInfo(path))
-            .OrderByDescending(file => file.LastWriteTimeUtc)
-            .FirstOrDefault();
+        FileInfo? logFile;
+        try
+        {
+            logFile = Directory
+                .EnumerateFiles(logDirectory, "*.log", SearchOption.TopDirectoryOnly)
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new CollectWebAppLogsJobResult
+            {
+                HealthKey = resolvedHealthKey,
+                LogDirectory = logDirectory,
+                Message = $"Could not enumerate Portal log files: {ex.Message}"
+            };
+        }
+
         if (logFile is null)
         {
             return new CollectWebAppLogsJobResult
@@ -121,16 +142,29 @@ public sealed class WebAppHealthMonitor
             };
         }
 
-        var content = ReadTail(logFile.FullName, Math.Clamp(maxLines, 20, 500));
-        return new CollectWebAppLogsJobResult
+        try
         {
-            HealthKey = resolvedHealthKey,
-            LogDirectory = logDirectory,
-            LogFile = logFile.FullName,
-            LineCount = content.LineCount,
-            Content = content.Text,
-            Message = $"Read {content.LineCount} line(s) from the latest Portal log file."
-        };
+            var content = ReadTail(logFile.FullName, Math.Clamp(maxLines, 20, 500));
+            return new CollectWebAppLogsJobResult
+            {
+                HealthKey = resolvedHealthKey,
+                LogDirectory = logDirectory,
+                LogFile = logFile.FullName,
+                LineCount = content.LineCount,
+                Content = content.Text,
+                Message = $"Read {content.LineCount} line(s) from the latest Portal log file."
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new CollectWebAppLogsJobResult
+            {
+                HealthKey = resolvedHealthKey,
+                LogDirectory = logDirectory,
+                LogFile = logFile.FullName,
+                Message = $"Could not read Portal log file: {ex.Message}"
+            };
+        }
     }
 
     private async Task<WebAppHealthProbeResult> ExecutePortalProbeAsync(
@@ -142,16 +176,10 @@ public sealed class WebAppHealthMonitor
         var appPoolName = ResolvePortalAppPoolName(settings);
         var timeout = TimeSpan.FromSeconds(Math.Clamp(healthSettings.TimeoutSeconds, 1, 120));
 
-        using var handler = new HttpClientHandler();
-        if (healthSettings.AllowInvalidTlsCertificate)
-        {
-            handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-        }
-
-        using var client = new HttpClient(handler)
-        {
-            Timeout = timeout
-        };
+        using var client = _httpClientFactory.CreateClient(healthSettings.AllowInvalidTlsCertificate
+            ? PortalHealthAllowInvalidTlsHttpClientName
+            : PortalHealthHttpClientName);
+        client.Timeout = timeout;
 
         try
         {
@@ -357,9 +385,11 @@ public sealed class WebAppHealthMonitor
         process.StartInfo.CreateNoWindow = true;
         process.Start();
 
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
+        var stdout = stdoutTask.GetAwaiter().GetResult();
+        var stderr = stderrTask.GetAwaiter().GetResult();
 
         return new ProcessResult(process.ExitCode, stdout, stderr);
     }

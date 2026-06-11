@@ -550,7 +550,7 @@ public sealed class HostAgentJobProcessor
         {
             if (Directory.Exists(localPath))
             {
-                Directory.Delete(localPath, recursive: true);
+                DeleteDirectoryWithRetry(localPath, cancellationToken);
                 AddEntryResult(result, entry, localPath, "Deleted", null);
             }
             else if (File.Exists(localPath))
@@ -597,7 +597,7 @@ public sealed class HostAgentJobProcessor
         {
             if (Directory.Exists(storePath))
             {
-                Directory.Delete(storePath, recursive: true);
+                DeleteDirectoryWithRetry(storePath, cancellationToken);
                 AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Deleted", null);
             }
             else if (File.Exists(storePath))
@@ -1241,7 +1241,8 @@ public sealed class HostAgentJobProcessor
             return false;
         }
 
-        if (string.Equals(Path.GetFullPath(installRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), candidate, GetPathComparison()))
+        var normalizedInstallRoot = installRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(normalizedInstallRoot, candidate, GetPathComparison()))
         {
             error = "Refusing to delete the configured install root.";
             return false;
@@ -1482,12 +1483,19 @@ public sealed class HostAgentJobProcessor
         }
 
         using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start sc.exe.");
+            ?? throw new InvalidOperationException($"Failed to start sc.exe with arguments: {FormatProcessArguments(arguments)}.");
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
         return new ScResult(process.ExitCode, output, error);
     }
+
+    private static string FormatProcessArguments(IEnumerable<string> arguments)
+        => string.Join(
+            " ",
+            arguments.Select(static argument => argument.Contains(' ', StringComparison.Ordinal)
+                ? '"' + argument.Replace("\"", "\\\"", StringComparison.Ordinal) + '"'
+                : argument));
 
     private static bool IsServiceNotFound(ScResult result)
         => result.ExitCode == ScServiceNotFoundExitCode

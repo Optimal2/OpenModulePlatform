@@ -42,6 +42,12 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddSingleton<ServiceAppDeploymentService>();
         services.AddSingleton<HostAgentSelfUpgradeService>();
         services.AddSingleton<HostAgentFileMirrorService>();
+        services.AddHttpClient(WebAppHealthMonitor.PortalHealthHttpClientName);
+        services.AddHttpClient(WebAppHealthMonitor.PortalHealthAllowInvalidTlsHttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(static () => new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            });
         services.AddSingleton<WebAppHealthMonitor>();
         services.AddSingleton<HostAgentJobProcessor>();
         services.AddSingleton<HostAgentCredentialStoreService>();
