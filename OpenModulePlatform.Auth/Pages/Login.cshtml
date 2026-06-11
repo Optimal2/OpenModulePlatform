@@ -109,11 +109,14 @@
                 </div>
             </details>
 
-            <div class="register-action">
-                <button type="button" class="button subtle-link" data-dialog-target="register-account-dialog">
-                    @L["Create account"]
-                </button>
-            </div>
+            @if (Model.SelfRegistrationEnabled)
+            {
+                <div class="register-action">
+                    <button type="button" class="button subtle-link" data-dialog-target="register-account-dialog">
+                        @L["Create account"]
+                    </button>
+                </div>
+            }
 
             <dialog id="alternate-windows-dialog" aria-labelledby="alternate-windows-dialog-title" data-open-on-load="@Model.ShowAlternateWindowsPrompt.ToString().ToLowerInvariant()">
                 <form method="post" asp-page-handler="AlternateWindows" class="stack dialog-body">
@@ -167,35 +170,38 @@
                 </form>
             </dialog>
 
-            <dialog id="register-account-dialog" aria-labelledby="register-account-dialog-title" data-open-on-load="@Model.ShowRegisterAccountPrompt.ToString().ToLowerInvariant()">
-                <form method="post" asp-page-handler="Register" class="stack dialog-body">
-                    <input type="hidden" asp-for="ReturnUrl" />
-                    <div>
-                        <h2 id="register-account-dialog-title" style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Create account"]</h2>
-                        <p class="muted" style="margin: 0;">@L["Create a local OMP account with a user name and password."]</p>
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowRegisterAccountPrompt)
-                    {
-                        <div class="error">@Model.ErrorMessage</div>
-                    }
-                    <div>
-                        <label asp-for="RegisterUserName">@L["User name"]</label>
-                        <input asp-for="RegisterUserName" autocomplete="username" />
-                    </div>
-                    <div>
-                        <label asp-for="RegisterPassword">@L["Password"]</label>
-                        <input asp-for="RegisterPassword" type="password" autocomplete="new-password" />
-                    </div>
-                    <div>
-                        <label asp-for="RegisterConfirmPassword">@L["Confirm password"]</label>
-                        <input asp-for="RegisterConfirmPassword" type="password" autocomplete="new-password" />
-                    </div>
-                    <div class="dialog-actions">
-                        <button type="button" class="button secondary" data-dialog-cancel>@L["Cancel"]</button>
-                        <button type="submit">@L["Create account"]</button>
-                    </div>
-                </form>
-            </dialog>
+            @if (Model.SelfRegistrationEnabled)
+            {
+                <dialog id="register-account-dialog" aria-labelledby="register-account-dialog-title" data-open-on-load="@Model.ShowRegisterAccountPrompt.ToString().ToLowerInvariant()">
+                    <form method="post" asp-page-handler="Register" class="stack dialog-body">
+                        <input type="hidden" asp-for="ReturnUrl" />
+                        <div>
+                            <h2 id="register-account-dialog-title" style="margin: 0 0 .35rem; font-size: 1.25rem;">@L["Create account"]</h2>
+                            <p class="muted" style="margin: 0;">@L["Create a local OMP account with a user name and password."]</p>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowRegisterAccountPrompt)
+                        {
+                            <div class="error">@Model.ErrorMessage</div>
+                        }
+                        <div>
+                            <label asp-for="RegisterUserName">@L["User name"]</label>
+                            <input asp-for="RegisterUserName" autocomplete="username" />
+                        </div>
+                        <div>
+                            <label asp-for="RegisterPassword">@L["Password"]</label>
+                            <input asp-for="RegisterPassword" type="password" autocomplete="new-password" />
+                        </div>
+                        <div>
+                            <label asp-for="RegisterConfirmPassword">@L["Confirm password"]</label>
+                            <input asp-for="RegisterConfirmPassword" type="password" autocomplete="new-password" />
+                        </div>
+                        <div class="dialog-actions">
+                            <button type="button" class="button secondary" data-dialog-cancel>@L["Cancel"]</button>
+                            <button type="submit">@L["Create account"]</button>
+                        </div>
+                    </form>
+                </dialog>
+            }
         </div>
     </section>
 </main>

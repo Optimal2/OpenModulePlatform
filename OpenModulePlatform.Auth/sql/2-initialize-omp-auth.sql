@@ -315,4 +315,48 @@ BEGIN
     WHERE InstanceTemplateModuleInstanceId = @AuthTemplateModuleInstanceId
       AND AppInstanceKey = N'omp_auth';
 END
+
+IF OBJECT_ID(N'omp.config_setting_definitions', N'U') IS NOT NULL
+   AND OBJECT_ID(N'omp.config_settings', N'U') IS NOT NULL
+BEGIN
+    MERGE omp.config_setting_definitions AS target
+    USING
+    (
+        VALUES
+            (N'auth', N'selfRegistrationEnabled', N'Controls whether users may create their own OMP account from the login page or account settings.', 110, CONVERT(bit, 1))
+    ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+    ON target.ConfigCategory = source.ConfigCategory
+       AND target.ConfigSetting = source.ConfigSetting
+    WHEN MATCHED THEN
+        UPDATE SET Description = source.Description,
+                   SortOrder = source.SortOrder,
+                   IsEnabled = source.IsEnabled,
+                   UpdatedUtc = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+        INSERT(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+        VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.SortOrder, source.IsEnabled);
+
+    MERGE omp.config_settings AS target
+    USING
+    (
+        SELECT def.ConfigSettingId,
+               defaults.ConfigValue,
+               0 AS ConfigPriority
+        FROM omp.config_setting_definitions def
+        INNER JOIN
+        (
+            VALUES
+                (N'auth', N'selfRegistrationEnabled', N'true')
+        ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)
+            ON defaults.ConfigCategory = def.ConfigCategory
+           AND defaults.ConfigSetting = def.ConfigSetting
+    ) AS source(ConfigSettingId, ConfigValue, ConfigPriority)
+    ON target.ConfigSettingId = source.ConfigSettingId
+       AND target.ConfigUsr IS NULL
+       AND target.ConfigPermission IS NULL
+       AND target.ConfigRole IS NULL
+    WHEN NOT MATCHED THEN
+        INSERT(ConfigSettingId, ConfigValue, ConfigPriority)
+        VALUES(source.ConfigSettingId, source.ConfigValue, source.ConfigPriority);
+END
 GO

@@ -422,18 +422,20 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         }
         else
         {
-            ActiveWidgets = [];
+            ActiveWidgets = FilterMessageWidgets(
+                await _dashboard.GetActiveWidgetsAsync(PortalDashboardService.DefaultDashboardUserId, roleIds, permissions, ct),
+                messagesEnabled);
             AvailableWidgets = [];
-            AllPortalEntries = [];
+            AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId: null, permissions, includeHidden: false, ct);
             FavoritePortalEntries = [];
             DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
-            ContentPages = [];
+            ContentPages = await _dashboard.GetReadableContentPagesAsync(Request, roleIds, permissions, ct);
             DashboardNotifications = [];
             DashboardMessageConversations = [];
             NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
             NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
-            LogSearchWidget = new DashboardLogSearchWidget("/logsearch", []);
-            EArkivCheckerWidget = new DashboardEArkivCheckerWidget("/earkivchecker", 0, 0, null, []);
+            LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
+            EArkivCheckerWidget = await _moduleDashboard.GetEArkivCheckerWidgetAsync(Request, permissions, ct);
         }
     }
 

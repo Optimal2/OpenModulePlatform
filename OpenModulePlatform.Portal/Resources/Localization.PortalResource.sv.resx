@@ -2596,4 +2596,6 @@
   <data name="Recycle app pool" xml:space="preserve"><value>Starta om app-pool</value></data>
   <data name="Collect logs" xml:space="preserve"><value>Hämta loggar</value></data>
   <data name="Recent web app operations" xml:space="preserve"><value>Senaste webbappsoperationer</value></data>
+  <data name="OMP account creation is disabled." xml:space="preserve"><value>Det går inte att skapa OMP-konto.</value></data>
+  <data name="You are signed in with Windows/AD, but creating your own OMP account is disabled for this installation." xml:space="preserve"><value>Du är inloggad med Windows/AD, men möjligheten att skapa ett eget OMP-konto är avstängd för den här installationen.</value></data>
 </root>

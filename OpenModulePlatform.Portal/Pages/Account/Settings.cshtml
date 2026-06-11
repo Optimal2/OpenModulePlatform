@@ -60,6 +60,13 @@
             </div>
         </form>
     }
+    else if (!Model.HasOmpUser)
+    {
+        <section class="card form-grid settings-panel">
+            <h3>@ompBranding.ApplyPlatformName(L["OMP account creation is disabled."].Value)</h3>
+            <p class="lede">@ompBranding.ApplyPlatformName(L["You are signed in with Windows/AD, but creating your own OMP account is disabled for this installation."].Value)</p>
+        </section>
+    }
     else
     {
         <form method="post" asp-page-handler="User" class="card form-grid settings-panel">

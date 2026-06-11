@@ -237,6 +237,11 @@ public sealed class OmpAuthRepository
             return (null, "Password must be at least 8 characters.");
         }
 
+        if (!await IsSelfRegistrationEnabledAsync(ct))
+        {
+            return (null, "Account registration is disabled.");
+        }
+
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -711,6 +716,15 @@ WHERE user_name = @user_name;";
         return displayName.Length <= DisplayNameMaxLength
             ? displayName
             : displayName[..DisplayNameMaxLength];
+    }
+
+    private async Task<bool> IsSelfRegistrationEnabledAsync(CancellationToken ct)
+    {
+        var value = await _configuration.GetGlobalStringAsync(
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthDefaults.SelfRegistrationEnabledSetting,
+            ct);
+        return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: true);
     }
 
     private static async Task<IReadOnlyList<string>> GetMappedAdGroupPrincipalsAsync(

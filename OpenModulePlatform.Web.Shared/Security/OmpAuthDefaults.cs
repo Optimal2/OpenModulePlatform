@@ -19,8 +19,38 @@ public static class OmpAuthDefaults
 
     public const string ConfigurationCategory = "auth";
     public const string ExternalUserProvisioningModeSetting = "externalUserProvisioningMode";
+    public const string SelfRegistrationEnabledSetting = "selfRegistrationEnabled";
     public const string ExternalUserProvisioningModeManual = "Manual";
     public const string ExternalUserProvisioningModeAutoIfRole = "AutoIfRole";
     public const string ExternalUserProvisioningModeAutoIfAuthenticated = "AutoIfAuthenticated";
     public const string ExternalUserProvisioningModeAutomaticForAuthorizedUsers = "AutomaticForAuthorizedUsers";
+
+    public static bool ParseEnabledConfigValue(string? value, bool defaultValue = true)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return defaultValue;
+        }
+
+        if (string.Equals(normalized, "true", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "yes", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "on", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "enabled", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(normalized, "false", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "0", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "no", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "off", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "disabled", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return defaultValue;
+    }
 }

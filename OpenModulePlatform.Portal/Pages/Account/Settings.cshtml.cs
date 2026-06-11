@@ -63,6 +63,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     public bool CanCreateOmpUser { get; private set; }
 
+    public bool SelfRegistrationEnabled { get; private set; } = true;
+
     public string? ProfileImageUrl { get; private set; }
 
     public string? ProfileImageFileName { get; private set; }
@@ -80,7 +82,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
                 return Forbid();
             }
 
-            LoadSelfServiceAccountState();
+            LoadSelfServiceAccountState(await GetSelfRegistrationEnabledAsync(ct));
             UserInput.DisplayName = SuggestedDisplayName();
             return Page();
         }
@@ -194,11 +196,17 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             return RedirectToSettings(UserTab);
         }
 
-        LoadSelfServiceAccountState();
+        LoadSelfServiceAccountState(await GetSelfRegistrationEnabledAsync(ct));
         var providerUserKeys = GetCurrentAdProviderUserKeys();
         if (providerUserKeys.Count == 0)
         {
             ModelState.AddModelError(string.Empty, T("The current sign-in is not an AD sign-in that can be linked."));
+            return Page();
+        }
+
+        if (!SelfRegistrationEnabled)
+        {
+            ModelState.AddModelError(string.Empty, await TWithBrandingAsync("OMP account creation is disabled.", ct));
             return Page();
         }
 
@@ -345,6 +353,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         ActiveTab = NormalizeTab(tab);
         HasOmpUser = true;
         CanCreateOmpUser = false;
+        SelfRegistrationEnabled = true;
         NotificationToastsGloballyEnabled = await GetNotificationToastsGloballyEnabledAsync(ct);
 
         var settings = await _settings.GetAccountSettingsAsync(userId, ct);
@@ -380,12 +389,13 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         return null;
     }
 
-    private void LoadSelfServiceAccountState()
+    private void LoadSelfServiceAccountState(bool selfRegistrationEnabled)
     {
         SetTitles("Settings");
         ActiveTab = UserTab;
         HasOmpUser = false;
-        CanCreateOmpUser = true;
+        SelfRegistrationEnabled = selfRegistrationEnabled;
+        CanCreateOmpUser = selfRegistrationEnabled;
         IsPortalAdmin = false;
         ProfileImageUrl = null;
         ProfileImageFileName = null;
@@ -400,6 +410,15 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             PortalUserSettingsService.NotificationToastsEnabledConfigSetting,
             ct);
         return PortalUserSettingsService.ParseNotificationToastsEnabled(value);
+    }
+
+    private async Task<bool> GetSelfRegistrationEnabledAsync(CancellationToken ct)
+    {
+        var value = await _configuration.GetGlobalStringAsync(
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthDefaults.SelfRegistrationEnabledSetting,
+            ct);
+        return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: true);
     }
 
     private static string NormalizeTab(string? tab)

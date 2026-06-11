@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.38",
+  "repositoryVersion": "0.3.40",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -10,7 +10,7 @@
     },
     {
       "moduleKey": "omp_auth",
-      "definitionVersion": "0.3.7",
+      "definitionVersion": "0.3.9",
       "path": "OpenModulePlatform.Auth/omp_auth.module-definition.json"
     },
     {
@@ -57,7 +57,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.235",
+      "version": "0.3.236",
       "minModuleDefinitionVersion": "0.3.92",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -71,7 +71,8 @@
       "appKey": "omp_auth",
       "packageType": "web-app",
       "targetName": "omp-auth",
-      "version": "0.3.20",
+      "version": "0.3.21",
+      "minModuleDefinitionVersion": "0.3.9",
       "projectPath": "OpenModulePlatform.Auth",
       "relativePathTemplate": "omp-auth/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Auth.zip"
