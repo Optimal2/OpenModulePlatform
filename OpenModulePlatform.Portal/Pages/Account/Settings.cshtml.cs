@@ -21,6 +21,13 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     public const string PortalTab = "portal";
     public const string AdminTab = "admin";
 
+    private enum ExternalUserProvisioningMode
+    {
+        Manual,
+        AutoIfRole,
+        AutoIfAuthenticated
+    }
+
     private readonly PortalUserSettingsService _settings;
     private readonly PortalDashboardService _dashboard;
     private readonly RbacService _rbac;
@@ -65,6 +72,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     public bool SelfRegistrationEnabled { get; private set; } = true;
 
+    public string? OmpUserCreationUnavailableMessage { get; private set; }
+
     public string? ProfileImageUrl { get; private set; }
 
     public string? ProfileImageFileName { get; private set; }
@@ -82,7 +91,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
                 return Forbid();
             }
 
-            LoadSelfServiceAccountState(await GetSelfRegistrationEnabledAsync(ct));
+            await LoadSelfServiceAccountStateAsync(ct);
             UserInput.DisplayName = SuggestedDisplayName();
             return Page();
         }
@@ -196,7 +205,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             return RedirectToSettings(UserTab);
         }
 
-        LoadSelfServiceAccountState(await GetSelfRegistrationEnabledAsync(ct));
+        await LoadSelfServiceAccountStateAsync(ct);
         var providerUserKeys = GetCurrentAdProviderUserKeys();
         if (providerUserKeys.Count == 0)
         {
@@ -207,6 +216,15 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         if (!SelfRegistrationEnabled)
         {
             ModelState.AddModelError(string.Empty, await TWithBrandingAsync("OMP account creation is disabled.", ct));
+            return Page();
+        }
+
+        if (!CanCreateOmpUser)
+        {
+            ModelState.AddModelError(
+                string.Empty,
+                OmpUserCreationUnavailableMessage
+                ?? await TWithBrandingAsync("This sign-in is not eligible to create an OMP account automatically. Contact an administrator if you need an OMP account.", ct));
             return Page();
         }
 
@@ -389,13 +407,41 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         return null;
     }
 
-    private void LoadSelfServiceAccountState(bool selfRegistrationEnabled)
+    private async Task LoadSelfServiceAccountStateAsync(CancellationToken ct)
     {
+        var selfRegistrationEnabled = await GetSelfRegistrationEnabledAsync(ct);
+        var canCreateOmpUser = false;
+        string? unavailableMessage = null;
+
+        if (!selfRegistrationEnabled)
+        {
+            unavailableMessage = await TWithBrandingAsync("OMP account creation is disabled.", ct);
+        }
+        else
+        {
+            var provisioningMode = await GetExternalUserProvisioningModeAsync(ct);
+            canCreateOmpUser = provisioningMode switch
+            {
+                ExternalUserProvisioningMode.Manual => true,
+                ExternalUserProvisioningMode.AutoIfRole => (await _rbac.GetUserRoleContextAsync(User, ct)).AvailableRoles.Count > 0,
+                ExternalUserProvisioningMode.AutoIfAuthenticated => await IsAuthenticatedUsersProvisioningTriggerAllowedAsync(ct),
+                _ => false
+            };
+
+            if (!canCreateOmpUser)
+            {
+                unavailableMessage = await TWithBrandingAsync(
+                    "This sign-in is not eligible to create an OMP account automatically. Contact an administrator if you need an OMP account.",
+                    ct);
+            }
+        }
+
         SetTitles("Settings");
         ActiveTab = UserTab;
         HasOmpUser = false;
         SelfRegistrationEnabled = selfRegistrationEnabled;
-        CanCreateOmpUser = selfRegistrationEnabled;
+        CanCreateOmpUser = selfRegistrationEnabled && canCreateOmpUser;
+        OmpUserCreationUnavailableMessage = unavailableMessage;
         IsPortalAdmin = false;
         ProfileImageUrl = null;
         ProfileImageFileName = null;
@@ -419,6 +465,61 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             OmpAuthDefaults.SelfRegistrationEnabledSetting,
             ct);
         return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: true);
+    }
+
+    private async Task<ExternalUserProvisioningMode> GetExternalUserProvisioningModeAsync(CancellationToken ct)
+    {
+        var value = await _configuration.GetGlobalStringAsync(
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthDefaults.ExternalUserProvisioningModeSetting,
+            ct);
+
+        var normalized = value?.Trim();
+        if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfRole, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeIfRole, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutomaticForAuthorizedUsers, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExternalUserProvisioningMode.AutoIfRole;
+        }
+
+        if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfAuthenticated, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeIfAuthenticated, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExternalUserProvisioningMode.AutoIfAuthenticated;
+        }
+
+        return ExternalUserProvisioningMode.Manual;
+    }
+
+    private async Task<bool> IsAuthenticatedUsersProvisioningTriggerAllowedAsync(CancellationToken ct)
+    {
+        var allowedDomainsValue = await _configuration.GetGlobalStringAsync(
+            OmpRbacDefaults.ConfigurationCategory,
+            OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting,
+            ct);
+
+        var allowedDomains = SplitDomainList(allowedDomainsValue);
+        if (allowedDomains.Count == 0 || allowedDomains.Contains("*"))
+        {
+            return true;
+        }
+
+        return GetWindowsAccountDomains().Any(allowedDomains.Contains);
+    }
+
+    private static HashSet<string> SplitDomainList(string? value)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parts = (value ?? string.Empty).Split(
+            [',', ';', '\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var part in parts.Where(part => !string.IsNullOrWhiteSpace(part)))
+        {
+            result.Add(part);
+        }
+
+        return result;
     }
 
     private static string NormalizeTab(string? tab)
@@ -515,6 +616,29 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         return NormalizePlainAdProviderUserKey(User.Identity?.Name)
             ?? NormalizePlainAdProviderUserKey(User.FindFirstValue(OmpAuthDefaults.ProviderUserKeyClaimType))
             ?? NormalizePlainAdProviderUserKey(User.FindFirstValue(ClaimTypes.Name));
+    }
+
+    private IEnumerable<string> GetWindowsAccountDomains()
+    {
+        foreach (var claim in User.FindAll(OmpAuthDefaults.PrincipalClaimType))
+        {
+            if (!TryParsePrincipalClaim(claim.Value, out var principalType, out var principal))
+            {
+                continue;
+            }
+
+            if (!string.Equals(principalType, "User", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var slashIndex = principal.IndexOf('\\', StringComparison.Ordinal);
+            if (slashIndex > 0)
+            {
+                yield return principal[..slashIndex];
+            }
+        }
     }
 
     private string SuggestedDisplayName()
