@@ -8,7 +8,7 @@
   <data name="Sign in to {0}" xml:space="preserve"><value>Sign in to {0}</value></data>
   <data name="Choose an authentication provider for this {0} instance." xml:space="preserve"><value>Choose an authentication provider for this {0} instance.</value></data>
   <data name="Sign in with Windows / AD" xml:space="preserve"><value>Sign in with Windows / AD</value></data>
-  <data name="Other sign-in options" xml:space="preserve"><value>Other sign-in options</value></data>
+  <data name="Other sign-in options" xml:space="preserve"><value>Other options</value></data>
   <data name="Use other credentials only when normal Windows / AD sign-in cannot be used." xml:space="preserve"><value>Use other credentials only when normal Windows / AD sign-in cannot be used.</value></data>
   <data name="Other Windows / AD account" xml:space="preserve"><value>Other Windows / AD account</value></data>
   <data name="Sign in with another Windows / AD account" xml:space="preserve"><value>Sign in with another Windows / AD account</value></data>

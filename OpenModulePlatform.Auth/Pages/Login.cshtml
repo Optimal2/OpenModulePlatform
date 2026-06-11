@@ -17,6 +17,7 @@
     <title>@signInLabel - @ompBranding.PlatformName</title>
     <style>
         :root { color-scheme: light dark; }
+        *, *::before, *::after { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f5f7fa; color: #16202a; }
         main { min-height: 100vh; display: grid; place-items: center; padding: 2rem; }
         .panel { width: min(28rem, 100%); background: #fff; border: 1px solid #d7dde5; border-radius: 8px; padding: 1.5rem; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08); }
@@ -25,6 +26,9 @@
         .stack { display: grid; gap: 1rem; }
         .windows-actions { display: grid; gap: .5rem; align-items: stretch; }
         .auth-options { display: grid; gap: .75rem; }
+        .auth-options > summary { cursor: pointer; list-style: none; }
+        .auth-options > summary::-webkit-details-marker { display: none; }
+        .auth-options:not([open]) .auth-options-list { display: none; }
         .auth-options-heading { display: flex; align-items: center; gap: .75rem; color: #586173; font-size: .86rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
         .auth-options-heading::before,
         .auth-options-heading::after { content: ""; height: 1px; background: #e2e8f0; flex: 1; }
@@ -63,8 +67,8 @@
                 <a class="button block" href="@Model.WindowsLoginUrl">@L["Sign in with Windows / AD"]</a>
             </div>
 
-            <section class="auth-options" aria-labelledby="other-signin-options-heading">
-                <div class="auth-options-heading" id="other-signin-options-heading">@L["Other sign-in options"]</div>
+            <details class="auth-options" @(Model.ShowOtherSignInOptions || Model.HasOpenPrompt ? "open" : null)>
+                <summary class="auth-options-heading" id="other-signin-options-heading">@L["Other sign-in options"]</summary>
                 <div class="auth-options-list">
                     <button
                         type="button"
@@ -80,7 +84,7 @@
                         @L["Local account"]
                     </button>
                 </div>
-            </section>
+            </details>
 
             <div class="register-action">
                 <button type="button" class="button subtle-link" data-dialog-target="register-account-dialog">
