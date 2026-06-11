@@ -203,7 +203,7 @@ public sealed class OmpAuthRepository
             ProviderUserKey = normalizedUserName,
             RolePrincipals =
             [
-                ("OmpUser", linkedUser.Value.UserId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                ("OmpUser", linkedUser.Value.UserId.ToString(CultureInfo.InvariantCulture)),
                 ("LocalUser", normalizedUserName)
             ]
         }, null);
