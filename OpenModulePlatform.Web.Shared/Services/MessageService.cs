@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Globalization;
 using System.Security.Claims;
+using System.Text;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
@@ -19,6 +20,7 @@ public sealed class MessageService
     private const long MaxConfiguredAttachmentBytes = 100 * 1024 * 1024;
     private const int MaxFileNameLength = 260;
     private const int MaxPreviewLength = 160;
+    private const int MaxMessageBatchSize = 100;
     private const string AttachmentHandlerName = "Attachment";
     public const string ConfigurationCategory = "messages";
     public const string EnabledSetting = "enabled";
@@ -574,7 +576,7 @@ ORDER BY m.message_id DESC;";
         var rows = new List<MessageRow>();
         await using (var cmd = new SqlCommand(sql, conn))
         {
-            cmd.Parameters.Add("@limit", SqlDbType.Int).Value = Math.Clamp(limit, 1, 100);
+            cmd.Parameters.Add("@limit", SqlDbType.Int).Value = Math.Clamp(limit, 1, MaxMessageBatchSize);
             cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
             cmd.Parameters.Add("@before_message_id", SqlDbType.BigInt).Value = beforeMessageId.HasValue
                 ? beforeMessageId.Value
@@ -944,7 +946,7 @@ WHERE a.attachment_id = @attachment_id
         return new MessageAttachmentDownload(
             rdr.GetString(0),
             rdr.GetString(1),
-            (byte[])rdr.GetValue(2));
+            await rdr.GetFieldValueAsync<byte[]>(2, ct));
     }
 
     private static async Task<bool> MessagesTablesExistAsync(SqlConnection conn, CancellationToken ct)
@@ -1080,7 +1082,12 @@ VALUES(@conversation_id, @user_id);";
         var storageKey = Guid.NewGuid().ToString("N");
         var fileName = CleanFileName(file.FileName);
         var contentType = CleanOptional(file.ContentType, 128) ?? "application/octet-stream";
-        await using var ms = new MemoryStream();
+        var initialCapacity = file.Length is > 0 and <= int.MaxValue
+            ? (int)file.Length
+            : 0;
+        await using var ms = initialCapacity > 0
+            ? new MemoryStream(initialCapacity)
+            : new MemoryStream();
         await file.CopyToAsync(ms, ct);
 
         const string sql = @"
@@ -1126,10 +1133,17 @@ VALUES
         {
             return new Dictionary<long, IReadOnlyList<MessageAttachmentRow>>();
         }
+        if (messageIds.Count > MaxMessageBatchSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(messageIds),
+                messageIds.Count,
+                $"Message attachment batches are limited to {MaxMessageBatchSize.ToString(CultureInfo.InvariantCulture)} messages.");
+        }
 
-        var values = string.Join(
-            ",",
-            Enumerable.Range(0, messageIds.Count).Select(i => $"(@message{i})"));
+        // The dynamic SQL below only contains generated parameter names for a bounded batch size.
+        // All message ids remain SqlParameter values.
+        var values = BuildMessageIdValuesClause(messageIds.Count);
 
         var sql = $@"
 WITH RequestedMessages(message_id) AS
@@ -1150,7 +1164,7 @@ ORDER BY a.message_id, a.attachment_id;";
         await using var cmd = new SqlCommand(sql, conn);
         for (var i = 0; i < messageIds.Count; i++)
         {
-            cmd.Parameters.Add("@message" + i, SqlDbType.BigInt).Value = messageIds[i];
+            cmd.Parameters.Add(GetMessageIdParameterName(i), SqlDbType.BigInt).Value = messageIds[i];
         }
 
         var rows = new Dictionary<long, List<MessageAttachmentRow>>();
@@ -1179,6 +1193,27 @@ ORDER BY a.message_id, a.attachment_id;";
             pair => pair.Key,
             pair => (IReadOnlyList<MessageAttachmentRow>)pair.Value);
     }
+
+    private static string BuildMessageIdValuesClause(int count)
+    {
+        var builder = new StringBuilder(count * 12);
+        for (var i = 0; i < count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(',');
+            }
+
+            builder.Append('(');
+            builder.Append(GetMessageIdParameterName(i));
+            builder.Append(')');
+        }
+
+        return builder.ToString();
+    }
+
+    private static string GetMessageIdParameterName(int index)
+        => string.Create(CultureInfo.InvariantCulture, $"@message{index}");
 
     private static string BuildAttachmentDownloadUrl(long conversationId, long attachmentId)
         => string.Concat(
