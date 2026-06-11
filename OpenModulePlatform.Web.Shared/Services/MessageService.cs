@@ -13,6 +13,7 @@ namespace OpenModulePlatform.Web.Shared.Services;
 /// </summary>
 public sealed class MessageService
 {
+    // omp.users.account_status uses 1 for active accounts in the shared auth schema.
     private const int ActiveAccountStatus = 1;
     private const int MaxAttachmentCount = 5;
     private const long DefaultMaxAttachmentBytes = 5 * 1024 * 1024;
@@ -44,6 +45,8 @@ public sealed class MessageService
         _configuration = configuration;
     }
 
+    // Keep a message-service facade so message endpoints do not need to depend
+    // directly on notification service identity helpers.
     public static int? TryGetOmpUserId(ClaimsPrincipal user)
         => NotificationService.TryGetOmpUserId(user);
 
@@ -64,6 +67,8 @@ public sealed class MessageService
         return ParseEnabled(value);
     }
 
+    // Messages are opt-out: missing or invalid configuration keeps the feature
+    // enabled for existing installations until an administrator disables it.
     public static bool ParseEnabled(string? value)
         => !bool.TryParse(value, out var enabled) || enabled;
 
