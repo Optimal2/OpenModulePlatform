@@ -1982,10 +1982,6 @@ button {
     pointer-events: none;
 }
 
-.portal-dashboard.is-editing .omp-dashboard-widget-popup-layer {
-    display: none;
-}
-
 .omp-dashboard-widget-popup-layer > .omp-dashboard-widget-popup {
     position: absolute;
     inset: auto;
@@ -2003,6 +1999,36 @@ button {
     box-shadow: 0 18px 44px rgba(15, 23, 42, 0.2);
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+}
+
+.omp-dashboard-widget-popup-layer > .omp-dashboard-widget-popup.is-dashboard-widget-popup-draggable {
+    padding-top: 28px;
+}
+
+.omp-dashboard-widget-popup__drag-handle {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    z-index: 3;
+    display: block;
+    width: 56px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.38);
+    cursor: grab;
+    transform: translateX(-50%);
+    touch-action: none;
+}
+
+.omp-dashboard-widget-popup__drag-handle:hover,
+.omp-dashboard-widget-popup__drag-handle:focus-visible,
+.omp-dashboard-widget-popup.is-dashboard-widget-popup-dragging .omp-dashboard-widget-popup__drag-handle {
+    background: rgba(11, 87, 208, 0.58);
+}
+
+.omp-dashboard-widget-popup.is-dashboard-widget-popup-dragging,
+.omp-dashboard-widget-popup.is-dashboard-widget-popup-dragging .omp-dashboard-widget-popup__drag-handle {
+    cursor: grabbing;
 }
 
 .omp-dashboard-widget-popup-layer > .omp-dashboard-widget-popup.dashboard-music-player__admin {

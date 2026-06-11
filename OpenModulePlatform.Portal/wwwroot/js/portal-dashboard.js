@@ -19,6 +19,7 @@
     const musicObjectUrls = new Set();
     const blankImageObjectUrls = new Set();
     let activeWidgetPopup = null;
+    let activeWidgetPopupDrag = null;
     let dashboardWidgetPopupId = 0;
     let blankWidgetImagesCache = null;
 
@@ -30,7 +31,7 @@
         const canvas = root?.querySelector?.('[data-dashboard-canvas]') || null;
         const layer = canvas?.querySelector?.('[data-dashboard-widget-popup-layer]') || null;
 
-        if (!anchor || !content || !root || !canvas || !layer || root.classList.contains('is-editing')) {
+        if (!anchor || !content || !root || !canvas || !layer || (root.classList.contains('is-editing') && options?.allowInEditMode !== true)) {
             return false;
         }
 
@@ -71,6 +72,7 @@
             content,
             canvas,
             layer,
+            dragHandle: null,
             ownerWidget,
             ownerWidgetId: options.ownerWidgetId || ownerWidget?.dataset?.userActiveWidgetId || '',
             onClose: typeof options.onClose === 'function' ? options.onClose : null,
@@ -81,6 +83,7 @@
         };
 
         content.classList.add('omp-dashboard-widget-popup');
+        content.classList.add('is-dashboard-widget-popup-draggable');
         content.hidden = false;
         content.style.position = 'absolute';
         content.style.inset = 'auto';
@@ -90,6 +93,13 @@
         content.style.bottom = 'auto';
         content.style.visibility = 'hidden';
         layer.appendChild(content);
+
+        const dragHandle = document.createElement('span');
+        dragHandle.className = 'omp-dashboard-widget-popup__drag-handle';
+        dragHandle.setAttribute('aria-hidden', 'true');
+        dragHandle.addEventListener('pointerdown', handleDashboardWidgetPopupDragStart);
+        content.prepend(dragHandle);
+        activeWidgetPopup.dragHandle = dragHandle;
 
         anchor.setAttribute('aria-expanded', 'true');
         anchor.setAttribute('aria-controls', content.id);
@@ -108,9 +118,12 @@
 
         activeWidgetPopup = null;
         unbindDashboardWidgetPopupEvents();
+        cancelDashboardWidgetPopupDrag();
 
         const { anchor, content, placeholder, originalState, onClose } = popup;
+        popup.dragHandle?.remove();
         content.classList.remove('omp-dashboard-widget-popup');
+        content.classList.remove('is-dashboard-widget-popup-draggable');
         content.hidden = originalState.hidden;
         content.style.position = originalState.position;
         content.style.inset = originalState.inset;
@@ -186,6 +199,76 @@
 
         content.style.left = `${clientLeft - canvasRect.left}px`;
         content.style.top = `${clientTop - canvasRect.top}px`;
+    }
+
+    function handleDashboardWidgetPopupDragStart(event) {
+        const popup = activeWidgetPopup;
+        if (!popup || event.button !== 0) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const contentRect = popup.content.getBoundingClientRect();
+        const canvasRect = popup.canvas.getBoundingClientRect();
+        activeWidgetPopupDrag = {
+            pointerId: event.pointerId,
+            popup,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startLeft: contentRect.left - canvasRect.left,
+            startTop: contentRect.top - canvasRect.top
+        };
+
+        popup.content.classList.add('is-dashboard-widget-popup-dragging');
+        document.addEventListener('pointermove', handleDashboardWidgetPopupDragMove, true);
+        document.addEventListener('pointerup', handleDashboardWidgetPopupDragEnd, true);
+        document.addEventListener('pointercancel', handleDashboardWidgetPopupDragEnd, true);
+        event.currentTarget?.setPointerCapture?.(event.pointerId);
+    }
+
+    function handleDashboardWidgetPopupDragMove(event) {
+        const drag = activeWidgetPopupDrag;
+        if (!drag || event.pointerId !== drag.pointerId || !drag.popup.content.isConnected) {
+            return;
+        }
+
+        event.preventDefault();
+        const nextLeft = drag.startLeft + event.clientX - drag.startClientX;
+        const nextTop = drag.startTop + event.clientY - drag.startClientY;
+        setDashboardWidgetPopupPosition(drag.popup, nextLeft, nextTop);
+    }
+
+    function handleDashboardWidgetPopupDragEnd(event) {
+        const drag = activeWidgetPopupDrag;
+        if (drag && event.pointerId === drag.pointerId) {
+            event.preventDefault();
+        }
+
+        cancelDashboardWidgetPopupDrag();
+    }
+
+    function cancelDashboardWidgetPopupDrag() {
+        if (activeWidgetPopupDrag?.popup?.content) {
+            activeWidgetPopupDrag.popup.content.classList.remove('is-dashboard-widget-popup-dragging');
+        }
+
+        activeWidgetPopupDrag = null;
+        document.removeEventListener('pointermove', handleDashboardWidgetPopupDragMove, true);
+        document.removeEventListener('pointerup', handleDashboardWidgetPopupDragEnd, true);
+        document.removeEventListener('pointercancel', handleDashboardWidgetPopupDragEnd, true);
+    }
+
+    function setDashboardWidgetPopupPosition(popup, left, top) {
+        const canvasWidth = Math.max(popup.canvas.scrollWidth, popup.canvas.offsetWidth, popup.canvas.clientWidth);
+        const canvasHeight = Math.max(popup.canvas.scrollHeight, popup.canvas.offsetHeight, popup.canvas.clientHeight);
+        const popupRect = popup.content.getBoundingClientRect();
+        const maxLeft = Math.max(0, canvasWidth - popupRect.width);
+        const maxTop = Math.max(0, canvasHeight - popupRect.height);
+
+        popup.content.style.left = `${Math.min(Math.max(0, left), maxLeft)}px`;
+        popup.content.style.top = `${Math.min(Math.max(0, top), maxTop)}px`;
     }
 
     function bindDashboardWidgetPopupEvents() {
@@ -734,6 +817,43 @@
         const zoomPanel = widget.querySelector('[data-widget-zoom-panel]');
         const toggle = widget.querySelector('[data-widget-settings-toggle]');
         const panel = widget.querySelector('[data-widget-settings-panel]');
+        const closeSettingsPanel = (restoreFocus = false) => {
+            if (panel && window.ompDashboardWidgetPopups?.isOpenFor?.(panel)) {
+                window.ompDashboardWidgetPopups.close({ restoreFocus });
+                return;
+            }
+
+            if (panel) {
+                panel.hidden = true;
+            }
+
+            toggle?.setAttribute('aria-expanded', 'false');
+        };
+
+        const openSettingsPanel = () => {
+            if (!toggle || !panel) {
+                return;
+            }
+
+            const opened = window.ompDashboardWidgetPopups?.open?.({
+                anchor: toggle,
+                content: panel,
+                ownerWidget: widget,
+                ownerWidgetId: widget.dataset.userActiveWidgetId || '',
+                placement: 'bottom-end',
+                allowInEditMode: true,
+                onClose: () => {
+                    panel.hidden = true;
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            if (!opened) {
+                panel.hidden = false;
+                toggle.setAttribute('aria-expanded', 'true');
+            }
+        };
+
         if (zoomToggle && zoomPanel && zoomToggle.dataset.dashboardWidgetSettingsBound !== 'true') {
             zoomToggle.dataset.dashboardWidgetSettingsBound = 'true';
             zoomToggle.addEventListener('click', (event) => {
@@ -741,8 +861,7 @@
                 event.stopPropagation();
                 const isOpen = zoomPanel.hidden;
                 if (panel && isOpen) {
-                    panel.hidden = true;
-                    toggle?.setAttribute('aria-expanded', 'false');
+                    closeSettingsPanel(false);
                 }
 
                 zoomPanel.hidden = !isOpen;
@@ -755,14 +874,17 @@
             toggle.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                const isOpen = panel.hidden;
-                if (zoomPanel && isOpen) {
+                const isOpen = window.ompDashboardWidgetPopups?.isOpenFor?.(panel) || !panel.hidden;
+                if (zoomPanel && !isOpen) {
                     zoomPanel.hidden = true;
                     zoomToggle?.setAttribute('aria-expanded', 'false');
                 }
 
-                panel.hidden = !isOpen;
-                toggle.setAttribute('aria-expanded', String(isOpen));
+                if (isOpen) {
+                    closeSettingsPanel(false);
+                } else {
+                    openSettingsPanel();
+                }
             });
         }
 
