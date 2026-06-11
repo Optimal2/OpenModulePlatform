@@ -30,6 +30,8 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 
     public bool CanUseMessages { get; private set; }
 
+    public bool MessagesDisabled { get; private set; }
+
     public bool HasMoreMessages { get; private set; }
 
     [BindProperty]
@@ -48,6 +50,13 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
     public async Task<IActionResult> OnGet(long conversationId, long? beforeMessageId, CancellationToken ct)
     {
         SetTitles("Messages");
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            MessagesDisabled = true;
+            CanUseMessages = false;
+            return Page();
+        }
 
         if (!TryGetCurrentUserId(out var userId))
         {
@@ -74,6 +83,11 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
             return Forbid();
         }
 
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
         try
         {
             await _messages.SendMessageAsync(userId, conversationId, MessageContent, Attachments, ct);
@@ -97,6 +111,11 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         if (!TryGetCurrentUserId(out var userId))
         {
             return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
         }
 
         var attachment = await _messages.GetAttachmentAsync(userId, conversationId, attachmentId, ct);

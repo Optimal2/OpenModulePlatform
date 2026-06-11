@@ -37,7 +37,7 @@
         </div>
     </section>
     <section class="card top-gap">
-        <div class="empty-state">@L["Messages require an OMP user"]</div>
+        <div class="empty-state">@(Model.MessagesDisabled ? L["Messages are disabled"].Value : L["Messages require an OMP user"].Value)</div>
     </section>
 }
 else if (Model.Conversation is null)

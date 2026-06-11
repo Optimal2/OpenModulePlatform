@@ -27,9 +27,18 @@ public sealed class IndexModel : OmpSecurePageModel<PortalResource>
 
     public bool CanUseMessages { get; private set; }
 
+    public bool MessagesDisabled { get; private set; }
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         SetTitles("Messages");
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            MessagesDisabled = true;
+            CanUseMessages = false;
+            return Page();
+        }
 
         if (!TryGetCurrentUserId(out var userId))
         {

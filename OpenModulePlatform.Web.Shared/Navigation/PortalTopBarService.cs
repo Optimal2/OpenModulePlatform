@@ -120,6 +120,7 @@ public sealed class PortalTopBarService
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
             var unreadMessageCount = 0;
+            var messagesEnabled = await _messages.IsEnabledAsync(ct);
             string? currentUserProfileImageUrl = null;
             if (user.Identity?.IsAuthenticated == true)
             {
@@ -132,10 +133,14 @@ public sealed class PortalTopBarService
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
-                unreadMessageCount = await _messages.GetUnreadMessageCountAsync(resolvedUserId, ct);
-                messageConversations = BuildMessageConversations(
-                    await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
-                    topBarOptions.PortalBaseUrl);
+                if (messagesEnabled)
+                {
+                    unreadMessageCount = await _messages.GetUnreadMessageCountAsync(resolvedUserId, ct);
+                    messageConversations = BuildMessageConversations(
+                        await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
+                        topBarOptions.PortalBaseUrl);
+                }
+
                 currentUserProfileImageUrl = await GetUserProfileImageUrlAsync(
                     resolvedUserId,
                     topBarOptions.PortalBaseUrl,
@@ -166,7 +171,7 @@ public sealed class PortalTopBarService
                 notificationMarkAllReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkAllReadPath),
                 notificationRecentUrl: BuildRequestEndpointHref(request, NotificationService.RecentPath),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
-                canUseMessages: userId.HasValue,
+                canUseMessages: userId.HasValue && messagesEnabled,
                 messageConversations,
                 unreadMessageCount,
                 messageMarkAllReadUrl: BuildRequestEndpointHref(request, MessageService.MarkAllReadPath),
@@ -336,6 +341,7 @@ public sealed class PortalTopBarService
             IReadOnlyList<PortalTopBarBanner> banners = [];
             var unreadNotificationCount = 0;
             var unreadMessageCount = 0;
+            var messagesEnabled = await _messages.IsEnabledAsync(ct);
             string? currentUserProfileImageUrl = null;
             if (user.Identity?.IsAuthenticated == true)
             {
@@ -348,10 +354,14 @@ public sealed class PortalTopBarService
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
-                unreadMessageCount = await _messages.GetUnreadMessageCountAsync(resolvedUserId, ct);
-                messageConversations = BuildMessageConversations(
-                    await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
-                    topBarOptions.PortalBaseUrl);
+                if (messagesEnabled)
+                {
+                    unreadMessageCount = await _messages.GetUnreadMessageCountAsync(resolvedUserId, ct);
+                    messageConversations = BuildMessageConversations(
+                        await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
+                        topBarOptions.PortalBaseUrl);
+                }
+
                 currentUserProfileImageUrl = await GetUserProfileImageUrlAsync(
                     resolvedUserId,
                     topBarOptions.PortalBaseUrl,
@@ -382,7 +392,7 @@ public sealed class PortalTopBarService
                 notificationMarkAllReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkAllReadPath),
                 notificationRecentUrl: BuildUriEndpointHref(currentUri, NotificationService.RecentPath),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
-                canUseMessages: userId.HasValue,
+                canUseMessages: userId.HasValue && messagesEnabled,
                 messageConversations,
                 unreadMessageCount,
                 messageMarkAllReadUrl: BuildUriEndpointHref(currentUri, MessageService.MarkAllReadPath),
