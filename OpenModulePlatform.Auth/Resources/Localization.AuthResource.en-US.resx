@@ -14,11 +14,13 @@
   <data name="Sign in with another Windows / AD account" xml:space="preserve"><value>Sign in with another Windows / AD account</value></data>
   <data name="Use DOMAIN\user, .\user, user@domain, or a local account name." xml:space="preserve"><value>Use DOMAIN\user, .\user, user@domain, or a local account name.</value></data>
   <data name="Windows account" xml:space="preserve"><value>Windows account</value></data>
+  <data name="Local account" xml:space="preserve"><value>Local account</value></data>
   <data name="Local password" xml:space="preserve"><value>Local password</value></data>
   <data name="User name" xml:space="preserve"><value>User name</value></data>
   <data name="Password" xml:space="preserve"><value>Password</value></data>
   <data name="Confirm password" xml:space="preserve"><value>Confirm password</value></data>
   <data name="Sign in with local password" xml:space="preserve"><value>Sign in with local password</value></data>
+  <data name="Sign in with a local OMP user name and password." xml:space="preserve"><value>Sign in with a local OMP user name and password.</value></data>
   <data name="Create account" xml:space="preserve"><value>Create account</value></data>
   <data name="Create a local OMP account with a user name and password." xml:space="preserve"><value>Create a local OMP account with a user name and password.</value></data>
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>

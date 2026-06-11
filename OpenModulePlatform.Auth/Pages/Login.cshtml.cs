@@ -64,7 +64,14 @@ public sealed class LoginModel : PageModel
 
     public bool ShowAlternateWindowsPrompt { get; private set; }
 
+    public bool ShowLocalAccountPrompt { get; private set; }
+
+    public bool ShowRegisterAccountPrompt { get; private set; }
+
     public bool ShowOtherSignInOptions { get; private set; }
+
+    public bool HasOpenPrompt =>
+        ShowAlternateWindowsPrompt || ShowLocalAccountPrompt || ShowRegisterAccountPrompt;
 
     public IActionResult OnGet(string? error)
     {
@@ -91,6 +98,7 @@ public sealed class LoginModel : PageModel
         if (string.IsNullOrWhiteSpace(UserName) || string.IsNullOrEmpty(Password))
         {
             ErrorMessage = T("Enter a user name and password.");
+            ShowLocalAccountPrompt = true;
             ShowOtherSignInOptions = true;
             BuildProviderUrls();
             return Page();
@@ -100,6 +108,7 @@ public sealed class LoginModel : PageModel
         if (result.User is null)
         {
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The user name or password is incorrect.", ct);
+            ShowLocalAccountPrompt = true;
             ShowOtherSignInOptions = true;
             BuildProviderUrls();
             return Page();
@@ -117,6 +126,7 @@ public sealed class LoginModel : PageModel
         if (validationError is not null)
         {
             ErrorMessage = T(validationError);
+            ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
             ClearRegistrationPasswordFields();
             BuildProviderUrls();
@@ -127,6 +137,7 @@ public sealed class LoginModel : PageModel
         if (result.User is null)
         {
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The OMP user account could not be created.", ct);
+            ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
             ClearRegistrationPasswordFields();
             BuildProviderUrls();

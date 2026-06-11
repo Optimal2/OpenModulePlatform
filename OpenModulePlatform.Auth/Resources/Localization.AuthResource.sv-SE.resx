@@ -14,11 +14,13 @@
   <data name="Sign in with another Windows / AD account" xml:space="preserve"><value>Logga in med ett annat Windows / AD-konto</value></data>
   <data name="Use DOMAIN\user, .\user, user@domain, or a local account name." xml:space="preserve"><value>Använd DOMAIN\användare, .\användare, användare@domän eller ett lokalt kontonamn.</value></data>
   <data name="Windows account" xml:space="preserve"><value>Windows-konto</value></data>
+  <data name="Local account" xml:space="preserve"><value>Lokalt konto</value></data>
   <data name="Local password" xml:space="preserve"><value>Lokalt lösenord</value></data>
   <data name="User name" xml:space="preserve"><value>Användarnamn</value></data>
   <data name="Password" xml:space="preserve"><value>Lösenord</value></data>
   <data name="Confirm password" xml:space="preserve"><value>Bekräfta lösenord</value></data>
   <data name="Sign in with local password" xml:space="preserve"><value>Logga in med lokalt lösenord</value></data>
+  <data name="Sign in with a local OMP user name and password." xml:space="preserve"><value>Logga in med ett lokalt OMP-användarnamn och lösenord.</value></data>
   <data name="Create account" xml:space="preserve"><value>Skapa konto</value></data>
   <data name="Create a local OMP account with a user name and password." xml:space="preserve"><value>Skapa ett lokalt OMP-konto med användarnamn och lösenord.</value></data>
   <data name="Cancel" xml:space="preserve"><value>Avbryt</value></data>
