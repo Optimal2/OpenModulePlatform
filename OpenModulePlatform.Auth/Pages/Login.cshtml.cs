@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Localization;
 using OpenModulePlatform.Auth.Localization;
 using OpenModulePlatform.Auth.Models;
@@ -15,6 +16,10 @@ namespace OpenModulePlatform.Auth.Pages;
 [AllowAnonymous]
 public sealed class LoginModel : PageModel
 {
+    private const int SessionExpirationHours = 10;
+    private const int MaxRegistrationUserNameLength = 256;
+    private const int MinRegistrationPasswordLength = 8;
+
     private static readonly char[] ReturnUrlPathTerminators = ['?', '#'];
 
     private readonly OmpAuthRepository _repository;
@@ -95,7 +100,7 @@ public sealed class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostLocalAsync(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(UserName) || string.IsNullOrEmpty(Password))
+        if (string.IsNullOrWhiteSpace(UserName) || string.IsNullOrWhiteSpace(Password))
         {
             ErrorMessage = T("Enter a user name and password.");
             ShowLocalAccountPrompt = true;
@@ -161,6 +166,7 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        // Windows passwords are not trimmed; only missing values are rejected here.
         if (string.IsNullOrWhiteSpace(AlternateWindowsUserName) ||
             string.IsNullOrEmpty(AlternateWindowsPassword))
         {
@@ -198,7 +204,7 @@ public sealed class LoginModel : PageModel
         {
             IsPersistent = true,
             IssuedUtc = DateTimeOffset.UtcNow,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(10)
+            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(SessionExpirationHours)
         };
 
         return HttpContext.SignInAsync(
@@ -225,7 +231,7 @@ public sealed class LoginModel : PageModel
     private void BuildProviderUrls()
     {
         var returnUrl = ResolveSafeReturnUrl();
-        WindowsLoginUrl = Url.Content("~/ad") + "?returnUrl=" + Uri.EscapeDataString(returnUrl);
+        WindowsLoginUrl = QueryHelpers.AddQueryString(Url.Content("~/ad"), "returnUrl", returnUrl);
     }
 
     private string? ValidateRegistrationInput()
@@ -235,17 +241,17 @@ public sealed class LoginModel : PageModel
             return "Enter a user name.";
         }
 
-        if (RegisterUserName.Length > 256)
+        if (RegisterUserName.Length > MaxRegistrationUserNameLength)
         {
             return "User name must be 256 characters or fewer.";
         }
 
-        if (string.IsNullOrEmpty(RegisterPassword))
+        if (string.IsNullOrWhiteSpace(RegisterPassword))
         {
             return "Password is required.";
         }
 
-        if (RegisterPassword.Length < 8)
+        if (RegisterPassword.Length < MinRegistrationPasswordLength)
         {
             return "Password must be at least 8 characters.";
         }

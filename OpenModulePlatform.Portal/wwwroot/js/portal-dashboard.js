@@ -2934,7 +2934,7 @@
         return window.scrollY || 0;
     }
 
-    function startDrag(root, canvas, widget, event, state, onChange = () => {}) {
+    function startDrag(root, canvas, widget, event, dashboardState, onChange = () => {}) {
         const canvasRect = canvas.getBoundingClientRect();
         const widgetRect = widget.getBoundingClientRect();
         const startX = event.clientX;
@@ -2965,14 +2965,14 @@
             const nextLeft = Math.max(0, startLeft + moveEvent.clientX - startX + scrollDeltaX);
             const scrollDeltaY = getWindowScrollY() - startScrollY;
             const nextTop = Math.max(0, startTop + moveEvent.clientY - startY + scrollDeltaY);
-            const deltaLeft = Math.max(snapIfNeeded(nextLeft, state) - activeStart.left, -minStartLeft);
-            const deltaTop = Math.max(snapIfNeeded(nextTop, state) - activeStart.top, -minStartTop);
+            const deltaLeft = Math.max(snapIfNeeded(nextLeft, dashboardState) - activeStart.left, -minStartLeft);
+            const deltaTop = Math.max(snapIfNeeded(nextTop, dashboardState) - activeStart.top, -minStartTop);
 
             widgetPositions.forEach((item) => {
                 item.widget.style.left = `${item.left + deltaLeft}px`;
                 item.widget.style.top = `${item.top + deltaTop}px`;
             });
-            updateCanvasHeight(root, canvas, state);
+            updateCanvasHeight(root, canvas, dashboardState);
         };
 
         const end = () => {
@@ -2980,7 +2980,7 @@
             widget.removeEventListener('pointermove', move);
             widget.removeEventListener('pointerup', end);
             widget.removeEventListener('pointercancel', end);
-            updateCanvasHeight(root, canvas, state);
+            updateCanvasHeight(root, canvas, dashboardState);
             onChange();
         };
 
@@ -3012,7 +3012,7 @@
         }
     }
 
-    function startResize(root, canvas, widget, event, state, onChange = () => {}) {
+    function startResize(root, canvas, widget, event, dashboardState, onChange = () => {}) {
         const startX = event.clientX;
         const startY = event.clientY;
         const startScrollX = getWindowScrollX();
@@ -3027,9 +3027,9 @@
             const scrollDeltaX = getWindowScrollX() - startScrollX;
             const nextWidth = Math.max(minWidth, startWidth + moveEvent.clientX - startX + scrollDeltaX);
             const nextHeight = Math.max(minHeight, startHeight + moveEvent.clientY - startY);
-            widget.style.width = `${snapSizeIfNeeded(nextWidth, minWidth, state)}px`;
-            widget.style.height = `${snapSizeIfNeeded(nextHeight, minHeight, state)}px`;
-            updateCanvasHeight(root, canvas, state);
+            widget.style.width = `${snapSizeIfNeeded(nextWidth, minWidth, dashboardState)}px`;
+            widget.style.height = `${snapSizeIfNeeded(nextHeight, minHeight, dashboardState)}px`;
+            updateCanvasHeight(root, canvas, dashboardState);
         };
 
         const end = () => {
@@ -3037,7 +3037,7 @@
             widget.removeEventListener('pointermove', move);
             widget.removeEventListener('pointerup', end);
             widget.removeEventListener('pointercancel', end);
-            updateCanvasHeight(root, canvas, state);
+            updateCanvasHeight(root, canvas, dashboardState);
             onChange();
         };
 
@@ -3046,34 +3046,34 @@
         widget.addEventListener('pointercancel', end);
     }
 
-    function snapWidgetToGrid(widget, state) {
-        if (!state?.alignToGrid) {
+    function snapWidgetToGrid(widget, dashboardState) {
+        if (!dashboardState?.alignToGrid) {
             return;
         }
 
-        widget.style.left = `${snapIfNeeded(parsePixel(widget.style.left), state)}px`;
-        widget.style.top = `${snapIfNeeded(parsePixel(widget.style.top), state)}px`;
-        widget.style.width = `${snapSizeIfNeeded(widget.offsetWidth, minWidth, state)}px`;
-        widget.style.height = `${snapSizeIfNeeded(widget.offsetHeight, minHeight, state)}px`;
+        widget.style.left = `${snapIfNeeded(parsePixel(widget.style.left), dashboardState)}px`;
+        widget.style.top = `${snapIfNeeded(parsePixel(widget.style.top), dashboardState)}px`;
+        widget.style.width = `${snapSizeIfNeeded(widget.offsetWidth, minWidth, dashboardState)}px`;
+        widget.style.height = `${snapSizeIfNeeded(widget.offsetHeight, minHeight, dashboardState)}px`;
     }
 
-    function snapAllWidgetsToGrid(canvas, state) {
+    function snapAllWidgetsToGrid(canvas, dashboardState) {
         canvas.querySelectorAll('[data-dashboard-widget]').forEach((widget) => {
-            snapWidgetToGrid(widget, state);
+            snapWidgetToGrid(widget, dashboardState);
         });
     }
 
-    function snapIfNeeded(value, state) {
-        if (!state?.alignToGrid) {
+    function snapIfNeeded(value, dashboardState) {
+        if (!dashboardState?.alignToGrid) {
             return Math.round(value);
         }
 
-        const gridSize = state.gridSize || defaultGridSize;
+        const gridSize = dashboardState.gridSize || defaultGridSize;
         return Math.round(value / gridSize) * gridSize;
     }
 
-    function snapSizeIfNeeded(value, min, state) {
-        const snapped = snapIfNeeded(value, state);
+    function snapSizeIfNeeded(value, min, dashboardState) {
+        const snapped = snapIfNeeded(value, dashboardState);
         return Math.max(min, snapped);
     }
 
@@ -3086,32 +3086,32 @@
         }
     }
 
-    function updateCanvasHeight(root, canvas, state) {
+    function updateCanvasHeight(root, canvas, dashboardState) {
         const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'));
         const lowestWidgetBottom = widgets
             .reduce((max, widget) => Math.max(max, parsePixel(widget.style.top) + widget.offsetHeight), 0);
         const isEditing = root.classList.contains('is-editing');
         let nextHeight = isEditing
             ? Math.max(
-                getMinCanvasHeight(root, canvas, state),
-                lowestWidgetBottom + (state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)))
+                getMinCanvasHeight(root, canvas, dashboardState),
+                lowestWidgetBottom + (dashboardState?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)))
             : widgets.length > 0
-                ? lowestWidgetBottom + (state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding))
-                : (state?.emptyCanvasHeight ?? parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight));
-        if (isEditing && state) {
-            state.editCanvasHeight = Math.max(
-                state.editCanvasHeight || 0,
+                ? lowestWidgetBottom + (dashboardState?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding))
+                : (dashboardState?.emptyCanvasHeight ?? parsePositiveInteger(root.dataset.emptyCanvasHeight, defaultEmptyCanvasHeight));
+        if (isEditing && dashboardState) {
+            dashboardState.editCanvasHeight = Math.max(
+                dashboardState.editCanvasHeight || 0,
                 nextHeight,
                 Math.ceil(canvas.getBoundingClientRect().height));
-            nextHeight = state.editCanvasHeight;
-        } else if (state) {
-            state.editCanvasHeight = 0;
+            nextHeight = dashboardState.editCanvasHeight;
+        } else if (dashboardState) {
+            dashboardState.editCanvasHeight = 0;
         }
         canvas.style.setProperty('--dashboard-canvas-height', `${Math.ceil(nextHeight)}px`);
-        updateCanvasWidth(root, canvas, state);
+        updateCanvasWidth(root, canvas, dashboardState);
     }
 
-    function updateCanvasWidth(root, canvas, state) {
+    function updateCanvasWidth(root, canvas, dashboardState) {
         const widgets = Array.from(canvas.querySelectorAll('[data-dashboard-widget]'));
         const lowestWidgetRight = widgets
             .reduce((max, widget) => Math.max(max, parsePixel(widget.style.left) + widget.offsetWidth), 0);
@@ -3119,8 +3119,8 @@
         if (lowestWidgetRight <= 0) {
             canvas.style.setProperty('--dashboard-canvas-width', '100%');
             document.documentElement.style.setProperty('--portal-page-chrome-width', '100%');
-            if (!isEditing && state) {
-                state.editCanvasWidth = 0;
+            if (!isEditing && dashboardState) {
+                dashboardState.editCanvasWidth = 0;
             }
             return;
         }
@@ -3128,17 +3128,17 @@
         const canvasLeft = Math.max(0, canvas.getBoundingClientRect().left);
         const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
         const padding = isEditing
-            ? state?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)
-            : state?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding);
+            ? dashboardState?.bottomPadding ?? parsePositiveInteger(root.dataset.canvasBottomPadding, defaultBottomPadding)
+            : dashboardState?.viewBottomPadding ?? parsePositiveInteger(root.dataset.canvasViewBottomPadding, defaultViewBottomPadding);
         let canvasWidth = Math.max(0, Math.ceil(lowestWidgetRight + padding));
-        if (isEditing && state) {
-            state.editCanvasWidth = Math.max(
-                state.editCanvasWidth || 0,
+        if (isEditing && dashboardState) {
+            dashboardState.editCanvasWidth = Math.max(
+                dashboardState.editCanvasWidth || 0,
                 canvasWidth,
                 Math.ceil(canvas.getBoundingClientRect().width));
-            canvasWidth = state.editCanvasWidth;
-        } else if (state) {
-            state.editCanvasWidth = 0;
+            canvasWidth = dashboardState.editCanvasWidth;
+        } else if (dashboardState) {
+            dashboardState.editCanvasWidth = 0;
         }
         const pageWidth = Math.max(viewportWidth, Math.ceil(canvasLeft + canvasWidth));
 
@@ -3146,8 +3146,8 @@
         document.documentElement.style.setProperty('--portal-page-chrome-width', `${pageWidth}px`);
     }
 
-    function getMinCanvasHeight(root, canvas, state) {
-        const configuredMin = state?.minCanvasHeight ?? parsePositiveInteger(root.dataset.minCanvasHeight, defaultMinCanvasHeight);
+    function getMinCanvasHeight(root, canvas, dashboardState) {
+        const configuredMin = dashboardState?.minCanvasHeight ?? parsePositiveInteger(root.dataset.minCanvasHeight, defaultMinCanvasHeight);
         const available = window.innerHeight - canvas.getBoundingClientRect().top - 32;
         return Math.max(configuredMin, available);
     }
