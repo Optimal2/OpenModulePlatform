@@ -1236,7 +1236,22 @@ ORDER BY attachment_id;";
         }
 
         fileName = fileName.Trim();
-        return fileName.Length <= MaxFileNameLength ? fileName : fileName[^MaxFileNameLength..];
+        if (fileName.Length <= MaxFileNameLength)
+        {
+            return fileName;
+        }
+
+        var extension = Path.GetExtension(fileName);
+        if (string.IsNullOrEmpty(extension) || extension.Length >= MaxFileNameLength)
+        {
+            return fileName[..MaxFileNameLength];
+        }
+
+        var nameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
+        var maxNameLength = MaxFileNameLength - extension.Length;
+        return nameWithoutExtension.Length <= maxNameLength
+            ? nameWithoutExtension + extension
+            : nameWithoutExtension[..maxNameLength] + extension;
     }
 
     private static string? CleanOptional(string? value, int maxLength)
