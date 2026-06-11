@@ -440,15 +440,20 @@
                     @L["Add widget"]
                 </button>
 
-                <button type="button" class="dashboard-save-button" data-dashboard-save disabled aria-disabled="true">
-                    <span class="dashboard-action-icon dashboard-action-icon--save" aria-hidden="true"></span>
-                    @L["Save"]
-                </button>
+                <div class="dashboard-edit-menu__save-row">
+                    <button type="button" class="dashboard-save-button" data-dashboard-save disabled aria-disabled="true">
+                        <span class="dashboard-action-icon dashboard-action-icon--save" aria-hidden="true"></span>
+                        @L["Save"]
+                    </button>
 
-                <button type="button" class="dashboard-reset-changes-button" data-dashboard-reset-changes>
-                    <span class="dashboard-action-icon dashboard-action-icon--reset-history" aria-hidden="true"></span>
-                    @L["Reset changes"]
-                </button>
+                    <button type="button"
+                            class="dashboard-reset-changes-button"
+                            data-dashboard-reset-changes
+                            aria-label="@L["Reset changes"]"
+                            title="@L["Reset changes"]">
+                        <span class="dashboard-action-icon dashboard-action-icon--reset-history" aria-hidden="true"></span>
+                    </button>
+                </div>
             </div>
             <button type="button"
                     class="dashboard-floating-button"
