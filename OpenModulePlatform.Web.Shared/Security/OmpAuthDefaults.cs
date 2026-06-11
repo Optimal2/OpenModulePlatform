@@ -21,7 +21,9 @@ public static class OmpAuthDefaults
     public const string ExternalUserProvisioningModeSetting = "externalUserProvisioningMode";
     public const string SelfRegistrationEnabledSetting = "selfRegistrationEnabled";
     public const string ExternalUserProvisioningModeManual = "Manual";
+    public const string ExternalUserProvisioningModeIfRole = "IfRole";
     public const string ExternalUserProvisioningModeAutoIfRole = "AutoIfRole";
+    public const string ExternalUserProvisioningModeIfAuthenticated = "IfAuthenticated";
     public const string ExternalUserProvisioningModeAutoIfAuthenticated = "AutoIfAuthenticated";
     public const string ExternalUserProvisioningModeAutomaticForAuthorizedUsers = "AutomaticForAuthorizedUsers";
 
