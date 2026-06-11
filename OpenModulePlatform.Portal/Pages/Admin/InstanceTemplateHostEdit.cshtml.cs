@@ -14,11 +14,10 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 /// <summary>
 /// Edits a desired host row on the current installation profile.
 /// </summary>
-public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
+public sealed partial class InstanceTemplateHostEditModel : OmpPortalPageModel
 {
-    private static readonly Regex KeyPattern = new(
-        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
-        RegexOptions.Compiled);
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.CultureInvariant)]
+    private static partial Regex HostKeyRegex();
 
     private readonly OmpAdminRepository _repo;
 
@@ -184,7 +183,7 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
             ModelState.AddModelError(nameof(Input.HostTemplateId), T("Select a host role."));
         }
 
-        if (!KeyPattern.IsMatch(Input.HostKey ?? string.Empty))
+        if (!HostKeyRegex().IsMatch(Input.HostKey))
         {
             ModelState.AddModelError(
                 nameof(Input.HostKey),
@@ -225,7 +224,6 @@ public sealed class InstanceTemplateHostEditModel : OmpPortalPageModel
 
         public int InstanceTemplateId { get; set; }
 
-        [Required]
         [Display(Name = "Host role")]
         public int HostTemplateId { get; set; }
 

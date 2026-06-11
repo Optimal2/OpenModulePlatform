@@ -6,6 +6,10 @@ namespace OpenModulePlatform.Portal.Services;
 
 public sealed partial class OmpAdminRepository
 {
+    // Retention preview and cleanup jobs scan all historical artifact versions and every reference table.
+    // Large installations can legitimately need a long-running query while the result is still bounded in C#.
+    private const int ArtifactRetentionCommandTimeoutSeconds = 3600;
+
     private const string ArtifactRetentionCandidateSql = @"
 WITH RankedArtifacts AS
 (
@@ -657,22 +661,12 @@ SELECT @@ROWCOUNT;";
     private async Task<IReadOnlyList<ArtifactRetentionCandidateRow>> ReadArtifactRetentionCandidatesAsync(
         string sql,
         int maxVersionsToKeep,
-        CancellationToken ct,
-        SqlConnection? existingConnection = null,
-        SqlTransaction? transaction = null)
+        CancellationToken ct)
     {
-        if (existingConnection is not null)
-        {
-            await using var cmd = new SqlCommand(sql, existingConnection, transaction);
-            cmd.CommandTimeout = 3600;
-            Add(cmd, "@MaxVersionsToKeep", maxVersionsToKeep);
-            return await ReadArtifactRetentionCandidatesAsync(cmd, ct);
-        }
-
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var newCmd = new SqlCommand(sql, conn);
-        newCmd.CommandTimeout = 3600;
+        newCmd.CommandTimeout = ArtifactRetentionCommandTimeoutSeconds;
         Add(newCmd, "@MaxVersionsToKeep", maxVersionsToKeep);
         return await ReadArtifactRetentionCandidatesAsync(newCmd, ct);
     }

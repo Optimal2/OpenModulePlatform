@@ -11,6 +11,9 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 
 public sealed class MaintenanceModel : OmpPortalPageModel
 {
+    private const int DefaultMaintenanceFindingLimit = 200;
+    private const int DefaultRecentHostAgentJobLimit = 25;
+
     private readonly OmpAdminRepository _repo;
 
     public MaintenanceModel(
@@ -74,7 +77,10 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return guard;
         }
 
-        return RedirectToMaintenancePage();
+        SetTitles("Maintenance");
+        Preview = await LoadPreviewCoreAsync(ct);
+        await LoadOperationalListsAsync(ct);
+        return Page();
     }
 
     public async Task<IActionResult> OnPostCleanupArtifacts(CancellationToken ct)
@@ -203,7 +209,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     private async Task LoadOperationalListsAsync(CancellationToken ct)
     {
-        MaintenanceFindings = await _repo.GetMaintenanceFindingsAsync(200, ct);
+        MaintenanceFindings = await _repo.GetMaintenanceFindingsAsync(DefaultMaintenanceFindingLimit, ct);
         await LoadRecentHostAgentJobsAsync(ct);
     }
 
@@ -222,18 +228,18 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     private async Task LoadRecentHostAgentJobsAsync(CancellationToken ct)
     {
-        RecentHostAgentJobs = await _repo.GetRecentHostAgentJobsAsync(25, ct);
+        RecentHostAgentJobs = await _repo.GetRecentHostAgentJobsAsync(DefaultRecentHostAgentJobLimit, ct);
     }
 
     public static string FormatHostAgentJobStatus(byte status)
         => status switch
         {
-            0 => "Pending",
-            1 => "Running",
-            2 => "Succeeded",
-            3 => "Failed",
-            4 => "Warning",
-            5 => "Cancelled",
+            HostAgentJobStatuses.Pending => "Pending",
+            HostAgentJobStatuses.Running => "Running",
+            HostAgentJobStatuses.Succeeded => "Succeeded",
+            HostAgentJobStatuses.Failed => "Failed",
+            HostAgentJobStatuses.Warning => "Warning",
+            HostAgentJobStatuses.Cancelled => "Cancelled",
             _ => "Unknown"
         };
 

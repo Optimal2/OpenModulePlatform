@@ -735,6 +735,16 @@ public sealed class ArtifactRetentionCleanupResult
     public int DeletableCandidateCount { get; init; }
 }
 
+public static class HostAgentJobStatuses
+{
+    public const byte Pending = 0;
+    public const byte Running = 1;
+    public const byte Succeeded = 2;
+    public const byte Failed = 3;
+    public const byte Warning = 4;
+    public const byte Cancelled = 5;
+}
+
 public static class MaintenanceFindingStatuses
 {
     public const byte Open = 0;
