@@ -2470,4 +2470,6 @@
   <data name="Recycle app pool" xml:space="preserve"><value>Recycle app pool</value></data>
   <data name="Collect logs" xml:space="preserve"><value>Collect logs</value></data>
   <data name="Recent web app operations" xml:space="preserve"><value>Recent web app operations</value></data>
+  <data name="OMP account creation is disabled." xml:space="preserve"><value>OMP account creation is disabled.</value></data>
+  <data name="You are signed in with Windows/AD, but creating your own OMP account is disabled for this installation." xml:space="preserve"><value>You are signed in with Windows/AD, but creating your own OMP account is disabled for this installation.</value></data>
 </root>
