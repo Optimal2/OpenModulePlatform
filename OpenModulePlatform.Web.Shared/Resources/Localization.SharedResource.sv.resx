@@ -25,17 +25,17 @@
   <data name="Deployment log" xml:space="preserve"><value>Deploylogg</value></data>
   <data name="Expand" xml:space="preserve"><value>Expandera</value></data>
   <data name="Collapse" xml:space="preserve"><value>Fäll ihop</value></data>
-  <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
+  <data name="Portal entries" xml:space="preserve"><value>Portalposter</value></data>
   <data name="Artifact package editor" xml:space="preserve"><value>Artefaktpaketseditor</value></data>
   <data name="Packages" xml:space="preserve"><value>Paket</value></data>
-  <data name="Import/export" xml:space="preserve"><value>Import/export</value></data>
+  <data name="Import/export" xml:space="preserve"><value>Importera/exportera</value></data>
   <data name="Operations" xml:space="preserve"><value>Drift</value></data>
   <data name="Tools" xml:space="preserve"><value>Verktyg</value></data>
-  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard-widgets</value></data>
+  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard-widgetar</value></data>
   <data name="Module definition editor" xml:space="preserve"><value>Moduldefinitionseditor</value></data>
   <data name="Bootstrap config editor" xml:space="preserve"><value>Bootstrap-konfigurationseditor</value></data>
   <data name="Navigation" xml:space="preserve"><value>Navigering</value></data>
-  <data name="Banners" xml:space="preserve"><value>Banners</value></data>
+  <data name="Banners" xml:space="preserve"><value>Banderoller</value></data>
   <data name="Your session appears to have expired. Sign in again before continuing." xml:space="preserve"><value>Din session verkar ha gått ut. Logga in igen innan du fortsätter.</value></data>
   <data name="The server could not be reached. Check the connection." xml:space="preserve"><value>Servern kunde inte nås. Kontrollera anslutningen.</value></data>
   <data name="Sign in again" xml:space="preserve"><value>Logga in igen</value></data>
