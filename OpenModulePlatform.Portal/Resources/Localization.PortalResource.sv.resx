@@ -1329,7 +1329,7 @@
   </data>
 
   <data name="Principal is already assigned to role." xml:space="preserve"><value>Identiteten är redan tilldelad rollen.</value></data>
-<data name="Unsaved changes" xml:space="preserve"><value>Osparade ändringar</value></data><data name="You have unsaved changes to the role name or description." xml:space="preserve"><value>Du har osparade ändringar i rollnamn eller beskrivning.</value></data><data name="Save changes" xml:space="preserve"><value>Spara ändringar</value></data><data name="Discard changes" xml:space="preserve"><value>Makulera ändringar</value></data><data name="Stay on page" xml:space="preserve"><value>Stanna på sidan</value></data><data name="You have unsaved role changes. Press OK to discard them and leave this page, or Cancel to stay." xml:space="preserve"><value>Du har osparade rolländringar. Tryck på OK för att makulera dem och lämna sidan, eller Avbryt för att stanna kvar.</value></data><data name="App workers" xml:space="preserve"><value>App workers</value></data><data name="Worker runtime" xml:space="preserve"><value>Worker runtime</value></data><data name="Worker runtime states" xml:space="preserve"><value>Worker runtime states</value></data><data name="Security" xml:space="preserve"><value>Säkerhet</value></data><data name="Open Security" xml:space="preserve"><value>Öppna säkerhet</value></data><data name="Workers" xml:space="preserve"><value>Arbetare</value></data><data name="Back to workers" xml:space="preserve"><value>Tillbaka till workers</value></data><data name="Runtime" xml:space="preserve"><value>Runtime</value></data><data name="Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place." xml:space="preserve"><value>Workers samlar app workers-definitioner och worker runtime så att du kan hantera worker-spåret från ett ställe.</value></data><data name="Expand" xml:space="preserve"><value>Expandera</value></data><data name="Minimize" xml:space="preserve"><value>Minimera</value></data><data name="Settings" xml:space="preserve"><value>Inställningar</value></data><data name="Manage your OMP user profile and portal defaults." xml:space="preserve"><value>Hantera din OMP-användarprofil och portalens standardval.</value></data><data name="Collapse admin overview by default" xml:space="preserve"><value>Fäll ihop adminöversikten som standard</value></data><data name="No portal settings are available." xml:space="preserve"><value>Inga portalinställningar finns tillgängliga.</value></data><data name="Settings saved." xml:space="preserve"><value>Inställningarna har sparats.</value></data><data name="Display name must be 200 characters or fewer." xml:space="preserve"><value>Visningsnamn får vara högst 200 tecken.</value></data>  <data name="Users" xml:space="preserve"><value>Användare</value></data>
+<data name="Unsaved changes" xml:space="preserve"><value>Osparade ändringar</value></data><data name="You have unsaved changes to the role name or description." xml:space="preserve"><value>Du har osparade ändringar i rollnamn eller beskrivning.</value></data><data name="Save changes" xml:space="preserve"><value>Spara ändringar</value></data><data name="Discard changes" xml:space="preserve"><value>Makulera ändringar</value></data><data name="Stay on page" xml:space="preserve"><value>Stanna på sidan</value></data><data name="You have unsaved role changes. Press OK to discard them and leave this page, or Cancel to stay." xml:space="preserve"><value>Du har osparade rolländringar. Tryck på OK för att makulera dem och lämna sidan, eller Avbryt för att stanna kvar.</value></data><data name="App workers" xml:space="preserve"><value>Apparbetare</value></data><data name="Worker runtime" xml:space="preserve"><value>Arbetarkörmiljö</value></data><data name="Worker runtime states" xml:space="preserve"><value>Arbetarnas körstatusar</value></data><data name="Security" xml:space="preserve"><value>Säkerhet</value></data><data name="Open Security" xml:space="preserve"><value>Öppna säkerhet</value></data><data name="Workers" xml:space="preserve"><value>Arbetare</value></data><data name="Back to workers" xml:space="preserve"><value>Tillbaka till arbetare</value></data><data name="Runtime" xml:space="preserve"><value>Körmiljö</value></data><data name="Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place." xml:space="preserve"><value>Arbetarsidan samlar apparnas arbetardefinitioner och aktuell körmiljö så att du kan hantera arbetarna från ett ställe.</value></data><data name="Expand" xml:space="preserve"><value>Expandera</value></data><data name="Minimize" xml:space="preserve"><value>Minimera</value></data><data name="Settings" xml:space="preserve"><value>Inställningar</value></data><data name="Manage your OMP user profile and portal defaults." xml:space="preserve"><value>Hantera din OMP-användarprofil och portalens standardval.</value></data><data name="Collapse admin overview by default" xml:space="preserve"><value>Fäll ihop adminöversikten som standard</value></data><data name="No portal settings are available." xml:space="preserve"><value>Inga portalinställningar finns tillgängliga.</value></data><data name="Settings saved." xml:space="preserve"><value>Inställningarna har sparats.</value></data><data name="Display name must be 200 characters or fewer." xml:space="preserve"><value>Visningsnamn får vara högst 200 tecken.</value></data>  <data name="Users" xml:space="preserve"><value>Användare</value></data>
   <data name="Manage OMP users and their authentication links. Users can exist before they are linked to an AD account." xml:space="preserve"><value>Hantera OMP-användare och deras autentiseringslänkar. Användare kan finnas innan de länkas till ett AD-konto.</value></data>
   <data name="Create user" xml:space="preserve"><value>Skapa användare</value></data>
   <data name="No OMP users have been created yet." xml:space="preserve"><value>Inga OMP-användare har skapats ännu.</value></data>
@@ -1358,11 +1358,11 @@
   <data name="Current account status" xml:space="preserve"><value>Aktuell kontostatus</value></data>
   <data name="User updated." xml:space="preserve"><value>Användaren har uppdaterats.</value></data>
   <data name="Authentication" xml:space="preserve"><value>Autentisering</value></data>
-  <data name="These provider identities are linked to this OMP user. They are shown read-only in this version." xml:space="preserve"><value>Dessa provideridentiteter är länkade till OMP-användaren. De visas skrivskyddade i den här versionen.</value></data>
-  <data name="These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added." xml:space="preserve"><value>Dessa provideridentiteter är länkade till OMP-användaren. Om alla länkar tas bort kan användaren inte logga in förrän en ny länk läggs till.</value></data>
+  <data name="These provider identities are linked to this OMP user. They are shown read-only in this version." xml:space="preserve"><value>Dessa autentiseringsidentiteter är länkade till OMP-användaren. De visas skrivskyddade i den här versionen.</value></data>
+  <data name="These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added." xml:space="preserve"><value>Dessa autentiseringsidentiteter är länkade till OMP-användaren. Om alla länkar tas bort kan användaren inte logga in förrän en ny länk läggs till.</value></data>
   <data name="This OMP user has no auth links." xml:space="preserve"><value>Den här OMP-användaren saknar autentiseringslänkar.</value></data>
-  <data name="Provider" xml:space="preserve"><value>Provider</value></data>
-  <data name="Provider user key" xml:space="preserve"><value>Provider user key</value></data>
+  <data name="Provider" xml:space="preserve"><value>Autentiseringsprovider</value></data>
+  <data name="Provider user key" xml:space="preserve"><value>Providerns användarnyckel</value></data>
   <data name="Last used UTC" xml:space="preserve"><value>Senast använd UTC</value></data>
   <data name="AD rights migration" xml:space="preserve"><value>Migrering av AD-rättigheter</value></data>
   <data name="There are {0} direct AD-user role assignments that can be moved to this OMP user." xml:space="preserve"><value>Det finns {0} direkta AD-användarroller som kan flyttas till den här OMP-användaren.</value></data>
@@ -1373,9 +1373,9 @@
   <data name="The AD rights could not be moved." xml:space="preserve"><value>AD-rättigheterna kunde inte flyttas.</value></data>
   <data name="Link AD account" xml:space="preserve"><value>Länka AD-konto</value></data>
   <data name="Use the same AD key format that Windows sign-in resolves, for example DOMAIN\username, name:DOMAIN\username or sid:S-1-5-21-..." xml:space="preserve"><value>Använd samma AD-nyckelformat som Windows-inloggningen slår upp, till exempel DOMAIN\username, name:DOMAIN\username eller sid:S-1-5-21-...</value></data>
-  <data name="AD provider user key" xml:space="preserve"><value>AD provider user key</value></data>
-  <data name="Enter an AD provider user key." xml:space="preserve"><value>Ange en AD provider user key.</value></data>
-  <data name="AD provider user key must be 1000 characters or fewer." xml:space="preserve"><value>AD provider user key får vara högst 1000 tecken.</value></data>
+  <data name="AD provider user key" xml:space="preserve"><value>AD-providerns användarnyckel</value></data>
+  <data name="Enter an AD provider user key." xml:space="preserve"><value>Ange AD-providerns användarnyckel.</value></data>
+  <data name="AD provider user key must be 1000 characters or fewer." xml:space="preserve"><value>AD-providerns användarnyckel får vara högst 1000 tecken.</value></data>
   <data name="AD account linked." xml:space="preserve"><value>AD-kontot har länkats.</value></data>
   <data name="This AD account is already linked to this user." xml:space="preserve"><value>Det här AD-kontot är redan länkat till den här användaren.</value></data>
   <data name="This AD account is already linked to user {0}." xml:space="preserve"><value>Det här AD-kontot är redan länkat till användare {0}.</value></data>
@@ -1436,7 +1436,7 @@
   <data name="Select setting" xml:space="preserve"><value>Välj inställning</value></data>
   <data name="Definitions are seeded by OMP. Add or remove definitions through SQL upgrades, not this page." xml:space="preserve"><value>Definitioner läggs in av OMP. Lägg till eller ta bort definitioner via SQL-uppgraderingar, inte på den här sidan.</value></data>
   <data name="Higher priority wins within permission or role scoped rows." xml:space="preserve"><value>Högre prioritet vinner inom behörighets- eller rollstyrda rader.</value></data>
-  <data name="Global rows apply to everyone. User scope wins over permission, permission wins over role." xml:space="preserve"><value>Globala rader gäller för alla. Användarscope vinner över behörighet, och behörighet vinner över roll.</value></data>
+  <data name="Global rows apply to everyone. User scope wins over permission, permission wins over role." xml:space="preserve"><value>Globala rader gäller för alla. Användaromfattning vinner över behörighet, och behörighet vinner över roll.</value></data>
   <data name="Select user" xml:space="preserve"><value>Välj användare</value></data>
   <data name="Select role" xml:space="preserve"><value>Välj roll</value></data>
   <data name="Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data." xml:space="preserve"><value>Värden lagras som text och kan innehålla skalära värden, JSON, XML eller annan serialiserad konfigurationsdata.</value></data>
@@ -1445,7 +1445,7 @@
   <data name="Configured values" xml:space="preserve"><value>Konfigurerade värden</value></data>
   <data name="No config setting values have been configured yet." xml:space="preserve"><value>Inga konfigurationsvärden har lagts till ännu.</value></data>
   <data name="Setting" xml:space="preserve"><value>Inställning</value></data>
-  <data name="Scope" xml:space="preserve"><value>Scope</value></data>
+  <data name="Scope" xml:space="preserve"><value>Omfattning</value></data>
   <data name="Priority" xml:space="preserve"><value>Prioritet</value></data>
   <data name="Value" xml:space="preserve"><value>Värde</value></data>
   <data name="Definition disabled" xml:space="preserve"><value>Definition inaktiverad</value></data>
@@ -1454,15 +1454,15 @@
   <data name="Config setting updated." xml:space="preserve"><value>Konfigurationsinställningen har uppdaterats.</value></data>
   <data name="Config setting deleted." xml:space="preserve"><value>Konfigurationsinställningen har tagits bort.</value></data>
   <data name="Select a registered config setting." xml:space="preserve"><value>Välj en registrerad konfigurationsinställning.</value></data>
-  <data name="A value for the same setting and scope already exists." xml:space="preserve"><value>Det finns redan ett värde för samma inställning och scope.</value></data>
+  <data name="A value for the same setting and scope already exists." xml:space="preserve"><value>Det finns redan ett värde för samma inställning och omfattning.</value></data>
   <data name="Select a user." xml:space="preserve"><value>Välj en användare.</value></data>
   <data name="Select a permission." xml:space="preserve"><value>Välj en behörighet.</value></data>
   <data name="Select a role." xml:space="preserve"><value>Välj en roll.</value></data>
-  <data name="Select a valid scope." xml:space="preserve"><value>Välj ett giltigt scope.</value></data>
+  <data name="Select a valid scope." xml:space="preserve"><value>Välj en giltig omfattning.</value></data>
   <data name="All users" xml:space="preserve"><value>Alla användare</value></data>
   <data name="NULL" xml:space="preserve"><value>NULL</value></data>
-  <data name="Portal entries" xml:space="preserve"><value>Portal entries</value></data>
-  <data name="Portal entries are curated start points for the destinations you can access." xml:space="preserve"><value>Portal entries är kurerade startpunkter för destinationer du har åtkomst till.</value></data>
+  <data name="Portal entries" xml:space="preserve"><value>Portalposter</value></data>
+  <data name="Portal entries are curated start points for the destinations you can access." xml:space="preserve"><value>Portalposter är utvalda startpunkter för destinationer du har åtkomst till.</value></data>
   <data name="Pinned" xml:space="preserve"><value>Fästa</value></data>
   <data name="All entries" xml:space="preserve"><value>Övriga</value></data>
   <data name="Show full list" xml:space="preserve"><value>Visa full lista</value></data>
@@ -1476,30 +1476,30 @@
   <data name="Options" xml:space="preserve"><value>Alternativ</value></data>
   <data name="Hidden" xml:space="preserve"><value>Dold</value></data>
   <data name="Drag to sort" xml:space="preserve"><value>Dra för att sortera</value></data>
-  <data name="No pinned entries" xml:space="preserve"><value>Inga fästa entries</value></data>
-  <data name="No entries to show" xml:space="preserve"><value>Inga entries att visa</value></data>
-  <data name="Administer portal entries" xml:space="preserve"><value>Administrera portal entries</value></data>
-  <data name="Create global Portal Entries that appear on the Portal start page for users with access to the target." xml:space="preserve"><value>Skapa globala Portal Entries som visas på portalens startsida för användare med åtkomst till målet.</value></data>
-  <data name="Create portal entry" xml:space="preserve"><value>Skapa portal entry</value></data>
-  <data name="Existing portal entries" xml:space="preserve"><value>Befintliga portal entries</value></data>
-  <data name="Entry key" xml:space="preserve"><value>Entry key</value></data>
+  <data name="No pinned entries" xml:space="preserve"><value>Inga fästa poster</value></data>
+  <data name="No entries to show" xml:space="preserve"><value>Inga poster att visa</value></data>
+  <data name="Administer portal entries" xml:space="preserve"><value>Administrera portalposter</value></data>
+  <data name="Create global Portal Entries that appear on the Portal start page for users with access to the target." xml:space="preserve"><value>Skapa globala portalposter som visas på portalens startsida för användare med åtkomst till målet.</value></data>
+  <data name="Create portal entry" xml:space="preserve"><value>Skapa portalpost</value></data>
+  <data name="Existing portal entries" xml:space="preserve"><value>Befintliga portalposter</value></data>
+  <data name="Entry key" xml:space="preserve"><value>Postnyckel</value></data>
   <data name="Logo URL" xml:space="preserve"><value>Logotyp-URL</value></data>
   <data name="Icon key" xml:space="preserve"><value>Ikonnyckel</value></data>
   <data name="Target URL" xml:space="preserve"><value>Mål-URL</value></data>
-  <data name="Target entry key" xml:space="preserve"><value>Mål-entry key</value></data>
+  <data name="Target entry key" xml:space="preserve"><value>Målpostnyckel</value></data>
   <data name="Default sort order" xml:space="preserve"><value>Standardsortering</value></data>
-  <data name="Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL." xml:space="preserve"><value>Använd en lokal path som /content/ex2, en relativ path som content/ex2 eller en absolut http/https-URL.</value></data>
-  <data name="Optional stable navigation entry key. Leave empty when target URL is enough." xml:space="preserve"><value>Valfri stabil navigation entry key. Lämna tom när mål-URL räcker.</value></data>
-  <data name="Portal entry created." xml:space="preserve"><value>Portal entry har skapats.</value></data>
-  <data name="Enter a target URL or target entry key." xml:space="preserve"><value>Ange mål-URL eller mål-entry key.</value></data>
-  <data name="Use an absolute http/https URL, a local path starting with /, or a relative path." xml:space="preserve"><value>Använd en absolut http/https-URL, en lokal path som börjar med / eller en relativ path.</value></data>
+  <data name="Use a local path such as /content/ex2, a relative path such as content/ex2, or an absolute http/https URL." xml:space="preserve"><value>Använd en lokal sökväg som /content/ex2, en relativ sökväg som content/ex2 eller en absolut http/https-URL.</value></data>
+  <data name="Optional stable navigation entry key. Leave empty when target URL is enough." xml:space="preserve"><value>Valfri stabil navigationspostnyckel. Lämna tom när mål-URL räcker.</value></data>
+  <data name="Portal entry created." xml:space="preserve"><value>Portalposten har skapats.</value></data>
+  <data name="Enter a target URL or target entry key." xml:space="preserve"><value>Ange mål-URL eller målpostnyckel.</value></data>
+  <data name="Use an absolute http/https URL, a local path starting with /, or a relative path." xml:space="preserve"><value>Använd en absolut http/https-URL, en lokal sökväg som börjar med / eller en relativ sökväg.</value></data>
   <data name="Back to portal" xml:space="preserve"><value>Tillbaka till portalen</value></data>
-  <data name="Edit portal entry" xml:space="preserve"><value>Redigera portal entry</value></data>
-  <data name="Update the Portal Entry shown on the Portal start page." xml:space="preserve"><value>Uppdatera den Portal Entry som visas på portalens startsida.</value></data>
-  <data name="This entry is seeded from an app instance. The app target is resolved before custom target fields." xml:space="preserve"><value>Denna entry kommer från en appinstans. Appmålet används före anpassade målfält.</value></data>
-  <data name="Save portal entry" xml:space="preserve"><value>Spara portal entry</value></data>
-  <data name="Back to portal entries" xml:space="preserve"><value>Tillbaka till portal entries</value></data>
-  <data name="Portal entry updated." xml:space="preserve"><value>Portal entry har uppdaterats.</value></data>
+  <data name="Edit portal entry" xml:space="preserve"><value>Redigera portalpost</value></data>
+  <data name="Update the Portal Entry shown on the Portal start page." xml:space="preserve"><value>Uppdatera portalposten som visas på portalens startsida.</value></data>
+  <data name="This entry is seeded from an app instance. The app target is resolved before custom target fields." xml:space="preserve"><value>Den här posten kommer från en appinstans. Appmålet används före anpassade målfält.</value></data>
+  <data name="Save portal entry" xml:space="preserve"><value>Spara portalpost</value></data>
+  <data name="Back to portal entries" xml:space="preserve"><value>Tillbaka till portalposter</value></data>
+  <data name="Portal entry updated." xml:space="preserve"><value>Portalposten har uppdaterats.</value></data>
   <data name="Portal settings" xml:space="preserve"><value>Portalinställningar</value></data>
   <data name="Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user." xml:space="preserve"><value>Portalens inställningsdefinitioner installeras av Portal. Den här sidan sparar bara värden som åsidosätter standardvärden för den här användaren.</value></data>
   <data name="Portal setting" xml:space="preserve"><value>Portalinställning</value></data>
@@ -1523,27 +1523,27 @@
   <data name="Enter a valid integer value." xml:space="preserve"><value>Ange ett giltigt heltalsvärde.</value></data>
   <data name="Integer" xml:space="preserve"><value>Heltal</value></data>
   <data name="String" xml:space="preserve"><value>Sträng</value></data>
-  <data name="Topbar layout" xml:space="preserve"><value>Topbarlayout</value></data>
-  <data name="Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Välj vilka Portal Entries som är synliga i topbaren och justera parent/child-layouten. Släpp en leaf-entry på en toppnivå-entry för att göra den till en underlänk.</value></data>
+  <data name="Topbar layout" xml:space="preserve"><value>Toppmenylayout</value></data>
+  <data name="Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Välj vilka portalposter som är synliga i toppmenyn och justera över- och underordning. Släpp en post på en toppnivåpost för att göra den till en underlänk.</value></data>
   <data name="Visible" xml:space="preserve"><value>Synlig</value></data>
   <data name="Child of" xml:space="preserve"><value>Underlänk till</value></data>
-  <data name="Top-level entry" xml:space="preserve"><value>Toppnivå-entry</value></data>
+  <data name="Top-level entry" xml:space="preserve"><value>Toppnivåpost</value></data>
   <data name="Make top-level" xml:space="preserve"><value>Gör till toppnivå</value></data>
-  <data name="Make child entry" xml:space="preserve"><value>Gör till undernivå</value></data>
-  <data name="Remove this Portal Entry?" xml:space="preserve"><value>Ta bort denna Portal Entry?</value></data>
-  <data name="Save topbar layout" xml:space="preserve"><value>Spara topbarlayout</value></data>
-  <data name="Topbar layout saved." xml:space="preserve"><value>Topbarlayouten har sparats.</value></data>
-  <data name="Portal entry removed." xml:space="preserve"><value>Portal entry har tagits bort.</value></data>
-  <data name="Portal entry was not found." xml:space="preserve"><value>Portal entry hittades inte.</value></data>
-  <data name="No portal entries were submitted." xml:space="preserve"><value>Inga portal entries skickades.</value></data>
-  <data name="Layout parent entry was not found." xml:space="preserve"><value>Layoutens parent entry hittades inte.</value></data>
-  <data name="A Portal Entry cannot be its own parent." xml:space="preserve"><value>En Portal Entry kan inte vara sin egen parent.</value></data>
-  <data name="The layout update would create a Portal Entry cycle." xml:space="preserve"><value>Layoutändringen skulle skapa en cirkel bland Portal Entries.</value></data>
+  <data name="Make child entry" xml:space="preserve"><value>Gör till underpost</value></data>
+  <data name="Remove this Portal Entry?" xml:space="preserve"><value>Ta bort den här portalposten?</value></data>
+  <data name="Save topbar layout" xml:space="preserve"><value>Spara toppmenylayout</value></data>
+  <data name="Topbar layout saved." xml:space="preserve"><value>Toppmenylayouten har sparats.</value></data>
+  <data name="Portal entry removed." xml:space="preserve"><value>Portalposten har tagits bort.</value></data>
+  <data name="Portal entry was not found." xml:space="preserve"><value>Portalposten hittades inte.</value></data>
+  <data name="No portal entries were submitted." xml:space="preserve"><value>Inga portalposter skickades.</value></data>
+  <data name="Layout parent entry was not found." xml:space="preserve"><value>Layoutens överordnade post hittades inte.</value></data>
+  <data name="A Portal Entry cannot be its own parent." xml:space="preserve"><value>En portalpost kan inte vara sin egen överordnade post.</value></data>
+  <data name="The layout update would create a Portal Entry cycle." xml:space="preserve"><value>Layoutändringen skulle skapa en cirkel bland portalposterna.</value></data>
   <data name="None" xml:space="preserve"><value>Inget</value></data>
-  <data name="Parent entry" xml:space="preserve"><value>Parent entry</value></data>
-  <data name="Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar." xml:space="preserve"><value>Lämna tomt för en toppnivå-entry. Välj en parent för att skapa en underlänk i topbaren.</value></data>
-  <data name="Select a valid parent entry." xml:space="preserve"><value>Välj en giltig parent entry.</value></data>
-  <data name="The selected parent would create a Portal Entry cycle." xml:space="preserve"><value>Vald parent skulle skapa en cirkel bland Portal Entries.</value></data>
+  <data name="Parent entry" xml:space="preserve"><value>Överordnad post</value></data>
+  <data name="Leave empty for a top-level Portal Entry. Choose a parent to create a child link in the top bar." xml:space="preserve"><value>Lämna tomt för en toppnivåpost. Välj en överordnad post för att skapa en underlänk i toppmenyn.</value></data>
+  <data name="Select a valid parent entry." xml:space="preserve"><value>Välj en giltig överordnad post.</value></data>
+  <data name="The selected parent would create a Portal Entry cycle." xml:space="preserve"><value>Vald överordnad post skulle skapa en cirkel bland portalposterna.</value></data>
   <data name="Desired topology" xml:space="preserve"><value>Önskad topologi</value></data>
   <data name="Runtime result" xml:space="preserve"><value>Runtime-resultat</value></data>
   <data name="Manual runtime" xml:space="preserve"><value>Manuell runtime</value></data>
@@ -1712,7 +1712,7 @@
   <data name="Existing artifact content replaced and metadata updated." xml:space="preserve"><value>Befintligt artefaktinnehåll har ersatts och metadata har uppdaterats.</value></data>
   <data name="Existing artifact configuration file rows were preserved." xml:space="preserve"><value>Befintliga rader för artefaktens konfigurationsfiler behölls.</value></data>
   <data name="Replace existing artifact with same identity" xml:space="preserve"><value>Ersätt befintlig artefakt med samma identitet</value></data>
-  <data name="Replace existing dashboard widgets for rollback or repair" xml:space="preserve"><value>Ersätt befintliga dashboard-widgets för rollback eller reparation</value></data>
+  <data name="Replace existing dashboard widgets for rollback or repair" xml:space="preserve"><value>Ersätt befintliga dashboard-widgetar för återställning eller reparation</value></data>
   <data name="Only use this when the same app, package type, target, and version already exists and the uploaded content should intentionally replace it. Automatic import never performs this replacement." xml:space="preserve"><value>Använd bara detta när samma app, pakettyp, mål och version redan finns och det uppladdade innehållet medvetet ska ersätta det. Automatisk import gör aldrig denna ersättning.</value></data>
   <data name="The filename references module '{0}' and app '{1}', but that enabled app definition was not found. Register the module/app first or select an existing app." xml:space="preserve"><value>Filnamnet hänvisar till modul '{0}' och app '{1}', men den aktiva appdefinitionen hittades inte. Registrera modulen/appen först eller välj en befintlig app.</value></data>
   <data name="Do not include runtime configuration files such as appsettings*.json or odv.site.config.js in the artifact zip. HostAgent writes those from deployment configuration or artifact configuration file rows." xml:space="preserve"><value>Ta inte med runtime-konfigurationsfiler som appsettings*.json eller odv.site.config.js i artefaktens zip-fil. HostAgent skriver dem från deployment-konfiguration eller från artefaktens konfigurationsfilsrader.</value></data>
@@ -1736,7 +1736,7 @@
   <data name="Updates matching desired app rows so HostAgent starts deploying this artifact on its next cycle." xml:space="preserve"><value>Uppdaterar matchande önskade appar så att HostAgent börjar deploya artefakten vid nästa körning.</value></data>
   <data name="Selected this artifact as desired version for {0} matching app row(s)." xml:space="preserve"><value>Valde den här artefakten som önskad version för {0} matchande apprad(er).</value></data>
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>Artefakten kunde inte väljas som önskad version automatiskt. Välj den från installationsmallens sida.</value></data>
-  <data name="Open topbar menus on hover" xml:space="preserve"><value>Öppna topbar-menyer vid hovring</value></data>
+  <data name="Open topbar menus on hover" xml:space="preserve"><value>Öppna toppmenyer vid hovring</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>När detta är avstängt öppnas menyer bara med klick eller kortkommando.</value></data>
   <data name="Mute toast notifications" xml:space="preserve"><value>Tysta toastnotiser</value></data>
   <data name="When this is turned on, notification and message toasts are not shown." xml:space="preserve"><value>När detta är påslaget visas inte toastnotiser för notifikationer och meddelanden.</value></data>
@@ -1896,15 +1896,15 @@
   <data name="Allow multiple active instances" xml:space="preserve"><value>Tillåt flera aktiva instanser</value></data>
   <data name="Use only for app definitions that intentionally create several runtime rows, such as one worker row per channel." xml:space="preserve"><value>Använd bara för appdefinitioner som avsiktligt skapar flera runtime-rader, till exempel en worker-rad per kanal.</value></data>
   <data name="Dashboard" xml:space="preserve"><value>Dashboard</value></data>
-  <data name="Arrange widgets freely on your personal canvas." xml:space="preserve"><value>Placera widgets fritt på din personliga canvas.</value></data>
+  <data name="Arrange widgets freely on your personal canvas." xml:space="preserve"><value>Placera widgetar fritt på din personliga canvas.</value></data>
   <data name="Dashboard canvas" xml:space="preserve"><value>Dashboard-canvas</value></data>
-  <data name="No widgets have been added yet." xml:space="preserve"><value>Inga widgets har lagts till ännu.</value></data>
-  <data name="Dashboard widgets require an OMP user." xml:space="preserve"><value>Dashboard-widgets kräver en OMP-user.</value></data>
+  <data name="No widgets have been added yet." xml:space="preserve"><value>Inga widgetar har lagts till ännu.</value></data>
+  <data name="Dashboard widgets require an OMP user." xml:space="preserve"><value>Dashboard-widgetar kräver en OMP-användare.</value></data>
   <data name="Edit dashboard" xml:space="preserve"><value>Redigera dashboard</value></data>
   <data name="Add widget" xml:space="preserve"><value>Lägg till widget</value></data>
   <data name="Remove widget" xml:space="preserve"><value>Ta bort widget</value></data>
-  <data name="No widgets are available." xml:space="preserve"><value>Inga widgets är tillgängliga.</value></data>
-  <data name="No matching widgets." xml:space="preserve"><value>Inga matchande widgets.</value></data>
+  <data name="No widgets are available." xml:space="preserve"><value>Inga widgetar är tillgängliga.</value></data>
+  <data name="No matching widgets." xml:space="preserve"><value>Inga matchande widgetar.</value></data>
   <data name="Search widgets" xml:space="preserve"><value>Sök widget</value></data>
   <data name="Compact view" xml:space="preserve"><value>Kompakt vy</value></data>
   <data name="Detailed view" xml:space="preserve"><value>Detaljerad vy</value></data>
@@ -1913,7 +1913,7 @@
   <data name="Preview unavailable" xml:space="preserve"><value>Förhandsvisning är inte tillgänglig</value></data>
   <data name="Select a widget" xml:space="preserve"><value>Välj en widget</value></data>
   <data name="Select a widget for details and preview." xml:space="preserve"><value>Välj en widget för att se information och förhandsvisning.</value></data>
-  <data name="No widgets found" xml:space="preserve"><value>Inga widgets hittades</value></data>
+  <data name="No widgets found" xml:space="preserve"><value>Inga widgetar hittades</value></data>
   <data name="Add selected widget" xml:space="preserve"><value>Lägg till vald widget</value></data>
   <data name="All authors" xml:space="preserve"><value>Alla författare</value></data>
   <data name="Close" xml:space="preserve"><value>Stäng</value></data>
@@ -1921,34 +1921,34 @@
   <data name="Reset layout" xml:space="preserve"><value>Återställ layout</value></data>
   <data name="Align to grid" xml:space="preserve"><value>Fäst mot rutnät</value></data>
   <data name="Expanded canvas" xml:space="preserve"><value>Utökad canvas</value></data>
-  <data name="This clears your current dashboard widgets. Continue?" xml:space="preserve"><value>Detta rensar dina nuvarande dashboard-widgets. Vill du fortsätta?</value></data>
-  <data name="No portal entries to show." xml:space="preserve"><value>Inga portal entries att visa.</value></data>
+  <data name="This clears your current dashboard widgets. Continue?" xml:space="preserve"><value>Detta rensar dina nuvarande dashboard-widgetar. Vill du fortsätta?</value></data>
+  <data name="No portal entries to show." xml:space="preserve"><value>Inga portalposter att visa.</value></data>
   <data name="Add favorite" xml:space="preserve"><value>Lägg till favorit</value></data>
   <data name="Remove favorite" xml:space="preserve"><value>Ta bort favorit</value></data>
   <data name="Search" xml:space="preserve"><value>Sök</value></data>
   <data name="Search..." xml:space="preserve"><value>Sök...</value></data>
   <data name="Favorites" xml:space="preserve"><value>Favoriter</value></data>
   <data name="Portal widget" xml:space="preserve"><value>Portal-widget</value></data>
-  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard-widgets</value></data>
+  <data name="Dashboard widgets" xml:space="preserve"><value>Dashboard-widgetar</value></data>
   <data name="Manage registered Portal dashboard widget definitions and availability." xml:space="preserve"><value>Hantera registrerade dashboard-widgetdefinitioner och tillgänglighet.</value></data>
   <data name="Export and import" xml:space="preserve"><value>Export och import</value></data>
-  <data name="Dashboard widget import and export is handled from the shared Export and import page." xml:space="preserve"><value>Import och export av dashboard-widgets hanteras från den gemensamma sidan Export och import.</value></data>
+  <data name="Dashboard widget import and export is handled from the shared Export and import page." xml:space="preserve"><value>Import och export av dashboard-widgetar hanteras från den gemensamma sidan Export och import.</value></data>
   <data name="Open Export and import" xml:space="preserve"><value>Öppna Export och import</value></data>
   <data name="Edit description" xml:space="preserve"><value>Redigera beskrivning</value></data>
   <data name="Leave empty to clear the widget description." xml:space="preserve"><value>Lämna tomt för att rensa widgetens beskrivning.</value></data>
   <data name="Save description" xml:space="preserve"><value>Spara beskrivning</value></data>
   <data name="Dashboard widget description updated." xml:space="preserve"><value>Dashboard-widgetens beskrivning har uppdaterats.</value></data>
   <data name="Import and export portable Portal dashboard widget definitions as JSON files." xml:space="preserve"><value>Importera och exportera portabla widgetdefinitioner för portalens dashboard som JSON-filer.</value></data>
-  <data name="Import widgets" xml:space="preserve"><value>Importera widgets</value></data>
-  <data name="Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created." xml:space="preserve"><value>Ladda upp en JSON-fil med dashboard-widgets. Matchande widgets uppdateras via widgetKey; saknade widgets skapas.</value></data>
+  <data name="Import widgets" xml:space="preserve"><value>Importera widgetar</value></data>
+  <data name="Upload one dashboard widget JSON file. Matching widgets are updated by widgetKey; missing widgets are created." xml:space="preserve"><value>Ladda upp en JSON-fil med dashboard-widgetar. Matchande widgetar uppdateras via widgetKey; saknade widgetar skapas.</value></data>
   <data name="Widget JSON" xml:space="preserve"><value>Widget-JSON</value></data>
   <data name="The import replaces the widget definition and its permission restrictions for matching widgetKey. moduleKey is optional ownership metadata, not part of the identity." xml:space="preserve"><value>Importen ersätter widgetdefinitionen och dess behörighetsbegränsningar för matchande widgetKey. moduleKey är valfri ägarmetadata, inte en del av identiteten.</value></data>
-  <data name="Export widgets" xml:space="preserve"><value>Exportera widgets</value></data>
-  <data name="Export all widgets or only the widgets owned by one module key." xml:space="preserve"><value>Exportera alla widgets eller bara widgets som tillhör en viss modulnyckel.</value></data>
+  <data name="Export widgets" xml:space="preserve"><value>Exportera widgetar</value></data>
+  <data name="Export all widgets or only the widgets owned by one module key." xml:space="preserve"><value>Exportera alla widgetar eller bara widgetar som tillhör en viss modulnyckel.</value></data>
   <data name="All modules" xml:space="preserve"><value>Alla moduler</value></data>
   <data name="JSON format" xml:space="preserve"><value>JSON-format</value></data>
   <data name="Widget JSON uses a globally stable widgetKey so private module repositories can version widget definitions without depending on database IDs. moduleKey is optional ownership metadata for filtering and export. Use empty permissionNames and roleNames arrays when a widget should be available to every signed-in OMP user." xml:space="preserve"><value>Widget-JSON använder en globalt stabil widgetKey så att privata modulrepon kan versionshantera widgetdefinitioner utan att bero på databas-ID:n. moduleKey är valfri ägarmetadata för filtrering och export. Använd tomma permissionNames- och roleNames-listor när en widget ska vara tillgänglig för alla inloggade OMP-användare.</value></data>
-  <data name="Existing widgets" xml:space="preserve"><value>Befintliga widgets</value></data>
+  <data name="Existing widgets" xml:space="preserve"><value>Befintliga widgetar</value></data>
   <data name="These widget definitions are currently registered in this OMP installation." xml:space="preserve"><value>Dessa widgetdefinitioner är registrerade i den här OMP-installationen.</value></data>
   <data name="Enable widget" xml:space="preserve"><value>Aktivera widget</value></data>
   <data name="Disable widget" xml:space="preserve"><value>Inaktivera widget</value></data>
@@ -1956,12 +1956,12 @@
   <data name="Dashboard widget disabled." xml:space="preserve"><value>Dashboard-widgeten har inaktiverats.</value></data>
   <data name="Empty adjustable widget for simple content or custom images." xml:space="preserve"><value>Tom justerbar widget för enkelt innehåll eller egna bilder.</value></data>
   <data name="Shows portal administration metrics for users with admin access." xml:space="preserve"><value>Visar portalens administrationsmått för användare med adminåtkomst.</value></data>
-  <data name="Lists the signed-in user's favorite portal entries." xml:space="preserve"><value>Listar den inloggade användarens favoritmarkerade portal entries.</value></data>
-  <data name="Lists portal entries the signed-in user can access." xml:space="preserve"><value>Listar portal entries som den inloggade användaren har åtkomst till.</value></data>
-  <data name="Combines favorite portal entries and all accessible portal entries in one list." xml:space="preserve"><value>Kombinerar favoritmarkerade portal entries och alla åtkomliga portal entries i en lista.</value></data>
+  <data name="Lists the signed-in user's favorite portal entries." xml:space="preserve"><value>Listar den inloggade användarens favoritmarkerade portalposter.</value></data>
+  <data name="Lists portal entries the signed-in user can access." xml:space="preserve"><value>Listar portalposter som den inloggade användaren har åtkomst till.</value></data>
+  <data name="Combines favorite portal entries and all accessible portal entries in one list." xml:space="preserve"><value>Kombinerar favoritmarkerade portalposter och alla åtkomliga portalposter i en lista.</value></data>
   <data name="Shows portal navigation groups and links as dashboard content." xml:space="preserve"><value>Visar portalens navigationsgrupper och länkar som dashboardinnehåll.</value></data>
   <data name="Shows the signed-in user's available roles and active role." xml:space="preserve"><value>Visar den inloggade användarens tillgängliga roller och aktiva roll.</value></data>
-  <data name="Lists content pages the signed-in user can access." xml:space="preserve"><value>Listar content-sidor som den inloggade användaren har åtkomst till.</value></data>
+  <data name="Lists content pages the signed-in user can access." xml:space="preserve"><value>Listar innehållssidor som den inloggade användaren har åtkomst till.</value></data>
   <data name="Shows recent personal OMP notifications." xml:space="preserve"><value>Visar senaste personliga OMP-notifikationer.</value></data>
   <data name="Shows recent message conversations." xml:space="preserve"><value>Visar senaste meddelandekonversationer.</value></data>
   <data name="Shows the current weekday, date, and week number." xml:space="preserve"><value>Visar aktuell veckodag, datum och veckonummer.</value></data>
@@ -1972,10 +1972,10 @@
   <data name="Access" xml:space="preserve"><value>Åtkomst</value></data>
   <data name="Modified" xml:space="preserve"><value>Ändrad</value></data>
   <data name="All signed-in users" xml:space="preserve"><value>Alla inloggade användare</value></data>
-  <data name="No dashboard widgets found." xml:space="preserve"><value>Inga dashboard-widgets hittades.</value></data>
+  <data name="No dashboard widgets found." xml:space="preserve"><value>Inga dashboard-widgetar hittades.</value></data>
   <data name="Back to overview" xml:space="preserve"><value>Tillbaka till översikt</value></data>
-  <data name="Imported dashboard widgets. Created: {0}. Updated: {1}. Permission rows: {2}." xml:space="preserve"><value>Importerade dashboard-widgets. Skapade: {0}. Uppdaterade: {1}. Behörighetsrader: {2}.</value></data>
-  <data name="Select one dashboard widget JSON file." xml:space="preserve"><value>Välj en JSON-fil med dashboard-widgets.</value></data>
+  <data name="Imported dashboard widgets. Created: {0}. Updated: {1}. Permission rows: {2}." xml:space="preserve"><value>Importerade dashboard-widgetar. Skapade: {0}. Uppdaterade: {1}. Behörighetsrader: {2}.</value></data>
+  <data name="Select one dashboard widget JSON file." xml:space="preserve"><value>Välj en JSON-fil med dashboard-widgetar.</value></data>
   <data name="The uploaded dashboard widget file must be a .json file." xml:space="preserve"><value>Den uppladdade dashboard-widgetfilen måste vara en .json-fil.</value></data>
   <data name="The uploaded dashboard widget file exceeds the configured limit of {0} bytes." xml:space="preserve"><value>Den uppladdade dashboard-widgetfilen överstiger gränsen på {0} byte.</value></data>
   <data name="Newer: {0}" xml:space="preserve"><value>Nyare: {0}</value></data>
@@ -2088,7 +2088,7 @@
   <data name="Back to operations" xml:space="preserve"><value>Tillbaka till drift</value></data>
   <data name="Inspect HostAgent app deployments, artifact provisioning, runtime identity checks, and explicit installation materialization requests." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisionering, runtime-identitetskontroller och explicita materialiseringsbegäranden för installationen.</value></data>
   <data name="Navigation" xml:space="preserve"><value>Navigering</value></data>
-  <data name="Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts." xml:space="preserve"><value>Hantera den gemensamma menyn Alla moduler. Användare väljer Favoriter från samma poster och dashboard-widgets återanvänder båda begreppen.</value></data>
+  <data name="Manage the shared All modules menu. Users choose Favorites from the same entries, and dashboard widgets reuse both concepts." xml:space="preserve"><value>Hantera den gemensamma menyn Alla moduler. Användare väljer Favoriter från samma poster och dashboard-widgetar återanvänder båda begreppen.</value></data>
   <data name="Manage the shared All modules menu. Users pick their own favorites from these entries." xml:space="preserve"><value>Hantera den gemensamma menyn Alla moduler. Användare väljer själva sina favoriter från dessa poster.</value></data>
   <data name="Add navigation entry" xml:space="preserve"><value>Lägg till navigeringspost</value></data>
   <data name="New navigation entry" xml:space="preserve"><value>Ny navigeringspost</value></data>
@@ -2111,8 +2111,8 @@
   <data name="Custom link created." xml:space="preserve"><value>Den egna länken har skapats.</value></data>
   <data name="Navigation entry removed." xml:space="preserve"><value>Navigeringsposten har tagits bort.</value></data>
   <data name="Navigation entry was not found." xml:space="preserve"><value>Navigeringsposten hittades inte.</value></data>
-  <data name="Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections." xml:space="preserve"><value>Favoriter är personliga genvägar som varje användare väljer från Alla moduler. Favoritmenyn i toppbaren och favorit-widgets använder samma sparade val.</value></data>
-  <data name="Open dashboard widget settings" xml:space="preserve"><value>Öppna inställningar för dashboard-widgets</value></data>
+  <data name="Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections." xml:space="preserve"><value>Favoriter är personliga genvägar som varje användare väljer från Alla moduler. Favoritmenyn i toppmenyn och favoritwidgetar använder samma sparade val.</value></data>
+  <data name="Open dashboard widget settings" xml:space="preserve"><value>Öppna inställningar för dashboard-widgetar</value></data>
   <data name="Admins control which entries can be selected as favorites by enabling or disabling them in All modules." xml:space="preserve"><value>Administratörer styr vilka poster som kan väljas som favoriter genom att aktivera eller inaktivera dem i Alla moduler.</value></data>
   <data name="Available favorite entries" xml:space="preserve"><value>Tillgängliga favoritposter</value></data>
   <data name="Edit navigation entry" xml:space="preserve"><value>Redigera navigeringspost</value></data>
@@ -2124,9 +2124,9 @@
   <data name="The selected parent would create a navigation cycle." xml:space="preserve"><value>Vald förälder skulle skapa en cirkel i navigeringen.</value></data>
   <data name="A navigation entry cannot be its own parent." xml:space="preserve"><value>En navigeringspost kan inte vara sin egen förälder.</value></data>
   <data name="The layout update would create a navigation cycle." xml:space="preserve"><value>Layoutändringen skulle skapa en cirkel i navigeringen.</value></data>
-  <data name="Import/export" xml:space="preserve"><value>Import/export</value></data>
+  <data name="Import/export" xml:space="preserve"><value>Importera/exportera</value></data>
   <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Import/export for portable objects, and Operations for HostAgent troubleshooting." xml:space="preserve"><value>Adminytan är organiserad runt en OMP-installation. Använd Installation för önskad topologi, Import/export för portabla objekt och Drift för HostAgent-felsökning.</value></data>
-  <data name="Import and export OMP installation objects. Use universal module packages for the most flexible transport format, or import individual module definitions, artifact packages, host configs, config overlays, and widgets." xml:space="preserve"><value>Importera och exportera OMP-installationsobjekt. Använd universella modulpaket som det mest flexibla transportformatet, eller importera enskilda moduldefinitioner, artefaktpaket, värdkonfigurationer, konfigurationslager och widgets.</value></data>
+  <data name="Import and export OMP installation objects. Use universal module packages for the most flexible transport format, or import individual module definitions, artifact packages, host configs, config overlays, and widgets." xml:space="preserve"><value>Importera och exportera OMP-installationsobjekt. Använd universella modulpaket som det mest flexibla transportformatet, eller importera enskilda moduldefinitioner, artefaktpaket, värdkonfigurationer, konfigurationslager och widgetar.</value></data>
   <data name="Import module package" xml:space="preserve"><value>Importera modulpaket</value></data>
   <data name="Upload one or more standard artifact package zips without changing any module definition." xml:space="preserve"><value>Ladda upp ett eller flera standardiserade artefaktpaket som zip utan att ändra någon moduldefinition.</value></data>
   <data name="Import artifact packages" xml:space="preserve"><value>Importera artefaktpaket</value></data>
@@ -2157,15 +2157,15 @@
   <data name="Export a module definition with the artifact packages it references." xml:space="preserve"><value>Exportera en moduldefinition med artefaktpaketen den refererar till.</value></data>
   <data name="Artifact package" xml:space="preserve"><value>Artefaktpaket</value></data>
   <data name="Export one installed artifact package." xml:space="preserve"><value>Exportera ett installerat artefaktpaket.</value></data>
-  <data name="Widgets" xml:space="preserve"><value>Widgets</value></data>
-  <data name="Export all widgets or widgets owned by one module." xml:space="preserve"><value>Exportera alla widgets eller widgets som tillhör en modul.</value></data>
+  <data name="Widgets" xml:space="preserve"><value>Widgetar</value></data>
+  <data name="Export all widgets or widgets owned by one module." xml:space="preserve"><value>Exportera alla widgetar eller widgetar som tillhör en modul.</value></data>
   <data name="Import package zip" xml:space="preserve"><value>Importera paket-zip</value></data>
   <data name="Use this when the module definition JSON and artifact packages are separate files." xml:space="preserve"><value>Använd detta när moduldefinitions-JSON och artefaktpaket är separata filer.</value></data>
   <data name="Import JSON plus artifact zips" xml:space="preserve"><value>Importera JSON plus artefaktzippar</value></data>
-  <data name="Export all widgets or one selected dashboard widget." xml:space="preserve"><value>Exportera alla widgets eller en vald dashboard-widget.</value></data>
-  <data name="Export all widgets or choose one of the widgets available in this OMP installation." xml:space="preserve"><value>Exportera alla widgets eller välj en av de widgets som finns i den här OMP-installationen.</value></data>
+  <data name="Export all widgets or one selected dashboard widget." xml:space="preserve"><value>Exportera alla widgetar eller en vald dashboard-widget.</value></data>
+  <data name="Export all widgets or choose one of the widgets available in this OMP installation." xml:space="preserve"><value>Exportera alla widgetar eller välj en av de widgetar som finns i den här OMP-installationen.</value></data>
   <data name="Widget" xml:space="preserve"><value>Widget</value></data>
-  <data name="All widgets" xml:space="preserve"><value>Alla widgets</value></data>
+  <data name="All widgets" xml:space="preserve"><value>Alla widgetar</value></data>
   <data name="Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisioneringshistorik och runtime-identitetskontroller.</value></data>
   <data name="Filter" xml:space="preserve"><value>Filter</value></data>
   <data name="Search rows" xml:space="preserve"><value>Sök rader</value></data>
@@ -2190,7 +2190,7 @@
   <data name="Week number" xml:space="preserve"><value>Veckonummer</value></data>
   <data name="Show week number" xml:space="preserve"><value>Visa veckonummer</value></data>
   <data name="Hide week number" xml:space="preserve"><value>Dölj veckonummer</value></data>
-  <data name="No content pages to show." xml:space="preserve"><value>Inga content-sidor att visa.</value></data>
+  <data name="No content pages to show." xml:space="preserve"><value>Inga innehållssidor att visa.</value></data>
   <data name="Blank widget" xml:space="preserve"><value>Tom widget</value></data>
   <data name="Admin overview" xml:space="preserve"><value>Adminöversikt</value></data>
   <data name="Favorite portal entries" xml:space="preserve"><value>Favoritposter</value></data>
@@ -2198,15 +2198,15 @@
   <data name="Combolist" xml:space="preserve"><value>Kombolista</value></data>
   <data name="User roles" xml:space="preserve"><value>Användarroller</value></data>
   <data name="Weekday and date" xml:space="preserve"><value>Veckodag och datum</value></data>
-  <data name="Content pages" xml:space="preserve"><value>Content-sidor</value></data>
+  <data name="Content pages" xml:space="preserve"><value>Innehållssidor</value></data>
   <data name="Show portal navbar" xml:space="preserve"><value>Visa portalens navbar</value></data>
-  <data name="When this is turned off, the Portal navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs portalens navbar under topbaren.</value></data>
+  <data name="When this is turned off, the Portal navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs portalens navbar under toppmenyn.</value></data>
   <data name="Portal navigation" xml:space="preserve"><value>Portalnavigering</value></data>
   <data name="No navigation links to show." xml:space="preserve"><value>Inga navigeringslänkar att visa.</value></data>
   <data name="Column count" xml:space="preserve"><value>Antal kolumner</value></data>
-  <data name="Entry filter" xml:space="preserve"><value>Entry-filter</value></data>
-  <data name="Show all entries" xml:space="preserve"><value>Visa alla entries</value></data>
-  <data name="Top-level entries only" xml:space="preserve"><value>Endast toppnivå-entries</value></data>
+  <data name="Entry filter" xml:space="preserve"><value>Postfilter</value></data>
+  <data name="Show all entries" xml:space="preserve"><value>Visa alla poster</value></data>
+  <data name="Top-level entries only" xml:space="preserve"><value>Endast toppnivåposter</value></data>
   <data name="Default" xml:space="preserve"><value>Standard</value></data>
   <data name="1 column" xml:space="preserve"><value>1 kolumn</value></data>
   <data name="2 columns" xml:space="preserve"><value>2 kolumner</value></data>
@@ -2279,25 +2279,25 @@
   <data name="Could not update blank widget image library." xml:space="preserve"><value>Bildbiblioteket för tom widget kunde inte uppdateras.</value></data>
   <data name="The selected image is too large." xml:space="preserve"><value>Den valda bilden är för stor.</value></data>
   <data name="Show dashboard navbar" xml:space="preserve"><value>Visa dashboardens navbar</value></data>
-  <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under topbaren.</value></data>
+  <data name="When this is turned off, the dashboard navbar below the topbar is hidden." xml:space="preserve"><value>När detta är avstängt döljs dashboardens navbar under toppmenyn.</value></data>
   <data name="Hide title bar outside edit mode" xml:space="preserve"><value>Dölj titelrad utanför redigeringsläge</value></data>
   <data name="Dashboard layout reset to default." xml:space="preserve"><value>Dashboard-layouten har återställts till standard.</value></data>
   <data name="Dashboard cleared." xml:space="preserve"><value>Dashboarden har rensats.</value></data>
-  <data name="Default dashboard layout saved. Widgets: {0}." xml:space="preserve"><value>Standardlayouten för dashboarden har sparats. Widgets: {0}.</value></data>
+  <data name="Default dashboard layout saved. Widgets: {0}." xml:space="preserve"><value>Standardlayouten för dashboarden har sparats. Widgetar: {0}.</value></data>
   <data name="This resets your dashboard to the shared default layout. Continue?" xml:space="preserve"><value>Detta återställer din dashboard till den gemensamma standardlayouten. Fortsätt?</value></data>
   <data name="Reset to the shared default dashboard layout." xml:space="preserve"><value>Återställ till den gemensamma standardlayouten för dashboarden.</value></data>
   <data name="Reset to default" xml:space="preserve"><value>Återställ till standard</value></data>
-  <data name="This removes all widgets from your dashboard. Continue?" xml:space="preserve"><value>Detta tar bort alla widgets från din dashboard. Fortsätt?</value></data>
-  <data name="Clear your dashboard and keep it empty until you add widgets again." xml:space="preserve"><value>Rensa din dashboard och håll den tom tills du lägger till widgets igen.</value></data>
+  <data name="This removes all widgets from your dashboard. Continue?" xml:space="preserve"><value>Detta tar bort alla widgetar från din dashboard. Fortsätt?</value></data>
+  <data name="Clear your dashboard and keep it empty until you add widgets again." xml:space="preserve"><value>Rensa din dashboard och håll den tom tills du lägger till widgetar igen.</value></data>
   <data name="Clear dashboard" xml:space="preserve"><value>Rensa dashboard</value></data>
   <data name="Default dashboard layout" xml:space="preserve"><value>Standardlayout för dashboard</value></data>
   <data name="This replaces the shared default dashboard layout with your current dashboard layout. Continue?" xml:space="preserve"><value>Detta ersätter den gemensamma standardlayouten med din nuvarande dashboard-layout. Fortsätt?</value></data>
   <data name="Users without a personal dashboard layout use the shared default layout." xml:space="preserve"><value>Användare utan personlig dashboard-layout använder den gemensamma standardlayouten.</value></data>
   <data name="Save current layout as default" xml:space="preserve"><value>Spara nuvarande layout som standard</value></data>
-  <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Skapa en universal-zip med valfri mix av moduldefinitioner, artefaktpaket, host-konfigurationer, config overlays, widgets och widget-runtime-data.</value></data>
-  <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Inkludera runtime-data för valda widgets</value></data>
-  <data name="Banners" xml:space="preserve"><value>Banners</value></data>
-  <data name="Create system-controlled banners for all users or selected roles. Users cannot dismiss banners." xml:space="preserve"><value>Skapa systemstyrda banners för alla användare eller valda roller. Användare kan inte stänga banners.</value></data>
+  <data name="Create one universal zip with any mix of module definitions, artifact packages, host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Skapa en universal-zip med valfri mix av moduldefinitioner, artefaktpaket, värdkonfigurationer, konfigurationslager, widgetar och widget-kördata.</value></data>
+  <data name="Include runtime data for selected widgets" xml:space="preserve"><value>Inkludera kördata för valda widgetar</value></data>
+  <data name="Banners" xml:space="preserve"><value>Banderoller</value></data>
+  <data name="Create system-controlled banners for all users or selected roles. Users cannot dismiss banners." xml:space="preserve"><value>Skapa systemstyrda banderoller för alla användare eller valda roller. Användare kan inte stänga banderoller.</value></data>
   <data name="Edit banner" xml:space="preserve"><value>Redigera banner</value></data>
   <data name="Create banner" xml:space="preserve"><value>Skapa banner</value></data>
   <data name="Announcement" xml:space="preserve"><value>Meddelande</value></data>
@@ -2454,8 +2454,8 @@
   <data name="Target host profile: {0}." xml:space="preserve"><value>Målprofil för host: {0}.</value></data>
   <data name="Showing {0} import detail rows from the completed import response. These details are rendered in the page and are not stored in cookies." xml:space="preserve"><value>Visar {0} importdetaljrader från det slutförda importsvaret. Detaljerna renderas på sidan och lagras inte i cookies.</value></data>
   <data name="Package details:" xml:space="preserve"><value>Paketdetaljer:</value></data>
-  <data name="Showing first {0} detail rows; {1} additional rows were omitted to keep the browser cookie small." xml:space="preserve"><value>Visar de första {0} detaljraderna; {1} ytterligare rader utelämnades för att hålla browser-cookien liten.</value></data>
-  <data name="The import result was shortened to avoid an oversized browser cookie." xml:space="preserve"><value>Importresultatet kortades för att undvika en för stor browser-cookie.</value></data>
+  <data name="Showing first {0} detail rows; {1} additional rows were omitted to keep the browser cookie small." xml:space="preserve"><value>Visar de första {0} detaljraderna; {1} ytterligare rader utelämnades för att hålla webbläsarcookien liten.</value></data>
+  <data name="The import result was shortened to avoid an oversized browser cookie." xml:space="preserve"><value>Importresultatet kortades för att undvika en för stor webbläsarcookie.</value></data>
   <data name="Queued HostAgent artifact retention cleanup job {0}. The HostAgent will recompute the candidates and perform both database and file cleanup. Current preview shows {1} deletable old versions out of {2} candidates with a keep limit of {3}." xml:space="preserve"><value>Köade HostAgent-jobb {0} för artefaktretention. HostAgent räknar om kandidaterna och gör både databas- och filrensning. Nuvarande förhandsgranskning visar {1} borttagbara gamla versioner av {2} kandidater med gränsen {3} versioner att behålla.</value></data>
   <data name="The HostAgent that claims the global retention job deletes database rows and central ArtifactStore payloads, then queues host-specific cache cleanup jobs. Portal only creates the job request." xml:space="preserve"><value>Den HostAgent som plockar det globala retention-jobbet tar bort databasrader och centrala ArtifactStore-payloads och köar sedan host-specifika cacherensningsjobb. Portal skapar bara jobbförfrågan.</value></data>
   <data name="Queue a HostAgent job to delete unreferenced old artifact versions?" xml:space="preserve"><value>Köa ett HostAgent-jobb för att ta bort orefererade gamla artefaktversioner?</value></data>
@@ -2486,7 +2486,7 @@
   <data name="Widget runtime data zip" xml:space="preserve"><value>Widget-runtime-data zip</value></data>
   <data name="Host-specific folder" xml:space="preserve"><value>Värdspecifik mapp</value></data>
   <data name="Optional host subfolder for host-specific objects" xml:space="preserve"><value>Valfri värdundermapp för värdspecifika objekt</value></data>
-  <data name="Choose any number of object files, then add them to the package list. Host-specific folders apply to host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Välj valfritt antal objektfiler och lägg sedan till dem i paketlistan. Värdspecifika mappar används för värdkonfigurationer, konfigurationsöverlägg, widgets och widget-runtime-data.</value></data>
+  <data name="Choose any number of object files, then add them to the package list. Host-specific folders apply to host configs, config overlays, widgets, and widget runtime data." xml:space="preserve"><value>Välj valfritt antal objektfiler och lägg sedan till dem i paketlistan. Värdspecifika mappar används för värdkonfigurationer, konfigurationslager, widgetar och widget-kördata.</value></data>
   <data name="Add files" xml:space="preserve"><value>Lägg till filer</value></data>
   <data name="Clear list" xml:space="preserve"><value>Rensa lista</value></data>
   <data name="Package items" xml:space="preserve"><value>Paketobjekt</value></data>
@@ -2524,7 +2524,7 @@
   <data name="Allowed roles" xml:space="preserve"><value>Tillåtna roller</value></data>
   <data name="Set key" xml:space="preserve"><value>Set-nyckel</value></data>
   <data name="Create URL" xml:space="preserve"><value>Skapa URL</value></data>
-  <data name="Add one target URL that can be used by normal iFrame URL sets or standalone portal entries." xml:space="preserve"><value>Lägg till ett URL-mål som kan användas av vanliga iFrame-URL-set eller fristående portal entries.</value></data>
+  <data name="Add one target URL that can be used by normal iFrame URL sets or standalone portal entries." xml:space="preserve"><value>Lägg till ett URL-mål som kan användas av vanliga iFrame-URL-set eller fristående portalposter.</value></data>
   <data name="Optional comma or semicolon separated active role names." xml:space="preserve"><value>Valfria aktiva rollnamn separerade med kommatecken eller semikolon.</value></data>
   <data name="Existing URLs" xml:space="preserve"><value>Befintliga URL:er</value></data>
   <data name="No iFrame URLs found." xml:space="preserve"><value>Inga iFrame-URL:er hittades.</value></data>
