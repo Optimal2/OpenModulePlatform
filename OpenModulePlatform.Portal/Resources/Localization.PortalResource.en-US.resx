@@ -40,7 +40,7 @@
   <data name="Optional AD link" xml:space="preserve"><value>Optional AD link</value></data>
   <data name="User created with AD link." xml:space="preserve"><value>User created with AD link.</value></data>
   <data name="User created with AD link and local login." xml:space="preserve"><value>User created with AD link and local login.</value></data>
-  <data name="Optional local login" xml:space="preserve"><value>Optional local login</value></data>
+  <data name="Optional local login" xml:space="preserve"><value>Local account</value></data>
   <data name="Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user." xml:space="preserve"><value>Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user.</value></data>
   <data name="Edit user" xml:space="preserve"><value>Edit user</value></data>
   <data name="Update the OMP user record and link AD identities that Windows sign-in can resolve." xml:space="preserve"><value>Update the OMP user record and link AD identities that Windows sign-in can resolve.</value></data>
