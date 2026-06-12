@@ -2610,6 +2610,7 @@
   <data name="OMP users" xml:space="preserve"><value>OMP-användare</value></data>
   <data name="Select OMP users" xml:space="preserve"><value>Välj OMP-användare</value></data>
   <data name="No active OMP users found." xml:space="preserve"><value>Inga aktiva OMP-användare hittades.</value></data>
+  <data name="No available OMP users found." xml:space="preserve"><value>Inga valbara OMP-användare hittades.</value></data>
   <data name="Add selected OMP users" xml:space="preserve"><value>Lägg till valda OMP-användare</value></data>
   <data name="AD users" xml:space="preserve"><value>AD-användare</value></data>
   <data name="Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically." xml:space="preserve"><value>Ange en AD-användare per rad. Länkade AD-konton tilldelas automatiskt som sin OMP-användare.</value></data>
