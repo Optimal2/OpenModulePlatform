@@ -196,12 +196,15 @@
 }
 
 .portal-message-thread-layout {
+    --portal-message-thread-height: min(820px, calc(100vh - var(--app-header-height, 0px) - 60px));
+    --portal-message-thread-height: min(820px, calc(100dvh - var(--app-header-height, 0px) - 60px));
+    --portal-message-thread-max-height: calc(100vh - var(--app-header-height, 0px) - 60px);
+    --portal-message-thread-max-height: calc(100dvh - var(--app-header-height, 0px) - 60px);
     display: grid;
     grid-template-columns: minmax(96px, 1fr) minmax(480px, 8fr) minmax(96px, 1fr);
     align-items: start;
     gap: 16px;
-    min-height: min(820px, calc(100vh - 96px));
-    min-height: min(820px, calc(100dvh - 96px));
+    min-height: var(--portal-message-thread-height);
 }
 
 .portal-message-thread__side {
@@ -246,10 +249,8 @@
     position: relative;
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
-    min-height: min(820px, calc(100vh - 96px));
-    min-height: min(820px, calc(100dvh - 96px));
-    max-height: calc(100vh - 96px);
-    max-height: calc(100dvh - 96px);
+    min-height: var(--portal-message-thread-height);
+    max-height: var(--portal-message-thread-max-height);
     overflow: hidden;
 }
 
