@@ -62,6 +62,8 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AvailablePermissionOptions { get; private set; } = [];
 
+    public IReadOnlyList<PrincipalSuggestion> OmpUserOptions { get; private set; } = [];
+
     public IReadOnlyList<PrincipalTypeOptionItem> PrincipalTypeOptions =>
     [
         new() { Value = "OmpUser", Label = T("OMP user") },
@@ -189,7 +191,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         return RedirectToSecurityRole(Input.RoleId);
     }
 
-    public async Task<IActionResult> OnPostAddPrincipal(string principalType, string principal, CancellationToken ct)
+    public async Task<IActionResult> OnPostAddPrincipal(
+        string principalType,
+        string? principal,
+        int[]? selectedOmpUserIds,
+        CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
@@ -202,44 +208,19 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return RedirectToSecurityRoles();
         }
 
-        principalType = Clean(principalType) ?? string.Empty;
-        principal = Clean(principal) ?? string.Empty;
-
-        var normalizedPrincipal = await NormalizePrincipalAsync(principalType, principal, ct);
-        if (!string.IsNullOrWhiteSpace(normalizedPrincipal.ErrorMessage))
-        {
-            await LoadDetailsAsync(ct);
-            SetTitles("Edit role");
-            ModelState.AddModelError(string.Empty, await ApplyBrandingAsync(T(normalizedPrincipal.ErrorMessage), ct));
-            NewPrincipal = principal;
-            return Page();
-        }
-
-        principal = normalizedPrincipal.Principal ?? principal;
-
-        if (string.IsNullOrWhiteSpace(principalType) || string.IsNullOrWhiteSpace(principal))
+        var candidates = BuildPrincipalCandidates(principalType, principal, selectedOmpUserIds);
+        if (candidates.Count == 0)
         {
             await LoadDetailsAsync(ct);
             SetTitles("Edit role");
             ModelState.AddModelError(
-                string.Empty, T("Select a principal type and enter a principal value."));
+                string.Empty, T("Select at least one principal to add."));
             NewPrincipal = principal;
             return Page();
         }
 
-        if (principal.Length > 256)
-        {
-            await LoadDetailsAsync(ct);
-            SetTitles("Edit role");
-            ModelState.AddModelError(string.Empty, T("Principal is too long."));
-            NewPrincipal = principal;
-            return Page();
-        }
-
-        var added = await _repo.AddPrincipalToRoleAsync(Input.RoleId, principalType, principal, ct);
-        StatusMessage = added
-            ? T("Principal added to role.")
-            : T("Principal is already assigned to role.");
+        var result = await AddPrincipalCandidatesAsync(candidates, ct);
+        StatusMessage = BuildPrincipalBatchStatusMessage(result);
         return RedirectToSecurityRole(Input.RoleId);
     }
 
@@ -352,6 +333,8 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                     Label = x.Name
                 })
             .ToArray();
+
+        OmpUserOptions = await _repo.GetActiveOmpUserPrincipalOptionsAsync(ct);
     }
 
     private void ValidateRole()
@@ -373,42 +356,190 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     {
         if (!IsSupportedPrincipalType(principalType))
         {
-            return new NormalizedPrincipalResult(null, "Select a supported principal type.");
+            return new NormalizedPrincipalResult(null, null, "Select a supported principal type.");
         }
 
         if (string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase))
         {
-            return new NormalizedPrincipalResult(NormalizeAdGroupPrincipal(principal));
+            return new NormalizedPrincipalResult("ADGroup", NormalizeAdGroupPrincipal(principal));
         }
 
         if (string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase))
         {
-            if (await _repo.IsAdUserPrincipalLinkedToOmpUserAsync(principal, ct))
+            var linkedOmpUserId = await _repo.GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(principal, ct);
+            if (linkedOmpUserId is int linkedUserId)
             {
                 return new NormalizedPrincipalResult(
-                    null,
-                    "This AD account is already linked to an OMP user. Assign the role to the OMP user instead.");
+                    "OmpUser",
+                    linkedUserId.ToString(CultureInfo.InvariantCulture));
             }
 
-            return new NormalizedPrincipalResult(principal);
+            return new NormalizedPrincipalResult("ADUser", principal);
         }
 
         if (!string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
         {
-            return new NormalizedPrincipalResult(principal);
+            return new NormalizedPrincipalResult(principalType, principal);
         }
 
         if (!TryParseOmpUserPrincipal(principal, out var userId))
         {
-            return new NormalizedPrincipalResult(null, "Select an OMP user from the suggestions or enter a valid user ID.");
+            return new NormalizedPrincipalResult(
+                null,
+                null,
+                "Select an OMP user from the suggestions or enter a valid user ID.");
         }
 
         if (!await _repo.OmpUserExistsAsync(userId, ct))
         {
-            return new NormalizedPrincipalResult(null, "Select an OMP user from the suggestions or enter a valid user ID.");
+            return new NormalizedPrincipalResult(
+                null,
+                null,
+                "Select an OMP user from the suggestions or enter a valid user ID.");
         }
 
-        return new NormalizedPrincipalResult(userId.ToString(CultureInfo.InvariantCulture));
+        return new NormalizedPrincipalResult("OmpUser", userId.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static IReadOnlyList<PrincipalCandidate> BuildPrincipalCandidates(
+        string principalType,
+        string? principal,
+        int[]? selectedOmpUserIds)
+    {
+        principalType = Clean(principalType) ?? string.Empty;
+        var candidates = new List<PrincipalCandidate>();
+
+        if (string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var userId in selectedOmpUserIds ?? [])
+            {
+                if (userId > 0)
+                {
+                    candidates.Add(new PrincipalCandidate("OmpUser", userId.ToString(CultureInfo.InvariantCulture)));
+                }
+            }
+
+            return candidates;
+        }
+
+        foreach (var row in SplitPrincipalLines(principal))
+        {
+            candidates.Add(new PrincipalCandidate(principalType, row));
+        }
+
+        return candidates;
+    }
+
+    private async Task<PrincipalBatchResult> AddPrincipalCandidatesAsync(
+        IReadOnlyList<PrincipalCandidate> candidates,
+        CancellationToken ct)
+    {
+        var result = new PrincipalBatchResult();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in candidates)
+        {
+            NormalizedPrincipalResult normalized;
+            try
+            {
+                normalized = await NormalizePrincipalAsync(candidate.PrincipalType, candidate.Principal, ct);
+            }
+            catch (SqlException ex)
+            {
+                result.Fail(candidate.Principal, ToFriendlySqlMessage(ex, "The principal could not be resolved."));
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(normalized.ErrorMessage)
+                || string.IsNullOrWhiteSpace(normalized.PrincipalType)
+                || string.IsNullOrWhiteSpace(normalized.Principal))
+            {
+                result.Fail(candidate.Principal, normalized.ErrorMessage ?? "The principal could not be resolved.");
+                continue;
+            }
+
+            if (normalized.Principal.Length > 256)
+            {
+                result.Fail(candidate.Principal, "Principal is too long.");
+                continue;
+            }
+
+            var normalizedKey = $"{normalized.PrincipalType}\u001f{normalized.Principal}";
+            if (!seen.Add(normalizedKey))
+            {
+                result.Skipped++;
+                continue;
+            }
+
+            try
+            {
+                var added = await _repo.AddPrincipalToRoleAsync(
+                    Input.RoleId,
+                    normalized.PrincipalType,
+                    normalized.Principal,
+                    ct);
+
+                if (added)
+                {
+                    result.Added++;
+                }
+                else
+                {
+                    result.Skipped++;
+                }
+            }
+            catch (SqlException ex)
+            {
+                if (ex.Number is 2601 or 2627)
+                {
+                    result.Skipped++;
+                    continue;
+                }
+
+                result.Fail(candidate.Principal, ToFriendlySqlMessage(ex, "The principal could not be added."));
+            }
+        }
+
+        return result;
+    }
+
+    private string BuildPrincipalBatchStatusMessage(PrincipalBatchResult result)
+    {
+        var parts = new List<string>
+        {
+            string.Format(CultureInfo.CurrentCulture, T("Added {0} principal(s)."), result.Added),
+            string.Format(CultureInfo.CurrentCulture, T("Skipped {0} duplicate or already assigned principal(s)."), result.Skipped)
+        };
+
+        if (result.Failures.Count > 0)
+        {
+            var failurePreview = string.Join("; ", result.Failures.Take(5));
+            if (result.Failures.Count > 5)
+            {
+                failurePreview += "; ...";
+            }
+
+            parts.Add(string.Format(CultureInfo.CurrentCulture, T("Failed {0}: {1}"), result.Failures.Count, failurePreview));
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    private static IEnumerable<string> SplitPrincipalLines(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            yield break;
+        }
+
+        foreach (var line in value.Split(["\r\n", "\n", "\r"], StringSplitOptions.None))
+        {
+            var trimmed = line.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                yield return trimmed;
+            }
+        }
     }
 
     private static bool IsSupportedPrincipalType(string principalType)
@@ -535,5 +666,19 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         public bool Disabled { get; set; }
     }
 
-    private sealed record NormalizedPrincipalResult(string? Principal, string? ErrorMessage = null);
+    private sealed record PrincipalCandidate(string PrincipalType, string Principal);
+
+    private sealed record NormalizedPrincipalResult(string? PrincipalType, string? Principal, string? ErrorMessage = null);
+
+    private sealed class PrincipalBatchResult
+    {
+        public int Added { get; set; }
+
+        public int Skipped { get; set; }
+
+        public List<string> Failures { get; } = [];
+
+        public void Fail(string principal, string message)
+            => Failures.Add($"{principal}: {message}");
+    }
 }

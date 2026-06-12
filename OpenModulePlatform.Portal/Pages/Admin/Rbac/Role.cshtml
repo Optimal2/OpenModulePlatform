@@ -291,32 +291,80 @@
                 </table>
             }
 
-            <form method="post" asp-page-handler="AddPrincipal" class="top-gap form-grid-inline form-grid-inline--triple" id="add-principal-form">
-                <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
-
-                <div class="form-field">
-                    <label for="principalType">@L["Principal type"]</label>
-                    <select id="principalType" name="principalType">
-                        @foreach (var option in Model.PrincipalTypeOptions)
-                        {
-                            <option value="@option.Value" disabled="@option.Disabled">@ompBranding.ApplyPlatformName(option.Label)</option>
-                        }
-                    </select>
+            <div class="top-gap role-principal-add">
+                <div>
+                    <h4>@L["Add principals"]</h4>
+                    <p class="muted">@ompBranding.ApplyPlatformName(L["Choose OMP users from the checklist or paste AD users/groups as newline-separated text."].Value)</p>
                 </div>
 
-                <div class="form-field grow">
-                    <label for="principal">@L["Principal"]</label>
-                    <input id="principal" name="principal" value="@Model.NewPrincipal" list="principal-suggestions" autocomplete="off" />
-                    <datalist id="principal-suggestions"></datalist>
-                    <div class="field-help">
-                        @ompBranding.ApplyPlatformName(L["For OMP users, start typing a display name or user ID and choose a suggestion. For AD users, enter DOMAIN\\User. For AD groups, enter a group SID or DOMAIN\\Group; local group names are resolved to a SID when possible."].Value)
-                    </div>
-                </div>
+                <div class="role-principal-add-grid">
+                    <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
+                        <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                        <input type="hidden" name="principalType" value="OmpUser" />
 
-                <div class="form-field actions">
-                    <button type="submit">@L["Add principal"]</button>
+                        <div class="form-field">
+                            <label>@L["OMP users"]</label>
+                            @if (Model.OmpUserOptions.Count == 0)
+                            {
+                                <div class="empty-state">@L["No active OMP users found."]</div>
+                            }
+                            else
+                            {
+                                <details class="role-principal-picker">
+                                    <summary>@L["Select OMP users"]</summary>
+                                    <div class="checkbox-list role-principal-picker__list">
+                                        @foreach (var option in Model.OmpUserOptions)
+                                        {
+                                            <label class="checkbox-row">
+                                                <input type="checkbox" name="selectedOmpUserIds" value="@option.Value" />
+                                                <span>@option.Label</span>
+                                            </label>
+                                        }
+                                    </div>
+                                </details>
+                            }
+                        </div>
+
+                        <div class="form-field actions">
+                            <button type="submit">@L["Add selected OMP users"]</button>
+                        </div>
+                    </form>
+
+                    <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
+                        <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                        <input type="hidden" name="principalType" value="ADUser" />
+
+                        <div class="form-field grow">
+                            <label for="adUserPrincipals">@L["AD users"]</label>
+                            <textarea id="adUserPrincipals" name="principal" rows="7" autocomplete="off">@Model.NewPrincipal</textarea>
+                            <div class="field-help">
+                                @ompBranding.ApplyPlatformName(L["Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically."].Value)
+                            </div>
+                        </div>
+
+                        <div class="form-field actions">
+                            <button type="submit">@L["Add AD users"]</button>
+                        </div>
+                    </form>
+
+                    <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
+                        <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                        <input type="hidden" name="principalType" value="ADGroup" />
+
+                        <div class="form-field grow">
+                            <label for="adGroupPrincipals">@L["AD groups"]</label>
+                            <textarea id="adGroupPrincipals" name="principal" rows="7" autocomplete="off"></textarea>
+                            <div class="field-help">
+                                @L["Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible."]
+                            </div>
+                        </div>
+
+                        <div class="form-field actions">
+                            <button type="submit">@L["Add AD groups"]</button>
+                        </div>
+                    </form>
                 </div>
-            </form>
+            </div>
         </section>
     </div>
 
@@ -330,79 +378,4 @@
         <p class="muted">@L["Deleting a role removes all principal and permission links for that role."]</p>
         <button type="submit" class="btn btn-danger">@L["Delete role"]</button>
     </form>
-    <script>
-        (() => {
-            const principalType = document.getElementById('principalType');
-            const principalInput = document.getElementById('principal');
-            const dataList = document.getElementById('principal-suggestions');
-            const form = document.getElementById('add-principal-form');
-
-            if (!principalType || !principalInput || !dataList || !form) {
-                return;
-            }
-
-            let controller = null;
-            let suggestionValues = new Map();
-
-            async function refreshSuggestions() {
-                dataList.replaceChildren();
-                suggestionValues = new Map();
-
-                if (principalType.value !== 'OmpUser' && principalType.value !== 'ADUser' && principalType.value !== 'ADGroup') {
-                    return;
-                }
-
-                const term = principalInput.value.trim();
-                const url = new URL(window.location.href);
-                url.search = '';
-                url.searchParams.set('handler', 'PrincipalSuggestions');
-                url.searchParams.set('principalType', principalType.value);
-                url.searchParams.set('term', term);
-
-                if (controller) {
-                    controller.abort();
-                }
-
-                controller = new AbortController();
-
-                try {
-                    const response = await fetch(url.toString(), {
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                        signal: controller.signal
-                    });
-
-                    if (!response.ok) {
-                        return;
-                    }
-
-                    const suggestions = await response.json();
-                    dataList.replaceChildren();
-
-                    for (const suggestion of suggestions) {
-                        const label = suggestion.label ?? suggestion.Label ?? suggestion;
-                        const value = suggestion.value ?? suggestion.Value ?? label;
-                        const option = document.createElement('option');
-                        option.value = label;
-                        dataList.appendChild(option);
-                        suggestionValues.set(label, value);
-                    }
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('Failed to load principal suggestions.', error);
-                    }
-                }
-            }
-
-            principalType.addEventListener('change', refreshSuggestions);
-            principalInput.addEventListener('input', refreshSuggestions);
-            principalInput.addEventListener('focus', refreshSuggestions);
-            form.addEventListener('submit', () => {
-                const selectedValue = suggestionValues.get(principalInput.value);
-                if (selectedValue) {
-                    principalInput.value = selectedValue;
-                }
-            });
-        })();
-    </script>
-
 }

@@ -2597,4 +2597,20 @@
   <data name="Linked AD account" xml:space="preserve"><value>Länkat AD-konto</value></data>
   <data name="Profile image storage is unavailable. Contact an administrator." xml:space="preserve"><value>Profilbildslagret är inte tillgängligt. Kontakta en administratör.</value></data>
   <data name="Profile image storage is not installed. Run core module SQL repair and try again." xml:space="preserve"><value>Profilbildslagret är inte installerat. Kör SQL-reparation för core-modulen och försök igen.</value></data>
+  <data name="Add principals" xml:space="preserve"><value>Lägg till principaler</value></data>
+  <data name="Choose OMP users from the checklist or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Välj OMP-användare i listan eller klistra in AD-användare/grupper radvis.</value></data>
+  <data name="OMP users" xml:space="preserve"><value>OMP-användare</value></data>
+  <data name="Select OMP users" xml:space="preserve"><value>Välj OMP-användare</value></data>
+  <data name="No active OMP users found." xml:space="preserve"><value>Inga aktiva OMP-användare hittades.</value></data>
+  <data name="Add selected OMP users" xml:space="preserve"><value>Lägg till valda OMP-användare</value></data>
+  <data name="AD users" xml:space="preserve"><value>AD-användare</value></data>
+  <data name="Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically." xml:space="preserve"><value>Ange en AD-användare per rad. Länkade AD-konton tilldelas automatiskt som sin OMP-användare.</value></data>
+  <data name="Add AD users" xml:space="preserve"><value>Lägg till AD-användare</value></data>
+  <data name="AD groups" xml:space="preserve"><value>AD-grupper</value></data>
+  <data name="Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible." xml:space="preserve"><value>Ange ett AD-grupp-SID eller DOMAIN\\Group per rad. Lokala gruppnamn slås upp till SID när det går.</value></data>
+  <data name="Add AD groups" xml:space="preserve"><value>Lägg till AD-grupper</value></data>
+  <data name="Select at least one principal to add." xml:space="preserve"><value>Välj minst en principal att lägga till.</value></data>
+  <data name="Added {0} principal(s)." xml:space="preserve"><value>Lade till {0} principal(er).</value></data>
+  <data name="Skipped {0} duplicate or already assigned principal(s)." xml:space="preserve"><value>Hoppade över {0} dubblett(er) eller redan tilldelade principal(er).</value></data>
+  <data name="Failed {0}: {1}" xml:space="preserve"><value>Misslyckades med {0}: {1}</value></data>
 </root>

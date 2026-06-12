@@ -5261,6 +5261,58 @@ body.dashboard-widget-picker-open {
     min-width: 0;
 }
 
+.role-principal-add {
+    display: grid;
+    gap: 12px;
+}
+
+.role-principal-add-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    align-items: stretch;
+}
+
+.role-principal-add-card {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-muted);
+}
+
+.role-principal-add-card textarea {
+    width: 100%;
+    min-height: 156px;
+    resize: vertical;
+}
+
+.role-principal-picker {
+    display: grid;
+    gap: 8px;
+}
+
+.role-principal-picker > summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    font-weight: 700;
+}
+
+.role-principal-picker__list {
+    max-height: 260px;
+}
+
+.role-principal-add-card .actions {
+    align-self: end;
+}
+
 
 .toolbar--header {
     margin-top: 0;

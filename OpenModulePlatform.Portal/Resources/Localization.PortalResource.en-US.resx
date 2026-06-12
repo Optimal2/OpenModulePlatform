@@ -895,4 +895,20 @@
   <data name="Linked AD account" xml:space="preserve"><value>Linked AD account</value></data>
   <data name="Profile image storage is unavailable. Contact an administrator." xml:space="preserve"><value>Profile image storage is unavailable. Contact an administrator.</value></data>
   <data name="Profile image storage is not installed. Run core module SQL repair and try again." xml:space="preserve"><value>Profile image storage is not installed. Run core module SQL repair and try again.</value></data>
+  <data name="Add principals" xml:space="preserve"><value>Add principals</value></data>
+  <data name="Choose OMP users from the checklist or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Choose OMP users from the checklist or paste AD users/groups as newline-separated text.</value></data>
+  <data name="OMP users" xml:space="preserve"><value>OMP users</value></data>
+  <data name="Select OMP users" xml:space="preserve"><value>Select OMP users</value></data>
+  <data name="No active OMP users found." xml:space="preserve"><value>No active OMP users found.</value></data>
+  <data name="Add selected OMP users" xml:space="preserve"><value>Add selected OMP users</value></data>
+  <data name="AD users" xml:space="preserve"><value>AD users</value></data>
+  <data name="Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically." xml:space="preserve"><value>Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically.</value></data>
+  <data name="Add AD users" xml:space="preserve"><value>Add AD users</value></data>
+  <data name="AD groups" xml:space="preserve"><value>AD groups</value></data>
+  <data name="Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible." xml:space="preserve"><value>Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible.</value></data>
+  <data name="Add AD groups" xml:space="preserve"><value>Add AD groups</value></data>
+  <data name="Select at least one principal to add." xml:space="preserve"><value>Select at least one principal to add.</value></data>
+  <data name="Added {0} principal(s)." xml:space="preserve"><value>Added {0} principal(s).</value></data>
+  <data name="Skipped {0} duplicate or already assigned principal(s)." xml:space="preserve"><value>Skipped {0} duplicate or already assigned principal(s).</value></data>
+  <data name="Failed {0}: {1}" xml:space="preserve"><value>Failed {0}: {1}</value></data>
 </root>
