@@ -177,7 +177,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
                 return Page();
 
             case ProfileImageSaveResult.StorageUnavailable:
-                ModelState.AddModelError(nameof(ProfileImageUpload), T("Profile image storage is not writable. Contact an administrator."));
+                ModelState.AddModelError(nameof(ProfileImageUpload), T("Profile image storage is unavailable. Contact an administrator."));
                 return Page();
 
             case ProfileImageSaveResult.SchemaUnavailable:

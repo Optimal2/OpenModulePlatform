@@ -2603,6 +2603,6 @@
   <data name="No roles are assigned directly to this user." xml:space="preserve"><value>Inga roller är direkt kopplade till den här användaren.</value></data>
   <data name="Source" xml:space="preserve"><value>Källa</value></data>
   <data name="Linked AD account" xml:space="preserve"><value>Länkat AD-konto</value></data>
-  <data name="Profile image storage is not writable. Contact an administrator." xml:space="preserve"><value>Profilbildslagret går inte att skriva till. Kontakta en administratör.</value></data>
+  <data name="Profile image storage is unavailable. Contact an administrator." xml:space="preserve"><value>Profilbildslagret är inte tillgängligt. Kontakta en administratör.</value></data>
   <data name="Profile image storage is not installed. Run core module SQL repair and try again." xml:space="preserve"><value>Profilbildslagret är inte installerat. Kör SQL-reparation för core-modulen och försök igen.</value></data>
 </root>

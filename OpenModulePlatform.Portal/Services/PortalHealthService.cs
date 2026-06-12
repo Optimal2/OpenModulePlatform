@@ -39,6 +39,10 @@ SELECT CASE
     WHEN OBJECT_ID(N'omp.users', N'U') IS NOT NULL
      AND COL_LENGTH(N'omp.users', N'profile_image_file_name') IS NOT NULL
      AND COL_LENGTH(N'omp.users', N'profile_image_storage_key') IS NOT NULL
+     AND OBJECT_ID(N'omp_portal.widget_binary_data', N'U') IS NOT NULL
+     AND COL_LENGTH(N'omp_portal.widget_binary_data', N'owner_ref') IS NOT NULL
+     AND COL_LENGTH(N'omp_portal.widget_binary_data', N'content_hash') IS NOT NULL
+     AND COL_LENGTH(N'omp_portal.widget_binary_data', N'data_value') IS NOT NULL
     THEN 1 ELSE 0 END;";
 
                 await using var schemaCmd = new SqlCommand(requiredSchemaSql, conn);
@@ -57,7 +61,7 @@ SELECT CASE
                 Error: isHealthy
                     ? null
                     : databaseOk
-                        ? "Required core profile image schema is missing. Run SQL repair for the omp_core module."
+                        ? "Required profile image storage schema is missing. Run SQL repair for the omp_core and omp_portal modules."
                         : "Database probe returned an unexpected value.");
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)
