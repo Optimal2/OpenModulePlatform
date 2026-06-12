@@ -53,7 +53,7 @@ The AD provider emits role principals for:
 - `ADUser` with the user SID when available
 - `ADGroup` only for group SIDs or translated `DOMAIN\Group` names that already exist in `omp.RolePrincipals`
 
-If an `omp.user_auth` row links the AD provider identity to an active `omp.users` row, the cookie also includes the OMP user id.
+If an enabled `omp.user_auth` row links the AD provider identity to an active `omp.users` row, the cookie also includes the OMP user id.
 
 The AD provider intentionally filters Windows group memberships before issuing the shared OMP cookie. A Windows identity can contain hundreds or thousands of AD groups, and writing all of them into the cookie can exceed IIS/HTTP header limits. The provider still enumerates the Windows groups during sign-in, but only persists the groups that are actually used by RBAC.
 
@@ -65,7 +65,7 @@ Local password sign-in requires:
 
 - an enabled `lpwd` row in `omp.auth_providers`
 - a password hash in `omp.auth_provider_lpwd`
-- an `omp.user_auth` row linking the local user name to an active `omp.users` row
+- an enabled `omp.user_auth` row linking the local user name to an active `omp.users` row
 
 Raw passwords must never be stored. The current hash format is `PBKDF2-SHA256$<iterations>$<saltBase64>$<hashBase64>`.
 
@@ -86,6 +86,12 @@ The core user tables are:
 - `omp.user_auth` - provider identity links for OMP users
 - `omp.auth_provider_lpwd` - local password provider data
 
+`omp.user_auth.auth_status` stores the link status as open-ended text. OMP
+currently creates `enabled` links and treats only `enabled` links as usable for
+sign-in and AD-user role resolution. `disabled` and `deleted` are reserved
+status values for administrative or automation workflows; additional status
+values may be introduced without changing the table shape.
+
 An OMP user row is required when the identity needs local password sign-in or durable OMP-owned user state. It is optional for AD identities that are only authorized through direct AD user or AD group role principals.
 
 Portal administrators can manage first-class OMP users at `/admin/users`. The
@@ -95,7 +101,7 @@ and reset local passwords. AD links use the same provider display name (`AD`)
 and provider user key formats that `/auth/ad` resolves, such as `DOMAIN\User`,
 `name:DOMAIN\User`, or `sid:S-1-5-21-...`.
 
-If a Windows identity matches an `omp.user_auth` AD link to a disabled OMP user,
+If a Windows identity matches an enabled `omp.user_auth` AD link to a disabled OMP user,
 the auth app blocks sign-in instead of falling back to direct AD user/group role
 principals. This keeps `account_status` authoritative for linked OMP users.
 

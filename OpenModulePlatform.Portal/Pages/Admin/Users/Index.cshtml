@@ -51,7 +51,7 @@ else
                         {
                             @foreach (var link in row.AuthLinks)
                             {
-                                <div><span class="example-token">@link.ProviderDisplayName</span> @link.ProviderUserKey</div>
+                                <div><span class="example-token">@link.ProviderDisplayName</span> @link.ProviderUserKey <span class="pill">@link.AuthStatus</span></div>
                             }
                         }
                     </td>

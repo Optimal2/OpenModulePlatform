@@ -32,7 +32,8 @@ SELECT u.user_id,
        u.updated_at,
        ua.user_auth_id,
        ap.display_name AS provider_display_name,
-       ua.provider_user_key
+       ua.provider_user_key,
+       ua.auth_status
 FROM omp.users u
 LEFT JOIN omp.user_auth ua ON ua.user_id = u.user_id
 LEFT JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
@@ -72,7 +73,8 @@ ORDER BY u.display_name,
             {
                 row.AuthLinks.Add(new OmpUserAuthLinkSummary(
                     rdr.GetString(7),
-                    rdr.GetString(8)));
+                    rdr.GetString(8),
+                    rdr.GetString(9)));
             }
         }
 
@@ -377,8 +379,8 @@ WHERE user_id = @user_id;";
         await conn.OpenAsync(ct);
 
         const string sql = @"
-INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, created_at)
-VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
+INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, auth_status, created_at)
+VALUES(@user_id, @provider_id, @provider_user_key, N'enabled', SYSUTCDATETIME());";
 
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
@@ -527,6 +529,7 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
 SELECT ua.user_auth_id,
        ap.display_name,
        ua.provider_user_key,
+       ua.auth_status,
        ua.created_at,
        ua.last_used_at
 FROM omp.user_auth ua
@@ -548,8 +551,9 @@ ORDER BY ap.display_name,
                 UserAuthId = rdr.GetInt32(0),
                 ProviderDisplayName = rdr.GetString(1),
                 ProviderUserKey = rdr.GetString(2),
-                CreatedAt = rdr.GetDateTime(3),
-                LastUsedAt = rdr.IsDBNull(4) ? null : rdr.GetDateTime(4)
+                AuthStatus = rdr.GetString(3),
+                CreatedAt = rdr.GetDateTime(4),
+                LastUsedAt = rdr.IsDBNull(5) ? null : rdr.GetDateTime(5)
             });
         }
 
@@ -571,6 +575,7 @@ WITH AdProviderKeys(Principal) AS
     INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
     WHERE ua.user_id = @user_id
       AND ap.display_name = @provider_display_name
+      AND ua.auth_status = N'enabled'
       AND LTRIM(RTRIM(ua.provider_user_key)) <> N''
       AND LEN(ua.provider_user_key) <= 256
     UNION
@@ -579,6 +584,7 @@ WITH AdProviderKeys(Principal) AS
     INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
     WHERE ua.user_id = @user_id
       AND ap.display_name = @provider_display_name
+      AND ua.auth_status = N'enabled'
       AND ua.provider_user_key LIKE N'name:%'
       AND LTRIM(RTRIM(SUBSTRING(ua.provider_user_key, 6, LEN(ua.provider_user_key)))) <> N''
       AND LEN(SUBSTRING(ua.provider_user_key, 6, LEN(ua.provider_user_key))) <= 256
@@ -588,6 +594,7 @@ WITH AdProviderKeys(Principal) AS
     INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
     WHERE ua.user_id = @user_id
       AND ap.display_name = @provider_display_name
+      AND ua.auth_status = N'enabled'
       AND ua.provider_user_key LIKE N'sid:%'
       AND LTRIM(RTRIM(SUBSTRING(ua.provider_user_key, 5, LEN(ua.provider_user_key)))) <> N''
       AND LEN(SUBSTRING(ua.provider_user_key, 5, LEN(ua.provider_user_key))) <= 256
@@ -645,6 +652,7 @@ WHERE rp.PrincipalType = N'ADUser'
       INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
       WHERE ua.user_id = @user_id
         AND ap.display_name = @provider_display_name
+        AND ua.auth_status = N'enabled'
         AND ua.provider_user_key = rp.Principal
   );";
 
@@ -675,6 +683,7 @@ FROM omp.user_auth ua
 INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
 WHERE ua.user_id = @user_id
   AND ap.display_name = @provider_display_name
+  AND ua.auth_status = N'enabled'
   AND LTRIM(RTRIM(ua.provider_user_key)) <> N''
   AND LEN(ua.provider_user_key) <= 256;
 
@@ -1040,8 +1049,8 @@ WHERE user_name = @user_name;";
         CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, created_at)
-VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME());";
+INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, auth_status, created_at)
+VALUES(@user_id, @provider_id, @provider_user_key, N'enabled', SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@user_id", userId);
@@ -1124,7 +1133,7 @@ public sealed class OmpUserDetail
     public int MigratableAdUserRoleAssignmentCount { get; set; }
 }
 
-public sealed record OmpUserAuthLinkSummary(string ProviderDisplayName, string ProviderUserKey);
+public sealed record OmpUserAuthLinkSummary(string ProviderDisplayName, string ProviderUserKey, string AuthStatus);
 
 public sealed class OmpUserAuthLinkRow
 {
@@ -1133,6 +1142,8 @@ public sealed class OmpUserAuthLinkRow
     public string ProviderDisplayName { get; set; } = string.Empty;
 
     public string ProviderUserKey { get; set; } = string.Empty;
+
+    public string AuthStatus { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; }
 
