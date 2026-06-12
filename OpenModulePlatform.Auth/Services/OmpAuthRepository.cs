@@ -367,6 +367,7 @@ FROM omp.user_auth ua
 INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ua.provider_id = @provider_id
   AND ua.provider_user_key IN ({inList})
+  AND ua.auth_status = N'enabled'
 ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
          ua.user_auth_id;";
 
@@ -653,8 +654,8 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, last_used_at, created_at)
-VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), SYSUTCDATETIME());";
+INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, last_used_at, auth_status, created_at)
+VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), N'enabled', SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("@user_id", userId);
@@ -798,7 +799,8 @@ WHERE rp.PrincipalType = N'ADGroup';";
         const string sql = @"
 UPDATE omp.user_auth
 SET last_used_at = SYSUTCDATETIME()
-WHERE user_auth_id = @user_auth_id;
+WHERE user_auth_id = @user_auth_id
+  AND auth_status = N'enabled';
 
 UPDATE omp.users
 SET last_login_at = SYSUTCDATETIME(),

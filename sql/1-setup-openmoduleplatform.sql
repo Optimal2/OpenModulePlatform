@@ -2647,6 +2647,9 @@ BEGIN
 
         -- Last time this linked provider identity was successfully used.
         last_used_at datetime2(3) NULL,
+        -- Link status is intentionally open-ended. Built-in values currently
+        -- used by OMP are enabled, disabled and deleted.
+        auth_status nvarchar(50) NOT NULL CONSTRAINT DF_omp_user_auth_auth_status DEFAULT(N'enabled'),
         created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_user_auth_created_at DEFAULT SYSUTCDATETIME(),
 
         CONSTRAINT PK_omp_user_auth PRIMARY KEY(user_auth_id),
@@ -2654,6 +2657,14 @@ BEGIN
         CONSTRAINT FK_omp_user_auth_provider FOREIGN KEY(provider_id) REFERENCES omp.auth_providers(provider_id),
         CONSTRAINT UQ_omp_user_auth_provider_key UNIQUE(provider_id, provider_user_hash)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.user_auth', N'auth_status') IS NULL
+BEGIN
+    ALTER TABLE omp.user_auth
+        ADD auth_status nvarchar(50) NOT NULL
+            CONSTRAINT DF_omp_user_auth_auth_status DEFAULT(N'enabled') WITH VALUES;
 END
 GO
 
