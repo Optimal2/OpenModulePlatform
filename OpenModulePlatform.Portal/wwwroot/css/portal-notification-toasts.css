@@ -89,12 +89,6 @@
     white-space: nowrap;
 }
 
-.portal-notification-toast.is-visible:not(:hover):not(:focus-within) .portal-notification-toast__close,
-.portal-notification-toast.is-visible:not(:hover):not(:focus-within) .portal-notification-toast__title,
-.portal-notification-toast.is-visible:not(:hover):not(:focus-within) .portal-notification-toast__content {
-    opacity: 0.72;
-}
-
 .portal-notification-toast__timer {
     position: relative;
     z-index: 4;
@@ -120,11 +114,6 @@
     transform-origin: left center;
     transform: scaleX(var(--portal-notification-toast-progress, 1));
     transition: transform var(--portal-notification-toast-transition-duration, var(--portal-notification-toast-duration, 7000ms)) linear;
-}
-
-.portal-notification-toast.is-visible:not(:hover):not(:focus-within) .portal-notification-toast__timer-fill {
-    background-color: var(--portal-notification-toast-timer-fill);
-    opacity: 1;
 }
 
 .portal-notification-toast.is-paused .portal-notification-toast__timer-fill {
