@@ -1350,7 +1350,7 @@
   <data name="Optional AD link" xml:space="preserve"><value>Valfri AD-länk</value></data>
   <data name="User created with AD link." xml:space="preserve"><value>Användaren har skapats med AD-länk.</value></data>
   <data name="User created with AD link and local login." xml:space="preserve"><value>Användaren har skapats med AD-länk och lokal inloggning.</value></data>
-  <data name="Optional local login" xml:space="preserve"><value>Valfri lokal inloggning</value></data>
+  <data name="Optional local login" xml:space="preserve"><value>Lokalt konto</value></data>
   <data name="Create a local password login now by entering a user name and password. Leave these fields empty to create only the OMP user." xml:space="preserve"><value>Skapa en lokal lösenordsinloggning nu genom att ange användarnamn och lösenord. Lämna fälten tomma för att bara skapa OMP-användaren.</value></data>
   <data name="Edit user" xml:space="preserve"><value>Redigera användare</value></data>
   <data name="Update the OMP user record and link AD identities that Windows sign-in can resolve." xml:space="preserve"><value>Uppdatera OMP-användaren och länka AD-identiteter som Windows-inloggning kan slå upp.</value></data>

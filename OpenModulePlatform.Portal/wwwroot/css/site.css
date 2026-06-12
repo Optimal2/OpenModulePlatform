@@ -5268,7 +5268,7 @@ body.dashboard-widget-picker-open {
 
 .role-principal-add--wide {
     width: 100%;
-    max-width: 980px;
+    max-width: 1180px;
     margin-inline: auto;
 }
 
@@ -5284,7 +5284,7 @@ body.dashboard-widget-picker-open {
     grid-template-rows: 1fr auto;
     gap: 10px;
     min-width: 0;
-    padding: 12px;
+    padding: 16px;
     border: 1px solid var(--border);
     border-radius: 12px;
     background: var(--surface-muted);
