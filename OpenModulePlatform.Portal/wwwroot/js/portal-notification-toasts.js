@@ -277,6 +277,7 @@
             remaining: config.toastDuration,
             startedAt: 0,
             timeout: 0,
+            progressFrame: 0,
             paused: false
         };
 
@@ -332,6 +333,38 @@
         return visibleState.remaining / duration;
     }
 
+    function cancelToastProgressAnimation(visibleState) {
+        if (visibleState.progressFrame) {
+            window.cancelAnimationFrame(visibleState.progressFrame);
+            visibleState.progressFrame = 0;
+        }
+    }
+
+    function startToastProgressAnimation(visibleState) {
+        cancelToastProgressAnimation(visibleState);
+
+        function tick() {
+            if (!visibleState.element.isConnected || visibleState.paused || visibleState.startedAt <= 0) {
+                visibleState.progressFrame = 0;
+                return;
+            }
+
+            var duration = Math.max(minToastDuration, visibleState.duration || defaultToastDuration);
+            var elapsed = performance.now() - visibleState.startedAt;
+            var currentRemaining = Math.max(0, visibleState.remaining - elapsed);
+
+            setToastTimerProgress(visibleState, currentRemaining / duration, 0);
+
+            if (currentRemaining > 0) {
+                visibleState.progressFrame = window.requestAnimationFrame(tick);
+            } else {
+                visibleState.progressFrame = 0;
+            }
+        }
+
+        visibleState.progressFrame = window.requestAnimationFrame(tick);
+    }
+
     function pauseToast(visibleState) {
         if (visibleState.paused) {
             return;
@@ -339,6 +372,7 @@
 
         visibleState.paused = true;
         visibleState.element.classList.add("is-paused");
+        cancelToastProgressAnimation(visibleState);
         if (visibleState.timeout) {
             window.clearTimeout(visibleState.timeout);
             visibleState.timeout = 0;
@@ -346,6 +380,7 @@
 
         if (visibleState.startedAt > 0) {
             visibleState.remaining = Math.max(0, visibleState.remaining - (performance.now() - visibleState.startedAt));
+            visibleState.startedAt = 0;
         }
 
         setToastTimerProgress(visibleState, getToastTimerProgress(visibleState), 0);
@@ -364,13 +399,7 @@
         }, visibleState.remaining);
 
         setToastTimerProgress(visibleState, getToastTimerProgress(visibleState), 0);
-        window.requestAnimationFrame(function () {
-            if (!visibleState.element.isConnected || visibleState.paused) {
-                return;
-            }
-
-            setToastTimerProgress(visibleState, 0, visibleState.remaining);
-        });
+        startToastProgressAnimation(visibleState);
     }
 
     function dismissToast(visibleState, config) {
@@ -378,6 +407,7 @@
             window.clearTimeout(visibleState.timeout);
         }
 
+        cancelToastProgressAnimation(visibleState);
         state.visible = state.visible.filter(function (item) {
             return item !== visibleState;
         });
