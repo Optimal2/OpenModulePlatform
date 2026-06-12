@@ -906,6 +906,7 @@
   <data name="OMP users" xml:space="preserve"><value>OMP users</value></data>
   <data name="Select OMP users" xml:space="preserve"><value>Select OMP users</value></data>
   <data name="No active OMP users found." xml:space="preserve"><value>No active OMP users found.</value></data>
+  <data name="No available OMP users found." xml:space="preserve"><value>No available OMP users found.</value></data>
   <data name="Add selected OMP users" xml:space="preserve"><value>Add selected OMP users</value></data>
   <data name="AD users" xml:space="preserve"><value>AD users</value></data>
   <data name="Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically." xml:space="preserve"><value>Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically.</value></data>

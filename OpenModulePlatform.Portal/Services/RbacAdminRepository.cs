@@ -306,15 +306,36 @@ ORDER BY display_name,
     }
 
     /// <summary>
-    /// Returns active OMP users for role assignment checklists.
+    /// Returns active OMP users that are not already linked to the role.
     /// </summary>
-    public async Task<IReadOnlyList<PrincipalSuggestion>> GetActiveOmpUserPrincipalOptionsAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<PrincipalSuggestion>> GetAvailableOmpUserPrincipalOptionsAsync(
+        int roleId,
+        CancellationToken ct)
     {
         const string sql = @"
 SELECT user_id,
        display_name
-FROM omp.users
-WHERE account_status = 1
+FROM omp.users u
+WHERE u.account_status = 1
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.RolePrincipals rp
+      WHERE rp.RoleId = @roleId
+        AND rp.PrincipalType = N'OmpUser'
+        AND TRY_CONVERT(int, rp.Principal) = u.user_id
+  )
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.RolePrincipals rp
+      INNER JOIN omp.user_auth ua ON ua.provider_user_key = rp.Principal
+      INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+      WHERE rp.RoleId = @roleId
+        AND rp.PrincipalType = N'ADUser'
+        AND ap.display_name = N'AD'
+        AND ua.user_id = u.user_id
+  )
 ORDER BY display_name,
          user_id;";
 
@@ -324,6 +345,7 @@ ORDER BY display_name,
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@roleId", roleId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {

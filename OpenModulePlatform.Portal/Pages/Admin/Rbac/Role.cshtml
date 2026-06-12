@@ -291,82 +291,81 @@
                 </table>
             }
 
-            <div class="top-gap role-principal-add">
-                <div>
-                    <h4>@L["Add principals"]</h4>
-                    <p class="muted">@ompBranding.ApplyPlatformName(L["Choose OMP users from the checklist or paste AD users/groups as newline-separated text."].Value)</p>
-                </div>
-
-                <div class="role-principal-add-grid">
-                    <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
-                        <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
-                        <input type="hidden" name="principalType" value="OmpUser" />
-
-                        <div class="form-field">
-                            <label>@L["OMP users"]</label>
-                            @if (Model.OmpUserOptions.Count == 0)
-                            {
-                                <div class="empty-state">@L["No active OMP users found."]</div>
-                            }
-                            else
-                            {
-                                <details class="role-principal-picker">
-                                    <summary>@L["Select OMP users"]</summary>
-                                    <div class="checkbox-list role-principal-picker__list">
-                                        @foreach (var option in Model.OmpUserOptions)
-                                        {
-                                            <label class="checkbox-row">
-                                                <input type="checkbox" name="selectedOmpUserIds" value="@option.Value" />
-                                                <span>@option.Label</span>
-                                            </label>
-                                        }
-                                    </div>
-                                </details>
-                            }
-                        </div>
-
-                        <div class="form-field actions">
-                            <button type="submit">@L["Add selected OMP users"]</button>
-                        </div>
-                    </form>
-
-                    <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
-                        <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
-                        <input type="hidden" name="principalType" value="ADUser" />
-
-                        <div class="form-field grow">
-                            <label for="adUserPrincipals">@L["AD users"]</label>
-                            <textarea id="adUserPrincipals" name="principal" rows="7" autocomplete="off">@Model.NewPrincipal</textarea>
-                            <div class="field-help">
-                                @ompBranding.ApplyPlatformName(L["Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically."].Value)
-                            </div>
-                        </div>
-
-                        <div class="form-field actions">
-                            <button type="submit">@L["Add AD users"]</button>
-                        </div>
-                    </form>
-
-                    <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
-                        <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
-                        <input type="hidden" name="principalType" value="ADGroup" />
-
-                        <div class="form-field grow">
-                            <label for="adGroupPrincipals">@L["AD groups"]</label>
-                            <textarea id="adGroupPrincipals" name="principal" rows="7" autocomplete="off"></textarea>
-                            <div class="field-help">
-                                @L["Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible."]
-                            </div>
-                        </div>
-
-                        <div class="form-field actions">
-                            <button type="submit">@L["Add AD groups"]</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
         </section>
     </div>
+
+    <section class="card section-card role-principal-add-section bottom-gap">
+        <div class="eyebrow">@L["Principals"]</div>
+        <h3>@L["Add principals"]</h3>
+        <p class="muted">@ompBranding.ApplyPlatformName(L["Choose OMP users from the checklist or paste AD users/groups as newline-separated text."].Value)</p>
+
+        <div class="role-principal-add role-principal-add--wide">
+            <div class="role-principal-add-grid">
+                <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
+                    <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                    <input type="hidden" name="principalType" value="OmpUser" />
+
+                    <div class="form-field">
+                        <label>@L["OMP users"]</label>
+                        @if (Model.OmpUserOptions.Count == 0)
+                        {
+                            <div class="empty-state">@L["No available OMP users found."]</div>
+                        }
+                        else
+                        {
+                            <div class="checkbox-list role-principal-picker__list">
+                                @foreach (var option in Model.OmpUserOptions)
+                                {
+                                    <label class="checkbox-row">
+                                        <input type="checkbox" name="selectedOmpUserIds" value="@option.Value" />
+                                        <span>@option.Label</span>
+                                    </label>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="form-field actions">
+                        <button type="submit">@L["Add selected OMP users"]</button>
+                    </div>
+                </form>
+
+                <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
+                    <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                    <input type="hidden" name="principalType" value="ADUser" />
+
+                    <div class="form-field grow">
+                        <label for="adUserPrincipals">@L["AD users"]</label>
+                        <textarea id="adUserPrincipals" name="principal" rows="7" autocomplete="off">@Model.NewPrincipal</textarea>
+                        <div class="field-help">
+                            @ompBranding.ApplyPlatformName(L["Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically."].Value)
+                        </div>
+                    </div>
+
+                    <div class="form-field actions">
+                        <button type="submit">@L["Add AD users"]</button>
+                    </div>
+                </form>
+
+                <form method="post" asp-page-handler="AddPrincipal" class="role-principal-add-card">
+                    <input type="hidden" name="Input.RoleId" value="@Model.Input.RoleId" />
+                    <input type="hidden" name="principalType" value="ADGroup" />
+
+                    <div class="form-field grow">
+                        <label for="adGroupPrincipals">@L["AD groups"]</label>
+                        <textarea id="adGroupPrincipals" name="principal" rows="7" autocomplete="off"></textarea>
+                        <div class="field-help">
+                            @L["Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible."]
+                        </div>
+                    </div>
+
+                    <div class="form-field actions">
+                        <button type="submit">@L["Add AD groups"]</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
 
     <form
         method="post"

@@ -334,7 +334,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 })
             .ToArray();
 
-        OmpUserOptions = await _repo.GetActiveOmpUserPrincipalOptionsAsync(ct);
+        OmpUserOptions = await _repo.GetAvailableOmpUserPrincipalOptionsAsync(Input.RoleId, ct);
     }
 
     private void ValidateRole()
