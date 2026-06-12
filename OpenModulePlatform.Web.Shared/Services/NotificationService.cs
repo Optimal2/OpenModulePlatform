@@ -260,11 +260,10 @@ WHERE notification_id = @notification_id
         const string updateSql = @"
 UPDATE omp.notifications
 SET status = N'read',
-    read_at = SYSUTCDATETIME()
+    read_at = COALESCE(read_at, SYSUTCDATETIME())
 WHERE notification_id = @notification_id
   AND user_id = @user_id
-  AND status = N'unread'
-  AND read_at IS NULL;";
+  AND (status <> N'read' OR read_at IS NULL);";
 
         await using (var updateCmd = new SqlCommand(updateSql, conn))
         {
@@ -294,10 +293,9 @@ WHERE notification_id = @notification_id
         const string sql = @"
 UPDATE omp.notifications
 SET status = N'read',
-    read_at = SYSUTCDATETIME()
+    read_at = COALESCE(read_at, SYSUTCDATETIME())
 WHERE user_id = @user_id
-  AND status = N'unread'
-  AND read_at IS NULL
+  AND (status <> N'read' OR read_at IS NULL)
   AND level <> N'banner'
   AND (expires_at IS NULL OR expires_at > SYSUTCDATETIME());";
 

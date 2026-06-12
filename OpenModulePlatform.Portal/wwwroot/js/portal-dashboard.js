@@ -1490,12 +1490,22 @@
             }
 
             form.dataset.dashboardNotificationFormBound = 'true';
-            form.addEventListener('submit', async (event) => {
-                event.preventDefault();
+            const submitForm = async (event) => {
+                if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+
+                if (form.dataset.dashboardNotificationSubmitting === 'true') {
+                    return;
+                }
+
+                form.dataset.dashboardNotificationSubmitting = 'true';
                 const root = form.closest('[data-dashboard-root]');
                 const token = root?.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
                 const notificationId = form.dataset.notificationId || form.querySelector('input[name="notificationId"]')?.value || '';
                 if (!root || !notificationId) {
+                    form.dataset.dashboardNotificationSubmitting = 'false';
                     return;
                 }
 
@@ -1508,8 +1518,13 @@
                     }
                 } catch (error) {
                     handleDashboardSaveError(root, error);
+                } finally {
+                    form.dataset.dashboardNotificationSubmitting = 'false';
                 }
-            });
+            };
+
+            form.addEventListener('submit', submitForm);
+            form.querySelector('button[type="submit"]')?.addEventListener('click', submitForm);
         });
     }
 
@@ -1626,6 +1641,7 @@
         form.action = feed.dataset.markReadUrl || '/notifications/mark-read';
         form.className = `dashboard-notification-feed__form ${item?.isUnread ? 'is-unread' : 'is-read'}`;
         form.dataset.dashboardNotificationForm = '';
+        form.setAttribute('data-enhance', 'false');
         form.dataset.notificationId = String(item?.notificationId || '');
         form.dataset.notificationCreatedAt = item?.createdAt || '';
 
