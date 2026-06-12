@@ -26,7 +26,8 @@
                       class="dashboard-notification-feed__form@(notification.IsUnread ? " is-unread" : " is-read")"
                       data-dashboard-notification-form
                       data-notification-id="@notification.NotificationId"
-                      data-notification-created-at="@notification.CreatedAt.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture)">
+                      data-notification-created-at="@notification.CreatedAt.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
+                      data-enhance="false">
                     <input type="hidden" name="notificationId" value="@notification.NotificationId" />
                     <button type="submit"
                             class="dashboard-notification-feed__row dashboard-notification-feed__row--@notification.Level"
