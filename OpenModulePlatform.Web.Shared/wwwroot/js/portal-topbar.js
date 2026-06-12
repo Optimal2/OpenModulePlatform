@@ -738,9 +738,17 @@
         }
 
         form.dataset.portalTopbarNotificationFormInitialized = 'true';
-        form.addEventListener('submit', function (event) {
-            event.preventDefault();
-            event.stopPropagation();
+        var submitForm = function (event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            if (form.dataset.portalTopbarNotificationSubmitting === 'true') {
+                return;
+            }
+
+            form.dataset.portalTopbarNotificationSubmitting = 'true';
 
             var root = form.closest('[data-portal-topbar-root]');
             var button = form.querySelector('button[type="submit"]');
@@ -784,11 +792,18 @@
                     }
                 })
                 .finally(function () {
+                    form.dataset.portalTopbarNotificationSubmitting = 'false';
                     if (button) {
                         button.disabled = false;
                     }
                 });
-        });
+        };
+
+        form.addEventListener('submit', submitForm);
+        var rowButton = form.querySelector('button[type="submit"]');
+        if (rowButton) {
+            rowButton.addEventListener('click', submitForm);
+        }
     }
 
     function initNotificationMarkAllForm(form) {
@@ -797,9 +812,17 @@
         }
 
         form.dataset.portalTopbarNotificationMarkAllFormInitialized = 'true';
-        form.addEventListener('submit', function (event) {
-            event.preventDefault();
-            event.stopPropagation();
+        var submitForm = function (event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            if (form.dataset.portalTopbarNotificationMarkAllSubmitting === 'true') {
+                return;
+            }
+
+            form.dataset.portalTopbarNotificationMarkAllSubmitting = 'true';
 
             var root = form.closest('[data-portal-topbar-root]');
             var button = form.querySelector('button[type="submit"]');
@@ -845,11 +868,18 @@
                     }
                 })
                 .finally(function () {
+                    form.dataset.portalTopbarNotificationMarkAllSubmitting = 'false';
                     if (button) {
                         button.disabled = false;
                     }
                 });
-        });
+        };
+
+        form.addEventListener('submit', submitForm);
+        var markAllButton = form.querySelector('button[type="submit"]');
+        if (markAllButton) {
+            markAllButton.addEventListener('click', submitForm);
+        }
     }
 
     function getNotificationCursor(list) {
