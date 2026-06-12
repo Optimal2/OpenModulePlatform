@@ -13,6 +13,7 @@
 .portal-notification-toast {
     --portal-notification-toast-timer-fill: var(--link, #0b57d0);
     position: relative;
+    isolation: isolate;
     display: grid;
     gap: 7px;
     padding: 13px 42px 13px 14px;
@@ -32,7 +33,7 @@
 .portal-notification-toast::before {
     position: absolute;
     inset: 0;
-    z-index: 0;
+    z-index: 1;
     background: rgba(241, 245, 249, 0.48);
     content: "";
     opacity: 1;
@@ -42,7 +43,7 @@
 
 .portal-notification-toast > * {
     position: relative;
-    z-index: 1;
+    z-index: 2;
 }
 
 .portal-notification-toast.is-visible {
@@ -87,7 +88,7 @@
     font: inherit;
     font-size: 1.25rem;
     line-height: 1;
-    z-index: 2;
+    z-index: 6;
 }
 
 .portal-notification-toast__close:hover,
@@ -113,7 +114,8 @@
 
 .portal-notification-toast__timer {
     position: relative;
-    z-index: 2;
+    z-index: 4;
+    isolation: isolate;
     height: 4px;
     overflow: hidden;
     border-radius: 999px;
@@ -125,7 +127,7 @@
 .portal-notification-toast__timer-fill {
     position: absolute;
     inset: 0;
-    z-index: 3;
+    z-index: 5;
     display: block;
     width: 100%;
     border-radius: inherit;
