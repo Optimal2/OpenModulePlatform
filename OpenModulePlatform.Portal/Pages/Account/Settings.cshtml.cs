@@ -176,6 +176,14 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
                 ModelState.AddModelError(nameof(ProfileImageUpload), T("Select a profile image file."));
                 return Page();
 
+            case ProfileImageSaveResult.StorageUnavailable:
+                ModelState.AddModelError(nameof(ProfileImageUpload), T("Profile image storage is not writable. Contact an administrator."));
+                return Page();
+
+            case ProfileImageSaveResult.SchemaUnavailable:
+                ModelState.AddModelError(nameof(ProfileImageUpload), T("Profile image storage is not installed. Run core module SQL repair and try again."));
+                return Page();
+
             default:
                 return Forbid();
         }
