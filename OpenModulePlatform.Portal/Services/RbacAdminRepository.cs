@@ -306,6 +306,38 @@ ORDER BY display_name,
     }
 
     /// <summary>
+    /// Returns active OMP users for role assignment checklists.
+    /// </summary>
+    public async Task<IReadOnlyList<PrincipalSuggestion>> GetActiveOmpUserPrincipalOptionsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT user_id,
+       display_name
+FROM omp.users
+WHERE account_status = 1
+ORDER BY display_name,
+         user_id;";
+
+        var rows = new List<PrincipalSuggestion>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var userId = rdr.GetInt32(0);
+            var displayName = rdr.GetString(1);
+            rows.Add(new PrincipalSuggestion(
+                userId.ToString(CultureInfo.InvariantCulture),
+                $"{displayName} (id: {userId.ToString(CultureInfo.InvariantCulture)})"));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
     /// Returns existing AD user principals for lightweight role-principal autocomplete suggestions.
     /// </summary>
     public async Task<IReadOnlyList<PrincipalSuggestion>> SearchAdUserPrincipalSuggestionsAsync(
@@ -407,13 +439,20 @@ WHERE user_id = @userId
     }
 
     public async Task<bool> IsAdUserPrincipalLinkedToOmpUserAsync(string principal, CancellationToken ct)
+        => (await GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(principal, ct)) is not null;
+
+    public async Task<int?> GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(string principal, CancellationToken ct)
     {
         const string sql = @"
-SELECT COUNT(1)
+SELECT TOP (1)
+       u.user_id
 FROM omp.user_auth ua
 INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ap.display_name = N'AD'
-  AND ua.provider_user_key = @principal;";
+  AND ua.provider_user_key = @principal
+  AND u.account_status = 1
+ORDER BY u.user_id;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -421,7 +460,10 @@ WHERE ap.display_name = N'AD'
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@principal", principal);
 
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null || result is DBNull
+            ? null
+            : Convert.ToInt32(result, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
