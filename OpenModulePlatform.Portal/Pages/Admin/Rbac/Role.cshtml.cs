@@ -446,7 +446,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             }
             catch (SqlException ex)
             {
-                result.Fail(candidate.Principal, ToFriendlySqlMessage(ex, "The principal could not be resolved."));
+                result.Fail(candidate.Principal, T(ToFriendlySqlMessage(ex, "The principal could not be resolved.")));
                 continue;
             }
 
@@ -454,13 +454,13 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 || string.IsNullOrWhiteSpace(normalized.PrincipalType)
                 || string.IsNullOrWhiteSpace(normalized.Principal))
             {
-                result.Fail(candidate.Principal, normalized.ErrorMessage ?? "The principal could not be resolved.");
+                result.Fail(candidate.Principal, T(normalized.ErrorMessage ?? "The principal could not be resolved."));
                 continue;
             }
 
             if (normalized.Principal.Length > 256)
             {
-                result.Fail(candidate.Principal, "Principal is too long.");
+                result.Fail(candidate.Principal, T("Principal is too long."));
                 continue;
             }
 
@@ -496,7 +496,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                     continue;
                 }
 
-                result.Fail(candidate.Principal, ToFriendlySqlMessage(ex, "The principal could not be added."));
+                result.Fail(candidate.Principal, T(ToFriendlySqlMessage(ex, "The principal could not be added.")));
             }
         }
 
