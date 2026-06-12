@@ -5267,7 +5267,9 @@ body.dashboard-widget-picker-open {
 }
 
 .role-principal-add--wide {
+    width: 100%;
     max-width: 980px;
+    margin-inline: auto;
 }
 
 .role-principal-add-grid {

@@ -908,6 +908,10 @@
   <data name="AD groups" xml:space="preserve"><value>AD groups</value></data>
   <data name="Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible." xml:space="preserve"><value>Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible.</value></data>
   <data name="Add AD groups" xml:space="preserve"><value>Add AD groups</value></data>
+  <data name="Bind OMP users, AD users or AD groups to the role." xml:space="preserve"><value>Bind OMP users, AD users or AD groups to the role.</value></data>
+  <data name="OmpUser" xml:space="preserve"><value>OMP user</value></data>
+  <data name="ADUser" xml:space="preserve"><value>AD user</value></data>
+  <data name="ADGroup" xml:space="preserve"><value>AD group</value></data>
   <data name="Select at least one principal to add." xml:space="preserve"><value>Select at least one principal to add.</value></data>
   <data name="Added {0} principal(s)." xml:space="preserve"><value>Added {0} principal(s).</value></data>
   <data name="Skipped {0} duplicate or already assigned principal(s)." xml:space="preserve"><value>Skipped {0} duplicate or already assigned principal(s).</value></data>
