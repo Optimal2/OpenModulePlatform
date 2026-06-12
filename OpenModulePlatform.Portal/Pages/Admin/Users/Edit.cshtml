@@ -241,6 +241,7 @@
                     <tr>
                         <th>@L["Provider"]</th>
                         <th>@L["Provider user key"]</th>
+                        <th>@L["Status"]</th>
                         <th>@L["Created UTC"]</th>
                         <th>@L["Last used UTC"]</th>
                         <th>@L["Actions"]</th>
@@ -252,6 +253,7 @@
                         <tr>
                             <td>@link.ProviderDisplayName</td>
                             <td>@link.ProviderUserKey</td>
+                            <td><span class="pill">@link.AuthStatus</span></td>
                             <td>@Model.FormatUtc(link.CreatedAt)</td>
                             <td>@Model.FormatUtc(link.LastUsedAt)</td>
                             <td>

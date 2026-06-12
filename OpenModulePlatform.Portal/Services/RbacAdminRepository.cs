@@ -334,6 +334,7 @@ WHERE u.account_status = 1
       WHERE rp.RoleId = @roleId
         AND rp.PrincipalType = N'ADUser'
         AND ap.display_name = N'AD'
+        AND ua.auth_status = N'enabled'
         AND ua.user_id = u.user_id
   )
 ORDER BY display_name,
@@ -473,6 +474,7 @@ INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
 INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ap.display_name = N'AD'
   AND ua.provider_user_key = @principal
+  AND ua.auth_status = N'enabled'
   AND u.account_status = 1
 ORDER BY u.user_id;";
 

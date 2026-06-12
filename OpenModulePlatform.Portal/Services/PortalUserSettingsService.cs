@@ -543,8 +543,8 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         CancellationToken ct)
     {
         const string sql = @"
-INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, last_used_at, created_at)
-VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), SYSUTCDATETIME());";
+INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, last_used_at, auth_status, created_at)
+VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), N'enabled', SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
