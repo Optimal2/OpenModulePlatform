@@ -117,11 +117,29 @@ WHERE user_id = @user_id
 
         var storageKey = $"{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
         var safeFileName = SanitizeDisplayFileName(file.FileName, storageKey);
-        var path = GetStoragePathForNewKey(storageKey);
-
-        await using (var target = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        try
         {
+            var path = GetStoragePathForNewKey(storageKey);
+            await using var target = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             await file.CopyToAsync(target, ct);
+        }
+        catch (IOException ex) when (!ct.IsCancellationRequested)
+        {
+            _log.LogError(
+                ex,
+                "Failed to write profile image for user {UserId} below {StorageRoot}.",
+                userId,
+                GetStorageRoot());
+            return ProfileImageSaveResult.StorageUnavailable;
+        }
+        catch (UnauthorizedAccessException ex) when (!ct.IsCancellationRequested)
+        {
+            _log.LogError(
+                ex,
+                "Failed to write profile image for user {UserId} below {StorageRoot}.",
+                userId,
+                GetStorageRoot());
+            return ProfileImageSaveResult.StorageUnavailable;
         }
 
         string? oldStorageKey = null;
@@ -158,8 +176,18 @@ SELECT @old_storage_key;";
                 return ProfileImageSaveResult.UserNotFound;
             }
         }
+        catch (SqlException ex) when (IsProfileImageSchemaError(ex))
+        {
+            DeleteStorageKeyBestEffort(storageKey);
+            _log.LogError(
+                ex,
+                "The core profile image schema is missing while saving a profile image for user {UserId}.",
+                userId);
+            return ProfileImageSaveResult.SchemaUnavailable;
+        }
         catch
         {
+            // The file is created before the database pointer is updated; remove it on any failed database write.
             DeleteStorageKeyBestEffort(storageKey);
             throw;
         }
@@ -266,6 +294,27 @@ SELECT @old_storage_key;";
         return cleaned.Length <= 260 ? cleaned : cleaned[^260..];
     }
 
+    private static bool IsProfileImageSchemaError(SqlException ex)
+    {
+        foreach (SqlError error in ex.Errors)
+        {
+            if (error.Number == 207
+                && (error.Message.Contains("profile_image_file_name", StringComparison.OrdinalIgnoreCase)
+                    || error.Message.Contains("profile_image_storage_key", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            if (error.Number == 208
+                && error.Message.Contains("omp.users", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string? GetContentType(string? fileName)
         => !string.IsNullOrWhiteSpace(fileName)
            && ContentTypesByExtension.TryGetValue(Path.GetExtension(fileName), out var contentType)
@@ -333,5 +382,7 @@ public enum ProfileImageSaveResult
     MissingFile,
     InvalidType,
     TooLarge,
-    UserNotFound
+    UserNotFound,
+    StorageUnavailable,
+    SchemaUnavailable
 }
