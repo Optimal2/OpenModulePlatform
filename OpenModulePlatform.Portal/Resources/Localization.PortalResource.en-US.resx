@@ -893,4 +893,6 @@
   <data name="No roles are assigned directly to this user." xml:space="preserve"><value>No roles are assigned directly to this user.</value></data>
   <data name="Source" xml:space="preserve"><value>Source</value></data>
   <data name="Linked AD account" xml:space="preserve"><value>Linked AD account</value></data>
+  <data name="Profile image storage is not writable. Contact an administrator." xml:space="preserve"><value>Profile image storage is not writable. Contact an administrator.</value></data>
+  <data name="Profile image storage is not installed. Run core module SQL repair and try again." xml:space="preserve"><value>Profile image storage is not installed. Run core module SQL repair and try again.</value></data>
 </root>
