@@ -342,19 +342,23 @@ public sealed class WebAppDeploymentService
 
         if (string.IsNullOrWhiteSpace(appPath))
         {
+            var identity = await ResolveIisAppPoolIdentityAsync(settings, deployment, appPoolName, cancellationToken);
             EnsureAppPool(
                 settings,
                 appPoolName,
-                await ResolveIisAppPoolIdentityAsync(settings, deployment, appPoolName, cancellationToken));
+                identity);
+            EnsurePortalAppPoolFilesystemAccess(targetPath, appPoolName, identity, _logger);
             EnsureIisSite(settings, targetPath, appPoolName);
             return;
         }
 
         var rootAppPoolName = ResolvePortalAppPoolName(settings);
+        var rootIdentity = await ResolveDefaultIisAppPoolIdentityAsync(settings, cancellationToken);
         EnsureAppPool(
             settings,
             rootAppPoolName,
-            await ResolveDefaultIisAppPoolIdentityAsync(settings, cancellationToken));
+            rootIdentity);
+        EnsurePortalAppPoolFilesystemAccess(siteRootPath, rootAppPoolName, rootIdentity, _logger);
         EnsureIisSite(settings, siteRootPath, rootAppPoolName);
         EnsureAppPool(
             settings,
@@ -485,6 +489,136 @@ public sealed class WebAppDeploymentService
 
             RunAppCmd([.. arguments]);
         }
+    }
+
+    private static void EnsurePortalAppPoolFilesystemAccess(
+        string portalPath,
+        string appPoolName,
+        HostAgentIisAppPoolIdentitySettings identity,
+        ILogger logger)
+    {
+        Directory.CreateDirectory(portalPath);
+        var accountNames = ResolveAppPoolFilesystemAccountNames(appPoolName, identity).ToList();
+        if (accountNames.Count == 0)
+        {
+            return;
+        }
+
+        if (!TryGrantDirectoryAccess(portalPath, accountNames, "M", out var error))
+        {
+            throw new InvalidOperationException(
+                $"Could not grant Modify access to Portal path '{portalPath}' for IIS app pool '{appPoolName}'. {error}");
+        }
+
+        logger.LogDebug(
+            "Ensured Portal filesystem Modify access. Path={Path}, AppPoolName={AppPoolName}",
+            portalPath,
+            appPoolName);
+    }
+
+    private static bool TryGrantDirectoryAccess(
+        string path,
+        IReadOnlyCollection<string> accountNames,
+        string permission,
+        out string error)
+    {
+        var lastError = string.Empty;
+        foreach (var accountName in accountNames)
+        {
+            var result = RunProcess(
+                "icacls.exe",
+                [path, "/grant", $"{accountName}:(OI)(CI)({permission})"]);
+            if (result.ExitCode == 0)
+            {
+                error = string.Empty;
+                return true;
+            }
+
+            lastError = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut.Trim() : result.StdErr.Trim();
+        }
+
+        error = string.IsNullOrWhiteSpace(lastError)
+            ? $"No configured account could be granted {permission} access."
+            : lastError;
+        return false;
+    }
+
+    private static IEnumerable<string> ResolveAppPoolFilesystemAccountNames(
+        string appPoolName,
+        HostAgentIisAppPoolIdentitySettings identity)
+    {
+        if (!string.IsNullOrWhiteSpace(identity.UserName)
+            && !IsBuiltInServiceIdentity(identity.UserName))
+        {
+            foreach (var candidate in ResolveWindowsAccountNameCandidates(identity.UserName))
+            {
+                yield return candidate;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(appPoolName))
+        {
+            yield return $@"IIS AppPool\{appPoolName.Trim()}";
+        }
+    }
+
+    private static IEnumerable<string> ResolveWindowsAccountNameCandidates(string configuredAccountName)
+    {
+        var trimmed = configuredAccountName.Trim();
+        var normalized = TryNormalizeDomainAccountName(trimmed);
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            yield return normalized;
+        }
+
+        yield return trimmed;
+    }
+
+    private static string TryNormalizeDomainAccountName(string accountName)
+    {
+        var atIndex = accountName.IndexOf('@', StringComparison.Ordinal);
+        if (atIndex > 0 && atIndex < accountName.Length - 1)
+        {
+            var userName = accountName[..atIndex];
+            var domain = NormalizeNetBiosDomainName(accountName[(atIndex + 1)..]);
+            return string.IsNullOrWhiteSpace(domain) ? string.Empty : domain + "\\" + userName;
+        }
+
+        var slashIndex = accountName.IndexOf('\\', StringComparison.Ordinal);
+        if (slashIndex > 0 && slashIndex < accountName.Length - 1)
+        {
+            var domain = NormalizeNetBiosDomainName(accountName[..slashIndex]);
+            return string.IsNullOrWhiteSpace(domain)
+                ? string.Empty
+                : domain + "\\" + accountName[(slashIndex + 1)..];
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizeNetBiosDomainName(string domainName)
+    {
+        var trimmed = domainName.Trim();
+        if (trimmed.Equals(".", StringComparison.Ordinal))
+        {
+            return ".";
+        }
+
+        var dotIndex = trimmed.IndexOf('.', StringComparison.Ordinal);
+        var netBios = dotIndex > 0 ? trimmed[..dotIndex] : trimmed;
+        return netBios.ToUpperInvariant();
+    }
+
+    private static bool IsBuiltInServiceIdentity(string accountName)
+    {
+        var normalized = accountName.Trim();
+        return normalized.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("LocalService", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NetworkService", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("ApplicationPoolIdentity", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\SYSTEM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\LOCAL SERVICE", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("NT AUTHORITY\\NETWORK SERVICE", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<HostAgentIisAppPoolIdentitySettings> ResolveIisAppPoolIdentityAsync(
