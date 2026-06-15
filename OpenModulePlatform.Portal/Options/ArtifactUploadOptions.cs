@@ -36,6 +36,11 @@ public sealed class ArtifactUploadOptions
     public string AvailableConfigOverlaysRoot { get; set; } = string.Empty;
 
     /// <summary>
+    /// Optional writable temp folder used for ASP.NET Core multipart upload buffering.
+    /// </summary>
+    public string TempRoot { get; set; } = string.Empty;
+
+    /// <summary>
     /// Maximum accepted zip upload size in bytes.
     /// </summary>
     public long MaxUploadBytes { get; set; } = DefaultMaxUploadBytes;
