@@ -277,6 +277,23 @@ Runtime-local files are preserved through
 can update application binaries without overwriting local configuration or
 runtime data.
 
+Applications can temporarily block HostAgent from replacing their files or
+restarting their runtime by writing a deployment lock file at
+`App_Data/omp-deployment.lock.json` below the deployed app root. The file uses
+the `OpenModulePlatform.DeploymentLock.v1` JSON schema from
+`OpenModulePlatform.Artifacts.DeploymentLockFile` and contains an expiry time.
+HostAgent checks the file immediately before web-app and service-app deployment
+steps that would change runtime files or restart the runtime. An active or
+unreadable lock makes HostAgent skip that deployment for the current cycle and
+record a warning in `omp.HostAppDeploymentStates`; an expired lock is ignored.
+
+Portal uses this lock while importing universal module packages so a package
+that also selects a newer Portal artifact cannot cause HostAgent to recycle or
+replace Portal before the import has finished. The lock is renewed while the
+import request is running and removed when the import completes. If Portal is
+terminated unexpectedly, the lock expires automatically instead of blocking
+deployment forever.
+
 Legacy artifact zips should not contain runtime configuration files. The
 exclusions above are a safety net for existing runtime folders and older
 packages, while Portal artifact upload rejects known runtime config files such
