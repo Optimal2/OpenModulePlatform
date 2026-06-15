@@ -13,6 +13,8 @@ var maxUploadBytes = builder.Configuration.GetValue<long?>(
     $"{ArtifactUploadOptions.SectionName}:MaxUploadBytes") is > 0 and var configuredMaxUploadBytes
         ? configuredMaxUploadBytes
         : ArtifactUploadOptions.DefaultMaxUploadBytes;
+var uploadTempRoot = ResolveUploadTempRoot(builder.Configuration);
+ConfigureAspNetCoreTempDirectory(uploadTempRoot);
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -174,6 +176,29 @@ app.MapGet("/health/ready", async (PortalHealthService healthService, Cancellati
 }).AllowAnonymous();
 
 app.Run();
+
+static string ResolveUploadTempRoot(ConfigurationManager configuration)
+{
+    var configuredPath = configuration.GetValue<string>($"{ArtifactUploadOptions.SectionName}:TempRoot");
+    if (!string.IsNullOrWhiteSpace(configuredPath))
+    {
+        return Path.GetFullPath(Environment.ExpandEnvironmentVariables(configuredPath.Trim()));
+    }
+
+    return Path.Join(Path.GetTempPath(), "OpenModulePlatform", "PortalUploads");
+}
+
+static void ConfigureAspNetCoreTempDirectory(string tempRoot)
+{
+    Directory.CreateDirectory(tempRoot);
+
+    var probePath = Path.Join(tempRoot, $".omp-upload-temp-probe-{Guid.NewGuid():N}.tmp");
+    using (File.Create(probePath, bufferSize: 1, FileOptions.DeleteOnClose))
+    {
+    }
+
+    Environment.SetEnvironmentVariable("ASPNETCORE_TEMP", tempRoot);
+}
 
 static string ToToastSnippet(string value)
 {

@@ -222,6 +222,7 @@ USING
   },
   "ArtifactUpload": {
     "ArtifactStoreRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}",
+    "TempRoot": "",
     "AvailableModuleDefinitionsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\module-definitions",
     "AvailableArtifactsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\artifacts",
     "AvailableHostConfigurationsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\host-configs",
