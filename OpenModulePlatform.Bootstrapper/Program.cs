@@ -621,6 +621,15 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
             EnsureDirectoryAccess(path, webAccounts, "RX", required: false);
         }
 
+        if (!string.IsNullOrWhiteSpace(hostAgent.PortalPhysicalPath))
+        {
+            EnsureDirectoryAccess(
+                Path.GetFullPath(hostAgent.PortalPhysicalPath.Trim()),
+                webAccounts,
+                "M",
+                required: false);
+        }
+
         if (!string.IsNullOrWhiteSpace(config.ArtifactStoreRoot))
         {
             EnsureDirectoryAccess(config.ArtifactStoreRoot, webAccounts, "M", required: false);
