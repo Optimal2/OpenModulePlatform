@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -79,11 +80,6 @@ public sealed class WebAppDeploymentService
                 ? GetIisAppPoolName(iisAppName)
                 : iisAppName);
 
-            if (settings.EnsureIisSite)
-            {
-                await EnsureIisApplicationAsync(settings, deployment, targetPath, iisAppName, runtimeName, cancellationToken);
-            }
-
             var configuredConnectionString = _repository.GetConfiguredConnectionString();
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
                 deployment.ArtifactId,
@@ -107,6 +103,29 @@ public sealed class WebAppDeploymentService
                     AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: false),
                     cancellationToken);
                 return;
+            }
+
+            var lockStatus = DeploymentLockFile.ReadStatus(targetPath, DateTimeOffset.UtcNow);
+            if (lockStatus.IsLocked)
+            {
+                var message = lockStatus.ToDeploymentSkippedMessage("Web app");
+                _logger.LogInformation(
+                    "Web app deployment skipped because a deployment lock is active. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, LockPath={LockPath}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    deployment.Version,
+                    lockStatus.Path);
+
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    AppDeploymentResult.Warning(targetPath, runtimeName, message),
+                    cancellationToken);
+                return;
+            }
+
+            if (settings.EnsureIisSite)
+            {
+                await EnsureIisApplicationAsync(settings, deployment, targetPath, iisAppName, runtimeName, cancellationToken);
             }
 
             await _repository.PublishAppDeploymentResultAsync(
