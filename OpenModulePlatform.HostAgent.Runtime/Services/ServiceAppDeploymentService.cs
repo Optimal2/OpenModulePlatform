@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -99,6 +100,24 @@ public sealed class ServiceAppDeploymentService
                 deployment,
                 configuredConnectionString,
                 settings);
+
+            var lockStatus = DeploymentLockFile.ReadStatus(targetPath, DateTimeOffset.UtcNow);
+            if (lockStatus.IsLocked)
+            {
+                var message = lockStatus.ToDeploymentSkippedMessage("Service app");
+                _logger.LogInformation(
+                    "Service app deployment skipped because a deployment lock is active. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, LockPath={LockPath}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    deployment.Version,
+                    lockStatus.Path);
+
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    AppDeploymentResult.Warning(targetPath, serviceName, message),
+                    cancellationToken);
+                return;
+            }
 
             if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))

@@ -40,6 +40,7 @@ builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<UserProfileImageService>();
 builder.Services.AddScoped<RbacAdminRepository>();
 builder.Services.AddScoped<PortableModulePackageService>();
+builder.Services.AddSingleton<PortalDeploymentLockService>();
 builder.Services.AddScoped<ConfigOverlayObjectService>();
 builder.Services.AddScoped<PortalHealthService>();
 builder.Services.Configure<ArtifactUploadOptions>(

@@ -21,6 +21,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     private readonly PortableModulePackageService _packages;
     private readonly PortalDashboardWidgetPackageService _widgets;
     private readonly ConfigOverlayObjectService _configObjects;
+    private readonly PortalDeploymentLockService _deploymentLocks;
 
     public ModulePackageImportModel(
         IOptions<WebAppOptions> options,
@@ -28,13 +29,15 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         OmpAdminRepository repo,
         PortableModulePackageService packages,
         PortalDashboardWidgetPackageService widgets,
-        ConfigOverlayObjectService configObjects)
+        ConfigOverlayObjectService configObjects,
+        PortalDeploymentLockService deploymentLocks)
         : base(options, rbac)
     {
         _repo = repo;
         _packages = packages;
         _widgets = widgets;
         _configObjects = configObjects;
+        _deploymentLocks = deploymentLocks;
     }
 
     [BindProperty]
@@ -110,6 +113,10 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 throw new InvalidOperationException(T("Select at least one universal module package zip."));
             }
 
+            await using var deploymentLock = await _deploymentLocks.AcquireUniversalImportLockAsync(
+                User.Identity?.Name,
+                ct);
+
             var results = new List<UniversalPackageImportResult>(files.Count);
             foreach (var file in files)
             {
@@ -182,6 +189,10 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         SetTitles("Import/export");
         try
         {
+            await using var deploymentLock = await _deploymentLocks.AcquireUniversalImportLockAsync(
+                User.Identity?.Name,
+                ct);
+
             var result = await _packages.ImportStagedUniversalPackageAsync(
                 UniversalStagedInput.Token,
                 UniversalStagedInput.SelectedItemPaths,
