@@ -14,7 +14,7 @@
 
 <section class="card odv-demo-panel">
     <div class="odv-demo-toolbar">
-        <a class="action-link" href="@Model.OpenDocViewerNewTabUrl" target="_blank" rel="noopener">
+        <a class="action-link" href="@Model.OpenDocViewerNewTabUrl" target="_blank" rel="noopener" id="odv-new-tab-link">
             @L["Open ODV in new tab"]
         </a>
         <button class="action-link" type="button" id="odv-local-file-button">
@@ -53,10 +53,13 @@
     (function () {
         const input = document.getElementById('odv-local-file-input');
         const button = document.getElementById('odv-local-file-button');
+        const newTabLink = document.getElementById('odv-new-tab-link');
         const summary = document.getElementById('odv-local-file-summary');
         const frame = document.getElementById('odv-demo-frame');
         const options = window.ODV_DEMO_OPTIONS || {};
         const supportedExtensions = new Set(['bmp', 'gif', 'jpg', 'pdf', 'png', 'tiff', 'webp']);
+        const defaultNewTabUrl = newTabLink ? newTabLink.href : '';
+        let localFilesActive = false;
         let objectUrls = [];
 
         function cleanupObjectUrls() {
@@ -175,6 +178,22 @@
             return baseUrl.toString();
         }
 
+        function setNewTabLocalMode() {
+            localFilesActive = true;
+            if (newTabLink) {
+                newTabLink.href = buildViewerUrl();
+                newTabLink.rel = '';
+            }
+        }
+
+        function resetNewTabLink() {
+            localFilesActive = false;
+            if (newTabLink) {
+                newTabLink.href = defaultNewTabUrl;
+                newTabLink.rel = 'noopener';
+            }
+        }
+
         function showSummary(files) {
             if (!summary) return;
             summary.hidden = false;
@@ -189,6 +208,7 @@
             cleanupObjectUrls();
 
             if (supportedFiles.length === 0) {
+                resetNewTabLink();
                 if (summary) {
                     summary.hidden = false;
                     summary.textContent = options.unsupportedMessage || 'No supported files were selected.';
@@ -197,12 +217,21 @@
             }
 
             window.ODV_BOOTSTRAP = buildLocalBundle(supportedFiles);
+            setNewTabLocalMode();
             showSummary(supportedFiles);
             frame.src = buildViewerUrl();
         }
 
         button?.addEventListener('click', () => input?.click());
         input?.addEventListener('change', () => openLocalFiles(input.files));
+        newTabLink?.addEventListener('click', (event) => {
+            if (!localFilesActive) return;
+            event.preventDefault();
+            const newWindow = window.open(buildViewerUrl(), '_blank');
+            if (newWindow && typeof newWindow.focus === 'function') {
+                newWindow.focus();
+            }
+        });
         window.addEventListener('beforeunload', cleanupObjectUrls);
     })();
 </script>
