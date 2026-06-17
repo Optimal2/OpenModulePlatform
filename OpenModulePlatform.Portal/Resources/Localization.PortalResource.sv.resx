@@ -2626,4 +2626,15 @@
   <data name="Added {0} principal(s)." xml:space="preserve"><value>Lade till {0} identitet(er).</value></data>
   <data name="Skipped {0} duplicate or already assigned principal(s)." xml:space="preserve"><value>Hoppade över {0} dubblett(er) eller redan tilldelade identitet(er).</value></data>
   <data name="Failed {0}: {1}" xml:space="preserve"><value>Misslyckades med {0}: {1}</value></data>
+  <data name="Imported universal module package {0}. Imported/updated: {1}. Skipped: {2}. Failed: {3}." xml:space="preserve"><value>Importerade universalpaket {0}. Importerade/uppdaterade: {1}. Hoppade över: {2}. Misslyckades: {3}.</value></data>
+  <data name="The detailed import result is no longer available. Run the import again if you need the row details." xml:space="preserve"><value>Det detaljerade importresultatet är inte längre tillgängligt. Kör importen igen om du behöver raddetaljerna.</value></data>
+  <data name="Select a host and HostAgent artifact before requesting an upgrade." xml:space="preserve"><value>Välj en värd och en HostAgent-artefakt innan du begär en uppgradering.</value></data>
+  <data name="HostAgent upgrade was requested. The active HostAgent will install and start the selected version during its next cycle." xml:space="preserve"><value>HostAgent-uppgradering har begärts. Aktiv Host Agent installerar och startar vald version vid nästa körning.</value></data>
+  <data name="HostAgent desired version already matched the selected artifact, or the selected host/artifact was not valid." xml:space="preserve"><value>Önskad HostAgent-version matchade redan vald artefakt, eller så var vald värd/artefakt inte giltig.</value></data>
+  <data name="Select a host before requesting a web app health probe." xml:space="preserve"><value>Välj en värd innan du begär en webbappskontroll.</value></data>
+  <data name="Web app health probe job {0} was queued." xml:space="preserve"><value>Webbappskontrolljobb {0} har köats.</value></data>
+  <data name="Select a host before requesting an application-pool recycle." xml:space="preserve"><value>Välj en värd innan du begär omstart av app-pool.</value></data>
+  <data name="Web app application-pool recycle job {0} was queued." xml:space="preserve"><value>Jobb {0} för omstart av webbappens app-pool har köats.</value></data>
+  <data name="Select a host before requesting web app logs." xml:space="preserve"><value>Välj en värd innan du begär webbappsloggar.</value></data>
+  <data name="Web app log collection job {0} was queued." xml:space="preserve"><value>Jobb {0} för hämtning av webbappsloggar har köats.</value></data>
 </root>

@@ -1,1 +1,30 @@
 @* File: OpenModulePlatform.Portal/Pages/Shared/_ValidationScriptsPartial.cshtml *@
+<script>
+    (function () {
+        'use strict';
+
+        if (!document.addEventListener) {
+            return;
+        }
+
+        document.addEventListener('submit', function (event) {
+            var form = event.target;
+            if (!form || form.nodeName !== 'FORM' || form.hasAttribute('novalidate')) {
+                return;
+            }
+
+            if (typeof form.checkValidity !== 'function' || form.checkValidity()) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Portal intentionally relies on native constraint validation instead of adding a
+            // jQuery Validate dependency to every admin page.
+            if (typeof form.reportValidity === 'function') {
+                form.reportValidity();
+            }
+        }, true);
+    }());
+</script>

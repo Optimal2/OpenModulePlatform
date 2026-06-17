@@ -23,43 +23,6 @@
     <div class="card status-banner">@Model.StatusMessage</div>
 }
 
-@if (Model.CleanupResult is not null)
-{
-    <div class="card status-banner">
-        @L["Queued HostAgent artifact retention cleanup job {0}. The HostAgent will recompute the candidates and perform both database and file cleanup. Current preview shows {1} deletable old versions out of {2} candidates with a keep limit of {3}.",
-            Model.CleanupResult.QueuedHostAgentJobId,
-            Model.CleanupResult.DeletableCandidateCount,
-            Model.CleanupResult.CandidateCount,
-            Model.CleanupResult.MaxVersionsToKeep]
-    </div>
-}
-
-@if (Model.MaintenanceScanResult is not null)
-{
-    <div class="card status-banner">
-        @L["Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back.",
-            Model.MaintenanceScanResult.TotalJobCount,
-            Model.MaintenanceScanResult.HostJobCount]
-    </div>
-}
-
-@if (Model.MaintenanceCleanupResult is not null)
-{
-    <div class="card status-banner">
-        @L["Queued cleanup for {0} of {1} selected maintenance finding(s) across {2} HostAgent job(s).",
-            Model.MaintenanceCleanupResult.QueuedFindingCount,
-            Model.MaintenanceCleanupResult.SelectedFindingCount,
-            Model.MaintenanceCleanupResult.QueuedJobCount]
-    </div>
-}
-
-@if (Model.IgnoredMaintenanceFindingCount > 0)
-{
-    <div class="card status-banner">
-        @L["Ignored {0} maintenance finding(s). They are hidden until a future scan reports them again.", Model.IgnoredMaintenanceFindingCount]
-    </div>
-}
-
 @if (!ViewContext.ModelState.IsValid)
 {
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
