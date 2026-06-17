@@ -2500,4 +2500,15 @@
   <data name="Added {0} principal(s)." xml:space="preserve"><value>Added {0} principal(s).</value></data>
   <data name="Skipped {0} duplicate or already assigned principal(s)." xml:space="preserve"><value>Skipped {0} duplicate or already assigned principal(s).</value></data>
   <data name="Failed {0}: {1}" xml:space="preserve"><value>Failed {0}: {1}</value></data>
+  <data name="Imported universal module package {0}. Imported/updated: {1}. Skipped: {2}. Failed: {3}." xml:space="preserve"><value>Imported universal module package {0}. Imported/updated: {1}. Skipped: {2}. Failed: {3}.</value></data>
+  <data name="The detailed import result is no longer available. Run the import again if you need the row details." xml:space="preserve"><value>The detailed import result is no longer available. Run the import again if you need the row details.</value></data>
+  <data name="Select a host and HostAgent artifact before requesting an upgrade." xml:space="preserve"><value>Select a host and HostAgent artifact before requesting an upgrade.</value></data>
+  <data name="HostAgent upgrade was requested. The active HostAgent will install and start the selected version during its next cycle." xml:space="preserve"><value>HostAgent upgrade was requested. The active HostAgent will install and start the selected version during its next cycle.</value></data>
+  <data name="HostAgent desired version already matched the selected artifact, or the selected host/artifact was not valid." xml:space="preserve"><value>HostAgent desired version already matched the selected artifact, or the selected host/artifact was not valid.</value></data>
+  <data name="Select a host before requesting a web app health probe." xml:space="preserve"><value>Select a host before requesting a web app health probe.</value></data>
+  <data name="Web app health probe job {0} was queued." xml:space="preserve"><value>Web app health probe job {0} was queued.</value></data>
+  <data name="Select a host before requesting an application-pool recycle." xml:space="preserve"><value>Select a host before requesting an application-pool recycle.</value></data>
+  <data name="Web app application-pool recycle job {0} was queued." xml:space="preserve"><value>Web app application-pool recycle job {0} was queued.</value></data>
+  <data name="Select a host before requesting web app logs." xml:space="preserve"><value>Select a host before requesting web app logs.</value></data>
+  <data name="Web app log collection job {0} was queued." xml:space="preserve"><value>Web app log collection job {0} was queued.</value></data>
 </root>

@@ -1,8 +1,11 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/ModulePackageImport.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Localization;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
@@ -16,12 +19,16 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 public sealed class ModulePackageImportModel : OmpPortalPageModel
 {
     private const int MaxStatusMessageLength = 1800;
+    private const string UniversalImportResultCacheKeyPrefix = "ModulePackageImport:UniversalImportResult:";
+    private static readonly TimeSpan UniversalImportResultCacheDuration = TimeSpan.FromMinutes(20);
 
     private readonly OmpAdminRepository _repo;
     private readonly PortableModulePackageService _packages;
     private readonly PortalDashboardWidgetPackageService _widgets;
     private readonly ConfigOverlayObjectService _configObjects;
     private readonly PortalDeploymentLockService _deploymentLocks;
+    private readonly IMemoryCache _cache;
+    private readonly IStringLocalizer<PortalResource> _portalLocalizer;
 
     public ModulePackageImportModel(
         IOptions<WebAppOptions> options,
@@ -30,7 +37,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         PortableModulePackageService packages,
         PortalDashboardWidgetPackageService widgets,
         ConfigOverlayObjectService configObjects,
-        PortalDeploymentLockService deploymentLocks)
+        PortalDeploymentLockService deploymentLocks,
+        IMemoryCache cache,
+        IStringLocalizer<PortalResource> portalLocalizer)
         : base(options, rbac)
     {
         _repo = repo;
@@ -38,6 +47,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         _widgets = widgets;
         _configObjects = configObjects;
         _deploymentLocks = deploymentLocks;
+        _cache = cache;
+        _portalLocalizer = portalLocalizer;
     }
 
     [BindProperty]
@@ -48,6 +59,9 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     [BindProperty(SupportsGet = true)]
     public UniversalExportInputModel UniversalExportInput { get; set; } = new();
+
+    [BindProperty(SupportsGet = true)]
+    public string? UniversalImportResultId { get; set; }
 
     public IReadOnlyList<ModuleDefinitionDocumentRow> AppliedDefinitions { get; private set; } = [];
 
@@ -81,6 +95,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
 
         SetTitles("Import/export");
+        LoadUniversalImportResultFromCache();
         await LoadAsync(ct);
         return Page();
     }
@@ -128,7 +143,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 results.Add(result);
             }
 
-            return await ShowUniversalImportResultsAsync(results, ct);
+            return ShowUniversalImportResults(results);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
@@ -200,7 +215,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 !UniversalStagedInput.QuickImport && UniversalStagedInput.ReplaceExistingConfigObjects,
                 ct);
 
-            return await ShowUniversalImportResultsAsync([result], ct);
+            return ShowUniversalImportResults([result]);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
@@ -382,7 +397,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     private IActionResult LegacyPortableFormatDisabled()
     {
-        StatusMessage = T("Only universal module packages are supported for import and export. Use the Universal package workflow.");
+        StatusMessage = P("Only universal module packages are supported for import and export. Use the Universal package workflow.");
         return RedirectToPage("/Admin/ModulePackageImport");
     }
 
@@ -409,22 +424,27 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             .ToList();
     }
 
-    private async Task<IActionResult> ShowUniversalImportResultsAsync(
-        IReadOnlyList<UniversalPackageImportResult> results,
-        CancellationToken ct)
+    private IActionResult ShowUniversalImportResults(IReadOnlyList<UniversalPackageImportResult> results)
     {
-        InlineStatusMessage = BuildUniversalImportSummary(results);
-        UniversalImportResults = BuildUniversalImportResultViewModels(results);
-        ActivePanel = "import-universal";
-        await LoadAsync(ct);
-        return Page();
+        var resultId = Guid.NewGuid().ToString("N");
+        var cacheKey = CreateUniversalImportResultCacheKey(resultId);
+        _cache.Set(
+            cacheKey,
+            BuildUniversalImportResultViewModels(results),
+            UniversalImportResultCacheDuration);
+
+        StatusMessage = BuildUniversalImportSummary(results);
+        return RedirectToPage(
+            "/Admin/ModulePackageImport",
+            new { UniversalImportResultId = resultId });
     }
 
     private string BuildUniversalImportSummary(UniversalPackageImportResult result)
     {
         var packageName = GetUniversalPackageName(result);
         var message = string.Format(
-            T("Imported universal module package {0}. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
+            System.Globalization.CultureInfo.CurrentCulture,
+            P("Imported universal module package {0}. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
             packageName,
             result.ImportedCount,
             result.SkippedCount,
@@ -432,7 +452,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         if (!string.IsNullOrWhiteSpace(result.TargetHostProfile))
         {
             message += " " + string.Format(
-                T("Target host profile: {0}."),
+                System.Globalization.CultureInfo.CurrentCulture,
+                P("Target host profile: {0}."),
                 result.TargetHostProfile);
         }
 
@@ -447,7 +468,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
 
         var message = string.Format(
-            T("Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
+            System.Globalization.CultureInfo.CurrentCulture,
+            P("Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
             results.Count,
             results.Sum(static result => result.ImportedCount),
             results.Sum(static result => result.SkippedCount),
@@ -455,6 +477,30 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
         return BoundStatusMessage(message);
     }
+
+    private void LoadUniversalImportResultFromCache()
+    {
+        if (string.IsNullOrWhiteSpace(UniversalImportResultId))
+        {
+            return;
+        }
+
+        if (_cache.TryGetValue(
+                CreateUniversalImportResultCacheKey(UniversalImportResultId),
+                out IReadOnlyList<UniversalImportResultViewModel>? results)
+            && results is not null)
+        {
+            UniversalImportResults = results;
+            ActivePanel = "import-universal";
+            return;
+        }
+
+        InlineStatusMessage = P("The detailed import result is no longer available. Run the import again if you need the row details.");
+        ActivePanel = "import-universal";
+    }
+
+    private static string CreateUniversalImportResultCacheKey(string resultId)
+        => UniversalImportResultCacheKeyPrefix + resultId;
 
     private static IReadOnlyList<UniversalImportResultViewModel> BuildUniversalImportResultViewModels(
         IReadOnlyList<UniversalPackageImportResult> results)
@@ -488,10 +534,13 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             return message;
         }
 
-        var suffix = " " + T("The import result was shortened to avoid an oversized browser cookie.");
+        var suffix = " " + P("The import result was shortened to avoid an oversized browser cookie.");
         var availableLength = Math.Max(0, MaxStatusMessageLength - suffix.Length);
         return message[..availableLength] + suffix;
     }
+
+    private string P(string key)
+        => _portalLocalizer[key];
 
     private IReadOnlyList<IFormFile> GetSelectedPackageFiles()
         => UniversalUploadInput.PackageFiles
