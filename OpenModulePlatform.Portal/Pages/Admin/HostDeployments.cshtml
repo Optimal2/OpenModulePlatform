@@ -12,7 +12,7 @@
 @if (TempData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
 {
     <section class="section-card section-card--wide">
-        <div class="notice">@L[statusMessage]</div>
+        <div class="notice">@statusMessage</div>
     </section>
 }
 

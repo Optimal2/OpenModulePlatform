@@ -1,9 +1,11 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/HostDeployments.cshtml.cs
 using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
@@ -11,11 +13,17 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 public sealed class HostDeploymentsModel : OmpPortalPageModel
 {
     private readonly OmpAdminRepository _repo;
+    private readonly IStringLocalizer<PortalResource> _portalLocalizer;
 
-    public HostDeploymentsModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
+    public HostDeploymentsModel(
+        IOptions<WebAppOptions> options,
+        RbacService rbac,
+        OmpAdminRepository repo,
+        IStringLocalizer<PortalResource> portalLocalizer)
         : base(options, rbac)
     {
         _repo = repo;
+        _portalLocalizer = portalLocalizer;
     }
 
     public IReadOnlyList<HostAppDeploymentStateRow> AppDeploymentStates { get; private set; } = [];
@@ -53,7 +61,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         var requestedBy = User.Identity?.Name ?? "PortalAdmin";
         await _repo.RequestServiceIdentityRepairAsync(hostId, appInstanceId, requestedBy, ct);
-        TempData["StatusMessage"] = "Service identity repair was requested. HostAgent will apply it during its next cycle when credential automation is set to PortalAdminApproved.";
+        TempData["StatusMessage"] = P("Service identity repair was requested. HostAgent will apply it during its next cycle when credential automation is set to PortalAdminApproved.");
         return RedirectToPage();
     }
 
@@ -65,14 +73,14 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         if (hostId == Guid.Empty || artifactId <= 0)
         {
-            TempData["StatusMessage"] = "Select a host and HostAgent artifact before requesting an upgrade.";
+            TempData["StatusMessage"] = P("Select a host and HostAgent artifact before requesting an upgrade.");
             return RedirectToPage();
         }
 
         var changedRows = await _repo.RequestHostAgentUpgradeAsync(hostId, artifactId, ct);
         TempData["StatusMessage"] = changedRows > 0
-            ? "HostAgent upgrade was requested. The active HostAgent will install and start the selected version during its next cycle."
-            : "HostAgent desired version already matched the selected artifact, or the selected host/artifact was not valid.";
+            ? P("HostAgent upgrade was requested. The active HostAgent will install and start the selected version during its next cycle.")
+            : P("HostAgent desired version already matched the selected artifact, or the selected host/artifact was not valid.");
         return RedirectToPage();
     }
 
@@ -84,7 +92,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         if (hostId == Guid.Empty)
         {
-            TempData["StatusMessage"] = "Select a host before requesting a web app health probe.";
+            TempData["StatusMessage"] = P("Select a host before requesting a web app health probe.");
             return RedirectToPage();
         }
 
@@ -94,7 +102,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             recycleIfUnhealthy: false,
             User.Identity?.Name,
             ct);
-        TempData["StatusMessage"] = $"Web app health probe job {jobId} was queued.";
+        TempData["StatusMessage"] = _portalLocalizer["Web app health probe job {0} was queued.", jobId].Value;
         return RedirectToPage();
     }
 
@@ -110,7 +118,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         if (hostId == Guid.Empty)
         {
-            TempData["StatusMessage"] = "Select a host before requesting an application-pool recycle.";
+            TempData["StatusMessage"] = P("Select a host before requesting an application-pool recycle.");
             return RedirectToPage();
         }
 
@@ -120,7 +128,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             appPoolName,
             User.Identity?.Name,
             ct);
-        TempData["StatusMessage"] = $"Web app application-pool recycle job {jobId} was queued.";
+        TempData["StatusMessage"] = _portalLocalizer["Web app application-pool recycle job {0} was queued.", jobId].Value;
         return RedirectToPage();
     }
 
@@ -132,7 +140,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         if (hostId == Guid.Empty)
         {
-            TempData["StatusMessage"] = "Select a host before requesting web app logs.";
+            TempData["StatusMessage"] = P("Select a host before requesting web app logs.");
             return RedirectToPage();
         }
 
@@ -141,7 +149,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             healthKey,
             User.Identity?.Name,
             ct);
-        TempData["StatusMessage"] = $"Web app log collection job {jobId} was queued.";
+        TempData["StatusMessage"] = _portalLocalizer["Web app log collection job {0} was queued.", jobId].Value;
         return RedirectToPage();
     }
 
@@ -276,6 +284,9 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         var text = row.ResultJson.Trim();
         return text.Length <= 1200 ? text : text[..1200];
     }
+
+    private string P(string key)
+        => _portalLocalizer[key].Value;
 
     private static int CompareHostAgentArtifactOptions(HostAgentArtifactOption left, HostAgentArtifactOption right)
     {

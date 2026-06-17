@@ -39,14 +39,6 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         MaxVersionsToKeep = 5
     };
 
-    public ArtifactRetentionCleanupResult? CleanupResult { get; private set; }
-
-    public MaintenanceScanQueueResult? MaintenanceScanResult { get; private set; }
-
-    public MaintenanceCleanupQueueResult? MaintenanceCleanupResult { get; private set; }
-
-    public int IgnoredMaintenanceFindingCount { get; private set; }
-
     public IReadOnlyList<MaintenanceFindingRow> MaintenanceFindings { get; private set; } = [];
 
     public IReadOnlyList<HostAgentJobRow> RecentHostAgentJobs { get; private set; } = [];
@@ -131,12 +123,12 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return guard;
         }
 
-        MaintenanceScanResult = await _repo.QueueMaintenanceScanAsync(User.Identity?.Name, ct);
+        var result = await _repo.QueueMaintenanceScanAsync(User.Identity?.Name, ct);
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
             T("Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back."),
-            MaintenanceScanResult.TotalJobCount,
-            MaintenanceScanResult.HostJobCount);
+            result.TotalJobCount,
+            result.HostJobCount);
         return RedirectToMaintenancePage();
     }
 
@@ -156,7 +148,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return Page();
         }
 
-        MaintenanceCleanupResult = await _repo.QueueMaintenanceCleanupAsync(
+        var result = await _repo.QueueMaintenanceCleanupAsync(
             SelectedMaintenanceFindingIds,
             User.Identity?.Name,
             ct);
@@ -164,9 +156,9 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
             T("Queued cleanup for {0} of {1} selected maintenance finding(s) across {2} HostAgent job(s)."),
-            MaintenanceCleanupResult.QueuedFindingCount,
-            MaintenanceCleanupResult.SelectedFindingCount,
-            MaintenanceCleanupResult.QueuedJobCount);
+            result.QueuedFindingCount,
+            result.SelectedFindingCount,
+            result.QueuedJobCount);
         return RedirectToMaintenancePage();
     }
 
@@ -186,7 +178,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return Page();
         }
 
-        IgnoredMaintenanceFindingCount = await _repo.IgnoreMaintenanceFindingsAsync(
+        var ignoredCount = await _repo.IgnoreMaintenanceFindingsAsync(
             SelectedMaintenanceFindingIds,
             User.Identity?.Name,
             ct);
@@ -194,7 +186,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
             T("Ignored {0} maintenance finding(s). They are hidden until a future scan reports them again."),
-            IgnoredMaintenanceFindingCount);
+            ignoredCount);
         return RedirectToMaintenancePage();
     }
 
