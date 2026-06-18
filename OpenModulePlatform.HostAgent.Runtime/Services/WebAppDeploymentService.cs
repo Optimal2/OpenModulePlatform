@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -1037,29 +1036,8 @@ public sealed class WebAppDeploymentService
 
     private static ProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{fileName}'.");
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        var output = outputTask.GetAwaiter().GetResult();
-        var error = errorTask.GetAwaiter().GetResult();
-
-        return new ProcessResult(process.ExitCode, output, error);
+        var result = HostAgentProcessRunner.Run(fileName, arguments);
+        return new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string CreateAppCmdFailureMessage(int exitCode, string message)
