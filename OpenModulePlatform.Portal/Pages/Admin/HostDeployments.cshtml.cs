@@ -41,8 +41,6 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     public IReadOnlyList<WebAppHealthStateRow> WebAppHealthStates { get; private set; } = [];
 
-    public IReadOnlyList<HostAgentJobRow> RecentWebAppHealthJobs { get; private set; } = [];
-
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -164,12 +162,6 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
                 group => (IReadOnlyList<HostDriftDetailRow>)group.ToList());
         HostAgentRows = await _repo.GetHostAgentUpgradeRowsAsync(ct);
         WebAppHealthStates = await _repo.GetWebAppHealthStatesAsync(ct);
-        RecentWebAppHealthJobs = (await _repo.GetRecentHostAgentJobsAsync(30, ct))
-            .Where(static row => string.Equals(row.JobType, "WebAppHealthProbe", StringComparison.OrdinalIgnoreCase)
-                                 || string.Equals(row.JobType, "RecycleWebAppAppPool", StringComparison.OrdinalIgnoreCase)
-                                 || string.Equals(row.JobType, "CollectWebAppLogs", StringComparison.OrdinalIgnoreCase))
-            .Take(10)
-            .ToList();
         var hostAgentArtifactOptions = (await _repo.GetHostAgentArtifactOptionsAsync(ct)).ToList();
         hostAgentArtifactOptions.Sort(CompareHostAgentArtifactOptions);
         HostAgentArtifactOptions = hostAgentArtifactOptions;
@@ -268,22 +260,6 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         => value.HasValue
             ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
             : 0;
-
-    public static string FormatJobResult(HostAgentJobRow row)
-    {
-        if (!string.IsNullOrWhiteSpace(row.LastError))
-        {
-            return row.LastError;
-        }
-
-        if (string.IsNullOrWhiteSpace(row.ResultJson))
-        {
-            return string.Empty;
-        }
-
-        var text = row.ResultJson.Trim();
-        return text.Length <= 1200 ? text : text[..1200];
-    }
 
     private string P(string key)
         => _portalLocalizer[key].Value;
