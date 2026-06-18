@@ -72,6 +72,22 @@ public sealed class HostAgentRpcClient
 
             return JsonSerializer.Deserialize<HostAgentEnsureArtifactResponse>(responseJson, JsonOptions);
         }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            var message = $"HostAgent ensureArtifact RPC timed out after {settings.HostAgentRpc.TimeoutSeconds} second(s).";
+            _logger.LogWarning(
+                ex,
+                "HostAgent ensureArtifact RPC timed out. ArtifactId={ArtifactId}, PipeName={PipeName}, TimeoutSeconds={TimeoutSeconds}",
+                artifactId,
+                pipeName,
+                settings.HostAgentRpc.TimeoutSeconds);
+
+            return new HostAgentEnsureArtifactResponse
+            {
+                Success = false,
+                ErrorMessage = message
+            };
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(
