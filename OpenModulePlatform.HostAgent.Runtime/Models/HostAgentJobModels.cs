@@ -35,7 +35,8 @@ public sealed record HostAgentJobWorkItem(
     string JobType,
     string? PayloadJson,
     string? RequestedBy,
-    int AttemptCount);
+    int AttemptCount,
+    Guid LeaseToken);
 
 public sealed class ArtifactRetentionCleanupJobPayload
 {

@@ -88,6 +88,7 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp', N'HostAppDeploymentStates', N'IdentityRepairRequestedBy'),
         (N'omp', N'InstanceTemplateAppInstances', N'TargetHostTemplateId'),
         (N'omp', N'InstanceTemplateAppInstances', N'IsAllowed'),
+        (N'omp', N'HostAgentJobs', N'LeaseToken'),
         (N'omp', N'users', N'profile_image_file_name'),
         (N'omp', N'users', N'profile_image_storage_key'),
         (N'omp', N'user_auth', N'auth_status'),

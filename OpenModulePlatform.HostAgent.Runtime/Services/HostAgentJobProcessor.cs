@@ -65,7 +65,7 @@ public sealed class HostAgentJobProcessor
                 return;
             }
 
-            await ProcessJobAsync(job, hostKey, serviceName, cancellationToken);
+            await ProcessJobAsync(job, hostKey, serviceName, leaseSeconds, cancellationToken);
         }
     }
 
@@ -73,51 +73,66 @@ public sealed class HostAgentJobProcessor
         HostAgentJobWorkItem job,
         string hostKey,
         string serviceName,
+        int leaseSeconds,
         CancellationToken cancellationToken)
     {
+        using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var leaseRenewal = RenewJobLeaseUntilProcessingCompletesAsync(
+            job,
+            leaseSeconds,
+            processingCancellation,
+            cancellationToken);
+
         try
         {
             switch (job.JobType)
             {
                 case HostAgentJobTypes.ArtifactRetentionCleanup:
-                    await ProcessArtifactRetentionCleanupJobAsync(job, cancellationToken);
+                    await ProcessArtifactRetentionCleanupJobAsync(job, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.ArtifactCacheCleanup:
-                    await ProcessArtifactCacheCleanupJobAsync(job, cancellationToken);
+                    await ProcessArtifactCacheCleanupJobAsync(job, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.ArtifactStoreCleanup:
-                    await ProcessArtifactStoreCleanupJobAsync(job, cancellationToken);
+                    await ProcessArtifactStoreCleanupJobAsync(job, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.MaintenanceScan:
-                    await ProcessMaintenanceScanJobAsync(job, hostKey, serviceName, cancellationToken);
+                    await ProcessMaintenanceScanJobAsync(job, hostKey, serviceName, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.MaintenanceCleanup:
-                    await ProcessMaintenanceCleanupJobAsync(job, cancellationToken);
+                    await ProcessMaintenanceCleanupJobAsync(job, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.WebAppHealthProbe:
-                    await ProcessWebAppHealthProbeJobAsync(job, cancellationToken);
+                    await ProcessWebAppHealthProbeJobAsync(job, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.RecycleWebAppAppPool:
-                    await ProcessRecycleWebAppAppPoolJobAsync(job, cancellationToken);
+                    await ProcessRecycleWebAppAppPoolJobAsync(job, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.CollectWebAppLogs:
-                    await ProcessCollectWebAppLogsJobAsync(job, cancellationToken);
+                    await ProcessCollectWebAppLogsJobAsync(job, processingCancellation.Token);
                     break;
 
                 default:
                     await CompleteFailedAsync(
                         job,
                         $"Unsupported HostAgent job type '{job.JobType}'.",
-                        cancellationToken);
+                        processingCancellation.Token);
                     break;
             }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && processingCancellation.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "HostAgent job processing stopped because the job lease is no longer owned by this process. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
+                job.HostAgentJobId,
+                job.JobType);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -128,6 +143,67 @@ public sealed class HostAgentJobProcessor
                 job.JobType);
 
             await CompleteFailedAsync(job, ex.Message, cancellationToken);
+        }
+        finally
+        {
+            await StopJobLeaseRenewalAsync(processingCancellation, leaseRenewal);
+        }
+    }
+
+    private async Task RenewJobLeaseUntilProcessingCompletesAsync(
+        HostAgentJobWorkItem job,
+        int leaseSeconds,
+        CancellationTokenSource processingCancellation,
+        CancellationToken hostAgentCancellationToken)
+    {
+        var renewalInterval = TimeSpan.FromSeconds(Math.Clamp(leaseSeconds / 3, 30, 120));
+        while (!processingCancellation.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(renewalInterval, processingCancellation.Token);
+                var renewed = await _repository.RenewHostAgentJobLeaseAsync(
+                    job.HostAgentJobId,
+                    job.LeaseToken,
+                    leaseSeconds,
+                    processingCancellation.Token);
+
+                if (!renewed)
+                {
+                    _logger.LogWarning(
+                        "HostAgent job lease renewal did not update a running job row. Cancelling local processing. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
+                        job.HostAgentJobId,
+                        job.JobType);
+                    await processingCancellation.CancelAsync();
+                    return;
+                }
+            }
+            catch (OperationCanceledException) when (hostAgentCancellationToken.IsCancellationRequested || processingCancellation.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "HostAgent job lease renewal failed. The next renewal attempt will retry while the job is still running. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
+                    job.HostAgentJobId,
+                    job.JobType);
+            }
+        }
+    }
+
+    private static async Task StopJobLeaseRenewalAsync(
+        CancellationTokenSource processingCancellation,
+        Task leaseRenewal)
+    {
+        await processingCancellation.CancelAsync();
+        try
+        {
+            await leaseRenewal;
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 
@@ -175,6 +251,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             probe.IsHealthy ? HostAgentJobStatuses.Succeeded : HostAgentJobStatuses.Warning,
             JsonSerializer.Serialize(result, JsonOptions),
             probe.IsHealthy ? null : probe.Error,
@@ -207,6 +284,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             HostAgentJobStatuses.Succeeded,
             JsonSerializer.Serialize(result, JsonOptions),
             null,
@@ -237,6 +315,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             status,
             JsonSerializer.Serialize(result, JsonOptions),
             status == HostAgentJobStatuses.Succeeded ? null : result.Message,
@@ -309,6 +388,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             HostAgentJobStatuses.Succeeded,
             JsonSerializer.Serialize(result, JsonOptions),
             null,
@@ -343,6 +423,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             status,
             JsonSerializer.Serialize(result, JsonOptions),
             result.ErrorCount > 0 ? "One or more maintenance findings could not be cleaned." : null,
@@ -453,6 +534,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             status,
             resultJson,
             message,
@@ -491,6 +573,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             status,
             resultJson,
             result.ErrorCount > 0 ? "One or more artifact cache entries could not be deleted." : null,
@@ -521,6 +604,7 @@ public sealed class HostAgentJobProcessor
 
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             status,
             resultJson,
             result.ErrorCount > 0 ? "One or more artifact store entries could not be deleted." : null,
@@ -1494,6 +1578,7 @@ public sealed class HostAgentJobProcessor
     {
         await _repository.CompleteHostAgentJobAsync(
             job.HostAgentJobId,
+            job.LeaseToken,
             HostAgentJobStatuses.Failed,
             null,
             error,

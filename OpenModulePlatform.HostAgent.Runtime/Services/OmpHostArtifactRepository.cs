@@ -2180,7 +2180,8 @@ BEGIN
         CAST(NULL AS nvarchar(100)) AS JobType,
         CAST(NULL AS nvarchar(max)) AS PayloadJson,
         CAST(NULL AS nvarchar(256)) AS RequestedBy,
-        CAST(NULL AS int) AS AttemptCount;
+        CAST(NULL AS int) AS AttemptCount,
+        CAST(NULL AS uniqueidentifier) AS LeaseToken;
     RETURN;
 END;
 
@@ -2197,7 +2198,8 @@ BEGIN
         CAST(NULL AS nvarchar(100)) AS JobType,
         CAST(NULL AS nvarchar(max)) AS PayloadJson,
         CAST(NULL AS nvarchar(256)) AS RequestedBy,
-        CAST(NULL AS int) AS AttemptCount;
+        CAST(NULL AS int) AS AttemptCount,
+        CAST(NULL AS uniqueidentifier) AS LeaseToken;
     RETURN;
 END;
 
@@ -2205,6 +2207,7 @@ UPDATE omp.HostAgentJobs
 SET Status = @failedStatus,
     CompletedUtc = @nowUtc,
     LeaseUntilUtc = NULL,
+    LeaseToken = NULL,
     LastError = COALESCE(NULLIF(LastError, N''), N'HostAgent job lease expired after the maximum number of attempts.'),
     UpdatedUtc = @nowUtc
 WHERE (HostId = @hostId OR HostId IS NULL)
@@ -2220,7 +2223,8 @@ DECLARE @claimed TABLE
     JobType nvarchar(100) NOT NULL,
     PayloadJson nvarchar(max) NULL,
     RequestedBy nvarchar(256) NULL,
-    AttemptCount int NOT NULL
+    AttemptCount int NOT NULL,
+    LeaseToken uniqueidentifier NOT NULL
 );
 
 ;WITH NextJob AS
@@ -2248,6 +2252,7 @@ SET Status = @runningStatus,
     ClaimedByServiceName = @serviceName,
     ClaimedUtc = @nowUtc,
     LeaseUntilUtc = DATEADD(second, @leaseSeconds, @nowUtc),
+    LeaseToken = NEWID(),
     StartedUtc = COALESCE(job.StartedUtc, @nowUtc),
     CompletedUtc = NULL,
     AttemptCount = job.AttemptCount + 1,
@@ -2258,8 +2263,9 @@ OUTPUT inserted.HostAgentJobId,
        inserted.JobType,
        inserted.PayloadJson,
        inserted.RequestedBy,
-       inserted.AttemptCount
-INTO @claimed(HostAgentJobId, HostId, JobType, PayloadJson, RequestedBy, AttemptCount)
+       inserted.AttemptCount,
+       inserted.LeaseToken
+INTO @claimed(HostAgentJobId, HostId, JobType, PayloadJson, RequestedBy, AttemptCount, LeaseToken)
 FROM omp.HostAgentJobs job
 INNER JOIN NextJob nextJob ON nextJob.HostAgentJobId = job.HostAgentJobId;
 
@@ -2268,7 +2274,8 @@ SELECT HostAgentJobId,
        JobType,
        PayloadJson,
        RequestedBy,
-       AttemptCount
+       AttemptCount,
+       LeaseToken
 FROM @claimed;";
 
         await using var conn = _db.Create();
@@ -2293,11 +2300,42 @@ FROM @claimed;";
             rdr.GetString(2),
             rdr.IsDBNull(3) ? null : rdr.GetString(3),
             rdr.IsDBNull(4) ? null : rdr.GetString(4),
-            rdr.GetInt32(5));
+            rdr.GetInt32(5),
+            rdr.GetGuid(6));
     }
 
-    public async Task CompleteHostAgentJobAsync(
+    public async Task<bool> RenewHostAgentJobLeaseAsync(
         long hostAgentJobId,
+        Guid leaseToken,
+        int leaseSeconds,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+
+UPDATE omp.HostAgentJobs
+SET LeaseUntilUtc = DATEADD(second, @leaseSeconds, @nowUtc),
+    UpdatedUtc = @nowUtc
+WHERE HostAgentJobId = @hostAgentJobId
+  AND Status = @runningStatus
+  AND LeaseToken = @leaseToken;
+
+SELECT @@ROWCOUNT;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostAgentJobId", hostAgentJobId);
+        cmd.Parameters.AddWithValue("@leaseToken", leaseToken);
+        cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(30, leaseSeconds));
+        cmd.Parameters.AddWithValue("@runningStatus", HostAgentJobStatuses.Running);
+        var affected = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+        return affected > 0;
+    }
+
+    public async Task<bool> CompleteHostAgentJobAsync(
+        long hostAgentJobId,
+        Guid leaseToken,
         byte status,
         string? resultJson,
         string? lastError,
@@ -2308,21 +2346,24 @@ UPDATE omp.HostAgentJobs
 SET Status = @status,
     CompletedUtc = SYSUTCDATETIME(),
     LeaseUntilUtc = NULL,
+    LeaseToken = NULL,
     ResultJson = @resultJson,
     LastError = @lastError,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE HostAgentJobId = @hostAgentJobId
-  AND Status = @runningStatus;";
+  AND Status = @runningStatus
+  AND LeaseToken = @leaseToken;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@hostAgentJobId", hostAgentJobId);
+        cmd.Parameters.AddWithValue("@leaseToken", leaseToken);
         cmd.Parameters.AddWithValue("@status", status);
         cmd.Parameters.AddWithValue("@runningStatus", HostAgentJobStatuses.Running);
         cmd.Parameters.AddWithValue("@resultJson", string.IsNullOrWhiteSpace(resultJson) ? DBNull.Value : resultJson);
         cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(lastError) ? DBNull.Value : Truncate(lastError, StoredDiagnosticMessageMaxLength));
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
     public async Task<bool> IsHostArtifactCachePathInUseAsync(
