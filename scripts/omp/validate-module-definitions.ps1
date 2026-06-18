@@ -101,6 +101,7 @@ function Resolve-RepositoryPath {
 function Add-ValidationError {
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [System.Collections.Generic.List[string]]$Errors,
         [Parameter(Mandatory = $true)]
         [string]$Message
