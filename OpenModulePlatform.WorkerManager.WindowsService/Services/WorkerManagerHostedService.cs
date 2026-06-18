@@ -49,14 +49,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         try
         {
-            await TouchHostHeartbeatIfEnabledAsync(hostIdentity, stoppingToken);
-            await ReconcileWorkersAsync(stoppingToken);
+            await RunReconcileCycleAsync(hostIdentity, stoppingToken);
 
             using var timer = new PeriodicTimer(refreshInterval);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                await TouchHostHeartbeatIfEnabledAsync(hostIdentity, stoppingToken);
-                await ReconcileWorkersAsync(stoppingToken);
+                await RunReconcileCycleAsync(hostIdentity, stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -66,6 +64,26 @@ public sealed class WorkerManagerHostedService : BackgroundService
         finally
         {
             await StopAllWorkersAsync("manager shutdown", CancellationToken.None);
+        }
+    }
+
+    private async Task RunReconcileCycleAsync(string hostIdentity, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await TouchHostHeartbeatIfEnabledAsync(hostIdentity, cancellationToken);
+            await ReconcileWorkersAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "WorkerManager reconcile cycle failed and will be retried during the next cycle. HostIdentity={HostIdentity}",
+                hostIdentity);
         }
     }
 
