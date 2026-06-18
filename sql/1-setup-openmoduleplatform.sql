@@ -883,6 +883,7 @@ BEGIN
         ClaimedByServiceName nvarchar(200) NULL,
         ClaimedUtc datetime2(3) NULL,
         LeaseUntilUtc datetime2(3) NULL,
+        LeaseToken uniqueidentifier NULL,
         StartedUtc datetime2(3) NULL,
         CompletedUtc datetime2(3) NULL,
         AttemptCount int NOT NULL CONSTRAINT DF_omp_HostAgentJobs_AttemptCount DEFAULT(0),
@@ -947,6 +948,13 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.HostAgentJobs', N'LeaseToken') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAgentJobs ADD LeaseToken uniqueidentifier NULL;
+END
+GO
+
 IF NOT EXISTS
 (
     SELECT 1
@@ -957,6 +965,20 @@ IF NOT EXISTS
 BEGIN
     CREATE INDEX IX_omp_HostAgentJobs_Host_Status
         ON omp.HostAgentJobs(HostId, Status, RequestedUtc, HostAgentJobId);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostAgentJobs')
+      AND name = N'IX_omp_HostAgentJobs_Status_LeaseUntil'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostAgentJobs_Status_LeaseUntil
+        ON omp.HostAgentJobs(Status, LeaseUntilUtc, HostId)
+        INCLUDE(AttemptCount, MaxAttempts);
 END
 GO
 
