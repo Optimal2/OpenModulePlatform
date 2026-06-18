@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -1468,34 +1467,11 @@ public sealed class HostAgentJobProcessor
 
     private static ScResult RunSc(params string[] arguments)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start sc.exe with arguments: {FormatProcessArguments(arguments)}.");
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return new ScResult(process.ExitCode, output, error);
+        var result = HostAgentProcessRunner.Run(
+            Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
+            arguments);
+        return new ScResult(result.ExitCode, result.StdOut, result.StdErr);
     }
-
-    private static string FormatProcessArguments(IEnumerable<string> arguments)
-        => string.Join(
-            " ",
-            arguments.Select(static argument => argument.Contains(' ', StringComparison.Ordinal)
-                ? '"' + argument.Replace("\"", "\\\"", StringComparison.Ordinal) + '"'
-                : argument));
 
     private static bool IsServiceNotFound(ScResult result)
         => result.ExitCode == ScServiceNotFoundExitCode

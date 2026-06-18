@@ -1400,26 +1400,10 @@ public sealed class HostAgentSelfUpgradeService
 
     private static ScResult RunSc(params string[] arguments)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start sc.exe.");
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return new ScResult(process.ExitCode, output, error);
+        var result = HostAgentProcessRunner.Run(
+            Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
+            arguments);
+        return new ScResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static void RunScChecked(params string[] arguments)

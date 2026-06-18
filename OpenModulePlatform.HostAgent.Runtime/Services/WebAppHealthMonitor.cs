@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -372,26 +371,8 @@ public sealed class WebAppHealthMonitor
 
     private static ProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
     {
-        using var process = new Process();
-        process.StartInfo.FileName = fileName;
-        foreach (var argument in arguments)
-        {
-            process.StartInfo.ArgumentList.Add(argument);
-        }
-
-        process.StartInfo.UseShellExecute = false;
-        process.StartInfo.RedirectStandardOutput = true;
-        process.StartInfo.RedirectStandardError = true;
-        process.StartInfo.CreateNoWindow = true;
-        process.Start();
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        var stderr = stderrTask.GetAwaiter().GetResult();
-
-        return new ProcessResult(process.ExitCode, stdout, stderr);
+        var result = HostAgentProcessRunner.Run(fileName, arguments);
+        return new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string[] SplitOutput(string value)
