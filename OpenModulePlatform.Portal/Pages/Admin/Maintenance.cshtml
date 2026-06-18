@@ -32,7 +32,7 @@
     <div class="split-header">
         <div>
             <h3>@L["OMP scan"]</h3>
-            <p class="muted">@L["Scan the shared installation and every enabled host for stale HostAgent runtime rows, stopped old HostAgent services, and leftover HostAgent folders. The scan only reports candidates; cleanup is queued separately after review."]</p>
+            <p class="muted">@L["Scan the shared installation and every enabled host for stale HostAgent runtime rows, stopped old HostAgent services, stopped old WorkerManager services, and leftover HostAgent folders. The scan only reports candidates; cleanup is queued separately after review."]</p>
         </div>
         <form method="post">
             <button type="submit" asp-page-handler="QueueMaintenanceScan">@L["Start OMP scan"]</button>

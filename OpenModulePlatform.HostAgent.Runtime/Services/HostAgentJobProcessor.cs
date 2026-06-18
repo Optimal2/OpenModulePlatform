@@ -18,6 +18,12 @@ public sealed class HostAgentJobProcessor
         "OMP.HostAgent",
         "OpenModulePlatform.HostAgent"
     ];
+    private static readonly string[] KnownWorkerManagerServiceNamePrefixes =
+    [
+        "EMP.WorkerManager",
+        "OMP.WorkerManager",
+        "OpenModulePlatform.WorkerManager"
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -369,7 +375,11 @@ public sealed class HostAgentJobProcessor
                 hostKey,
                 serviceName,
                 _settings.CurrentValue,
-                cancellationToken);
+                cancellationToken).ToList();
+            findings.AddRange(BuildWorkerManagerLeftoverServiceFindings(
+                job.HostId.Value,
+                hostKey,
+                cancellationToken));
 
             await _repository.UpsertMaintenanceFindingsAsync(
                 findings,
@@ -1114,6 +1124,70 @@ public sealed class HostAgentJobProcessor
         return findings;
     }
 
+    private static IReadOnlyList<MaintenanceFindingUpsert> BuildWorkerManagerLeftoverServiceFindings(
+        Guid hostId,
+        string hostKey,
+        CancellationToken cancellationToken)
+    {
+        var findings = new List<MaintenanceFindingUpsert>();
+        var services = EnumerateWorkerManagerServices();
+        var runningServices = services
+            .Where(static service =>
+                string.Equals(service.State, "RUNNING", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(service.ExecutablePath))
+            .ToArray();
+
+        foreach (var service in services)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(service.State, "RUNNING", StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(service.ExecutablePath))
+            {
+                continue;
+            }
+
+            var executablePath = Path.GetFullPath(service.ExecutablePath);
+            var activeService = runningServices.FirstOrDefault(candidate =>
+                !string.IsNullOrWhiteSpace(candidate.ExecutablePath)
+                && string.Equals(
+                    Path.GetFullPath(candidate.ExecutablePath),
+                    executablePath,
+                    GetPathComparison()));
+            if (activeService is null)
+            {
+                continue;
+            }
+
+            var detail =
+                $"Host '{hostKey}' has a stopped WorkerManager service '{service.Name}' in state '{service.State ?? "unknown"}'. It points to the same executable as running WorkerManager service '{activeService.Name}': {executablePath}.";
+            var action = JsonSerializer.Serialize(new MaintenanceFindingAction
+            {
+                TargetKind = MaintenanceTargetKinds.WindowsService,
+                HostId = hostId,
+                ServiceName = service.Name
+            }, JsonOptions);
+
+            findings.Add(new MaintenanceFindingUpsert
+            {
+                FindingKey = $"workermanager-service:{hostId:D}:{service.Name}",
+                Scope = MaintenanceScanScopes.Host,
+                HostId = hostId,
+                Category = "WorkerManagerLeftover",
+                TargetKind = MaintenanceTargetKinds.WindowsService,
+                TargetIdentifier = service.Name,
+                Title = "Stopped old WorkerManager service",
+                Detail = detail,
+                RecommendedAction = "Delete the stopped old WorkerManager Windows service.",
+                SafetyNotes = "The service name matches a known WorkerManager prefix, is not running, and another WorkerManager service is running from the same executable path.",
+                ActionJson = action,
+                Severity = 2,
+                Confidence = 90
+            });
+        }
+
+        return findings;
+    }
+
     private MaintenanceCleanupEntryResult CleanupWindowsServiceFinding(
         MaintenanceFindingCleanupEntry entry,
         MaintenanceFindingAction? action)
@@ -1384,18 +1458,30 @@ public sealed class HostAgentJobProcessor
 
     private static IReadOnlyList<HostAgentServiceCandidate> EnumerateHostAgentServices(string serviceNamePrefix)
     {
+        var prefixes = GetKnownHostAgentServiceNamePrefixes(serviceNamePrefix);
+        return EnumerateWindowsServicesByPrefix(prefixes);
+    }
+
+    private static IReadOnlyList<HostAgentServiceCandidate> EnumerateWorkerManagerServices()
+        => EnumerateWindowsServicesByPrefix(KnownWorkerManagerServiceNamePrefixes);
+
+    private static IReadOnlyList<HostAgentServiceCandidate> EnumerateWindowsServicesByPrefix(IEnumerable<string> serviceNamePrefixes)
+    {
         var result = RunSc("queryex", "type=", "service", "state=", "all");
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
         }
 
-        var prefixes = GetKnownHostAgentServiceNamePrefixes(serviceNamePrefix);
+        var prefixes = serviceNamePrefixes
+            .Select(static prefix => prefix.Trim().TrimEnd('.'))
+            .Where(static prefix => !string.IsNullOrWhiteSpace(prefix))
+            .ToArray();
         var serviceNames = result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
             .Select(line => line["SERVICE_NAME:".Length..].Trim())
-            .Where(name => IsHostAgentServiceName(name, prefixes))
+            .Where(name => IsServiceNameWithKnownPrefix(name, prefixes))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -1417,7 +1503,7 @@ public sealed class HostAgentJobProcessor
         return prefixes;
     }
 
-    private static bool IsHostAgentServiceName(string serviceName, IEnumerable<string> serviceNamePrefixes)
+    private static bool IsServiceNameWithKnownPrefix(string serviceName, IEnumerable<string> serviceNamePrefixes)
         => serviceNamePrefixes.Any(prefix =>
             string.Equals(serviceName, prefix, StringComparison.OrdinalIgnoreCase)
             || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
