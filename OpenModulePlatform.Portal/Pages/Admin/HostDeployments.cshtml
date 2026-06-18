@@ -137,39 +137,6 @@
             </table>
         </div>
     }
-
-    @if (Model.RecentWebAppHealthJobs.Count > 0)
-    {
-        <h4>@L["Recent web app operations"]</h4>
-        <div class="table-scroll">
-            <table class="grid app-instances-grid">
-                <thead>
-                    <tr>
-                        <th>@L["Job"]</th>
-                        <th>@L["Host"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Completed UTC"]</th>
-                        <th>@L["Message"]</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach (var job in Model.RecentWebAppHealthJobs)
-                {
-                    <tr>
-                        <td>
-                            <code>@job.HostAgentJobId</code>
-                            <div class="muted">@job.JobType</div>
-                        </td>
-                        <td><code>@(string.IsNullOrWhiteSpace(job.HostKey) ? L["Any HostAgent"].Value : job.HostKey)</code></td>
-                        <td><span class="pill">@L[MaintenanceModel.FormatHostAgentJobStatus(job.Status)]</span></td>
-                        <td>@(job.CompletedUtc.HasValue ? job.CompletedUtc.Value.ToString("u") : L["None"].Value)</td>
-                        <td><pre class="code-block">@HostDeploymentsModel.FormatJobResult(job)</pre></td>
-                    </tr>
-                }
-                </tbody>
-            </table>
-        </div>
-    }
 </section>
 
 <section class="card section-card section-card--wide">
