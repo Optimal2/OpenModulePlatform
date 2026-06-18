@@ -56,6 +56,10 @@ jobs:
       - name: Show .NET SDK info
         run: dotnet --info
 
+      - name: Validate module definitions
+        shell: pwsh
+        run: .\scripts\omp\validate-module-definitions.ps1
+
       - name: Restore solution
         run: dotnet restore OpenModulePlatform.slnx
 

@@ -79,6 +79,13 @@ The default output folder is `artifacts\universal-packages`. Set
 `OMP_UNIVERSAL_PACKAGE_OUTPUT_DIR` to use a shared package folder without
 hardcoding machine-specific paths in repositories.
 
+Use `validate-module-definitions.ps1` before packaging or in CI to catch
+manifest/module-definition version drift and stale embedded SQL content:
+
+```powershell
+.\scripts\omp\validate-module-definitions.ps1
+```
+
 `build-repository-objects.ps1` reads a repository's `omp-components.json` and
 creates portable OMP objects:
 
