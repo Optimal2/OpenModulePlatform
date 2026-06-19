@@ -161,7 +161,9 @@ OpenModulePlatform.HostAgent.{HostKey}
 
 HostAgent creates the pipe with an explicit ACL. By default it allows local
 Administrators, `LocalSystem`, `LocalService`, `NetworkService`, and the running
-HostAgent service identity. Add custom service accounts with:
+HostAgent service identity. Add custom service accounts with
+`RpcAllowedClientAccounts`, or allow Windows service SIDs by service name with
+`RpcAllowedClientServiceNames`:
 
 ```json
 {
@@ -169,10 +171,17 @@ HostAgent service identity. Add custom service accounts with:
     "EnableRpc": true,
     "RpcAllowedClientAccounts": [
       "DOMAIN\\OmpWorkerManager"
+    ],
+    "RpcAllowedClientServiceNames": [
+      "OMP.WorkerManager"
     ]
   }
 }
 ```
+
+HostAgent also logs the connected caller identity after each RPC pipe
+connection for audit. The pipe ACL remains the authoritative enforcement
+boundary.
 
 The manager still owns process lifecycle. HostAgent only provisions artifacts and reports host/artifact state.
 

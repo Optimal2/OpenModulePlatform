@@ -84,7 +84,13 @@ public sealed class HostAgentRpcHostedService : BackgroundService
                     outBufferSize: 0,
                     pipeSecurity);
                 await pipe.WaitForConnectionAsync(stoppingToken);
-                _ = Task.Run(() => HandleClientAsync(pipe, stoppingToken), CancellationToken.None);
+                var callerName = GetClientUserName(pipe);
+                _logger.LogInformation(
+                    "HostAgent RPC client connected. PipeName={PipeName}, Caller={Caller}",
+                    pipeName,
+                    callerName ?? "unknown");
+                var connectedPipe = pipe;
+                _ = Task.Run(() => HandleClientAsync(connectedPipe, callerName, stoppingToken), CancellationToken.None);
                 pipe = null;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -123,7 +129,10 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
     }
 
-    private async Task HandleClientAsync(NamedPipeServerStream pipe, CancellationToken serviceCancellationToken)
+    private async Task HandleClientAsync(
+        NamedPipeServerStream pipe,
+        string? callerName,
+        CancellationToken serviceCancellationToken)
     {
         await using var ownedPipe = pipe;
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(serviceCancellationToken);
@@ -153,37 +162,40 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         }
         catch (OperationCanceledException ex) when (!serviceCancellationToken.IsCancellationRequested)
         {
-            LogRequestFailure(ex);
+            LogRequestFailure(ex, callerName);
         }
         catch (IOException ex)
         {
-            LogRequestFailure(ex);
+            LogRequestFailure(ex, callerName);
         }
         catch (DbException ex)
         {
-            LogRequestFailure(ex);
+            LogRequestFailure(ex, callerName);
         }
         catch (UnauthorizedAccessException ex)
         {
-            LogRequestFailure(ex);
+            LogRequestFailure(ex, callerName);
         }
         catch (JsonException ex)
         {
-            LogRequestFailure(ex);
+            LogRequestFailure(ex, callerName);
         }
         catch (InvalidOperationException ex)
         {
-            LogRequestFailure(ex);
+            LogRequestFailure(ex, callerName);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogRequestFailure(ex);
+            LogRequestFailure(ex, callerName);
         }
     }
 
-    private void LogRequestFailure(Exception exception)
+    private void LogRequestFailure(Exception exception, string? callerName)
     {
-        _logger.LogError(exception, "HostAgent RPC request failed.");
+        _logger.LogError(
+            exception,
+            "HostAgent RPC request failed. Caller={Caller}",
+            callerName ?? "unknown");
     }
 
     private PipeSecurity CreatePipeSecurity(HostAgentSettings settings)
@@ -196,16 +208,11 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             pipeSecurity.AddAccessRule(new PipeAccessRule(sid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
         }
 
-        foreach (var accountName in settings.RpcAllowedClientAccounts)
+        foreach (var accountName in GetConfiguredRpcClientAccounts(settings))
         {
-            if (string.IsNullOrWhiteSpace(accountName))
-            {
-                continue;
-            }
-
             try
             {
-                var sid = (SecurityIdentifier)new NTAccount(accountName.Trim()).Translate(typeof(SecurityIdentifier));
+                var sid = (SecurityIdentifier)new NTAccount(accountName).Translate(typeof(SecurityIdentifier));
                 pipeSecurity.AddAccessRule(new PipeAccessRule(sid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
             }
             catch (IdentityNotMappedException ex)
@@ -228,6 +235,30 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         }
 
         return pipeSecurity;
+    }
+
+    private static string? GetClientUserName(NamedPipeServerStream pipe)
+    {
+        try
+        {
+            return pipe.GetImpersonationUserName();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static IEnumerable<string> GetConfiguredRpcClientAccounts(HostAgentSettings settings)
+    {
+        return settings.RpcAllowedClientAccounts
+            .Concat(settings.RpcAllowedClientServiceNames
+                .Select(static serviceName => serviceName.Trim())
+                .Where(static serviceName => !string.IsNullOrWhiteSpace(serviceName))
+                .Select(static serviceName => $@"NT SERVICE\{serviceName}"))
+            .Select(static accountName => accountName.Trim())
+            .Where(static accountName => !string.IsNullOrWhiteSpace(accountName))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<SecurityIdentifier> GetDefaultRpcClientSids()
