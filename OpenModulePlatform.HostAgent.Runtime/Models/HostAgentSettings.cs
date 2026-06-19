@@ -136,6 +136,8 @@ public sealed class HostAgentSettings
 
     public string RpcPipeName { get; set; } = string.Empty;
 
+    public string[] RpcAllowedClientAccounts { get; set; } = [];
+
     public int RpcRequestTimeoutSeconds { get; set; } = 60;
 
     public string ResolveHostKey()
