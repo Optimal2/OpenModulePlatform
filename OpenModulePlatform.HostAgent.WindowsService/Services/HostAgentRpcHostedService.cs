@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.IO.Pipes;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,7 @@ namespace OpenModulePlatform.HostAgent.WindowsService.Services;
 public sealed class HostAgentRpcHostedService : BackgroundService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private const int MaxRequestLineLength = 32 * 1024;
     private static readonly TimeSpan TakeoverRpcDelay = TimeSpan.FromSeconds(1);
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
@@ -124,7 +126,7 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             using var reader = new StreamReader(pipe, leaveOpen: true);
             await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
 
-            var requestJson = await reader.ReadLineAsync(timeoutCts.Token);
+            var requestJson = await ReadRequestLineAsync(reader, timeoutCts.Token);
             if (string.IsNullOrWhiteSpace(requestJson))
             {
                 await WriteResponseAsync(writer, HostAgentRpcResponse.Failed("Empty RPC request."), timeoutCts.Token);
@@ -165,6 +167,10 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         {
             LogRequestFailure(ex);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogRequestFailure(ex);
+        }
     }
 
     private void LogRequestFailure(Exception exception)
@@ -198,6 +204,45 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             cancellationToken);
 
         return HostAgentRpcResponse.FromProvisioningResult(result);
+    }
+
+    private static async Task<string?> ReadRequestLineAsync(
+        StreamReader reader,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new char[256];
+        var builder = new StringBuilder();
+
+        while (true)
+        {
+            var read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken);
+            if (read == 0)
+            {
+                return builder.Length == 0 ? null : builder.ToString();
+            }
+
+            for (var index = 0; index < read; index++)
+            {
+                var character = buffer[index];
+                if (character == '\n')
+                {
+                    return builder.ToString();
+                }
+
+                if (character == '\r')
+                {
+                    continue;
+                }
+
+                if (builder.Length >= MaxRequestLineLength)
+                {
+                    throw new InvalidOperationException(
+                        $"RPC request exceeds the maximum allowed length of {MaxRequestLineLength} characters.");
+                }
+
+                builder.Append(character);
+            }
+        }
     }
 
     private static async Task WriteResponseAsync(

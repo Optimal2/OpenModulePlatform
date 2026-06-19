@@ -7,6 +7,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class HostAgentEngine
 {
+    private readonly object _leaseStateLock = new();
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ArtifactProvisioner _provisioner;
@@ -19,6 +20,7 @@ public sealed class HostAgentEngine
     private readonly HostAgentJobProcessor _jobProcessor;
     private readonly HostAgentProcessContext _process;
     private readonly ILogger<HostAgentEngine> _logger;
+    private HostAgentLeaseResult? _activeLease;
 
     public HostAgentEngine(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -67,6 +69,7 @@ public sealed class HostAgentEngine
 
         if (lease.HostId is null)
         {
+            ClearActiveLease();
             _logger.LogWarning(
                 "HostAgent skipped cycle because host key is not registered or enabled in the database. HostKey={HostKey}, CurrentService={CurrentService}",
                 hostKey,
@@ -76,6 +79,7 @@ public sealed class HostAgentEngine
 
         if (!lease.Acquired)
         {
+            ClearActiveLease();
             _logger.LogInformation(
                 "HostAgent skipped cycle because another service owns the host lease. HostKey={HostKey}, CurrentService={CurrentService}, ActiveService={ActiveService}",
                 hostKey,
@@ -83,6 +87,8 @@ public sealed class HostAgentEngine
                 lease.ActiveServiceName);
             return;
         }
+
+        SetActiveLease(lease);
 
         await _repository.PublishHostAgentRuntimeStateAsync(
             lease.HostId.Value,
@@ -168,6 +174,53 @@ public sealed class HostAgentEngine
                 _process.ServiceName,
                 settings.MaxHostAgentJobsPerCycle,
                 cancellationToken);
+        }
+    }
+
+    public async Task ShutdownAsync(CancellationToken cancellationToken)
+    {
+        var activeLease = TakeActiveLease();
+        if (activeLease?.HostId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _repository.PublishHostAgentRuntimeStateAsync(
+                activeLease.HostId.Value,
+                _process,
+                _process.RuntimeMode,
+                artifactId: null,
+                AppContext.BaseDirectory,
+                isActive: false,
+                statusMessage: "HostAgent stopped.",
+                cancellationToken,
+                preserveExistingStatusMessage: false);
+        }
+        catch (Exception ex) when (IsExpectedShutdownFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to publish inactive HostAgent runtime state during shutdown. HostId={HostId}, ServiceName={ServiceName}",
+                activeLease.HostId.Value,
+                _process.ServiceName);
+        }
+
+        try
+        {
+            await _repository.ReleaseHostAgentLeaseAsync(
+                activeLease.HostId.Value,
+                _process.ServiceName,
+                cancellationToken);
+        }
+        catch (Exception ex) when (IsExpectedShutdownFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to release HostAgent lease during shutdown. HostId={HostId}, ServiceName={ServiceName}",
+                activeLease.HostId.Value,
+                _process.ServiceName);
         }
     }
 
@@ -317,4 +370,37 @@ public sealed class HostAgentEngine
             or IOException
             or DbException
             or UnauthorizedAccessException;
+
+    private static bool IsExpectedShutdownFailure(Exception exception)
+        => exception is InvalidOperationException
+            or IOException
+            or DbException
+            or UnauthorizedAccessException
+            or TimeoutException;
+
+    private void SetActiveLease(HostAgentLeaseResult lease)
+    {
+        lock (_leaseStateLock)
+        {
+            _activeLease = lease;
+        }
+    }
+
+    private HostAgentLeaseResult? TakeActiveLease()
+    {
+        lock (_leaseStateLock)
+        {
+            var lease = _activeLease;
+            _activeLease = null;
+            return lease;
+        }
+    }
+
+    private void ClearActiveLease()
+    {
+        lock (_leaseStateLock)
+        {
+            _activeLease = null;
+        }
+    }
 }

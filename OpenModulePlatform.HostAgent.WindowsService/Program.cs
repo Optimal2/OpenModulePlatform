@@ -62,7 +62,16 @@ try
     if (runOnce)
     {
         var engine = host.Services.GetRequiredService<HostAgentEngine>();
-        await engine.RunOnceAsync(CancellationToken.None);
+        try
+        {
+            await engine.RunOnceAsync(CancellationToken.None);
+        }
+        finally
+        {
+            using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await engine.ShutdownAsync(shutdownCts.Token);
+        }
+
         return;
     }
 
