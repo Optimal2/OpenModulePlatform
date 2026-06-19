@@ -53,7 +53,10 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddSingleton<HostAgentCredentialStoreService>();
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
-        services.AddHostedService<HostAgentRpcHostedService>();
+        if (OperatingSystem.IsWindows())
+        {
+            services.AddHostedService<HostAgentRpcHostedService>();
+        }
     });
 
 try

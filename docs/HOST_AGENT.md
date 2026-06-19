@@ -159,6 +159,21 @@ An empty `PipeName` resolves to:
 OpenModulePlatform.HostAgent.{HostKey}
 ```
 
+HostAgent creates the pipe with an explicit ACL. By default it allows local
+Administrators, `LocalSystem`, `LocalService`, `NetworkService`, and the running
+HostAgent service identity. Add custom service accounts with:
+
+```json
+{
+  "HostAgent": {
+    "EnableRpc": true,
+    "RpcAllowedClientAccounts": [
+      "DOMAIN\\OmpWorkerManager"
+    ]
+  }
+}
+```
+
 The manager still owns process lifecycle. HostAgent only provisions artifacts and reports host/artifact state.
 
 ## IIS web app deployment
