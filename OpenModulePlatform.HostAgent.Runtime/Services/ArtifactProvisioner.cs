@@ -118,10 +118,36 @@ public sealed class ArtifactProvisioner
     {
         if (!string.IsNullOrWhiteSpace(artifact.DesiredLocalPath))
         {
-            return Path.GetFullPath(artifact.DesiredLocalPath.Trim());
+            return ResolveExplicitLocalPath(settings.LocalArtifactCacheRoot, artifact.DesiredLocalPath);
         }
 
         return CombineUnderRoot(settings.LocalArtifactCacheRoot, artifact.GetCacheRelativePath(), nameof(artifact.RelativePath));
+    }
+
+    private static string ResolveExplicitLocalPath(string rootPath, string desiredLocalPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+        {
+            throw new InvalidOperationException($"Root path for '{nameof(HostAgentSettings.LocalArtifactCacheRoot)}' is not configured.");
+        }
+
+        if (string.IsNullOrWhiteSpace(desiredLocalPath))
+        {
+            throw new InvalidOperationException($"Path for '{nameof(ArtifactDescriptor.DesiredLocalPath)}' is not configured.");
+        }
+
+        var fullRoot = Path.GetFullPath(rootPath.Trim());
+        var trimmedDesiredPath = desiredLocalPath.Trim();
+        var fullPath = Path.IsPathRooted(trimmedDesiredPath)
+            ? Path.GetFullPath(trimmedDesiredPath)
+            : Path.GetFullPath(Path.Join(fullRoot, trimmedDesiredPath));
+        if (!IsSameOrChildPath(fullRoot, fullPath))
+        {
+            throw new InvalidOperationException(
+                $"Path '{desiredLocalPath}' escapes root path '{fullRoot}' for '{nameof(ArtifactDescriptor.DesiredLocalPath)}'.");
+        }
+
+        return fullPath;
     }
 
     private static string CombineUnderRoot(string rootPath, string relativePath, string parameterName)

@@ -62,6 +62,10 @@ public sealed class HostAgentHostedService : BackgroundService
         {
             _logger.LogInformation("HostAgent cancellation requested. HostKey={HostKey}", hostKey);
         }
+        finally
+        {
+            await ReleaseLeaseAndRuntimeStateAsync();
+        }
     }
 
     private async Task RunCycleSafelyAsync(CancellationToken cancellationToken)
@@ -96,5 +100,23 @@ public sealed class HostAgentHostedService : BackgroundService
     private void LogCycleFailure(Exception exception)
     {
         _logger.LogError(exception, "HostAgent cycle failed.");
+    }
+
+    private async Task ReleaseLeaseAndRuntimeStateAsync()
+    {
+        using var shutdownCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        try
+        {
+            await _engine.ShutdownAsync(shutdownCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("HostAgent shutdown cleanup timed out.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "HostAgent shutdown cleanup failed.");
+        }
     }
 }

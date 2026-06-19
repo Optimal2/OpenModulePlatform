@@ -119,7 +119,18 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         foreach (var existing in _managedWorkers.Values.Where(worker => !desiredById.ContainsKey(worker.Definition.WorkerInstanceId)).ToList())
         {
-            await StopAndRemoveWorkerAsync(existing, runtimeKind, "worker no longer desired", cancellationToken);
+            try
+            {
+                await StopAndRemoveWorkerAsync(existing, runtimeKind, "worker no longer desired", cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                await HandleWorkerFailureAsync(existing, runtimeKind, "stop undesired worker", ex, cancellationToken);
+            }
         }
 
         foreach (var desired in desiredWorkers)
@@ -130,19 +141,30 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 _managedWorkers.Add(desired.WorkerInstanceId, managed);
             }
 
-            if (!managed.HasEquivalentConfiguration(desired))
+            try
             {
-                _logger.LogInformation(
-                    "Worker configuration changed. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}",
-                    desired.AppInstanceId,
-                    desired.WorkerInstanceId,
-                    desired.WorkerTypeKey);
+                if (!managed.HasEquivalentConfiguration(desired))
+                {
+                    _logger.LogInformation(
+                        "Worker configuration changed. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                        desired.AppInstanceId,
+                        desired.WorkerInstanceId,
+                        desired.WorkerTypeKey);
 
-                await StopWorkerAsync(managed, runtimeKind, "worker configuration changed", cancellationToken);
-                managed.UpdateDefinition(desired);
+                    await StopWorkerAsync(managed, runtimeKind, "worker configuration changed", cancellationToken);
+                    managed.UpdateDefinition(desired);
+                }
+
+                await EnsureWorkerRunningAsync(managed, runtimeKind, cancellationToken);
             }
-
-            await EnsureWorkerRunningAsync(managed, runtimeKind, cancellationToken);
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                await HandleWorkerFailureAsync(managed, runtimeKind, "reconcile desired worker", ex, cancellationToken);
+            }
         }
     }
 
@@ -353,6 +375,38 @@ public sealed class WorkerManagerHostedService : BackgroundService
             managed.Definition.AppInstanceId,
             managed.Definition.WorkerInstanceId,
             managed.LastExitCode);
+    }
+
+    private async Task HandleWorkerFailureAsync(
+        ManagedWorkerProcess managed,
+        string? runtimeKind,
+        string phase,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogError(
+            exception,
+            "WorkerManager failed to {Phase}. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+            phase,
+            managed.Definition.AppInstanceId,
+            managed.Definition.WorkerInstanceId,
+            managed.Definition.WorkerTypeKey);
+
+        if (string.IsNullOrWhiteSpace(runtimeKind))
+        {
+            return;
+        }
+
+        var observation = CreateObservation(
+            managed,
+            runtimeKind,
+            WorkerObservedStates.Failed,
+            managed.LastStartUtc,
+            DateTimeOffset.UtcNow,
+            managed.LastExitUtc,
+            $"WorkerManager failed to {phase}: {exception.Message}");
+
+        await TryPublishObservationAsync(observation, touchAppInstanceHeartbeat: false, cancellationToken);
     }
 
     private async Task TouchHostHeartbeatIfEnabledAsync(string hostIdentity, CancellationToken cancellationToken)

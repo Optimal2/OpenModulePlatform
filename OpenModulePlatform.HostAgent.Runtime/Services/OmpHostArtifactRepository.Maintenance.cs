@@ -44,14 +44,14 @@ WHEN MATCHED THEN
         SafetyNotes = @safetyNotes,
         ActionJson = @actionJson,
         Status = CASE
-            WHEN target.Status = @cleanupQueuedStatus THEN target.Status
+            WHEN target.Status IN (@cleanupQueuedStatus, @cleanedStatus, @skippedStatus) THEN target.Status
             ELSE @openStatus
         END,
         Severity = @severity,
         Confidence = @confidence,
         DetectedByHostAgentJobId = @detectedByHostAgentJobId,
         ResultMessage = CASE
-            WHEN target.Status = @cleanupQueuedStatus THEN target.ResultMessage
+            WHEN target.Status IN (@cleanupQueuedStatus, @cleanedStatus, @skippedStatus) THEN target.ResultMessage
             ELSE NULL
         END,
         LastSeenUtc = @nowUtc,
@@ -125,6 +125,8 @@ WHEN NOT MATCHED THEN
                 Add(cmd, "@detectedByHostAgentJobId", SqlDbType.BigInt, detectedByHostAgentJobId);
                 Add(cmd, "@openStatus", SqlDbType.TinyInt, MaintenanceFindingStatuses.Open);
                 Add(cmd, "@cleanupQueuedStatus", SqlDbType.TinyInt, MaintenanceFindingStatuses.CleanupQueued);
+                Add(cmd, "@cleanedStatus", SqlDbType.TinyInt, MaintenanceFindingStatuses.Cleaned);
+                Add(cmd, "@skippedStatus", SqlDbType.TinyInt, MaintenanceFindingStatuses.Skipped);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
