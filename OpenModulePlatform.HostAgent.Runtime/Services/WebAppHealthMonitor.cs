@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -46,6 +47,18 @@ public sealed class WebAppHealthMonitor
             || ShouldAutoRecycle(settings, result);
         if (shouldRecycle && !result.IsHealthy)
         {
+            var lockStatus = GetActivePortalDeploymentLock(settings);
+            if (lockStatus is not null)
+            {
+                _logger.LogInformation(
+                    "Skipped Portal app-pool recycle because a deployment lock is active. HealthKey={HealthKey}, AppPoolName={AppPoolName}, LockPath={LockPath}, LockId={LockId}",
+                    result.HealthKey,
+                    result.AppPoolName,
+                    lockStatus.Path,
+                    lockStatus.Document?.LockId);
+                return result;
+            }
+
             var message = RecycleAppPool(result.AppPoolName);
             await _repository.RecordWebAppHealthActionAsync(
                 hostId,
@@ -76,6 +89,17 @@ public sealed class WebAppHealthMonitor
         var resolvedAppPoolName = string.IsNullOrWhiteSpace(appPoolName)
             ? ResolvePortalAppPoolName(settings)
             : appPoolName.Trim();
+        var lockStatus = GetActivePortalDeploymentLock(settings);
+        if (lockStatus is not null)
+        {
+            return new RecycleWebAppAppPoolJobResult
+            {
+                HealthKey = resolvedHealthKey,
+                AppPoolName = resolvedAppPoolName,
+                Message = BuildPortalRecycleLockedMessage(lockStatus)
+            };
+        }
+
         var message = RecycleAppPool(resolvedAppPoolName);
 
         await _repository.RecordWebAppHealthActionAsync(
@@ -285,6 +309,28 @@ public sealed class WebAppHealthMonitor
 
     private static string ResolvePortalAppPoolName(HostAgentSettings settings)
         => BuildIisAppPoolName(settings, "portal");
+
+    private static DeploymentLockStatus? GetActivePortalDeploymentLock(HostAgentSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.PortalPhysicalPath))
+        {
+            return null;
+        }
+
+        var lockStatus = DeploymentLockFile.ReadStatus(settings.PortalPhysicalPath.Trim(), DateTimeOffset.UtcNow);
+        return lockStatus.IsLocked ? lockStatus : null;
+    }
+
+    private static string BuildPortalRecycleLockedMessage(DeploymentLockStatus lockStatus)
+    {
+        var message = "Skipped Portal app-pool recycle because a deployment lock is active.";
+        if (lockStatus.Document is null)
+        {
+            return message;
+        }
+
+        return $"{message} LockId={lockStatus.Document.LockId}; ExpiresUtc={lockStatus.Document.ExpiresUtc.UtcDateTime:u}.";
+    }
 
     private static string BuildIisAppPoolName(HostAgentSettings settings, string value)
     {
