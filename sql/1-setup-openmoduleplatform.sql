@@ -982,6 +982,20 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostAgentJobs')
+      AND name = N'IX_omp_HostAgentJobs_LeaseToken'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostAgentJobs_LeaseToken
+        ON omp.HostAgentJobs(LeaseToken)
+        WHERE LeaseToken IS NOT NULL;
+END
+GO
+
 IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.MaintenanceFindings

@@ -152,6 +152,8 @@ END;
 DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
 DECLARE @openStatus tinyint = 0;
 DECLARE @cleanupQueuedStatus tinyint = 2;
+DECLARE @cleanedStatus tinyint = 3;
+DECLARE @skippedStatus tinyint = 5;
 DECLARE @Upserted TABLE(FindingKey nvarchar(450) NOT NULL);
 
 WITH StaleRuntime AS
@@ -232,11 +234,17 @@ WHEN MATCHED THEN
         RecommendedAction = N'Delete the stale HostAgent runtime-state row.',
         SafetyNotes = N'The row is inactive, has no active lease, and does not match the currently desired HostAgent service name for the host.',
         ActionJson = source.ActionJson,
-        Status = CASE WHEN target.Status = @cleanupQueuedStatus THEN target.Status ELSE @openStatus END,
+        Status = CASE
+                     WHEN target.Status IN (@cleanupQueuedStatus, @cleanedStatus, @skippedStatus) THEN target.Status
+                     ELSE @openStatus
+                 END,
         Severity = 1,
         Confidence = 90,
         DetectedByHostAgentJobId = @detectedByHostAgentJobId,
-        ResultMessage = CASE WHEN target.Status = @cleanupQueuedStatus THEN target.ResultMessage ELSE NULL END,
+        ResultMessage = CASE
+                            WHEN target.Status IN (@cleanupQueuedStatus, @cleanedStatus, @skippedStatus) THEN target.ResultMessage
+                            ELSE NULL
+                        END,
         LastSeenUtc = @nowUtc,
         UpdatedUtc = @nowUtc
 WHEN NOT MATCHED THEN
