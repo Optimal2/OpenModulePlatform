@@ -1638,6 +1638,7 @@ $bootstrapConfig = [ordered]@{
                 }
                 EnableRpc = $true
                 RpcPipeName = ''
+                RpcAllowedClientServiceNames = @()
                 RpcRequestTimeoutSeconds = 60
             }
         }

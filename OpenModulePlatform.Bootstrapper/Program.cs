@@ -4739,7 +4739,8 @@ VALUES
                             ProtectionScope = "LocalMachine",
                             EntropyPurpose = "OpenModulePlatform.HostAgent.CredentialStore.v1"
                         },
-                        EnableRpc = true
+                        EnableRpc = true,
+                        RpcAllowedClientServiceNames = Array.Empty<string>()
                     }
                 },
                 JsonOptions))!;
