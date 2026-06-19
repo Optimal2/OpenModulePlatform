@@ -12,5 +12,6 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="NLog.Extensions.Hosting" />
+    <PackageReference Include="System.Management" />
   </ItemGroup>
 </Project>

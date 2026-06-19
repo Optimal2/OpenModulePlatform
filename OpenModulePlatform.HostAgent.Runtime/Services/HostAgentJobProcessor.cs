@@ -139,6 +139,23 @@ public sealed class HostAgentJobProcessor
                 "HostAgent job processing stopped because the job lease is no longer owned by this process. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
                 job.HostAgentJobId,
                 job.JobType);
+
+            await TryMarkJobFailedAfterCancellationAsync(
+                job,
+                "HostAgent job lease was lost during processing.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "HostAgent job processing stopped because HostAgent is shutting down. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
+                job.HostAgentJobId,
+                job.JobType);
+
+            await TryMarkJobFailedAfterCancellationAsync(
+                job,
+                "HostAgent stopped before the job completed.");
+
+            throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -1669,6 +1686,33 @@ public sealed class HostAgentJobProcessor
             null,
             error,
             cancellationToken);
+    }
+
+    private async Task TryMarkJobFailedAfterCancellationAsync(
+        HostAgentJobWorkItem job,
+        string error)
+    {
+        using var completionCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        try
+        {
+            await CompleteFailedAsync(job, error, completionCts.Token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "HostAgent could not mark a canceled job as failed. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
+                job.HostAgentJobId,
+                job.JobType);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning(
+                "HostAgent timed out while marking a canceled job as failed. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
+                job.HostAgentJobId,
+                job.JobType);
+        }
     }
 
     private sealed record HostAgentServiceCandidate(

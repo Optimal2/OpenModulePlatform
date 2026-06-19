@@ -1,5 +1,8 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/WorkerManagerHostedService.cs
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Management;
+using System.Runtime.Versioning;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -49,6 +52,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         try
         {
+            await CleanupOrphanedWorkerProcessesOnStartupAsync(stoppingToken);
             await RunReconcileCycleAsync(hostIdentity, stoppingToken);
 
             using var timer = new PeriodicTimer(refreshInterval);
@@ -326,7 +330,23 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         foreach (var managed in _managedWorkers.Values.ToList())
         {
-            await StopWorkerAsync(managed, runtimeKind, reason, cancellationToken);
+            try
+            {
+                await StopWorkerAsync(managed, runtimeKind, reason, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "WorkerManager could not stop a managed worker during shutdown cleanup. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, Reason={Reason}",
+                    managed.Definition.AppInstanceId,
+                    managed.Definition.WorkerInstanceId,
+                    reason);
+            }
         }
 
         _managedWorkers.Clear();
@@ -365,7 +385,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 settings.StopTimeoutSeconds,
                 managed.ProcessId);
 
-            managed.Kill();
+            var killed = await managed.KillAsync(stopTimeout, cancellationToken);
+            if (!killed)
+            {
+                throw new TimeoutException(
+                    $"Worker process '{managed.Definition.WorkerInstanceId}' did not exit within {settings.StopTimeoutSeconds} seconds after kill.");
+            }
         }
 
         await PublishExitObservationIfEnabledAsync(managed, runtimeKind, reason, cancellationToken);
@@ -664,4 +689,221 @@ public sealed class WorkerManagerHostedService : BackgroundService
             EnableRaisingEvents = false
         };
     }
+
+    private async Task CleanupOrphanedWorkerProcessesOnStartupAsync(CancellationToken cancellationToken)
+    {
+        var settings = _settings.CurrentValue;
+        settings.Validate();
+
+        string workerProcessPath;
+        try
+        {
+            workerProcessPath = Path.GetFullPath(await ResolveWorkerProcessPathAsync(settings, cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(
+                ex,
+                "WorkerManager skipped startup orphan scan because the worker host executable path could not be resolved.");
+            return;
+        }
+
+        var managerProcessPath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(managerProcessPath))
+        {
+            _logger.LogWarning("WorkerManager skipped startup orphan scan because the manager executable path could not be resolved.");
+            return;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        IReadOnlyList<OrphanedWorkerProcess> orphanedProcesses;
+        try
+        {
+            orphanedProcesses = FindOrphanedWorkerProcesses(
+                workerProcessPath,
+                Path.GetFullPath(managerProcessPath));
+        }
+        catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or Win32Exception or NotSupportedException)
+        {
+            _logger.LogWarning(
+                ex,
+                "WorkerManager skipped startup orphan scan because running worker process metadata could not be enumerated.");
+            return;
+        }
+
+        if (orphanedProcesses.Count == 0)
+        {
+            return;
+        }
+
+        var stopTimeout = TimeSpan.FromSeconds(settings.StopTimeoutSeconds);
+        var cleanedCount = 0;
+
+        foreach (var orphan in orphanedProcesses)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                using var process = Process.GetProcessById(orphan.ProcessId);
+                if (process.HasExited)
+                {
+                    cleanedCount++;
+                    continue;
+                }
+
+                _logger.LogWarning(
+                    "WorkerManager is stopping an orphaned worker host process discovered during startup. ProcessId={ProcessId}, ParentProcessId={ParentProcessId}, WorkerProcessPath={WorkerProcessPath}",
+                    orphan.ProcessId,
+                    orphan.ParentProcessId,
+                    workerProcessPath);
+
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(CancellationToken.None).WaitAsync(stopTimeout, cancellationToken);
+                cleanedCount++;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (ArgumentException)
+            {
+                cleanedCount++;
+            }
+            catch (InvalidOperationException)
+            {
+                cleanedCount++;
+            }
+            catch (TimeoutException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "WorkerManager timed out while stopping an orphaned worker host process during startup. ProcessId={ProcessId}",
+                    orphan.ProcessId);
+            }
+            catch (Exception ex) when (ex is Win32Exception or NotSupportedException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "WorkerManager could not stop an orphaned worker host process during startup. ProcessId={ProcessId}",
+                    orphan.ProcessId);
+            }
+        }
+
+        if (cleanedCount > 0)
+        {
+            _logger.LogWarning(
+                "WorkerManager cleaned orphaned worker host processes during startup. Count={Count}, WorkerProcessPath={WorkerProcessPath}",
+                cleanedCount,
+                workerProcessPath);
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static IReadOnlyList<OrphanedWorkerProcess> FindOrphanedWorkerProcesses(
+        string workerProcessPath,
+        string managerProcessPath)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return [];
+        }
+
+        var normalizedWorkerProcessPath = Path.GetFullPath(workerProcessPath);
+        var result = new List<OrphanedWorkerProcess>();
+        using var searcher = new ManagementObjectSearcher(
+            "SELECT ProcessId, ParentProcessId, ExecutablePath FROM Win32_Process WHERE Name = 'OpenModulePlatform.WorkerProcessHost.exe'");
+        using var processes = searcher.Get();
+
+        foreach (ManagementObject process in processes)
+        {
+            using (process)
+            {
+                var processId = ReadManagementUInt32(process, "ProcessId");
+                if (processId <= 0 || processId == Environment.ProcessId)
+                {
+                    continue;
+                }
+
+                var executablePath = process["ExecutablePath"] as string;
+                if (string.IsNullOrWhiteSpace(executablePath))
+                {
+                    continue;
+                }
+
+                if (!string.Equals(
+                        Path.GetFullPath(executablePath),
+                        normalizedWorkerProcessPath,
+                        GetPathComparison()))
+                {
+                    continue;
+                }
+
+                var parentProcessId = ReadManagementUInt32(process, "ParentProcessId");
+                if (IsLiveWorkerManagerParent(parentProcessId, managerProcessPath))
+                {
+                    continue;
+                }
+
+                result.Add(new OrphanedWorkerProcess(processId, parentProcessId));
+            }
+        }
+
+        return result;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static bool IsLiveWorkerManagerParent(int parentProcessId, string managerProcessPath)
+    {
+        if (parentProcessId <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var parent = Process.GetProcessById(parentProcessId);
+            if (parent.HasExited)
+            {
+                return false;
+            }
+
+            var executablePath = parent.MainModule?.FileName;
+            return !string.IsNullOrWhiteSpace(executablePath)
+                && string.Equals(
+                    Path.GetFullPath(executablePath),
+                    managerProcessPath,
+                    GetPathComparison());
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static int ReadManagementUInt32(ManagementBaseObject process, string propertyName)
+    {
+        return process[propertyName] switch
+        {
+            uint value => checked((int)value),
+            int value => value,
+            _ => 0
+        };
+    }
+
+    private static StringComparison GetPathComparison()
+        => OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+    private sealed record OrphanedWorkerProcess(int ProcessId, int ParentProcessId);
 }

@@ -133,15 +133,42 @@ public sealed class ManagedWorkerProcess
         }
     }
 
-    public void Kill()
+    public async Task<bool> KillAsync(TimeSpan timeout, CancellationToken cancellationToken)
     {
-        if (Process is { HasExited: false })
+        var process = Process;
+        if (process is null)
         {
-            Process.Kill(entireProcessTree: true);
-            Process.WaitForExit();
+            ShutdownEvent?.Dispose();
+            ShutdownEvent = null;
+            return true;
         }
 
-        ObserveExitIfNeeded();
+        if (process.HasExited)
+        {
+            ObserveExitIfNeeded();
+            return true;
+        }
+
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException) when (process.HasExited)
+        {
+            ObserveExitIfNeeded();
+            return true;
+        }
+
+        try
+        {
+            await process.WaitForExitAsync(CancellationToken.None).WaitAsync(timeout, cancellationToken);
+            ObserveExitIfNeeded();
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
     }
 
     private void TrimRestartAttempts(DateTimeOffset nowUtc, TimeSpan restartWindow)
