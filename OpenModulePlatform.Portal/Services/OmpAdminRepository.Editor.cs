@@ -3013,7 +3013,7 @@ ORDER BY ar.ArtifactId;";
         await conn.OpenAsync(ct);
 
         var target = await ReadArtifactAutoApplyTargetAsync(conn, artifactId, ct);
-        if (target is null)
+        if (target is null || !IsArtifactPackageCompatibleWithAppType(target.PackageType, target.AppType))
         {
             return new ArtifactApplicationResult();
         }
@@ -3106,10 +3106,14 @@ WHERE WorkerInstanceId = @RowId;",
 SELECT ArtifactId,
        AppId,
        Version,
-       PackageType
-FROM omp.Artifacts
-WHERE ArtifactId = @ArtifactId
-  AND IsEnabled = 1;";
+       PackageType,
+       app.AppType
+FROM omp.Artifacts artifact
+INNER JOIN omp.Apps app
+    ON app.AppId = artifact.AppId
+WHERE artifact.ArtifactId = @ArtifactId
+  AND artifact.IsEnabled = 1
+  AND app.IsEnabled = 1;";
 
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@ArtifactId", artifactId);
@@ -3123,7 +3127,8 @@ WHERE ArtifactId = @ArtifactId
             rdr.GetInt32(0),
             rdr.GetInt32(1),
             rdr.GetString(2),
-            rdr.GetString(3));
+            rdr.GetString(3),
+            rdr.GetString(4));
     }
 
     private static async Task<int> ApplyArtifactToIntRowsAsync(
@@ -3199,6 +3204,19 @@ WHERE ArtifactId = @ArtifactId
 
         return updated;
     }
+
+    private static bool IsArtifactPackageCompatibleWithAppType(string packageType, string appType)
+        => (packageType.Equals("web-app", StringComparison.OrdinalIgnoreCase)
+                && (appType.Equals("Portal", StringComparison.OrdinalIgnoreCase)
+                    || appType.Equals("WebApp", StringComparison.OrdinalIgnoreCase)))
+            || (packageType.Equals("service-app", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("ServiceApp", StringComparison.OrdinalIgnoreCase))
+            || (packageType.Equals("worker", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("Worker", StringComparison.OrdinalIgnoreCase))
+            || (packageType.Equals("host-agent", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("HostAgent", StringComparison.OrdinalIgnoreCase))
+            || (packageType.Equals("worker-host", StringComparison.OrdinalIgnoreCase)
+                && appType.Equals("WorkerHost", StringComparison.OrdinalIgnoreCase));
 
     private static async Task<int> ApplyHostAgentArtifactToForwardRowsAsync(
         SqlConnection conn,
@@ -5465,7 +5483,8 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         int ArtifactId,
         int AppId,
         string Version,
-        string PackageType);
+        string PackageType,
+        string AppType);
 
     private static void Add(SqlCommand cmd, string name, object? value)
     {
