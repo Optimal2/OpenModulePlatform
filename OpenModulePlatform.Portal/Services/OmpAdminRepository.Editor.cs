@@ -3205,7 +3205,7 @@ WHERE artifact.ArtifactId = @ArtifactId
         return updated;
     }
 
-    private static bool IsArtifactPackageCompatibleWithAppType(string packageType, string appType)
+    internal static bool IsArtifactPackageCompatibleWithAppType(string packageType, string appType)
         => (packageType.Equals("web-app", StringComparison.OrdinalIgnoreCase)
                 && (appType.Equals("Portal", StringComparison.OrdinalIgnoreCase)
                     || appType.Equals("WebApp", StringComparison.OrdinalIgnoreCase)))
