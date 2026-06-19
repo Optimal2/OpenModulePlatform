@@ -1,5 +1,8 @@
 using System.Data.Common;
 using System.IO.Pipes;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
@@ -10,6 +13,7 @@ using OpenModulePlatform.HostAgent.Runtime.Services;
 
 namespace OpenModulePlatform.HostAgent.WindowsService.Services;
 
+[SupportedOSPlatform("windows")]
 public sealed class HostAgentRpcHostedService : BackgroundService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -62,6 +66,7 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         }
 
         var pipeName = settings.ResolveRpcPipeName();
+        var pipeSecurity = CreatePipeSecurity(settings);
         _logger.LogInformation("HostAgent RPC named pipe started. PipeName={PipeName}", pipeName);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -69,12 +74,15 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             NamedPipeServerStream? pipe = null;
             try
             {
-                pipe = new NamedPipeServerStream(
+                pipe = NamedPipeServerStreamAcl.Create(
                     pipeName,
                     PipeDirection.InOut,
                     maxNumberOfServerInstances: 8,
                     PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
+                    PipeOptions.Asynchronous,
+                    inBufferSize: 0,
+                    outBufferSize: 0,
+                    pipeSecurity);
                 await pipe.WaitForConnectionAsync(stoppingToken);
                 _ = Task.Run(() => HandleClientAsync(pipe, stoppingToken), CancellationToken.None);
                 pipe = null;
@@ -176,6 +184,58 @@ public sealed class HostAgentRpcHostedService : BackgroundService
     private void LogRequestFailure(Exception exception)
     {
         _logger.LogError(exception, "HostAgent RPC request failed.");
+    }
+
+    private PipeSecurity CreatePipeSecurity(HostAgentSettings settings)
+    {
+        var pipeSecurity = new PipeSecurity();
+        pipeSecurity.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+
+        foreach (var sid in GetDefaultRpcClientSids())
+        {
+            pipeSecurity.AddAccessRule(new PipeAccessRule(sid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        }
+
+        foreach (var accountName in settings.RpcAllowedClientAccounts)
+        {
+            if (string.IsNullOrWhiteSpace(accountName))
+            {
+                continue;
+            }
+
+            try
+            {
+                var sid = (SecurityIdentifier)new NTAccount(accountName.Trim()).Translate(typeof(SecurityIdentifier));
+                pipeSecurity.AddAccessRule(new PipeAccessRule(sid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+            }
+            catch (IdentityNotMappedException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Skipped unresolved HostAgent RPC client account. AccountName={AccountName}",
+                    accountName);
+            }
+        }
+
+        var currentUser = WindowsIdentity.GetCurrent().User;
+        if (currentUser is not null)
+        {
+            pipeSecurity.AddAccessRule(
+                new PipeAccessRule(
+                    currentUser,
+                    PipeAccessRights.FullControl,
+                    AccessControlType.Allow));
+        }
+
+        return pipeSecurity;
+    }
+
+    private static IEnumerable<SecurityIdentifier> GetDefaultRpcClientSids()
+    {
+        yield return new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        yield return new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+        yield return new SecurityIdentifier(WellKnownSidType.LocalServiceSid, null);
+        yield return new SecurityIdentifier(WellKnownSidType.NetworkServiceSid, null);
     }
 
     private async Task<HostAgentRpcResponse> ExecuteRequestAsync(
