@@ -152,6 +152,37 @@ public sealed class ServiceAppDeploymentService
                 return;
             }
 
+            var deploymentLock = await HostAgentDeploymentLockLease.TryAcquireAsync(
+                targetPath,
+                deployment.AppInstanceKey,
+                $"HostAgent {deployment.HostKey}",
+                "HostAgent service app deployment is running.",
+                _logger,
+                cancellationToken);
+            if (deploymentLock.Lease is null)
+            {
+                var activeLock = deploymentLock.ExistingLockStatus
+                    ?? DeploymentLockStatus.Locked(
+                        DeploymentLockFile.GetPath(targetPath),
+                        null,
+                        "Deployment lock became active before HostAgent could begin deployment.");
+                var message = activeLock.ToDeploymentSkippedMessage("Service app");
+                _logger.LogInformation(
+                    "Service app deployment skipped because a deployment lock became active before HostAgent acquired its deployment lease. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, LockPath={LockPath}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    deployment.Version,
+                    activeLock.Path);
+
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    AppDeploymentResult.Warning(targetPath, serviceName, message),
+                    cancellationToken);
+                return;
+            }
+
+            await using var deploymentLockLease = deploymentLock.Lease!;
+
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
                 AppDeploymentResult.Running(targetPath, serviceName),
