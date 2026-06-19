@@ -52,6 +52,7 @@ BEGIN
         CAST(NULL AS nvarchar(150)) AS WorkerInstanceKey,
         CAST(NULL AS nvarchar(200)) AS WorkerTypeKey,
         CAST(NULL AS int) AS ArtifactId,
+        CAST(NULL AS nvarchar(64)) AS PackageType,
         CAST(NULL AS nvarchar(500)) AS InstallPath,
         CAST(NULL AS bit) AS IsProvisionedFromHostArtifactCache,
         CAST(NULL AS nvarchar(400)) AS PluginRelativePath,
@@ -74,6 +75,7 @@ WorkerRows AS
         wi.WorkerInstanceKey,
         awd.WorkerTypeKey,
         COALESCE(wi.ArtifactId, ai.ArtifactId) AS EffectiveArtifactId,
+        ar.PackageType,
         CASE WHEN @useHostArtifactCache = 1 THEN COALESCE(has.LocalPath, ai.InstallPath) ELSE ai.InstallPath END AS InstallPath,
         CASE WHEN @useHostArtifactCache = 1 AND has.LocalPath IS NOT NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsProvisionedFromHostArtifactCache,
         awd.PluginRelativePath,
@@ -123,6 +125,7 @@ WorkerRows AS
         ai.AppInstanceKey AS WorkerInstanceKey,
         awd.WorkerTypeKey,
         ai.ArtifactId AS EffectiveArtifactId,
+        ar.PackageType,
         CASE WHEN @useHostArtifactCache = 1 THEN COALESCE(has.LocalPath, ai.InstallPath) ELSE ai.InstallPath END AS InstallPath,
         CASE WHEN @useHostArtifactCache = 1 AND has.LocalPath IS NOT NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsProvisionedFromHostArtifactCache,
         awd.PluginRelativePath,
@@ -162,6 +165,7 @@ SELECT
     WorkerInstanceKey,
     WorkerTypeKey,
     EffectiveArtifactId,
+    PackageType,
     InstallPath,
     IsProvisionedFromHostArtifactCache,
     PluginRelativePath,
@@ -197,10 +201,24 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
             var workerInstanceKey = rdr.GetString(2);
             var workerTypeKey = rdr.GetString(3);
             var artifactId = rdr.IsDBNull(4) ? (int?)null : rdr.GetInt32(4);
-            var installPath = rdr.IsDBNull(5) ? null : rdr.GetString(5);
-            var isProvisionedFromHostArtifactCache = rdr.GetBoolean(6);
-            var pluginRelativePath = rdr.GetString(7);
-            var configurationJson = rdr.IsDBNull(8) ? null : rdr.GetString(8);
+            var packageType = rdr.IsDBNull(5) ? null : rdr.GetString(5);
+            if (!IsArtifactPackageTypeCompatibleWithRuntimeKind(runtimeKind, packageType))
+            {
+                _logger.LogError(
+                    "Skipping desired worker with incompatible artifact package type. HostKey={HostKey}, RuntimeKind={RuntimeKind}, AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}, PackageType={PackageType}",
+                    hostKey,
+                    runtimeKind,
+                    appInstanceId,
+                    workerInstanceId,
+                    artifactId,
+                    packageType);
+                continue;
+            }
+
+            var installPath = rdr.IsDBNull(6) ? null : rdr.GetString(6);
+            var isProvisionedFromHostArtifactCache = rdr.GetBoolean(7);
+            var pluginRelativePath = rdr.GetString(8);
+            var configurationJson = rdr.IsDBNull(9) ? null : rdr.GetString(9);
             var pluginAssemblyPath = string.IsNullOrWhiteSpace(installPath)
                 ? string.Empty
                 : ResolvePluginAssemblyPath(installPath, pluginRelativePath, appInstanceId, workerInstanceId);
@@ -278,5 +296,15 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
     private static string BuildShutdownEventName(Guid workerInstanceId)
     {
         return $"OpenModulePlatform.WorkerShutdown.{workerInstanceId:N}";
+    }
+
+    private static bool IsArtifactPackageTypeCompatibleWithRuntimeKind(string runtimeKind, string? packageType)
+    {
+        if (string.Equals(runtimeKind, "windows-worker-plugin", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(packageType, "worker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return true;
     }
 }
