@@ -7,6 +7,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class HostAgentEngine
 {
+    private const int MinimumLeaseSeconds = 30;
     private readonly object _leaseStateLock = new();
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
@@ -57,6 +58,7 @@ public sealed class HostAgentEngine
 
         var hostKey = settings.ResolveHostKey();
         var runtimeMode = _process.RuntimeMode;
+        var leaseSeconds = Math.Max(MinimumLeaseSeconds, settings.RefreshSeconds * 3);
         var forceLeaseTakeover = runtimeMode == HostAgentRuntimeMode.Takeover
             || await _selfUpgradeService.ShouldForceLeaseTakeoverAsync(hostKey, cancellationToken);
         var lease = await _repository.TryAcquireHostAgentLeaseAsync(
@@ -64,7 +66,7 @@ public sealed class HostAgentEngine
             _process.ServiceName,
             runtimeMode,
             forceTakeover: forceLeaseTakeover,
-            leaseSeconds: Math.Max(30, settings.RefreshSeconds * 3),
+            leaseSeconds,
             cancellationToken);
 
         if (lease.HostId is null)
@@ -90,90 +92,110 @@ public sealed class HostAgentEngine
 
         SetActiveLease(lease);
 
-        await _repository.PublishHostAgentRuntimeStateAsync(
-            lease.HostId.Value,
-            _process,
-            runtimeMode,
-            artifactId: null,
-            AppContext.BaseDirectory,
-            isActive: true,
-            statusMessage: null,
-            cancellationToken,
-            preserveExistingStatusMessage: true);
+        var leaseLost = new System.Runtime.CompilerServices.StrongBox<bool>(false);
+        using var leaseRenewalCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var leaseRenewal = RenewLeaseUntilCycleCompletesAsync(
+            lease,
+            leaseSeconds,
+            leaseLost,
+            leaseRenewalCancellation,
+            cancellationToken);
 
-        if (runtimeMode == HostAgentRuntimeMode.Takeover)
+        try
         {
-            await _selfUpgradeService.CompleteTakeoverAsync(hostKey, lease.HostId.Value, cancellationToken);
-        }
-        else
-        {
-            await _selfUpgradeService.CleanupSupersededHostAgentServicesAsync(hostKey, lease.HostId.Value, cancellationToken);
-        }
+            await _repository.PublishHostAgentRuntimeStateAsync(
+                lease.HostId.Value,
+                _process,
+                runtimeMode,
+                artifactId: null,
+                AppContext.BaseDirectory,
+                isActive: true,
+                statusMessage: null,
+                leaseRenewalCancellation.Token,
+                preserveExistingStatusMessage: true);
 
-        if (_process.IsQuiesceRequested)
-        {
-            _process.MarkQuiesced();
-            await _repository.MarkHostAgentQuiescedAsync(lease.HostId.Value, _process.ServiceName, cancellationToken);
-            _logger.LogInformation("HostAgent is quiesced. HostKey={HostKey}, ServiceName={ServiceName}", hostKey, _process.ServiceName);
-            return;
-        }
-
-        await _repository.TouchHostHeartbeatAsync(hostKey, cancellationToken);
-
-        await _artifactZipImportService.ImportPendingAsync(cancellationToken);
-
-        if (settings.ProcessHostDeployments)
-        {
-            await ProcessNextHostDeploymentAsync(hostKey, cancellationToken);
-        }
-
-        if (settings.MaterializeTemplates)
-        {
-            var materialization = await _repository.MaterializeTemplatesForHostAsync(hostKey, null, cancellationToken);
-            if (materialization.ModuleInstanceChanges > 0 || materialization.AppInstanceChanges > 0)
+            if (runtimeMode == HostAgentRuntimeMode.Takeover)
             {
-                _logger.LogInformation(
-                    "Materialized template topology. HostKey={HostKey}, ModuleInstanceChanges={ModuleInstanceChanges}, AppInstanceChanges={AppInstanceChanges}",
+                await _selfUpgradeService.CompleteTakeoverAsync(hostKey, lease.HostId.Value, leaseRenewalCancellation.Token);
+            }
+            else
+            {
+                await _selfUpgradeService.CleanupSupersededHostAgentServicesAsync(hostKey, lease.HostId.Value, leaseRenewalCancellation.Token);
+            }
+
+            if (_process.IsQuiesceRequested)
+            {
+                _process.MarkQuiesced();
+                await _repository.MarkHostAgentQuiescedAsync(lease.HostId.Value, _process.ServiceName, leaseRenewalCancellation.Token);
+                _logger.LogInformation("HostAgent is quiesced. HostKey={HostKey}, ServiceName={ServiceName}", hostKey, _process.ServiceName);
+                return;
+            }
+
+            await _repository.TouchHostHeartbeatAsync(hostKey, leaseRenewalCancellation.Token);
+
+            await _artifactZipImportService.ImportPendingAsync(leaseRenewalCancellation.Token);
+
+            if (settings.ProcessHostDeployments)
+            {
+                await ProcessNextHostDeploymentAsync(hostKey, leaseRenewalCancellation.Token);
+            }
+
+            if (settings.MaterializeTemplates)
+            {
+                var materialization = await _repository.MaterializeTemplatesForHostAsync(hostKey, null, leaseRenewalCancellation.Token);
+                if (materialization.ModuleInstanceChanges > 0 || materialization.AppInstanceChanges > 0)
+                {
+                    _logger.LogInformation(
+                        "Materialized template topology. HostKey={HostKey}, ModuleInstanceChanges={ModuleInstanceChanges}, AppInstanceChanges={AppInstanceChanges}",
+                        hostKey,
+                        materialization.ModuleInstanceChanges,
+                        materialization.AppInstanceChanges);
+                }
+            }
+
+            var artifacts = await _repository.GetDesiredArtifactsAsync(
+                hostKey,
+                settings.ProvisionAppInstanceArtifacts,
+                settings.ProvisionExplicitRequirements,
+                settings.MaxArtifactsPerCycle,
+                leaseRenewalCancellation.Token);
+
+            _logger.LogInformation(
+                "Resolved desired artifacts. HostKey={HostKey}, Count={Count}",
+                hostKey,
+                artifacts.Count);
+
+            foreach (var artifact in artifacts)
+            {
+                leaseRenewalCancellation.Token.ThrowIfCancellationRequested();
+                await EnsureAndPublishAsync(artifact, leaseRenewalCancellation.Token);
+            }
+
+            await _webAppDeploymentService.DeployDesiredWebAppsAsync(hostKey, leaseRenewalCancellation.Token);
+            await _webAppHealthMonitor.ProbePortalAsync(
+                lease.HostId.Value,
+                recycleIfUnhealthy: false,
+                leaseRenewalCancellation.Token);
+            await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(hostKey, leaseRenewalCancellation.Token);
+            await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, leaseRenewalCancellation.Token);
+            await _fileMirrorService.MirrorConfiguredFilesAsync(leaseRenewalCancellation.Token);
+
+            if (settings.ProcessHostAgentJobs)
+            {
+                await _jobProcessor.ProcessPendingJobsAsync(
                     hostKey,
-                    materialization.ModuleInstanceChanges,
-                    materialization.AppInstanceChanges);
+                    _process.ServiceName,
+                    settings.MaxHostAgentJobsPerCycle,
+                    leaseRenewalCancellation.Token);
             }
         }
-
-        var artifacts = await _repository.GetDesiredArtifactsAsync(
-            hostKey,
-            settings.ProvisionAppInstanceArtifacts,
-            settings.ProvisionExplicitRequirements,
-            settings.MaxArtifactsPerCycle,
-            cancellationToken);
-
-        _logger.LogInformation(
-            "Resolved desired artifacts. HostKey={HostKey}, Count={Count}",
-            hostKey,
-            artifacts.Count);
-
-        foreach (var artifact in artifacts)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && leaseLost.Value)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await EnsureAndPublishAsync(artifact, cancellationToken);
+            await HandleLostLeaseAsync(lease, cancellationToken);
         }
-
-        await _webAppDeploymentService.DeployDesiredWebAppsAsync(hostKey, cancellationToken);
-        await _webAppHealthMonitor.ProbePortalAsync(
-            lease.HostId.Value,
-            recycleIfUnhealthy: false,
-            cancellationToken);
-        await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(hostKey, cancellationToken);
-        await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, cancellationToken);
-        await _fileMirrorService.MirrorConfiguredFilesAsync(cancellationToken);
-
-        if (settings.ProcessHostAgentJobs)
+        finally
         {
-            await _jobProcessor.ProcessPendingJobsAsync(
-                hostKey,
-                _process.ServiceName,
-                settings.MaxHostAgentJobsPerCycle,
-                cancellationToken);
+            await StopLeaseRenewalAsync(leaseRenewalCancellation, leaseRenewal);
         }
     }
 
@@ -299,6 +321,104 @@ public sealed class HostAgentEngine
                 succeeded: false,
                 outcomeMessage: ex.Message,
                 cancellationToken);
+        }
+    }
+
+    private async Task<bool> RenewLeaseUntilCycleCompletesAsync(
+        HostAgentLeaseResult lease,
+        int leaseSeconds,
+        System.Runtime.CompilerServices.StrongBox<bool> leaseLost,
+        CancellationTokenSource cycleCancellation,
+        CancellationToken hostCancellationToken)
+    {
+        if (!lease.HostId.HasValue || !lease.LeaseToken.HasValue)
+        {
+            return false;
+        }
+
+        var renewalInterval = TimeSpan.FromSeconds(Math.Clamp(leaseSeconds / 3, 10, 120));
+        while (!cycleCancellation.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(renewalInterval, cycleCancellation.Token);
+                var renewed = await _repository.RenewHostAgentLeaseAsync(
+                    lease.HostId.Value,
+                    lease.LeaseToken.Value,
+                    leaseSeconds,
+                    cycleCancellation.Token);
+
+                if (!renewed)
+                {
+                    leaseLost.Value = true;
+                    _logger.LogWarning(
+                        "HostAgent host lease renewal did not update the active lease row. Cancelling the current cycle. HostId={HostId}, ServiceName={ServiceName}",
+                        lease.HostId.Value,
+                        _process.ServiceName);
+                    await cycleCancellation.CancelAsync();
+                    return true;
+                }
+            }
+            catch (OperationCanceledException) when (hostCancellationToken.IsCancellationRequested || cycleCancellation.IsCancellationRequested)
+            {
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "HostAgent host lease renewal failed. The next renewal attempt will retry while the current cycle continues. HostId={HostId}, ServiceName={ServiceName}",
+                    lease.HostId.Value,
+                    _process.ServiceName);
+            }
+        }
+
+        return false;
+    }
+
+    private async Task HandleLostLeaseAsync(HostAgentLeaseResult lease, CancellationToken cancellationToken)
+    {
+        ClearActiveLease();
+
+        if (!lease.HostId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            await _repository.PublishHostAgentRuntimeStateAsync(
+                lease.HostId.Value,
+                _process,
+                _process.RuntimeMode,
+                artifactId: null,
+                AppContext.BaseDirectory,
+                isActive: false,
+                statusMessage: "HostAgent lost its host lease during the current cycle.",
+                cancellationToken,
+                preserveExistingStatusMessage: false);
+        }
+        catch (Exception ex) when (IsExpectedShutdownFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to publish inactive HostAgent runtime state after losing the host lease. HostId={HostId}, ServiceName={ServiceName}",
+                lease.HostId.Value,
+                _process.ServiceName);
+        }
+    }
+
+    private static async Task StopLeaseRenewalAsync(
+        CancellationTokenSource cycleCancellation,
+        Task<bool> leaseRenewal)
+    {
+        await cycleCancellation.CancelAsync();
+        try
+        {
+            await leaseRenewal;
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 

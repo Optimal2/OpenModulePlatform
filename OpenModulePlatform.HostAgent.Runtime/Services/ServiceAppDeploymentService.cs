@@ -44,6 +44,8 @@ public sealed class ServiceAppDeploymentService
             throw new InvalidOperationException("Service app deployment requires Windows and sc.exe.");
         }
 
+        await RecoverInterruptedDeploymentsAsync(hostKey, settings, cancellationToken);
+
         var deployments = await _repository.GetDesiredServiceAppDeploymentsAsync(
             hostKey,
             settings.MaxArtifactsPerCycle,
@@ -69,6 +71,7 @@ public sealed class ServiceAppDeploymentService
         string? targetPath = null;
         string? serviceName = null;
         var serviceStopped = false;
+        var stopMarkerWritten = false;
 
         try
         {
@@ -156,7 +159,24 @@ public sealed class ServiceAppDeploymentService
 
             if (settings.StopServiceForServiceAppDeployment)
             {
+                if (settings.StartServiceAfterServiceAppDeployment && IsServiceRunning(serviceName))
+                {
+                    DeploymentRuntimeStopMarker.Write(
+                        targetPath,
+                        "service-app",
+                        serviceName,
+                        deployment.AppInstanceId,
+                        deployment.AppInstanceKey,
+                        deployment.HostKey);
+                    stopMarkerWritten = true;
+                }
+
                 serviceStopped = StopServiceIfRunning(serviceName, settings.ServiceAppStopTimeoutSeconds);
+                if (!serviceStopped && stopMarkerWritten)
+                {
+                    DeploymentRuntimeStopMarker.Delete(targetPath);
+                    stopMarkerWritten = false;
+                }
             }
 
             ArtifactDirectoryMirror.MirrorDirectory(
@@ -180,6 +200,11 @@ public sealed class ServiceAppDeploymentService
             {
                 StartServiceIfStopped(serviceName, settings.ServiceAppStartTimeoutSeconds);
                 serviceStopped = false;
+                if (stopMarkerWritten)
+                {
+                    DeploymentRuntimeStopMarker.Delete(targetPath);
+                    stopMarkerWritten = false;
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(postDeployIdentityCheck.WarningMessage))
@@ -219,7 +244,11 @@ public sealed class ServiceAppDeploymentService
 
             if (serviceStopped && settings.StartServiceAfterServiceAppDeployment && !string.IsNullOrWhiteSpace(serviceName))
             {
-                TryStartService(serviceName, settings.ServiceAppStartTimeoutSeconds, _logger);
+                if (TryStartService(serviceName, settings.ServiceAppStartTimeoutSeconds, _logger) && stopMarkerWritten && !string.IsNullOrWhiteSpace(targetPath))
+                {
+                    DeploymentRuntimeStopMarker.Delete(targetPath);
+                    stopMarkerWritten = false;
+                }
             }
 
             await _repository.PublishAppDeploymentResultAsync(
@@ -681,13 +710,14 @@ public sealed class ServiceAppDeploymentService
     private static bool IsServiceRunning(string serviceName)
         => string.Equals(GetServiceState(serviceName), "RUNNING", StringComparison.OrdinalIgnoreCase);
 
-    private static void TryStartService(string serviceName, int timeoutSeconds, ILogger logger)
+    private static bool TryStartService(string serviceName, int timeoutSeconds, ILogger logger)
     {
         // The original deployment failure is the actionable error. Restart
         // recovery is best-effort and should not mask that primary failure.
         try
         {
             StartServiceIfStopped(serviceName, timeoutSeconds);
+            return true;
         }
         catch (Exception ex) when (IsExpectedRecoveryStartFailure(ex))
         {
@@ -695,6 +725,59 @@ public sealed class ServiceAppDeploymentService
                 ex,
                 "Failed to restart Windows service after deployment failure. ServiceName={ServiceName}",
                 serviceName);
+            return false;
+        }
+    }
+
+    private async Task RecoverInterruptedDeploymentsAsync(
+        string hostKey,
+        HostAgentSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var candidates = await _repository.GetServiceAppDeploymentRecoveryCandidatesAsync(hostKey, cancellationToken);
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!DeploymentRuntimeStopMarker.Exists(candidate.TargetPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var marker = DeploymentRuntimeStopMarker.TryRead(candidate.TargetPath);
+                var runtimeName = string.IsNullOrWhiteSpace(marker?.RuntimeName)
+                    ? candidate.RuntimeName
+                    : marker.RuntimeName.Trim();
+                if (string.IsNullOrWhiteSpace(runtimeName))
+                {
+                    _logger.LogWarning(
+                        "Service app deployment recovery skipped because the interrupted deployment marker has no runtime name. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, TargetPath={TargetPath}",
+                        candidate.AppInstanceId,
+                        candidate.AppInstanceKey,
+                        candidate.TargetPath);
+                    continue;
+                }
+
+                StartServiceIfStopped(runtimeName, settings.ServiceAppStartTimeoutSeconds);
+                DeploymentRuntimeStopMarker.Delete(candidate.TargetPath);
+                _logger.LogInformation(
+                    "Recovered Windows service after an interrupted service app deployment. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, ServiceName={ServiceName}, TargetPath={TargetPath}",
+                    candidate.AppInstanceId,
+                    candidate.AppInstanceKey,
+                    runtimeName,
+                    candidate.TargetPath);
+            }
+            catch (Exception ex) when (IsExpectedRecoveryStartFailure(ex))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to recover Windows service after an interrupted service app deployment. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, RuntimeName={RuntimeName}, TargetPath={TargetPath}",
+                    candidate.AppInstanceId,
+                    candidate.AppInstanceKey,
+                    candidate.RuntimeName,
+                    candidate.TargetPath);
+            }
         }
     }
 

@@ -42,6 +42,8 @@ public sealed class WebAppDeploymentService
             throw new InvalidOperationException("Web app deployment requires Windows and IIS appcmd.exe.");
         }
 
+        await RecoverInterruptedDeploymentsAsync(hostKey, cancellationToken);
+
         var deployments = await _repository.GetDesiredWebAppDeploymentsAsync(
             hostKey,
             settings.MaxArtifactsPerCycle,
@@ -67,6 +69,7 @@ public sealed class WebAppDeploymentService
         string? targetPath = null;
         string? runtimeName = null;
         var appPoolStopped = false;
+        var stopMarkerWritten = false;
 
         try
         {
@@ -134,9 +137,27 @@ public sealed class WebAppDeploymentService
 
             if (UseAppCmdAppPoolControl(settings)
                 && settings.StopIisAppPoolForWebAppDeployment
+                && settings.StartIisAppPoolAfterWebAppDeployment
                 && !string.IsNullOrWhiteSpace(runtimeName))
             {
+                if (string.Equals(GetAppPoolState(runtimeName), "Started", StringComparison.OrdinalIgnoreCase))
+                {
+                    DeploymentRuntimeStopMarker.Write(
+                        targetPath,
+                        "web-app",
+                        runtimeName,
+                        deployment.AppInstanceId,
+                        deployment.AppInstanceKey,
+                        deployment.HostKey);
+                    stopMarkerWritten = true;
+                }
+
                 appPoolStopped = StopAppPoolIfRunning(runtimeName, settings.IisAppPoolStopTimeoutSeconds);
+                if (!appPoolStopped && stopMarkerWritten)
+                {
+                    DeploymentRuntimeStopMarker.Delete(targetPath);
+                    stopMarkerWritten = false;
+                }
             }
 
             await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken);
@@ -147,6 +168,11 @@ public sealed class WebAppDeploymentService
             {
                 StartAppPoolIfStopped(runtimeName);
                 appPoolStopped = false;
+                if (stopMarkerWritten)
+                {
+                    DeploymentRuntimeStopMarker.Delete(targetPath);
+                    stopMarkerWritten = false;
+                }
             }
 
             await _repository.PublishAppDeploymentResultAsync(
@@ -176,7 +202,11 @@ public sealed class WebAppDeploymentService
                 && settings.StartIisAppPoolAfterWebAppDeployment
                 && !string.IsNullOrWhiteSpace(runtimeName))
             {
-                TryStartAppPool(runtimeName, _logger);
+                if (TryStartAppPool(runtimeName, _logger) && stopMarkerWritten && !string.IsNullOrWhiteSpace(targetPath))
+                {
+                    DeploymentRuntimeStopMarker.Delete(targetPath);
+                    stopMarkerWritten = false;
+                }
             }
 
             await _repository.PublishAppDeploymentResultAsync(
@@ -989,13 +1019,14 @@ public sealed class WebAppDeploymentService
         RunAppCmd("start", "apppool", $"/apppool.name:{appPoolName}");
     }
 
-    private static void TryStartAppPool(string appPoolName, ILogger logger)
+    private static bool TryStartAppPool(string appPoolName, ILogger logger)
     {
         // The original deployment failure is the actionable error. Restart
         // recovery is best-effort and should not mask that primary failure.
         try
         {
             StartAppPoolIfStopped(appPoolName);
+            return true;
         }
         catch (Exception ex) when (IsExpectedRecoveryStartFailure(ex))
         {
@@ -1003,6 +1034,56 @@ public sealed class WebAppDeploymentService
                 ex,
                 "Failed to restart IIS app pool after deployment failure. AppPoolName={AppPoolName}",
                 appPoolName);
+            return false;
+        }
+    }
+
+    private async Task RecoverInterruptedDeploymentsAsync(string hostKey, CancellationToken cancellationToken)
+    {
+        var candidates = await _repository.GetWebAppDeploymentRecoveryCandidatesAsync(hostKey, cancellationToken);
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!DeploymentRuntimeStopMarker.Exists(candidate.TargetPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var marker = DeploymentRuntimeStopMarker.TryRead(candidate.TargetPath);
+                var runtimeName = string.IsNullOrWhiteSpace(marker?.RuntimeName)
+                    ? candidate.RuntimeName
+                    : marker.RuntimeName.Trim();
+                if (string.IsNullOrWhiteSpace(runtimeName))
+                {
+                    _logger.LogWarning(
+                        "Web app deployment recovery skipped because the interrupted deployment marker has no runtime name. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, TargetPath={TargetPath}",
+                        candidate.AppInstanceId,
+                        candidate.AppInstanceKey,
+                        candidate.TargetPath);
+                    continue;
+                }
+
+                StartAppPoolIfStopped(runtimeName);
+                DeploymentRuntimeStopMarker.Delete(candidate.TargetPath);
+                _logger.LogInformation(
+                    "Recovered IIS app pool after an interrupted web app deployment. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, AppPoolName={AppPoolName}, TargetPath={TargetPath}",
+                    candidate.AppInstanceId,
+                    candidate.AppInstanceKey,
+                    runtimeName,
+                    candidate.TargetPath);
+            }
+            catch (Exception ex) when (IsExpectedRecoveryStartFailure(ex))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to recover IIS app pool after an interrupted web app deployment. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, RuntimeName={RuntimeName}, TargetPath={TargetPath}",
+                    candidate.AppInstanceId,
+                    candidate.AppInstanceKey,
+                    candidate.RuntimeName,
+                    candidate.TargetPath);
+            }
         }
     }
 
