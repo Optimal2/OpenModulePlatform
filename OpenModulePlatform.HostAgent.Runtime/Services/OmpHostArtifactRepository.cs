@@ -143,6 +143,33 @@ WHERE HostId = @hostId
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<bool> RenewHostAgentLeaseAsync(
+        Guid hostId,
+        Guid leaseToken,
+        int leaseSeconds,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+
+UPDATE omp.HostAgentLeases
+SET LeaseUntilUtc = DATEADD(second, @leaseSeconds, @nowUtc),
+    UpdatedUtc = @nowUtc
+WHERE HostId = @hostId
+  AND LeaseToken = @leaseToken;
+
+SELECT @@ROWCOUNT;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@leaseToken", leaseToken);
+        cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(30, leaseSeconds));
+        var affected = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+        return affected > 0;
+    }
+
     public async Task PublishHostAgentRuntimeStateAsync(
         Guid hostId,
         HostAgentProcessContext process,
@@ -2934,6 +2961,11 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
         return result;
     }
 
+    public Task<IReadOnlyList<DeploymentRuntimeRecoveryCandidate>> GetWebAppDeploymentRecoveryCandidatesAsync(
+        string hostKey,
+        CancellationToken ct)
+        => GetDeploymentRuntimeRecoveryCandidatesAsync(hostKey, "web-app", ct);
+
     public async Task<IReadOnlyList<ServiceAppDeploymentDescriptor>> GetDesiredServiceAppDeploymentsAsync(
         string hostKey,
         int maxDeployments,
@@ -3068,6 +3100,11 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
 
         return result;
     }
+
+    public Task<IReadOnlyList<DeploymentRuntimeRecoveryCandidate>> GetServiceAppDeploymentRecoveryCandidatesAsync(
+        string hostKey,
+        CancellationToken ct)
+        => GetDeploymentRuntimeRecoveryCandidatesAsync(hostKey, "service-app", ct);
 
     public async Task PublishResultAsync(
         ArtifactDescriptor artifact,
@@ -3263,6 +3300,72 @@ WHEN NOT MATCHED THEN
         cmd.Parameters.AddWithValue("@applied", result.Applied);
         cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private async Task<IReadOnlyList<DeploymentRuntimeRecoveryCandidate>> GetDeploymentRuntimeRecoveryCandidatesAsync(
+        string hostKey,
+        string packageType,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS uniqueidentifier) AS AppInstanceId,
+        CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
+        CAST(NULL AS nvarchar(500)) AS TargetPath,
+        CAST(NULL AS nvarchar(200)) AS RuntimeName;
+    RETURN;
+END;
+
+SELECT hds.AppInstanceId,
+       ai.AppInstanceKey,
+       hds.TargetPath,
+       hds.RuntimeName
+FROM omp.HostAppDeploymentStates hds
+INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = hds.AppInstanceId
+WHERE hds.HostId = @hostId
+  AND hds.TargetPath IS NOT NULL
+  AND LTRIM(RTRIM(hds.TargetPath)) <> N''
+  AND hds.RuntimeName IS NOT NULL
+  AND LTRIM(RTRIM(hds.RuntimeName)) <> N''
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.Artifacts ar
+      WHERE ar.ArtifactId = COALESCE(ai.ArtifactId, hds.ArtifactId)
+        AND ar.PackageType = @packageType
+  )
+ORDER BY ai.AppInstanceKey;";
+
+        var result = new List<DeploymentRuntimeRecoveryCandidate>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@packageType", packageType);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            result.Add(new DeploymentRuntimeRecoveryCandidate
+            {
+                AppInstanceId = rdr.GetGuid(0),
+                AppInstanceKey = rdr.GetString(1),
+                TargetPath = rdr.GetString(2),
+                RuntimeName = rdr.GetString(3)
+            });
+        }
+
+        return result;
     }
 
     private static async Task<int> InsertModuleDefinitionDocumentAsync(
