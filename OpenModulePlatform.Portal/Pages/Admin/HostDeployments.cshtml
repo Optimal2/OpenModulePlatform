@@ -16,6 +16,30 @@
     </section>
 }
 
+@if (Model.PortalDeploymentLockStatus is { IsLocked: true } lockStatus)
+{
+    <section class="section-card section-card--wide">
+        <div class="notice">
+            <strong>@L["A deployment lock is active."]</strong>
+            @L[" Application-pool recycle is disabled until the active deployment finishes or the lock expires."]
+            @if (lockStatus.Document is not null)
+            {
+                <div class="muted">
+                    @L["Owner"]: @lockStatus.Document.Owner
+                    |
+                    @L["Reason"]: @lockStatus.Document.Reason
+                    |
+                    @L["Expires UTC"]: @lockStatus.Document.ExpiresUtc.UtcDateTime.ToString("u")
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(lockStatus.Diagnostic))
+            {
+                <div class="muted">@lockStatus.Diagnostic</div>
+            }
+        </div>
+    </section>
+}
+
 <section class="card section-card section-card--wide">
     <h3>@L["Web app health"]</h3>
     <p class="muted">@L["Shows per-host web app probes written by HostAgent. Portal health should return a non-success status when the app cannot serve real traffic."]</p>
@@ -119,11 +143,18 @@
                                 <input type="hidden" name="healthKey" value="@row.HealthKey" />
                                 <button type="submit" class="btn btn-secondary">@L["Probe now"]</button>
                             </form>
-                            <form method="post" asp-page-handler="RecycleWebAppAppPool" class="inline-form">
+                            <form method="post"
+                                  asp-page-handler="RecycleWebAppAppPool"
+                                  class="inline-form"
+                                  onsubmit="return confirm('@L["Recycle this application pool? HostAgent will validate the host state before recycling it."]');">
                                 <input type="hidden" name="hostId" value="@row.HostId" />
                                 <input type="hidden" name="healthKey" value="@row.HealthKey" />
                                 <input type="hidden" name="appPoolName" value="@row.AppPoolName" />
-                                <button type="submit" class="btn btn-secondary" disabled="@string.IsNullOrWhiteSpace(row.AppPoolName)">@L["Recycle app pool"]</button>
+                                <button type="submit"
+                                        class="btn btn-secondary"
+                                        disabled="@(!Model.CanRecyclePortalAppPool || string.IsNullOrWhiteSpace(row.AppPoolName))">
+                                    @L["Recycle app pool"]
+                                </button>
                             </form>
                             <form method="post" asp-page-handler="CollectWebAppLogs" class="inline-form">
                                 <input type="hidden" name="hostId" value="@row.HostId" />
@@ -407,7 +438,10 @@
                             }
                         </td>
                         <td>
-                            <form method="post" asp-page-handler="RequestHostAgentUpgrade" class="inline-form">
+                            <form method="post"
+                                  asp-page-handler="RequestHostAgentUpgrade"
+                                  class="inline-form"
+                                  onsubmit="return confirm('@L["Request HostAgent upgrade for this host? The active HostAgent installs the selected artifact during its next cycle."]');">
                                 <input type="hidden" name="hostId" value="@row.HostId" />
                                 <select name="artifactId" aria-label="@L["HostAgent artifact"]">
                                     @foreach (var option in Model.HostAgentArtifactOptions)
