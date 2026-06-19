@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/HostDeployments.cshtml.cs
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Services;
@@ -6,12 +7,16 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
 public sealed class HostDeploymentsModel : OmpPortalPageModel
 {
+    private const string PortalDeploymentApplicationKey = "Portal";
+
+    private readonly IHostEnvironment _environment;
     private readonly OmpAdminRepository _repo;
     private readonly IStringLocalizer<PortalResource> _portalLocalizer;
 
@@ -19,9 +24,11 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         IOptions<WebAppOptions> options,
         RbacService rbac,
         OmpAdminRepository repo,
-        IStringLocalizer<PortalResource> portalLocalizer)
+        IStringLocalizer<PortalResource> portalLocalizer,
+        IHostEnvironment environment)
         : base(options, rbac)
     {
+        _environment = environment;
         _repo = repo;
         _portalLocalizer = portalLocalizer;
     }
@@ -39,7 +46,12 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     public IReadOnlyDictionary<Guid, IReadOnlyList<HostDriftDetailRow>> HostDriftDetailsByHost { get; private set; }
         = new Dictionary<Guid, IReadOnlyList<HostDriftDetailRow>>();
 
+    public DeploymentLockStatus? PortalDeploymentLockStatus { get; private set; }
+
     public IReadOnlyList<WebAppHealthStateRow> WebAppHealthStates { get; private set; } = [];
+
+    public bool CanRecyclePortalAppPool
+        => PortalDeploymentLockStatus is null || !PortalDeploymentLockStatus.IsLocked;
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -120,6 +132,13 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             return RedirectToPage();
         }
 
+        var lockStatus = GetPortalDeploymentLockStatus();
+        if (lockStatus.IsLocked)
+        {
+            TempData["StatusMessage"] = DescribePortalDeploymentLock(lockStatus);
+            return RedirectToPage();
+        }
+
         var jobId = await _repo.QueueWebAppAppPoolRecycleAsync(
             hostId,
             healthKey,
@@ -154,6 +173,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     private async Task LoadAsync(CancellationToken ct)
     {
         SetTitles("Operations");
+        PortalDeploymentLockStatus = GetPortalDeploymentLockStatus();
         HostDriftSummaries = await _repo.GetHostDriftSummariesAsync(ct);
         HostDriftDetailsByHost = (await _repo.GetHostDriftDetailsAsync(ct))
             .GroupBy(row => row.HostId)
@@ -263,6 +283,40 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     private string P(string key)
         => _portalLocalizer[key].Value;
+
+    private DeploymentLockStatus GetPortalDeploymentLockStatus()
+        => DeploymentLockFile.ReadStatus(_environment.ContentRootPath, DateTimeOffset.UtcNow);
+
+    private string DescribePortalDeploymentLock(DeploymentLockStatus lockStatus)
+    {
+        var owner = lockStatus.Document?.Owner;
+        var reason = lockStatus.Document?.Reason;
+        var expiresUtc = lockStatus.Document?.ExpiresUtc.UtcDateTime.ToString("u");
+
+        if (!string.IsNullOrWhiteSpace(owner)
+            && !string.IsNullOrWhiteSpace(reason)
+            && !string.IsNullOrWhiteSpace(expiresUtc))
+        {
+            return _portalLocalizer[
+                "Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires UTC: {3}.",
+                PortalDeploymentApplicationKey,
+                owner,
+                reason,
+                expiresUtc].Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(lockStatus.Diagnostic))
+        {
+            return _portalLocalizer[
+                "Application-pool recycle is blocked because the deployment lock state could not be cleared safely for {0}. {1}",
+                PortalDeploymentApplicationKey,
+                lockStatus.Diagnostic].Value;
+        }
+
+        return _portalLocalizer[
+            "Application-pool recycle is blocked because a deployment lock is active for {0}. Wait for the current deployment to finish or for the lock to expire.",
+            PortalDeploymentApplicationKey].Value;
+    }
 
     private static int CompareHostAgentArtifactOptions(HostAgentArtifactOption left, HostAgentArtifactOption right)
     {
