@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using System.IO.Pipes;
+using System.Management;
+using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,6 +15,7 @@ public sealed class HostAgentRpcClient
 
     private readonly IOptionsMonitor<WorkerManagerSettings> _settings;
     private readonly ILogger<HostAgentRpcClient> _logger;
+    private readonly Lazy<string> _baseCallerIdentity;
 
     public HostAgentRpcClient(
         IOptionsMonitor<WorkerManagerSettings> settings,
@@ -19,6 +23,7 @@ public sealed class HostAgentRpcClient
     {
         _settings = settings;
         _logger = logger;
+        _baseCallerIdentity = new Lazy<string>(BuildBaseCallerIdentity, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public async Task<HostAgentEnsureArtifactResponse?> EnsureArtifactAsync(
@@ -45,7 +50,8 @@ public sealed class HostAgentRpcClient
                 serverName: ".",
                 pipeName,
                 PipeDirection.InOut,
-                PipeOptions.Asynchronous);
+                PipeOptions.Asynchronous,
+                TokenImpersonationLevel.Identification);
 
             await pipe.ConnectAsync(timeoutCts.Token);
 
@@ -53,7 +59,8 @@ public sealed class HostAgentRpcClient
             {
                 operation = "ensureArtifact",
                 artifactId,
-                desiredLocalPath
+                desiredLocalPath,
+                requestedBy = BuildRequestedBy(settings)
             };
 
             await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
@@ -101,6 +108,82 @@ public sealed class HostAgentRpcClient
                 Success = false,
                 ErrorMessage = ex.Message
             };
+        }
+    }
+
+    private string BuildRequestedBy(WorkerManagerSettings settings)
+    {
+        return $"{_baseCallerIdentity.Value}; host:{settings.ResolveHostKey()}";
+    }
+
+    private static string BuildBaseCallerIdentity()
+    {
+        var serviceName = TryResolveCurrentServiceName();
+        var processName = TryResolveCurrentProcessName();
+        var userName = TryResolveCurrentUserName();
+        return $"service:{serviceName ?? processName}; user:{userName}; pid:{Environment.ProcessId}";
+    }
+
+    private static string? TryResolveCurrentServiceName()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                $"SELECT Name FROM Win32_Service WHERE ProcessId = {Environment.ProcessId}");
+            foreach (var instance in searcher.Get().OfType<ManagementObject>())
+            {
+                var serviceName = instance["Name"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(serviceName))
+                {
+                    return serviceName.Trim();
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static string TryResolveCurrentProcessName()
+    {
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            if (!string.IsNullOrWhiteSpace(process.ProcessName))
+            {
+                return process.ProcessName.Trim();
+            }
+        }
+        catch
+        {
+        }
+
+        return "unknown-process";
+    }
+
+    private static string TryResolveCurrentUserName()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return "unknown-user";
+        }
+
+        try
+        {
+            return string.IsNullOrWhiteSpace(WindowsIdentity.GetCurrent().Name)
+                ? "unknown-user"
+                : WindowsIdentity.GetCurrent().Name;
+        }
+        catch
+        {
+            return "unknown-user";
         }
     }
 }

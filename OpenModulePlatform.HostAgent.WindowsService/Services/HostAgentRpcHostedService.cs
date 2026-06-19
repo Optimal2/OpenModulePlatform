@@ -90,7 +90,7 @@ public sealed class HostAgentRpcHostedService : BackgroundService
                     pipeName,
                     callerName ?? "unknown");
                 var connectedPipe = pipe;
-                _ = Task.Run(() => HandleClientAsync(connectedPipe, callerName, stoppingToken), CancellationToken.None);
+                _ = Task.Run(() => HandleClientAsync(connectedPipe, pipeName, callerName, stoppingToken), CancellationToken.None);
                 pipe = null;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -131,12 +131,14 @@ public sealed class HostAgentRpcHostedService : BackgroundService
 
     private async Task HandleClientAsync(
         NamedPipeServerStream pipe,
+        string pipeName,
         string? callerName,
         CancellationToken serviceCancellationToken)
     {
         await using var ownedPipe = pipe;
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(serviceCancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _settings.CurrentValue.RpcRequestTimeoutSeconds)));
+        string? requestedBy = null;
 
         try
         {
@@ -157,45 +159,54 @@ public sealed class HostAgentRpcHostedService : BackgroundService
                 return;
             }
 
+            requestedBy = NormalizeRequestedBy(request.RequestedBy);
+            _logger.LogInformation(
+                "HostAgent RPC request received. PipeName={PipeName}, Operation={Operation}, Caller={Caller}, RequestedBy={RequestedBy}",
+                pipeName,
+                request.Operation,
+                callerName ?? "unknown",
+                requestedBy ?? "unknown");
+
             var response = await ExecuteRequestAsync(request, timeoutCts.Token);
             await WriteResponseAsync(writer, response, timeoutCts.Token);
         }
         catch (OperationCanceledException ex) when (!serviceCancellationToken.IsCancellationRequested)
         {
-            LogRequestFailure(ex, callerName);
+            LogRequestFailure(ex, callerName, requestedBy);
         }
         catch (IOException ex)
         {
-            LogRequestFailure(ex, callerName);
+            LogRequestFailure(ex, callerName, requestedBy);
         }
         catch (DbException ex)
         {
-            LogRequestFailure(ex, callerName);
+            LogRequestFailure(ex, callerName, requestedBy);
         }
         catch (UnauthorizedAccessException ex)
         {
-            LogRequestFailure(ex, callerName);
+            LogRequestFailure(ex, callerName, requestedBy);
         }
         catch (JsonException ex)
         {
-            LogRequestFailure(ex, callerName);
+            LogRequestFailure(ex, callerName, requestedBy);
         }
         catch (InvalidOperationException ex)
         {
-            LogRequestFailure(ex, callerName);
+            LogRequestFailure(ex, callerName, requestedBy);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogRequestFailure(ex, callerName);
+            LogRequestFailure(ex, callerName, requestedBy);
         }
     }
 
-    private void LogRequestFailure(Exception exception, string? callerName)
+    private void LogRequestFailure(Exception exception, string? callerName, string? requestedBy)
     {
         _logger.LogError(
             exception,
-            "HostAgent RPC request failed. Caller={Caller}",
-            callerName ?? "unknown");
+            "HostAgent RPC request failed. Caller={Caller}, RequestedBy={RequestedBy}",
+            callerName ?? "unknown",
+            requestedBy ?? "unknown");
     }
 
     private PipeSecurity CreatePipeSecurity(HostAgentSettings settings)
@@ -259,6 +270,13 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             .Select(static accountName => accountName.Trim())
             .Where(static accountName => !string.IsNullOrWhiteSpace(accountName))
             .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string? NormalizeRequestedBy(string? requestedBy)
+    {
+        return string.IsNullOrWhiteSpace(requestedBy)
+            ? null
+            : requestedBy.Trim();
     }
 
     private static IEnumerable<SecurityIdentifier> GetDefaultRpcClientSids()
