@@ -2127,7 +2127,7 @@ BEGIN
           )
     )
     BEGIN
-        THROW 51061, 'Do not mix active host-role and overlapping host-specific template web app rows for the same template module and web app definition.', 1;
+        THROW 51064, 'Do not mix active host-role and overlapping host-specific template web app rows for the same template module and web app definition.', 1;
     END;
 END
 GO

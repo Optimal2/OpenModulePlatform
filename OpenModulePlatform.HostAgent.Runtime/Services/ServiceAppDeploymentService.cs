@@ -273,13 +273,14 @@ public sealed class ServiceAppDeploymentService
                 deployment.ArtifactId,
                 deployment.Version);
 
-            if (serviceStopped && settings.StartServiceAfterServiceAppDeployment && !string.IsNullOrWhiteSpace(serviceName))
+            if (serviceStopped
+                && settings.StartServiceAfterServiceAppDeployment
+                && !string.IsNullOrWhiteSpace(serviceName)
+                && TryStartService(serviceName, settings.ServiceAppStartTimeoutSeconds, _logger)
+                && stopMarkerWritten
+                && !string.IsNullOrWhiteSpace(targetPath))
             {
-                if (TryStartService(serviceName, settings.ServiceAppStartTimeoutSeconds, _logger) && stopMarkerWritten && !string.IsNullOrWhiteSpace(targetPath))
-                {
-                    DeploymentRuntimeStopMarker.Delete(targetPath);
-                    stopMarkerWritten = false;
-                }
+                DeploymentRuntimeStopMarker.Delete(targetPath);
             }
 
             await _repository.PublishAppDeploymentResultAsync(
