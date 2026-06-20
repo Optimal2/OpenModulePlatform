@@ -17,6 +17,8 @@ public sealed class HostAgentSelfUpgradeService
     private const int DirectoryDeleteMaxAttempts = 20;
     private const string DefaultNLogAppName = "OpenModulePlatform.HostAgent.WindowsService";
     private const string DefaultNLogDirectory = "${basedir}/logs";
+    // Keep legacy branded prefixes so self-upgrade can recognize older installs
+    // without depending on customer-specific configuration files.
     private static readonly string[] KnownHostAgentServiceNamePrefixes =
     [
         "EMP.HostAgent",

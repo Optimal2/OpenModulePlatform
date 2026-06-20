@@ -744,7 +744,8 @@ WHEN NOT MATCHED THEN
     VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.SortOrder, source.IsEnabled);
 
 -- Insert defaults only. Environment/customer installers may intentionally
--- override these rows (for example VGR uses EMP), so rerunning the generic core
+-- override these rows (for example, a customer may use a branded platform
+-- name), so rerunning the generic core
 -- initialization must not reset an existing branding choice.
 MERGE omp.config_settings AS target
 USING

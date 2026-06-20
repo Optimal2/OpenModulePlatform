@@ -208,17 +208,17 @@ them later through Portal.
 1. Expand the package on the target server.
 2. Put one or more environment-specific bootstrap JSON files in
    `hosts/<profile>/bootstrap.json` beside the package. Keeping profile names
-   such as `linus`, `alfons`, `vgr-production-1825`, and `vgr-test` lets one
-   package carry multiple installation profiles. For older disposable local
-   environments, editing `configs\bootstrap.local.sample.json` in place is also
-   acceptable.
+   such as `developer-laptop`, `customer-test`, `customer-production`, and
+   `staging` lets one package carry multiple installation profiles. For older
+   disposable local environments, editing `configs\bootstrap.local.sample.json`
+   in place is also acceptable.
    Profiles can include a `profile` section:
 
    ```json
    {
      "profile": {
-       "displayName": "VGR Production - VGMS1825",
-       "machineNames": [ "VGMS1825", "VGMS1825.vgregion.se" ]
+       "displayName": "Contoso Production - Server01",
+       "machineNames": [ "SERVER01", "server01.example.com" ]
      }
    }
    ```
@@ -399,13 +399,13 @@ When only installer code changed, update just the committed executable:
 
 ```powershell
 .\scripts\deployment\update-installer-runner-only.ps1 `
-  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\installer"
+  -PackageRoot "C:\OMP\PrivateInstaller"
 ```
 
 This runner-only update does not rebuild or commit module definitions, artifact
 zips, SQL payloads, manifests, helper tools, or package libraries. It is the
-preferred DEV-repository path when the installer binary changed but the package
-contents should remain generated on each developer machine.
+preferred private-installer-repository path when the installer binary changed
+but the package contents should remain generated on each developer machine.
 
 Do not run `scripts/deployment/package-hostagent-first.ps1` directly with the
 existing universal installer package as its output target. That script creates a
@@ -415,8 +415,8 @@ package from the command line, use the package-preserving wrapper instead:
 
 ```powershell
 .\scripts\deployment\refresh-existing-hostagent-first-package.ps1 `
-  -PackageRoot "E:\Linus Dunkers\Documents\GitHub\DEV\OpenModulePlatform\Universal\installer" `
-  -ConfigName linus
+  -PackageRoot "C:\OMP\PrivateInstaller" `
+  -ConfigName developer-laptop
 ```
 
 The wrapper copies the package-local bootstrapper runner to a temporary folder
@@ -429,11 +429,10 @@ If the package has been copied outside the source tree, use the `Developer` tab
 to point the installer at the source repository roots and, when needed, a
 specific package `.psd1` config. The source-root field accepts semicolon-
 separated paths. The list must include the `OpenModulePlatform` repository and
-may include sibling module repositories such as `OpenDocViewer`, `IbsPackager`,
-`iKrock2`, or `VajSkrivare` when their `omp-components.json` manifests should
-be included in the source comparison. This developer workflow is intentionally
-local; production updates should still use controlled artifact/module-definition
-packages.
+may include sibling consumer repositories when their `omp-components.json`
+manifests should be included in the source comparison. This developer workflow
+is intentionally local; production updates should still use controlled
+artifact/module-definition packages.
 
 HostAgent-first packages keep one shared portable object library under
 `data/global`:
@@ -525,7 +524,7 @@ When using a profile below `hosts`, pass the profile JSON and the package root
 explicitly for console automation:
 
 ```cmd
-OpenModulePlatform.Bootstrapper.exe --config ..\..\hosts\linus\bootstrap.json --payload-root .
+OpenModulePlatform.Bootstrapper.exe --config ..\..\hosts\developer-laptop\bootstrap.json --payload-root .
 ```
 
 Use `--yes` only for controlled automated runs:
@@ -628,12 +627,16 @@ Customer-specific packages should keep customer-specific SQL values outside the
 public repository and inject them into the package configuration or generated
 SQL during protected package creation.
 
-## VGR And Other Customer Packages
+## Customer-Specific Package Extensions
 
 The public repository contains only neutral local bootstrap behavior. Customer
 packages should generate their own protected `bootstrap.<environment>.json` and,
 when needed, customer SQL files that seed hosts, templates, shared content
 mirrors, service names, and paths for that environment.
+
+The example below is intentionally generic and safe to publish. Keep real
+customer names, paths, host keys, and package values in a private installer
+repository.
 
 `package-hostagent-first.ps1` can include protected customer SQL files and
 module-definition JSON files from the deployment config without committing them
@@ -650,21 +653,20 @@ HostAgentFirst = @{
     )
 
     AdditionalSqlFiles = @(
-        'vgr-test-bootstrap.sql',
-        @{ Source = 'vgr-prod-bootstrap.sql'; Destination = 'Customer\vgr-prod-bootstrap.sql' }
+        'customer-test-bootstrap.sql',
+        @{ Source = 'customer-production-bootstrap.sql'; Destination = 'Customer\customer-production-bootstrap.sql' }
     )
 
     AdditionalModuleDefinitionFiles = @(
-        '..\IbsPackager\ibs_packager.module-definition.json',
-        '..\iKrock2\ikrock.module-definition.json',
-        '..\VajSkrivare\vajskrivare.module-definition.json'
+        '..\ExampleConsumer\example-consumer.module-definition.json',
+        '..\ExampleService\example-service.module-definition.json'
     )
 
     AdditionalArtifactFiles = @(
         @{
-            Source = '..\IbsPackager\artifacts\archive\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
-            Payload = 'data\global\artifacts\ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.3.zip'
-            Target = 'ibs-packager/web/0.3.3'
+            Source = '..\ExampleConsumer\artifacts\archive\example_consumer__example_web__web-app__example-web__1.0.0.zip'
+            Payload = 'data\global\artifacts\example_consumer__example_web__web-app__example-web__1.0.0.zip'
+            Target = 'example-consumer/web/1.0.0'
         }
     )
 }
@@ -688,7 +690,7 @@ falls back to `data/global`. Runtime configuration differences should normally
 be captured as config overlay objects in the central library; host-local
 artifact overrides should be reserved for bootstrap repair scenarios.
 
-For example, a protected VGR package can set:
+For example, a protected customer package can set:
 
 - `hostAgent.serviceName` to the actual service name used on the servers
 - `hostAgent.additionalServiceNamesToRemove` when uninstall packages must remove

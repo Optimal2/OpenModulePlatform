@@ -12,7 +12,7 @@ Before making changes:
 - Prefer direct file edits over generated shell scripts.
 - Keep changes small and reviewable.
 - Show a concise summary, validation results, and git diff after changes.
-- Do not mix customer-specific IbsPackager logic into OpenModulePlatform.
+- Do not mix customer-specific consumer-repository logic into OpenModulePlatform.
 - Keep code, comments, SQL, scripts, and development documentation in English. Swedish belongs only in application localization resources.
 - If a change must be visible in the local IIS/runtime environment, run the matching publish or install script after the code change.
 - When a task produces repository changes, validate them, commit with a focused message, and push unless the user asks not to or the worktree contains unrelated user changes.
@@ -22,8 +22,8 @@ Before making changes:
 When working across more than one repository, never run builds, publishes, or
 package creation in parallel if more than one command can build shared OMP
 projects such as `OpenModulePlatform.Web.Shared`. This applies especially to
-OMP web projects and dependent module repositories such as Dokumentbibliotek,
-LogSearch, EArkivChecker, VajSkrivare, IbsPackager, ODVGateway, and iKrock2.
+OMP web projects and dependent consumer repositories that build shared OMP
+projects.
 
 Parallel file reads and searches are fine. Build/publish/package work must be
 sequential: build OpenModulePlatform first when shared platform projects may be
@@ -55,7 +55,7 @@ Default local development paths:
 
 - `<workspace>` means the local parent folder where these sibling repositories are cloned.
 - OpenModulePlatform repo: `<workspace>\OpenModulePlatform`
-- Optional consumer repos: `<workspace>\IbsPackager`, `<workspace>\OpenDocViewer`
+- Optional consumer repos: `<workspace>\<consumer-repo>`
 - Runtime root: `E:\OMP`
 - SQL Server: `localhost`
 - Database: `OpenModulePlatform`

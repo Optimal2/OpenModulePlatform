@@ -7,8 +7,8 @@ context in the linked documents, not here.
 ## Repository Role
 
 OpenModulePlatform is the neutral platform repository. It must not contain
-customer-specific IbsPackager behavior, credentials, or deployment assumptions
-beyond documented local development defaults.
+customer-specific consumer-repository behavior, credentials, or deployment
+assumptions beyond documented local development defaults.
 
 Use these files as the main map:
 
@@ -93,8 +93,7 @@ Use the narrowest level that gives real confidence:
 - Never run builds, publishes, or package creation in parallel when more than
   one command can build shared OMP projects such as
   `OpenModulePlatform.Web.Shared`. This applies to OMP web projects and
-  dependent module repositories such as Dokumentbibliotek, LogSearch,
-  EArkivChecker, VajSkrivare, IbsPackager, ODVGateway, and iKrock2.
+  dependent consumer repositories that build shared OMP projects.
 - Parallel file reads and searches are fine. Build/publish/package validation
   must be sequential: build OpenModulePlatform first when shared platform
   projects may be involved, then build one dependent repository at a time.
@@ -105,7 +104,7 @@ Default local paths and endpoints:
 
 ```text
 OpenModulePlatform repo: <workspace>\OpenModulePlatform
-Optional consumer repos: <workspace>\IbsPackager, <workspace>\OpenDocViewer
+Optional consumer repos: <workspace>\<consumer-repo>
 Runtime root:            E:\OMP
 SQL Server:              localhost
 Database:                OpenModulePlatform
@@ -146,9 +145,9 @@ be safely validated inside the SQL script after substitution.
 
 ## Cross-Repository Boundary
 
-OpenModulePlatform may reference IbsPackager only as an external consumer in
-documentation or local runbooks. Platform code, SQL, examples, and shared web
-components must stay neutral.
+OpenModulePlatform may reference consumer repositories only as external
+consumers in documentation or local runbooks. Platform code, SQL, examples,
+and shared web components must stay neutral.
 
 Machine-specific developer packages, customer bootstrap values, credentials,
 and protected payloads belong in a private installation repository. Keep this

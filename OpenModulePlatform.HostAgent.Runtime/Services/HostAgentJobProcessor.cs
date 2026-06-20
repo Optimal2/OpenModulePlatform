@@ -12,6 +12,8 @@ public sealed class HostAgentJobProcessor
     private const int ScServiceMarkedForDeletionExitCode = 1072;
     private const int DirectoryDeleteMaxAttempts = 20;
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
+    // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
+    // older installs without exposing any customer-specific configuration.
     private static readonly string[] KnownHostAgentServiceNamePrefixes =
     [
         "EMP.HostAgent",

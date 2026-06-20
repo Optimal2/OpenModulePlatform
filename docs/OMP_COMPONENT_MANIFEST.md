@@ -224,22 +224,22 @@ Host-specific package:
 .\scripts\omp\export-universal-package.ps1 `
   -AllComponents `
   -BuildArtifacts `
-  -HostProfilePath E:\Private\profiles\vgr-test.package-profile.json `
-  -OutputPath E:\Packages\openmoduleplatform__vgr-test__20260525.zip
+  -HostProfilePath E:\Private\profiles\customer-test.package-profile.json `
+  -OutputPath E:\Packages\openmoduleplatform__customer-test__20260525.zip
 ```
 
 The optional host profile is JSON. It may contain:
 
 ```json
 {
-  "targetHostProfile": "vgr-test",
+  "targetHostProfile": "customer-test",
   "modules": {
     "opendocviewer": {
       "artifactConfigurationFiles": [
         {
           "componentKey": "opendocviewer-web",
           "relativePath": "odv.site.config.js",
-          "sourcePath": "overlays/vgr-test/odv.site.config.js"
+          "sourcePath": "overlays/customer-test/odv.site.config.js"
         }
       ]
     }
@@ -258,8 +258,7 @@ module definitions, and component metadata.
 Top-level file lists apply to the current repository export. Values under
 `modules.<moduleKey>` apply only when the repository owns that module key in
 `omp-components.json`. This lets one shared host profile contain data for
-OpenDocViewer, VajSkrivare, IbsPackager, and other modules while each repository
-consumes only its own segment.
+multiple consumer modules while each repository consumes only its own segment.
 
 If a repository needs to generate portable host-specific objects from arbitrary
 module-private settings, it can add this optional hook:

@@ -56,8 +56,8 @@ the active role and still inherit general app access from `AuthenticatedUsers`.
 
 `AuthenticatedUsers` defaults to any authenticated principal. To restrict it to
 specific Windows account prefixes, set the `rbac/authenticatedUsersWindowsDomains`
-configuration value from `/admin/configsettings`, for example `VGREGION` or
-`VGREGION;OTHERDOMAIN`. Empty or `*` means no domain/workgroup/computer prefix
+configuration value from `/admin/configsettings`, for example `CONTOSO` or
+`CONTOSO;OTHERDOMAIN`. Empty or `*` means no domain/workgroup/computer prefix
 restriction.
 
 The built-in auth app is mounted at `/auth`. AD sign-in goes through `/auth/ad`, and local password sign-in goes through `/auth/login`.
@@ -74,9 +74,9 @@ the UI. The shared web layer reads the allowed setting keys from
 - `branding/platformName` defaults to `OMP`
 - `branding/portalName` defaults to `Portal`
 
-Deployment configs can seed or update them through `ConfigSettings`. VGR uses
-`EMP` as the platform name, while the local developer install can use `LOMP` to
-make branding substitutions easy to verify. Technical identifiers, permission
+Deployment configs can seed or update them through `ConfigSettings`. A customer
+might use `ACME` as the platform name, while the local developer install can
+use `OMP DEV` to make branding substitutions easy to verify. Technical identifiers, permission
 names, schemas, cookies, and assembly names keep their stable OMP names.
 Windows service names, Windows service display names, IIS app-pool names, table
 names, and other system-facing identifiers also keep OMP naming. Customer or

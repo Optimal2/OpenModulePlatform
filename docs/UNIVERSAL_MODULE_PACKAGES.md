@@ -27,7 +27,7 @@ Example:
   "packageVersion": "2026.05.25",
   "displayName": "OMP core runtime",
   "description": "Module definitions, artifact packages, and optional overlays.",
-  "targetHostProfile": "vgr-test",
+  "targetHostProfile": "customer-test",
   "items": [
     {
       "kind": "module-definition",
@@ -39,7 +39,7 @@ Example:
     },
     {
       "kind": "config-overlay",
-      "path": "config-overlays/vgr-test__opendocviewer__2.0.4.json"
+      "path": "config-overlays/customer-test__opendocviewer__2.0.4.json"
     }
   ]
 }
@@ -72,9 +72,9 @@ Host-specific objects use the same root folders. Put them in a host subfolder
 when it makes the package easier to inspect, for example:
 
 ```text
-host-configs/vgr-test/vgr-test__host-config__2026.05.25.json
-config-overlays/vgr-test/vgr-test__opendocviewer__2.0.4.json
-widgets/vgr-test/omp-dashboard-widgets-vgr-test.json
+host-configs/customer-test/customer-test__host-config__2026.05.25.json
+config-overlays/customer-test/customer-test__opendocviewer__2.0.4.json
+widgets/customer-test/omp-dashboard-widgets-customer-test.json
 ```
 
 No extra container folders are needed. The folder tells an operator what the
@@ -328,7 +328,7 @@ files or overlays:
 .\scripts\omp\export-universal-package.ps1 `
   -AllComponents `
   -BuildArtifacts `
-  -HostProfilePath E:\Private\profiles\vgr-test.package-profile.json
+  -HostProfilePath E:\Private\profiles\customer-test.package-profile.json
 ```
 
 Public repositories should not store customer-specific profile files. The
@@ -341,16 +341,16 @@ repository owns that module key:
 
 ```json
 {
-  "targetHostProfile": "vgr-test",
+  "targetHostProfile": "customer-test",
   "modules": {
-    "vajskrivare": {
+    "example-service": {
       "settings": {
-        "printerListPath": "\\\\vgregion.se\\app\\Vaj.SkaS\\Printer_List\\Printer_List_test.json"
+        "printerListPath": "\\\\fileserver\\share\\Printers\\printer-list-test.json"
       },
       "configOverlayFiles": [
         {
-          "destinationName": "vgr-test-vajskrivare-appsettings.json",
-          "sourcePath": "generated/vgr-test/vajskrivare-appsettings.json"
+          "destinationName": "customer-test-example-service-appsettings.json",
+          "sourcePath": "generated/customer-test/example-service-appsettings.json"
         }
       ]
     },
@@ -359,7 +359,7 @@ repository owns that module key:
         {
           "componentKey": "opendocviewer-web",
           "relativePath": "odv.site.config.js",
-          "sourcePath": "generated/vgr-test/odv.site.config.js"
+          "sourcePath": "generated/customer-test/odv.site.config.js"
         }
       ]
     }
@@ -381,17 +381,17 @@ runtime contract:
 
 - `worker` for WorkerManager-loaded worker plugins.
 - `worker-host` for the generic WorkerProcessHost runtime.
-- `channel-type` for module-private plugin models such as IbsPackager channel
-  types.
+- `channel-type` for module-private plugin models such as customer-specific
+  channel types.
 - `service-app` or `web-app` when a module implements extension behavior as a
   normal hosted app.
 
 Plugin metadata belongs to the owning module definition or module-specific
 database/configuration. For example, WorkerManager plugin metadata is expressed
-through app worker definitions in the module definition, while IbsPackager
-channel-type metadata belongs to the IbsPackager module. Host-specific plugin
-configuration should be emitted as config overlays or artifact configuration
-files, not embedded into the binary artifact hash.
+through app worker definitions in the module definition, while channel-type
+metadata belongs to the owning module. Host-specific plugin configuration
+should be emitted as config overlays or artifact configuration files, not
+embedded into the binary artifact hash.
 
 ## Import Behavior
 

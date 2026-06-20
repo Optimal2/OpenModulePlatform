@@ -142,14 +142,14 @@ Examples:
 .\scripts\omp\export-universal-package.ps1 `
   -AllComponents `
   -BuildArtifacts `
-  -TargetHostProfile vgr-test `
+  -TargetHostProfile customer-test `
   -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'
 
 .\scripts\omp\export-universal-package.ps1 `
   -AllComponents `
   -BuildArtifacts `
-  -HostProfilePath E:\Private\profiles\vgr-test.package-profile.json `
-  -OutputPath E:\Packages\opendocviewer__vgr-test__20260525.zip
+  -HostProfilePath E:\Private\profiles\customer-test.package-profile.json `
+  -OutputPath E:\Packages\opendocviewer__customer-test__20260525.zip
 ```
 
 The optional host profile is JSON and can provide `targetHostProfile`,
@@ -182,8 +182,8 @@ exceeds the configured timeout.
 .\scripts\omp\test-cmd-wrappers.ps1 -RepositoryName OpenModulePlatform -PerRepositoryTimeoutSeconds 1200
 
 .\scripts\omp\test-cmd-wrappers.ps1 `
-  -WorkspaceRoot "E:\Linus Dunkers\Documents\GitHub" `
-  -RepositoryName Dokumentbibliotek,LogSearch,EArkivChecker `
+  -WorkspaceRoot "C:\src" `
+  -RepositoryName ExampleConsumerA,ExampleConsumerB,ExampleConsumerC `
   -OutputRoot "$env:TEMP\omp-cmd-wrapper-validation\packages" `
   -LogRoot "$env:TEMP\omp-cmd-wrapper-validation\logs" `
   -PerRepositoryTimeoutSeconds 1800

@@ -860,7 +860,7 @@ public sealed class WebAppDeploymentService
         // IIS appcmd can create the HTTPS site binding, but on some Windows/IIS
         // versions it cannot set certificateHash on the binding collection. The
         // HTTP.sys SSL binding is the authoritative backend binding and works
-        // for VGR-style TLS termination where the public certificate lives on a
+        // for layered TLS termination where the public certificate lives on a
         // load balancer and IIS uses a node/server certificate.
         RunNetsh("http", "delete", "sslcert", bindingTarget);
         RunNetsh(
