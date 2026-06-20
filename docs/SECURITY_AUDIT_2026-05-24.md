@@ -2,15 +2,16 @@
 
 This document records the security audit baseline performed for the OMP-related repositories on 2026-05-24.
 
+This public copy generalizes private consumer repository names where the exact
+repository identity is not needed to understand the audit outcome.
+
 ## Scope
 
 Reviewed repositories:
 
 - OpenModulePlatform
 - OpenDocViewer
-- IbsPackager
-- iKrock2
-- VajSkrivare
+- selected private OMP consumer repositories
 
 The private DEV repository was treated as installation material only. It was scanned for accidental secret exposure patterns, but this report does not include customer-specific values.
 
@@ -56,10 +57,10 @@ The private DEV repository was treated as installation material only. It was sca
 - Kept relative URL rewriting for manual assets and links, but the final HTML is now sanitized after rewriting.
 - Bumped the OpenDocViewer package, component manifest, module definition, and SQL registration version to `2.0.4`.
 
-### iKrock2
+### One private consumer module
 
 - Removed avoidable `innerHTML` use in the collisions list UI and replaced it with DOM node creation.
-- Bumped the iKrock module definition and related artifact versions to keep the security fix deployable through OMP artifacts.
+- Bumped the affected private consumer module definition and related artifact versions to keep the security fix deployable through OMP artifacts.
 
 ## Findings Not Changed
 
@@ -78,12 +79,9 @@ The repository pattern scan did not replace those tools; adding both to CI would
 Successful validation commands:
 
 - `dotnet build OpenModulePlatform.slnx`
-- `dotnet build IbsPackager.slnx`
-- `dotnet build iKrock2.slnx`
-- `dotnet build Skrivarkoppling.sln`
+- `dotnet build <private-consumer-solution>` for each reviewed private consumer repository
 - `npm audit --audit-level=moderate`
 - `npm run lint`
 - `npm run build`
 
 Dependency vulnerability checks reported no vulnerable NuGet packages for the reviewed .NET solutions after the audit. OpenDocViewer reported zero moderate-or-higher npm vulnerabilities after the `qs` update.
-

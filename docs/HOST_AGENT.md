@@ -1,6 +1,7 @@
 # HostAgent
 
-HostAgent is host-local OMP/ODV infrastructure. It is intentionally generic and is not tied to a specific module such as IbsPackager.
+HostAgent is host-local OMP/ODV infrastructure. It is intentionally generic and
+is not tied to any specific consumer module.
 
 Artifact versions and stable identifiers follow
 `docs/VERSIONING_AND_IDENTITIES.md`. HostAgent deploys the artifact selected by
@@ -429,12 +430,12 @@ local `App_Data` folders during normal requests.
   "HostAgent": {
     "FileMirrors": [
       {
-        "SourcePath": "\\\\server\\share\\EMP\\Data\\ContentReports",
+        "SourcePath": "\\\\fileserver\\share\\OMP\\Data\\ContentReports",
         "TargetPath": "D:\\\\Netserv\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentReports",
         "DeleteStaleTargetEntries": true
       },
       {
-        "SourcePath": "\\\\server\\share\\EMP\\Data\\ContentPages",
+        "SourcePath": "\\\\fileserver\\share\\OMP\\Data\\ContentPages",
         "TargetPath": "D:\\\\Netserv\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentPages",
         "DeleteStaleTargetEntries": true
       }

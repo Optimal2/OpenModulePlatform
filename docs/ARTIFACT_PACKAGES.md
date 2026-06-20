@@ -118,9 +118,9 @@ validate the requirement before registering the artifact.
 For a legacy zip, Portal and HostAgent folder import extract the whole zip as
 the immutable artifact content and continue to block runtime configuration files
 such as `appsettings*.json` and `odv.site.config.js`. This matters for apps
-such as Vajskrivare and OpenDocViewer: their runtime configuration must be
-stored as artifact configuration-file rows or config overlays, never inside the
-hashed payload.
+that need host-specific runtime configuration: their settings must be stored as
+artifact configuration-file rows or config overlays, never inside the hashed
+payload.
 
 For a manifest envelope:
 

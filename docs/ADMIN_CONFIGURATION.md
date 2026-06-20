@@ -74,9 +74,9 @@ the UI. The shared web layer reads the allowed setting keys from
 - `branding/platformName` defaults to `OMP`
 - `branding/portalName` defaults to `Portal`
 
-Deployment configs can seed or update them through `ConfigSettings`. the customer uses
-`EMP` as the platform name, while the local developer install can use `LOMP` to
-make branding substitutions easy to verify. Technical identifiers, permission
+Deployment configs can seed or update them through `ConfigSettings`. A customer
+might use `ACME` as the platform name, while the local developer install can
+use `OMP DEV` to make branding substitutions easy to verify. Technical identifiers, permission
 names, schemas, cookies, and assembly names keep their stable OMP names.
 Windows service names, Windows service display names, IIS app-pool names, table
 names, and other system-facing identifiers also keep OMP naming. Customer or
