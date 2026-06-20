@@ -330,6 +330,14 @@ requirement in the artifact package manifest as
 until the required module definition has been applied, while ordinary artifact
 releases remain independent.
 
+Runtime binding rows are stricter than compatibility slots. `omp.AppInstances.ArtifactId`,
+`omp.WorkerInstances.ArtifactId`, and `omp.InstanceTemplateAppInstances.DesiredArtifactId`
+must point to an artifact owned by the same app and whose `PackageType` matches the app's
+runtime `AppType` (`web-app` -> `Portal`/`WebApp`, `service-app` -> `ServiceApp`,
+`worker` -> `Worker`, `host-agent` -> `HostAgent`, `worker-host` -> `WorkerHost`).
+Metadata-only package types such as `channel-type` may still appear in `compatibleArtifacts`
+and module-owned tables, but they are rejected for runtime bindings.
+
 `artifactConfigurationFiles` describes runtime files that belong to an artifact
 slot but should not live inside the immutable zip. These descriptors are also
 applied when a concrete artifact exists; they are not proof that the artifact
