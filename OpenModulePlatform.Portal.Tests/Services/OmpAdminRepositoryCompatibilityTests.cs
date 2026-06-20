@@ -11,6 +11,7 @@ public sealed class OmpAdminRepositoryCompatibilityTests
     [InlineData("channel-type", "ServiceApp")]
     [InlineData("channel-type", "HostAgent")]
     [InlineData("channel-type", "WorkerHost")]
+    [InlineData("CHANNEL-TYPE", "worker")]
     [InlineData("worker-plugin", "Worker")]
     [InlineData("worker", "WebApp")]
     [InlineData("host-agent", "Portal")]
@@ -57,6 +58,7 @@ public sealed class OmpAdminRepositoryCompatibilityTests
         Assert.NotNull(result.AutoApplyInfoMessage);
         Assert.Contains("ibs_packager_worker", result.AutoApplyInfoMessage, StringComparison.Ordinal);
         Assert.Contains("channel-type", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+        Assert.Contains("compatibility/channel metadata", result.AutoApplyInfoMessage, StringComparison.Ordinal);
         Assert.Contains("Worker", result.AutoApplyInfoMessage, StringComparison.Ordinal);
         Assert.Contains("AppInstances", result.AutoApplyInfoMessage, StringComparison.Ordinal);
         Assert.Contains("WorkerInstances", result.AutoApplyInfoMessage, StringComparison.Ordinal);
