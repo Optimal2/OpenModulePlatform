@@ -229,6 +229,7 @@ public sealed class HostAgentJobProcessor
         }
         catch (OperationCanceledException)
         {
+            return;
         }
     }
 

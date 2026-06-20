@@ -647,4 +647,3 @@ BEGIN
         (N'sample.run', N'{"message":"second managed worker job"}', 0, SYSUTCDATETIME(), N'install-script');
 END
 GO
-GO

@@ -231,13 +231,12 @@ public sealed class WebAppDeploymentService
             if (appPoolStopped
                 && UseAppCmdAppPoolControl(settings)
                 && settings.StartIisAppPoolAfterWebAppDeployment
-                && !string.IsNullOrWhiteSpace(runtimeName))
+                && !string.IsNullOrWhiteSpace(runtimeName)
+                && TryStartAppPool(runtimeName, _logger)
+                && stopMarkerWritten
+                && !string.IsNullOrWhiteSpace(targetPath))
             {
-                if (TryStartAppPool(runtimeName, _logger) && stopMarkerWritten && !string.IsNullOrWhiteSpace(targetPath))
-                {
-                    DeploymentRuntimeStopMarker.Delete(targetPath);
-                    stopMarkerWritten = false;
-                }
+                DeploymentRuntimeStopMarker.Delete(targetPath);
             }
 
             await _repository.PublishAppDeploymentResultAsync(

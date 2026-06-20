@@ -3594,8 +3594,7 @@ WHERE AppInstanceId = @AppInstanceId;";
                 "This app instance is managed by an instance template. Change the desired template app instead and let HostAgent update the runtime row.");
         }
 
-        await using var update = new SqlCommand(updateSql, conn);
-        update.Transaction = tx;
+        await using var update = new SqlCommand(updateSql, conn, tx);
         BindAppInstance(update, input);
         var affected = await update.ExecuteNonQueryAsync(ct);
         if (affected == 0)

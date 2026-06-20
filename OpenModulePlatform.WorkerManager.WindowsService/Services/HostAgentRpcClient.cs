@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Management;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Security;
 using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -135,21 +138,27 @@ public sealed class HostAgentRpcClient
         {
             using var searcher = new ManagementObjectSearcher(
                 $"SELECT Name FROM Win32_Service WHERE ProcessId = {Environment.ProcessId}");
-            foreach (var instance in searcher.Get().OfType<ManagementObject>())
+            foreach (var serviceName in searcher.Get()
+                         .OfType<ManagementObject>()
+                         .Select(ReadWindowsServiceName))
             {
-                var serviceName = instance["Name"]?.ToString();
                 if (!string.IsNullOrWhiteSpace(serviceName))
                 {
                     return serviceName.Trim();
                 }
             }
         }
-        catch
+        catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or COMException)
         {
+            return null;
         }
 
         return null;
     }
+
+    [SupportedOSPlatform("windows")]
+    private static string? ReadWindowsServiceName(ManagementObject instance)
+        => instance["Name"]?.ToString();
 
     private static string TryResolveCurrentProcessName()
     {
@@ -161,8 +170,9 @@ public sealed class HostAgentRpcClient
                 return process.ProcessName.Trim();
             }
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
+            return "unknown-process";
         }
 
         return "unknown-process";
@@ -181,7 +191,7 @@ public sealed class HostAgentRpcClient
                 ? "unknown-user"
                 : WindowsIdentity.GetCurrent().Name;
         }
-        catch
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException)
         {
             return "unknown-user";
         }
