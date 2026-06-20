@@ -430,6 +430,45 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.IsArtifactPackageCompatibleWithAppType', N'FN') IS NULL
+    EXEC(N'CREATE FUNCTION omp.IsArtifactPackageCompatibleWithAppType(@PackageType nvarchar(50), @AppType nvarchar(50)) RETURNS bit AS BEGIN RETURN 0; END');
+GO
+
+ALTER FUNCTION omp.IsArtifactPackageCompatibleWithAppType
+(
+    @PackageType nvarchar(50),
+    @AppType nvarchar(50)
+)
+RETURNS bit
+AS
+BEGIN
+    DECLARE @NormalizedPackageType nvarchar(50) = UPPER(LTRIM(RTRIM(ISNULL(@PackageType, N''))));
+    DECLARE @NormalizedAppType nvarchar(50) = UPPER(LTRIM(RTRIM(ISNULL(@AppType, N''))));
+
+    RETURN
+    (
+        CASE
+            WHEN @NormalizedPackageType = N'WEB-APP'
+                 AND @NormalizedAppType IN (N'PORTAL', N'WEBAPP')
+                THEN 1
+            WHEN @NormalizedPackageType = N'SERVICE-APP'
+                 AND @NormalizedAppType = N'SERVICEAPP'
+                THEN 1
+            WHEN @NormalizedPackageType = N'WORKER'
+                 AND @NormalizedAppType = N'WORKER'
+                THEN 1
+            WHEN @NormalizedPackageType = N'HOST-AGENT'
+                 AND @NormalizedAppType = N'HOSTAGENT'
+                THEN 1
+            WHEN @NormalizedPackageType = N'WORKER-HOST'
+                 AND @NormalizedAppType = N'WORKERHOST'
+                THEN 1
+            ELSE 0
+        END
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp.ArtifactConfigurationFiles', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.ArtifactConfigurationFiles
@@ -1091,6 +1130,69 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.TR_WorkerInstances_ValidateArtifactCompatibility', N'TR') IS NULL
+    EXEC(N'CREATE TRIGGER omp.TR_WorkerInstances_ValidateArtifactCompatibility ON omp.WorkerInstances AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER TRIGGER omp.TR_WorkerInstances_ValidateArtifactCompatibility
+ON omp.WorkerInstances
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF NOT
+    (
+        UPDATE(AppInstanceId)
+        OR UPDATE(ArtifactId)
+    )
+    BEGIN
+        RETURN;
+    END;
+
+    DECLARE @ErrorMessage nvarchar(4000);
+
+    SELECT TOP (1)
+        @ErrorMessage =
+            CASE
+                WHEN artifact.AppId <> appInstance.AppId
+                    THEN CONCAT(
+                        N'Artifact binding rejected in omp.WorkerInstances: artifact ',
+                        artifact.ArtifactId,
+                        N' belongs to a different app than worker app ''',
+                        app.AppKey,
+                        N'''.')
+                ELSE CONCAT(
+                    N'Artifact binding rejected in omp.WorkerInstances: package type ''',
+                    artifact.PackageType,
+                    N''' is not compatible with app ''',
+                    app.AppKey,
+                    N''' (',
+                    app.AppType,
+                    N').')
+            END
+    FROM inserted i
+    INNER JOIN omp.AppInstances appInstance
+        ON appInstance.AppInstanceId = i.AppInstanceId
+    INNER JOIN omp.Apps app
+        ON app.AppId = appInstance.AppId
+    INNER JOIN omp.Artifacts artifact
+        ON artifact.ArtifactId = i.ArtifactId
+    WHERE i.ArtifactId IS NOT NULL
+      AND
+      (
+          artifact.AppId <> appInstance.AppId
+          OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
+      )
+    ORDER BY i.WorkerInstanceId;
+
+    IF @ErrorMessage IS NOT NULL
+    BEGIN
+        THROW 51062, @ErrorMessage, 1;
+    END;
+END
+GO
+
 IF OBJECT_ID(N'omp.WorkerInstanceRuntimeStates', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.WorkerInstanceRuntimeStates
@@ -1474,6 +1576,67 @@ IF OBJECT_ID(N'omp.TR_AppInstances_ValidateActivePlacement', N'TR') IS NULL
     EXEC(N'CREATE TRIGGER omp.TR_AppInstances_ValidateActivePlacement ON omp.AppInstances AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; END');
 GO
 
+IF OBJECT_ID(N'omp.TR_AppInstances_ValidateArtifactCompatibility', N'TR') IS NULL
+    EXEC(N'CREATE TRIGGER omp.TR_AppInstances_ValidateArtifactCompatibility ON omp.AppInstances AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER TRIGGER omp.TR_AppInstances_ValidateArtifactCompatibility
+ON omp.AppInstances
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF NOT
+    (
+        UPDATE(AppId)
+        OR UPDATE(ArtifactId)
+    )
+    BEGIN
+        RETURN;
+    END;
+
+    DECLARE @ErrorMessage nvarchar(4000);
+
+    SELECT TOP (1)
+        @ErrorMessage =
+            CASE
+                WHEN artifact.AppId <> i.AppId
+                    THEN CONCAT(
+                        N'Artifact binding rejected in omp.AppInstances: artifact ',
+                        artifact.ArtifactId,
+                        N' belongs to a different app than ''',
+                        app.AppKey,
+                        N'''.')
+                ELSE CONCAT(
+                    N'Artifact binding rejected in omp.AppInstances: package type ''',
+                    artifact.PackageType,
+                    N''' is not compatible with app ''',
+                    app.AppKey,
+                    N''' (',
+                    app.AppType,
+                    N').')
+            END
+    FROM inserted i
+    INNER JOIN omp.Apps app
+        ON app.AppId = i.AppId
+    INNER JOIN omp.Artifacts artifact
+        ON artifact.ArtifactId = i.ArtifactId
+    WHERE i.ArtifactId IS NOT NULL
+      AND
+      (
+          artifact.AppId <> i.AppId
+          OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
+      )
+    ORDER BY i.AppInstanceId;
+
+    IF @ErrorMessage IS NOT NULL
+    BEGIN
+        THROW 51061, @ErrorMessage, 1;
+    END;
+END
+GO
+
 ALTER TRIGGER omp.TR_AppInstances_ValidateActivePlacement
 ON omp.AppInstances
 AFTER INSERT, UPDATE
@@ -1770,6 +1933,67 @@ GO
 
 IF OBJECT_ID(N'omp.TR_InstanceTemplateAppInstances_ValidateActivePlacement', N'TR') IS NULL
     EXEC(N'CREATE TRIGGER omp.TR_InstanceTemplateAppInstances_ValidateActivePlacement ON omp.InstanceTemplateAppInstances AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; END');
+GO
+
+IF OBJECT_ID(N'omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility', N'TR') IS NULL
+    EXEC(N'CREATE TRIGGER omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility ON omp.InstanceTemplateAppInstances AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER TRIGGER omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility
+ON omp.InstanceTemplateAppInstances
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF NOT
+    (
+        UPDATE(AppId)
+        OR UPDATE(DesiredArtifactId)
+    )
+    BEGIN
+        RETURN;
+    END;
+
+    DECLARE @ErrorMessage nvarchar(4000);
+
+    SELECT TOP (1)
+        @ErrorMessage =
+            CASE
+                WHEN artifact.AppId <> i.AppId
+                    THEN CONCAT(
+                        N'Artifact binding rejected in omp.InstanceTemplateAppInstances: artifact ',
+                        artifact.ArtifactId,
+                        N' belongs to a different app than ''',
+                        app.AppKey,
+                        N'''.')
+                ELSE CONCAT(
+                    N'Artifact binding rejected in omp.InstanceTemplateAppInstances: package type ''',
+                    artifact.PackageType,
+                    N''' is not compatible with app ''',
+                    app.AppKey,
+                    N''' (',
+                    app.AppType,
+                    N').')
+            END
+    FROM inserted i
+    INNER JOIN omp.Apps app
+        ON app.AppId = i.AppId
+    INNER JOIN omp.Artifacts artifact
+        ON artifact.ArtifactId = i.DesiredArtifactId
+    WHERE i.DesiredArtifactId IS NOT NULL
+      AND
+      (
+          artifact.AppId <> i.AppId
+          OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
+      )
+    ORDER BY i.InstanceTemplateAppInstanceId;
+
+    IF @ErrorMessage IS NOT NULL
+    BEGIN
+        THROW 51063, @ErrorMessage, 1;
+    END;
+END
 GO
 
 ALTER TRIGGER omp.TR_InstanceTemplateAppInstances_ValidateActivePlacement

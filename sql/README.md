@@ -4,6 +4,10 @@
 
 Use these scripts for the neutral OMP core installation flow:
 
+0. `0-validate-openmoduleplatform.sql`
+   - Verifies that the core `omp` tables, required columns, and runtime artifact compatibility guards exist.
+   - Reports any invalid runtime artifact bindings in `omp.AppInstances`, `omp.WorkerInstances`, or `omp.InstanceTemplateAppInstances`.
+
 1. `1-setup-openmoduleplatform.sql`
    - Creates the neutral `omp` schema and core platform tables.
    - Creates and migrates `omp.config_setting_definitions` and
