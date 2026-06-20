@@ -84,6 +84,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
         catch (Exception ex)
         {
+            // A single reconcile failure must not stop the Windows service;
+            // the next cycle gets a fresh catalog/runtime view and retries.
             _logger.LogError(
                 ex,
                 "WorkerManager reconcile cycle failed and will be retried during the next cycle. HostIdentity={HostIdentity}",
@@ -133,6 +135,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
             catch (Exception ex)
             {
+                // Keep reconciling other workers; per-worker failures are published below.
                 await HandleWorkerFailureAsync(existing, runtimeKind, "stop undesired worker", ex, cancellationToken);
             }
         }
@@ -340,6 +343,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
             catch (Exception ex)
             {
+                // Shutdown cleanup is best-effort because the service is already stopping.
                 _logger.LogWarning(
                     ex,
                     "WorkerManager could not stop a managed worker during shutdown cleanup. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, Reason={Reason}",

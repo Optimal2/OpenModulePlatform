@@ -254,8 +254,9 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         {
             return pipe.GetImpersonationUserName();
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException or UnauthorizedAccessException)
         {
+            // Client identity is diagnostic only; authorization is enforced by the pipe ACL.
             return null;
         }
     }

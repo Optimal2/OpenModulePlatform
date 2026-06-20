@@ -365,6 +365,8 @@ public sealed class HostAgentEngine
             }
             catch (Exception ex)
             {
+                // Host lease renewal is best-effort: log transient repository/SQL failures
+                // and retry on the next renewal interval while the cycle still runs.
                 _logger.LogWarning(
                     ex,
                     "HostAgent host lease renewal failed. The next renewal attempt will retry while the current cycle continues. HostId={HostId}, ServiceName={ServiceName}",
