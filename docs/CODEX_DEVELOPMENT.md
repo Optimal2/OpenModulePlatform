@@ -86,7 +86,7 @@ Use the narrowest level that gives real confidence:
 
 - C# changes: `dotnet build OpenModulePlatform.slnx`
 - Publish script changes: parse the changed `.ps1` file with `System.Management.Automation.Language.Parser`
-- SQL changes: review idempotency, rerun only when the task explicitly requires local data mutation
+- SQL changes: review idempotency, rerun only when the task explicitly requires local data mutation. If the changed SQL is referenced by a module definition `sqlScripts[].path`, run `.\scripts\dev\embed-module-definition-sql.ps1` before `.\scripts\omp\validate-module-definitions.ps1`.
 - Formatting hygiene: `git diff --check`
 - Local web visibility: publish/update the runtime, then verify the relevant localhost URL
 

@@ -80,7 +80,16 @@ The default output folder is `artifacts\universal-packages`. Set
 hardcoding machine-specific paths in repositories.
 
 Use `validate-module-definitions.ps1` before packaging or in CI to catch
-manifest/module-definition version drift and stale embedded SQL content:
+manifest/module-definition version drift and stale embedded SQL content. If you
+changed a source `.sql` file referenced by a module definition, refresh the
+embedded JSON first:
+
+```powershell
+.\scripts\dev\embed-module-definition-sql.ps1
+.\scripts\omp\validate-module-definitions.ps1
+```
+
+If you did not change module-definition source SQL, validation alone is enough:
 
 ```powershell
 .\scripts\omp\validate-module-definitions.ps1
