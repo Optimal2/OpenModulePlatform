@@ -258,8 +258,7 @@ module definitions, and component metadata.
 Top-level file lists apply to the current repository export. Values under
 `modules.<moduleKey>` apply only when the repository owns that module key in
 `omp-components.json`. This lets one shared host profile contain data for
-OpenDocViewer, VajSkrivare, IbsPackager, and other modules while each repository
-consumes only its own segment.
+multiple consumer modules while each repository consumes only its own segment.
 
 If a repository needs to generate portable host-specific objects from arbitrary
 module-private settings, it can add this optional hook:

@@ -182,8 +182,8 @@ exceeds the configured timeout.
 .\scripts\omp\test-cmd-wrappers.ps1 -RepositoryName OpenModulePlatform -PerRepositoryTimeoutSeconds 1200
 
 .\scripts\omp\test-cmd-wrappers.ps1 `
-  -WorkspaceRoot "E:\Linus Dunkers\Documents\GitHub" `
-  -RepositoryName Dokumentbibliotek,LogSearch,EArkivChecker `
+  -WorkspaceRoot "C:\src" `
+  -RepositoryName ExampleConsumerA,ExampleConsumerB,ExampleConsumerC `
   -OutputRoot "$env:TEMP\omp-cmd-wrapper-validation\packages" `
   -LogRoot "$env:TEMP\omp-cmd-wrapper-validation\logs" `
   -PerRepositoryTimeoutSeconds 1800

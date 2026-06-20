@@ -343,14 +343,14 @@ repository owns that module key:
 {
   "targetHostProfile": "customer-test",
   "modules": {
-    "vajskrivare": {
+    "example-service": {
       "settings": {
-        "printerListPath": "\\\\example.com\\app\\Vaj.SkaS\\Printer_List\\Printer_List_test.json"
+        "printerListPath": "\\\\fileserver\\share\\Printers\\printer-list-test.json"
       },
       "configOverlayFiles": [
         {
-          "destinationName": "customer-test-vajskrivare-appsettings.json",
-          "sourcePath": "generated/customer-test/vajskrivare-appsettings.json"
+          "destinationName": "customer-test-example-service-appsettings.json",
+          "sourcePath": "generated/customer-test/example-service-appsettings.json"
         }
       ]
     },
@@ -381,17 +381,17 @@ runtime contract:
 
 - `worker` for WorkerManager-loaded worker plugins.
 - `worker-host` for the generic WorkerProcessHost runtime.
-- `channel-type` for module-private plugin models such as IbsPackager channel
-  types.
+- `channel-type` for module-private plugin models such as customer-specific
+  channel types.
 - `service-app` or `web-app` when a module implements extension behavior as a
   normal hosted app.
 
 Plugin metadata belongs to the owning module definition or module-specific
 database/configuration. For example, WorkerManager plugin metadata is expressed
-through app worker definitions in the module definition, while IbsPackager
-channel-type metadata belongs to the IbsPackager module. Host-specific plugin
-configuration should be emitted as config overlays or artifact configuration
-files, not embedded into the binary artifact hash.
+through app worker definitions in the module definition, while channel-type
+metadata belongs to the owning module. Host-specific plugin configuration
+should be emitted as config overlays or artifact configuration files, not
+embedded into the binary artifact hash.
 
 ## Import Behavior
 
