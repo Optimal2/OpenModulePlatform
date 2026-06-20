@@ -448,6 +448,8 @@ public sealed class ArtifactApplicationResult
 
     public int HostAgentDesiredRowsUpdated { get; set; }
 
+    public string? AutoApplyInfoMessage { get; set; }
+
     public int TotalRowsUpdated =>
         TemplateAppRowsUpdated
         + AppInstanceRowsUpdated
