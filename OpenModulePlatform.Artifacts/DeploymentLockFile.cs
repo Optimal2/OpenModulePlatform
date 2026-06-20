@@ -27,7 +27,7 @@ public static class DeploymentLockFile
             throw new ArgumentException("Application root is required.", nameof(applicationRoot));
         }
 
-        return Path.Combine(
+        return Path.Join(
             Path.GetFullPath(applicationRoot.Trim()),
             "App_Data",
             "omp-deployment.lock.json");
@@ -64,7 +64,7 @@ public static class DeploymentLockFile
             ?? throw new InvalidOperationException($"Could not resolve deployment lock directory for '{path}'.");
         Directory.CreateDirectory(directory);
 
-        var tempPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        var tempPath = Path.Join(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
             var json = JsonSerializer.Serialize(document, JsonOptions);

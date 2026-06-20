@@ -51,6 +51,22 @@ function Add-Check {
     })
 }
 
+function Resolve-CheckStatus {
+    param(
+        [bool]$Condition,
+        [ValidateSet('OK', 'Warn', 'Fail', 'Info')]
+        [string]$WhenTrue = 'OK',
+        [ValidateSet('OK', 'Warn', 'Fail', 'Info')]
+        [string]$WhenFalse = 'Fail'
+    )
+
+    if ($Condition) {
+        return $WhenTrue
+    }
+
+    return $WhenFalse
+}
+
 function ConvertTo-PlainObject {
     param($Value)
 
@@ -605,7 +621,8 @@ function Add-ModuleDataStoreChecks {
     $ompDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:OmpDb' -Default '')
     $legacyDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:DokumentBibliotekDb' -Default '')
 
-    Add-Check 'Module compatibility' 'Data-store configuration' ($(if ($useLegacy -and [string]::IsNullOrWhiteSpace($legacyDb)) { 'Fail' } else { 'OK' })) "UseLegacyDataStore=$useLegacy; DataSchema=$dataSchema" ([ordered]@{
+    $dataStoreStatus = Resolve-CheckStatus -Condition (-not ($useLegacy -and [string]::IsNullOrWhiteSpace($legacyDb))) -WhenFalse 'Fail'
+    Add-Check 'Module compatibility' 'Data-store configuration' $dataStoreStatus "UseLegacyDataStore=$useLegacy; DataSchema=$dataSchema" ([ordered]@{
         ModuleType = 'DocumentLibrary'
         UseLegacyDataStore = $useLegacy
         DataSchema = $dataSchema
@@ -644,7 +661,8 @@ FROM RequiredObjects
 ORDER BY RequiredObjects.TableName;
 '@ -Parameters @{ '@schemaName' = $dataSchema }
         $missing = @($rows | Where-Object { $_.ExistsInDatabase -ne 1 })
-        Add-Check 'Module compatibility' 'Required data tables' ($(if ($missing.Count -gt 0) { 'Warn' } else { 'OK' })) "Checked schema $dataSchema; missing $($missing.Count)." ([ordered]@{
+        $tableStatus = Resolve-CheckStatus -Condition ($missing.Count -eq 0) -WhenFalse 'Warn'
+        Add-Check 'Module compatibility' 'Required data tables' $tableStatus "Checked schema $dataSchema; missing $($missing.Count)." ([ordered]@{
             ModuleType = 'DocumentLibrary'
             Objects = $rows
         })
@@ -674,7 +692,8 @@ function Add-ModulePrinterConfigChecks {
     $resolvedZebraPath = Resolve-AppPath -BasePath $Path -ConfiguredPath $zebraPath
     $printerItems = @(Get-ConfigValue -Config $Config -Path 'PrinterDatabases:Items' -Default @())
 
-    Add-Check 'Module compatibility' 'Printer/Zebra configuration' ($(if ($zebraEnabled -and [string]::IsNullOrWhiteSpace($resolvedZebraPath)) { 'Fail' } else { 'OK' })) "Printer database count=$(@($printerItems).Count); ZebraEnabled=$zebraEnabled" ([ordered]@{
+    $printerStatus = Resolve-CheckStatus -Condition (-not ($zebraEnabled -and [string]::IsNullOrWhiteSpace($resolvedZebraPath))) -WhenFalse 'Fail'
+    Add-Check 'Module compatibility' 'Printer/Zebra configuration' $printerStatus "Printer database count=$(@($printerItems).Count); ZebraEnabled=$zebraEnabled" ([ordered]@{
         ModuleType = 'Printer'
         PrinterDatabaseCount = @($printerItems).Count
         ZebraEnabled = $zebraEnabled
@@ -688,7 +707,8 @@ function Add-ModulePrinterConfigChecks {
 
     $fileSummary = Get-FileSummary -Path $resolvedZebraPath
     if (-not $fileSummary.Exists) {
-        Add-Check 'Module compatibility' 'Zebra JSON file' ($(if ($zebraEnabled) { 'Fail' } else { 'Warn' })) $resolvedZebraPath ([ordered]@{
+        $zebraFileStatus = Resolve-CheckStatus -Condition (-not $zebraEnabled) -WhenTrue 'Warn' -WhenFalse 'Fail'
+        Add-Check 'Module compatibility' 'Zebra JSON file' $zebraFileStatus $resolvedZebraPath ([ordered]@{
             ModuleType = 'Printer'
             File = $fileSummary
         })
@@ -710,7 +730,8 @@ function Add-ModulePrinterConfigChecks {
             })
         }
 
-        Add-Check 'Module compatibility' 'Zebra JSON content' ($(if (-not [string]::IsNullOrWhiteSpace($Client) -and $clientMatches.Count -eq 0) { 'Warn' } else { 'OK' })) "Connections=$($connections.Count); Configs=$($configs.Count); ClientMatches=$($clientMatches.Count)" ([ordered]@{
+        $zebraContentStatus = Resolve-CheckStatus -Condition ([string]::IsNullOrWhiteSpace($Client) -or $clientMatches.Count -gt 0) -WhenFalse 'Warn'
+        Add-Check 'Module compatibility' 'Zebra JSON content' $zebraContentStatus "Connections=$($connections.Count); Configs=$($configs.Count); ClientMatches=$($clientMatches.Count)" ([ordered]@{
             ModuleType = 'Printer'
             Path = $resolvedZebraPath
             Length = $fileSummary.Length
@@ -766,11 +787,11 @@ function Add-DeploymentFileChecks {
     }
 
     $targetSummary = Get-DirectorySummary -Path $Path -RecentHours $RecentHours
-    Add-Check 'Filesystem' "Deployment target path ($SourceName)" ($(if ($targetSummary.Exists) { 'OK' } else { 'Fail' })) $Path $targetSummary
+    Add-Check 'Filesystem' "Deployment target path ($SourceName)" (Resolve-CheckStatus -Condition $targetSummary.Exists -WhenFalse 'Fail') $Path $targetSummary
 
     $webConfigPath = Join-Path $Path 'web.config'
     $webConfigSummary = Get-FileSummary -Path $webConfigPath
-    Add-Check 'Filesystem' "web.config ($SourceName)" ($(if ($webConfigSummary.Exists) { 'OK' } else { 'Warn' })) $webConfigPath $webConfigSummary
+    Add-Check 'Filesystem' "web.config ($SourceName)" (Resolve-CheckStatus -Condition $webConfigSummary.Exists -WhenFalse 'Warn') $webConfigPath $webConfigSummary
     Add-Check 'Filesystem' "appsettings files ($SourceName)" 'Info' $Path (Get-ConfigFileSummaries -Path $Path)
 
     foreach ($logPath in @(
@@ -780,12 +801,12 @@ function Add-DeploymentFileChecks {
     )) {
         $logSummary = Get-DirectorySummary -Path $logPath -RecentHours $RecentHours
         if ($logSummary.Exists -or -not [string]::IsNullOrWhiteSpace($logSummary.Error)) {
-            Add-Check 'Logging' "Log folder ($SourceName): $logPath" ($(if ($logSummary.Exists) { 'Info' } else { 'Warn' })) $logPath $logSummary
+            Add-Check 'Logging' "Log folder ($SourceName): $logPath" (Resolve-CheckStatus -Condition $logSummary.Exists -WhenTrue 'Info' -WhenFalse 'Warn') $logPath $logSummary
         }
     }
 
     $recentLogs = Get-RecentLogFiles -Path $Path -RecentHours $RecentHours
-    Add-Check 'Logging' "Recent deployed-app log files ($SourceName)" ($(if (@($recentLogs).Count -gt 0) { 'Info' } else { 'Warn' })) "Found $(@($recentLogs).Count) recent log/text file(s)." $recentLogs
+    Add-Check 'Logging' "Recent deployed-app log files ($SourceName)" (Resolve-CheckStatus -Condition (@($recentLogs).Count -gt 0) -WhenTrue 'Info' -WhenFalse 'Warn') "Found $(@($recentLogs).Count) recent log/text file(s)." $recentLogs
 }
 
 function Get-EventLogSignals {

@@ -419,6 +419,7 @@ public sealed class HostAgentEngine
         }
         catch (OperationCanceledException)
         {
+            return;
         }
     }
 
