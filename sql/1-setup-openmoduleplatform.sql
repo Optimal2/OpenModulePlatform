@@ -1162,6 +1162,13 @@ BEGIN
                         N' belongs to a different app than worker app ''',
                         app.AppKey,
                         N'''.')
+                WHEN artifact.PackageType IN (N'channel-type')
+                    THEN CONCAT(
+                        N'Artifact binding rejected in omp.WorkerInstances: package type ''',
+                        artifact.PackageType,
+                        N''' is a metadata-only compatibility slot and cannot be bound to a runtime worker row for app ''',
+                        app.AppKey,
+                        N'''.')
                 ELSE CONCAT(
                     N'Artifact binding rejected in omp.WorkerInstances: package type ''',
                     artifact.PackageType,
@@ -1608,6 +1615,13 @@ BEGIN
                         N' belongs to a different app than ''',
                         app.AppKey,
                         N'''.')
+                WHEN artifact.PackageType IN (N'channel-type')
+                    THEN CONCAT(
+                        N'Artifact binding rejected in omp.AppInstances: package type ''',
+                        artifact.PackageType,
+                        N''' is a metadata-only compatibility slot and cannot be bound to a runtime app instance for ''',
+                        app.AppKey,
+                        N'''.')
                 ELSE CONCAT(
                     N'Artifact binding rejected in omp.AppInstances: package type ''',
                     artifact.PackageType,
@@ -1965,6 +1979,13 @@ BEGIN
                         N'Artifact binding rejected in omp.InstanceTemplateAppInstances: artifact ',
                         artifact.ArtifactId,
                         N' belongs to a different app than ''',
+                        app.AppKey,
+                        N'''.')
+                WHEN artifact.PackageType IN (N'channel-type')
+                    THEN CONCAT(
+                        N'Artifact binding rejected in omp.InstanceTemplateAppInstances: package type ''',
+                        artifact.PackageType,
+                        N''' is a metadata-only compatibility slot and cannot be bound to a template app instance for ''',
                         app.AppKey,
                         N'''.')
                 ELSE CONCAT(
