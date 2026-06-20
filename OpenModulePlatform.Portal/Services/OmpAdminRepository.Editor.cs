@@ -3013,9 +3013,14 @@ ORDER BY ar.ArtifactId;";
         await conn.OpenAsync(ct);
 
         var target = await ReadArtifactAutoApplyTargetAsync(conn, artifactId, ct);
-        if (target is null || !IsArtifactPackageCompatibleWithAppType(target.PackageType, target.AppType))
+        if (target is null)
         {
             return new ArtifactApplicationResult();
+        }
+
+        if (!IsArtifactPackageCompatibleWithAppType(target.PackageType, target.AppType))
+        {
+            return CreateIncompatibleAutoApplySkipResult(target.PackageType, target.AppType, target.AppKey);
         }
 
         var templateAppRowsUpdated = await ApplyArtifactToIntRowsAsync(
@@ -3105,6 +3110,7 @@ WHERE WorkerInstanceId = @RowId;",
         const string sql = @"
 SELECT ArtifactId,
        AppId,
+       app.AppKey,
        Version,
        PackageType,
        app.AppType
@@ -3128,7 +3134,8 @@ WHERE artifact.ArtifactId = @ArtifactId
             rdr.GetInt32(1),
             rdr.GetString(2),
             rdr.GetString(3),
-            rdr.GetString(4));
+            rdr.GetString(4),
+            rdr.GetString(5));
     }
 
     private static async Task<int> ApplyArtifactToIntRowsAsync(
@@ -3217,6 +3224,23 @@ WHERE artifact.ArtifactId = @ArtifactId
                 && appType.Equals("HostAgent", StringComparison.OrdinalIgnoreCase))
             || (packageType.Equals("worker-host", StringComparison.OrdinalIgnoreCase)
                 && appType.Equals("WorkerHost", StringComparison.OrdinalIgnoreCase));
+
+    internal static ArtifactApplicationResult CreateIncompatibleAutoApplySkipResult(
+        string packageType,
+        string appType,
+        string appKey)
+    {
+        var normalizedAppKey = string.IsNullOrWhiteSpace(appKey) ? "unknown-app" : appKey.Trim();
+        var incompatibilityDescription = packageType.Equals("channel-type", StringComparison.OrdinalIgnoreCase)
+            ? "is compatibility/channel metadata rather than a runtime artifact"
+            : "is not a runtime-compatible artifact";
+
+        return new ArtifactApplicationResult
+        {
+            AutoApplyInfoMessage =
+                $"Auto-apply skipped for '{normalizedAppKey}': package type '{packageType}' {incompatibilityDescription} for app type '{appType}', so no AppInstances, WorkerInstances, or InstanceTemplateAppInstances rows were updated."
+        };
+    }
 
     private static async Task<int> ApplyHostAgentArtifactToForwardRowsAsync(
         SqlConnection conn,
@@ -5482,6 +5506,7 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
     private sealed record ArtifactAutoApplyTarget(
         int ArtifactId,
         int AppId,
+        string AppKey,
         string Version,
         string PackageType,
         string AppType);

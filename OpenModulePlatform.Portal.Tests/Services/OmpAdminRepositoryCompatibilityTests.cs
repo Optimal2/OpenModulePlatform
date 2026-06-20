@@ -35,4 +35,26 @@ public sealed class OmpAdminRepositoryCompatibilityTests
 
         Assert.True(compatible);
     }
+
+    [Fact]
+    public void CreateIncompatibleAutoApplySkipResult_LeavesRuntimeBindingsUntouched_ForWorkerChannelTypeIncidentShape()
+    {
+        var result = OmpAdminRepository.CreateIncompatibleAutoApplySkipResult(
+            "channel-type",
+            "Worker",
+            "ibs_packager_worker");
+
+        Assert.Equal(0, result.TemplateAppRowsUpdated);
+        Assert.Equal(0, result.AppInstanceRowsUpdated);
+        Assert.Equal(0, result.WorkerInstanceRowsUpdated);
+        Assert.Equal(0, result.HostAgentDesiredRowsUpdated);
+        Assert.Equal(0, result.TotalRowsUpdated);
+        Assert.NotNull(result.AutoApplyInfoMessage);
+        Assert.Contains("ibs_packager_worker", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+        Assert.Contains("channel-type", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+        Assert.Contains("Worker", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+        Assert.Contains("AppInstances", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+        Assert.Contains("WorkerInstances", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+        Assert.Contains("InstanceTemplateAppInstances", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+    }
 }

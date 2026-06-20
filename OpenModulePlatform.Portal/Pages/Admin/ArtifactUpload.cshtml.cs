@@ -756,10 +756,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         if (applyWasRequested)
         {
-            var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
-            message += " " + string.Format(
-                T("Selected this artifact as desired version for {0} matching deployment row(s)."),
-                updatedRows);
+            message += " " + BuildArtifactAutoApplyStatusMessage(applicationResult);
         }
 
         return message;
@@ -777,13 +774,23 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
         if (applyWasRequested)
         {
-            var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
-            message += " " + string.Format(
-                T("Selected this artifact as desired version for {0} matching deployment row(s)."),
-                updatedRows);
+            message += " " + BuildArtifactAutoApplyStatusMessage(applicationResult);
         }
 
         return message;
+    }
+
+    private string BuildArtifactAutoApplyStatusMessage(ArtifactApplicationResult? applicationResult)
+    {
+        if (!string.IsNullOrWhiteSpace(applicationResult?.AutoApplyInfoMessage))
+        {
+            return applicationResult.AutoApplyInfoMessage!;
+        }
+
+        var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
+        return string.Format(
+            T("Selected this artifact as desired version for {0} matching deployment row(s)."),
+            updatedRows);
     }
 
     private static void MoveExistingArtifactToBackup(string finalPath, string backupPath)
