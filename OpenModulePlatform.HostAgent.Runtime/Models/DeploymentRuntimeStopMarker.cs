@@ -4,6 +4,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Models;
 
 public sealed class DeploymentRuntimeStopMarker
 {
+    private static readonly TimeSpan DefaultExpiry = TimeSpan.FromHours(1);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true
@@ -20,6 +22,11 @@ public sealed class DeploymentRuntimeStopMarker
     public string HostKey { get; init; } = string.Empty;
 
     public DateTimeOffset RecordedUtc { get; init; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset ExpiresUtc { get; init; } = DateTimeOffset.UtcNow.Add(DefaultExpiry);
+
+    public bool IsExpired(DateTimeOffset now)
+        => ExpiresUtc <= now;
 
     public static string GetPath(string targetPath)
         => Path.Join(targetPath, "App_Data", "omp-runtime-stopped-for-deployment.json");
@@ -52,10 +59,12 @@ public sealed class DeploymentRuntimeStopMarker
         string runtimeName,
         Guid appInstanceId,
         string appInstanceKey,
-        string hostKey)
+        string hostKey,
+        TimeSpan? expiry = null)
     {
         var path = GetPath(targetPath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var now = DateTimeOffset.UtcNow;
         var marker = new DeploymentRuntimeStopMarker
         {
             RuntimeKind = runtimeKind,
@@ -63,7 +72,8 @@ public sealed class DeploymentRuntimeStopMarker
             AppInstanceId = appInstanceId,
             AppInstanceKey = appInstanceKey,
             HostKey = hostKey,
-            RecordedUtc = DateTimeOffset.UtcNow
+            RecordedUtc = now,
+            ExpiresUtc = now.Add(expiry ?? DefaultExpiry)
         };
         File.WriteAllText(path, JsonSerializer.Serialize(marker, JsonOptions));
     }

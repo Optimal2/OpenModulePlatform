@@ -777,6 +777,17 @@ public sealed class ServiceAppDeploymentService
             try
             {
                 var marker = DeploymentRuntimeStopMarker.TryRead(candidate.TargetPath);
+                if (marker?.IsExpired(DateTimeOffset.UtcNow) ?? true)
+                {
+                    DeploymentRuntimeStopMarker.Delete(candidate.TargetPath);
+                    _logger.LogWarning(
+                        "Deleted stale or unreadable interrupted service app deployment marker. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, TargetPath={TargetPath}",
+                        candidate.AppInstanceId,
+                        candidate.AppInstanceKey,
+                        candidate.TargetPath);
+                    continue;
+                }
+
                 var runtimeName = string.IsNullOrWhiteSpace(marker?.RuntimeName)
                     ? candidate.RuntimeName
                     : marker.RuntimeName.Trim();
