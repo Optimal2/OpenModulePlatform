@@ -411,12 +411,9 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
         {
-            foreach (var userId in selectedOmpUserIds ?? [])
+            foreach (var userId in (selectedOmpUserIds ?? []).Where(static id => id > 0))
             {
-                if (userId > 0)
-                {
-                    candidates.Add(new PrincipalCandidate("OmpUser", userId.ToString(CultureInfo.InvariantCulture)));
-                }
+                candidates.Add(new PrincipalCandidate("OmpUser", userId.ToString(CultureInfo.InvariantCulture)));
             }
 
             return candidates;
@@ -532,13 +529,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             yield break;
         }
 
-        foreach (var line in value.Split(["\r\n", "\n", "\r"], StringSplitOptions.None))
+        foreach (var trimmed in value.Split(["\r\n", "\n", "\r"], StringSplitOptions.None)
+                     .Select(static line => line.Trim())
+                     .Where(static line => !string.IsNullOrWhiteSpace(line)))
         {
-            var trimmed = line.Trim();
-            if (!string.IsNullOrWhiteSpace(trimmed))
-            {
-                yield return trimmed;
-            }
+            yield return trimmed;
         }
     }
 
