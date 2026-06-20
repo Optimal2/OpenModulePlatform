@@ -137,7 +137,7 @@ IF EXISTS (SELECT 1 FROM omp.Apps WHERE ModuleId = @WorkerModuleId AND AppKey = 
 BEGIN
     UPDATE omp.Apps
     SET DisplayName = N'Example Managed Worker',
-        AppType = N'ServiceApp',
+        AppType = N'Worker',
         Description = N'Manager-driven worker app definition for the example worker module',
         IsEnabled = 1,
         SortOrder = 411,
@@ -151,7 +151,7 @@ BEGIN
         @WorkerModuleId,
         N'example_workerapp_worker',
         N'Example Managed Worker',
-        N'ServiceApp',
+        N'Worker',
         N'Manager-driven worker app definition for the example worker module',
         1,
         411);
