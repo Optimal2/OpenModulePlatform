@@ -57,6 +57,52 @@ END;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task WriteAuditLogAsync(
+        string actor,
+        string action,
+        string targetType,
+        string targetId,
+        string? beforeJson,
+        string? afterJson,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.AuditLog', N'U') IS NULL
+BEGIN
+    RETURN;
+END;
+
+INSERT INTO omp.AuditLog
+(
+    Actor,
+    Action,
+    TargetType,
+    TargetId,
+    BeforeJson,
+    AfterJson
+)
+VALUES
+(
+    @Actor,
+    @Action,
+    @TargetType,
+    @TargetId,
+    @BeforeJson,
+    @AfterJson
+);";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@Actor", TruncateForAudit(actor, 256));
+        Add(cmd, "@Action", TruncateForAudit(action, 200));
+        Add(cmd, "@TargetType", TruncateForAudit(targetType, 100));
+        Add(cmd, "@TargetId", TruncateForAudit(targetId, 200));
+        Add(cmd, "@BeforeJson", string.IsNullOrWhiteSpace(beforeJson) ? DBNull.Value : beforeJson.Trim());
+        Add(cmd, "@AfterJson", string.IsNullOrWhiteSpace(afterJson) ? DBNull.Value : afterJson.Trim());
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     // -------------------------------------------------------------------------
     // Lookup helpers used by edit forms
     // -------------------------------------------------------------------------
@@ -5514,5 +5560,18 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
     private static void Add(SqlCommand cmd, string name, object? value)
     {
         cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+    }
+
+    private static string TruncateForAudit(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength
+            ? trimmed
+            : trimmed[..maxLength];
     }
 }

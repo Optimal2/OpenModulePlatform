@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/HostDeployments.cshtml.cs
+using System.Text.Json;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Localization;
@@ -19,18 +20,21 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     private readonly IHostEnvironment _environment;
     private readonly OmpAdminRepository _repo;
     private readonly IStringLocalizer<PortalResource> _portalLocalizer;
+    private readonly ILogger<HostDeploymentsModel> _logger;
 
     public HostDeploymentsModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
         OmpAdminRepository repo,
         IStringLocalizer<PortalResource> portalLocalizer,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        ILogger<HostDeploymentsModel> logger)
         : base(options, rbac)
     {
         _environment = environment;
         _repo = repo;
         _portalLocalizer = portalLocalizer;
+        _logger = logger;
     }
 
     public IReadOnlyList<HostAppDeploymentStateRow> AppDeploymentStates { get; private set; } = [];
@@ -71,6 +75,17 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         var requestedBy = User.Identity?.Name ?? "PortalAdmin";
         await _repo.RequestServiceIdentityRepairAsync(hostId, appInstanceId, requestedBy, ct);
+        await TryWriteAuditLogAsync(
+            "RequestServiceIdentityRepair",
+            "ServiceAppDeploymentState",
+            appInstanceId.ToString(),
+            new
+            {
+                hostId,
+                appInstanceId,
+                requestedBy
+            },
+            ct);
         TempData["StatusMessage"] = P("Service identity repair was requested. HostAgent will apply it during its next cycle when credential automation is set to PortalAdminApproved.");
         return RedirectToPage();
     }
@@ -88,6 +103,17 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         }
 
         var changedRows = await _repo.RequestHostAgentUpgradeAsync(hostId, artifactId, ct);
+        await TryWriteAuditLogAsync(
+            "RequestHostAgentUpgrade",
+            "HostAgentDesiredState",
+            hostId.ToString(),
+            new
+            {
+                hostId,
+                artifactId,
+                changedRows
+            },
+            ct);
         TempData["StatusMessage"] = changedRows > 0
             ? P("HostAgent upgrade was requested. The active HostAgent will install and start the selected version during its next cycle.")
             : P("HostAgent desired version already matched the selected artifact, or the selected host/artifact was not valid.");
@@ -112,6 +138,17 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             recycleIfUnhealthy: false,
             User.Identity?.Name,
             ct);
+        await TryWriteAuditLogAsync(
+            "QueueWebAppHealthProbe",
+            "HostAgentJob",
+            jobId.ToString(),
+            new
+            {
+                jobId,
+                hostId,
+                healthKey = NormalizeHealthKey(healthKey)
+            },
+            ct);
         TempData["StatusMessage"] = _portalLocalizer["Web app health probe job {0} was queued.", jobId].Value;
         return RedirectToPage();
     }
@@ -135,6 +172,19 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         var lockStatus = GetPortalDeploymentLockStatus();
         if (lockStatus.IsLocked)
         {
+            await TryWriteAuditLogAsync(
+                "BlockWebAppAppPoolRecycle",
+                "PortalDeploymentLock",
+                hostId.ToString(),
+                new
+                {
+                    hostId,
+                    healthKey = NormalizeHealthKey(healthKey),
+                    appPoolName = NormalizeOptionalValue(appPoolName),
+                    lockId = lockStatus.Document?.LockId,
+                    diagnostic = lockStatus.Diagnostic
+                },
+                ct);
             TempData["StatusMessage"] = DescribePortalDeploymentLock(lockStatus);
             return RedirectToPage();
         }
@@ -144,6 +194,18 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             healthKey,
             appPoolName,
             User.Identity?.Name,
+            ct);
+        await TryWriteAuditLogAsync(
+            "QueueWebAppAppPoolRecycle",
+            "HostAgentJob",
+            jobId.ToString(),
+            new
+            {
+                jobId,
+                hostId,
+                healthKey = NormalizeHealthKey(healthKey),
+                appPoolName = NormalizeOptionalValue(appPoolName)
+            },
             ct);
         TempData["StatusMessage"] = _portalLocalizer["Web app application-pool recycle job {0} was queued.", jobId].Value;
         return RedirectToPage();
@@ -165,6 +227,17 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             hostId,
             healthKey,
             User.Identity?.Name,
+            ct);
+        await TryWriteAuditLogAsync(
+            "QueueWebAppLogCollection",
+            "HostAgentJob",
+            jobId.ToString(),
+            new
+            {
+                jobId,
+                hostId,
+                healthKey = NormalizeHealthKey(healthKey)
+            },
             ct);
         TempData["StatusMessage"] = _portalLocalizer["Web app log collection job {0} was queued.", jobId].Value;
         return RedirectToPage();
@@ -345,4 +418,45 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
         return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
     }
+
+    private async Task TryWriteAuditLogAsync(
+        string action,
+        string targetType,
+        string targetId,
+        object details,
+        CancellationToken ct)
+    {
+        var actor = User.Identity?.Name ?? "PortalAdmin";
+
+        try
+        {
+            await _repo.WriteAuditLogAsync(
+                actor,
+                action,
+                targetType,
+                targetId,
+                beforeJson: null,
+                afterJson: JsonSerializer.Serialize(details),
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to write HostDeployments audit log entry. Action={Action}, TargetType={TargetType}, TargetId={TargetId}",
+                action,
+                targetType,
+                targetId);
+        }
+    }
+
+    private static string NormalizeHealthKey(string? healthKey)
+        => string.IsNullOrWhiteSpace(healthKey)
+            ? "portal"
+            : healthKey.Trim();
+
+    private static string? NormalizeOptionalValue(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Trim();
 }
