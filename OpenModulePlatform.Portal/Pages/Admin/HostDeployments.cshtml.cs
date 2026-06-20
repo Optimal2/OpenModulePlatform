@@ -441,6 +441,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         }
         catch (Exception ex)
         {
+            // Audit write failures must not block the operator action that already completed.
             _logger.LogWarning(
                 ex,
                 "Failed to write HostDeployments audit log entry. Action={Action}, TargetType={TargetType}, TargetId={TargetId}",

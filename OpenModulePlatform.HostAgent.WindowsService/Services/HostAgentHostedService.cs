@@ -116,6 +116,7 @@ public sealed class HostAgentHostedService : BackgroundService
         }
         catch (Exception ex)
         {
+            // Shutdown cleanup is best-effort because the service is already stopping.
             _logger.LogWarning(ex, "HostAgent shutdown cleanup failed.");
         }
     }
