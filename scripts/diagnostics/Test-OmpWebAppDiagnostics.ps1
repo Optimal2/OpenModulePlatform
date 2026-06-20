@@ -586,7 +586,7 @@ function Add-SharedWebConfigChecks {
     Add-Check 'Runtime configuration' 'OMP web prerequisites' $status 'Checks OmpDb and shared auth/DataProtection settings used by the shared topbar.' $data
 }
 
-function Add-DocumentLibraryConfigChecks {
+function Add-ModuleDataStoreChecks {
     param(
         [System.Collections.IDictionary]$Config
     )
@@ -605,7 +605,8 @@ function Add-DocumentLibraryConfigChecks {
     $ompDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:OmpDb' -Default '')
     $legacyDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:DokumentBibliotekDb' -Default '')
 
-    Add-Check 'Dokumentbibliotek' 'Data-store configuration' ($(if ($useLegacy -and [string]::IsNullOrWhiteSpace($legacyDb)) { 'Fail' } else { 'OK' })) "UseLegacyDataStore=$useLegacy; DataSchema=$dataSchema" ([ordered]@{
+    Add-Check 'Module compatibility' 'Data-store configuration' ($(if ($useLegacy -and [string]::IsNullOrWhiteSpace($legacyDb)) { 'Fail' } else { 'OK' })) "UseLegacyDataStore=$useLegacy; DataSchema=$dataSchema" ([ordered]@{
+        ModuleType = 'DocumentLibrary'
         UseLegacyDataStore = $useLegacy
         DataSchema = $dataSchema
         HasOmpDbConnectionString = -not [string]::IsNullOrWhiteSpace($ompDb)
@@ -643,14 +644,20 @@ FROM RequiredObjects
 ORDER BY RequiredObjects.TableName;
 '@ -Parameters @{ '@schemaName' = $dataSchema }
         $missing = @($rows | Where-Object { $_.ExistsInDatabase -ne 1 })
-        Add-Check 'Dokumentbibliotek' 'Required data tables' ($(if ($missing.Count -gt 0) { 'Warn' } else { 'OK' })) "Checked schema $dataSchema; missing $($missing.Count)." $rows
+        Add-Check 'Module compatibility' 'Required data tables' ($(if ($missing.Count -gt 0) { 'Warn' } else { 'OK' })) "Checked schema $dataSchema; missing $($missing.Count)." ([ordered]@{
+            ModuleType = 'DocumentLibrary'
+            Objects = $rows
+        })
     }
     catch {
-        Add-Check 'Dokumentbibliotek' 'Required data tables' 'Fail' $_.Exception.Message
+        Add-Check 'Module compatibility' 'Required data tables' 'Fail' $_.Exception.Message ([ordered]@{
+            ModuleType = 'DocumentLibrary'
+            DataSchema = $dataSchema
+        })
     }
 }
 
-function Add-VajSkrivareConfigChecks {
+function Add-ModulePrinterConfigChecks {
     param(
         [string]$Path,
         [System.Collections.IDictionary]$Config,
@@ -667,7 +674,8 @@ function Add-VajSkrivareConfigChecks {
     $resolvedZebraPath = Resolve-AppPath -BasePath $Path -ConfiguredPath $zebraPath
     $printerItems = @(Get-ConfigValue -Config $Config -Path 'PrinterDatabases:Items' -Default @())
 
-    Add-Check 'VajSkrivare' 'Printer/Zebra configuration' ($(if ($zebraEnabled -and [string]::IsNullOrWhiteSpace($resolvedZebraPath)) { 'Fail' } else { 'OK' })) "Printer database count=$(@($printerItems).Count); ZebraEnabled=$zebraEnabled" ([ordered]@{
+    Add-Check 'Module compatibility' 'Printer/Zebra configuration' ($(if ($zebraEnabled -and [string]::IsNullOrWhiteSpace($resolvedZebraPath)) { 'Fail' } else { 'OK' })) "Printer database count=$(@($printerItems).Count); ZebraEnabled=$zebraEnabled" ([ordered]@{
+        ModuleType = 'Printer'
         PrinterDatabaseCount = @($printerItems).Count
         ZebraEnabled = $zebraEnabled
         ZebraFilePath = $zebraPath
@@ -680,7 +688,10 @@ function Add-VajSkrivareConfigChecks {
 
     $fileSummary = Get-FileSummary -Path $resolvedZebraPath
     if (-not $fileSummary.Exists) {
-        Add-Check 'VajSkrivare' 'Zebra JSON file' ($(if ($zebraEnabled) { 'Fail' } else { 'Warn' })) $resolvedZebraPath $fileSummary
+        Add-Check 'Module compatibility' 'Zebra JSON file' ($(if ($zebraEnabled) { 'Fail' } else { 'Warn' })) $resolvedZebraPath ([ordered]@{
+            ModuleType = 'Printer'
+            File = $fileSummary
+        })
         return
     }
 
@@ -699,7 +710,8 @@ function Add-VajSkrivareConfigChecks {
             })
         }
 
-        Add-Check 'VajSkrivare' 'Zebra JSON content' ($(if (-not [string]::IsNullOrWhiteSpace($Client) -and $clientMatches.Count -eq 0) { 'Warn' } else { 'OK' })) "Connections=$($connections.Count); Configs=$($configs.Count); ClientMatches=$($clientMatches.Count)" ([ordered]@{
+        Add-Check 'Module compatibility' 'Zebra JSON content' ($(if (-not [string]::IsNullOrWhiteSpace($Client) -and $clientMatches.Count -eq 0) { 'Warn' } else { 'OK' })) "Connections=$($connections.Count); Configs=$($configs.Count); ClientMatches=$($clientMatches.Count)" ([ordered]@{
+            ModuleType = 'Printer'
             Path = $resolvedZebraPath
             Length = $fileSummary.Length
             LastWriteTimeUtc = $fileSummary.LastWriteTimeUtc
@@ -710,7 +722,10 @@ function Add-VajSkrivareConfigChecks {
         })
     }
     catch {
-        Add-Check 'VajSkrivare' 'Zebra JSON content' 'Fail' $_.Exception.Message ([ordered]@{ Path = $resolvedZebraPath })
+        Add-Check 'Module compatibility' 'Zebra JSON content' 'Fail' $_.Exception.Message ([ordered]@{
+            ModuleType = 'Printer'
+            Path = $resolvedZebraPath
+        })
     }
 }
 
@@ -1199,8 +1214,8 @@ if (-not [string]::IsNullOrWhiteSpace($targetPath)) {
             RedactedConfig = Redact-ConfigValue -Key 'appsettings' -Value $appConfigInfo.Config
         })
         Add-SharedWebConfigChecks -Path $targetPath -Config $appConfigInfo.Config
-        Add-DocumentLibraryConfigChecks -Config $appConfigInfo.Config
-        Add-VajSkrivareConfigChecks -Path $targetPath -Config $appConfigInfo.Config -Client $ZebraClient
+        Add-ModuleDataStoreChecks -Config $appConfigInfo.Config
+        Add-ModulePrinterConfigChecks -Path $targetPath -Config $appConfigInfo.Config -Client $ZebraClient
     }
     catch {
         Add-Check 'Runtime configuration' 'Effective deployed appsettings' 'Fail' $_.Exception.Message

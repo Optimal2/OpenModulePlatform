@@ -38,8 +38,8 @@ event-log, and optional HTTP probe data for one web application:
 .\Test-OmpWebAppDiagnostics.ps1 `
   -ServiceName 'OMP.HostAgent' `
   -HostAgentPath 'D:\OMP\Services\HostAgent' `
-  -RoutePath 'dokumentbibliotek' `
-  -AppInstanceKey 'earkiv_dokumentbibliotek_web' `
-  -Url 'https://example.invalid/dokumentbibliotek' `
-  -OutputPath '.\omp-webapp-dokumentbibliotek.json'
+  -RoutePath 'my-web-app' `
+  -AppInstanceKey 'my_web_app' `
+  -Url 'https://example.invalid/my-web-app' `
+  -OutputPath '.\omp-webapp-my-web-app.json'
 ```
