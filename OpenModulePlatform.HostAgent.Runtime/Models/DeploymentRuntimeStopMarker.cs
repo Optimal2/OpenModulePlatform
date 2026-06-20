@@ -47,8 +47,10 @@ public sealed class DeploymentRuntimeStopMarker
             var json = File.ReadAllText(path);
             return JsonSerializer.Deserialize<DeploymentRuntimeStopMarker>(json, JsonOptions);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
+            // Recovery treats unreadable or malformed markers as absent/stale;
+            // the caller logs and repairs the deployment state from database truth.
             return null;
         }
     }

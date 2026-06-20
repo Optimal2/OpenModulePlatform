@@ -209,6 +209,8 @@ public sealed class HostAgentJobProcessor
             }
             catch (Exception ex)
             {
+                // Lease renewal is best-effort: log transient repository/SQL failures
+                // and retry on the next renewal interval while the job still runs.
                 _logger.LogWarning(
                     ex,
                     "HostAgent job lease renewal failed. The next renewal attempt will retry while the job is still running. HostAgentJobId={HostAgentJobId}, JobType={JobType}",
