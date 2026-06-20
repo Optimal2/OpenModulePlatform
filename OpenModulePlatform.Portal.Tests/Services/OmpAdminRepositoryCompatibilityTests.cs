@@ -5,7 +5,12 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 public sealed class OmpAdminRepositoryCompatibilityTests
 {
     [Theory]
+    [InlineData("channel-type", "Portal")]
+    [InlineData("channel-type", "WebApp")]
     [InlineData("channel-type", "Worker")]
+    [InlineData("channel-type", "ServiceApp")]
+    [InlineData("channel-type", "HostAgent")]
+    [InlineData("channel-type", "WorkerHost")]
     [InlineData("worker-plugin", "Worker")]
     [InlineData("worker", "WebApp")]
     [InlineData("host-agent", "Portal")]
