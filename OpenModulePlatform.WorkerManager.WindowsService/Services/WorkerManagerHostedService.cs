@@ -284,31 +284,36 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 $"Worker plugin assembly path does not exist: '{managed.Definition.PluginAssemblyPath}'.");
         }
 
-        var shutdownEvent = new EventWaitHandle(
-            initialState: false,
-            mode: EventResetMode.ManualReset,
-            name: managed.Definition.ShutdownEventName);
-
-        var ompConnectionString = _configuration.GetConnectionString("OmpDb");
-        var process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
-        managed.RecordStartAttempt(nowUtc, restartWindow);
-
+        EventWaitHandle? shutdownEvent = null;
+        Process? process = null;
         try
         {
+            shutdownEvent = new EventWaitHandle(
+                initialState: false,
+                mode: EventResetMode.ManualReset,
+                name: managed.Definition.ShutdownEventName);
+
+            var ompConnectionString = _configuration.GetConnectionString("OmpDb");
+            process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
+            managed.RecordStartAttempt(nowUtc, restartWindow);
+
             if (!process.Start())
             {
                 throw new InvalidOperationException(
                     $"Failed to start worker process for WorkerInstanceId '{managed.Definition.WorkerInstanceId}'.");
             }
+
+            managed.AttachProcess(process, shutdownEvent, nowUtc);
+            process = null;
+            shutdownEvent = null;
         }
         catch
         {
-            process.Dispose();
-            shutdownEvent.Dispose();
+            process?.Dispose();
+            shutdownEvent?.Dispose();
             throw;
         }
 
-        managed.AttachProcess(process, shutdownEvent, nowUtc);
         await PublishStartingObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
 
         _logger.LogInformation(
@@ -689,13 +694,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
         startInfo.ArgumentList.Add($"--WorkerProcess:AppInstanceId={desired.AppInstanceId:D}");
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerInstanceId={desired.WorkerInstanceId:D}");
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerInstanceKey={desired.WorkerInstanceKey}");
-        if (!string.IsNullOrWhiteSpace(desired.ConfigurationJson))
-        {
-            startInfo.ArgumentList.Add($"--WorkerProcess:ConfigurationJson={desired.ConfigurationJson}");
-        }
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerTypeKey={desired.WorkerTypeKey}");
         startInfo.ArgumentList.Add($"--WorkerProcess:PluginAssemblyPath={desired.PluginAssemblyPath}");
         startInfo.ArgumentList.Add($"--WorkerProcess:ShutdownEventName={desired.ShutdownEventName}");
+        if (!string.IsNullOrWhiteSpace(desired.ConfigurationJson))
+        {
+            // Worker configuration may contain module-specific values. Keep it out of
+            // process command lines and let WorkerProcessHost read it from environment config.
+            startInfo.Environment["WorkerProcess__ConfigurationJson"] = desired.ConfigurationJson;
+        }
+
         var normalizedOmpConnectionString = ompConnectionString?.Trim();
         if (!string.IsNullOrWhiteSpace(normalizedOmpConnectionString))
         {
@@ -789,7 +797,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     workerProcessPath);
 
                 process.Kill(entireProcessTree: true);
-                await process.WaitForExitAsync(CancellationToken.None).WaitAsync(stopTimeout, cancellationToken);
+                if (!await WaitForProcessExitAsync(process, stopTimeout, cancellationToken))
+                {
+                    throw new TimeoutException(
+                        $"Orphaned worker host process '{orphan.ProcessId}' did not exit within {settings.StopTimeoutSeconds} seconds.");
+                }
+
                 cleanedCount++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -926,6 +939,24 @@ public sealed class WorkerManagerHostedService : BackgroundService
         => OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
+
+    private static async Task<bool> WaitForProcessExitAsync(
+        Process process,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        try
+        {
+            await process.WaitForExitAsync(waitCts.Token);
+            return true;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
 
     private static bool IsRecoverableWorkerManagerFailure(Exception exception)
         => exception is InvalidOperationException
