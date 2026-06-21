@@ -16,6 +16,8 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 
 public sealed class WorkerManagerHostedService : BackgroundService
 {
+    private const string WorkerProcessHostExecutableName = "OpenModulePlatform.WorkerProcessHost.exe";
+
     private readonly ILogger<WorkerManagerHostedService> _logger;
     private readonly IConfiguration _configuration;
     private readonly IOptionsMonitor<WorkerManagerSettings> _settings;
@@ -123,7 +125,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
             await PublishExitObservationIfEnabledAsync(managed, runtimeKind, "worker process exited", cancellationToken);
         }
 
-        foreach (var existing in _managedWorkers.Values.Where(worker => !desiredById.ContainsKey(worker.Definition.WorkerInstanceId)).ToList())
+        var undesiredWorkers = _managedWorkers.Values
+            .Where(worker => !desiredById.ContainsKey(worker.Definition.WorkerInstanceId))
+            .ToList();
+
+        foreach (var existing in undesiredWorkers)
         {
             try
             {
@@ -170,6 +176,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
             catch (Exception ex)
             {
+                // One worker can fail to stop, start, or publish status without blocking
+                // reconciliation for the remaining workers in the same service cycle.
                 await HandleWorkerFailureAsync(managed, runtimeKind, "reconcile desired worker", ex, cancellationToken);
             }
         }
@@ -185,10 +193,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         foreach (var desired in desiredWorkers)
         {
             var resolved = desired;
-            var shouldAskHostAgent = settings.HostAgentRpc.Enabled
-                && desired.ArtifactId.HasValue
-                && !string.IsNullOrWhiteSpace(desired.PluginRelativePath)
-                && (!desired.IsProvisionedFromHostArtifactCache || string.IsNullOrWhiteSpace(desired.PluginAssemblyPath) || !File.Exists(desired.PluginAssemblyPath));
+            var shouldAskHostAgent = ShouldRequestArtifactFromHostAgent(settings, desired);
 
             if (shouldAskHostAgent)
             {
@@ -283,10 +288,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
             mode: EventResetMode.ManualReset,
             name: managed.Definition.ShutdownEventName);
 
-        var process = CreateWorkerProcess(
-            workerProcessPath,
-            managed.Definition,
-            _configuration.GetConnectionString("OmpDb"));
+        var ompConnectionString = _configuration.GetConnectionString("OmpDb");
+        var process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
         managed.RecordStartAttempt(nowUtc, restartWindow);
 
         try
@@ -325,6 +328,18 @@ public sealed class WorkerManagerHostedService : BackgroundService
     {
         await StopWorkerAsync(managed, runtimeKind, reason, cancellationToken);
         _managedWorkers.Remove(managed.Definition.WorkerInstanceId);
+    }
+
+    private static bool ShouldRequestArtifactFromHostAgent(
+        WorkerManagerSettings settings,
+        DesiredWorkerInstance desired)
+    {
+        return settings.HostAgentRpc.Enabled
+            && desired.ArtifactId.HasValue
+            && !string.IsNullOrWhiteSpace(desired.PluginRelativePath)
+            && (!desired.IsProvisionedFromHostArtifactCache
+                || string.IsNullOrWhiteSpace(desired.PluginAssemblyPath)
+                || !File.Exists(desired.PluginAssemblyPath));
     }
 
     private async Task StopAllWorkersAsync(string reason, CancellationToken cancellationToken)
@@ -680,11 +695,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerTypeKey={desired.WorkerTypeKey}");
         startInfo.ArgumentList.Add($"--WorkerProcess:PluginAssemblyPath={desired.PluginAssemblyPath}");
         startInfo.ArgumentList.Add($"--WorkerProcess:ShutdownEventName={desired.ShutdownEventName}");
-        if (!string.IsNullOrWhiteSpace(ompConnectionString))
+        var normalizedOmpConnectionString = ompConnectionString?.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedOmpConnectionString))
         {
             // Worker modules run in a separate process; pass the OMP database connection through
             // process-local configuration without exposing it as a command-line argument.
-            startInfo.Environment["ConnectionStrings__OmpDb"] = ompConnectionString.Trim();
+            startInfo.Environment["ConnectionStrings__OmpDb"] = normalizedOmpConnectionString;
         }
 
         return new Process
@@ -824,7 +840,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         var normalizedWorkerProcessPath = Path.GetFullPath(workerProcessPath);
         var result = new List<OrphanedWorkerProcess>();
         using var searcher = new ManagementObjectSearcher(
-            "SELECT ProcessId, ParentProcessId, ExecutablePath FROM Win32_Process WHERE Name = 'OpenModulePlatform.WorkerProcessHost.exe'");
+            $"SELECT ProcessId, ParentProcessId, ExecutablePath FROM Win32_Process WHERE Name = '{WorkerProcessHostExecutableName}'");
         using var processes = searcher.Get();
 
         foreach (ManagementObject process in processes)
