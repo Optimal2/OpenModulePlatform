@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/HostDeployments.cshtml.cs
+using System.Data.Common;
 using System.Text.Json;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
@@ -439,7 +440,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
                 afterJson: JsonSerializer.Serialize(details),
                 ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsAuditLogFailure(ex))
         {
             // Audit write failures must not block the operator action that already completed.
             _logger.LogWarning(
@@ -450,6 +451,13 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
                 targetId);
         }
     }
+
+    private static bool IsAuditLogFailure(Exception exception)
+        => exception is DbException
+            or InvalidOperationException
+            or JsonException
+            or NotSupportedException
+            or TimeoutException;
 
     private static string NormalizeHealthKey(string? healthKey)
         => string.IsNullOrWhiteSpace(healthKey)

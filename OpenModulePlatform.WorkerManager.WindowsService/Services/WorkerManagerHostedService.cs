@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/WorkerManagerHostedService.cs
 using System.ComponentModel;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Management;
 using System.Runtime.Versioning;
@@ -84,7 +85,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsRecoverableWorkerManagerFailure(ex))
         {
             // A single reconcile failure must not stop the Windows service;
             // the next cycle gets a fresh catalog/runtime view and retries.
@@ -139,7 +140,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableWorkerManagerFailure(ex))
             {
                 // Keep reconciling other workers; per-worker failures are published below.
                 await HandleWorkerFailureAsync(existing, runtimeKind, "stop undesired worker", ex, cancellationToken);
@@ -174,7 +175,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableWorkerManagerFailure(ex))
             {
                 // One worker can fail to stop, start, or publish status without blocking
                 // reconciliation for the remaining workers in the same service cycle.
@@ -356,7 +357,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsRecoverableWorkerManagerFailure(ex))
             {
                 // Shutdown cleanup is best-effort because the service is already stopping.
                 _logger.LogWarning(
@@ -698,8 +699,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         var normalizedOmpConnectionString = ompConnectionString?.Trim();
         if (!string.IsNullOrWhiteSpace(normalizedOmpConnectionString))
         {
-            // Worker modules run in a separate process; pass the OMP database connection through
-            // process-local configuration without exposing it as a command-line argument.
+            // Worker host and plugins are OMP-provisioned code running in the same Windows
+            // trust boundary. Environment configuration avoids command-line exposure while
+            // still giving the worker process its required OMP database connection.
             startInfo.Environment["ConnectionStrings__OmpDb"] = normalizedOmpConnectionString;
         }
 
@@ -924,6 +926,17 @@ public sealed class WorkerManagerHostedService : BackgroundService
         => OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
+
+    private static bool IsRecoverableWorkerManagerFailure(Exception exception)
+        => exception is InvalidOperationException
+            or IOException
+            or DbException
+            or UnauthorizedAccessException
+            or TimeoutException
+            or ArgumentException
+            or ManagementException
+            or Win32Exception
+            or NotSupportedException;
 
     private sealed record OrphanedWorkerProcess(int ProcessId, int ParentProcessId);
 }

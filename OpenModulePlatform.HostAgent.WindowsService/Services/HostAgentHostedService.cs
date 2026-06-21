@@ -114,10 +114,14 @@ public sealed class HostAgentHostedService : BackgroundService
         {
             _logger.LogWarning("HostAgent shutdown cleanup timed out.");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsRecoverableShutdownFailure(ex))
         {
             // Shutdown cleanup is best-effort because the service is already stopping.
             _logger.LogWarning(ex, "HostAgent shutdown cleanup failed.");
         }
     }
+
+    private static bool IsRecoverableShutdownFailure(Exception exception)
+        => IsRecoverableCycleFailure(exception)
+            || exception is OperationCanceledException;
 }
