@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -207,7 +208,7 @@ public sealed class HostAgentJobProcessor
             {
                 return;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsExpectedLeaseRenewalFailure(ex))
             {
                 // Lease renewal is best-effort: log transient repository/SQL failures
                 // and retry on the next renewal interval while the job still runs.
@@ -219,6 +220,13 @@ public sealed class HostAgentJobProcessor
             }
         }
     }
+
+    private static bool IsExpectedLeaseRenewalFailure(Exception exception)
+        => exception is InvalidOperationException
+            or IOException
+            or DbException
+            or UnauthorizedAccessException
+            or TimeoutException;
 
     private static async Task StopJobLeaseRenewalAsync(
         CancellationTokenSource processingCancellation,

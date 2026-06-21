@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Management;
+using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Artifacts;
@@ -493,6 +496,11 @@ public sealed class ServiceAppDeploymentService
                     $"Windows service '{serviceName}' must run as '{desiredIdentity.UserName}', but HostAgent has no stored password for that account.");
             }
 
+            if (!OperatingSystem.IsWindows())
+            {
+                throw new InvalidOperationException("Service app identity repair requires Windows service management.");
+            }
+
             ApplyDesiredServiceIdentity(settings, serviceName, desiredIdentity);
             var updatedIdentity = GetServiceStartName(serviceName);
             if (!AccountsEqual(updatedIdentity, desiredIdentity.UserName))
@@ -665,6 +673,7 @@ public sealed class ServiceAppDeploymentService
             identityCheck.Status,
             identityCheck.ClearRepairRequest);
 
+    [SupportedOSPlatform("windows")]
     private static void ApplyDesiredServiceIdentity(
         HostAgentSettings settings,
         string serviceName,
@@ -682,21 +691,11 @@ public sealed class ServiceAppDeploymentService
             StopServiceIfRunning(serviceName, settings.ServiceAppStopTimeoutSeconds);
         }
 
-        var arguments = new List<string>
-        {
-            "config",
-            serviceName,
-            "obj=",
-            NormalizeAccountForSc(desiredIdentity.UserName)
-        };
-
-        if (RequiresPassword(desiredIdentity.UserName))
-        {
-            arguments.Add("password=");
-            arguments.Add(desiredIdentity.Password);
-        }
-
-        RunScChecked([.. arguments]);
+        var serviceStartName = NormalizeAccountForSc(desiredIdentity.UserName);
+        var serviceStartPassword = RequiresPassword(desiredIdentity.UserName)
+            ? desiredIdentity.Password
+            : null;
+        ChangeServiceStartAccount(serviceName, serviceStartName, serviceStartPassword);
 
         if (wasRunning)
         {
@@ -883,6 +882,45 @@ public sealed class ServiceAppDeploymentService
 
         return null;
     }
+
+    [SupportedOSPlatform("windows")]
+    private static void ChangeServiceStartAccount(
+        string serviceName,
+        string startName,
+        string? startPassword)
+    {
+        using var service = GetWindowsServiceManagementObject(serviceName);
+        using var parameters = service.GetMethodParameters("Change");
+        parameters["StartName"] = startName;
+        parameters["StartPassword"] = startPassword;
+
+        using var result = service.InvokeMethod("Change", parameters, null);
+        var returnValue = Convert.ToUInt32(result?["ReturnValue"] ?? 0, CultureInfo.InvariantCulture);
+        if (returnValue != 0)
+        {
+            throw new InvalidOperationException(
+                $"Win32_Service.Change failed with return value {returnValue} for Windows service '{serviceName}'.");
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static ManagementObject GetWindowsServiceManagementObject(string serviceName)
+    {
+        using var searcher = new ManagementObjectSearcher(
+            "SELECT * FROM Win32_Service WHERE Name = " + QuoteWqlString(serviceName));
+
+        foreach (ManagementObject service in searcher.Get())
+        {
+            return service;
+        }
+
+        throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
+    }
+
+    private static string QuoteWqlString(string value)
+        => "'" + value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal) + "'";
 
     private static string? GetServiceStartNameIfExists(string serviceName)
     {
