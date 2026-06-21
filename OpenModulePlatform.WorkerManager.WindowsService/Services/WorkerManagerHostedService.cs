@@ -756,6 +756,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     private async Task CleanupOrphanedWorkerProcessesOnStartupAsync(CancellationToken cancellationToken)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var settings = _settings.CurrentValue;
         settings.Validate();
 
@@ -780,11 +785,6 @@ public sealed class WorkerManagerHostedService : BackgroundService
         if (string.IsNullOrWhiteSpace(managerProcessPath))
         {
             _logger.LogWarning("WorkerManager skipped startup orphan scan because the manager executable path could not be resolved.");
-            return;
-        }
-
-        if (!OperatingSystem.IsWindows())
-        {
             return;
         }
 
@@ -881,11 +881,6 @@ public sealed class WorkerManagerHostedService : BackgroundService
         string workerProcessPath,
         string managerProcessPath)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return [];
-        }
-
         var normalizedWorkerProcessPath = Path.GetFullPath(workerProcessPath);
         var result = new List<OrphanedWorkerProcess>();
         using var searcher = new ManagementObjectSearcher(CreateWorkerProcessHostQuery());
