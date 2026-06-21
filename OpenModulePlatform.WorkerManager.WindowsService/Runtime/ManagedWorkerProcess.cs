@@ -121,16 +121,13 @@ public sealed class ManagedWorkerProcess
             return true;
         }
 
-        try
+        if (await WaitForProcessExitAsync(process, stopTimeout, cancellationToken))
         {
-            await process.WaitForExitAsync(CancellationToken.None).WaitAsync(stopTimeout, cancellationToken);
             ObserveExitIfNeeded();
             return true;
         }
-        catch (TimeoutException)
-        {
-            return false;
-        }
+
+        return false;
     }
 
     public async Task<bool> KillAsync(TimeSpan timeout, CancellationToken cancellationToken)
@@ -159,13 +156,28 @@ public sealed class ManagedWorkerProcess
             return true;
         }
 
-        try
+        if (await WaitForProcessExitAsync(process, timeout, cancellationToken))
         {
-            await process.WaitForExitAsync(CancellationToken.None).WaitAsync(timeout, cancellationToken);
             ObserveExitIfNeeded();
             return true;
         }
-        catch (TimeoutException)
+
+        return false;
+    }
+
+    private static async Task<bool> WaitForProcessExitAsync(
+        Process process,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        try
+        {
+            await process.WaitForExitAsync(waitCts.Token);
+            return true;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             return false;
         }
