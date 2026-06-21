@@ -20,7 +20,7 @@ namespace OpenModulePlatform.Portal.Pages.Admin.Rbac;
 public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 {
     private static readonly Regex NamePattern = new(
-        "^[A-Za-z0-9][A-Za-z0-9._-]{1,199}$",
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$",
         RegexOptions.Compiled);
 
     private static readonly Regex OmpUserPrincipalLabelPattern = new(
@@ -342,7 +342,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         if (!NamePattern.IsMatch(Input.Name ?? string.Empty))
         {
             ModelState.AddModelError(
-                nameof(Input.Name), T("Use letters, digits, dash, underscore or dot. Keep the role name stable."));
+                nameof(Input.Name), T("Role name must be 1-200 characters and contain only letters, digits, dash, underscore or dot."));
         }
     }
 
@@ -461,6 +461,8 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 continue;
             }
 
+            // Unit separator cannot occur in the normalized principal type values and is
+            // not valid in Windows principal names, so it avoids collisions for batch de-duplication.
             var normalizedKey = $"{normalized.PrincipalType}\u001f{normalized.Principal}";
             if (!seen.Add(normalizedKey))
             {
@@ -555,6 +557,8 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         {
             try
             {
+                // NTAccount.Translate can contact a domain controller. The candidate list is
+                // deliberately tiny so role saves fail soft rather than block on broad lookup work.
                 if (new NTAccount(candidate).Translate(typeof(SecurityIdentifier)) is SecurityIdentifier sid)
                 {
                     return sid.Value;
@@ -578,6 +582,8 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (!principal.Contains('\\') && !string.IsNullOrWhiteSpace(Environment.MachineName))
         {
+            // Bare group names are tried as local machine groups after the original value.
+            // Domain principals should be entered as DOMAIN\Name or as a SID to avoid ambiguity.
             yield return Environment.MachineName + "\\" + principal;
         }
     }

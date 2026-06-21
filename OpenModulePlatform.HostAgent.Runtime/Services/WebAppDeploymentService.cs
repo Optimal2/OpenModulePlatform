@@ -582,11 +582,12 @@ public sealed class WebAppDeploymentService
         out string error)
     {
         var lastError = string.Empty;
-        foreach (var accountName in accountNames)
+        var grantResults = accountNames.Select(accountName => RunProcess(
+            "icacls.exe",
+            [path, "/grant", $"{accountName}:(OI)(CI)({permission})"]));
+
+        foreach (var result in grantResults)
         {
-            var result = RunProcess(
-                "icacls.exe",
-                [path, "/grant", $"{accountName}:(OI)(CI)({permission})"]);
             if (result.ExitCode == 0)
             {
                 error = string.Empty;
@@ -1082,7 +1083,7 @@ public sealed class WebAppDeploymentService
             try
             {
                 var marker = DeploymentRuntimeStopMarker.TryRead(candidate.TargetPath);
-                if (marker?.IsExpired(DateTimeOffset.UtcNow) ?? true)
+                if (marker is null || marker.IsExpired(DateTimeOffset.UtcNow))
                 {
                     DeploymentRuntimeStopMarker.Delete(candidate.TargetPath);
                     _logger.LogWarning(
@@ -1093,7 +1094,7 @@ public sealed class WebAppDeploymentService
                     continue;
                 }
 
-                var runtimeName = string.IsNullOrWhiteSpace(marker?.RuntimeName)
+                var runtimeName = string.IsNullOrWhiteSpace(marker.RuntimeName)
                     ? candidate.RuntimeName
                     : marker.RuntimeName.Trim();
                 if (string.IsNullOrWhiteSpace(runtimeName))

@@ -778,7 +778,7 @@ public sealed class ServiceAppDeploymentService
             try
             {
                 var marker = DeploymentRuntimeStopMarker.TryRead(candidate.TargetPath);
-                if (marker?.IsExpired(DateTimeOffset.UtcNow) ?? true)
+                if (marker is null || marker.IsExpired(DateTimeOffset.UtcNow))
                 {
                     DeploymentRuntimeStopMarker.Delete(candidate.TargetPath);
                     _logger.LogWarning(
@@ -789,7 +789,7 @@ public sealed class ServiceAppDeploymentService
                     continue;
                 }
 
-                var runtimeName = string.IsNullOrWhiteSpace(marker?.RuntimeName)
+                var runtimeName = string.IsNullOrWhiteSpace(marker.RuntimeName)
                     ? candidate.RuntimeName
                     : marker.RuntimeName.Trim();
                 if (string.IsNullOrWhiteSpace(runtimeName))
