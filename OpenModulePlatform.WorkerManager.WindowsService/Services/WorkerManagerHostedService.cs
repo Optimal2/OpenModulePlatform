@@ -286,6 +286,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         EventWaitHandle? shutdownEvent = null;
         Process? process = null;
+        var ownershipTransferred = false;
         try
         {
             shutdownEvent = new EventWaitHandle(
@@ -304,13 +305,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
 
             managed.AttachProcess(process, shutdownEvent, nowUtc);
-            process = null;
-            shutdownEvent = null;
+            ownershipTransferred = true;
         }
         catch
         {
-            process?.Dispose();
-            shutdownEvent?.Dispose();
+            if (!ownershipTransferred)
+            {
+                process?.Dispose();
+                shutdownEvent?.Dispose();
+            }
+
             throw;
         }
 
@@ -605,7 +609,13 @@ public sealed class WorkerManagerHostedService : BackgroundService
             return null;
         }
 
-        return _settings.CurrentValue.OmpDatabase.RuntimeKind.Trim();
+        var ompDatabase = _settings.CurrentValue.OmpDatabase;
+        if (ompDatabase is null || string.IsNullOrWhiteSpace(ompDatabase.RuntimeKind))
+        {
+            return null;
+        }
+
+        return ompDatabase.RuntimeKind.Trim();
     }
 
     private static WorkerRuntimeObservation CreateObservation(
@@ -697,11 +707,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerTypeKey={desired.WorkerTypeKey}");
         startInfo.ArgumentList.Add($"--WorkerProcess:PluginAssemblyPath={desired.PluginAssemblyPath}");
         startInfo.ArgumentList.Add($"--WorkerProcess:ShutdownEventName={desired.ShutdownEventName}");
-        if (!string.IsNullOrWhiteSpace(desired.ConfigurationJson))
+        var workerConfigurationJson = desired.ConfigurationJson;
+        if (!string.IsNullOrWhiteSpace(workerConfigurationJson))
         {
             // Worker configuration may contain module-specific values. Keep it out of
             // process command lines and let WorkerProcessHost read it from environment config.
-            startInfo.Environment["WorkerProcess__ConfigurationJson"] = desired.ConfigurationJson;
+            startInfo.Environment["WorkerProcess__ConfigurationJson"] = workerConfigurationJson;
         }
 
         var normalizedOmpConnectionString = ompConnectionString?.Trim();
