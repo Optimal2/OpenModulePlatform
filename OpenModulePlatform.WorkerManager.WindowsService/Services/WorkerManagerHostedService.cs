@@ -1,7 +1,5 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/WorkerManagerHostedService.cs
 using System.ComponentModel;
-using System.Data.Common;
-using System.Diagnostics;
 using System.Management;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.Configuration;
@@ -12,6 +10,9 @@ using OpenModulePlatform.WorkerManager.WindowsService.Contracts;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
 using OpenModulePlatform.WorkerManager.WindowsService.Runtime;
 using OpenModulePlatform.WorkerManager.WindowsService.Utilities;
+using DbException = System.Data.Common.DbException;
+using Process = System.Diagnostics.Process;
+using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 
@@ -936,17 +937,22 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     private static string CreateSafeWqlStringLiteral(string value)
     {
-        foreach (var ch in value)
+        var unsupportedCharacter = value
+            .Where(ch => !IsSafeWqlStringLiteralCharacter(ch))
+            .Select(ch => (char?)ch)
+            .FirstOrDefault();
+
+        if (unsupportedCharacter.HasValue)
         {
-            if (!char.IsLetterOrDigit(ch) && ch is not '.' and not '_' and not '-')
-            {
-                throw new InvalidOperationException(
-                    $"WorkerProcessHost executable name contains an unsupported WMI query character: '{value}'.");
-            }
+            throw new InvalidOperationException(
+                $"WorkerProcessHost executable name contains an unsupported WMI query character: '{value}'.");
         }
 
         return "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
     }
+
+    private static bool IsSafeWqlStringLiteralCharacter(char ch)
+        => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-';
 
     [SupportedOSPlatform("windows")]
     private static bool IsLiveWorkerManagerParent(int parentProcessId, string managerProcessPath)
