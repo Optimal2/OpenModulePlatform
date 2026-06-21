@@ -272,51 +272,23 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         var workerProcessPath = await ResolveWorkerProcessPathAsync(settings, cancellationToken);
-        if (!File.Exists(workerProcessPath))
-        {
-            throw new InvalidOperationException(
-                $"Resolved WorkerProcessHost executable path '{workerProcessPath}' does not exist.");
-        }
+        ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
+        ValidateReadableStartupFile(managed.Definition.PluginAssemblyPath, "Worker plugin assembly");
 
-        if (!File.Exists(managed.Definition.PluginAssemblyPath))
-        {
-            throw new InvalidOperationException(
-                $"Worker plugin assembly path does not exist: '{managed.Definition.PluginAssemblyPath}'.");
-        }
+        using var startupResources = new WorkerStartupResources(new EventWaitHandle(
+            initialState: false,
+            mode: EventResetMode.ManualReset,
+            name: managed.Definition.ShutdownEventName));
 
-        EventWaitHandle? shutdownEvent = null;
-        Process? process = null;
-        var ownershipTransferred = false;
-        try
-        {
-            shutdownEvent = new EventWaitHandle(
-                initialState: false,
-                mode: EventResetMode.ManualReset,
-                name: managed.Definition.ShutdownEventName);
+        var ompConnectionString = _configuration.GetConnectionString("OmpDb");
+        var process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
+        startupResources.AttachProcess(process);
+        managed.RecordStartAttempt(nowUtc, restartWindow);
 
-            var ompConnectionString = _configuration.GetConnectionString("OmpDb");
-            process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
-            managed.RecordStartAttempt(nowUtc, restartWindow);
+        StartWorkerProcess(process, managed.Definition.WorkerInstanceId, workerProcessPath);
 
-            if (!process.Start())
-            {
-                throw new InvalidOperationException(
-                    $"Failed to start worker process for WorkerInstanceId '{managed.Definition.WorkerInstanceId}'.");
-            }
-
-            managed.AttachProcess(process, shutdownEvent, nowUtc);
-            ownershipTransferred = true;
-        }
-        catch
-        {
-            if (!ownershipTransferred)
-            {
-                process?.Dispose();
-                shutdownEvent?.Dispose();
-            }
-
-            throw;
-        }
+        managed.AttachProcess(process, startupResources.ShutdownEvent, nowUtc);
+        startupResources.ReleaseOwnership();
 
         await PublishStartingObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
 
@@ -686,6 +658,51 @@ public sealed class WorkerManagerHostedService : BackgroundService
         return workerProcessPath;
     }
 
+    private static void ValidateReadableStartupFile(string path, string description)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException($"{description} path is not configured.");
+        }
+
+        try
+        {
+            // This is a diagnostic preflight check only. Process.Start and the worker host still
+            // handle the authoritative file-system state because paths can change after validation.
+            using var _ = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        }
+        catch (Exception ex) when (ex is ArgumentException
+            or DirectoryNotFoundException
+            or FileNotFoundException
+            or IOException
+            or NotSupportedException
+            or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"{description} is not readable: '{path}'.", ex);
+        }
+    }
+
+    private static void StartWorkerProcess(Process process, Guid workerInstanceId, string workerProcessPath)
+    {
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException(
+                    $"Failed to start worker process for WorkerInstanceId '{workerInstanceId}'.");
+            }
+        }
+        catch (Exception ex) when (ex is DirectoryNotFoundException
+            or FileNotFoundException
+            or UnauthorizedAccessException
+            or Win32Exception)
+        {
+            throw new InvalidOperationException(
+                $"Failed to start WorkerProcessHost for WorkerInstanceId '{workerInstanceId}'. Path='{workerProcessPath}'.",
+                ex);
+        }
+    }
+
     private static Process CreateWorkerProcess(
         string workerProcessPath,
         DesiredWorkerInstance desired,
@@ -697,6 +714,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
             WorkingDirectory = Path.GetDirectoryName(workerProcessPath) ?? AppContext.BaseDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // Worker plugins use their own logging providers. Redirecting these streams here would
+            // require an always-drained pipe and can block noisy workers if the manager falls behind.
             RedirectStandardOutput = false,
             RedirectStandardError = false
         };
@@ -720,13 +739,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
         {
             // Worker host and plugins are OMP-provisioned code running in the same Windows
             // trust boundary. Environment configuration avoids command-line exposure while
-            // still giving the worker process its required OMP database connection.
+            // still giving the worker process its required OMP database connection. Service
+            // account isolation and filesystem ACLs are the intended protection boundary.
             startInfo.Environment["ConnectionStrings__OmpDb"] = normalizedOmpConnectionString;
         }
 
         return new Process
         {
             StartInfo = startInfo,
+            // Exit detection is intentionally polling-based through ManagedWorkerProcess so that
+            // reconciliation observes all workers in one place instead of mixing event callbacks.
             EnableRaisingEvents = false
         };
     }
@@ -865,8 +887,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         var normalizedWorkerProcessPath = Path.GetFullPath(workerProcessPath);
         var result = new List<OrphanedWorkerProcess>();
-        using var searcher = new ManagementObjectSearcher(
-            $"SELECT ProcessId, ParentProcessId, ExecutablePath FROM Win32_Process WHERE Name = '{WorkerProcessHostExecutableName}'");
+        using var searcher = new ManagementObjectSearcher(CreateWorkerProcessHostQuery());
         using var processes = searcher.Get();
 
         foreach (ManagementObject process in processes)
@@ -904,6 +925,27 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         return result;
+    }
+
+    private static string CreateWorkerProcessHostQuery()
+    {
+        var executableNameLiteral = CreateSafeWqlStringLiteral(WorkerProcessHostExecutableName);
+        return "SELECT ProcessId, ParentProcessId, ExecutablePath FROM Win32_Process WHERE Name = "
+            + executableNameLiteral;
+    }
+
+    private static string CreateSafeWqlStringLiteral(string value)
+    {
+        foreach (var ch in value)
+        {
+            if (!char.IsLetterOrDigit(ch) && ch is not '.' and not '_' and not '-')
+            {
+                throw new InvalidOperationException(
+                    $"WorkerProcessHost executable name contains an unsupported WMI query character: '{value}'.");
+            }
+        }
+
+        return "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
     }
 
     [SupportedOSPlatform("windows")]
@@ -979,6 +1021,41 @@ public sealed class WorkerManagerHostedService : BackgroundService
             or ManagementException
             or Win32Exception
             or NotSupportedException;
+
+    private sealed class WorkerStartupResources : IDisposable
+    {
+        private bool _ownsResources = true;
+
+        public WorkerStartupResources(EventWaitHandle shutdownEvent)
+        {
+            ShutdownEvent = shutdownEvent;
+        }
+
+        public EventWaitHandle ShutdownEvent { get; }
+
+        public Process? Process { get; private set; }
+
+        public void AttachProcess(Process process)
+        {
+            Process = process;
+        }
+
+        public void ReleaseOwnership()
+        {
+            _ownsResources = false;
+        }
+
+        public void Dispose()
+        {
+            if (!_ownsResources)
+            {
+                return;
+            }
+
+            Process?.Dispose();
+            ShutdownEvent.Dispose();
+        }
+    }
 
     private sealed record OrphanedWorkerProcess(int ProcessId, int ParentProcessId);
 }
