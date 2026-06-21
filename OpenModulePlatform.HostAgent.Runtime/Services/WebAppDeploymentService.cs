@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -485,23 +486,22 @@ public sealed class WebAppDeploymentService
         bool anonymousEnabled,
         bool windowsEnabled)
     {
-        RunAppCmd(
-            "set",
-            "config",
-            location,
-            "/section:system.webServer/security/authentication/anonymousAuthentication",
-            $"/enabled:{FormatIisBoolean(anonymousEnabled)}",
-            "/userName:",
-            "/password:",
-            "/commit:apphost");
+        using var serverManager = CreateIisServerManager();
+        var configuration = GetIisApplicationHostConfiguration(serverManager);
+        var anonymousAuthentication = GetIisConfigurationSection(
+            configuration,
+            "system.webServer/security/authentication/anonymousAuthentication",
+            location);
+        SetIisConfigurationValue(anonymousAuthentication, "enabled", anonymousEnabled);
+        SetIisConfigurationValue(anonymousAuthentication, "userName", string.Empty);
+        SetIisConfigurationValue(anonymousAuthentication, "password", string.Empty);
 
-        RunAppCmd(
-            "set",
-            "config",
-            location,
-            "/section:system.webServer/security/authentication/windowsAuthentication",
-            $"/enabled:{FormatIisBoolean(windowsEnabled)}",
-            "/commit:apphost");
+        var windowsAuthentication = GetIisConfigurationSection(
+            configuration,
+            "system.webServer/security/authentication/windowsAuthentication",
+            location);
+        SetIisConfigurationValue(windowsAuthentication, "enabled", windowsEnabled);
+        CommitIisChanges(serverManager);
     }
 
     private static bool IsOmpAuthenticationAppPath(string appPath)
@@ -509,9 +509,6 @@ public sealed class WebAppDeploymentService
             appPath.Trim().Trim('/', '\\').Replace('\\', '/'),
             "auth",
             StringComparison.OrdinalIgnoreCase);
-
-    private static string FormatIisBoolean(bool value)
-        => value ? "true" : "false";
 
     private static void EnsureAppPool(
         HostAgentSettings settings,
@@ -532,22 +529,28 @@ public sealed class WebAppDeploymentService
 
         if (!string.IsNullOrWhiteSpace(identity.UserName))
         {
-            var arguments = new List<string>
-            {
-                "set",
-                "apppool",
-                $"/apppool.name:{appPoolName}",
-                "/processModel.identityType:SpecificUser",
-                $"/processModel.userName:{identity.UserName.Trim()}"
-            };
-
-            if (!string.IsNullOrWhiteSpace(identity.Password))
-            {
-                arguments.Add($"/processModel.password:{identity.Password}");
-            }
-
-            RunAppCmd([.. arguments]);
+            ConfigureSpecificUserAppPoolIdentity(appPoolName, identity);
         }
+    }
+
+    private static void ConfigureSpecificUserAppPoolIdentity(
+        string appPoolName,
+        HostAgentIisAppPoolIdentitySettings identity)
+    {
+        using var serverManager = CreateIisServerManager();
+        var appPools = GetPropertyValue(serverManager, "ApplicationPools");
+        var appPool = GetIndexedValue(appPools, appPoolName)
+            ?? throw new InvalidOperationException($"IIS app pool '{appPoolName}' was not found after creation.");
+        var processModel = GetPropertyValue(appPool, "ProcessModel");
+        var identityType = GetIisEnumValue("Microsoft.Web.Administration.ProcessModelIdentityType", "SpecificUser");
+        SetPropertyValue(processModel, "IdentityType", identityType);
+        SetPropertyValue(processModel, "UserName", identity.UserName.Trim());
+        if (!string.IsNullOrWhiteSpace(identity.Password))
+        {
+            SetPropertyValue(processModel, "Password", identity.Password);
+        }
+
+        CommitIisChanges(serverManager);
     }
 
     private static void EnsurePortalAppPoolFilesystemAccess(
@@ -1137,6 +1140,130 @@ public sealed class WebAppDeploymentService
             .Any(line => line.Contains(
                 $"\"{iisAppName}\"",
                 StringComparison.OrdinalIgnoreCase));
+
+    private static IDisposable CreateIisServerManager()
+    {
+        var serverManagerType = LoadMicrosoftWebAdministrationType("Microsoft.Web.Administration.ServerManager");
+        return Activator.CreateInstance(serverManagerType) as IDisposable
+            ?? throw new InvalidOperationException("Could not create Microsoft.Web.Administration.ServerManager.");
+    }
+
+    private static Type LoadMicrosoftWebAdministrationType(string typeName)
+    {
+        var assembly = Assembly.LoadFrom(GetMicrosoftWebAdministrationPath());
+        return assembly.GetType(typeName, throwOnError: true)
+            ?? throw new InvalidOperationException($"Microsoft.Web.Administration type '{typeName}' was not found.");
+    }
+
+    private static string GetMicrosoftWebAdministrationPath()
+    {
+        var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var assemblyPath = Path.Join(windowsDirectory, "System32", "inetsrv", "Microsoft.Web.Administration.dll");
+        if (!File.Exists(assemblyPath))
+        {
+            throw new FileNotFoundException(
+                $"Microsoft.Web.Administration.dll was not found: '{assemblyPath}'.",
+                assemblyPath);
+        }
+
+        return assemblyPath;
+    }
+
+    private static object GetIisApplicationHostConfiguration(object serverManager)
+        => InvokeRequiredMethod(serverManager, "GetApplicationHostConfiguration");
+
+    private static object GetIisConfigurationSection(
+        object configuration,
+        string sectionPath,
+        string location)
+    {
+        var method = configuration.GetType().GetMethod(
+            "GetSection",
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: [typeof(string), typeof(string)],
+            modifiers: null)
+            ?? throw new InvalidOperationException("IIS configuration GetSection(path, location) method was not found.");
+
+        return method.Invoke(configuration, [sectionPath, location])
+            ?? throw new InvalidOperationException($"IIS configuration section '{sectionPath}' was not found for '{location}'.");
+    }
+
+    private static object GetIisEnumValue(string typeName, string value)
+    {
+        var enumType = LoadMicrosoftWebAdministrationType(typeName);
+        return Enum.Parse(enumType, value, ignoreCase: false);
+    }
+
+    private static object GetPropertyValue(object target, string propertyName)
+    {
+        var property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new InvalidOperationException($"Property '{propertyName}' was not found on '{target.GetType().FullName}'.");
+        return property.GetValue(target)
+            ?? throw new InvalidOperationException($"Property '{propertyName}' on '{target.GetType().FullName}' returned null.");
+    }
+
+    private static void SetPropertyValue(object target, string propertyName, object? value)
+    {
+        var property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new InvalidOperationException($"Property '{propertyName}' was not found on '{target.GetType().FullName}'.");
+        property.SetValue(target, value);
+    }
+
+    private static object? GetIndexedValue(object target, string key)
+    {
+        var property = target.GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(property =>
+            {
+                var indexes = property.GetIndexParameters();
+                return indexes.Length == 1 && indexes[0].ParameterType == typeof(string);
+            })
+            ?? throw new InvalidOperationException($"String indexer was not found on '{target.GetType().FullName}'.");
+
+        return property.GetValue(target, [key]);
+    }
+
+    private static void SetIisConfigurationValue(object section, string propertyName, object value)
+    {
+        var indexer = section.GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(property =>
+            {
+                var indexes = property.GetIndexParameters();
+                return indexes.Length == 1 && indexes[0].ParameterType == typeof(string);
+            })
+            ?? throw new InvalidOperationException($"IIS configuration indexer was not found on '{section.GetType().FullName}'.");
+
+        indexer.SetValue(section, value, [propertyName]);
+    }
+
+    private static object InvokeRequiredMethod(object target, string methodName)
+    {
+        var method = target.GetType().GetMethod(
+            methodName,
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: [],
+            modifiers: null)
+            ?? throw new InvalidOperationException($"Method '{methodName}' was not found on '{target.GetType().FullName}'.");
+
+        return method.Invoke(target, null)
+            ?? throw new InvalidOperationException($"Method '{methodName}' on '{target.GetType().FullName}' returned null.");
+    }
+
+    private static void CommitIisChanges(object serverManager)
+    {
+        var method = serverManager.GetType().GetMethod(
+            "CommitChanges",
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: [],
+            modifiers: null)
+            ?? throw new InvalidOperationException($"Method 'CommitChanges' was not found on '{serverManager.GetType().FullName}'.");
+
+        method.Invoke(serverManager, null);
+    }
 
     private static string[] RunAppCmd(params string[] arguments)
     {

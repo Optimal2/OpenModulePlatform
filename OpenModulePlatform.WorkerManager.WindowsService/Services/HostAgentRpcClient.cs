@@ -3,7 +3,6 @@ using System.IO.Pipes;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Security;
 using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -123,8 +122,7 @@ public sealed class HostAgentRpcClient
     {
         var serviceName = TryResolveCurrentServiceName();
         var processName = TryResolveCurrentProcessName();
-        var userName = TryResolveCurrentUserName();
-        return $"service:{serviceName ?? processName}; user:{userName}; pid:{Environment.ProcessId}";
+        return $"service:{serviceName ?? processName}";
     }
 
     private static string? TryResolveCurrentServiceName()
@@ -176,22 +174,4 @@ public sealed class HostAgentRpcClient
         return "unknown-process";
     }
 
-    private static string TryResolveCurrentUserName()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return "unknown-user";
-        }
-
-        try
-        {
-            return string.IsNullOrWhiteSpace(WindowsIdentity.GetCurrent().Name)
-                ? "unknown-user"
-                : WindowsIdentity.GetCurrent().Name;
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException)
-        {
-            return "unknown-user";
-        }
-    }
 }

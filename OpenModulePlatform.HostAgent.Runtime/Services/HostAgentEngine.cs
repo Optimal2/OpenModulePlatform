@@ -363,7 +363,7 @@ public sealed class HostAgentEngine
             {
                 return false;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsExpectedLeaseRenewalFailure(ex))
             {
                 // Host lease renewal is best-effort: log transient repository/SQL failures
                 // and retry on the next renewal interval while the cycle still runs.
@@ -377,6 +377,13 @@ public sealed class HostAgentEngine
 
         return false;
     }
+
+    private static bool IsExpectedLeaseRenewalFailure(Exception exception)
+        => exception is InvalidOperationException
+            or IOException
+            or DbException
+            or UnauthorizedAccessException
+            or TimeoutException;
 
     private async Task HandleLostLeaseAsync(HostAgentLeaseResult lease, CancellationToken cancellationToken)
     {
