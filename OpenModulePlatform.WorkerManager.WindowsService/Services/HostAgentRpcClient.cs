@@ -140,12 +140,10 @@ public sealed class HostAgentRpcClient
                 $"SELECT Name FROM Win32_Service WHERE ProcessId = {Environment.ProcessId}");
             foreach (var serviceName in searcher.Get()
                          .OfType<ManagementObject>()
-                         .Select(ReadWindowsServiceName))
+                         .Select(ReadWindowsServiceName)
+                         .Where(static serviceName => !string.IsNullOrWhiteSpace(serviceName)))
             {
-                if (!string.IsNullOrWhiteSpace(serviceName))
-                {
-                    return serviceName.Trim();
-                }
+                return serviceName!.Trim();
             }
         }
         catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or COMException)
