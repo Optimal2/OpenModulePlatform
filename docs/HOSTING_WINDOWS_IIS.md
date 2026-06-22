@@ -77,6 +77,52 @@ fronts several applications through the same DNS name, use equivalent
 application-specific checks for those applications instead of a single
 site-wide node check.
 
+## Blazor Server behind IIS and load balancers
+
+OMP Blazor Server modules use ASP.NET Core SignalR for interactive circuits.
+Keep the default SignalR transport negotiation enabled unless a module has a
+specific, tested reason to override it. The normal order is WebSockets first,
+then fallback transports such as Server-Sent Events or long polling when the
+browser, IIS, proxy, or load balancer cannot establish WebSockets.
+
+Fallback transports are a resilience mechanism, not a replacement for correct
+hosting configuration. Long polling in particular increases request volume and
+still needs the same authenticated session, routing, forwarded-header, and
+timeout behavior as WebSockets. If an environment disables or intermittently
+breaks WebSockets, users may see Blazor reconnect UI and short interruptions
+even when the application eventually recovers.
+
+Use this checklist for IIS-hosted Blazor Server modules:
+
+- Install the IIS WebSocket Protocol feature on every IIS node that serves
+  Blazor Server modules.
+- Enable WebSockets through any reverse proxy or load balancer in front of IIS.
+- Keep ARR or load-balancer cookie persistence enabled for Blazor Server
+  routes. A reconnecting circuit must be routed back to the server that owns
+  that circuit unless the application has explicitly been designed and tested
+  for another topology.
+- Share ASP.NET Core Data Protection keys across all nodes that serve the same
+  OMP Portal or module DNS name.
+- When TLS terminates before Kestrel/IIS, enable `UseForwardedHeaders` and set
+  the trusted proxy IPs or networks so generated HTTPS URLs, redirects, and
+  cookie security decisions use the public request scheme and host.
+- Keep OMP authentication and role cookies same-site for same-origin Portal and
+  module hosting. If a deployment intentionally embeds an OMP module cross-site,
+  review the affected cookies and browser policy separately; cross-site iframe
+  scenarios normally require `SameSite=None`, `Secure`, and matching frame/CSP
+  policy.
+- Keep iframe use same-origin where possible. The shared OMP security headers
+  emit `X-Frame-Options: SAMEORIGIN` by default.
+- Set load-balancer idle timeouts above the module's SignalR keep-alive and
+  client-timeout values. Do not use a timeout that silently closes idle
+  WebSocket connections before the app can detect and reconnect.
+- Scope health checks to a lightweight application route. Do not point load
+  balancer health checks at Blazor circuit endpoints such as `_blazor`.
+
+Blazor modules should provide a clear reconnect UI when interrupted. Only tune
+SignalR keep-alive, client timeout, disconnected-circuit retention, or retry
+intervals after validating the actual IIS/proxy/load-balancer timeout behavior.
+
 ## Recommended OMP deployment posture on Windows
 
 For the current public repository, the recommended baseline is:
