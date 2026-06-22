@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,10 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class WebAppDeploymentService
 {
     private const string IisSslBindingAppId = "{6E9C7F30-6D4E-4D8A-9D1E-9F086C35B508}";
+    private const string SystemSecurityPermissionsAssemblyName = "System.Security.Permissions";
+
+    private static readonly object IisAssemblyResolverLock = new();
+    private static bool iisAssemblyResolverRegistered;
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
@@ -1150,9 +1155,47 @@ public sealed class WebAppDeploymentService
 
     private static Type LoadMicrosoftWebAdministrationType(string typeName)
     {
+        EnsureIisAssemblyResolver();
         var assembly = Assembly.LoadFrom(GetMicrosoftWebAdministrationPath());
         return assembly.GetType(typeName, throwOnError: true)
             ?? throw new InvalidOperationException($"Microsoft.Web.Administration type '{typeName}' was not found.");
+    }
+
+    private static void EnsureIisAssemblyResolver()
+    {
+        if (iisAssemblyResolverRegistered)
+        {
+            return;
+        }
+
+        lock (IisAssemblyResolverLock)
+        {
+            if (iisAssemblyResolverRegistered)
+            {
+                return;
+            }
+
+            AssemblyLoadContext.Default.Resolving += ResolveIisDependency;
+            iisAssemblyResolverRegistered = true;
+        }
+    }
+
+    private static Assembly? ResolveIisDependency(AssemblyLoadContext context, AssemblyName assemblyName)
+    {
+        if (!string.Equals(
+                assemblyName.Name,
+                SystemSecurityPermissionsAssemblyName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        // Microsoft.Web.Administration is loaded from the IIS folder, but the
+        // compatibility assembly it needs is deployed beside the HostAgent.
+        var dependencyPath = Path.Join(AppContext.BaseDirectory, SystemSecurityPermissionsAssemblyName + ".dll");
+        return File.Exists(dependencyPath)
+            ? context.LoadFromAssemblyPath(dependencyPath)
+            : null;
     }
 
     private static string GetMicrosoftWebAdministrationPath()
