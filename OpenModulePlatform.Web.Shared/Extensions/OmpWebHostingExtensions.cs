@@ -279,6 +279,16 @@ public static class OmpWebHostingExtensions
             CancellationToken ct) =>
             HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct));
 
+        app.MapGet(PortalTopBarModel.DefaultSessionStatusPath, (HttpContext context) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+
+            return Results.Json(new
+            {
+                authenticated = context.User.Identity?.IsAuthenticated == true
+            });
+        }).AllowAnonymous();
+
         app.MapPost(PortalTopBarService.ToggleFavoritePath, async (
             HttpContext context,
             PortalTopBarService portalTopBarService,
