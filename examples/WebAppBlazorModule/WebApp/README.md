@@ -29,4 +29,16 @@ The module still follows the same OMP principles:
 - `Components/Pages/Configurations/Edit.razor` - configuration editing
 - `Components/ExampleWebAppBlazorModuleComponentBase.cs` - shared auth/title helper for components
 
+## Hosting notes
+
+This example leaves ASP.NET Core SignalR transport negotiation at the framework
+default. Do not force WebSockets-only hosting unless the target IIS/proxy/load
+balancer path has been validated. Blazor Server can fall back to other SignalR
+transports, but fallback still requires sticky routing, shared Data Protection
+keys, correct forwarded headers when TLS terminates upstream, and load-balancer
+timeouts that do not silently break active circuits.
+
+For the operator checklist, see
+`docs/HOSTING_WINDOWS_IIS.md#blazor-server-behind-iis-and-load-balancers`.
+
 Use this project as a starting point for simple OMP modules that should use Blazor Server rather than Razor Pages. The module identity, permissions, schema and route are unique so the original and Blazor examples can be installed side by side.
