@@ -1,6 +1,6 @@
 @using OpenModulePlatform.Web.Shared.Models
 
-@if (Model is not null)
+@if (Model is not null && Model.StatusCode != 0 && !string.IsNullOrWhiteSpace(Model.Title))
 {
     <section class="omp-error-view" aria-live="polite">
         <div class="omp-error-view__code">@Model.StatusCode</div>
