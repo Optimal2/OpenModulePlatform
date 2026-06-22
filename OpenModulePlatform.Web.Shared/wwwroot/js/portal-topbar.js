@@ -1638,6 +1638,15 @@
         var root = sessionStatusState.root || document.querySelector('[data-portal-topbar-root][data-session-status-enabled="true"]');
         var config = getSessionStatusConfig(root);
         var kind = event && event.detail && event.detail.kind === 'network' ? 'network' : 'auth';
+        if (root) {
+            sessionStatusState.root = root;
+        }
+
+        if (kind === 'auth' && config.enabled && config.url && sessionStatusState.root) {
+            runSessionStatusCheckSoon();
+            return;
+        }
+
         sessionStatusState.currentKind = kind;
         if (kind === 'network') {
             sessionStatusState.failures += 1;
