@@ -177,7 +177,8 @@ public sealed class WebAppDeploymentService
                 && settings.StartIisAppPoolAfterWebAppDeployment
                 && !string.IsNullOrWhiteSpace(runtimeName))
             {
-                if (string.Equals(GetAppPoolState(runtimeName), "Started", StringComparison.OrdinalIgnoreCase))
+                var initialAppPoolState = GetAppPoolState(runtimeName);
+                if (string.Equals(initialAppPoolState, "Started", StringComparison.OrdinalIgnoreCase))
                 {
                     DeploymentRuntimeStopMarker.Write(
                         targetPath,
@@ -189,7 +190,11 @@ public sealed class WebAppDeploymentService
                     stopMarkerWritten = true;
                 }
 
-                appPoolStopped = StopAppPoolIfRunning(runtimeName, settings.IisAppPoolStopTimeoutSeconds);
+                appPoolStopped = await StopAppPoolIfRunningAsync(
+                    runtimeName,
+                    settings.IisAppPoolStopTimeoutSeconds,
+                    initialAppPoolState,
+                    cancellationToken);
                 if (!appPoolStopped && stopMarkerWritten)
                 {
                     DeploymentRuntimeStopMarker.Delete(targetPath);
@@ -896,14 +901,14 @@ public sealed class WebAppDeploymentService
         var storeName = string.IsNullOrWhiteSpace(settings.IisBindingCertificateStoreName)
             ? "My"
             : settings.IisBindingCertificateStoreName.Trim();
-        var serialNumber = NormalizeCertificateHex(settings.IisBindingCertificateSerialNumber);
+        var expectedSerialNumber = NormalizeCertificateHex(settings.IisBindingCertificateSerialNumber);
 
         using var store = new X509Store(storeName, StoreLocation.LocalMachine);
         store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
         var certificate = store.Certificates.OfType<X509Certificate2>().FirstOrDefault(certificate =>
             string.Equals(
                 NormalizeCertificateHex(certificate.SerialNumber),
-                serialNumber,
+                expectedSerialNumber,
                 StringComparison.OrdinalIgnoreCase));
         if (certificate is not null)
         {
@@ -1022,9 +1027,13 @@ public sealed class WebAppDeploymentService
         return text[start..end].Trim();
     }
 
-    private static bool StopAppPoolIfRunning(string appPoolName, int timeoutSeconds)
+    private static async Task<bool> StopAppPoolIfRunningAsync(
+        string appPoolName,
+        int timeoutSeconds,
+        string? initialState,
+        CancellationToken cancellationToken)
     {
-        var state = GetAppPoolState(appPoolName);
+        var state = initialState ?? GetAppPoolState(appPoolName);
         if (!string.Equals(state, "Started", StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -1041,7 +1050,7 @@ public sealed class WebAppDeploymentService
                 return true;
             }
 
-            Thread.Sleep(250);
+            await Task.Delay(250, cancellationToken);
         }
 
         throw new TimeoutException($"IIS app pool '{appPoolName}' did not stop within {timeoutSeconds} seconds.");
@@ -1337,6 +1346,9 @@ public sealed class WebAppDeploymentService
     {
         var trimmed = message.Trim();
         var result = $"appcmd.exe failed with exit code {exitCode}: {trimmed}";
+        // appcmd.exe does not expose a stable structured error code for this
+        // IIS configuration ACL failure. Keep this message enhancement as a
+        // best-effort diagnostic hint and preserve the original appcmd output.
         if (trimmed.Contains("redirection.config", StringComparison.OrdinalIgnoreCase)
             || trimmed.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase))
         {

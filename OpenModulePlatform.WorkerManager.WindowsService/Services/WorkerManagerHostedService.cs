@@ -276,6 +276,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
         ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
         ValidateReadableStartupFile(managed.Definition.PluginAssemblyPath, "Worker plugin assembly");
 
+        // The named event is a cooperative same-host shutdown signal between
+        // WorkerManager and the OMP-provisioned WorkerProcessHost. The worker
+        // process and plugin assemblies still run inside the same Windows
+        // service trust boundary; process ownership and status publication are
+        // the authoritative controls.
         using var startupResources = new WorkerStartupResources(new EventWaitHandle(
             initialState: false,
             mode: EventResetMode.ManualReset,
@@ -670,7 +675,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         {
             // This is a diagnostic preflight check only. Process.Start and the worker host still
             // handle the authoritative file-system state because paths can change after validation.
-            using var _ = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var _ = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         }
         catch (Exception ex) when (ex is ArgumentException
             or DirectoryNotFoundException
@@ -830,6 +835,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     orphan.ParentProcessId,
                     workerProcessPath);
 
+                // WorkerProcessHost owns the plugin lifetime. If it is orphaned,
+                // terminating the tree prevents plugin-spawned children from
+                // continuing without their supervising worker host.
                 process.Kill(entireProcessTree: true);
                 if (!await WaitForProcessExitAsync(process, stopTimeout, cancellationToken))
                 {
