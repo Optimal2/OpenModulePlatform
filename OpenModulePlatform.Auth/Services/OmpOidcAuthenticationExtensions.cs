@@ -189,12 +189,11 @@ public static class OmpOidcAuthenticationExtensions
             "openid"
         };
 
-        foreach (var scope in configuredScopes ?? [])
+        foreach (var scope in (configuredScopes ?? [])
+            .Where(scope => !string.IsNullOrWhiteSpace(scope))
+            .Select(scope => scope.Trim()))
         {
-            if (!string.IsNullOrWhiteSpace(scope))
-            {
-                scopes.Add(scope.Trim());
-            }
+            scopes.Add(scope);
         }
 
         return scopes.ToList();

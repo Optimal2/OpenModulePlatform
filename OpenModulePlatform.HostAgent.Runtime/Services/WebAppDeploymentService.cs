@@ -12,6 +12,8 @@ public sealed class WebAppDeploymentService
 {
     private const string IisSslBindingAppId = "{6E9C7F30-6D4E-4D8A-9D1E-9F086C35B508}";
     private const string SystemSecurityPermissionsAssemblyName = "System.Security.Permissions";
+    private const int MaxIisAppPoolNameLength = 80;
+    private static readonly TimeSpan AppPoolStatePollDelay = TimeSpan.FromMilliseconds(250);
 
     private static readonly object IisAssemblyResolverLock = new();
     private static bool iisAssemblyResolverRegistered;
@@ -837,7 +839,7 @@ public sealed class WebAppDeploymentService
         }
 
         var name = prefix + normalized;
-        return name.Length <= 80 ? name : name[..80].TrimEnd('_', '.', '-');
+        return name.Length <= MaxIisAppPoolNameLength ? name : name[..MaxIisAppPoolNameLength].TrimEnd('_', '.', '-');
     }
 
     private static string CreateIisBinding(HostAgentSettings settings)
@@ -1050,7 +1052,7 @@ public sealed class WebAppDeploymentService
                 return true;
             }
 
-            await Task.Delay(250, cancellationToken);
+            await Task.Delay(AppPoolStatePollDelay, cancellationToken);
         }
 
         throw new TimeoutException($"IIS app pool '{appPoolName}' did not stop within {timeoutSeconds} seconds.");

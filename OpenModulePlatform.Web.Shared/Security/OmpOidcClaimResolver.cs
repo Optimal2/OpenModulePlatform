@@ -247,18 +247,9 @@ public static class OmpOidcClaimResolver
         ClaimsPrincipal principal,
         string? configuredClaimType,
         IReadOnlyList<string>? fallbackClaimTypes = null)
-    {
-        foreach (var claimType in EnumerateClaimTypes(configuredClaimType, fallbackClaimTypes))
-        {
-            var value = principal.FindFirst(claimType)?.Value;
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
+        => EnumerateClaimTypes(configuredClaimType, fallbackClaimTypes)
+            .Select(claimType => principal.FindFirst(claimType)?.Value)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static IReadOnlyList<string> FindAllValues(
         ClaimsPrincipal principal,
@@ -267,12 +258,11 @@ public static class OmpOidcClaimResolver
         var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var claimType in claimTypes)
         {
-            foreach (var claim in principal.FindAll(claimType))
+            foreach (var value in principal.FindAll(claimType)
+                .Select(claim => claim.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value)))
             {
-                if (!string.IsNullOrWhiteSpace(claim.Value))
-                {
-                    values.Add(claim.Value.Trim());
-                }
+                values.Add(value.Trim());
             }
         }
 
@@ -284,14 +274,10 @@ public static class OmpOidcClaimResolver
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var value in values)
+        foreach (var normalized in values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim()))
         {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                continue;
-            }
-
-            var normalized = value.Trim();
             if (seen.Add(normalized))
             {
                 result.Add(normalized);
@@ -318,12 +304,11 @@ public static class OmpOidcClaimResolver
             yield break;
         }
 
-        foreach (var claimType in fallbackClaimTypes.Where(type => !string.IsNullOrWhiteSpace(type)))
+        foreach (var claimType in fallbackClaimTypes
+            .Where(type => !string.IsNullOrWhiteSpace(type))
+            .Where(type => !string.Equals(configuredClaimType, type, StringComparison.Ordinal)))
         {
-            if (!string.Equals(configuredClaimType, claimType, StringComparison.Ordinal))
-            {
-                yield return claimType;
-            }
+            yield return claimType;
         }
     }
 }
