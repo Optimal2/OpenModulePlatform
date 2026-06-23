@@ -287,6 +287,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
             name: managed.Definition.ShutdownEventName));
 
         var ompConnectionString = _configuration.GetConnectionString("OmpDb");
+        if (string.IsNullOrWhiteSpace(ompConnectionString))
+        {
+            throw new InvalidOperationException("Missing connection string: ConnectionStrings:OmpDb");
+        }
+
         var process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
         startupResources.AttachProcess(process);
         managed.RecordStartAttempt(nowUtc, restartWindow);
@@ -712,7 +717,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
     private static Process CreateWorkerProcess(
         string workerProcessPath,
         DesiredWorkerInstance desired,
-        string? ompConnectionString)
+        string ompConnectionString)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -740,15 +745,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
             startInfo.Environment["WorkerProcess__ConfigurationJson"] = workerConfigurationJson;
         }
 
-        var normalizedOmpConnectionString = ompConnectionString?.Trim();
-        if (!string.IsNullOrWhiteSpace(normalizedOmpConnectionString))
-        {
-            // Worker host and plugins are OMP-provisioned code running in the same Windows
-            // trust boundary. Environment configuration avoids command-line exposure while
-            // still giving the worker process its required OMP database connection. Service
-            // account isolation and filesystem ACLs are the intended protection boundary.
-            startInfo.Environment["ConnectionStrings__OmpDb"] = normalizedOmpConnectionString;
-        }
+        var normalizedOmpConnectionString = ompConnectionString.Trim();
+        // Worker host and plugins are OMP-provisioned code running in the same Windows
+        // service trust boundary. Environment variables can still be read by the same
+        // service account or local administrators, but they avoid command-line exposure;
+        // service account isolation and filesystem ACLs are the intended protection boundary.
+        startInfo.Environment["ConnectionStrings__OmpDb"] = normalizedOmpConnectionString;
 
         return new Process
         {
