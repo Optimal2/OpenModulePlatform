@@ -57,6 +57,57 @@ If an enabled `omp.user_auth` row links the AD provider identity to an active `o
 
 The AD provider intentionally filters Windows group memberships before issuing the shared OMP cookie. A Windows identity can contain hundreds or thousands of AD groups, and writing all of them into the cookie can exceed IIS/HTTP header limits. The provider still enumerates the Windows groups during sign-in, but only persists the groups that are actually used by RBAC.
 
+### OIDC / AD FS Provider
+
+OMP Auth can optionally expose a server-side OpenID Connect provider for AD FS
+or another OIDC identity provider. It is disabled by default and is configured
+under `OmpAuth:Oidc`.
+
+Supported settings include:
+
+- `Enabled`
+- `DisplayName`
+- `Authority` or `MetadataAddress`
+- `ClientId`
+- `ClientSecret`
+- `CallbackPath`
+- `Scopes`
+- `ResponseType` set to `code`
+- `ClaimTypes:UserIdClaimType`
+- `ClaimTypes:NameClaimType`
+- `ClaimTypes:DisplayNameClaimType`
+- `ClaimTypes:GroupsClaimType`
+
+The Auth application handles the OIDC authorization-code callback server-side.
+The OpenIdConnect middleware validates the identity token, OMP Auth maps the
+configured claims to an OMP identity, and then OMP Auth issues the normal shared
+`OmpAuth` cookie. Tokens are not saved into the authentication ticket, exposed
+to browser-side code, or forwarded to downstream OMP applications. OMP uses the
+identity claims from the sign-in token and does not depend on an access token
+for downstream API calls.
+
+OIDC identities use the `OIDC` provider in `omp.auth_providers` and
+`omp.user_auth`. The provider user key is based on the issuer and configured
+user-id claim when an issuer is present, with additional lookup aliases for the
+subject and configured user-name claim. If the OIDC identity is linked to a
+disabled OMP user, sign-in is blocked instead of falling back to direct
+principal claims.
+
+The OIDC provider emits role principals for:
+
+- `User` with the configured user-name claim
+- `ADUser` with the configured user-name claim
+- `OIDCUser` with the provider user key
+- `OIDCSubject` with the configured user-id claim
+- `ADGroup` for every configured group claim value sent by the identity provider
+
+OMP does not maintain a separate allow-list of OIDC groups. If AD FS sends broad
+group claims, OMP can use those values directly as `ADGroup` role principals.
+That keeps group ownership in AD FS/AD, but it also means the resulting OMP
+cookie can grow with the number and length of group claims. Prefer compact group
+identifiers or scoped group issuance rules at the identity provider when users
+belong to many groups.
+
 ### Local Password Provider
 
 The built-in local password provider uses provider key `lpwd` and table `omp.auth_provider_lpwd`.
@@ -209,7 +260,7 @@ Auth app.
 1. A user opens an OMP web app.
 2. The web app validates the shared OMP cookie.
 3. If no valid cookie exists, the web app redirects to `/auth/login`.
-4. The user selects AD or local password sign-in.
+4. The user selects AD, OIDC, or local password sign-in.
 5. `OpenModulePlatform.Auth` authenticates the provider identity and emits OMP role-principal claims.
 6. `RbacService` adds the built-in system principals that apply to the request.
 7. `RbacService` resolves claims and system principals against `omp.RolePrincipals`, `omp.Roles`, and `omp.RolePermissions`.
