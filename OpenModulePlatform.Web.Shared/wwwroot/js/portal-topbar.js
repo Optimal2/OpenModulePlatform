@@ -7,6 +7,8 @@
     // do not trigger repeated layout thrashing for the same visual update.
     var COMPACT_BREAKPOINT_VARIABLE = '--portal-topbar-compact-breakpoint';
     var FALLBACK_COMPACT_BREAKPOINT = '710px';
+    var MAX_NOTIFICATION_BADGE_COUNT = 99;
+    var MAX_BACKOFF_MULTIPLIER = 6;
     var initializedTopbars = new Set();
     var scheduledTopbars = new Set();
     var globalHandlersRegistered = false;
@@ -559,7 +561,9 @@
     }
 
     function notificationBadgeText(count) {
-        return count > 99 ? '99+' : String(Math.max(0, count));
+        return count > MAX_NOTIFICATION_BADGE_COUNT
+            ? MAX_NOTIFICATION_BADGE_COUNT + '+'
+            : String(Math.max(0, count));
     }
 
     function updateNotificationBadge(root, count) {
@@ -1304,7 +1308,7 @@
             ? config.hiddenInterval
             : config.visibleInterval;
         if (topbarPollingState.failures > 0) {
-            return baseDelay * Math.min(6, topbarPollingState.failures + 1);
+            return baseDelay * Math.min(MAX_BACKOFF_MULTIPLIER, topbarPollingState.failures + 1);
         }
 
         return baseDelay;
@@ -1465,7 +1469,7 @@
             ? config.hiddenInterval
             : config.visibleInterval;
         if (sessionStatusState.currentKind === 'network' && sessionStatusState.failures > 0) {
-            return baseDelay * Math.min(6, sessionStatusState.failures + 1);
+            return baseDelay * Math.min(MAX_BACKOFF_MULTIPLIER, sessionStatusState.failures + 1);
         }
 
         return baseDelay;

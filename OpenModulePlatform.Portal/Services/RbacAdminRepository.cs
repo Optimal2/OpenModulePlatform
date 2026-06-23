@@ -538,6 +538,10 @@ ORDER BY p.Name;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
+        // Roles and permissions currently expose CreatedUtc only. Adding UpdatedUtc
+        // requires a coordinated schema migration plus updates to every RBAC write
+        // path; doing it only in the bootstrap table definition would create a
+        // misleading audit column on fresh installs.
         if (input.RoleId == 0)
         {
             const string sql = @"

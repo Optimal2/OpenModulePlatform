@@ -42,6 +42,9 @@ namespace OpenModulePlatform.Web.Shared.Extensions;
 /// </remarks>
 public static class OmpWebHostingExtensions
 {
+    private const int DefaultNotificationPageSize = 10;
+    private const int MaxNotificationPageSize = 50;
+
     public static WebApplicationBuilder AddOmpWebDefaults<TAppResource>(
         this WebApplicationBuilder builder,
         string optionsSectionName = WebAppOptions.DefaultSectionName)
@@ -469,7 +472,10 @@ public static class OmpWebHostingExtensions
                 before = parsedBefore.ToUniversalTime();
             }
 
-            var pageSize = Math.Clamp(limit.GetValueOrDefault(10), 1, 50);
+            var pageSize = Math.Clamp(
+                limit.GetValueOrDefault(DefaultNotificationPageSize),
+                1,
+                MaxNotificationPageSize);
             var rows = await notificationService.GetRecentForUserAsync(
                 userId.Value,
                 pageSize,
