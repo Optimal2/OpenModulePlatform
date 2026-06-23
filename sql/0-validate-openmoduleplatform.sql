@@ -148,19 +148,19 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
                           THEN 1
                       ELSE 0
                   END
@@ -183,19 +183,19 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
                           THEN 1
                       ELSE 0
                   END
@@ -216,19 +216,19 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
                           THEN 1
                       ELSE 0
                   END
@@ -281,19 +281,19 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
                           THEN 1
                       ELSE 0
                   END
@@ -330,19 +330,19 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
                           THEN 1
                       ELSE 0
                   END
@@ -377,19 +377,19 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
                           THEN 1
                       ELSE 0
                   END

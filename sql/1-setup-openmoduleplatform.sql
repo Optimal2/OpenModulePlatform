@@ -320,12 +320,15 @@ BEGIN
 END
 GO
 
+DECLARE @PortalModuleKey nvarchar(100) = N'omp_portal';
+DECLARE @PortalAppKey nvarchar(100) = N'omp_portal';
+
 UPDATE app
 SET AppType =
         CASE
             WHEN normalized.AppType = N'WEB'
-                 AND module.ModuleKey = N'omp_portal'
-                 AND app.AppKey = N'omp_portal'
+                 AND module.ModuleKey = @PortalModuleKey
+                 AND app.AppKey = @PortalAppKey
                 THEN N'Portal'
             WHEN normalized.AppType = N'WEB'
                 THEN N'WebApp'
@@ -345,8 +348,8 @@ WHERE (normalized.AppType = N'WEB'
   AND app.AppType <>
         CASE
             WHEN normalized.AppType = N'WEB'
-                 AND module.ModuleKey = N'omp_portal'
-                 AND app.AppKey = N'omp_portal'
+                 AND module.ModuleKey = @PortalModuleKey
+                 AND app.AppKey = @PortalAppKey
                 THEN N'Portal'
             WHEN normalized.AppType = N'WEB'
                 THEN N'WebApp'
@@ -465,6 +468,12 @@ GO
 
 IF OBJECT_ID(N'omp.Artifacts', N'U') IS NULL
 BEGIN
+    -- PackageType normally maps to an executable runtime contract such as
+    -- web-app, service-app, worker, host-agent, or worker-host. Some module
+    -- definitions also publish metadata-only compatibility artifacts, for
+    -- example channel-type. Those artifacts may be stored and referenced by
+    -- module-owned metadata, but runtime binding triggers reject them for
+    -- AppInstances, WorkerInstances, and template app instance artifacts.
     CREATE TABLE omp.Artifacts
     (
         ArtifactId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
@@ -495,7 +504,11 @@ RETURNS bit
 AS
 BEGIN
     DECLARE @NormalizedPackageType nvarchar(50) = UPPER(LTRIM(RTRIM(ISNULL(@PackageType, N''))));
-    DECLARE @NormalizedAppType nvarchar(50) = UPPER(LTRIM(RTRIM(ISNULL(@AppType, N''))));
+    -- AppType values are stored as Portal/WebApp/ServiceApp/HostAgent/WorkerHost,
+    -- while PackageType values use manifest names such as web-app and service-app.
+    -- Strip hyphens here so older AppType aliases and package-style spellings are
+    -- accepted without changing the canonical stored AppType values.
+    DECLARE @NormalizedAppType nvarchar(50) = REPLACE(UPPER(LTRIM(RTRIM(ISNULL(@AppType, N'')))), N'-', N'');
 
     RETURN
     (
@@ -2403,6 +2416,9 @@ BEGIN
     AND target.AppInstanceKey = source.AppInstanceKey
     WHEN MATCHED AND
     (
+        -- Nullable GUID/int/text comparisons use sentinels because SQL Server
+        -- treats direct NULL comparisons as UNKNOWN. The materializer must
+        -- detect both NULL -> value and value -> NULL transitions.
         ISNULL(target.HostId, '00000000-0000-0000-0000-000000000000') <> ISNULL(source.HostId, '00000000-0000-0000-0000-000000000000')
         OR ISNULL(target.TargetHostTemplateId, -1) <> ISNULL(source.TargetHostTemplateId, -1)
         OR target.AppId <> source.AppId
