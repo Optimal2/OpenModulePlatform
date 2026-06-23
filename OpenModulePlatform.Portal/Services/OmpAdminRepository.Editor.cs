@@ -2153,7 +2153,7 @@ BEGIN
                source.IsEnabled,
                source.IsAllowed,
                CASE
-                   WHEN app.AppType IN (N'Portal', N'WebApp') THEN N'web-app'
+                   WHEN app.AppType IN (N'Portal', N'WebApp', N'web') THEN N'web-app'
                    WHEN app.AppType = N'ServiceApp' THEN N'service-app'
                    WHEN app.AppType = N'Worker' THEN N'worker'
                    WHEN app.AppType = N'HostAgent' THEN N'host-agent'
@@ -2290,7 +2290,7 @@ BEGIN
                source.IsEnabled,
                source.IsAllowed,
                CASE
-                   WHEN app.AppType IN (N'Portal', N'WebApp') THEN N'web-app'
+                   WHEN app.AppType IN (N'Portal', N'WebApp', N'web') THEN N'web-app'
                    WHEN app.AppType = N'ServiceApp' THEN N'service-app'
                    WHEN app.AppType = N'Worker' THEN N'worker'
                    WHEN app.AppType = N'HostAgent' THEN N'host-agent'
@@ -3261,7 +3261,8 @@ WHERE artifact.ArtifactId = @ArtifactId
     internal static bool IsArtifactPackageCompatibleWithAppType(string packageType, string appType)
         => (packageType.Equals("web-app", StringComparison.OrdinalIgnoreCase)
                 && (appType.Equals("Portal", StringComparison.OrdinalIgnoreCase)
-                    || appType.Equals("WebApp", StringComparison.OrdinalIgnoreCase)))
+                    || appType.Equals("WebApp", StringComparison.OrdinalIgnoreCase)
+                    || appType.Equals("web", StringComparison.OrdinalIgnoreCase)))
             || (packageType.Equals("service-app", StringComparison.OrdinalIgnoreCase)
                 && appType.Equals("ServiceApp", StringComparison.OrdinalIgnoreCase))
             || (packageType.Equals("worker", StringComparison.OrdinalIgnoreCase)

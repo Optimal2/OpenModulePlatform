@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_portal",
-  "definitionVersion": "0.3.93",
+  "definitionVersion": "0.3.94",
   "module": {
     "displayName": "OpenModulePlatform Portal",
     "moduleType": "Portal",
@@ -14,7 +14,7 @@
     {
       "appKey": "omp_portal",
       "displayName": "Portal",
-      "appType": "web",
+      "appType": "Portal",
       "description": "The OpenModulePlatform portal web application.",
       "sortOrder": 0,
       "isEnabled": true

@@ -1497,7 +1497,7 @@ BEGIN
                source.IsEnabled,
                source.IsAllowed,
                CASE
-                   WHEN app.AppType IN (N'Portal', N'WebApp') THEN N'web-app'
+                   WHEN app.AppType IN (N'Portal', N'WebApp', N'web') THEN N'web-app'
                    WHEN app.AppType = N'ServiceApp' THEN N'service-app'
                    WHEN app.AppType = N'Worker' THEN N'worker'
                    WHEN app.AppType = N'HostAgent' THEN N'host-agent'
@@ -1634,7 +1634,7 @@ BEGIN
                source.IsEnabled,
                source.IsAllowed,
                CASE
-                   WHEN app.AppType IN (N'Portal', N'WebApp') THEN N'web-app'
+                   WHEN app.AppType IN (N'Portal', N'WebApp', N'web') THEN N'web-app'
                    WHEN app.AppType = N'ServiceApp' THEN N'service-app'
                    WHEN app.AppType = N'Worker' THEN N'worker'
                    WHEN app.AppType = N'HostAgent' THEN N'host-agent'
@@ -3303,7 +3303,7 @@ WHERE artifact.ArtifactId = @artifactId
 IF @appId IS NOT NULL
    AND
    (
-       (@packageType = N'web-app' AND @appType IN (N'Portal', N'WebApp'))
+       (@packageType = N'web-app' AND @appType IN (N'Portal', N'WebApp', N'web'))
        OR (@packageType = N'service-app' AND @appType = N'ServiceApp')
        OR (@packageType = N'worker' AND @appType = N'Worker')
        OR (@packageType = N'host-agent' AND @appType = N'HostAgent')

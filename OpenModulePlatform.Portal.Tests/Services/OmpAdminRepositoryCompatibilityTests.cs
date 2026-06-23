@@ -28,6 +28,7 @@ public sealed class OmpAdminRepositoryCompatibilityTests
     [Theory]
     [InlineData("web-app", "Portal")]
     [InlineData("web-app", "WebApp")]
+    [InlineData("web-app", "web")]
     [InlineData("service-app", "ServiceApp")]
     [InlineData("worker", "Worker")]
     [InlineData("host-agent", "HostAgent")]
