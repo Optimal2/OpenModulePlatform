@@ -304,6 +304,42 @@ BEGIN
 END
 GO
 
+UPDATE app
+SET AppType =
+        CASE
+            WHEN normalized.AppType = N'WEB'
+                 AND module.ModuleKey = N'omp_portal'
+                 AND app.AppKey = N'omp_portal'
+                THEN N'Portal'
+            WHEN normalized.AppType = N'WEB'
+                THEN N'WebApp'
+            WHEN normalized.AppType = N'SERVICE'
+                THEN N'ServiceApp'
+            ELSE app.AppType
+        END,
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.Apps app
+LEFT JOIN omp.Modules module ON module.ModuleId = app.ModuleId
+CROSS APPLY
+(
+    SELECT UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) AS AppType
+) normalized
+WHERE (normalized.AppType = N'WEB'
+       OR normalized.AppType = N'SERVICE')
+  AND app.AppType <>
+        CASE
+            WHEN normalized.AppType = N'WEB'
+                 AND module.ModuleKey = N'omp_portal'
+                 AND app.AppKey = N'omp_portal'
+                THEN N'Portal'
+            WHEN normalized.AppType = N'WEB'
+                THEN N'WebApp'
+            WHEN normalized.AppType = N'SERVICE'
+                THEN N'ServiceApp'
+            ELSE app.AppType
+        END;
+GO
+
 IF OBJECT_ID(N'omp.AppPermissions', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.AppPermissions
@@ -449,7 +485,7 @@ BEGIN
     (
         CASE
             WHEN @NormalizedPackageType = N'WEB-APP'
-                 AND @NormalizedAppType IN (N'PORTAL', N'WEBAPP')
+                 AND @NormalizedAppType IN (N'PORTAL', N'WEBAPP', N'WEB')
                 THEN 1
             WHEN @NormalizedPackageType = N'SERVICE-APP'
                  AND @NormalizedAppType = N'SERVICEAPP'
