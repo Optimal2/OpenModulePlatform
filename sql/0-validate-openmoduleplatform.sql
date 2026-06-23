@@ -123,185 +123,117 @@ SELECT @Missing = @Missing + COUNT(1)
 FROM RequiredProgrammableObjects required
 WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL;
 
-DECLARE @InvalidRuntimeArtifactBindings TABLE
-(
-    BindingTable nvarchar(128) NOT NULL,
-    RowId nvarchar(100) NOT NULL,
-    AppKey nvarchar(100) NOT NULL,
-    AppType nvarchar(50) NOT NULL,
-    ArtifactId int NOT NULL,
-    ArtifactAppId int NOT NULL,
-    PackageType nvarchar(50) NOT NULL,
-    TargetName nvarchar(100) NULL,
-    Version nvarchar(50) NOT NULL,
-    FailureReason nvarchar(200) NOT NULL
-);
-
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.InstanceTemplateAppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.Apps', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.Artifacts', N'U') IS NOT NULL
 BEGIN
-    INSERT INTO @InvalidRuntimeArtifactBindings
+    SELECT @InvalidArtifactBindings = COUNT(1)
+    FROM
     (
-        BindingTable,
-        RowId,
-        AppKey,
-        AppType,
-        ArtifactId,
-        ArtifactAppId,
-        PackageType,
-        TargetName,
-        Version,
-        FailureReason
-    )
-    SELECT
-        N'omp.AppInstances',
-        CONVERT(nvarchar(100), appInstance.AppInstanceId),
-        app.AppKey,
-        app.AppType,
-        artifact.ArtifactId,
-        artifact.AppId,
-        artifact.PackageType,
-        artifact.TargetName,
-        artifact.Version,
-        CASE
-            WHEN artifact.AppId <> appInstance.AppId
-                THEN N'Artifact belongs to a different app.'
-            ELSE N'Artifact package type is not compatible with the app type.'
-        END
-    FROM omp.AppInstances appInstance
-    INNER JOIN omp.Apps app
-        ON app.AppId = appInstance.AppId
-    INNER JOIN omp.Artifacts artifact
-        ON artifact.ArtifactId = appInstance.ArtifactId
-    WHERE appInstance.ArtifactId IS NOT NULL
-      AND
-      (
-          artifact.AppId <> appInstance.AppId
-          OR
+        SELECT 1 AS InvalidBinding
+        FROM omp.AppInstances appInstance
+        INNER JOIN omp.Apps app
+            ON app.AppId = appInstance.AppId
+        INNER JOIN omp.Artifacts artifact
+            ON artifact.ArtifactId = appInstance.ArtifactId
+        WHERE appInstance.ArtifactId IS NOT NULL
+          AND
           (
-              CASE
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
-                      THEN 1
-                  ELSE 0
-              END
-          ) = 0
-      )
-    UNION ALL
-    SELECT
-        N'omp.WorkerInstances',
-        CONVERT(nvarchar(100), workerInstance.WorkerInstanceId),
-        app.AppKey,
-        app.AppType,
-        artifact.ArtifactId,
-        artifact.AppId,
-        artifact.PackageType,
-        artifact.TargetName,
-        artifact.Version,
-        CASE
-            WHEN artifact.AppId <> appInstance.AppId
-                THEN N'Artifact belongs to a different app.'
-            ELSE N'Artifact package type is not compatible with the app type.'
-        END
-    FROM omp.WorkerInstances workerInstance
-    INNER JOIN omp.AppInstances appInstance
-        ON appInstance.AppInstanceId = workerInstance.AppInstanceId
-    INNER JOIN omp.Apps app
-        ON app.AppId = appInstance.AppId
-    INNER JOIN omp.Artifacts artifact
-        ON artifact.ArtifactId = workerInstance.ArtifactId
-    WHERE workerInstance.ArtifactId IS NOT NULL
-      AND
-      (
-          artifact.AppId <> appInstance.AppId
-          OR
+              artifact.AppId <> appInstance.AppId
+              OR
+              (
+                  CASE
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                          THEN 1
+                      ELSE 0
+                  END
+              ) = 0
+          )
+        UNION ALL
+        SELECT 1 AS InvalidBinding
+        FROM omp.WorkerInstances workerInstance
+        INNER JOIN omp.AppInstances appInstance
+            ON appInstance.AppInstanceId = workerInstance.AppInstanceId
+        INNER JOIN omp.Apps app
+            ON app.AppId = appInstance.AppId
+        INNER JOIN omp.Artifacts artifact
+            ON artifact.ArtifactId = workerInstance.ArtifactId
+        WHERE workerInstance.ArtifactId IS NOT NULL
+          AND
           (
-              CASE
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
-                      THEN 1
-                  ELSE 0
-              END
-          ) = 0
-      )
-    UNION ALL
-    SELECT
-        N'omp.InstanceTemplateAppInstances',
-        CONVERT(nvarchar(100), templateAppInstance.InstanceTemplateAppInstanceId),
-        app.AppKey,
-        app.AppType,
-        artifact.ArtifactId,
-        artifact.AppId,
-        artifact.PackageType,
-        artifact.TargetName,
-        artifact.Version,
-        CASE
-            WHEN artifact.AppId <> templateAppInstance.AppId
-                THEN N'Artifact belongs to a different app.'
-            ELSE N'Artifact package type is not compatible with the app type.'
-        END
-    FROM omp.InstanceTemplateAppInstances templateAppInstance
-    INNER JOIN omp.Apps app
-        ON app.AppId = templateAppInstance.AppId
-    INNER JOIN omp.Artifacts artifact
-        ON artifact.ArtifactId = templateAppInstance.DesiredArtifactId
-    WHERE templateAppInstance.DesiredArtifactId IS NOT NULL
-      AND
-      (
-          artifact.AppId <> templateAppInstance.AppId
-          OR
+              artifact.AppId <> appInstance.AppId
+              OR
+              (
+                  CASE
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                          THEN 1
+                      ELSE 0
+                  END
+              ) = 0
+          )
+        UNION ALL
+        SELECT 1 AS InvalidBinding
+        FROM omp.InstanceTemplateAppInstances templateAppInstance
+        INNER JOIN omp.Apps app
+            ON app.AppId = templateAppInstance.AppId
+        INNER JOIN omp.Artifacts artifact
+            ON artifact.ArtifactId = templateAppInstance.DesiredArtifactId
+        WHERE templateAppInstance.DesiredArtifactId IS NOT NULL
+          AND
           (
-              CASE
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
-                      THEN 1
-                  WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                       AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
-                      THEN 1
-                  ELSE 0
-              END
-          ) = 0
-      );
+              artifact.AppId <> templateAppInstance.AppId
+              OR
+              (
+                  CASE
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                          THEN 1
+                      ELSE 0
+                  END
+              ) = 0
+          )
+    ) invalidBindings;
 END;
-
-SELECT @InvalidArtifactBindings = COUNT(1)
-FROM @InvalidRuntimeArtifactBindings;
 
 SELECT
     CAST(CASE WHEN @Missing = 0 AND @InvalidArtifactBindings = 0 THEN 1 ELSE 0 END AS bit) AS IsHealthy,
@@ -316,17 +248,151 @@ SELECT
 
 IF @InvalidArtifactBindings > 0
 BEGIN
-    SELECT
-        BindingTable,
-        RowId,
-        AppKey,
-        AppType,
-        ArtifactId,
-        ArtifactAppId,
-        PackageType,
-        TargetName,
-        Version,
-        FailureReason
-    FROM @InvalidRuntimeArtifactBindings
+    SELECT *
+    FROM
+    (
+        SELECT
+            N'omp.AppInstances' AS BindingTable,
+            CONVERT(nvarchar(100), appInstance.AppInstanceId) AS RowId,
+            app.AppKey,
+            app.AppType,
+            artifact.ArtifactId,
+            artifact.AppId AS ArtifactAppId,
+            artifact.PackageType,
+            artifact.TargetName,
+            artifact.Version,
+            CASE
+                WHEN artifact.AppId <> appInstance.AppId
+                    THEN N'Artifact belongs to a different app.'
+                ELSE N'Artifact package type is not compatible with the app type.'
+            END AS FailureReason
+        FROM omp.AppInstances appInstance
+        INNER JOIN omp.Apps app
+            ON app.AppId = appInstance.AppId
+        INNER JOIN omp.Artifacts artifact
+            ON artifact.ArtifactId = appInstance.ArtifactId
+        WHERE appInstance.ArtifactId IS NOT NULL
+          AND
+          (
+              artifact.AppId <> appInstance.AppId
+              OR
+              (
+                  CASE
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                          THEN 1
+                      ELSE 0
+                  END
+              ) = 0
+          )
+        UNION ALL
+        SELECT
+            N'omp.WorkerInstances' AS BindingTable,
+            CONVERT(nvarchar(100), workerInstance.WorkerInstanceId) AS RowId,
+            app.AppKey,
+            app.AppType,
+            artifact.ArtifactId,
+            artifact.AppId AS ArtifactAppId,
+            artifact.PackageType,
+            artifact.TargetName,
+            artifact.Version,
+            CASE
+                WHEN artifact.AppId <> appInstance.AppId
+                    THEN N'Artifact belongs to a different app.'
+                ELSE N'Artifact package type is not compatible with the app type.'
+            END AS FailureReason
+        FROM omp.WorkerInstances workerInstance
+        INNER JOIN omp.AppInstances appInstance
+            ON appInstance.AppInstanceId = workerInstance.AppInstanceId
+        INNER JOIN omp.Apps app
+            ON app.AppId = appInstance.AppId
+        INNER JOIN omp.Artifacts artifact
+            ON artifact.ArtifactId = workerInstance.ArtifactId
+        WHERE workerInstance.ArtifactId IS NOT NULL
+          AND
+          (
+              artifact.AppId <> appInstance.AppId
+              OR
+              (
+                  CASE
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                          THEN 1
+                      ELSE 0
+                  END
+              ) = 0
+          )
+        UNION ALL
+        SELECT
+            N'omp.InstanceTemplateAppInstances' AS BindingTable,
+            CONVERT(nvarchar(100), templateAppInstance.InstanceTemplateAppInstanceId) AS RowId,
+            app.AppKey,
+            app.AppType,
+            artifact.ArtifactId,
+            artifact.AppId AS ArtifactAppId,
+            artifact.PackageType,
+            artifact.TargetName,
+            artifact.Version,
+            CASE
+                WHEN artifact.AppId <> templateAppInstance.AppId
+                    THEN N'Artifact belongs to a different app.'
+                ELSE N'Artifact package type is not compatible with the app type.'
+            END AS FailureReason
+        FROM omp.InstanceTemplateAppInstances templateAppInstance
+        INNER JOIN omp.Apps app
+            ON app.AppId = templateAppInstance.AppId
+        INNER JOIN omp.Artifacts artifact
+            ON artifact.ArtifactId = templateAppInstance.DesiredArtifactId
+        WHERE templateAppInstance.DesiredArtifactId IS NOT NULL
+          AND
+          (
+              artifact.AppId <> templateAppInstance.AppId
+              OR
+              (
+                  CASE
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKER'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'HOSTAGENT'
+                          THEN 1
+                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'WORKERHOST'
+                          THEN 1
+                      ELSE 0
+                  END
+              ) = 0
+          )
+    ) invalidBindings
     ORDER BY BindingTable, AppKey, RowId;
 END;
