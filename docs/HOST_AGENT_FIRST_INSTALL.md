@@ -582,6 +582,65 @@ modeled as a normal web-app artifact so HostAgent can create the IIS child
 application and keep its runtime configuration in
 `omp.ArtifactConfigurationFiles` like other deployable apps.
 
+## Auth / OIDC Configuration
+
+The public Auth artifact configuration contains only neutral OMP settings such
+as the shared cookie name, login/logout paths, database connection placeholder,
+and Data Protection key path. Environment-specific OIDC or AD FS values belong
+in protected runtime configuration, normally an Auth `appsettings.json` config
+overlay carried by a private installer repository or imported after the base
+install.
+
+Set OIDC values under `OmpAuth:Oidc` for the `omp_auth` web app:
+
+```json
+{
+  "OmpAuth": {
+    "Oidc": {
+      "Enabled": true,
+      "DisplayName": "OpenID Connect",
+      "ProviderName": "ADFS",
+      "Authority": "https://idp.example.invalid/adfs",
+      "MetadataAddress": "",
+      "ClientId": "omp-auth",
+      "ClientSecret": "<server-side-secret>",
+      "CallbackPath": "/signin-oidc",
+      "ResponseType": "code",
+      "Scopes": [ "openid", "profile" ],
+      "ClaimTypes": {
+        "ProviderUserKeyClaimType": "sub",
+        "UserIdClaimType": "sub",
+        "NameClaimType": "upn",
+        "DisplayNameClaimType": "name",
+        "UserSidClaimType": "objectsid",
+        "UpnClaimType": "upn",
+        "SamAccountNameClaimType": "samaccountname",
+        "DomainClaimType": "netbiosname",
+        "GroupsClaimType": "groups",
+        "GroupClaimTypes": [],
+        "GroupSidClaimTypes": [ "group_sid" ],
+        "GroupNameClaimTypes": [ "group_name" ]
+      }
+    }
+  }
+}
+```
+
+The values above are neutral examples only. Do not commit real identity-provider
+hostnames, client ids, client secrets, group names, or customer-specific claim
+names to the public OMP repository. Store the client secret server-side only.
+AD FS must register the external redirect URI that reaches the Auth
+application, normally `https://<omp-host>/auth/signin-oidc` when
+`CallbackPath` is left at its default. If AD FS only emits required claims into
+the access token, administrators may add `allatclaims` to `Scopes` so those
+claims appear in the `id_token`; this is optional and depends on the AD FS
+claim issuance policy.
+
+After creating or updating an Auth config overlay, import it into the package
+object library or through Portal, then let HostAgent apply desired state to the
+Auth web app. Refresh/import the affected config overlay package; a code
+artifact refresh is not required when only runtime OIDC settings changed.
+
 ## Content File Mirroring
 
 Content pages can be backed by HTML files and server-report JSON files. In
