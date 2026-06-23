@@ -44,8 +44,16 @@ BEGIN
         Name nvarchar(200) NOT NULL,
         Description nvarchar(500) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Permissions_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Permissions_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT UQ_omp_Permissions_Name UNIQUE(Name)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.Permissions', N'UpdatedUtc') IS NULL
+BEGIN
+    ALTER TABLE omp.Permissions
+        ADD UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Permissions_UpdatedUtc DEFAULT SYSUTCDATETIME() WITH VALUES;
 END
 GO
 
@@ -57,8 +65,16 @@ BEGIN
         Name nvarchar(200) NOT NULL,
         Description nvarchar(500) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Roles_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Roles_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT UQ_omp_Roles_Name UNIQUE(Name)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.Roles', N'UpdatedUtc') IS NULL
+BEGIN
+    ALTER TABLE omp.Roles
+        ADD UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Roles_UpdatedUtc DEFAULT SYSUTCDATETIME() WITH VALUES;
 END
 GO
 

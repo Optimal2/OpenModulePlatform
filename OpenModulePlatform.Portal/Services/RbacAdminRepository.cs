@@ -538,10 +538,6 @@ ORDER BY p.Name;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
-        // Roles and permissions currently expose CreatedUtc only. Adding UpdatedUtc
-        // requires a coordinated schema migration plus updates to every RBAC write
-        // path; doing it only in the bootstrap table definition would create a
-        // misleading audit column on fresh installs.
         if (input.RoleId == 0)
         {
             const string sql = @"
@@ -560,7 +556,8 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         const string updateSql = @"
 UPDATE omp.Roles
 SET Name = @Name,
-    Description = @Description
+    Description = @Description,
+    UpdatedUtc = SYSUTCDATETIME()
 WHERE RoleId = @RoleId;";
 
         await using (var update = new SqlCommand(updateSql, conn))
@@ -597,7 +594,8 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         const string updateSql = @"
 UPDATE omp.Permissions
 SET Name = @Name,
-    Description = @Description
+    Description = @Description,
+    UpdatedUtc = SYSUTCDATETIME()
 WHERE PermissionId = @PermissionId;";
 
         await using (var update = new SqlCommand(updateSql, conn))
@@ -699,6 +697,10 @@ IF NOT EXISTS
 BEGIN
     INSERT INTO omp.RolePermissions(RoleId, PermissionId)
     VALUES (@RoleId, @PermissionId);
+
+    UPDATE omp.Roles
+    SET UpdatedUtc = SYSUTCDATETIME()
+    WHERE RoleId = @RoleId;
 END";
 
         await using var conn = _db.Create();
@@ -715,7 +717,14 @@ END";
         const string sql = @"
 DELETE FROM omp.RolePermissions
 WHERE RoleId = @RoleId
-  AND PermissionId = @PermissionId;";
+  AND PermissionId = @PermissionId;
+
+IF @@ROWCOUNT > 0
+BEGIN
+    UPDATE omp.Roles
+    SET UpdatedUtc = SYSUTCDATETIME()
+    WHERE RoleId = @RoleId;
+END";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -744,6 +753,10 @@ IF NOT EXISTS
 BEGIN
     INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
     VALUES (@RoleId, @PrincipalType, @Principal);
+
+    UPDATE omp.Roles
+    SET UpdatedUtc = SYSUTCDATETIME()
+    WHERE RoleId = @RoleId;
 
     SELECT CAST(1 AS bit);
 END
@@ -774,7 +787,14 @@ END";
 DELETE FROM omp.RolePrincipals
 WHERE RoleId = @RoleId
   AND PrincipalType = @PrincipalType
-  AND Principal = @Principal;";
+  AND Principal = @Principal;
+
+IF @@ROWCOUNT > 0
+BEGIN
+    UPDATE omp.Roles
+    SET UpdatedUtc = SYSUTCDATETIME()
+    WHERE RoleId = @RoleId;
+END";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
