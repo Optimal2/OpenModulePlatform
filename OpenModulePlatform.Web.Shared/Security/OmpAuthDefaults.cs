@@ -7,6 +7,11 @@ namespace OpenModulePlatform.Web.Shared.Security;
 public static class OmpAuthDefaults
 {
     public const string AuthenticationScheme = "OmpAuth";
+    public const string OidcAuthenticationScheme = "OmpOidc";
+    public const string OidcProviderDisplayName = "OIDC";
+    public const string OidcDefaultDisplayName = "OpenID Connect";
+    public const string OidcLoginPath = "/oidc";
+    public const string OidcCallbackPath = "/signin-oidc";
     public const string CookieName = ".OpenModulePlatform.Auth";
     public const string LoginPath = "/auth/login";
     public const string LogoutPath = "/auth/logout";

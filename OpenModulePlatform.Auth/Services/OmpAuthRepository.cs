@@ -11,6 +11,7 @@ namespace OpenModulePlatform.Auth.Services;
 public sealed class OmpAuthRepository
 {
     private const string AdProvider = "AD";
+    private const string OidcProvider = OmpAuthDefaults.OidcProviderDisplayName;
     private const int ActiveAccountStatus = 1;
     private const int DisplayNameMaxLength = 200;
     private const int ProviderUserKeyMaxLength = 1000;
@@ -122,6 +123,7 @@ public sealed class OmpAuthRepository
                 provider.Value.ProviderId,
                 userName,
                 userKeys,
+                "Windows identity",
                 ct);
 
             if (linkedUser is not null && !linkedUser.Value.IsActive)
@@ -144,6 +146,84 @@ public sealed class OmpAuthRepository
             UserId = linkedUser?.UserId,
             DisplayName = linkedUser?.DisplayName ?? userName,
             Provider = AdProvider,
+            ProviderUserKey = userKeys[0],
+            RolePrincipals = principals
+        };
+    }
+
+    public async Task<OmpAuthenticatedUser?> ResolveOidcAsync(
+        OmpOidcResolvedClaims oidcClaims,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(oidcClaims.ProviderUserKey) ||
+            string.IsNullOrWhiteSpace(oidcClaims.UserName))
+        {
+            return null;
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var provider = await EnsureProviderAsync(conn, OidcProvider, ct);
+        if (provider is null)
+        {
+            return null;
+        }
+
+        var userKeys = BuildOidcProviderUserKeys(oidcClaims);
+        if (userKeys.Count == 0)
+        {
+            _log.LogWarning("OIDC identity did not contain a provider user key that fits OMP storage limits.");
+            return null;
+        }
+
+        var linkedUser = await TryResolveLinkedUserAsync(conn, provider.Value.ProviderId, userKeys, ct);
+        if (linkedUser is not null && linkedUser.Value.IsActive)
+        {
+            await MarkUserAuthUsedAsync(conn, linkedUser.Value.UserAuthId, linkedUser.Value.UserId, ct);
+        }
+        else if (linkedUser is not null)
+        {
+            _log.LogWarning(
+                "OIDC identity with provider user key hash {ProviderUserKeyHash} matched disabled OMP user {UserId}. Principal fallback is blocked.",
+                CreateLogHash(userKeys[0]),
+                linkedUser.Value.UserId);
+            return null;
+        }
+
+        var principals = BuildOidcRolePrincipals(oidcClaims);
+
+        if (linkedUser is null &&
+            await ShouldAutoProvisionExternalUserAsync(conn, principals, ct))
+        {
+            linkedUser = await TryAutoProvisionLinkedUserAsync(
+                conn,
+                provider.Value.ProviderId,
+                oidcClaims.DisplayName,
+                userKeys,
+                "OIDC identity",
+                ct);
+
+            if (linkedUser is not null && !linkedUser.Value.IsActive)
+            {
+                _log.LogWarning(
+                    "OIDC identity with provider user key hash {ProviderUserKeyHash} matched disabled OMP user {UserId} during auto-provisioning retry. Principal fallback is blocked.",
+                    CreateLogHash(userKeys[0]),
+                    linkedUser.Value.UserId);
+                return null;
+            }
+        }
+
+        if (linkedUser is not null)
+        {
+            principals.Add(("OmpUser", linkedUser.Value.UserId.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        return new OmpAuthenticatedUser
+        {
+            UserId = linkedUser?.UserId,
+            DisplayName = linkedUser?.DisplayName ?? oidcClaims.DisplayName,
+            Provider = OidcProvider,
             ProviderUserKey = userKeys[0],
             RolePrincipals = principals
         };
@@ -551,6 +631,7 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
         int providerId,
         string userName,
         IReadOnlyList<string> providerUserKeys,
+        string providerLogLabel,
         CancellationToken ct)
     {
         var keys = providerUserKeys
@@ -589,8 +670,9 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
 
             await tx.CommitAsync(ct);
             _log.LogInformation(
-                "Auto-provisioned OMP user {UserId} for Windows identity '{UserName}' with {AuthLinkCount} AD auth link(s).",
+                "Auto-provisioned OMP user {UserId} for {ProviderLogLabel} '{UserName}' with {AuthLinkCount} auth link(s).",
                 userId,
+                providerLogLabel,
                 userName,
                 keys.Length);
 
@@ -624,6 +706,60 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
         return displayName.Length <= DisplayNameMaxLength
             ? displayName
             : displayName[..DisplayNameMaxLength];
+    }
+
+    private static IReadOnlyList<string> BuildOidcProviderUserKeys(OmpOidcResolvedClaims oidcClaims)
+    {
+        return new[]
+            {
+                oidcClaims.ProviderUserKey,
+                string.IsNullOrWhiteSpace(oidcClaims.Subject) ? "" : "sub:" + oidcClaims.Subject,
+                string.IsNullOrWhiteSpace(oidcClaims.UserName) ? "" : "name:" + oidcClaims.UserName,
+                oidcClaims.UserName
+            }
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Select(key => key.Trim())
+            .Where(key => key.Length <= ProviderUserKeyMaxLength)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<(string PrincipalType, string Principal)> BuildOidcRolePrincipals(
+        OmpOidcResolvedClaims oidcClaims)
+    {
+        var principals = new List<(string PrincipalType, string Principal)>();
+
+        AddPrincipal(principals, "User", oidcClaims.UserName);
+        AddPrincipal(principals, "ADUser", oidcClaims.UserName);
+        AddPrincipal(principals, "OIDCUser", oidcClaims.ProviderUserKey);
+        AddPrincipal(principals, "OIDCSubject", oidcClaims.Subject);
+
+        foreach (var group in oidcClaims.Groups)
+        {
+            AddPrincipal(principals, "ADGroup", group);
+        }
+
+        return principals
+            .Distinct()
+            .ToList();
+    }
+
+    private static void AddPrincipal(
+        List<(string PrincipalType, string Principal)> principals,
+        string principalType,
+        string? principal)
+    {
+        if (!string.IsNullOrWhiteSpace(principal) &&
+            principal.Length <= 256)
+        {
+            principals.Add((principalType, principal.Trim()));
+        }
+    }
+
+    private static string CreateLogHash(string value)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes.AsSpan(0, 8));
     }
 
     private static async Task<int> InsertActiveUserWithLastLoginAsync(

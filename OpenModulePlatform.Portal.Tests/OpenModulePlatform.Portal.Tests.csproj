@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.Portal\OpenModulePlatform.Portal.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

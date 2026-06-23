@@ -27,6 +27,7 @@ builder.Services.AddSingleton<WindowsPrincipalReader>();
 builder.Services.AddSingleton<WindowsPasswordAuthenticator>();
 builder.Services.AddScoped<OmpAuthRepository>();
 builder.Services.AddOmpCookieAuthentication(builder.Configuration);
+var oidcProviderStatus = builder.Services.AddOmpOidcAuthentication(builder.Configuration);
 var runningUnderIis = !string.IsNullOrWhiteSpace(
     Environment.GetEnvironmentVariable("ASPNETCORE_IIS_PHYSICAL_PATH"));
 
@@ -65,6 +66,20 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
+if (oidcProviderStatus.IsEnabled)
+{
+    app.MapGet(OmpAuthDefaults.OidcLoginPath, (HttpContext context, string? returnUrl) =>
+    {
+        var safeReturnUrl = ResolveSafeReturnUrl(context, returnUrl);
+        return Results.Challenge(
+            new AuthenticationProperties
+            {
+                RedirectUri = safeReturnUrl
+            },
+            [OmpAuthDefaults.OidcAuthenticationScheme]);
+    }).AllowAnonymous();
+}
+
 app.MapGet("/session-status", (HttpContext context) =>
 {
     context.Response.Headers.CacheControl = "no-store";
@@ -87,3 +102,52 @@ app.MapPost("/logout", async (HttpContext context, IOptions<OmpAuthOptions> auth
 });
 
 app.Run();
+
+static string ResolveSafeReturnUrl(HttpContext context, string? returnUrl)
+{
+    if (!string.IsNullOrWhiteSpace(returnUrl) &&
+        IsSafeLocalReturnUrl(returnUrl) &&
+        !IsCurrentLoginUrl(context, returnUrl))
+    {
+        return returnUrl;
+    }
+
+    return "/";
+}
+
+static bool IsCurrentLoginUrl(HttpContext context, string returnUrl)
+{
+    var returnPath = ExtractPath(returnUrl);
+    var currentLoginPath = string.Concat(context.Request.PathBase.Value, "/login");
+
+    return string.Equals(returnPath, currentLoginPath, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(returnPath, OmpAuthDefaults.LoginPath, StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsSafeLocalReturnUrl(string returnUrl)
+{
+    if (!Uri.IsWellFormedUriString(returnUrl, UriKind.Relative) ||
+        !returnUrl.StartsWith("/", StringComparison.Ordinal) ||
+        returnUrl.StartsWith("//", StringComparison.Ordinal) ||
+        returnUrl.Contains('\\', StringComparison.Ordinal))
+    {
+        return false;
+    }
+
+    try
+    {
+        var unescaped = Uri.UnescapeDataString(returnUrl);
+        return !unescaped.StartsWith("//", StringComparison.Ordinal)
+            && !unescaped.Contains('\\', StringComparison.Ordinal);
+    }
+    catch (UriFormatException)
+    {
+        return false;
+    }
+}
+
+static string ExtractPath(string returnUrl)
+{
+    var queryIndex = returnUrl.IndexOfAny(['?', '#']);
+    return queryIndex >= 0 ? returnUrl[..queryIndex] : returnUrl;
+}

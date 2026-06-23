@@ -26,6 +26,7 @@ public sealed class LoginModel : PageModel
     private readonly OmpBrandingService _brandingService;
     private readonly OmpConfigurationService _configuration;
     private readonly WindowsPasswordAuthenticator _windowsPasswordAuthenticator;
+    private readonly OmpOidcProviderStatus _oidcProviderStatus;
     private readonly IStringLocalizer<AuthResource> _localizer;
 
     public LoginModel(
@@ -33,12 +34,14 @@ public sealed class LoginModel : PageModel
         OmpBrandingService brandingService,
         OmpConfigurationService configuration,
         WindowsPasswordAuthenticator windowsPasswordAuthenticator,
+        OmpOidcProviderStatus oidcProviderStatus,
         IStringLocalizer<AuthResource> localizer)
     {
         _repository = repository;
         _brandingService = brandingService;
         _configuration = configuration;
         _windowsPasswordAuthenticator = windowsPasswordAuthenticator;
+        _oidcProviderStatus = oidcProviderStatus;
         _localizer = localizer;
     }
 
@@ -68,6 +71,12 @@ public sealed class LoginModel : PageModel
 
     public string WindowsLoginUrl { get; private set; } = "";
 
+    public string OidcLoginUrl { get; private set; } = "";
+
+    public string OidcDisplayName { get; private set; } = "";
+
+    public bool OidcEnabled { get; private set; }
+
     public string? ErrorMessage { get; private set; }
 
     public bool ShowAlternateWindowsPrompt { get; private set; }
@@ -95,6 +104,8 @@ public sealed class LoginModel : PageModel
         {
             "windows" => T("Windows sign-in could not be resolved."),
             "windowsAlternateUnavailable" => T("Alternate Windows sign-in is not available on this host."),
+            "oidc" => T("External sign-in could not be completed."),
+            "oidcUnavailable" => T("External sign-in is not configured."),
             _ => null
         };
         ShowOtherSignInOptions = error == "windowsAlternateUnavailable";
@@ -244,6 +255,9 @@ public sealed class LoginModel : PageModel
     {
         var returnUrl = ResolveSafeReturnUrl();
         WindowsLoginUrl = QueryHelpers.AddQueryString(Url.Content("~/ad"), "returnUrl", returnUrl);
+        OidcEnabled = _oidcProviderStatus.IsEnabled;
+        OidcDisplayName = _oidcProviderStatus.DisplayName;
+        OidcLoginUrl = QueryHelpers.AddQueryString(Url.Content("~/oidc"), "returnUrl", returnUrl);
     }
 
     private async Task PreparePageAsync(CancellationToken ct)

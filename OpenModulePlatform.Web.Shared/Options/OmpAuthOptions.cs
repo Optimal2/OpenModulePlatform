@@ -19,4 +19,9 @@ public sealed class OmpAuthOptions
     /// read the shared auth cookie must use the same key ring.
     /// </summary>
     public string DataProtectionKeyPath { get; set; } = "";
+
+    /// <summary>
+    /// Optional central OIDC/AD FS sign-in provider for OMP Auth.
+    /// </summary>
+    public OmpOidcOptions Oidc { get; set; } = new();
 }
