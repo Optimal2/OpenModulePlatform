@@ -11,7 +11,6 @@ namespace OpenModulePlatform.Auth.Services;
 public sealed class OmpAuthRepository
 {
     private const string AdProvider = "AD";
-    private const string OidcProvider = OmpAuthDefaults.OidcProviderDisplayName;
     private const int ActiveAccountStatus = 1;
     private const int DisplayNameMaxLength = 200;
     private const int ProviderUserKeyMaxLength = 1000;
@@ -164,7 +163,8 @@ public sealed class OmpAuthRepository
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
-        var provider = await EnsureProviderAsync(conn, OidcProvider, ct);
+        var providerName = NormalizeOidcProviderName(oidcClaims.ProviderName);
+        var provider = await EnsureProviderAsync(conn, providerName, ct);
         if (provider is null)
         {
             return null;
@@ -223,7 +223,7 @@ public sealed class OmpAuthRepository
         {
             UserId = linkedUser?.UserId,
             DisplayName = linkedUser?.DisplayName ?? oidcClaims.DisplayName,
-            Provider = OidcProvider,
+            Provider = providerName,
             ProviderUserKey = userKeys[0],
             RolePrincipals = principals
         };
@@ -710,13 +710,17 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
 
     private static IReadOnlyList<string> BuildOidcProviderUserKeys(OmpOidcResolvedClaims oidcClaims)
     {
-        return new[]
+        var keys = oidcClaims.ProviderUserKeyCandidates.Count > 0
+            ? oidcClaims.ProviderUserKeyCandidates
+            : new[]
             {
                 oidcClaims.ProviderUserKey,
                 string.IsNullOrWhiteSpace(oidcClaims.Subject) ? "" : "sub:" + oidcClaims.Subject,
                 string.IsNullOrWhiteSpace(oidcClaims.UserName) ? "" : "name:" + oidcClaims.UserName,
                 oidcClaims.UserName
-            }
+            };
+
+        return keys
             .Where(key => !string.IsNullOrWhiteSpace(key))
             .Select(key => key.Trim())
             .Where(key => key.Length <= ProviderUserKeyMaxLength)
@@ -731,6 +735,11 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
 
         AddPrincipal(principals, "User", oidcClaims.UserName);
         AddPrincipal(principals, "ADUser", oidcClaims.UserName);
+        foreach (var candidate in oidcClaims.UserPrincipalCandidates)
+        {
+            AddPrincipal(principals, "ADUser", candidate);
+        }
+
         AddPrincipal(principals, "OIDCUser", oidcClaims.ProviderUserKey);
         AddPrincipal(principals, "OIDCSubject", oidcClaims.Subject);
 
@@ -743,6 +752,11 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             .Distinct()
             .ToList();
     }
+
+    private static string NormalizeOidcProviderName(string? providerName)
+        => string.IsNullOrWhiteSpace(providerName)
+            ? OmpAuthDefaults.OidcProviderDisplayName
+            : providerName.Trim();
 
     private static void AddPrincipal(
         List<(string PrincipalType, string Principal)> principals,
