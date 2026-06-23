@@ -130,6 +130,67 @@ to appear in the `id_token` used by OMP Auth. Add it to `OmpAuth:Oidc:Scopes`
 only when the AD FS relying-party policy requires it; OMP treats scopes as
 configuration and always keeps tokens out of the shared OMP cookie.
 
+#### Local OIDC Validation
+
+Automated OMP tests do not require real AD FS, VPN, external network access, or
+customer secrets. They cover:
+
+- disabled and incomplete OIDC configuration hiding the provider without
+  registering an OIDC authentication scheme
+- local placeholder OIDC configuration registering the expected
+  authorization-code, PKCE, claim-type, scope, and OMP-cookie boundaries
+- claim mapping for AD FS-style user, SID, UPN, account-name, and group claims
+- conversion from a resolved OIDC identity into the shared `OmpAuth` cookie
+  principal without saving identity-provider tokens
+
+If a developer wants an end-to-end local browser exercise, use a local-only OIDC
+test server or simulator and register the Auth app redirect URI for the local
+mount path, normally `http://localhost:8088/auth/signin-oidc`. Keep all values
+local placeholders; do not use customer URLs, relying-party identifiers, or
+secrets in this repository.
+
+Example non-secret local placeholder configuration:
+
+```json
+{
+  "OmpAuth": {
+    "Oidc": {
+      "Enabled": true,
+      "DisplayName": "Local simulated AD FS",
+      "ProviderName": "ADFS",
+      "Authority": "https://idp.local.test/adfs",
+      "MetadataAddress": "",
+      "ClientId": "omp-local-auth",
+      "ClientSecret": "<local-development-client-secret>",
+      "CallbackPath": "/signin-oidc",
+      "ResponseType": "code",
+      "Scopes": [ "openid", "profile", "allatclaims" ],
+      "ClaimTypes": {
+        "ProviderUserKeyClaimType": "sub",
+        "UserIdClaimType": "sub",
+        "NameClaimType": "upn",
+        "DisplayNameClaimType": "name",
+        "UserSidClaimType": "objectsid",
+        "UpnClaimType": "upn",
+        "SamAccountNameClaimType": "samaccountname",
+        "DomainClaimType": "netbiosname",
+        "GroupsClaimType": "groups",
+        "GroupClaimTypes": [ "roles" ],
+        "GroupSidClaimTypes": [ "group_sid" ],
+        "GroupNameClaimTypes": [ "group_name" ]
+      }
+    }
+  }
+}
+```
+
+`Authority` and `MetadataAddress` are mutually alternative ways to point the
+middleware at local discovery metadata. With `Enabled` set to `true`, OMP Auth
+requires one of those values, `ClientId`, `ClientSecret`, and
+`ResponseType: "code"`. If the required values are incomplete, OMP Auth logs
+that OIDC sign-in is disabled, hides the provider on the login page, and does
+not register the OIDC challenge endpoint.
+
 ### Local Password Provider
 
 The built-in local password provider uses provider key `lpwd` and table `omp.auth_provider_lpwd`.
