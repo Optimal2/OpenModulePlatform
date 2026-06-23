@@ -11,6 +11,12 @@ OMP separates authentication from authorization:
 - external principals, especially large AD groups, can grant access without creating one `omp.users` row per external user
 - first-class OMP users can still exist when the platform needs profile state, local password sign-in, or provider links
 
+`OpenModulePlatform.Auth` is the server-side authentication broker for OMP. It
+talks to Windows Authentication, local password sign-in, or OIDC identity
+providers, then issues the same shared OMP cookie for the Portal and module web
+applications. Normal OMP web apps do not receive identity-provider secrets or
+tokens.
+
 ## Web Applications
 
 `OpenModulePlatform.Auth` is mounted as the `/auth` IIS application.
@@ -87,13 +93,36 @@ Supported settings include:
 - `ClaimTypes:GroupSidClaimTypes`
 - `ClaimTypes:GroupNameClaimTypes`
 
-The Auth application handles the OIDC authorization-code callback server-side.
-The OpenIdConnect middleware validates the identity token, OMP Auth maps the
-configured claims to an OMP identity, and then OMP Auth issues the normal shared
-`OmpAuth` cookie. Tokens are not saved into the authentication ticket, exposed
-to browser-side code, or forwarded to downstream OMP applications. OMP uses the
-identity claims from the sign-in token and does not depend on an access token
-for downstream API calls.
+OMP Auth uses the server-side confidential authorization-code flow. The
+identity provider sends the browser back to the Auth application, the Auth
+application redeems the code with the server-side client secret, validates the
+`id_token`, maps configured claims to an OMP identity, and then issues the
+normal shared `OmpAuth` cookie. The client secret is stored only in server-side
+Auth configuration, normally an environment-specific protected config overlay
+or secret store. It must not be placed in browser-side code, module web-app
+configuration, public repositories, or generated documentation.
+
+Tokens are not saved into the authentication ticket, exposed to browser-side
+code, or forwarded to downstream OMP applications. OMP uses the identity claims
+from the sign-in token and does not require an access token for downstream API
+calls.
+
+The OIDC sign-in endpoint is `/oidc` inside the Auth application. Because the
+Auth application is normally mounted as `/auth`, the site-level path is
+`/auth/oidc`. `CallbackPath` defaults to `/signin-oidc` inside the Auth
+application, so the normal relying-party redirect URI registered in AD FS is:
+
+```text
+https://<omp-host>/auth/signin-oidc
+```
+
+Use the real external scheme, host, port, and path seen by the user's browser.
+For local HTTP development, the equivalent default is
+`http://localhost:8088/auth/signin-oidc`. A custom `CallbackPath` must start
+with `/` and must not contain backslashes; invalid values fall back to
+`/signin-oidc`. AD FS redirect URI comparison is exact, so mismatched HTTP vs
+HTTPS, host aliases, ports, trailing paths, or reverse-proxy public URLs will
+break the callback.
 
 OIDC identities use the configured `ProviderName` in `omp.auth_providers` and
 `omp.user_auth`; the default is `OIDC`. Use a stable provider name such as
@@ -129,6 +158,38 @@ AD FS deployments sometimes require the `allatclaims` scope for desired claims
 to appear in the `id_token` used by OMP Auth. Add it to `OmpAuth:Oidc:Scopes`
 only when the AD FS relying-party policy requires it; OMP treats scopes as
 configuration and always keeps tokens out of the shared OMP cookie.
+
+AD FS group issuance is an identity-provider decision. Administrators can emit
+all groups, selected groups, group SIDs, group names, or role-style claims. OMP
+can consume any configured claim type and resolve the resulting values as
+`ADGroup` role principals. OMP itself should not require a maintained
+group allow-list for OIDC sign-in; a scoped AD FS claim issuance policy may
+still be useful for token size, privacy, and auditability.
+
+#### OIDC RBAC Examples
+
+Prefer stable AD group SIDs when they are available. Names are easier to read
+but can change when a group is renamed.
+
+```text
+Role: PortalAdmins
+PrincipalType: ADGroup
+Principal: S-1-5-21-1000000000-2000000000-3000000000-51234
+
+Role: CaseReaders
+PrincipalType: ADGroup
+Principal: S-1-5-21-1000000000-2000000000-3000000000-62001
+
+Role: RecordsOperators
+PrincipalType: ADGroup
+Principal: EXAMPLE\Records Operators
+```
+
+When AD FS emits group names instead of SIDs, configure
+`ClaimTypes:GroupNameClaimTypes` with those claim names and create matching
+`ADGroup` role principals. When AD FS emits SID values, configure
+`ClaimTypes:GroupSidClaimTypes` or `ClaimTypes:GroupsClaimType` as appropriate
+and use the SID values in RBAC.
 
 #### Local OIDC Validation
 
@@ -190,6 +251,13 @@ requires one of those values, `ClientId`, `ClientSecret`, and
 `ResponseType: "code"`. If the required values are incomplete, OMP Auth logs
 that OIDC sign-in is disabled, hides the provider on the login page, and does
 not register the OIDC challenge endpoint.
+
+For HostAgent-managed installations, keep these settings in an Auth app
+`appsettings.json` config overlay or another protected runtime configuration
+source. The neutral artifact configuration only contains shared cookie and
+database settings; environment-specific OIDC authority, client id, client
+secret, callback path, scopes, and claim mappings belong outside the public
+repository.
 
 ### Local Password Provider
 
@@ -387,3 +455,32 @@ If `/auth/ad` fails with `HTTP Error 400. The size of the request headers is too
 - If the error appears after a successful AD challenge and redirect, the browser may be sending an oversized OMP cookie. The built-in AD provider filters AD group claims to avoid this, but old cookies may need to be deleted after upgrading.
 
 On Windows/IIS hosts, HTTP.sys request header limits are controlled by the `HKLM\SYSTEM\CurrentControlSet\Services\HTTP\Parameters` registry values `MaxFieldLength` and `MaxRequestBytes`. Changing those values is an infrastructure decision and requires a restart of HTTP.sys or the server. Use the HTTPERR logs under `%SystemRoot%\System32\LogFiles\HTTPERR` to confirm `RequestHeadersTooLong` before changing host-level limits.
+
+## Troubleshooting OIDC / AD FS
+
+Use this checklist before changing code:
+
+- Missing metadata: confirm `OmpAuth:Oidc:Authority` or
+  `OmpAuth:Oidc:MetadataAddress` points to reachable discovery metadata from
+  the OMP server. If both are empty while OIDC is enabled, OMP logs that OIDC is
+  disabled due to invalid configuration.
+- Bad client secret: confirm the server-side `ClientSecret` matches the AD FS
+  confidential client/relying-party configuration. OMP never sends this value to
+  the browser and does not store it in the shared cookie.
+- Invalid redirect URI: confirm AD FS has the exact external redirect URI,
+  normally `https://<omp-host>/auth/signin-oidc`. Check scheme, host, port,
+  path, and reverse-proxy public URL handling.
+- Missing group claims: inspect the `id_token` claims issued by AD FS and align
+  `GroupsClaimType`, `GroupClaimTypes`, `GroupSidClaimTypes`, and
+  `GroupNameClaimTypes` with the emitted claim names. Add `allatclaims` only
+  when AD FS policy otherwise places the needed claims outside the `id_token`.
+- Token or cookie too large: reduce emitted groups, prefer SID claims over long
+  names, or scope the AD FS issuance policy. Very large identity tokens or OMP
+  cookies can exceed browser, proxy, IIS, or HTTP.sys header limits.
+- Clock skew: verify the OMP server and AD FS server clocks use reliable time
+  synchronization. Skew can make otherwise valid tokens appear expired or not
+  yet valid.
+- SameSite or cookie issues: OMP's shared cookie is `SameSite=Lax` by default.
+  Standard top-level OIDC redirects work with this setting. Embedded iframe or
+  cross-site hosting scenarios may require HTTPS, `Secure`, `SameSite=None`,
+  and matching frame/CSP configuration at the hosting layer.
