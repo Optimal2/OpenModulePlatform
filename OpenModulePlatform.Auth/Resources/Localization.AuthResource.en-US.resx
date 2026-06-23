@@ -8,6 +8,7 @@
   <data name="Sign in to {0}" xml:space="preserve"><value>Sign in to {0}</value></data>
   <data name="Choose an authentication provider for this {0} instance." xml:space="preserve"><value>Choose an authentication provider for this {0} instance.</value></data>
   <data name="Sign in with Windows / AD" xml:space="preserve"><value>Sign in with Windows / AD</value></data>
+  <data name="Sign in with {0}" xml:space="preserve"><value>Sign in with {0}</value></data>
   <data name="Other sign-in options" xml:space="preserve"><value>Other options</value></data>
   <data name="Use other credentials only when normal Windows / AD sign-in cannot be used." xml:space="preserve"><value>Use other credentials only when normal Windows / AD sign-in cannot be used.</value></data>
   <data name="Other Windows / AD account" xml:space="preserve"><value>Other Windows / AD account</value></data>
@@ -26,6 +27,8 @@
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Windows sign-in could not be resolved." xml:space="preserve"><value>Windows sign-in could not be resolved.</value></data>
   <data name="Alternate Windows sign-in is not available on this host." xml:space="preserve"><value>Alternate Windows sign-in is not available on this host.</value></data>
+  <data name="External sign-in could not be completed." xml:space="preserve"><value>External sign-in could not be completed.</value></data>
+  <data name="External sign-in is not configured." xml:space="preserve"><value>External sign-in is not configured.</value></data>
   <data name="Enter a user name and password." xml:space="preserve"><value>Enter a user name and password.</value></data>
   <data name="Enter a user name." xml:space="preserve"><value>Enter a user name.</value></data>
   <data name="User name must be 256 characters or fewer." xml:space="preserve"><value>User name must be 256 characters or fewer.</value></data>
