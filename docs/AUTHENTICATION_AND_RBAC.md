@@ -67,16 +67,25 @@ Supported settings include:
 
 - `Enabled`
 - `DisplayName`
+- `ProviderName`, the `omp.auth_providers.display_name` value used for OIDC links
 - `Authority` or `MetadataAddress`
 - `ClientId`
 - `ClientSecret`
 - `CallbackPath`
 - `Scopes`
 - `ResponseType` set to `code`
+- `ClaimTypes:ProviderUserKeyClaimType`
 - `ClaimTypes:UserIdClaimType`
 - `ClaimTypes:NameClaimType`
 - `ClaimTypes:DisplayNameClaimType`
+- `ClaimTypes:UserSidClaimType`
+- `ClaimTypes:UpnClaimType`
+- `ClaimTypes:SamAccountNameClaimType`
+- `ClaimTypes:DomainClaimType`
 - `ClaimTypes:GroupsClaimType`
+- `ClaimTypes:GroupClaimTypes`
+- `ClaimTypes:GroupSidClaimTypes`
+- `ClaimTypes:GroupNameClaimTypes`
 
 The Auth application handles the OIDC authorization-code callback server-side.
 The OpenIdConnect middleware validates the identity token, OMP Auth maps the
@@ -86,10 +95,15 @@ to browser-side code, or forwarded to downstream OMP applications. OMP uses the
 identity claims from the sign-in token and does not depend on an access token
 for downstream API calls.
 
-OIDC identities use the `OIDC` provider in `omp.auth_providers` and
-`omp.user_auth`. The provider user key is based on the issuer and configured
-user-id claim when an issuer is present, with additional lookup aliases for the
-subject and configured user-name claim. If the OIDC identity is linked to a
+OIDC identities use the configured `ProviderName` in `omp.auth_providers` and
+`omp.user_auth`; the default is `OIDC`. Use a stable provider name such as
+`OIDC` or `ADFS` and keep it stable after links exist. The provider user key is
+based on the issuer and configured `ProviderUserKeyClaimType` when an issuer is
+present. For AD FS this should normally be a stable claim such as object SID,
+`nameidentifier`, or `sub`, depending on the relying-party policy and whether
+the value is stable across the identity lifetime. OMP also tries lookup aliases
+for the subject, user name, SID, UPN, SAM/account name, and `DOMAIN\name`
+candidates when those claims are present. If the OIDC identity is linked to a
 disabled OMP user, sign-in is blocked instead of falling back to direct
 principal claims.
 
@@ -97,16 +111,24 @@ The OIDC provider emits role principals for:
 
 - `User` with the configured user-name claim
 - `ADUser` with the configured user-name claim
+- `ADUser` with useful AD-style user principal candidates when present, such as SID, UPN, SAM/account name, or `DOMAIN\name`
 - `OIDCUser` with the provider user key
 - `OIDCSubject` with the configured user-id claim
-- `ADGroup` for every configured group claim value sent by the identity provider
+- `ADGroup` for every configured group claim value sent by the identity provider, including SID values and configured name values
 
 OMP does not maintain a separate allow-list of OIDC groups. If AD FS sends broad
 group claims, OMP can use those values directly as `ADGroup` role principals.
 That keeps group ownership in AD FS/AD, but it also means the resulting OMP
 cookie can grow with the number and length of group claims. Prefer compact group
 identifiers or scoped group issuance rules at the identity provider when users
-belong to many groups.
+belong to many groups. AD FS policy may still decide which groups are emitted.
+If all groups are emitted, AD FS administrators must consider identity-token,
+cookie, and HTTP header size limits.
+
+AD FS deployments sometimes require the `allatclaims` scope for desired claims
+to appear in the `id_token` used by OMP Auth. Add it to `OmpAuth:Oidc:Scopes`
+only when the AD FS relying-party policy requires it; OMP treats scopes as
+configuration and always keeps tokens out of the shared OMP cookie.
 
 ### Local Password Provider
 
