@@ -270,22 +270,11 @@ public static class OmpOidcClaimResolver
     }
 
     private static IReadOnlyList<string> NormalizeDistinct(IEnumerable<string?> values)
-    {
-        var result = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var normalized in values
+        => values
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!.Trim()))
-        {
-            if (seen.Add(normalized))
-            {
-                result.Add(normalized);
-            }
-        }
-
-        return result;
-    }
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private static bool IsSid(string value)
         => value.StartsWith("S-", StringComparison.OrdinalIgnoreCase);

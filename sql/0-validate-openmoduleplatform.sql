@@ -78,6 +78,8 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
     FROM (VALUES
         (N'omp', N'InstanceTemplates', N'SortOrder'),
         (N'omp', N'HostTemplates', N'SortOrder'),
+        (N'omp', N'Permissions', N'UpdatedUtc'),
+        (N'omp', N'Roles', N'UpdatedUtc'),
         (N'omp', N'Apps', N'AllowMultipleActiveInstances'),
         (N'omp', N'ModuleDefinitionArtifactCompatibility', N'RelativePathTemplate'),
         (N'omp', N'AppInstances', N'TargetHostTemplateId'),
