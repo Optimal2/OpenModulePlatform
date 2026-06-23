@@ -1,4 +1,7 @@
 (function () {
+    // This shared asset is intentionally authored for the modern browser baseline
+    // required by OMP's fetch/ResizeObserver-based top bar. It is served directly,
+    // not transpiled, so async/await usage is part of that supported baseline.
     // Keep a single set of global listeners for all shared top bars on the page.
     // Rebalance work is coalesced per animation frame so that multiple resize notifications
     // do not trigger repeated layout thrashing for the same visual update.

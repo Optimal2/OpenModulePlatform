@@ -75,6 +75,7 @@ public static class OmpWebHostingExtensions
         var webAppOptions = builder.Configuration
             .GetSection(optionsSectionName)
             .Get<WebAppOptions>() ?? new WebAppOptions();
+        var cultureSelectionService = new CultureSelectionService();
 
         builder.Services.AddAuthorization(options =>
         {
@@ -113,7 +114,7 @@ public static class OmpWebHostingExtensions
             options.SupportedUICultures = supportedCultures;
             options.RequestCultureProviders =
             [
-                new PreferredCultureRequestCultureProvider(webAppOptions, new CultureSelectionService()),
+                new PreferredCultureRequestCultureProvider(webAppOptions, cultureSelectionService),
                 new CookieRequestCultureProvider(),
                 new AcceptLanguageHeaderRequestCultureProvider()
             ];
@@ -131,7 +132,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddMemoryCache();
         builder.Services.AddTransient<IClaimsTransformation, ActiveRoleClaimsTransformation>();
-        builder.Services.AddSingleton<CultureSelectionService>();
+        builder.Services.AddSingleton(cultureSelectionService);
         builder.Services.AddSingleton<SqlConnectionFactory>();
         builder.Services.AddScoped<OmpConfigurationService>();
         builder.Services.AddScoped<OmpBrandingService>();
@@ -645,8 +646,8 @@ public static class OmpWebHostingExtensions
                 options.Cookie.IsEssential = true;
                 options.Cookie.SameSite = SameSiteMode.Lax;
                 options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-                options.LoginPath = authOptions.LoginPath;
-                options.AccessDeniedPath = authOptions.AccessDeniedPath;
+                options.LoginPath = NormalizeLocalAuthPath(authOptions.LoginPath, OmpAuthDefaults.LoginPath);
+                options.AccessDeniedPath = NormalizeLocalAuthPath(authOptions.AccessDeniedPath, OmpAuthDefaults.AccessDeniedPath);
                 options.SlidingExpiration = true;
                 options.ExpireTimeSpan = TimeSpan.FromHours(10);
 
@@ -654,9 +655,7 @@ public static class OmpWebHostingExtensions
                 {
                     OnRedirectToLogin = context =>
                     {
-                        var loginPath = string.IsNullOrWhiteSpace(authOptions.LoginPath)
-                            ? OmpAuthDefaults.LoginPath
-                            : authOptions.LoginPath;
+                        var loginPath = NormalizeLocalAuthPath(authOptions.LoginPath, OmpAuthDefaults.LoginPath);
                         var returnUrl = string.Concat(
                             context.Request.PathBase,
                             context.Request.Path,
@@ -710,12 +709,27 @@ public static class OmpWebHostingExtensions
         return string.Empty;
     }
 
+    private static string NormalizeLocalAuthPath(string? configuredPath, string fallbackPath)
+    {
+        var fallback = IsSafeLocalReturnUrl(fallbackPath)
+            ? fallbackPath
+            : "/";
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return fallback;
+        }
+
+        var candidate = configuredPath.Trim();
+        return IsSafeLocalReturnUrl(candidate)
+            && !candidate.Contains('?', StringComparison.Ordinal)
+            && !candidate.Contains('#', StringComparison.Ordinal)
+            ? candidate
+            : fallback;
+    }
+
     private static string BuildLoginRedirectUrl(string? configuredLoginPath, string returnUrl)
     {
-        var loginPath = IsSafeLocalReturnUrl(configuredLoginPath)
-            ? configuredLoginPath!
-            : OmpAuthDefaults.LoginPath;
-
+        var loginPath = NormalizeLocalAuthPath(configuredLoginPath, OmpAuthDefaults.LoginPath);
         return QueryHelpers.AddQueryString(loginPath, "returnUrl", returnUrl);
     }
 
