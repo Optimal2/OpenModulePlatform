@@ -146,7 +146,7 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
                            AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
@@ -181,7 +181,7 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
                            AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
@@ -214,7 +214,7 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
                            AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
@@ -279,7 +279,7 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
                            AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
@@ -328,7 +328,7 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
                            AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
@@ -375,7 +375,7 @@ BEGIN
               (
                   CASE
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP')
+                           AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) IN (N'PORTAL', N'WEBAPP', N'WEB')
                           THEN 1
                       WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
                            AND UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) = N'SERVICEAPP'
