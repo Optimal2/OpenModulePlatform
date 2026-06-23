@@ -320,6 +320,40 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.NormalizeCompatibilityToken', N'FN') IS NULL
+    EXEC(N'CREATE FUNCTION omp.NormalizeCompatibilityToken(@Value nvarchar(4000)) RETURNS nvarchar(4000) AS BEGIN RETURN N''''; END');
+GO
+
+ALTER FUNCTION omp.NormalizeCompatibilityToken
+(
+    @Value nvarchar(4000)
+)
+RETURNS nvarchar(4000)
+AS
+BEGIN
+    RETURN UPPER(LTRIM(RTRIM(ISNULL(@Value, N''))));
+END
+GO
+
+IF OBJECT_ID(N'omp.NormalizeAppTypeCompatibilityToken', N'FN') IS NULL
+    EXEC(N'CREATE FUNCTION omp.NormalizeAppTypeCompatibilityToken(@Value nvarchar(4000)) RETURNS nvarchar(4000) AS BEGIN RETURN N''''; END');
+GO
+
+ALTER FUNCTION omp.NormalizeAppTypeCompatibilityToken
+(
+    @Value nvarchar(4000)
+)
+RETURNS nvarchar(4000)
+AS
+BEGIN
+    -- AppType values may arrive in canonical form such as ServiceApp or in a
+    -- package-style spelling such as service-app. Runtime compatibility checks
+    -- compare the normalized token so existing stored AppType values do not
+    -- need a disruptive rename.
+    RETURN REPLACE(omp.NormalizeCompatibilityToken(@Value), N'-', N'');
+END
+GO
+
 DECLARE @PortalModuleKey nvarchar(100) = N'omp_portal';
 DECLARE @PortalAppKey nvarchar(100) = N'omp_portal';
 
@@ -341,7 +375,7 @@ FROM omp.Apps app
 LEFT JOIN omp.Modules module ON module.ModuleId = app.ModuleId
 CROSS APPLY
 (
-    SELECT UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))) AS AppType
+    SELECT omp.NormalizeCompatibilityToken(app.AppType) AS AppType
 ) normalized
 WHERE (normalized.AppType = N'WEB'
        OR normalized.AppType = N'SERVICE')
@@ -503,12 +537,12 @@ ALTER FUNCTION omp.IsArtifactPackageCompatibleWithAppType
 RETURNS bit
 AS
 BEGIN
-    DECLARE @NormalizedPackageType nvarchar(50) = UPPER(LTRIM(RTRIM(ISNULL(@PackageType, N''))));
+    DECLARE @NormalizedPackageType nvarchar(50) = omp.NormalizeCompatibilityToken(@PackageType);
     -- AppType values are stored as Portal/WebApp/ServiceApp/HostAgent/WorkerHost,
     -- while PackageType values use manifest names such as web-app and service-app.
     -- Strip hyphens here so older AppType aliases and package-style spellings are
     -- accepted without changing the canonical stored AppType values.
-    DECLARE @NormalizedAppType nvarchar(50) = REPLACE(UPPER(LTRIM(RTRIM(ISNULL(@AppType, N'')))), N'-', N'');
+    DECLARE @NormalizedAppType nvarchar(50) = omp.NormalizeAppTypeCompatibilityToken(@AppType);
 
     RETURN
     (
@@ -2238,6 +2272,7 @@ BEGIN
 
     DECLARE @ModuleActions TABLE(ActionName nvarchar(10) NOT NULL);
     DECLARE @AppActions TABLE(ActionName nvarchar(10) NOT NULL);
+    DECLARE @NullGuidSentinel uniqueidentifier = '00000000-0000-0000-0000-000000000000';
 
     IF @HostKey IS NOT NULL
        AND NOT EXISTS
@@ -2419,7 +2454,7 @@ BEGIN
         -- Nullable GUID/int/text comparisons use sentinels because SQL Server
         -- treats direct NULL comparisons as UNKNOWN. The materializer must
         -- detect both NULL -> value and value -> NULL transitions.
-        ISNULL(target.HostId, '00000000-0000-0000-0000-000000000000') <> ISNULL(source.HostId, '00000000-0000-0000-0000-000000000000')
+        ISNULL(target.HostId, @NullGuidSentinel) <> ISNULL(source.HostId, @NullGuidSentinel)
         OR ISNULL(target.TargetHostTemplateId, -1) <> ISNULL(source.TargetHostTemplateId, -1)
         OR target.AppId <> source.AppId
         OR target.DisplayName <> source.DisplayName
@@ -2863,6 +2898,10 @@ BEGIN
         content_type nvarchar(128) NOT NULL,
         file_size bigint NOT NULL,
         storage_key nvarchar(120) NOT NULL,
+        -- Keep the legacy shared binary-data column name. The same name is
+        -- used by widget/media binary tables and repository code; renaming only
+        -- message attachments would add compatibility churn without improving
+        -- runtime behavior.
         data_value varbinary(max) NOT NULL,
         uploaded_by_user_id int NOT NULL,
         created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_message_attachments_created_at DEFAULT SYSUTCDATETIME(),
@@ -3216,6 +3255,8 @@ BEGIN
         -- user > permission > role > global; higher ConfigPriority wins within
         -- the same scope class, and ConfigId is the deterministic final tie
         -- breaker.
+        -- ConfigUsr is an older public schema name kept for compatibility with
+        -- existing SQL, services, and portable configuration packages.
         ConfigUsr int NULL,
         ConfigPermission int NULL,
         ConfigRole int NULL,
