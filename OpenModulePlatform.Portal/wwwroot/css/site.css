@@ -4749,6 +4749,78 @@ body.dashboard-widget-picker-open {
     opacity: 0.58;
 }
 
+.dashboard-widgets-admin-scroll {
+    overflow-x: hidden;
+}
+
+.dashboard-widgets-admin-grid {
+    table-layout: fixed;
+    font-size: 0.84rem;
+}
+
+.dashboard-widgets-admin-grid th,
+.dashboard-widgets-admin-grid td,
+.dashboard-widgets-admin-grid code,
+.dashboard-widgets-admin-grid .small-text,
+.dashboard-widgets-admin-grid .pill {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.dashboard-widgets-admin-grid code {
+    white-space: normal;
+}
+
+.dashboard-widgets-admin-grid th,
+.dashboard-widgets-admin-grid td {
+    padding: 8px 8px;
+}
+
+.dashboard-widgets-admin-grid__module {
+    width: 7%;
+}
+
+.dashboard-widgets-admin-grid__key {
+    width: 10%;
+}
+
+.dashboard-widgets-admin-grid__title {
+    width: 9%;
+}
+
+.dashboard-widgets-admin-grid__description {
+    width: 17%;
+}
+
+.dashboard-widgets-admin-grid__type {
+    width: 8%;
+}
+
+.dashboard-widgets-admin-grid__payload {
+    width: 10%;
+}
+
+.dashboard-widgets-admin-grid__version {
+    width: 6%;
+}
+
+.dashboard-widgets-admin-grid__status {
+    width: 6%;
+}
+
+.dashboard-widgets-admin-grid__access {
+    width: 12%;
+}
+
+.dashboard-widgets-admin-grid__modified {
+    width: 7%;
+}
+
+.dashboard-widgets-admin-grid__actions {
+    width: 8%;
+}
+
 .dashboard-widget-option__title {
     align-self: end;
     font-weight: 700;
