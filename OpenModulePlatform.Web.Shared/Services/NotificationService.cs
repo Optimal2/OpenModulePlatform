@@ -1,4 +1,5 @@
 using OpenModulePlatform.Web.Shared.Navigation;
+using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Security;
 using Microsoft.Data.SqlClient;
 using System.Data;
@@ -25,10 +26,14 @@ public sealed class NotificationService
     };
 
     private readonly SqlConnectionFactory _db;
+    private readonly ITopBarNotificationStatePublisher _statePublisher;
 
-    public NotificationService(SqlConnectionFactory db)
+    public NotificationService(
+        SqlConnectionFactory db,
+        ITopBarNotificationStatePublisher statePublisher)
     {
         _db = db;
+        _statePublisher = statePublisher;
     }
 
     public static int? TryGetOmpUserId(ClaimsPrincipal user)
@@ -115,7 +120,11 @@ VALUES
             : (object)DBNull.Value;
 
         var result = await cmd.ExecuteScalarAsync(ct);
-        return Convert.ToInt64(result, CultureInfo.InvariantCulture);
+        var notificationId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+
+        await _statePublisher.NotifyChangedAsync(userId, ct);
+
+        return notificationId;
     }
 
     public async Task<IReadOnlyList<PortalTopBarNotification>> GetRecentForUserAsync(
@@ -272,7 +281,11 @@ WHERE notification_id = @notification_id
             await updateCmd.ExecuteNonQueryAsync(ct);
         }
 
-        return new NotificationMarkReadResult(true, destinationUrl, await GetUnreadCountAsync(conn, userId, ct));
+        var unreadCount = await GetUnreadCountAsync(conn, userId, ct);
+
+        await _statePublisher.NotifyChangedAsync(userId, ct);
+
+        return new NotificationMarkReadResult(true, destinationUrl, unreadCount);
     }
 
     public async Task<int> MarkAllAsReadAsync(int userId, CancellationToken ct)
@@ -301,7 +314,13 @@ WHERE user_id = @user_id
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-        return await cmd.ExecuteNonQueryAsync(ct);
+        var markedCount = await cmd.ExecuteNonQueryAsync(ct);
+        if (markedCount > 0)
+        {
+            await _statePublisher.NotifyChangedAsync(userId, ct);
+        }
+
+        return markedCount;
     }
 
     public async Task<NotificationToastSummary> GetToastSummaryForUserAsync(
