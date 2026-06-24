@@ -2769,31 +2769,227 @@ BEGIN
         event_category nvarchar(80) NOT NULL,
         target_type nvarchar(40) NOT NULL CONSTRAINT DF_omp_push_event_outbox_target_type DEFAULT(N'user'),
         target_user_id int NULL,
+        target_json nvarchar(2048) NOT NULL,
         payload_json nvarchar(max) NULL,
+        deduplication_key nvarchar(200) NULL,
+        correlation_key nvarchar(200) NULL,
         status nvarchar(40) NOT NULL CONSTRAINT DF_omp_push_event_outbox_status DEFAULT(N'pending'),
         lease_token uniqueidentifier NULL,
+        lease_owner nvarchar(200) NULL,
         lease_until_utc datetime2(3) NULL,
         retry_count int NOT NULL CONSTRAINT DF_omp_push_event_outbox_retry_count DEFAULT(0),
-        max_retries int NOT NULL CONSTRAINT DF_omp_push_event_outbox_max_retries DEFAULT(3),
-        error_message nvarchar(max) NULL,
+        max_retries int NOT NULL CONSTRAINT DF_omp_push_event_outbox_max_retries DEFAULT(5),
+        error_message nvarchar(2048) NULL,
         created_utc datetime2(3) NOT NULL CONSTRAINT DF_omp_push_event_outbox_created_utc DEFAULT SYSUTCDATETIME(),
         scheduled_utc datetime2(3) NOT NULL CONSTRAINT DF_omp_push_event_outbox_scheduled_utc DEFAULT SYSUTCDATETIME(),
         dispatched_utc datetime2(3) NULL,
+        completed_utc datetime2(3) NULL,
+        dead_lettered_utc datetime2(3) NULL,
 
         CONSTRAINT PK_omp_push_event_outbox PRIMARY KEY(push_event_id),
-        CONSTRAINT FK_omp_push_event_outbox_user FOREIGN KEY(target_user_id) REFERENCES omp.users(user_id),
-        CONSTRAINT CK_omp_push_event_outbox_event_category CHECK(LEN(LTRIM(RTRIM(event_category))) > 0),
-        CONSTRAINT CK_omp_push_event_outbox_target_type CHECK(target_type IN (N'user', N'broadcast', N'authenticated')),
-        CONSTRAINT CK_omp_push_event_outbox_user_target CHECK
+        CONSTRAINT FK_omp_push_event_outbox_user FOREIGN KEY(target_user_id) REFERENCES omp.users(user_id)
+    );
+END
+GO
+
+IF COL_LENGTH(N'omp.push_event_outbox', N'target_json') IS NULL
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD target_json nvarchar(2048) NULL;
+END
+GO
+
+UPDATE omp.push_event_outbox
+SET target_json = CASE
+        WHEN target_type = N'user' AND target_user_id IS NOT NULL
+            THEN CONCAT(N'{"kind":"user","ids":["', CONVERT(nvarchar(20), target_user_id), N'"]}')
+        WHEN target_type = N'authenticated'
+            THEN N'{"kind":"authenticated","ids":[]}'
+        WHEN target_type = N'broadcast'
+            THEN N'{"kind":"broadcast","ids":[]}'
+        ELSE N'{"kind":"broadcast","ids":[]}'
+    END
+WHERE target_json IS NULL;
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'omp.push_event_outbox')
+      AND name = N'target_json'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ALTER COLUMN target_json nvarchar(2048) NOT NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.push_event_outbox', N'deduplication_key') IS NULL
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD deduplication_key nvarchar(200) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.push_event_outbox', N'correlation_key') IS NULL
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD correlation_key nvarchar(200) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.push_event_outbox', N'lease_owner') IS NULL
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD lease_owner nvarchar(200) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.push_event_outbox', N'completed_utc') IS NULL
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD completed_utc datetime2(3) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.push_event_outbox', N'dead_lettered_utc') IS NULL
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD dead_lettered_utc datetime2(3) NULL;
+END
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'omp.push_event_outbox')
+      AND name = N'error_message'
+      AND max_length = -1
+)
+BEGIN
+    UPDATE omp.push_event_outbox
+    SET error_message = LEFT(error_message, 2048)
+    WHERE LEN(error_message) > 2048;
+
+    ALTER TABLE omp.push_event_outbox
+        ALTER COLUMN error_message nvarchar(2048) NULL;
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_event_category')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_event_category;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_event_category')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_event_category CHECK(LEN(LTRIM(RTRIM(event_category))) > 0);
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_target_type')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_target_type;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_target_type')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_target_type CHECK(target_type IN (N'user', N'role', N'broadcast', N'authenticated', N'module'));
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_user_target')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_user_target;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_user_target')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_user_target CHECK
         (
             (target_type = N'user' AND target_user_id IS NOT NULL)
             OR
             (target_type <> N'user' AND target_user_id IS NULL)
-        ),
-        CONSTRAINT CK_omp_push_event_outbox_retry CHECK(retry_count >= 0 AND max_retries BETWEEN 0 AND 20),
-        CONSTRAINT CK_omp_push_event_outbox_status CHECK(status IN (N'pending', N'processing', N'dispatched', N'failed')),
-        CONSTRAINT CK_omp_push_event_outbox_payload_json CHECK(payload_json IS NULL OR ISJSON(payload_json) = 1)
-    );
+        );
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_retry')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_retry;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_retry')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_retry CHECK(retry_count >= 0 AND max_retries BETWEEN 0 AND 20);
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_status')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_status;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_status')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_status CHECK(status IN (N'pending', N'processing', N'dispatched', N'failed', N'dead-lettered'));
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_target_json')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_target_json;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_target_json')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_target_json CHECK(ISJSON(target_json) = 1 AND DATALENGTH(target_json) <= 4096);
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_payload_json')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_payload_json;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_payload_json')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_payload_json CHECK(payload_json IS NULL OR (ISJSON(payload_json) = 1 AND DATALENGTH(payload_json) <= 32768));
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_keys')
+BEGIN
+    ALTER TABLE omp.push_event_outbox DROP CONSTRAINT CK_omp_push_event_outbox_keys;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_keys')
+BEGIN
+    ALTER TABLE omp.push_event_outbox
+        ADD CONSTRAINT CK_omp_push_event_outbox_keys CHECK
+        (
+            (deduplication_key IS NULL OR LEN(LTRIM(RTRIM(deduplication_key))) > 0)
+            AND
+            (correlation_key IS NULL OR LEN(LTRIM(RTRIM(correlation_key))) > 0)
+        );
 END
 GO
 
@@ -2807,7 +3003,7 @@ IF NOT EXISTS
 BEGIN
     CREATE INDEX IX_omp_push_event_outbox_pending
         ON omp.push_event_outbox(status, scheduled_utc, lease_until_utc, push_event_id)
-        INCLUDE(event_category, target_type, target_user_id, retry_count, max_retries)
+        INCLUDE(event_category, target_type, target_user_id, retry_count, max_retries, lease_token, lease_owner)
         WHERE status IN (N'pending', N'processing');
 END
 GO
@@ -2837,7 +3033,35 @@ IF NOT EXISTS
 BEGIN
     CREATE INDEX IX_omp_push_event_outbox_cleanup
         ON omp.push_event_outbox(status, created_utc)
-        WHERE status IN (N'dispatched', N'failed');
+        WHERE status IN (N'dispatched', N'failed', N'dead-lettered');
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'UX_omp_push_event_outbox_deduplication_key'
+      AND object_id = OBJECT_ID(N'omp.push_event_outbox')
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_push_event_outbox_deduplication_key
+        ON omp.push_event_outbox(deduplication_key)
+        WHERE deduplication_key IS NOT NULL;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_push_event_outbox_correlation_key'
+      AND object_id = OBJECT_ID(N'omp.push_event_outbox')
+)
+BEGIN
+    CREATE INDEX IX_omp_push_event_outbox_correlation_key
+        ON omp.push_event_outbox(correlation_key, created_utc DESC, push_event_id DESC)
+        WHERE correlation_key IS NOT NULL;
 END
 GO
 

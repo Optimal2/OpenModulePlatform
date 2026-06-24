@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging.Abstractions;
-using OpenModulePlatform.EventPublisher;
 using OpenModulePlatform.Web.Shared.Notifications;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
@@ -8,65 +7,19 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 public sealed class SignalRTopBarNotificationStatePublisherTests
 {
     [Fact]
-    public async Task NotifyChangedAsync_PersistsUserTargetedOutboxEventAndSignalsUserGroup()
+    public async Task NotifyChangedAsync_SignalsUserGroup()
     {
-        var pushEvents = new RecordingPushEventPublisher();
         var clientProxy = new RecordingClientProxy();
         var hubContext = new RecordingHubContext(clientProxy);
         var publisher = new SignalRTopBarNotificationStatePublisher(
             hubContext,
-            pushEvents,
             NullLogger<SignalRTopBarNotificationStatePublisher>.Instance);
 
         await publisher.NotifyChangedAsync(42, CancellationToken.None);
-
-        var pushEvent = Assert.Single(pushEvents.Events).Normalize();
-        Assert.Equal(PushEventCategories.TopBarNotificationStateChanged, pushEvent.EventCategory);
-        Assert.Equal(PushEventTargetTypes.User, pushEvent.TargetType);
-        Assert.Equal(42, pushEvent.TargetUserId);
-        Assert.Null(pushEvent.PayloadJson);
 
         Assert.Equal("omp-user:42", hubContext.ClientsImpl.GroupName);
         Assert.Equal(TopBarNotificationHub.StateChangedMethod, clientProxy.MethodName);
         Assert.Empty(clientProxy.Arguments);
-    }
-
-    [Fact]
-    public async Task NotifyChangedAsync_WhenOutboxPublishFails_StillSignalsUserGroup()
-    {
-        var pushEvents = new RecordingPushEventPublisher
-        {
-            Exception = new InvalidOperationException("outbox unavailable")
-        };
-        var clientProxy = new RecordingClientProxy();
-        var hubContext = new RecordingHubContext(clientProxy);
-        var publisher = new SignalRTopBarNotificationStatePublisher(
-            hubContext,
-            pushEvents,
-            NullLogger<SignalRTopBarNotificationStatePublisher>.Instance);
-
-        await publisher.NotifyChangedAsync(42, CancellationToken.None);
-
-        Assert.Equal("omp-user:42", hubContext.ClientsImpl.GroupName);
-        Assert.Equal(TopBarNotificationHub.StateChangedMethod, clientProxy.MethodName);
-    }
-
-    private sealed class RecordingPushEventPublisher : IPushEventPublisher
-    {
-        public List<PushEvent> Events { get; } = [];
-
-        public Exception? Exception { get; init; }
-
-        public Task<long> PublishAsync(PushEvent pushEvent, CancellationToken ct)
-        {
-            if (Exception is not null)
-            {
-                throw Exception;
-            }
-
-            Events.Add(pushEvent);
-            return Task.FromResult((long)Events.Count);
-        }
     }
 
     private sealed class RecordingHubContext : IHubContext<TopBarNotificationHub>
