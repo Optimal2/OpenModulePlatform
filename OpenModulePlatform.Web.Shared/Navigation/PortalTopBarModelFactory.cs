@@ -19,6 +19,7 @@ public static class PortalTopBarModelFactory
     public static PortalTopBarModel Create(WebAppOptions options)
     {
         var topBarOptions = options.PortalTopBar ?? new PortalTopBarOptions();
+        var notificationUpdateOptions = PortalTopBarNotificationUpdateOptions.FromWebAppOptions(options.TopBarPolling);
 
         if (!topBarOptions.Enabled)
         {
@@ -71,10 +72,12 @@ public static class PortalTopBarModelFactory
             SessionLoginUrl = OmpAuthDefaults.LoginPath,
             SessionStatusVisibleIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.VisibleIntervalSeconds, 60),
             SessionStatusHiddenIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.HiddenIntervalSeconds, 180),
-            TopBarPollingEnabled = options.TopBarPolling?.Enabled != false,
+            NotificationUpdateMode = notificationUpdateOptions.Mode,
+            NotificationPollIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
+            TopBarPollingEnabled = notificationUpdateOptions.UsesPolling,
             TopBarSummaryUrl = PortalTopBarModel.DefaultTopBarSummaryPath,
-            TopBarPollingVisibleIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.VisibleIntervalSeconds, 60),
-            TopBarPollingHiddenIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.HiddenIntervalSeconds, 180)
+            TopBarPollingVisibleIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
+            TopBarPollingHiddenIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds
         };
     }
 

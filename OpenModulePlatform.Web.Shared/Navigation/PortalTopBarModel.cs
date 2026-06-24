@@ -55,6 +55,8 @@ public sealed class PortalTopBarModel
         SessionLoginUrl = OmpAuthDefaults.LoginPath,
         SessionStatusVisibleIntervalSeconds = 60,
         SessionStatusHiddenIntervalSeconds = 180,
+        NotificationUpdateMode = PortalTopBarNotificationUpdateOptions.PollMode,
+        NotificationPollIntervalSeconds = PortalTopBarNotificationUpdateOptions.DefaultPollIntervalSeconds,
         TopBarPollingEnabled = true,
         TopBarSummaryUrl = DefaultTopBarSummaryPath,
         TopBarPollingVisibleIntervalSeconds = 60,
@@ -191,6 +193,10 @@ public sealed class PortalTopBarModel
     public int SessionStatusVisibleIntervalSeconds { get; init; } = 60;
 
     public int SessionStatusHiddenIntervalSeconds { get; init; } = 180;
+
+    public string NotificationUpdateMode { get; init; } = PortalTopBarNotificationUpdateOptions.PollMode;
+
+    public int NotificationPollIntervalSeconds { get; init; } = PortalTopBarNotificationUpdateOptions.DefaultPollIntervalSeconds;
 
     public bool TopBarPollingEnabled { get; init; } = true;
 
