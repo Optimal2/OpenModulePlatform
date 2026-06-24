@@ -9,6 +9,14 @@
     var FALLBACK_COMPACT_BREAKPOINT = '710px';
     var MAX_NOTIFICATION_BADGE_COUNT = 99;
     var MAX_BACKOFF_MULTIPLIER = 6;
+    var DEFAULT_TOPBAR_POLL_INTERVAL_SECONDS = 60;
+    var MIN_TOPBAR_POLL_INTERVAL_SECONDS = 10;
+    var MAX_TOPBAR_POLL_INTERVAL_SECONDS = 3600;
+    var TOPBAR_UPDATE_MANUAL_MODE = 'manual';
+    var TOPBAR_UPDATE_POLL_MODE = 'poll';
+    var TOPBAR_UPDATE_PUSH_MODE = 'push';
+    var TOPBAR_NOTIFICATION_PUSH_METHOD = 'notificationStateChanged';
+    var SIGNALR_CLIENT_SCRIPT_URL = '/_content/OpenModulePlatform.Web.Shared/js/signalr.min.js';
     var initializedTopbars = new Set();
     var scheduledTopbars = new Set();
     var globalHandlersRegistered = false;
@@ -29,7 +37,15 @@
         timer: 0,
         running: false,
         failures: 0,
-        handlersRegistered: false
+        handlersRegistered: false,
+        mode: TOPBAR_UPDATE_MANUAL_MODE,
+        pushUrl: '',
+        pushConnection: null,
+        pushStarting: false,
+        pushFallbackActive: false,
+        pushFallbackWarned: false,
+        pushReconnectTimer: 0,
+        signalRClientPromise: null
     };
     var canHoverMedia = typeof window.matchMedia === 'function'
         ? window.matchMedia('(hover: hover) and (pointer: fine)')
@@ -1294,13 +1310,53 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
     }
 
+    function normalizeTopbarUpdateMode(value) {
+        var normalized = (value || '').trim().toLowerCase();
+        return normalized === TOPBAR_UPDATE_MANUAL_MODE
+            || normalized === TOPBAR_UPDATE_POLL_MODE
+            || normalized === TOPBAR_UPDATE_PUSH_MODE
+            ? normalized
+            : TOPBAR_UPDATE_POLL_MODE;
+    }
+
+    function parseTopbarPollIntervalSeconds(value, fallback) {
+        var text = (value || '').trim();
+        if (!/^\d+$/.test(text)) {
+            return fallback;
+        }
+
+        var parsed = Number(text);
+        return Number.isFinite(parsed)
+            && parsed >= MIN_TOPBAR_POLL_INTERVAL_SECONDS
+            && parsed <= MAX_TOPBAR_POLL_INTERVAL_SECONDS
+            ? parsed
+            : fallback;
+    }
+
     function getTopbarPollingConfig(root) {
+        var pollInterval = parseTopbarPollIntervalSeconds(
+            root ? root.getAttribute('data-notification-poll-interval') : '',
+            DEFAULT_TOPBAR_POLL_INTERVAL_SECONDS);
+        var hiddenInterval = parseTopbarPollIntervalSeconds(
+            root ? root.getAttribute('data-topbar-polling-hidden-interval') : '',
+            pollInterval);
+        var mode = normalizeTopbarUpdateMode(root ? root.getAttribute('data-notification-update-mode') : '');
+
         return {
-            enabled: !!root && root.getAttribute('data-topbar-polling-enabled') === 'true',
+            enabled: !!root && mode !== TOPBAR_UPDATE_MANUAL_MODE,
+            mode: mode,
             url: root ? root.getAttribute('data-topbar-summary-url') || '/topbar/summary' : '/topbar/summary',
-            visibleInterval: parsePositiveInteger(root ? root.getAttribute('data-topbar-polling-visible-interval') : '', 60) * 1000,
-            hiddenInterval: parsePositiveInteger(root ? root.getAttribute('data-topbar-polling-hidden-interval') : '', 180) * 1000
+            pushUrl: root ? root.getAttribute('data-notification-push-url') || '/topbar/notifications/updates' : '/topbar/notifications/updates',
+            visibleInterval: pollInterval * 1000,
+            hiddenInterval: hiddenInterval * 1000
         };
+    }
+
+    function isTopbarAutomaticRefreshActive(config) {
+        return !!config && (
+            config.mode === TOPBAR_UPDATE_POLL_MODE
+            || (config.mode === TOPBAR_UPDATE_PUSH_MODE && topbarPollingState.pushFallbackActive)
+        );
     }
 
     function getTopbarPollingDelay(config) {
@@ -1314,24 +1370,54 @@
         return baseDelay;
     }
 
-    function scheduleTopbarSummaryRefresh(delay) {
+    function stopTopbarSummaryTimer() {
         if (topbarPollingState.timer) {
             window.clearTimeout(topbarPollingState.timer);
+            topbarPollingState.timer = 0;
         }
-
-        if (!topbarPollingState.root) {
-            return;
-        }
-
-        topbarPollingState.timer = window.setTimeout(runTopbarSummaryRefresh, Math.max(0, delay));
     }
 
-    function runTopbarSummaryRefreshSoon() {
+    function scheduleTopbarSummaryRefresh(delay, force) {
+        stopTopbarSummaryTimer();
         if (!topbarPollingState.root) {
             return;
         }
 
-        scheduleTopbarSummaryRefresh(0);
+        var config = getTopbarPollingConfig(topbarPollingState.root);
+        if (!force && !isTopbarAutomaticRefreshActive(config)) {
+            return;
+        }
+
+        topbarPollingState.timer = window.setTimeout(function () {
+            runTopbarSummaryRefresh(!!force);
+        }, Math.max(0, delay));
+    }
+
+    function runTopbarSummaryRefreshSoon(force) {
+        if (!topbarPollingState.root) {
+            return;
+        }
+
+        scheduleTopbarSummaryRefresh(0, !!force);
+    }
+
+    async function runTopbarSummaryRefreshForRoot(root) {
+        var config = getTopbarPollingConfig(root);
+        if (!config.url || topbarPollingState.running) {
+            return;
+        }
+
+        topbarPollingState.running = true;
+        try {
+            var payload = await fetchTopbarJson(config.url);
+            applyTopbarSummary(payload);
+        } catch (error) {
+            if (window.console && typeof window.console.warn === 'function') {
+                window.console.warn('OMP topbar summary refresh failed.', error);
+            }
+        } finally {
+            topbarPollingState.running = false;
+        }
     }
 
     function applyTopbarSummary(payload) {
@@ -1382,15 +1468,15 @@
         return await response.json();
     }
 
-    async function runTopbarSummaryRefresh() {
+    async function runTopbarSummaryRefresh(force) {
         var root = topbarPollingState.root;
         var config = getTopbarPollingConfig(root);
-        if (!config.enabled || !config.url) {
+        if ((!force && !isTopbarAutomaticRefreshActive(config)) || !config.url) {
             return;
         }
 
         if (topbarPollingState.running) {
-            scheduleTopbarSummaryRefresh(config.visibleInterval);
+            scheduleTopbarSummaryRefresh(force ? 250 : config.visibleInterval, !!force);
             return;
         }
 
@@ -1406,7 +1492,9 @@
             }
         } finally {
             topbarPollingState.running = false;
-            scheduleTopbarSummaryRefresh(getTopbarPollingDelay(config));
+            if (isTopbarAutomaticRefreshActive(getTopbarPollingConfig(topbarPollingState.root))) {
+                scheduleTopbarSummaryRefresh(getTopbarPollingDelay(config), false);
+            }
         }
     }
 
@@ -1418,35 +1506,219 @@
         menu.dataset.portalTopbarSummaryRefreshInitialized = 'true';
         menu.addEventListener('toggle', function () {
             if (menu.open) {
-                runTopbarSummaryRefreshSoon();
+                runTopbarSummaryRefreshForRoot(menu.closest('[data-portal-topbar-root]'));
             }
         });
     }
 
-    function initTopbarSummaryPolling(topbar) {
-        if (!topbar || topbar.getAttribute('data-topbar-polling-enabled') !== 'true') {
+    function loadSignalRClient() {
+        if (window.signalR && typeof window.signalR.HubConnectionBuilder === 'function') {
+            return Promise.resolve(window.signalR);
+        }
+
+        if (topbarPollingState.signalRClientPromise) {
+            return topbarPollingState.signalRClientPromise;
+        }
+
+        topbarPollingState.signalRClientPromise = new Promise(function (resolve, reject) {
+            var script = document.createElement('script');
+            script.src = resolveSharedAssetUrl(SIGNALR_CLIENT_SCRIPT_URL);
+            script.async = true;
+            script.onload = function () {
+                if (window.signalR && typeof window.signalR.HubConnectionBuilder === 'function') {
+                    resolve(window.signalR);
+                    return;
+                }
+
+                reject(new Error('SignalR browser client did not initialize.'));
+            };
+            script.onerror = function () {
+                reject(new Error('SignalR browser client could not be loaded.'));
+            };
+            document.head.appendChild(script);
+        });
+
+        return topbarPollingState.signalRClientPromise;
+    }
+
+    function startTopbarPushFallback(error) {
+        topbarPollingState.pushFallbackActive = true;
+        if (!topbarPollingState.pushFallbackWarned && window.console && typeof window.console.warn === 'function') {
+            topbarPollingState.pushFallbackWarned = true;
+            window.console.warn('OMP topbar notification push setup failed; falling back to polling.', error);
+        }
+
+        scheduleTopbarSummaryRefresh(0, false);
+    }
+
+    function scheduleTopbarPushReconnect(config) {
+        if (topbarPollingState.pushReconnectTimer || !topbarPollingState.root) {
             return;
         }
 
-        topbarPollingState.root = topbar;
+        topbarPollingState.pushReconnectTimer = window.setTimeout(function () {
+            topbarPollingState.pushReconnectTimer = 0;
+            var currentConfig = getTopbarPollingConfig(topbarPollingState.root);
+            if (currentConfig.mode === TOPBAR_UPDATE_PUSH_MODE) {
+                startTopbarPush(currentConfig);
+            }
+        }, Math.max(config.visibleInterval, DEFAULT_TOPBAR_POLL_INTERVAL_SECONDS * 1000));
+    }
 
-        if (!topbarPollingState.handlersRegistered) {
-            topbarPollingState.handlersRegistered = true;
-            window.addEventListener('focus', runTopbarSummaryRefreshSoon);
-            document.addEventListener('visibilitychange', function () {
-                if (document.visibilityState === 'visible') {
-                    runTopbarSummaryRefreshSoon();
-                } else {
-                    scheduleTopbarSummaryRefresh(getTopbarPollingDelay(getTopbarPollingConfig(topbarPollingState.root)));
+    function clearTopbarPushReconnect() {
+        if (topbarPollingState.pushReconnectTimer) {
+            window.clearTimeout(topbarPollingState.pushReconnectTimer);
+            topbarPollingState.pushReconnectTimer = 0;
+        }
+    }
+
+    function stopTopbarPushConnection() {
+        clearTopbarPushReconnect();
+        var connection = topbarPollingState.pushConnection;
+        topbarPollingState.pushConnection = null;
+        topbarPollingState.pushStarting = false;
+        topbarPollingState.pushFallbackActive = false;
+        if (connection && typeof connection.stop === 'function') {
+            connection.stop().catch(function () {
+            });
+        }
+    }
+
+    async function startTopbarPush(config) {
+        if (!config.pushUrl || topbarPollingState.pushStarting || topbarPollingState.pushConnection) {
+            return;
+        }
+
+        topbarPollingState.pushStarting = true;
+        try {
+            var signalR = await loadSignalRClient();
+            var currentConfig = getTopbarPollingConfig(topbarPollingState.root);
+            if (currentConfig.mode !== TOPBAR_UPDATE_PUSH_MODE || currentConfig.pushUrl !== config.pushUrl) {
+                return;
+            }
+
+            var builder = new signalR.HubConnectionBuilder()
+                .withUrl(config.pushUrl)
+                .withAutomaticReconnect();
+            if (signalR.LogLevel && typeof builder.configureLogging === 'function') {
+                builder.configureLogging(signalR.LogLevel.Warning);
+            }
+
+            var connection = builder.build();
+            connection.on(TOPBAR_NOTIFICATION_PUSH_METHOD, function () {
+                runTopbarSummaryRefreshSoon(true);
+            });
+            connection.onreconnecting(function (error) {
+                startTopbarPushFallback(error);
+            });
+            connection.onreconnected(function () {
+                topbarPollingState.pushFallbackActive = false;
+                topbarPollingState.failures = 0;
+                stopTopbarSummaryTimer();
+                runTopbarSummaryRefreshSoon(true);
+            });
+            connection.onclose(function (error) {
+                if (topbarPollingState.pushConnection === connection) {
+                    topbarPollingState.pushConnection = null;
+                }
+
+                var closedConfig = getTopbarPollingConfig(topbarPollingState.root);
+                if (closedConfig.mode === TOPBAR_UPDATE_PUSH_MODE) {
+                    startTopbarPushFallback(error);
+                    scheduleTopbarPushReconnect(closedConfig);
                 }
             });
-            window.addEventListener(NOTIFICATION_CHANGED_EVENT, runTopbarSummaryRefreshSoon);
+
+            topbarPollingState.pushConnection = connection;
+            await connection.start();
+            topbarPollingState.pushFallbackActive = false;
+            topbarPollingState.pushFallbackWarned = false;
+            topbarPollingState.failures = 0;
+            stopTopbarSummaryTimer();
+        } catch (error) {
+            if (topbarPollingState.pushConnection && typeof topbarPollingState.pushConnection.stop === 'function') {
+                topbarPollingState.pushConnection.stop().catch(function () {
+                });
+            }
+
+            topbarPollingState.pushConnection = null;
+            startTopbarPushFallback(error);
+        } finally {
+            topbarPollingState.pushStarting = false;
+        }
+    }
+
+    function registerTopbarSummaryRefreshHandlers() {
+        if (topbarPollingState.handlersRegistered) {
+            return;
+        }
+
+        topbarPollingState.handlersRegistered = true;
+        window.addEventListener('focus', function () {
+            if (isTopbarAutomaticRefreshActive(getTopbarPollingConfig(topbarPollingState.root))) {
+                runTopbarSummaryRefreshSoon(false);
+            }
+        });
+        document.addEventListener('visibilitychange', function () {
+            var config = getTopbarPollingConfig(topbarPollingState.root);
+            if (!isTopbarAutomaticRefreshActive(config)) {
+                return;
+            }
+
+            if (document.visibilityState === 'visible') {
+                runTopbarSummaryRefreshSoon(false);
+            } else {
+                scheduleTopbarSummaryRefresh(getTopbarPollingDelay(config), false);
+            }
+        });
+        window.addEventListener(NOTIFICATION_CHANGED_EVENT, function () {
+            if (isTopbarAutomaticRefreshActive(getTopbarPollingConfig(topbarPollingState.root))) {
+                runTopbarSummaryRefreshSoon(false);
+            }
+        });
+    }
+
+    function initTopbarNotificationUpdates(topbar) {
+        if (!topbar) {
+            return;
         }
 
         topbar.querySelectorAll('[data-portal-topbar-notifications], [data-portal-topbar-messages]').forEach(initTopbarSummaryDropdownRefresh);
+        registerTopbarSummaryRefreshHandlers();
+
+        var config = getTopbarPollingConfig(topbar);
+        if (!config.enabled) {
+            if (topbarPollingState.root === topbar) {
+                stopTopbarSummaryTimer();
+                stopTopbarPushConnection();
+                topbarPollingState.root = null;
+                topbarPollingState.mode = TOPBAR_UPDATE_MANUAL_MODE;
+            }
+
+            return;
+        }
+
+        var rootChanged = topbarPollingState.root !== topbar;
+        var modeChanged = topbarPollingState.mode !== config.mode;
+        var pushUrlChanged = topbarPollingState.pushUrl !== config.pushUrl;
+        if (rootChanged || modeChanged || pushUrlChanged) {
+            stopTopbarSummaryTimer();
+            stopTopbarPushConnection();
+            topbarPollingState.failures = 0;
+            topbarPollingState.pushFallbackWarned = false;
+        }
+
+        topbarPollingState.root = topbar;
+        topbarPollingState.mode = config.mode;
+        topbarPollingState.pushUrl = config.pushUrl;
+
+        if (config.mode === TOPBAR_UPDATE_PUSH_MODE) {
+            startTopbarPush(config);
+            return;
+        }
 
         if (!topbarPollingState.timer) {
-            scheduleTopbarSummaryRefresh(0);
+            scheduleTopbarSummaryRefresh(0, false);
         }
     }
 
@@ -1730,7 +2002,7 @@
         topbar.querySelectorAll('[data-portal-topbar-notifications-list]').forEach(initNotificationLazyList);
         updateNotificationEmptyState(topbar);
         initSessionStatusCheck(topbar);
-        initTopbarSummaryPolling(topbar);
+        initTopbarNotificationUpdates(topbar);
     }
 
     function initTopbar(topbar) {
