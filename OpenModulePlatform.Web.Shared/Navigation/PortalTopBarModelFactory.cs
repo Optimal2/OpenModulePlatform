@@ -1,4 +1,5 @@
 using OpenModulePlatform.Web.Shared.Localization;
+using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
@@ -73,6 +74,7 @@ public static class PortalTopBarModelFactory
             SessionStatusVisibleIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.VisibleIntervalSeconds, 60),
             SessionStatusHiddenIntervalSeconds = PositiveOrDefault(options.SessionStatusCheck?.HiddenIntervalSeconds, 180),
             NotificationUpdateMode = notificationUpdateOptions.Mode,
+            NotificationPushUrl = TopBarNotificationHub.Path,
             NotificationPollIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
             TopBarPollingEnabled = notificationUpdateOptions.UsesPolling,
             TopBarSummaryUrl = PortalTopBarModel.DefaultTopBarSummaryPath,

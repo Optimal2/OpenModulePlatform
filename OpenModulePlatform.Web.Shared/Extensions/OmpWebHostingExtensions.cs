@@ -2,6 +2,7 @@
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Models;
 using OpenModulePlatform.Web.Shared.Navigation;
+using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
@@ -20,6 +21,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.AspNetCore.SignalR;
 using System.Globalization;
 using System.Net;
 using SystemNetIPNetwork = System.Net.IPNetwork;
@@ -134,9 +136,11 @@ public static class OmpWebHostingExtensions
 
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddMemoryCache();
+        builder.Services.AddSignalR();
         builder.Services.AddTransient<IClaimsTransformation, ActiveRoleClaimsTransformation>();
         builder.Services.AddSingleton(cultureSelectionService);
         builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.AddSingleton<ITopBarNotificationStatePublisher, SignalRTopBarNotificationStatePublisher>();
         builder.Services.AddScoped<OmpConfigurationService>();
         builder.Services.AddScoped<OmpBrandingService>();
         builder.Services.AddScoped<RbacService>();
@@ -501,6 +505,9 @@ public static class OmpWebHostingExtensions
                 hasMore = rows.Count >= pageSize
             });
         }).RequireAuthorization();
+
+        app.MapHub<TopBarNotificationHub>(TopBarNotificationHub.Path)
+            .RequireAuthorization();
 
         // Anonymous apps still read the OMP cookie so shared UI can show the current user,
         // roles, favorites, and module navigation without requiring sign-in.

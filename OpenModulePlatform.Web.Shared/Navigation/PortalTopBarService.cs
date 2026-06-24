@@ -1,4 +1,5 @@
 using OpenModulePlatform.Web.Shared.Localization;
+using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
@@ -178,6 +179,7 @@ public sealed class PortalTopBarService
                 notificationMarkReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkReadPath),
                 notificationMarkAllReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkAllReadPath),
                 notificationRecentUrl: BuildRequestEndpointHref(request, NotificationService.RecentPath),
+                notificationPushUrl: BuildRequestEndpointHref(request, TopBarNotificationHub.Path),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
                 canUseMessages: userId.HasValue && messagesEnabled,
                 messageConversations,
@@ -405,6 +407,7 @@ public sealed class PortalTopBarService
                 notificationMarkReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkReadPath),
                 notificationMarkAllReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkAllReadPath),
                 notificationRecentUrl: BuildUriEndpointHref(currentUri, NotificationService.RecentPath),
+                notificationPushUrl: BuildUriEndpointHref(currentUri, TopBarNotificationHub.Path),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
                 canUseMessages: userId.HasValue && messagesEnabled,
                 messageConversations,
@@ -493,6 +496,7 @@ public sealed class PortalTopBarService
             notificationMarkReadUrl: NotificationService.MarkReadPath,
             notificationMarkAllReadUrl: NotificationService.MarkAllReadPath,
             notificationRecentUrl: NotificationService.RecentPath,
+            notificationPushUrl: TopBarNotificationHub.Path,
             notificationsUrl: "/notifications",
             canUseMessages: false,
             messageConversations: Array.Empty<PortalTopBarMessageConversation>(),
@@ -557,6 +561,7 @@ public sealed class PortalTopBarService
         string notificationMarkReadUrl,
         string notificationMarkAllReadUrl,
         string notificationRecentUrl,
+        string notificationPushUrl,
         string notificationsUrl,
         bool canUseMessages,
         IReadOnlyList<PortalTopBarMessageConversation> messageConversations,
@@ -590,6 +595,7 @@ public sealed class PortalTopBarService
             NotificationMarkReadUrl = notificationMarkReadUrl,
             NotificationMarkAllReadUrl = notificationMarkAllReadUrl,
             NotificationRecentUrl = notificationRecentUrl,
+            NotificationPushUrl = notificationPushUrl,
             NotificationsUrl = notificationsUrl,
             CanUseMessages = canUseMessages,
             MessageConversations = messageConversations,

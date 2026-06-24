@@ -56,6 +56,7 @@ public sealed class PortalTopBarModel
         SessionStatusVisibleIntervalSeconds = 60,
         SessionStatusHiddenIntervalSeconds = 180,
         NotificationUpdateMode = PortalTopBarNotificationUpdateOptions.PollMode,
+        NotificationPushUrl = "/topbar/notifications/updates",
         NotificationPollIntervalSeconds = PortalTopBarNotificationUpdateOptions.DefaultPollIntervalSeconds,
         TopBarPollingEnabled = true,
         TopBarSummaryUrl = DefaultTopBarSummaryPath,
@@ -195,6 +196,8 @@ public sealed class PortalTopBarModel
     public int SessionStatusHiddenIntervalSeconds { get; init; } = 180;
 
     public string NotificationUpdateMode { get; init; } = PortalTopBarNotificationUpdateOptions.PollMode;
+
+    public string NotificationPushUrl { get; init; } = "/topbar/notifications/updates";
 
     public int NotificationPollIntervalSeconds { get; init; } = PortalTopBarNotificationUpdateOptions.DefaultPollIntervalSeconds;
 
