@@ -81,10 +81,6 @@
 
             <div class="windows-actions">
                 <a class="button block" href="@Model.WindowsLoginUrl">@L["Sign in with Windows / AD"]</a>
-                @if (Model.OidcEnabled)
-                {
-                    <a class="button block" href="@Model.OidcLoginUrl">@string.Format(L["Sign in with {0}"].Value, Model.OidcDisplayName)</a>
-                }
             </div>
 
             <details class="auth-options" @(Model.ShowOtherSignInOptions || Model.HasOpenPrompt ? "open" : null)>
@@ -97,6 +93,10 @@
                     <span>@L["Other sign-in options"]</span>
                 </summary>
                 <div class="auth-options-list" id="other-signin-options-list">
+                    @if (Model.OidcEnabled)
+                    {
+                        <a class="button secondary block" href="@Model.OidcLoginUrl">@string.Format(L["Sign in with {0}"].Value, Model.OidcDisplayName)</a>
+                    }
                     <button
                         type="button"
                         class="button secondary block"
