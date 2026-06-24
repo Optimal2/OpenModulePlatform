@@ -1683,9 +1683,6 @@
             return;
         }
 
-        topbar.querySelectorAll('[data-portal-topbar-notifications], [data-portal-topbar-messages]').forEach(initTopbarSummaryDropdownRefresh);
-        registerTopbarSummaryRefreshHandlers();
-
         var config = getTopbarPollingConfig(topbar);
         if (!config.enabled) {
             if (topbarPollingState.root === topbar) {
@@ -1697,6 +1694,9 @@
 
             return;
         }
+
+        topbar.querySelectorAll('[data-portal-topbar-notifications], [data-portal-topbar-messages]').forEach(initTopbarSummaryDropdownRefresh);
+        registerTopbarSummaryRefreshHandlers();
 
         var rootChanged = topbarPollingState.root !== topbar;
         var modeChanged = topbarPollingState.mode !== config.mode;
