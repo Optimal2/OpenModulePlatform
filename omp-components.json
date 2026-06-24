@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.93",
+  "repositoryVersion": "0.3.94",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.88",
+      "definitionVersion": "0.3.89",
       "path": "omp_core.module-definition.json"
     },
     {
