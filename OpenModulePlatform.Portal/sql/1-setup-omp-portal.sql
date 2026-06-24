@@ -1026,7 +1026,9 @@ BEGIN
         VALUES
             (N'messages', N'enabled', N'Controls whether the OMP messages feature is available globally.', 90, CONVERT(bit, 1)),
             (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1)),
-            (N'portal', N'notificationToastsEnabled', N'Controls whether Portal notification and message toast polling and display are enabled globally.', 100, CONVERT(bit, 1))
+            (N'portal', N'notificationToastsEnabled', N'Controls whether Portal notification and message toast polling and display are enabled globally.', 100, CONVERT(bit, 1)),
+            (N'portal', N'notificationUpdateMode', N'Controls topbar notification update behavior. Supported values: manual, poll, push.', 110, CONVERT(bit, 1)),
+            (N'portal', N'notificationPollIntervalSeconds', N'Topbar notification polling interval in seconds when notificationUpdateMode is poll. Valid range: 10-3600.', 120, CONVERT(bit, 1))
     ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
     ON target.ConfigCategory = source.ConfigCategory
        AND target.ConfigSetting = source.ConfigSetting
@@ -1051,7 +1053,9 @@ BEGIN
             VALUES
                 (N'messages', N'enabled', N'true'),
                 (N'messages', N'attachmentMaxBytes', N'5242880'),
-                (N'portal', N'notificationToastsEnabled', N'true')
+                (N'portal', N'notificationToastsEnabled', N'true'),
+                (N'portal', N'notificationUpdateMode', N'poll'),
+                (N'portal', N'notificationPollIntervalSeconds', N'60')
         ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)
             ON defaults.ConfigCategory = def.ConfigCategory
            AND defaults.ConfigSetting = def.ConfigSetting

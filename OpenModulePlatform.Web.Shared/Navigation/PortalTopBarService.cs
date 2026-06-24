@@ -34,6 +34,7 @@ public sealed class PortalTopBarService
     private readonly CultureSelectionService _cultureSelectionService;
     private readonly IOptions<OmpAuthOptions> _authOptions;
     private readonly OmpBrandingService _brandingService;
+    private readonly OmpConfigurationService _configuration;
     private readonly NotificationService _notifications;
     private readonly MessageService _messages;
     private readonly BannerService _banners;
@@ -45,6 +46,7 @@ public sealed class PortalTopBarService
         CultureSelectionService cultureSelectionService,
         IOptions<OmpAuthOptions> authOptions,
         OmpBrandingService brandingService,
+        OmpConfigurationService configuration,
         NotificationService notifications,
         MessageService messages,
         BannerService banners,
@@ -55,6 +57,7 @@ public sealed class PortalTopBarService
         _cultureSelectionService = cultureSelectionService;
         _authOptions = authOptions;
         _brandingService = brandingService;
+        _configuration = configuration;
         _notifications = notifications;
         _messages = messages;
         _banners = banners;
@@ -113,6 +116,11 @@ public sealed class PortalTopBarService
                 GetPortalBasePath(options),
                 row => ResolvePortalEntryHref(request, row, accessibleApps));
             var userId = TryGetOmpUserId(user);
+            var notificationUpdateOptions = await GetNotificationUpdateOptionsAsync(
+                userId,
+                roleContext.ActiveRoleId,
+                permissions,
+                ct);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
@@ -178,6 +186,7 @@ public sealed class PortalTopBarService
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
                 topBarSummaryUrl: BuildRequestEndpointHref(request, SummaryPath),
                 dropdownsOpenOnHover,
+                notificationUpdateOptions,
                 options,
                 GetLogoutUrl(),
                 GetLoginUrl());
@@ -334,6 +343,11 @@ public sealed class PortalTopBarService
                 GetPortalBasePath(options),
                 row => ResolvePortalEntryHref(currentUri, row, accessibleApps));
             var userId = TryGetOmpUserId(user);
+            var notificationUpdateOptions = await GetNotificationUpdateOptionsAsync(
+                userId,
+                roleContext.ActiveRoleId,
+                permissions,
+                ct);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
@@ -399,6 +413,7 @@ public sealed class PortalTopBarService
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
                 topBarSummaryUrl: BuildUriEndpointHref(currentUri, SummaryPath),
                 dropdownsOpenOnHover,
+                notificationUpdateOptions,
                 options,
                 GetLogoutUrl(),
                 GetLoginUrl());
@@ -486,6 +501,7 @@ public sealed class PortalTopBarService
             messagesUrl: "/messages",
             topBarSummaryUrl: SummaryPath,
             dropdownsOpenOnHover: true,
+            PortalTopBarNotificationUpdateOptions.FromWebAppOptions(options.TopBarPolling),
             options,
             logoutUrl,
             OmpAuthDefaults.LoginPath);
@@ -549,6 +565,7 @@ public sealed class PortalTopBarService
         string messagesUrl,
         string topBarSummaryUrl,
         bool dropdownsOpenOnHover,
+        PortalTopBarNotificationUpdateOptions notificationUpdateOptions,
         WebAppOptions options,
         string logoutUrl,
         string loginUrl)
@@ -579,10 +596,12 @@ public sealed class PortalTopBarService
             UnreadMessageCount = unreadMessageCount,
             MessageMarkAllReadUrl = messageMarkAllReadUrl,
             MessagesUrl = messagesUrl,
-            TopBarPollingEnabled = options.TopBarPolling?.Enabled != false,
+            NotificationUpdateMode = notificationUpdateOptions.Mode,
+            NotificationPollIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
+            TopBarPollingEnabled = notificationUpdateOptions.UsesPolling,
             TopBarSummaryUrl = topBarSummaryUrl,
-            TopBarPollingVisibleIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.VisibleIntervalSeconds, 60),
-            TopBarPollingHiddenIntervalSeconds = PositiveOrDefault(options.TopBarPolling?.HiddenIntervalSeconds, 180),
+            TopBarPollingVisibleIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
+            TopBarPollingHiddenIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
             Links = [portalLink, .. moduleLinks],
             IsPortalAdmin = isPortalAdmin,
             PortalAdminSections = portalAdminSections,
@@ -889,6 +908,31 @@ public sealed class PortalTopBarService
         return int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var userId)
             ? userId
             : null;
+    }
+
+    private async Task<PortalTopBarNotificationUpdateOptions> GetNotificationUpdateOptionsAsync(
+        int? userId,
+        int? activeRoleId,
+        IReadOnlyCollection<string> effectivePermissions,
+        CancellationToken ct)
+    {
+        var modeValue = await _configuration.GetEffectiveStringAsync(
+            PortalTopBarNotificationUpdateOptions.ConfigCategory,
+            PortalTopBarNotificationUpdateOptions.ModeConfigSetting,
+            userId,
+            activeRoleId,
+            effectivePermissions,
+            ct);
+
+        var pollIntervalValue = await _configuration.GetEffectiveStringAsync(
+            PortalTopBarNotificationUpdateOptions.ConfigCategory,
+            PortalTopBarNotificationUpdateOptions.PollIntervalSecondsConfigSetting,
+            userId,
+            activeRoleId,
+            effectivePermissions,
+            ct);
+
+        return PortalTopBarNotificationUpdateOptions.FromConfig(modeValue, pollIntervalValue);
     }
 
     private async Task<bool> GetTopbarDropdownsOpenOnHoverAsync(int userId, CancellationToken ct)
