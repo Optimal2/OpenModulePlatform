@@ -129,11 +129,12 @@ the dispatcher automatically, so module web apps that call `AddOmpWebDefaults`
 do not compete for leases unless they explicitly opt in.
 
 The dispatcher leases pending rows atomically from `omp.push_event_outbox`,
-ordered by `push_event_id`, sends a lightweight SignalR envelope on
-`/topbar/notifications/updates` with method `notificationStateChanged`, and
-then marks the row `dispatched`. Failed dispatches are retried with a scheduled
-delay until `max_retries` is exceeded, after which the row is marked
-`dead-lettered`.
+ordered by `push_event_id`, sends a lightweight SignalR envelope with method
+`pushEvent`, and then marks the row `dispatched`. The same authorized hub is
+available at `/push/events` for neutral module-owned consumers and at the
+legacy `/topbar/notifications/updates` path used by the shared topbar.
+Failed dispatches are retried with a scheduled delay until `max_retries` is
+exceeded, after which the row is marked `dead-lettered`.
 
 When the dispatcher is enabled, it also performs bounded retention cleanup for
 terminal outbox rows. By default, dispatched rows are retained for 7 days,
@@ -150,10 +151,17 @@ targets to those groups.
 
 The browser treats push as a wake-up hint. The envelope contains `eventId`,
 `deduplicationKey`, `category`, `targetKind`, `targetValue`, and optional
-`payload`, but the topbar still re-reads state through its normal summary
-endpoint. The client deduplicates recent push envelopes and also still handles
-the legacy no-argument `notificationStateChanged` signal by refreshing the
-summary.
+`payload`. Module-owned clients should subscribe to `pushEvent` and filter by
+their own category and payload contract. OMP only owns the neutral envelope and
+target groups.
+
+For topbar notification and message categories, the dispatcher also sends the
+legacy `notificationStateChanged` method so existing topbar clients refresh
+their normal summary endpoint. The topbar client deduplicates recent push
+envelopes and still handles the legacy no-argument `notificationStateChanged`
+signal by refreshing the summary. Banner and module events are delivered as
+generic `pushEvent` envelopes only; live banner repainting remains future UI
+work.
 
 Fallback polling remains part of the design. If push mode is disabled,
 unavailable, disconnected, or fails to start, the topbar falls back to polling

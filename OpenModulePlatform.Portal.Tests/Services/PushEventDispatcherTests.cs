@@ -94,6 +94,38 @@ public sealed class PushEventDispatcherTests
         Assert.Equal([expectedGroup], groups);
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("notification", true)]
+    [InlineData("message", true)]
+    [InlineData("topbar.notification-state-changed", true)]
+    [InlineData("topbar.message-state-changed", true)]
+    [InlineData("topbar.banner-state-changed", false)]
+    [InlineData("module.state-changed", false)]
+    [InlineData("module.specific", false)]
+    public void PortalTopbarScript_RefreshesOnlySummaryCategories(string? category, bool expectedRefresh)
+    {
+        var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js"));
+        var start = script.IndexOf("function isTopbarSummaryPushCategory(category)", StringComparison.Ordinal);
+        var end = script.IndexOf("function handleTopbarPushEvent(envelope)", StringComparison.Ordinal);
+        var functionBody = script[start..end];
+
+        if (category is null)
+        {
+            Assert.Contains("return true;", functionBody);
+            return;
+        }
+
+        if (expectedRefresh)
+        {
+            Assert.Contains(category, functionBody);
+        }
+        else
+        {
+            Assert.DoesNotContain(category, functionBody);
+        }
+    }
+
     [Fact]
     public void Envelope_UsesEventIdDedupFallbackAndParsesPayload()
     {
@@ -120,6 +152,7 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("function handleTopbarPushEvent(envelope)", script);
         Assert.Contains("rememberTopbarPushEvent(eventKey)", script);
         Assert.Contains("connection.on(TOPBAR_NOTIFICATION_PUSH_METHOD, function (envelope)", script);
+        Assert.Contains("connection.on(GENERIC_PUSH_EVENT_METHOD, function (envelope)", script);
         Assert.Contains("if (!envelope || typeof envelope !== 'object')", script);
         Assert.Contains("runTopbarSummaryRefreshSoon(true);", script);
     }

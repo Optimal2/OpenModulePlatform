@@ -539,6 +539,9 @@ public static class OmpWebHostingExtensions
         app.MapHub<TopBarNotificationHub>(TopBarNotificationHub.Path)
             .RequireAuthorization();
 
+        app.MapHub<TopBarNotificationHub>(TopBarNotificationHub.PushEventPath)
+            .RequireAuthorization();
+
         // Anonymous apps still read the OMP cookie so shared UI can show the current user,
         // roles, favorites, and module navigation without requiring sign-in.
         app.UseAuthentication();
