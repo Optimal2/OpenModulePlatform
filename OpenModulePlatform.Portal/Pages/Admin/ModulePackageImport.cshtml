@@ -61,10 +61,10 @@
                                     }
                                 </div>
                             </td>
-                            <td>@item.Kind</td>
+                            <td>@Model.FormatUniversalItemKind(item.Kind)</td>
                             <td><code>@item.Path</code></td>
-                            <td>@item.Status</td>
-                            <td>@item.Message</td>
+                            <td>@Model.FormatUniversalImportStatus(item.Status)</td>
+                            <td>@Model.FormatUniversalImportMessage(item.Message)</td>
                         </tr>
                     }
                 }
@@ -214,7 +214,7 @@
                                 <td>
                                     <input type="checkbox" name="UniversalStagedInput.SelectedItemPaths" value="@item.Path" checked />
                                 </td>
-                                <td>@item.Kind</td>
+                                <td>@Model.FormatUniversalItemKind(item.Kind)</td>
                                 <td><code aria-label="@L["Package item path"]: @item.Path">@item.Path</code></td>
                             </tr>
                         }
