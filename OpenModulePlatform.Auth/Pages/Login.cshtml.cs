@@ -108,7 +108,7 @@ public sealed class LoginModel : PageModel
             "oidcUnavailable" => T("External sign-in is not configured."),
             _ => null
         };
-        ShowOtherSignInOptions = error == "windowsAlternateUnavailable";
+        ShowOtherSignInOptions = error is "windowsAlternateUnavailable" or "oidc" or "oidcUnavailable";
 
         await PreparePageAsync(ct);
         return Page();
