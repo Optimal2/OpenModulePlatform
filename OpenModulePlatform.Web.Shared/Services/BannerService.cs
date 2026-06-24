@@ -1,7 +1,9 @@
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.EventPublisher;
 using OpenModulePlatform.Web.Shared.Navigation;
 using System.Data;
 using System.Globalization;
+using System.Text.Json;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
@@ -22,10 +24,14 @@ public sealed class BannerService
     private const string WarningIconUrl = "/_content/OpenModulePlatform.Web.Shared/icons/warning.svg";
 
     private readonly SqlConnectionFactory _db;
+    private readonly IPushEventPublisher _pushEventPublisher;
 
-    public BannerService(SqlConnectionFactory db)
+    public BannerService(
+        SqlConnectionFactory db,
+        IPushEventPublisher pushEventPublisher)
     {
         _db = db;
+        _pushEventPublisher = pushEventPublisher;
     }
 
     public async Task<long> CreateAsync(
@@ -45,6 +51,7 @@ public sealed class BannerService
         }
 
         await using var tx = conn.BeginTransaction();
+        long bannerId;
         try
         {
             const string sql = @"
@@ -71,17 +78,19 @@ VALUES
             await using var cmd = new SqlCommand(sql, conn, tx);
             AddBannerParameters(cmd, normalized);
             var result = await cmd.ExecuteScalarAsync(ct);
-            var bannerId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+            bannerId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
 
             await ReplaceTargetsAsync(conn, tx, bannerId, normalized.Targets, ct);
             await tx.CommitAsync(ct);
-            return bannerId;
         }
         catch
         {
             await tx.RollbackAsync(ct);
             throw;
         }
+
+        await PublishBannerChangedAsync("created", bannerId, normalized.Targets, ct);
+        return bannerId;
     }
 
     public async Task<bool> UpdateAsync(BannerEditRequest request, CancellationToken ct)
@@ -103,6 +112,7 @@ VALUES
         }
 
         await using var tx = conn.BeginTransaction();
+        var updated = false;
         try
         {
             const string sql = @"
@@ -128,13 +138,20 @@ WHERE banner_id = @banner_id;";
 
             await ReplaceTargetsAsync(conn, tx, request.BannerId, normalized.Targets, ct);
             await tx.CommitAsync(ct);
-            return true;
+            updated = true;
         }
         catch
         {
             await tx.RollbackAsync(ct);
             throw;
         }
+
+        if (updated)
+        {
+            await PublishBannerChangedAsync("updated", request.BannerId, normalized.Targets, ct);
+        }
+
+        return updated;
     }
 
     public async Task<bool> DisableAsync(long bannerId, CancellationToken ct)
@@ -152,6 +169,8 @@ WHERE banner_id = @banner_id;";
             return false;
         }
 
+        var targets = await GetTargetsAsync(conn, bannerId, ct);
+
         const string sql = @"
 UPDATE omp.banners
 SET status = N'disabled',
@@ -160,7 +179,13 @@ WHERE banner_id = @banner_id;";
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@banner_id", SqlDbType.BigInt).Value = bannerId;
-        return await cmd.ExecuteNonQueryAsync(ct) > 0;
+        var disabled = await cmd.ExecuteNonQueryAsync(ct) > 0;
+        if (disabled)
+        {
+            await PublishBannerChangedAsync("disabled", bannerId, targets, ct);
+        }
+
+        return disabled;
     }
 
     public async Task<IReadOnlyList<PortalTopBarBanner>> GetActiveForRolesAsync(
@@ -449,6 +474,64 @@ ORDER BY rp.RoleId;";
         }
 
         return "active";
+    }
+
+    private async Task PublishBannerChangedAsync(
+        string action,
+        long bannerId,
+        IReadOnlyCollection<BannerTargetRequest> targets,
+        CancellationToken ct)
+    {
+        foreach (var pushEvent in CreateBannerChangedPushEvents(action, bannerId, targets))
+        {
+            await _pushEventPublisher.PublishAsync(pushEvent, ct);
+        }
+    }
+
+    internal static IReadOnlyList<PushEvent> CreateBannerChangedPushEvents(
+        string action,
+        long bannerId,
+        IReadOnlyCollection<BannerTargetRequest> targets)
+    {
+        var payloadJson = JsonSerializer.Serialize(new
+        {
+            action,
+            bannerId
+        });
+
+        if (targets.Any(target => string.Equals(target.TargetType, TargetGlobal, StringComparison.OrdinalIgnoreCase)))
+        {
+            return
+            [
+                PushEvent.ForBroadcast(
+                    PushEventCategory.TopBarBannerStateChanged,
+                    payloadJson,
+                    correlationKey: string.Create(CultureInfo.InvariantCulture, $"banner:{bannerId}"))
+            ];
+        }
+
+        var roleIds = targets
+            .Where(target => string.Equals(target.TargetType, TargetRole, StringComparison.OrdinalIgnoreCase))
+            .Select(target => target.RoleId)
+            .Where(roleId => roleId.HasValue && roleId.Value > 0)
+            .Select(roleId => roleId!.Value.ToString(CultureInfo.InvariantCulture))
+            .Distinct(StringComparer.Ordinal)
+            .Order()
+            .ToArray();
+
+        if (roleIds.Length == 0)
+        {
+            return [];
+        }
+
+        return
+        [
+            new PushEvent(
+                PushEventCategory.TopBarBannerStateChanged,
+                new PushTarget(PushTargetKind.Role, roleIds),
+                payloadJson,
+                CorrelationKey: string.Create(CultureInfo.InvariantCulture, $"banner:{bannerId}"))
+        ];
     }
 
     private static async Task ReplaceTargetsAsync(
