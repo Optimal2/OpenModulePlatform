@@ -20,6 +20,8 @@ public sealed class HostAgentUpgradeSettings
 
     public bool StartPreparedService { get; set; } = true;
 
+    public int PreparedServiceStartupVerificationDelaySeconds { get; set; } = 3;
+
     public void Validate()
     {
         if (!IsEnabled)
@@ -30,6 +32,11 @@ public sealed class HostAgentUpgradeSettings
         if (TakeoverStopTimeoutSeconds < 1)
         {
             throw new InvalidOperationException("HostAgent:SelfUpgrade:TakeoverStopTimeoutSeconds must be at least 1.");
+        }
+
+        if (PreparedServiceStartupVerificationDelaySeconds < 0)
+        {
+            throw new InvalidOperationException("HostAgent:SelfUpgrade:PreparedServiceStartupVerificationDelaySeconds must be zero or greater.");
         }
 
         if (string.IsNullOrWhiteSpace(ServiceAccountName)

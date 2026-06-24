@@ -1123,7 +1123,7 @@ public sealed class PortableModulePackageService
             ct);
         var appliedDefinition = await _repo.GetAppliedModuleDefinitionDocumentAsync(definition.ModuleKey, ct);
         var keepNewerAppliedDefinition = appliedDefinition is not null
-            && CompareArtifactVersions(appliedDefinition.DefinitionVersion, definition.DefinitionVersion) > 0;
+            && ArtifactVersionComparer.Compare(appliedDefinition.DefinitionVersion, definition.DefinitionVersion) > 0;
 
         var applied = false;
         var repairCount = 0;
@@ -2483,7 +2483,7 @@ public sealed class PortableModulePackageService
             return;
         }
 
-        if (CompareArtifactVersions(compatibility.DefinitionVersion, package.MinModuleDefinitionVersion) < 0)
+        if (ArtifactVersionComparer.Compare(compatibility.DefinitionVersion, package.MinModuleDefinitionVersion) < 0)
         {
             throw new InvalidOperationException(
                 $"Artifact package requires module definition '{compatibility.ModuleKey}' version {package.MinModuleDefinitionVersion} or later. " +
@@ -2509,44 +2509,18 @@ public sealed class PortableModulePackageService
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
     {
         if (!string.IsNullOrWhiteSpace(minVersion)
-            && CompareArtifactVersions(version, minVersion) < 0)
+            && ArtifactVersionComparer.Compare(version, minVersion) < 0)
         {
             return false;
         }
 
         if (!string.IsNullOrWhiteSpace(maxVersion)
-            && CompareArtifactVersions(version, maxVersion) > 0)
+            && ArtifactVersionComparer.Compare(version, maxVersion) > 0)
         {
             return false;
         }
 
         return true;
-    }
-
-    private static int CompareArtifactVersions(string left, string right)
-    {
-        if (TryParseComparableVersion(left, out var leftVersion)
-            && TryParseComparableVersion(right, out var rightVersion))
-        {
-            return leftVersion.CompareTo(rightVersion);
-        }
-
-        return string.Compare(
-            left?.Trim(),
-            right?.Trim(),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryParseComparableVersion(string? value, out Version version)
-    {
-        var text = value?.Trim() ?? string.Empty;
-        var suffixIndex = text.IndexOfAny(['-', '+']);
-        if (suffixIndex >= 0)
-        {
-            text = text[..suffixIndex];
-        }
-
-        return Version.TryParse(text, out version!);
     }
 
     private static string Truncate(string value, int maxLength)
@@ -2664,7 +2638,7 @@ public sealed class PortableModulePackageService
             out string message)
         {
             if (installedVersions.TryGetValue(key, out var installedVersion)
-                && CompareArtifactVersions(installedVersion, packageVersion) >= 0)
+            && ArtifactVersionComparer.Compare(installedVersion, packageVersion) >= 0)
             {
                 message = $"Quick import skipped {label} because package version {packageVersion} is not newer than installed version {installedVersion}.";
                 return true;
@@ -2681,8 +2655,8 @@ public sealed class PortableModulePackageService
                 return;
             }
 
-            if (!versions.TryGetValue(key, out var currentVersion)
-                || CompareArtifactVersions(version, currentVersion) > 0)
+        if (!versions.TryGetValue(key, out var currentVersion)
+            || ArtifactVersionComparer.Compare(version, currentVersion) > 0)
             {
                 versions[key] = version;
             }
@@ -2695,13 +2669,6 @@ public sealed class PortableModulePackageService
             => value?.Trim().ToUpperInvariant() ?? string.Empty;
     }
 
-    private sealed class ArtifactVersionComparer : IComparer<string>
-    {
-        public static readonly ArtifactVersionComparer Instance = new();
-
-        public int Compare(string? x, string? y)
-            => CompareArtifactVersions(x ?? string.Empty, y ?? string.Empty);
-    }
 }
 
 public sealed record PortableModulePackageImportOptions(

@@ -801,7 +801,7 @@ WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             targetName = rdr.IsDBNull(4) ? null : rdr.GetString(4);
         }
 
-        if (CompareArtifactVersions(targetVersion, currentVersion) <= 0)
+        if (ArtifactVersionComparer.Compare(targetVersion, currentVersion) <= 0)
         {
             throw new InvalidOperationException("The selected artifact is not newer than the current desired artifact.");
         }
@@ -3379,7 +3379,7 @@ VALUES(@HostId, @ArtifactId, NULL, NULL, 1);";
 
     private static bool ShouldApplyImportedArtifact(string targetVersion, string? currentVersion)
         => string.IsNullOrWhiteSpace(currentVersion)
-            || CompareArtifactVersions(targetVersion, currentVersion) > 0;
+            || ArtifactVersionComparer.Compare(targetVersion, currentVersion) > 0;
 
     public async Task<int> RequestHostAgentUpgradeAsync(
         Guid hostId,
@@ -4712,44 +4712,18 @@ VALUES
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
     {
         if (!string.IsNullOrWhiteSpace(minVersion)
-            && CompareArtifactVersions(version, minVersion) < 0)
+            && ArtifactVersionComparer.Compare(version, minVersion) < 0)
         {
             return false;
         }
 
         if (!string.IsNullOrWhiteSpace(maxVersion)
-            && CompareArtifactVersions(version, maxVersion) > 0)
+            && ArtifactVersionComparer.Compare(version, maxVersion) > 0)
         {
             return false;
         }
 
         return true;
-    }
-
-    private static int CompareArtifactVersions(string left, string right)
-    {
-        if (TryParseComparableVersion(left, out var leftVersion)
-            && TryParseComparableVersion(right, out var rightVersion))
-        {
-            return leftVersion.CompareTo(rightVersion);
-        }
-
-        return string.Compare(
-            left?.Trim(),
-            right?.Trim(),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryParseComparableVersion(string? value, out Version version)
-    {
-        var text = value?.Trim() ?? string.Empty;
-        var suffixIndex = text.IndexOfAny(['-', '+']);
-        if (suffixIndex >= 0)
-        {
-            text = text[..suffixIndex];
-        }
-
-        return Version.TryParse(text, out version!);
     }
 
     private static string FormatArtifactVersionRanges(IEnumerable<ArtifactCompatibilitySlot> slots)

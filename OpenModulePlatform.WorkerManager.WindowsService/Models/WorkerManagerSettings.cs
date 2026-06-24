@@ -21,6 +21,8 @@ public sealed class WorkerManagerSettings
 
     public int MaxRestartsPerWindow { get; set; } = 5;
 
+    public bool CleanupOrphansKillProcessTree { get; set; } = true;
+
     public OmpDatabaseWorkerCatalogSettings OmpDatabase { get; set; } = new();
 
     public HostAgentRpcSettings HostAgentRpc { get; set; } = new();

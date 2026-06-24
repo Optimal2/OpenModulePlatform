@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Models/ModulePackageModels.cs
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Services;
 
 namespace OpenModulePlatform.Portal.Models;
@@ -96,7 +97,7 @@ public sealed class AvailablePackageRowModel
             StringComparison.OrdinalIgnoreCase);
         var definitionInstalled = !string.IsNullOrWhiteSpace(installedDefinitionVersion);
         var definitionNewer = definitionInstalled
-            && CompareArtifactVersions(installedDefinitionVersion!, package.DefinitionVersion) > 0;
+            && ArtifactVersionComparer.Compare(installedDefinitionVersion!, package.DefinitionVersion) > 0;
         var installedArtifactsBySlot = installedArtifacts.ToLookup(
             artifact => BuildArtifactSlotKey(
                 artifact.ModuleKey,
@@ -119,11 +120,11 @@ public sealed class AvailablePackageRowModel
             {
                 sameArtifacts++;
             }
-            else if (matches.Any(artifact => CompareArtifactVersions(artifact.Version, file.Version) > 0))
+            else if (matches.Any(artifact => ArtifactVersionComparer.Compare(artifact.Version, file.Version) > 0))
             {
                 newerArtifacts++;
             }
-            else if (matches.Any(artifact => CompareArtifactVersions(artifact.Version, file.Version) < 0))
+            else if (matches.Any(artifact => ArtifactVersionComparer.Compare(artifact.Version, file.Version) < 0))
             {
                 olderArtifacts++;
             }
@@ -173,29 +174,4 @@ public sealed class AvailablePackageRowModel
         string? targetName)
         => string.Join('\u001f', moduleKey, appKey, packageType, targetName ?? string.Empty);
 
-    private static int CompareArtifactVersions(string left, string right)
-    {
-        if (TryParseComparableVersion(left, out var leftVersion)
-            && TryParseComparableVersion(right, out var rightVersion))
-        {
-            return leftVersion.CompareTo(rightVersion);
-        }
-
-        return string.Compare(
-            left?.Trim(),
-            right?.Trim(),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryParseComparableVersion(string? value, out Version version)
-    {
-        var text = value?.Trim() ?? string.Empty;
-        var suffixIndex = text.IndexOfAny(['-', '+']);
-        if (suffixIndex >= 0)
-        {
-            text = text[..suffixIndex];
-        }
-
-        return Version.TryParse(text, out version!);
-    }
 }

@@ -722,7 +722,7 @@ WHERE OverlayKey = @overlayKey
                 var existing = await FindDashboardWidgetAsync(conn, tx, widget, ct);
                 if (existing is not null)
                 {
-                    var versionComparison = CompareArtifactVersions(widget.WidgetVersion, existing.WidgetVersion);
+                    var versionComparison = ArtifactVersionComparer.Compare(widget.WidgetVersion, existing.WidgetVersion);
                     if (versionComparison < 0)
                     {
                         skipped++;
@@ -4289,7 +4289,7 @@ WHERE artifact.ArtifactId = @artifactId
 
     private static bool ShouldAutoApplyImportedArtifact(string targetVersion, string? currentVersion)
         => string.IsNullOrWhiteSpace(currentVersion)
-            || CompareArtifactVersions(targetVersion, currentVersion) > 0;
+            || ArtifactVersionComparer.Compare(targetVersion, currentVersion) > 0;
 
     private static async Task EnsureDashboardWidgetTablesAsync(
         SqlConnection conn,
@@ -4953,44 +4953,18 @@ VALUES(@widget_id, @permission_id, @role_id);";
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
     {
         if (!string.IsNullOrWhiteSpace(minVersion)
-            && CompareArtifactVersions(version, minVersion) < 0)
+            && ArtifactVersionComparer.Compare(version, minVersion) < 0)
         {
             return false;
         }
 
         if (!string.IsNullOrWhiteSpace(maxVersion)
-            && CompareArtifactVersions(version, maxVersion) > 0)
+            && ArtifactVersionComparer.Compare(version, maxVersion) > 0)
         {
             return false;
         }
 
         return true;
-    }
-
-    private static int CompareArtifactVersions(string left, string right)
-    {
-        if (TryParseComparableVersion(left, out var leftVersion)
-            && TryParseComparableVersion(right, out var rightVersion))
-        {
-            return leftVersion.CompareTo(rightVersion);
-        }
-
-        return string.Compare(
-            left?.Trim(),
-            right?.Trim(),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryParseComparableVersion(string? value, out Version version)
-    {
-        var text = value?.Trim() ?? string.Empty;
-        var suffixIndex = text.IndexOfAny(['-', '+']);
-        if (suffixIndex >= 0)
-        {
-            text = text[..suffixIndex];
-        }
-
-        return Version.TryParse(text, out version!);
     }
 
     private static string FormatArtifactVersionRanges(IEnumerable<ArtifactCompatibilitySlot> slots)

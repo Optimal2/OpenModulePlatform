@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Services/OmpAdminRepository.cs
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
@@ -1080,7 +1081,7 @@ WHERE tmi.InstanceTemplateId = @InstanceTemplateId;";
             }
 
             var candidateVersion = rdr.GetString(2);
-            if (CompareArtifactVersions(candidateVersion, row.ArtifactVersion) <= 0)
+            if (ArtifactVersionComparer.Compare(candidateVersion, row.ArtifactVersion) <= 0)
             {
                 continue;
             }
@@ -1093,7 +1094,7 @@ WHERE tmi.InstanceTemplateId = @InstanceTemplateId;";
             }
 
             if (!bestByTemplateApp.TryGetValue(templateAppId, out var currentBest)
-                || CompareArtifactVersions(candidateVersion, currentBest.Version) > 0)
+                || ArtifactVersionComparer.Compare(candidateVersion, currentBest.Version) > 0)
             {
                 bestByTemplateApp[templateAppId] = (rdr.GetInt32(1), candidateVersion);
             }
