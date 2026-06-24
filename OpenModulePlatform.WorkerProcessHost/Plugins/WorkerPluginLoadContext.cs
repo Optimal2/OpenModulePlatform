@@ -19,7 +19,8 @@ internal sealed class WorkerPluginLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
-        if (string.Equals(assemblyName.Name, "OpenModulePlatform.Worker.Abstractions", StringComparison.Ordinal)
+        if (string.Equals(assemblyName.Name, "OpenModulePlatform.EventPublisher.Abstractions", StringComparison.Ordinal)
+            || string.Equals(assemblyName.Name, "OpenModulePlatform.Worker.Abstractions", StringComparison.Ordinal)
             || assemblyName.Name?.StartsWith("Microsoft.Extensions.", StringComparison.Ordinal) == true)
         {
             return null;

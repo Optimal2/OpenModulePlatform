@@ -49,6 +49,7 @@ For repository and release work:
 - `WORKER_RUNTIME.md` - worker runtime concepts.
 - `worker-runtime-windows.md` - Windows-specific worker runtime notes.
 - `HOSTING_WINDOWS_IIS.md` - IIS hosting guidance.
+- `PUSH_EVENTS.md` - push event model for web apps, service apps, workers, and UI refresh hints.
 - `OPEN_DOC_VIEWER_EXAMPLES.md` - host-side CSP requirements for the OMP OpenDocViewer embed examples.
 - `LOGGING.md` - logging conventions.
 

@@ -1,6 +1,7 @@
-using OpenModulePlatform.Web.Shared.Notifications;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging.Abstractions;
+using OpenModulePlatform.EventPublisher;
+using OpenModulePlatform.Web.Shared.Notifications;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 

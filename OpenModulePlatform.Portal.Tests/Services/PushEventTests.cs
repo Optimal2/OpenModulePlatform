@@ -1,4 +1,4 @@
-using OpenModulePlatform.Web.Shared.Notifications;
+using OpenModulePlatform.EventPublisher;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -52,5 +52,12 @@ public sealed class PushEventTests
             PushEventTargetTypes.User);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => pushEvent.Normalize());
+    }
+
+    [Fact]
+    public void Categories_ReserveModuleAndBannerRefreshHints()
+    {
+        Assert.Equal("module.state-changed", PushEventCategories.ModuleStateChanged);
+        Assert.Equal("topbar.banner-state-changed", PushEventCategories.TopBarBannerStateChanged);
     }
 }

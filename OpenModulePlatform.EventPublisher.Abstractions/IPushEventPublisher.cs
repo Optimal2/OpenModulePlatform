@@ -1,4 +1,4 @@
-namespace OpenModulePlatform.Web.Shared.Notifications;
+namespace OpenModulePlatform.EventPublisher;
 
 public interface IPushEventPublisher
 {

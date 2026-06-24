@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Web.Shared/Extensions/OmpWebHostingExtensions.cs
+using OpenModulePlatform.EventPublisher;
+using OpenModulePlatform.EventPublisher.Sql;
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Models;
 using OpenModulePlatform.Web.Shared.Navigation;
@@ -140,7 +142,12 @@ public static class OmpWebHostingExtensions
         builder.Services.AddTransient<IClaimsTransformation, ActiveRoleClaimsTransformation>();
         builder.Services.AddSingleton(cultureSelectionService);
         builder.Services.AddSingleton<SqlConnectionFactory>();
-        builder.Services.AddSingleton<IPushEventPublisher, SqlPushEventPublisher>();
+        builder.Services.AddSingleton<IPushEventPublisher>(sp =>
+        {
+            var db = sp.GetRequiredService<SqlConnectionFactory>();
+            var logger = sp.GetRequiredService<ILogger<SqlPushEventPublisher>>();
+            return new SqlPushEventPublisher(db.Create, logger);
+        });
         builder.Services.AddSingleton<ITopBarNotificationStatePublisher, SignalRTopBarNotificationStatePublisher>();
         builder.Services.AddScoped<OmpConfigurationService>();
         builder.Services.AddScoped<OmpBrandingService>();
