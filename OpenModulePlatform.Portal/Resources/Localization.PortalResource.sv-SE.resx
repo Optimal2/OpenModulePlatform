@@ -369,6 +369,12 @@
   <data name="Artifact" xml:space="preserve">
     <value>Artefakt</value>
   </data>
+  <data name="Upload artifact" xml:space="preserve">
+    <value>Ladda upp artefakt</value>
+  </data>
+  <data name="Artifact zip" xml:space="preserve">
+    <value>Artefakt-zip</value>
+  </data>
   <data name="Comment" xml:space="preserve">
     <value>Kommentar</value>
   </data>
@@ -1004,6 +1010,12 @@
   </data>
   <data name="Worker host" xml:space="preserve">
     <value>Worker-värd</value>
+  </data>
+  <data name="Worker plugin" xml:space="preserve">
+    <value>Worker-plugin</value>
+  </data>
+  <data name="Channel type" xml:space="preserve">
+    <value>Kanaltyp</value>
   </data>
   <data name="Folder" xml:space="preserve">
     <value>Mapp</value>
@@ -2430,9 +2442,41 @@
   <data name="Use this standalone-compatible tool to create a universal OMP package zip from any mix of portable objects." xml:space="preserve"><value>Använd detta fristående kompatibla verktyg för att skapa ett universellt OMP-paket från valfri blandning av portabla objekt.</value></data>
   <data name="Back to import/export" xml:space="preserve"><value>Tillbaka till import/export</value></data>
   <data name="Only universal module packages are supported for import and export. Use the Universal package workflow." xml:space="preserve"><value>Endast universella modulpaket stöds för import och export. Använd flödet för universalpaket.</value></data>
+  <data name="Import universal module package" xml:space="preserve"><value>Importera universellt modulpaket</value></data>
+  <data name="Use this for the new universal package format with omp-universal-package.json and standard object folders. Each object is imported independently so one failed item does not stop the rest." xml:space="preserve"><value>Använd detta för det nya universalpaketsformatet med omp-universal-package.json och standardiserade objektmappar. Varje objekt importeras separat så att ett misslyckat objekt inte stoppar resten.</value></data>
+  <data name="Universal module package zip" xml:space="preserve"><value>Universellt modulpaket som zip-fil</value></data>
   <data name="Drop universal package files here or click to browse." xml:space="preserve"><value>Släpp universalpaket här eller klicka för att bläddra.</value></data>
   <data name="Drop universal package files here" xml:space="preserve"><value>Släpp universalpaket här</value></data>
   <data name="or click anywhere in this area to browse for one or more zip files." xml:space="preserve"><value>eller klicka var som helst i ytan för att välja en eller flera zip-filer.</value></data>
+  <data name="Preview lets you choose individual items. Import all applies every supported item immediately." xml:space="preserve"><value>Förhandsgranskning låter dig välja enskilda objekt. Importera alla applicerar alla objekt som stöds direkt.</value></data>
+  <data name="Apply module definitions" xml:space="preserve"><value>Applicera moduldefinitioner</value></data>
+  <data name="Replace existing module definitions with same key and version" xml:space="preserve"><value>Ersätt befintliga moduldefinitioner med samma nyckel och version</value></data>
+  <data name="Replace existing host configs and overlays with same key and version" xml:space="preserve"><value>Ersätt befintliga värdkonfigurationer och konfigurationslager med samma nyckel och version</value></data>
+  <data name="Preview and choose" xml:space="preserve"><value>Förhandsgranska och välj</value></data>
+  <data name="Import all" xml:space="preserve"><value>Importera alla</value></data>
+  <data name="Package contents" xml:space="preserve"><value>Paketinnehåll</value></data>
+  <data name="Import selected items" xml:space="preserve"><value>Importera valda objekt</value></data>
+  <data name="Host configuration" xml:space="preserve"><value>Värdkonfiguration</value></data>
+  <data name="Config overlay" xml:space="preserve"><value>Konfigurationslager</value></data>
+  <data name="Dashboard widget" xml:space="preserve"><value>Dashboard-widget</value></data>
+  <data name="Widget runtime data" xml:space="preserve"><value>Widget-kördata</value></data>
+  <data name="Imported" xml:space="preserve"><value>Importerad</value></data>
+  <data name="Replaced" xml:space="preserve"><value>Ersatt</value></data>
+  <data name="Updated" xml:space="preserve"><value>Uppdaterad</value></data>
+  <data name="The item kind is not supported." xml:space="preserve"><value>Objekttypen stöds inte.</value></data>
+  <data name="Module {0} {1}; artifacts imported or replaced: {2}; failed artifacts: {3}." xml:space="preserve"><value>Modul {0} {1}; artefakter importerade eller ersatta: {2}; misslyckade artefakter: {3}.</value></data>
+  <data name="Host {0} {1}." xml:space="preserve"><value>Värd {0} {1}.</value></data>
+  <data name="Overlay {0} {1}; configuration files: {2}." xml:space="preserve"><value>Konfigurationslager {0} {1}; konfigurationsfiler: {2}.</value></data>
+  <data name="Created: {0}; updated: {1}; skipped: {2}; permission rows: {3}." xml:space="preserve"><value>Skapade: {0}; uppdaterade: {1}; hoppade över: {2}; behörighetsrader: {3}.</value></data>
+  <data name="Data documents: {0}; binary rows inserted: {1}; binary rows reused: {2}." xml:space="preserve"><value>Datadokument: {0}; binärrader infogade: {1}; binärrader återanvända: {2}.</value></data>
+  <data name="Export universal module package" xml:space="preserve"><value>Exportera universellt modulpaket</value></data>
+  <data name="Package key" xml:space="preserve"><value>Paketnyckel</value></data>
+  <data name="Package version" xml:space="preserve"><value>Paketversion</value></data>
+  <data name="Target host profile" xml:space="preserve"><value>Målprofil för värd</value></data>
+  <data name="Leave empty for a global/generic package." xml:space="preserve"><value>Lämna tomt för ett globalt/generiskt paket.</value></data>
+  <data name="Host configs" xml:space="preserve"><value>Värdkonfigurationer</value></data>
+  <data name="Config overlays" xml:space="preserve"><value>Konfigurationslager</value></data>
+  <data name="Export universal zip" xml:space="preserve"><value>Exportera universal-zip</value></data>
   <data name="Select at least one universal module package zip." xml:space="preserve"><value>Välj minst ett universellt modulpaket som zip-fil.</value></data>
   <data name="Select one universal module package zip to preview." xml:space="preserve"><value>Välj ett universellt modulpaket som zip-fil för förhandsgranskning.</value></data>
   <data name="Preview supports one universal module package at a time. Use Import all to import multiple packages." xml:space="preserve"><value>Förhandsgranskning stöder ett universalpaket i taget. Använd Importera alla för att importera flera paket.</value></data>
@@ -2506,6 +2550,18 @@
   <data name="Reason" xml:space="preserve"><value>Orsak</value></data>
   <data name="Placement" xml:space="preserve"><value>Placering</value></data>
   <data name="Materialized" xml:space="preserve"><value>Materialiserad</value></data>
+  <data name="HostAgent self-upgrade" xml:space="preserve"><value>HostAgent självuppgradering</value></data>
+  <data name="Select the desired HostAgent artifact per host. The active HostAgent installs the selected version and hands over to it during its next cycle." xml:space="preserve"><value>Välj önskad HostAgent-artefakt per värd. Aktiv HostAgent installerar vald version och lämnar över till den vid nästa körning.</value></data>
+  <data name="No HostAgent artifacts are available. Import a host-agent artifact before requesting a self-upgrade." xml:space="preserve"><value>Inga HostAgent-artefakter är tillgängliga. Importera en host-agent-artefakt innan du begär en självuppgradering.</value></data>
+  <data name="Upgrade target" xml:space="preserve"><value>Uppgraderingsmål</value></data>
+  <data name="HostAgent artifact" xml:space="preserve"><value>HostAgent-artefakt</value></data>
+  <data name="Request HostAgent upgrade for this host? The active HostAgent installs the selected artifact during its next cycle." xml:space="preserve"><value>Begär HostAgent-uppgradering för den här värden? Aktiv HostAgent installerar vald artefakt vid nästa körning.</value></data>
+  <data name="Request upgrade" xml:space="preserve"><value>Begär uppgradering</value></data>
+  <data name="Service prefix" xml:space="preserve"><value>Tjänsteprefix</value></data>
+  <data name="Install root" xml:space="preserve"><value>Installationsrot</value></data>
+  <data name="Target service" xml:space="preserve"><value>Måltjänst</value></data>
+  <data name="Target mode" xml:space="preserve"><value>Målläge</value></data>
+  <data name="Target last seen" xml:space="preserve"><value>Målet senast sett</value></data>
   <data name="iFrame URLs" xml:space="preserve"><value>iFrame-URL:er</value></data>
   <data name="Manage iFrame URL targets and URL sets used by the iFrame module." xml:space="preserve"><value>Hantera iFrame-URL-mål och URL-set som används av iFrame-modulen.</value></data>
   <data name="The iFrame URL tables are not installed." xml:space="preserve"><value>iFrame-URL-tabellerna är inte installerade.</value></data>
@@ -2630,4 +2686,19 @@
   <data name="Web app application-pool recycle job {0} was queued." xml:space="preserve"><value>Jobb {0} för omstart av webbappens app-pool har köats.</value></data>
   <data name="Select a host before requesting web app logs." xml:space="preserve"><value>Välj en värd innan du begär webbappsloggar.</value></data>
   <data name="Web app log collection job {0} was queued." xml:space="preserve"><value>Jobb {0} för hämtning av webbappsloggar har köats.</value></data>
+  <data name="A deployment lock is active." xml:space="preserve"><value>Ett driftsättningslås är aktivt.</value></data>
+  <data name="Application-pool recycle is disabled until the active deployment finishes or the lock expires." xml:space="preserve"><value>Omstart av applikationspoolen är inaktiverad tills den aktiva driftsättningen är klar eller låset löper ut.</value></data>
+  <data name="Artifacts are deployable outputs of an app definition. Keep artifact metadata and HostAgent-managed configuration files precise so app instances can reference the right build." xml:space="preserve"><value>Artefakter är driftsättningsbara resultat från en appdefinition. Håll artefaktmetadata och HostAgent-hanterade konfigurationsfiler korrekta så att appinstanser kan referera till rätt bygge.</value></data>
+  <data name="Expires UTC" xml:space="preserve"><value>Löper ut UTC</value></data>
+  <data name="Include compatible artifacts for selected modules" xml:space="preserve"><value>Inkludera kompatibla artefakter för valda moduler</value></data>
+  <data name="Include historical artifact versions for selected modules" xml:space="preserve"><value>Inkludera historiska artefaktversioner för valda moduler</value></data>
+  <data name="Mode" xml:space="preserve"><value>Läge</value></data>
+  <data name="No enabled hosts were found." xml:space="preserve"><value>Inga aktiverade värdar hittades.</value></data>
+  <data name="Optional" xml:space="preserve"><value>Valfritt</value></data>
+  <data name="Owner" xml:space="preserve"><value>Ägare</value></data>
+  <data name="Recognized filename format:" xml:space="preserve"><value>Känt filnamnsformat:</value></data>
+  <data name="Recycle this application pool? HostAgent will validate the host state before recycling it." xml:space="preserve"><value>Starta om den här applikationspoolen? HostAgent validerar värdens tillstånd före omstarten.</value></data>
+  <data name="Select package type" xml:space="preserve"><value>Välj pakettyp</value></data>
+  <data name="Target host: {0}" xml:space="preserve"><value>Målvärd: {0}</value></data>
+  <data name="Upload one immutable artifact zip, unpack it into the central artifact store, and register it for HostAgent deployment." xml:space="preserve"><value>Ladda upp en oföränderlig artefakt-zip, packa upp den i det centrala artefaktlagret och registrera den för driftsättning via HostAgent.</value></data>
 </root>
