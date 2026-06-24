@@ -274,16 +274,20 @@ WHERE notification_id = @notification_id
   AND user_id = @user_id
   AND (status <> N'read' OR read_at IS NULL);";
 
+        var markedCount = 0;
         await using (var updateCmd = new SqlCommand(updateSql, conn))
         {
             updateCmd.Parameters.Add("@notification_id", SqlDbType.BigInt).Value = notificationId;
             updateCmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            markedCount = await updateCmd.ExecuteNonQueryAsync(ct);
         }
 
         var unreadCount = await GetUnreadCountAsync(conn, userId, ct);
 
-        await _statePublisher.NotifyChangedAsync(userId, ct);
+        if (markedCount > 0)
+        {
+            await _statePublisher.NotifyChangedAsync(userId, ct);
+        }
 
         return new NotificationMarkReadResult(true, destinationUrl, unreadCount);
     }

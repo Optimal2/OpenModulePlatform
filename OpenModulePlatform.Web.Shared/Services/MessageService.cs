@@ -1,3 +1,4 @@
+using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
@@ -38,11 +39,16 @@ public sealed class MessageService
 
     private readonly SqlConnectionFactory _db;
     private readonly OmpConfigurationService _configuration;
+    private readonly ITopBarNotificationStatePublisher _statePublisher;
 
-    public MessageService(SqlConnectionFactory db, OmpConfigurationService configuration)
+    public MessageService(
+        SqlConnectionFactory db,
+        OmpConfigurationService configuration,
+        ITopBarNotificationStatePublisher statePublisher)
     {
         _db = db;
         _configuration = configuration;
+        _statePublisher = statePublisher;
     }
 
     // Keep a message-service facade so message endpoints do not need to depend
@@ -680,12 +686,15 @@ ORDER BY m.message_id DESC;";
 
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         long messageId;
+        IReadOnlyList<int> recipientUserIds;
         try
         {
             if (!await UserCanAccessConversationAsync(conn, tx, userId, conversationId, ct))
             {
                 throw new UnauthorizedAccessException("Only conversation participants can send messages.");
             }
+
+            recipientUserIds = await GetConversationParticipantUserIdsAsync(conn, tx, conversationId, userId, ct);
 
             const string messageSql = @"
 INSERT INTO omp.messages(conversation_id, sender_user_id, content, message_type)
@@ -725,6 +734,11 @@ WHERE conversation_id = @conversation_id;";
             throw;
         }
 
+        foreach (var recipientUserId in recipientUserIds)
+        {
+            await _statePublisher.NotifyChangedAsync(recipientUserId, ct);
+        }
+
         return messageId;
     }
 
@@ -742,6 +756,8 @@ WHERE conversation_id = @conversation_id;";
         {
             return;
         }
+
+        var unreadCount = await GetUnreadMessageCountAsync(conn, userId, conversationId, ct);
 
         const string sql = @"
 UPDATE cp
@@ -761,6 +777,11 @@ WHERE cp.conversation_id = @conversation_id
         cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         await cmd.ExecuteNonQueryAsync(ct);
+
+        if (unreadCount > 0)
+        {
+            await _statePublisher.NotifyChangedAsync(userId, ct);
+        }
     }
 
     public async Task<int> MarkAllConversationsReadAsync(int userId, CancellationToken ct)
@@ -801,7 +822,41 @@ WHERE cp.user_id = @user_id
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         await cmd.ExecuteNonQueryAsync(ct);
+        if (messagesMarkedRead > 0)
+        {
+            await _statePublisher.NotifyChangedAsync(userId, ct);
+        }
+
         return messagesMarkedRead;
+    }
+
+    private static async Task<IReadOnlyList<int>> GetConversationParticipantUserIdsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        long conversationId,
+        int excludedUserId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT user_id
+FROM omp.conversation_participants
+WHERE conversation_id = @conversation_id
+  AND left_at IS NULL
+  AND user_id <> @excluded_user_id
+ORDER BY user_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+        cmd.Parameters.Add("@excluded_user_id", SqlDbType.Int).Value = excludedUserId;
+
+        var userIds = new List<int>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            userIds.Add(rdr.GetInt32(0));
+        }
+
+        return userIds;
     }
 
     private static async Task<int> GetUnreadMessageCountAsync(SqlConnection conn, int userId, CancellationToken ct)
@@ -818,6 +873,29 @@ WHERE cp.user_id = @user_id
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<int> GetUnreadMessageCountAsync(
+        SqlConnection conn,
+        int userId,
+        long conversationId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT_BIG(1)
+FROM omp.conversation_participants cp
+INNER JOIN omp.messages m ON m.conversation_id = cp.conversation_id
+WHERE cp.user_id = @user_id
+  AND cp.conversation_id = @conversation_id
+  AND cp.left_at IS NULL
+  AND m.deleted_at IS NULL
+  AND m.sender_user_id <> @user_id
+  AND m.message_id > ISNULL(cp.last_read_message_id, 0);";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
