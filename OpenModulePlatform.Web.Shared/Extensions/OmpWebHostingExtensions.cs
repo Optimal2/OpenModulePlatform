@@ -140,6 +140,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddTransient<IClaimsTransformation, ActiveRoleClaimsTransformation>();
         builder.Services.AddSingleton(cultureSelectionService);
         builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.AddSingleton<IPushEventPublisher, SqlPushEventPublisher>();
         builder.Services.AddSingleton<ITopBarNotificationStatePublisher, SignalRTopBarNotificationStatePublisher>();
         builder.Services.AddScoped<OmpConfigurationService>();
         builder.Services.AddScoped<OmpBrandingService>();

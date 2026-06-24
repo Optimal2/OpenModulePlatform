@@ -10,6 +10,8 @@ public sealed class TopBarNotificationHub : Hub
 {
     public const string Path = "/topbar/notifications/updates";
     public const string StateChangedMethod = "notificationStateChanged";
+    public const string BroadcastGroupName = "omp-broadcast";
+    public const string AuthenticatedGroupName = "omp-authenticated";
 
     public override async Task OnConnectedAsync()
     {
@@ -23,6 +25,16 @@ public sealed class TopBarNotificationHub : Hub
         await Groups.AddToGroupAsync(
             Context.ConnectionId,
             UserGroupName(userId),
+            Context.ConnectionAborted);
+
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            AuthenticatedGroupName,
+            Context.ConnectionAborted);
+
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            BroadcastGroupName,
             Context.ConnectionAborted);
 
         await base.OnConnectedAsync();
