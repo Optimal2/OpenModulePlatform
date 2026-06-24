@@ -1,7 +1,7 @@
 # Push Events
 
 OMP push events are lightweight wake-up hints that let web apps, service apps,
-workers, and module code request UI refreshes without browser polling.
+workers, and module code request UI refreshes with less browser polling.
 
 Push events are not the source of truth. Module state remains in module-owned
 tables or shared OMP tables. A push event only tells a web surface that some
@@ -28,10 +28,26 @@ Web apps should use the `IPushEventPublisher` service registered by
 `AddOmpWebDefaults`. The SQL publisher stores events durably in
 `omp.push_event_outbox`; it does not deliver browser messages by itself.
 
+Platform producers that currently write push events:
+
+- `NotificationService` publishes `topbar.notification-state-changed` for
+  notification create/read/read-all mutations when
+  `PushEvents:Producers:UseOutboxForNotificationStateChanges` is `true`.
+  When the flag is `false`, the same service uses the legacy direct SignalR
+  path instead. The migration wrapper calls exactly one path per event.
+- `MessageService` publishes `topbar.message-state-changed` after message
+  sends and read-state updates.
+- `BannerService` publishes `topbar.banner-state-changed` after global or
+  role-targeted banner create/update/disable mutations.
+
 Service apps should reference `OpenModulePlatform.EventPublisher.Abstractions`
 and `OpenModulePlatform.EventPublisher.Sql`, register `IPushEventPublisher`
 with their SQL connection factory, and publish after committing their own state
 changes. Service apps do not need to host SignalR.
+
+Do not expose an HTTP publish endpoint unless the deployment has a clear
+service-to-service authentication model. The supported local OMP path is the
+trusted SQL outbox writer above.
 
 Workers should reference `OpenModulePlatform.EventPublisher.Abstractions` from
 worker plugins when they need the contract. `OpenModulePlatform.WorkerProcessHost`
@@ -47,22 +63,17 @@ the web shared project only to publish events.
 
 Platform categories currently include:
 
-- `topbar.notification-state-changed` - existing topbar notification/message
-  refresh hint.
-- `topbar.banner-state-changed` - reserved for future banner refresh support.
+- `topbar.notification-state-changed` - topbar notification refresh hint.
+- `topbar.message-state-changed` - topbar message refresh hint.
+- `topbar.banner-state-changed` - topbar banner refresh hint.
 - `module.state-changed` - general module state refresh hint for module web
   surfaces.
+- `module.specific` - module-owned event category for module-owned consumers.
 
 Modules can also use module-specific categories when the consumer and producer
 are both module-owned. Keep category names stable and neutral, and keep payloads
 small. The event payload is optional JSON and is intended for routing hints, not
 large data transfer.
-
-## Banners
-
-Banners are not wired to push yet. The reserved banner category allows the
-backend model to stay stable, but live banner refresh requires a later web UI
-pass that teaches the topbar client how to re-read and render banner state.
 
 ## Service-App And Consumer Module Hook Points
 
@@ -75,12 +86,47 @@ Consumer modules adopt this by adding references and DI registration in their
 own repositories. OpenModulePlatform stays customer-neutral; it provides the
 contract, outbox writer, and web/worker host boundaries.
 
+Minimal service-app registration pattern:
+
+```csharp
+services.AddSingleton<IPushEventPublisher>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<SqlPushEventPublisher>>();
+    return new SqlPushEventPublisher(CreateSqlConnection, logger);
+});
+```
+
+The service app can then publish:
+
+```csharp
+await publisher.PublishAsync(
+    PushEvent.ForAuthenticatedUsers(PushEventCategory.ModuleStateChanged),
+    ct);
+```
+
+The service app writes only an outbox row. It does not host SignalR, map hubs,
+or send browser messages directly.
+
+## Direct Database Writes
+
+Direct inserts or updates to `omp.notifications`, `omp.messages`,
+`omp.banners`, or module-owned state tables do not automatically produce push
+events. SQL triggers are intentionally not part of the push model: they would
+couple persistence to browser delivery, make service-app behavior harder to
+test, and still could not send SignalR messages from SQL Server.
+
+Every writer that wants push behavior must call `IPushEventPublisher` after its
+state change succeeds. If a maintenance script or emergency SQL statement
+modifies state directly, clients will see the change through page reloads or
+fallback polling only.
+
 ## Dispatcher And Browser Protocol
 
-Portal can host the outbox dispatcher by calling `AddOmpPushEventDispatcher`
-and setting `PushEvents:Dispatcher:Enabled` to `true`. Shared web defaults do
-not register the dispatcher automatically, so module web apps that call
-`AddOmpWebDefaults` do not compete for leases unless they explicitly opt in.
+Portal owns dispatch in the default OMP deployment. It hosts the outbox
+dispatcher by calling `AddOmpPushEventDispatcher` and setting
+`PushEvents:Dispatcher:Enabled` to `true`. Shared web defaults do not register
+the dispatcher automatically, so module web apps that call `AddOmpWebDefaults`
+do not compete for leases unless they explicitly opt in.
 
 The dispatcher leases pending rows atomically from `omp.push_event_outbox`,
 ordered by `push_event_id`, sends a lightweight SignalR envelope on
@@ -89,11 +135,22 @@ then marks the row `dispatched`. Failed dispatches are retried with a scheduled
 delay until `max_retries` is exceeded, after which the row is marked
 `dead-lettered`.
 
+Authenticated browser clients connected to `TopBarNotificationHub` receive
+SignalR messages. On connect, the hub joins per-user, effective-role,
+broadcast, authenticated, app, and module groups. The dispatcher maps outbox
+targets to those groups.
+
 The browser treats push as a wake-up hint. The envelope contains `eventId`,
 `deduplicationKey`, `category`, `targetKind`, `targetValue`, and optional
 `payload`, but the topbar still re-reads state through its normal summary
-endpoint. The client also still handles the legacy no-argument
-`notificationStateChanged` signal by refreshing the summary.
+endpoint. The client deduplicates recent push envelopes and also still handles
+the legacy no-argument `notificationStateChanged` signal by refreshing the
+summary.
+
+Fallback polling remains part of the design. If push mode is disabled,
+unavailable, disconnected, or fails to start, the topbar falls back to polling
+`/topbar/summary`. Push is an optimization for faster refresh, not the only
+path to correctness.
 
 ## Multi-Node Delivery Boundary
 
