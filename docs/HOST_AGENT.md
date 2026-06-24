@@ -549,7 +549,8 @@ Minimal configuration:
       "ServiceAccountPasswordCredentialKey": "",
       "TakeoverStopTimeoutSeconds": 45,
       "DeletePreviousServiceAfterTakeover": true,
-      "StartPreparedService": true
+      "StartPreparedService": true,
+      "PreparedServiceStartupVerificationDelaySeconds": 3
     },
     "CredentialStore": {
       "AutomationMode": "Full",
@@ -575,6 +576,11 @@ copy. Cleanup of superseded HostAgent folders will not remove a folder that is
 still referenced by the active credential-store path; this keeps interrupted or
 legacy upgrades resumable until the next successful version has its own local
 credential-store file.
+
+`PreparedServiceStartupVerificationDelaySeconds` controls how long the current
+HostAgent waits after starting the prepared takeover service before checking
+that it is still running. The default is `3`, matching the original fixed
+delay.
 
 The desired version also performs cleanup during normal cycles. This makes the
 upgrade idempotent if the process is interrupted after the new service starts:

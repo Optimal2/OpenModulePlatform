@@ -394,7 +394,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     private static int CompareHostAgentArtifactOptions(HostAgentArtifactOption left, HostAgentArtifactOption right)
     {
-        var versionComparison = CompareVersions(left.Version, right.Version);
+        var versionComparison = ArtifactVersionComparer.Compare(left.Version, right.Version);
         if (versionComparison != 0)
         {
             return -versionComparison;
@@ -407,17 +407,6 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         }
 
         return right.ArtifactId.CompareTo(left.ArtifactId);
-    }
-
-    private static int CompareVersions(string left, string right)
-    {
-        if (Version.TryParse(left, out var leftVersion)
-            && Version.TryParse(right, out var rightVersion))
-        {
-            return leftVersion.CompareTo(rightVersion);
-        }
-
-        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task TryWriteAuditLogAsync(

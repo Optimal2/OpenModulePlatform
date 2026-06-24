@@ -132,7 +132,8 @@
           "ServiceAccountPasswordCredentialKey": "",
           "TakeoverStopTimeoutSeconds": 45,
           "DeletePreviousServiceAfterTakeover": true,
-          "StartPreparedService": true
+          "StartPreparedService": true,
+          "PreparedServiceStartupVerificationDelaySeconds": 3
         },
         "CredentialStore": {
           "AutomationMode": "",

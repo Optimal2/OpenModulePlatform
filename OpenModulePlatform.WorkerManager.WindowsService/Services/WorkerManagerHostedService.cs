@@ -837,10 +837,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     orphan.ParentProcessId,
                     workerProcessPath);
 
-                // WorkerProcessHost owns the plugin lifetime. If it is orphaned,
-                // terminating the tree prevents plugin-spawned children from
-                // continuing without their supervising worker host.
-                process.Kill(entireProcessTree: true);
+                // WorkerProcessHost owns the plugin lifetime by default. The setting
+                // allows hosts with intentionally independent plugin children to opt out.
+                process.Kill(entireProcessTree: settings.CleanupOrphansKillProcessTree);
                 if (!await WaitForProcessExitAsync(process, stopTimeout, cancellationToken))
                 {
                     throw new TimeoutException(

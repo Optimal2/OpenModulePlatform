@@ -11,8 +11,6 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class ServiceAppDeploymentService
 {
     private const int ScAccessDeniedExitCode = 5;
-    private const int ScServiceNotFoundExitCode = 1060;
-
     private static readonly char[] InvalidServiceNameCharacters = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
@@ -845,7 +843,7 @@ public sealed class ServiceAppDeploymentService
         var result = RunSc("query", serviceName);
         if (result.ExitCode != 0)
         {
-            if (IsServiceNotFound(result))
+            if (result.IsServiceNotFound())
             {
                 return null;
             }
@@ -927,7 +925,7 @@ public sealed class ServiceAppDeploymentService
         var result = RunSc("qc", serviceName);
         if (result.ExitCode != 0)
         {
-            if (IsServiceNotFound(result))
+            if (result.IsServiceNotFound())
             {
                 return null;
             }
@@ -974,10 +972,10 @@ public sealed class ServiceAppDeploymentService
             $"Could not determine logon account for Windows service '{serviceName}'. sc.exe did not return SERVICE_START_NAME.");
     }
 
-    private static ScResult RunSc(params string[] arguments)
+    private static ScCommandResult RunSc(params string[] arguments)
     {
         var result = HostAgentProcessRunner.Run(GetScPath(), arguments);
-        return new ScResult(result.ExitCode, result.StdOut, result.StdErr);
+        return new ScCommandResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static void RunScChecked(params string[] arguments)
@@ -994,14 +992,6 @@ public sealed class ServiceAppDeploymentService
                 operation,
                 serviceName));
         }
-    }
-
-    private static bool IsServiceNotFound(ScResult result)
-    {
-        var text = result.CombinedOutput;
-        return result.ExitCode == ScServiceNotFoundExitCode
-            || text.Contains("FAILED 1060", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CreateScFailureMessage(
@@ -1241,11 +1231,6 @@ public sealed class ServiceAppDeploymentService
             or UnauthorizedAccessException
             or TimeoutException
             or System.ComponentModel.Win32Exception;
-
-    private sealed record ScResult(int ExitCode, string Output, string Error)
-    {
-        public string CombinedOutput => string.Concat(Output, "\n", Error);
-    }
 
     private sealed record ServiceAppIdentityResolution(string UserName, string Password)
     {

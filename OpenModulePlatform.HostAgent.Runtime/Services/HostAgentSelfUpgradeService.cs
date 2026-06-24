@@ -12,8 +12,6 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class HostAgentSelfUpgradeService
 {
-    private const int ScServiceNotFoundExitCode = 1060;
-    private const int ScServiceCannotAcceptControlExitCode = 1061;
     private const int DirectoryDeleteMaxAttempts = 20;
     private const string DefaultNLogAppName = "OpenModulePlatform.HostAgent.WindowsService";
     private const string DefaultNLogDirectory = "${basedir}/logs";
@@ -25,7 +23,6 @@ public sealed class HostAgentSelfUpgradeService
         "OMP.HostAgent",
         "OpenModulePlatform.HostAgent"
     ];
-    private static readonly TimeSpan PreparedServiceStartupVerificationDelay = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
@@ -147,7 +144,8 @@ public sealed class HostAgentSelfUpgradeService
         string installPath,
         CancellationToken cancellationToken)
     {
-        await Task.Delay(PreparedServiceStartupVerificationDelay, cancellationToken);
+        var delay = TimeSpan.FromSeconds(Math.Max(0, _settings.CurrentValue.SelfUpgrade.PreparedServiceStartupVerificationDelaySeconds));
+        await Task.Delay(delay, cancellationToken);
 
         var state = GetServiceState(serviceName);
         if (string.Equals(state, "RUNNING", StringComparison.OrdinalIgnoreCase))
@@ -930,12 +928,12 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
-        if (IsServiceNotFound(result))
+        if (result.IsServiceNotFound())
         {
             return;
         }
 
-        if (IsServiceControlTemporarilyUnavailable(result))
+        if (result.IsServiceControlTemporarilyUnavailable())
         {
             WaitForServiceStoppedOrTerminate(serviceName, Math.Min(timeoutSeconds, 5), timeoutSeconds);
             return;
@@ -1312,7 +1310,7 @@ public sealed class HostAgentSelfUpgradeService
         var result = RunSc("query", serviceName);
         if (result.ExitCode != 0)
         {
-            return IsServiceNotFound(result) ? null : throw new InvalidOperationException(result.CombinedOutput.Trim());
+            return result.IsServiceNotFound() ? null : throw new InvalidOperationException(result.CombinedOutput.Trim());
         }
 
         foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
@@ -1345,7 +1343,7 @@ public sealed class HostAgentSelfUpgradeService
         var result = RunSc("queryex", serviceName);
         if (result.ExitCode != 0)
         {
-            return IsServiceNotFound(result)
+            return result.IsServiceNotFound()
                 ? null
                 : throw new InvalidOperationException(result.CombinedOutput.Trim());
         }
@@ -1400,12 +1398,12 @@ public sealed class HostAgentSelfUpgradeService
         WaitForServiceState(serviceName, "STOPPED", Math.Max(timeoutSeconds, 5));
     }
 
-    private static ScResult RunSc(params string[] arguments)
+    private static ScCommandResult RunSc(params string[] arguments)
     {
         var result = HostAgentProcessRunner.Run(
             Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
             arguments);
-        return new ScResult(result.ExitCode, result.StdOut, result.StdErr);
+        return new ScCommandResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static void RunScChecked(params string[] arguments)
@@ -1416,16 +1414,6 @@ public sealed class HostAgentSelfUpgradeService
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
         }
     }
-
-    private static bool IsServiceNotFound(ScResult result)
-        => result.ExitCode == ScServiceNotFoundExitCode
-            || result.CombinedOutput.Contains("FAILED 1060", StringComparison.OrdinalIgnoreCase)
-            || result.CombinedOutput.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsServiceControlTemporarilyUnavailable(ScResult result)
-        => result.ExitCode == ScServiceCannotAcceptControlExitCode
-            || result.CombinedOutput.Contains("FAILED 1061", StringComparison.OrdinalIgnoreCase)
-            || result.CombinedOutput.Contains("cannot accept control messages", StringComparison.OrdinalIgnoreCase);
 
     private static string FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
@@ -1466,11 +1454,6 @@ public sealed class HostAgentSelfUpgradeService
         {
             // Best-effort staging cleanup: lack of delete permission should not mask the actual self-upgrade result.
         }
-    }
-
-    private sealed record ScResult(int ExitCode, string Output, string Error)
-    {
-        public string CombinedOutput => string.Concat(Output, "\n", Error);
     }
 
     private sealed record HostAgentServiceCandidate(string Name, string? ExecutablePath);

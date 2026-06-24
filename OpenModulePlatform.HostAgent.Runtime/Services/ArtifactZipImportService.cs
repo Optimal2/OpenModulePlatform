@@ -502,7 +502,7 @@ public sealed class ArtifactZipImportService
             definition.ModuleKey,
             cancellationToken);
         if (!string.IsNullOrWhiteSpace(appliedVersion)
-            && CompareArtifactVersions(appliedVersion, definition.DefinitionVersion) > 0)
+            && ArtifactVersionComparer.Compare(appliedVersion, definition.DefinitionVersion) > 0)
         {
             return new ModuleDefinitionImportResult(
                 definition.ModuleKey,
@@ -994,7 +994,7 @@ public sealed class ArtifactZipImportService
             return;
         }
 
-        if (CompareArtifactVersions(compatibility.DefinitionVersion, package.MinModuleDefinitionVersion) < 0)
+        if (ArtifactVersionComparer.Compare(compatibility.DefinitionVersion, package.MinModuleDefinitionVersion) < 0)
         {
             throw new InvalidOperationException(
                 $"Artifact package requires module definition '{compatibility.ModuleKey}' version {package.MinModuleDefinitionVersion} or later. " +
@@ -1005,44 +1005,18 @@ public sealed class ArtifactZipImportService
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
     {
         if (!string.IsNullOrWhiteSpace(minVersion)
-            && CompareArtifactVersions(version, minVersion) < 0)
+            && ArtifactVersionComparer.Compare(version, minVersion) < 0)
         {
             return false;
         }
 
         if (!string.IsNullOrWhiteSpace(maxVersion)
-            && CompareArtifactVersions(version, maxVersion) > 0)
+            && ArtifactVersionComparer.Compare(version, maxVersion) > 0)
         {
             return false;
         }
 
         return true;
-    }
-
-    private static int CompareArtifactVersions(string left, string right)
-    {
-        if (TryParseComparableVersion(left, out var leftVersion)
-            && TryParseComparableVersion(right, out var rightVersion))
-        {
-            return leftVersion.CompareTo(rightVersion);
-        }
-
-        return string.Compare(
-            left?.Trim(),
-            right?.Trim(),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryParseComparableVersion(string? value, out Version version)
-    {
-        var text = value?.Trim() ?? string.Empty;
-        var suffixIndex = text.IndexOfAny(['-', '+']);
-        if (suffixIndex >= 0)
-        {
-            text = text[..suffixIndex];
-        }
-
-        return Version.TryParse(text, out version!);
     }
 
     private static FilenameMetadata? TryParseFilenameMetadata(string fileName)
@@ -1374,14 +1348,6 @@ public sealed class ArtifactZipImportService
         FilenameMetadata? Metadata,
         string? SkipMessage,
         string? FailureMessage);
-
-    private sealed class ArtifactVersionComparer : IComparer<string>
-    {
-        public static readonly ArtifactVersionComparer Instance = new();
-
-        public int Compare(string? x, string? y)
-            => CompareArtifactVersions(x ?? string.Empty, y ?? string.Empty);
-    }
 
     private sealed record FilenameMetadata(
         string ModuleKey,
